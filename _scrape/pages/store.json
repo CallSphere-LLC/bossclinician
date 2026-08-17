@@ -1,0 +1,133 @@
+{
+  "slug": "store",
+  "url": "https://www.bossclinician.com/store",
+  "title": "Start Your Journey to a Profitable Private Practice",
+  "description": "Discover how to launch and grow your profitable private therapy practice with expert guidance from Yvette. Get started today!",
+  "images": [
+    {
+      "orig": "https://kajabi-storefronts-production.kajabi-cdn.com/kajabi-storefronts-production/file-uploads/themes/2157622920/settings_images/3a450fe-80ea-c151-11e0-56151df666_af669bce-6231-432b-ab04-a4010010514b.webp",
+      "local": "791da84c1a06.webp",
+      "alt": "Boss Clinician"
+    },
+    {
+      "orig": "https://kajabi-storefronts-production.kajabi-cdn.com/kajabi-storefronts-production/file-uploads/sites/2148299891/images/b22e2e-b824-7e37-11a5-5155a62e8e46_Facebook_CoverLogo_5_.png",
+      "local": "b3a2f3cdf3bb.png",
+      "alt": ""
+    },
+    {
+      "orig": "https://kajabi-storefronts-production.kajabi-cdn.com/kajabi-storefronts-production/file-uploads/sites/2148299891/images/2b3402-11a3-6dab-e04-368db17103ee_Facebook_CoverLogo_8_.png",
+      "local": "52c45a6b0f9f.png",
+      "alt": ""
+    },
+    {
+      "orig": "https://kajabi-storefronts-production.kajabi-cdn.com/kajabi-storefronts-production/file-uploads/sites/2148299891/images/8151a06-4ede-6f-041b-e17767702a5a_Facebook_CoverLogo_7_.png",
+      "local": "8dfa5308c9c5.png",
+      "alt": ""
+    },
+    {
+      "orig": "https://kajabi-storefronts-production.kajabi-cdn.com/kajabi-storefronts-production/file-uploads/themes/2157622920/settings_images/f7d1af-5daf-feba-0d17-c04ef2c0315_a526f544-8baa-41c6-8478-1d741aef2850.webp",
+      "local": "8e119e5e9c0d.webp",
+      "alt": "Boss Clinician logo — footer"
+    },
+    {
+      "orig": "https://kajabi-storefronts-production.kajabi-cdn.com/kajabi-storefronts-production/themes/2157622920/assets/placeholder.png?1780327412999895",
+      "local": "48d3402bda7e.png",
+      "alt": ""
+    },
+    {
+      "orig": "https://kajabi-storefronts-production.kajabi-cdn.com/kajabi-storefronts-production/file-uploads/themes/2157622920/settings_images/a1f22e18-0fc6-461c-90a0-eaf035bbd4a2.jpg",
+      "local": "23a727ba2042.jpg",
+      "alt": "bg"
+    }
+  ],
+  "texts": [
+    {
+      "tag": "a",
+      "text": "ABOUT YVETTE"
+    },
+    {
+      "tag": "a",
+      "text": "WORK WITH ME"
+    },
+    {
+      "tag": "a",
+      "text": "COURSES"
+    },
+    {
+      "tag": "a",
+      "text": "FREE RESOURCES"
+    },
+    {
+      "tag": "a",
+      "text": "RETREATS"
+    },
+    {
+      "tag": "a",
+      "text": "BLOG"
+    },
+    {
+      "tag": "p",
+      "text": "Work with Me"
+    },
+    {
+      "tag": "h2",
+      "text": "Build a smoother, more profitable practice with support!"
+    },
+    {
+      "tag": "h2",
+      "text": "BOSS CLINICIAN CONSULTING SERVICES"
+    },
+    {
+      "tag": "a",
+      "text": "Practice Reset Intensive $3,500.00 USD"
+    },
+    {
+      "tag": "h4",
+      "text": "Practice Reset Intensive"
+    },
+    {
+      "tag": "a",
+      "text": "Scale and Reclaim Suite $6,500.00 USD"
+    },
+    {
+      "tag": "h4",
+      "text": "Scale and Reclaim Suite"
+    },
+    {
+      "tag": "a",
+      "text": "The Boss Boardroom $12,000.00 USD"
+    },
+    {
+      "tag": "h4",
+      "text": "The Boss Boardroom"
+    },
+    {
+      "tag": "a",
+      "text": "Financial Disclaimer"
+    },
+    {
+      "tag": "a",
+      "text": "Privacy Policy"
+    },
+    {
+      "tag": "a",
+      "text": "Terms of Use"
+    },
+    {
+      "tag": "a",
+      "text": "Disclaimer"
+    },
+    {
+      "tag": "a",
+      "text": "Terms of Service"
+    },
+    {
+      "tag": "h4",
+      "text": "Join Our Free Trial"
+    },
+    {
+      "tag": "p",
+      "text": "Get started today before this once in a lifetime opportunity expires."
+    }
+  ]
+}

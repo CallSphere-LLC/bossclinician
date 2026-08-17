@@ -1,0 +1,287 @@
+import type { PoolClient } from "pg";
+import { pool } from "../db/pool";
+import { accessExpiresAt } from "./pricing";
+
+/**
+ * Access grants — the only answer to "may this member open this product".
+ *
+ * Every delivery route in Phase 3 consults this module and nothing else. It
+ * deliberately does NOT look at orders or subscriptions: entitlement has too
+ * many sources (a purchase, a bundle, an automation, a manual grant from the
+ * admin, a refund clawback) for each reader to re-derive it correctly. One
+ * table, one writer, one reader.
+ */
+
+export type GrantSource = "purchase" | "manual" | "automation" | "bundle" | "affiliate" | "import";
+
+type Queryable = Pick<PoolClient, "query"> | typeof pool;
+
+export interface GrantAccessInput {
+  memberId: number;
+  productId: number;
+  offerId?: number | null;
+  orderId?: number | null;
+  subscriptionId?: number | null;
+  source?: GrantSource;
+  /** Days from now until access lapses. null/undefined = never. */
+  expiresAfterDays?: number | null;
+  /** Defaults to now. Passed explicitly when backfilling so drip dates line up. */
+  grantedAt?: Date;
+  /** Runs inside a caller's transaction when given — webhooks need this. */
+  client?: Queryable;
+}
+
+export interface AccessGrant {
+  id: number;
+  memberId: number;
+  productId: number;
+  status: "active" | "revoked" | "expired";
+  grantedAt: string;
+  expiresAt: string | null;
+}
+
+/**
+ * Grants access, or refreshes an existing grant.
+ *
+ * Re-granting is the interesting case, and it is common: a customer whose
+ * subscription lapsed and who buys again, or who owns a product directly and
+ * then buys a bundle containing it. The UNIQUE (member_id, product_id)
+ * constraint plus this upsert means they end up with one live grant rather than
+ * two, so "products owned" never double-counts.
+ *
+ * The expiry rule on conflict is the subtle part: a re-grant must never SHORTEN
+ * existing access. Someone with lifetime access who is later given a 30-day
+ * grant keeps lifetime. Hence NULL wins, and otherwise the later date wins.
+ */
+export async function grantAccess(input: GrantAccessInput): Promise<AccessGrant> {
+  const db = input.client ?? pool;
+  const grantedAt = input.grantedAt ?? new Date();
+  const expiresAt = accessExpiresAt(grantedAt, input.expiresAfterDays ?? null);
+
+  const res = await db.query(
+    `INSERT INTO access_grants
+       (member_id, product_id, offer_id, order_id, subscription_id, source,
+        status, granted_at, expires_at)
+     VALUES ($1, $2, $3, $4, $5, $6, 'active', $7, $8)
+     ON CONFLICT (member_id, product_id) DO UPDATE SET
+       status          = 'active',
+       revoked_at      = NULL,
+       revoke_reason   = '',
+       offer_id        = COALESCE(EXCLUDED.offer_id, access_grants.offer_id),
+       order_id        = COALESCE(EXCLUDED.order_id, access_grants.order_id),
+       subscription_id = COALESCE(EXCLUDED.subscription_id, access_grants.subscription_id),
+       granted_at      = LEAST(access_grants.granted_at, EXCLUDED.granted_at),
+       expires_at      = CASE
+                           WHEN access_grants.expires_at IS NULL THEN NULL
+                           WHEN EXCLUDED.expires_at IS NULL THEN NULL
+                           ELSE GREATEST(access_grants.expires_at, EXCLUDED.expires_at)
+                         END,
+       updated_at      = now()
+     RETURNING id, member_id, product_id, status, granted_at, expires_at`,
+    [
+      input.memberId,
+      input.productId,
+      input.offerId ?? null,
+      input.orderId ?? null,
+      input.subscriptionId ?? null,
+      input.source ?? "purchase",
+      grantedAt,
+      expiresAt,
+    ]
+  );
+
+  const row = res.rows[0];
+  return {
+    id: row.id,
+    memberId: row.member_id,
+    productId: row.product_id,
+    status: row.status,
+    grantedAt: row.granted_at,
+    expiresAt: row.expires_at,
+  };
+}
+
+/**
+ * Grants every product attached to an offer, expanding any bundles one level.
+ *
+ * One level, not recursively: a bundle of bundles is a configuration mistake
+ * rather than a feature, and the migration's `bundle_not_self` check only stops
+ * the trivial cycle. Expanding once keeps this terminating no matter how the
+ * data is shaped.
+ */
+export async function grantOfferAccess(input: {
+  memberId: number;
+  offerId: number;
+  orderId?: number | null;
+  subscriptionId?: number | null;
+  source?: GrantSource;
+  grantedAt?: Date;
+  client?: Queryable;
+}): Promise<number[]> {
+  const db = input.client ?? pool;
+
+  const res = await db.query<{ product_id: number; access_expires_after_days: number | null }>(
+    `SELECT DISTINCT p.id AS product_id, o.access_expires_after_days
+       FROM offers o
+       JOIN offer_products op ON op.offer_id = o.id
+       JOIN products p        ON p.id = op.product_id
+      WHERE o.id = $1
+      UNION
+     SELECT DISTINCT bi.product_id, o.access_expires_after_days
+       FROM offers o
+       JOIN offer_products op       ON op.offer_id = o.id
+       JOIN product_bundle_items bi ON bi.bundle_product_id = op.product_id
+      WHERE o.id = $1`,
+    [input.offerId]
+  );
+
+  const granted: number[] = [];
+  for (const row of res.rows) {
+    await grantAccess({
+      memberId: input.memberId,
+      productId: row.product_id,
+      offerId: input.offerId,
+      orderId: input.orderId ?? null,
+      subscriptionId: input.subscriptionId ?? null,
+      source: input.source ?? "purchase",
+      expiresAfterDays: row.access_expires_after_days,
+      grantedAt: input.grantedAt,
+      client: input.client,
+    });
+    granted.push(row.product_id);
+  }
+  return granted;
+}
+
+/** Revokes one grant. Keeps the row so the history of what was owned survives. */
+export async function revokeAccess(input: {
+  memberId: number;
+  productId: number;
+  reason?: string;
+  client?: Queryable;
+}): Promise<boolean> {
+  const db = input.client ?? pool;
+  const res = await db.query(
+    `UPDATE access_grants
+        SET status = 'revoked', revoked_at = now(), revoke_reason = $3, updated_at = now()
+      WHERE member_id = $1 AND product_id = $2 AND status = 'active'`,
+    [input.memberId, input.productId, (input.reason ?? "").slice(0, 500)]
+  );
+  return (res.rowCount ?? 0) > 0;
+}
+
+/** Revokes everything an offer granted — used on refund and subscription end. */
+export async function revokeOfferAccess(input: {
+  memberId: number;
+  offerId: number;
+  reason?: string;
+  client?: Queryable;
+}): Promise<number> {
+  const db = input.client ?? pool;
+  const res = await db.query(
+    `UPDATE access_grants
+        SET status = 'revoked', revoked_at = now(), revoke_reason = $3, updated_at = now()
+      WHERE member_id = $1 AND offer_id = $2 AND status = 'active'`,
+    [input.memberId, input.offerId, (input.reason ?? "").slice(0, 500)]
+  );
+  return res.rowCount ?? 0;
+}
+
+/**
+ * Whether a member may open a product right now.
+ *
+ * Expiry is evaluated in the query rather than by a sweeper job, so access
+ * lapses at the instant it should even if no background task has run. A
+ * separate job flips `status` to 'expired' for reporting; correctness does not
+ * depend on it having run.
+ */
+export async function hasProductAccess(memberId: number, productId: number): Promise<boolean> {
+  const res = await pool.query(
+    `SELECT 1 FROM access_grants
+      WHERE member_id = $1 AND product_id = $2 AND status = 'active'
+        AND (expires_at IS NULL OR expires_at > now())
+      LIMIT 1`,
+    [memberId, productId]
+  );
+  return res.rows.length > 0;
+}
+
+/** The same question asked about a course, which is what the player needs. */
+export async function hasCourseAccess(memberId: number, courseId: number): Promise<boolean> {
+  const res = await pool.query(
+    `SELECT 1
+       FROM access_grants g
+       JOIN products p ON p.id = g.product_id
+      WHERE g.member_id = $1 AND p.course_id = $2 AND g.status = 'active'
+        AND (g.expires_at IS NULL OR g.expires_at > now())
+      LIMIT 1`,
+    [memberId, courseId]
+  );
+  return res.rows.length > 0;
+}
+
+export interface OwnedProduct {
+  grantId: number;
+  productId: number;
+  slug: string;
+  title: string;
+  subtitle: string;
+  thumbnailUrl: string;
+  kind: string;
+  courseId: number | null;
+  communityId: number | null;
+  podcastId: number | null;
+  newsletterId: number | null;
+  coachingOfferId: number | null;
+  grantedAt: string;
+  expiresAt: string | null;
+}
+
+/** Everything a member currently owns — the query behind /library. */
+export async function listMemberProducts(memberId: number): Promise<OwnedProduct[]> {
+  const res = await pool.query(
+    `SELECT g.id AS grant_id, p.id AS product_id, p.slug, p.title, p.subtitle,
+            p.thumbnail_url, p.kind, p.course_id, p.community_id, p.podcast_id,
+            p.newsletter_id, p.coaching_offer_id, g.granted_at, g.expires_at
+       FROM access_grants g
+       JOIN products p ON p.id = g.product_id
+      WHERE g.member_id = $1 AND g.status = 'active'
+        AND (g.expires_at IS NULL OR g.expires_at > now())
+        AND p.status <> 'archived'
+      ORDER BY g.granted_at DESC`,
+    [memberId]
+  );
+
+  return res.rows.map((r) => ({
+    grantId: r.grant_id,
+    productId: r.product_id,
+    slug: r.slug,
+    title: r.title,
+    subtitle: r.subtitle,
+    thumbnailUrl: r.thumbnail_url,
+    kind: r.kind,
+    courseId: r.course_id,
+    communityId: r.community_id,
+    podcastId: r.podcast_id,
+    newsletterId: r.newsletter_id,
+    coachingOfferId: r.coaching_offer_id,
+    grantedAt: r.granted_at,
+    expiresAt: r.expires_at,
+  }));
+}
+
+/**
+ * Marks lapsed grants as expired.
+ *
+ * Cosmetic and for reporting only — `hasProductAccess` already refuses an
+ * expired grant regardless of whether this has run. Called by the Phase 10 job
+ * runner; safe to call at any frequency.
+ */
+export async function sweepExpiredGrants(): Promise<number> {
+  const res = await pool.query(
+    `UPDATE access_grants
+        SET status = 'expired', updated_at = now()
+      WHERE status = 'active' AND expires_at IS NOT NULL AND expires_at <= now()`
+  );
+  return res.rowCount ?? 0;
+}

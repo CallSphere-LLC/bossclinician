@@ -1,0 +1,56 @@
+{
+  "slug": "quiz",
+  "url": "https://www.bossclinician.com/start-your-own-private-practice-quiz",
+  "title": "Is Starting a Private Practice Right for You? Take Our Quiz!",
+  "description": "Considering private practice? Take our free quiz to evaluate your readiness and discover steps to launch a successful mental health practice. Start your journey with Boss Clinician today.",
+  "images": [
+    {
+      "orig": "https://kajabi-storefronts-production.kajabi-cdn.com/kajabi-storefronts-production/file-uploads/themes/2157171352/settings_images/81abe-8ece-d502-211e-c1acda7f50d_d880849e-033f-4703-9cca-ccefaf6d738e.png",
+      "local": "bdb766e56393.png",
+      "alt": "Header Logo"
+    },
+    {
+      "orig": "https://kajabi-storefronts-production.kajabi-cdn.com/kajabi-storefronts-production/themes/2157171352/assets/placeholder.png?173033151743187",
+      "local": "72c8809523dd.png",
+      "alt": ""
+    }
+  ],
+  "texts": [
+    {
+      "tag": "h2",
+      "text": "Has starting a private practice been on your mind?"
+    },
+    {
+      "tag": "h2",
+      "text": "Take the quiz below!"
+    },
+    {
+      "tag": "a",
+      "text": "Financial Disclaimer"
+    },
+    {
+      "tag": "a",
+      "text": "Privacy Policy"
+    },
+    {
+      "tag": "a",
+      "text": "Terms of Use"
+    },
+    {
+      "tag": "a",
+      "text": "Disclaimer"
+    },
+    {
+      "tag": "a",
+      "text": "Terms of Service"
+    },
+    {
+      "tag": "h4",
+      "text": "Join Our Free Trial"
+    },
+    {
+      "tag": "p",
+      "text": "Get started today before this once in a lifetime opportunity expires."
+    }
+  ]
+}

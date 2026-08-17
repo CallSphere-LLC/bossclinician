@@ -1,0 +1,32 @@
+import { Router } from "express";
+import { healthRouter } from "./health";
+import { pagesRouter } from "./pages";
+import { blogRouter } from "./blog";
+import { coursesRouter } from "./courses";
+import { testimonialsRouter } from "./testimonials";
+import { resourcesRouter } from "./resources";
+import { settingsRouter } from "./settings";
+import { leadsRouter } from "./leads";
+import { subscribeRouter } from "./subscribe";
+import { chatRouter } from "./chat";
+import { realtimeRouter } from "./realtime";
+import { checkoutRouter } from "./checkout";
+import { stripeWebhookRouter } from "./stripeWebhook";
+import { growthPublicRouter } from "./growthPublic";
+
+export const publicRouter = Router();
+
+publicRouter.use(healthRouter);
+publicRouter.use(pagesRouter);
+publicRouter.use(blogRouter);
+publicRouter.use(coursesRouter);
+publicRouter.use(testimonialsRouter);
+publicRouter.use(resourcesRouter);
+publicRouter.use(settingsRouter);
+publicRouter.use(leadsRouter);
+publicRouter.use(subscribeRouter);
+publicRouter.use(chatRouter);
+publicRouter.use(realtimeRouter);
+publicRouter.use(checkoutRouter);
+publicRouter.use(stripeWebhookRouter);
+publicRouter.use(growthPublicRouter);

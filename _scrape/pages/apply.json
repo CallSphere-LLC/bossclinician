@@ -1,0 +1,191 @@
+{
+  "slug": "apply",
+  "url": "https://www.bossclinician.com/apply",
+  "title": "Boss Clinician Consulting - Apply",
+  "description": "",
+  "images": [
+    {
+      "orig": "https://kajabi-storefronts-production.kajabi-cdn.com/kajabi-storefronts-production/file-uploads/sites/2148299891/images/a255c1-6fd-de8-ae8-715046d5c047_a526f544-8baa-41c6-8478-1d741aef2850.webp",
+      "local": "5dad4c25d94c.webp",
+      "alt": "Header Logo"
+    },
+    {
+      "orig": "https://kajabi-storefronts-production.kajabi-cdn.com/kajabi-storefronts-production/file-uploads/themes/2163792732/settings_images/04452bc-0380-a7e-8bad-0031362638b_Copy_of_Arrow_Nova_7.0_NS_2_.png",
+      "local": "70d91a98cc6e.png",
+      "alt": ""
+    },
+    {
+      "orig": "https://kajabi-storefronts-production.kajabi-cdn.com/kajabi-storefronts-production/file-uploads/themes/2163774408/settings_images/46eead3-b5f3-8a68-f3f8-78762fa76b2_Screenshot_2025-11-22_at_5.37.03_PM.png",
+      "local": "f5b93b871e63.png",
+      "alt": ""
+    },
+    {
+      "orig": "https://kajabi-storefronts-production.kajabi-cdn.com/kajabi-storefronts-production/file-uploads/themes/2163774408/settings_images/0d70dda-4607-c145-284b-a2255fc66ebf_46eead3-b5f3-8a68-f3f8-78762fa76b2_Screenshot_2025-11-22_at_5.png",
+      "local": "f3d42dbe2fc1.png",
+      "alt": ""
+    },
+    {
+      "orig": "https://kajabi-storefronts-production.kajabi-cdn.com/kajabi-storefronts-production/file-uploads/themes/2163774408/settings_images/3ef7c40-2c27-730-3ea3-ee10b4273fa5_46eead3-b5f3-8a68-f3f8-78762fa76b2_Screenshot_2025-11-22_at_5-2.png",
+      "local": "88fa8b929f77.png",
+      "alt": ""
+    },
+    {
+      "orig": "https://kajabi-storefronts-production.kajabi-cdn.com/kajabi-storefronts-production/file-uploads/themes/2163774408/settings_images/b66eac7-bcb-b33c-de5f-eaafdfc6603_46eead3-b5f3-8a68-f3f8-78762fa76b2_Screenshot_2025-11-22_at_5-3.png",
+      "local": "25a801447682.png",
+      "alt": ""
+    },
+    {
+      "orig": "https://kajabi-storefronts-production.kajabi-cdn.com/kajabi-storefronts-production/file-uploads/themes/2163774408/settings_images/ae218f7-4a08-ecc2-44e-00785b156ddd_46eead3-b5f3-8a68-f3f8-78762fa76b2_Screenshot_2025-11-22_at_5-4.png",
+      "local": "2b9be34e5f05.png",
+      "alt": ""
+    },
+    {
+      "orig": "https://kajabi-storefronts-production.kajabi-cdn.com/kajabi-storefronts-production/file-uploads/themes/2163792732/settings_images/3f12a-470a-be03-f8c3-620d305f657_Screenshot_2025-11-24_at_11.39.48_AM.png",
+      "local": "db4f54f58658.png",
+      "alt": ""
+    },
+    {
+      "orig": "https://kajabi-storefronts-production.kajabi-cdn.com/kajabi-storefronts-production/file-uploads/themes/2163557538/settings_images/ed3a865-143a-754e-1d20-80a6dd536e6_7253125-6272-725f-7f4a-67438a13dc2f_yhowardlcsw-01_1_.webp",
+      "local": "2103dbadf285.webp",
+      "alt": "Footer Logo"
+    },
+    {
+      "orig": "https://kajabi-storefronts-production.kajabi-cdn.com/kajabi-storefronts-production/themes/2163813575/assets/placeholder.png?1784730316207646",
+      "local": "31819239cf64.png",
+      "alt": ""
+    },
+    {
+      "orig": "https://fonts.cdnfonts.com/css/general-sans",
+      "local": "39aa7e07a0c8.img",
+      "alt": "bg"
+    },
+    {
+      "orig": "https://kajabi-storefronts-production.kajabi-cdn.com/kajabi-storefronts-production/file-uploads/themes/2163515063/settings_images/24ccf37-14-7723-86db-58e0c1b8c6e_dad8ff-ca05-c46e-437-4324e27561f8_7c22f07-f-c4b8-a17e-2f7b7f15da_b182200-3247-105e-e71-8e1e155110e2_noun-tick-4577087_1_1_1_.png",
+      "local": "a6fc4f43d997.png",
+      "alt": "bg"
+    },
+    {
+      "orig": "https://kajabi-storefronts-production.kajabi-cdn.com/kajabi-storefronts-production/file-uploads/themes/2163813575/settings_images/cf2740f-505b-ae66-2e86-536e6cfe508_7fe948ef-b2c1-4e58-aa0e-082be6c32de2.jpg",
+      "local": "408adac24127.jpg",
+      "alt": "bg"
+    }
+  ],
+  "texts": [
+    {
+      "tag": "a",
+      "text": "ABOUT YVETTE"
+    },
+    {
+      "tag": "a",
+      "text": "WORK WITH ME"
+    },
+    {
+      "tag": "a",
+      "text": "COURSES"
+    },
+    {
+      "tag": "a",
+      "text": "FREE RESOURCES"
+    },
+    {
+      "tag": "a",
+      "text": "RETREATS"
+    },
+    {
+      "tag": "a",
+      "text": "BLOG"
+    },
+    {
+      "tag": "h2",
+      "text": "Are you ready to stop surviving your practice and start building one that truly supports you?"
+    },
+    {
+      "tag": "p",
+      "text": "I help therapists at every stage—from starting to scaling—build structured, profitable practices that attract aligned clients and support long-term growth."
+    },
+    {
+      "tag": "p",
+      "text": "WORK WITH ME"
+    },
+    {
+      "tag": "h3",
+      "text": "Fill out the form below"
+    },
+    {
+      "tag": "p",
+      "text": "HEY MY THERAPIST FRIEND!"
+    },
+    {
+      "tag": "p",
+      "text": "👋 Welcome — I’m so glad you’re here."
+    },
+    {
+      "tag": "p",
+      "text": "The fact that you’re reading this tells me something important: you’re ready for more. More clarity, more confidence, more structure, more ownership of your practice… and more ease in building it."
+    },
+    {
+      "tag": "p",
+      "text": "This isn’t just another coaching application. This is the first honest step toward building the private practice you keep envisioning —the one that pays you well, fits your life, and lets you lead with purpose (not hustle and burnout)."
+    },
+    {
+      "tag": "p",
+      "text": "I take on a limited number of clinicians at a time—because this isn’t surface-level coaching. It’s deep, strategic, personal, and tailored to your goals, your vision, and the business you want to grow."
+    },
+    {
+      "tag": "p",
+      "text": "So please take your time as you complete this form. Your answers help me understand where you are now, where you want to be, and whether I’m the right coach to help you get there."
+    },
+    {
+      "tag": "p",
+      "text": "I review every application myself and you’ll hear back from me within 24 hours."
+    },
+    {
+      "tag": "p",
+      "text": "If you’re ready to move from clinician to Boss Clinician—you're in the right place."
+    },
+    {
+      "tag": "p",
+      "text": "LET’S BEGIN YOUR JOURNEY."
+    },
+    {
+      "tag": "button",
+      "text": "DONE! LETS DO THIS!"
+    },
+    {
+      "tag": "h2",
+      "text": "follow me @ profitwithyvette"
+    },
+    {
+      "tag": "h2",
+      "text": "follow me @ profitwithyvette"
+    },
+    {
+      "tag": "a",
+      "text": "Financial Disclaimer"
+    },
+    {
+      "tag": "a",
+      "text": "Privacy Policy"
+    },
+    {
+      "tag": "a",
+      "text": "Terms of Use"
+    },
+    {
+      "tag": "a",
+      "text": "Disclaimer"
+    },
+    {
+      "tag": "a",
+      "text": "Terms of Service"
+    },
+    {
+      "tag": "h4",
+      "text": "Join Our Free Trial"
+    },
+    {
+      "tag": "p",
+      "text": "Get started today before this once in a lifetime opportunity expires."
+    }
+  ]
+}

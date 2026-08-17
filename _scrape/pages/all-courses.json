@@ -1,0 +1,615 @@
+{
+  "slug": "all-courses",
+  "url": "https://www.bossclinician.com/all-courses",
+  "title": "COURSES - Boss Clinician",
+  "description": "",
+  "images": [
+    {
+      "orig": "https://kajabi-storefronts-production.kajabi-cdn.com/kajabi-storefronts-production/file-uploads/themes/2164066892/settings_images/aaf6133-1f2e-ad52-47fb-8717b7f7c54_cc27caf-bdfb-3edc-8125-c31d5c2f02e_ed3a865-143a-754e-1d20-80a6dd536e6_7253125-6272-725f-7f4a-67438a13dc2f_yhowardlcsw-01_1_.webp",
+      "local": "fca86cb397c6.webp",
+      "alt": "Boss Clinician logo — main header"
+    },
+    {
+      "orig": "https://kajabi-storefronts-production.kajabi-cdn.com/kajabi-storefronts-production/file-uploads/themes/2164066892/settings_images/e10062f-ee-3dbf-231-220a012e7fd_pngtree-pretty-dotted-arrow-png-image_2962544-removebg-preview_4_.png",
+      "local": "52529aff51bc.png",
+      "alt": ""
+    },
+    {
+      "orig": "https://kajabi-storefronts-production.kajabi-cdn.com/kajabi-storefronts-production/file-uploads/themes/2164066892/settings_images/e7e3aff-cdb0-37c6-b34-e0eede1204_New_Project_5_.png",
+      "local": "ea58a63aae60.png",
+      "alt": "Boss Clinician private practice training resources for therapists"
+    },
+    {
+      "orig": "https://kajabi-storefronts-production.kajabi-cdn.com/kajabi-storefronts-production/file-uploads/themes/2164066892/settings_images/25dc8cf-0857-4f86-df46-56b6fd245a6_New_Project_6_.png",
+      "local": "1bddc80cff22.png",
+      "alt": ""
+    },
+    {
+      "orig": "https://kajabi-storefronts-production.kajabi-cdn.com/kajabi-storefronts-production/file-uploads/themes/2164085590/settings_images/b58f1e-820d-01d-4015-53f6c51fa1c5_ba06be3-a342-aab6-00c3-6bc1e1861c7d_Yvette_Howard_by_The_Joshua_Gray_Foster-modified.png",
+      "local": "faff351d997d.png",
+      "alt": "Headshot — professional "
+    },
+    {
+      "orig": "https://kajabi-storefronts-production.kajabi-cdn.com/kajabi-storefronts-production/file-uploads/themes/2163890122/settings_images/e1214d5-30a-215c-5b31-2224483a173_1144832-200_2_.png",
+      "local": "be6005451611.png",
+      "alt": ""
+    },
+    {
+      "orig": "https://kajabi-storefronts-production.kajabi-cdn.com/kajabi-storefronts-production/file-uploads/themes/2164066892/settings_images/f2533-8d31-cda0-ee5a-e236100dfa7_b414bf8-3f40-30f4-ee6-7d6ce86b5_0e7c081-d4e2-d471-0051-4785cdae6b18_9ec6b8b3-5c1c-4d6c-bb07-bee23e756522.webp",
+      "local": "87e2e475b3ec.webp",
+      "alt": "Directory Makeover Audit banner"
+    },
+    {
+      "orig": "https://kajabi-storefronts-production.kajabi-cdn.com/kajabi-storefronts-production/file-uploads/themes/2164066892/settings_images/0fd3aa-5525-2a2d-d074-75212d66d7bb_278e73-2144-fcf-53bd-fb143c8ef628_Copy_of_Premium_Offer_Mock_Ups_7_.webp",
+      "local": "b9de41b029ed.webp",
+      "alt": "Courses — Fully Booked Toolkit worksheets"
+    },
+    {
+      "orig": "https://kajabi-storefronts-production.kajabi-cdn.com/kajabi-storefronts-production/file-uploads/themes/2164066892/settings_images/c225855-16a1-d120-845f-6d67735c62_75f851c-766-6d0d-5bbb-015db6fcf0_01_SAVE_THE_DATE_I_mean_it_when_I_say_this_one-hour_session_has_the_potential_to_transform_your_approach_to_business_and_boost_your_income_indefinitely.webp",
+      "local": "5a8b78757b65.webp",
+      "alt": "Courses page — Credentialing Success Formula mockup for group practices."
+    },
+    {
+      "orig": "https://kajabi-storefronts-production.kajabi-cdn.com/kajabi-storefronts-production/file-uploads/themes/2164066892/settings_images/fb6da14-4b46-c46c-48f0-2acbaeb1ad4_ea3ba6d-cfa8-313-820-fcaa21b06fe4_Copy_of_Premium_Offer_Mock_Ups_4_.webp",
+      "local": "bf28804cb9be.webp",
+      "alt": "Therapist confidence and credibility training Boss Clinician"
+    },
+    {
+      "orig": "https://kajabi-storefronts-production.kajabi-cdn.com/kajabi-storefronts-production/file-uploads/themes/2164066892/settings_images/cb3f5-fb57-0bd2-c74e-01516d7ff31_e65b-060a-f-0be-d5613c50465d_c8560a8-a0c5-2d83-1dcb-80c2aa643683_Private_Practice_Kickstart_Course_Mockup_2_.webp",
+      "local": "b638c609d53c.webp",
+      "alt": "Private practice startup toolkit for therapists and clinicians"
+    },
+    {
+      "orig": "https://kajabi-storefronts-production.kajabi-cdn.com/kajabi-storefronts-production/file-uploads/themes/2164066892/settings_images/a4a7c1a-02-1f2f-3de7-a4a27e624df1_35428a3-6eec-012a-f0b8-bf2b048e0_Facebook_Banner_from_Karen_18_.webp",
+      "local": "63feb84d0c9d.webp",
+      "alt": "Therapist rate increase strategy Boss Clinician"
+    },
+    {
+      "orig": "https://kajabi-storefronts-production.kajabi-cdn.com/kajabi-storefronts-production/file-uploads/themes/2164066892/settings_images/50856-7dd-83bb-520d-aa0f1e6e4fef_c84a665-4003-0bd2-c770-e18267be7c_b03d0cbf-4f75-4c2f-868c-ba71c6e4e6c5.jpeg",
+      "local": "674d37182903.jpeg",
+      "alt": "Referral partnership guide for private practice therapists"
+    },
+    {
+      "orig": "https://kajabi-storefronts-production.kajabi-cdn.com/kajabi-storefronts-production/file-uploads/themes/2164066892/settings_images/6ae317-25d6-0e7-e800-fc47ef47703_b0ee62-08a6-374a-274f-1ff8025730_8cdbbdd0-4f28-4d81-9ea5-8866a8b5489c.webp",
+      "local": "9d7fb2d1ba2d.webp",
+      "alt": "Private practice policies and protection resources for therapists"
+    },
+    {
+      "orig": "https://kajabi-storefronts-production.kajabi-cdn.com/kajabi-storefronts-production/file-uploads/themes/2164085590/settings_images/efda808-4478-7a45-301-e56e2cf835_321270f-c7fe-37d-aa20-2f001de33642_7_1_.png",
+      "local": "7df196fe83a2.png",
+      "alt": "Therapist marketing strategy training Boss Clinician"
+    },
+    {
+      "orig": "https://kajabi-storefronts-production.kajabi-cdn.com/kajabi-storefronts-production/file-uploads/themes/2164085590/settings_images/3b2877a-5b7a-ac14-d530-6f68058600f4_8.png",
+      "local": "792bcd2c2e26.png",
+      "alt": "Therapist niche and branding training Boss Clinician"
+    },
+    {
+      "orig": "https://kajabi-storefronts-production.kajabi-cdn.com/kajabi-storefronts-production/file-uploads/themes/2164066892/settings_images/56c6aa-eda-abc2-4e7c-5bb854d842cb_64b6da-858-3f65-326b-e62cfce34ff_01_SAVE_THE_DATE_I_mean_it_when_I_say_this_one-hour_session_has_the_potential_to_transform_your_approach_to_business_and_boost_your_income_indefinitely.webp",
+      "local": "fb13cb030751.webp",
+      "alt": "Therapist insurance rate negotiation template"
+    },
+    {
+      "orig": "https://kajabi-storefronts-production.kajabi-cdn.com/kajabi-storefronts-production/file-uploads/themes/2164066892/settings_images/4f3738-64d2-ecbc-285b-dd5723c75673_5d6734e-ad7f-8db-c2f5-718deae7efa_68a35-a2a7-588-8a0-14075164f21_Facebook_Banner_from_Karen_40_.webp",
+      "local": "1126b9d16f01.webp",
+      "alt": "Private practice planning and profit journal for therapists"
+    },
+    {
+      "orig": "https://kajabi-storefronts-production.kajabi-cdn.com/kajabi-storefronts-production/file-uploads/themes/2164066892/settings_images/e4b08bb-573c-cdc6-de85-6faf83c3aa0f_d8a8b01-d35a-a448-3dc7-427d326ad3c_c884271a-6814-4f5e-b113-f0c555ec9ec6.webp",
+      "local": "f6e89a66a1a7.webp",
+      "alt": "Therapist consultation call script and conversion guide"
+    },
+    {
+      "orig": "https://kajabi-storefronts-production.kajabi-cdn.com/kajabi-storefronts-production/file-uploads/themes/2164085590/settings_images/3f54305-c88b-f5ea-6dca-54f24ed1feb_db108e2-ed48-3dde-33ad-427a0a16d60_44.webp",
+      "local": "7d1cdf512574.webp",
+      "alt": "Private practice business growth training Boss Clinician"
+    },
+    {
+      "orig": "https://kajabi-storefronts-production.kajabi-cdn.com/kajabi-storefronts-production/file-uploads/themes/2163774408/settings_images/46eead3-b5f3-8a68-f3f8-78762fa76b2_Screenshot_2025-11-22_at_5.37.03_PM.png",
+      "local": "f5b93b871e63.png",
+      "alt": "Boss Clinician private practice education and coaching content"
+    },
+    {
+      "orig": "https://kajabi-storefronts-production.kajabi-cdn.com/kajabi-storefronts-production/file-uploads/themes/2163774408/settings_images/0d70dda-4607-c145-284b-a2255fc66ebf_46eead3-b5f3-8a68-f3f8-78762fa76b2_Screenshot_2025-11-22_at_5.png",
+      "local": "f3d42dbe2fc1.png",
+      "alt": "Boss Clinician private practice education and coaching content"
+    },
+    {
+      "orig": "https://kajabi-storefronts-production.kajabi-cdn.com/kajabi-storefronts-production/file-uploads/themes/2163774408/settings_images/3ef7c40-2c27-730-3ea3-ee10b4273fa5_46eead3-b5f3-8a68-f3f8-78762fa76b2_Screenshot_2025-11-22_at_5-2.png",
+      "local": "88fa8b929f77.png",
+      "alt": "Boss Clinician private practice education and coaching content"
+    },
+    {
+      "orig": "https://kajabi-storefronts-production.kajabi-cdn.com/kajabi-storefronts-production/file-uploads/themes/2163774408/settings_images/b66eac7-bcb-b33c-de5f-eaafdfc6603_46eead3-b5f3-8a68-f3f8-78762fa76b2_Screenshot_2025-11-22_at_5-3.png",
+      "local": "25a801447682.png",
+      "alt": "Boss Clinician private practice education and coaching content"
+    },
+    {
+      "orig": "https://kajabi-storefronts-production.kajabi-cdn.com/kajabi-storefronts-production/file-uploads/themes/2163774408/settings_images/ae218f7-4a08-ecc2-44e-00785b156ddd_46eead3-b5f3-8a68-f3f8-78762fa76b2_Screenshot_2025-11-22_at_5-4.png",
+      "local": "2b9be34e5f05.png",
+      "alt": "Boss Clinician private practice education and coaching content"
+    },
+    {
+      "orig": "https://kajabi-storefronts-production.kajabi-cdn.com/kajabi-storefronts-production/file-uploads/themes/2163890122/settings_images/cc27caf-bdfb-3edc-8125-c31d5c2f02e_ed3a865-143a-754e-1d20-80a6dd536e6_7253125-6272-725f-7f4a-67438a13dc2f_yhowardlcsw-01_1_.webp",
+      "local": "9f85dbb40125.webp",
+      "alt": "Footer Logo"
+    },
+    {
+      "orig": "https://kajabi-storefronts-production.kajabi-cdn.com/kajabi-storefronts-production/file-uploads/themes/2163672763/settings_images/1d24eb0-3014-cb0a-8f38-71ff2e263a1_Multiple-Line-Chart_-Green-_remix_20251118102429.gif",
+      "local": "337e0b0a24ce.gif",
+      "alt": ""
+    },
+    {
+      "orig": "https://fonts.cdnfonts.com/css/general-sans",
+      "local": "39aa7e07a0c8.img",
+      "alt": "bg"
+    },
+    {
+      "orig": "https://kajabi-storefronts-production.kajabi-cdn.com/kajabi-storefronts-production/file-uploads/themes/2163515063/settings_images/24ccf37-14-7723-86db-58e0c1b8c6e_dad8ff-ca05-c46e-437-4324e27561f8_7c22f07-f-c4b8-a17e-2f7b7f15da_b182200-3247-105e-e71-8e1e155110e2_noun-tick-4577087_1_1_1_.png",
+      "local": "a6fc4f43d997.png",
+      "alt": "bg"
+    },
+    {
+      "orig": "https://kajabi-storefronts-production.kajabi-cdn.com/kajabi-storefronts-production/file-uploads/themes/2163890122/settings_images/86a3607-c204-816-6808-65752e54151_c08284d-53e-03f-cd66-0ea15273ec1b_New_Project_2_.jpg",
+      "local": "9009684b4e04.jpg",
+      "alt": "bg"
+    },
+    {
+      "orig": "https://kajabi-storefronts-production.kajabi-cdn.com/kajabi-storefronts-production/file-uploads/themes/2159452965/settings_images/16a4d5e-a57e-5e4-ed61-305a7cf4744_0fb048a6-5a47-47e8-af88-33d13c261477.jpg",
+      "local": "63aba3a6feee.jpg",
+      "alt": "bg"
+    },
+    {
+      "orig": "https://kajabi-storefronts-production.kajabi-cdn.com/kajabi-storefronts-production/file-uploads/themes/2159452965/settings_images/16a4d5e-a57e-5e4-ed61-305a7cf4744_0fb048a6-5a47-47e8-af88-33d13c261477.jpg",
+      "local": "63aba3a6feee.jpg",
+      "alt": "bg"
+    },
+    {
+      "orig": "https://kajabi-storefronts-production.kajabi-cdn.com/kajabi-storefronts-production/file-uploads/themes/2159452965/settings_images/16a4d5e-a57e-5e4-ed61-305a7cf4744_0fb048a6-5a47-47e8-af88-33d13c261477.jpg",
+      "local": "63aba3a6feee.jpg",
+      "alt": "bg"
+    },
+    {
+      "orig": "https://kajabi-storefronts-production.kajabi-cdn.com/kajabi-storefronts-production/file-uploads/themes/2159452965/settings_images/16a4d5e-a57e-5e4-ed61-305a7cf4744_0fb048a6-5a47-47e8-af88-33d13c261477.jpg",
+      "local": "63aba3a6feee.jpg",
+      "alt": "bg"
+    },
+    {
+      "orig": "https://kajabi-storefronts-production.kajabi-cdn.com/kajabi-storefronts-production/file-uploads/themes/2159452965/settings_images/16a4d5e-a57e-5e4-ed61-305a7cf4744_0fb048a6-5a47-47e8-af88-33d13c261477.jpg",
+      "local": "63aba3a6feee.jpg",
+      "alt": "bg"
+    },
+    {
+      "orig": "https://kajabi-storefronts-production.kajabi-cdn.com/kajabi-storefronts-production/file-uploads/themes/2159452965/settings_images/16a4d5e-a57e-5e4-ed61-305a7cf4744_0fb048a6-5a47-47e8-af88-33d13c261477.jpg",
+      "local": "63aba3a6feee.jpg",
+      "alt": "bg"
+    },
+    {
+      "orig": "https://kajabi-storefronts-production.kajabi-cdn.com/kajabi-storefronts-production/file-uploads/themes/2159452965/settings_images/16a4d5e-a57e-5e4-ed61-305a7cf4744_0fb048a6-5a47-47e8-af88-33d13c261477.jpg",
+      "local": "63aba3a6feee.jpg",
+      "alt": "bg"
+    },
+    {
+      "orig": "https://kajabi-storefronts-production.kajabi-cdn.com/kajabi-storefronts-production/file-uploads/themes/2159452965/settings_images/16a4d5e-a57e-5e4-ed61-305a7cf4744_0fb048a6-5a47-47e8-af88-33d13c261477.jpg",
+      "local": "63aba3a6feee.jpg",
+      "alt": "bg"
+    },
+    {
+      "orig": "https://kajabi-storefronts-production.kajabi-cdn.com/kajabi-storefronts-production/file-uploads/themes/2159452965/settings_images/16a4d5e-a57e-5e4-ed61-305a7cf4744_0fb048a6-5a47-47e8-af88-33d13c261477.jpg",
+      "local": "63aba3a6feee.jpg",
+      "alt": "bg"
+    },
+    {
+      "orig": "https://kajabi-storefronts-production.kajabi-cdn.com/kajabi-storefronts-production/file-uploads/themes/2159452965/settings_images/16a4d5e-a57e-5e4-ed61-305a7cf4744_0fb048a6-5a47-47e8-af88-33d13c261477.jpg",
+      "local": "63aba3a6feee.jpg",
+      "alt": "bg"
+    },
+    {
+      "orig": "https://kajabi-storefronts-production.kajabi-cdn.com/kajabi-storefronts-production/file-uploads/themes/2159452965/settings_images/16a4d5e-a57e-5e4-ed61-305a7cf4744_0fb048a6-5a47-47e8-af88-33d13c261477.jpg",
+      "local": "63aba3a6feee.jpg",
+      "alt": "bg"
+    },
+    {
+      "orig": "https://kajabi-storefronts-production.kajabi-cdn.com/kajabi-storefronts-production/file-uploads/themes/2159452965/settings_images/16a4d5e-a57e-5e4-ed61-305a7cf4744_0fb048a6-5a47-47e8-af88-33d13c261477.jpg",
+      "local": "63aba3a6feee.jpg",
+      "alt": "bg"
+    },
+    {
+      "orig": "https://kajabi-storefronts-production.kajabi-cdn.com/kajabi-storefronts-production/file-uploads/themes/2159452965/settings_images/16a4d5e-a57e-5e4-ed61-305a7cf4744_0fb048a6-5a47-47e8-af88-33d13c261477.jpg",
+      "local": "63aba3a6feee.jpg",
+      "alt": "bg"
+    },
+    {
+      "orig": "https://kajabi-storefronts-production.kajabi-cdn.com/kajabi-storefronts-production/file-uploads/themes/2159452965/settings_images/16a4d5e-a57e-5e4-ed61-305a7cf4744_0fb048a6-5a47-47e8-af88-33d13c261477.jpg",
+      "local": "63aba3a6feee.jpg",
+      "alt": "bg"
+    },
+    {
+      "orig": "https://kajabi-storefronts-production.kajabi-cdn.com/kajabi-storefronts-production/file-uploads/themes/2159452965/settings_images/16a4d5e-a57e-5e4-ed61-305a7cf4744_0fb048a6-5a47-47e8-af88-33d13c261477.jpg",
+      "local": "63aba3a6feee.jpg",
+      "alt": "bg"
+    }
+  ],
+  "texts": [
+    {
+      "tag": "a",
+      "text": "ABOUT YVETTE"
+    },
+    {
+      "tag": "a",
+      "text": "WORK WITH ME"
+    },
+    {
+      "tag": "a",
+      "text": "COURSES"
+    },
+    {
+      "tag": "a",
+      "text": "FREE RESOURCES"
+    },
+    {
+      "tag": "a",
+      "text": "RETREATS"
+    },
+    {
+      "tag": "a",
+      "text": "BLOG"
+    },
+    {
+      "tag": "h2",
+      "text": "Ready to Start, Grow, & Scale Your Private Practice With Confidence?"
+    },
+    {
+      "tag": "p",
+      "text": "It's time to ditch the overwhelm and build the profitable, peaceful, fully aligned practice you’ve been dreaming of."
+    },
+    {
+      "tag": "a",
+      "text": "Explore the Library"
+    },
+    {
+      "tag": "p",
+      "text": "IT'S TIME TO DITCH THE OVERWHELM AND BUILD THE PROFITABLE, PEACEFUL, FULLY ALIGNED PRACTICE YOU’VE BEEN DREAMING OF."
+    },
+    {
+      "tag": "h3",
+      "text": "Boss Clinician"
+    },
+    {
+      "tag": "h3",
+      "text": "Mission"
+    },
+    {
+      "tag": "h3",
+      "text": "Helping therapists build profitable practices, embrace confidence, and create a lifestyle filled with freedom, fulfillment, and financial peace."
+    },
+    {
+      "tag": "h2",
+      "text": "Explore the Boss Clinician Training Library →"
+    },
+    {
+      "tag": "p",
+      "text": "Created to help therapists step into their CEO identity, attract aligned clients, and run a practice that feels good and grows consistently."
+    },
+    {
+      "tag": "h2",
+      "text": "DIRECTORY MAKEOVER AUDIT"
+    },
+    {
+      "tag": "p",
+      "text": "Make Your Profile Irresistible — Get Seen. Get Chosen. Get Booked."
+    },
+    {
+      "tag": "p",
+      "text": "A personalized audit that shows you exactly how to transform your Psychology Today or TherapyDen profile into a client-attracting powerhouse."
+    },
+    {
+      "tag": "p",
+      "text": "You’ll Get:"
+    },
+    {
+      "tag": "a",
+      "text": "Turn My profile into a booking magnet!"
+    },
+    {
+      "tag": "h2",
+      "text": "FULLY BOOKED TOOLKIT"
+    },
+    {
+      "tag": "p",
+      "text": "Confidence. Consistency. Clients — This Toolkit Gets You Booked."
+    },
+    {
+      "tag": "p",
+      "text": "You worked hard to become a therapist — now let your practice reflect that. The Fully Booked Toolkit is designed to help you attract consistent clients , streamline systems, and run a thriving practice that fills your schedule without chaos."
+    },
+    {
+      "tag": "p",
+      "text": "Inside You’ll Get:"
+    },
+    {
+      "tag": "a",
+      "text": "GET FULLY BOOKED HERE"
+    },
+    {
+      "tag": "h2",
+      "text": "CREDENTIALING SUCCESS FORMULA"
+    },
+    {
+      "tag": "p",
+      "text": "For Group Practice Owners Who Need Their Team Credentialed ASAP"
+    },
+    {
+      "tag": "p",
+      "text": "A simple, repeatable system to credential your clinicians quickly and cleanly."
+    },
+    {
+      "tag": "p",
+      "text": "Inside you will get:"
+    },
+    {
+      "tag": "a",
+      "text": "Grab Credentialing Success Formula"
+    },
+    {
+      "tag": "h2",
+      "text": "CREDENTIAL WITH CONFIDENCE"
+    },
+    {
+      "tag": "p",
+      "text": "For Solo Therapists Ready to Start Credentialing"
+    },
+    {
+      "tag": "p",
+      "text": "No confusion. No overwhelm. Just clear direction."
+    },
+    {
+      "tag": "p",
+      "text": "Inside you will get:"
+    },
+    {
+      "tag": "p",
+      "text": "💛 CAQH made simple so you will finally understand what’s required without confusion."
+    },
+    {
+      "tag": "p",
+      "text": "💛 I nsurance panels clearly explained so you will know which panels to apply to and why."
+    },
+    {
+      "tag": "p",
+      "text": "💛 Step-by-step submission guidance so you will credential correctly the first time and avoid delays."
+    },
+    {
+      "tag": "a",
+      "text": "Start Credentialing With Confidence"
+    },
+    {
+      "tag": "h2",
+      "text": "PRIVATE PRACTICE STARTER SUITE"
+    },
+    {
+      "tag": "p",
+      "text": "A 3-Step Mini Course to Launch Your Private Practice"
+    },
+    {
+      "tag": "p",
+      "text": "Your roadmap for setting up your business legally & confidently."
+    },
+    {
+      "tag": "p",
+      "text": "Inside you will get:"
+    },
+    {
+      "tag": "a",
+      "text": "Start Your Practice Today"
+    },
+    {
+      "tag": "h2",
+      "text": "🔥 RAMP-UP RATE FORMULA"
+    },
+    {
+      "tag": "p",
+      "text": "Set Your Rates Like a CEO — Not a Guessing Therapist"
+    },
+    {
+      "tag": "p",
+      "text": "Discover your exact profitable, ethical session rate."
+    },
+    {
+      "tag": "p",
+      "text": "Inside you will get:"
+    },
+    {
+      "tag": "a",
+      "text": "Find Your Perfect Rate"
+    },
+    {
+      "tag": "h2",
+      "text": "PROVIDER PARTNERSHIP GUIDE"
+    },
+    {
+      "tag": "p",
+      "text": "Create Referral Streams That Never Dry Up"
+    },
+    {
+      "tag": "p",
+      "text": "Get the templates, scripts, and workflows to build strong referral relationships with doctors and specialists — consistently sending clients your way."
+    },
+    {
+      "tag": "p",
+      "text": "Inside you will get:"
+    },
+    {
+      "tag": "a",
+      "text": "Build Referral Partnerships"
+    },
+    {
+      "tag": "h2",
+      "text": "PRIVATE PRACTICE PROTECTION PACK"
+    },
+    {
+      "tag": "p",
+      "text": "Protect Your Practice With Lawyer-Reviewed Forms"
+    },
+    {
+      "tag": "p",
+      "text": "Get everything you need — consent forms, HIPAA documents, policies, telehealth and safety templates — to stay compliant and run your practice like a professional."
+    },
+    {
+      "tag": "p",
+      "text": "Inside you will get:"
+    },
+    {
+      "tag": "a",
+      "text": "Protect Your Practice"
+    },
+    {
+      "tag": "h2",
+      "text": "MARKETING MASTERY FOR THERAPISTS"
+    },
+    {
+      "tag": "p",
+      "text": "A Complete Therapist-Friendly Marketing System"
+    },
+    {
+      "tag": "p",
+      "text": "Done-for-you content that helps you get clients consistently."
+    },
+    {
+      "tag": "p",
+      "text": "Inside you will get:"
+    },
+    {
+      "tag": "a",
+      "text": "Master Your Marketing"
+    },
+    {
+      "tag": "h2",
+      "text": "THERAPIST NICHE CLARITY ACCELERATOR"
+    },
+    {
+      "tag": "p",
+      "text": "Find Your Niche Fast — So Clients Find YOU"
+    },
+    {
+      "tag": "p",
+      "text": "A powerful clarity tool to identify your ideal client & message."
+    },
+    {
+      "tag": "p",
+      "text": "Inside you will get:"
+    },
+    {
+      "tag": "a",
+      "text": "Find Your Niche Today"
+    },
+    {
+      "tag": "h2",
+      "text": "RATE NEGOTIATION LETTER TEMPLATE"
+    },
+    {
+      "tag": "p",
+      "text": "Ask for Higher Rates With Ease"
+    },
+    {
+      "tag": "p",
+      "text": "A plug-and-play, therapist-friendly template that helps you request (and often secure) better reimbursement rates."
+    },
+    {
+      "tag": "p",
+      "text": "Inside you will get:"
+    },
+    {
+      "tag": "a",
+      "text": "Download the Letter Template"
+    },
+    {
+      "tag": "h2",
+      "text": "PREPARE TO PROFIT JOURNAL"
+    },
+    {
+      "tag": "p",
+      "text": "A Guided Meditation & Mindset Journal to Release Fear & Step Into CEO Energy"
+    },
+    {
+      "tag": "p",
+      "text": "A 5-step digital journal designed for therapists to ditch self-doubt and step into the confidence needed to start or scale their practice."
+    },
+    {
+      "tag": "p",
+      "text": "Inside you will get:"
+    },
+    {
+      "tag": "a",
+      "text": "Start Shifting Into CEO Energy With the Journal"
+    },
+    {
+      "tag": "h2",
+      "text": "CLIENT CONSULTATION CALL SCRIPT"
+    },
+    {
+      "tag": "p",
+      "text": "A Complete, Plug-and-Play Script to Guide Your First Client Calls — Confidently & Professionally"
+    },
+    {
+      "tag": "p",
+      "text": "Make your initial consult calls smooth , confident , and conversion-focused . This script helps you structure discovery calls so you can screen for fit, set expectations, and convert inquiries into booked sessions."
+    },
+    {
+      "tag": "p",
+      "text": "Inside you will get:"
+    },
+    {
+      "tag": "a",
+      "text": "Get the Client Consultation Call Script"
+    },
+    {
+      "tag": "h2",
+      "text": "FROM PROFILE TO PROFIT"
+    },
+    {
+      "tag": "p",
+      "text": "Turn Your Therapist Directory Profile Into Booked Clients"
+    },
+    {
+      "tag": "p",
+      "text": "Stop blending in — make your directory profile stand out , attract your ideal clients , and convert profile views into booked sessions."
+    },
+    {
+      "tag": "p",
+      "text": "Inside you will get:"
+    },
+    {
+      "tag": "a",
+      "text": "Transform Your Profile"
+    },
+    {
+      "tag": "h2",
+      "text": "Follow me @ profitwithyvette"
+    },
+    {
+      "tag": "a",
+      "text": "Financial Disclaimer"
+    },
+    {
+      "tag": "a",
+      "text": "Privacy Policy"
+    },
+    {
+      "tag": "a",
+      "text": "Terms of Use"
+    },
+    {
+      "tag": "a",
+      "text": "Disclaimer"
+    },
+    {
+      "tag": "a",
+      "text": "Terms of Service"
+    },
+    {
+      "tag": "h3",
+      "text": "Download the free step-by-step blueprint to get started the right way."
+    }
+  ]
+}

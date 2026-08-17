@@ -1,0 +1,28 @@
+# deps
+node_modules/
+**/node_modules/
+.venv/
+__pycache__/
+*.pyc
+
+# builds
+dist/
+build/
+frontend/dist/
+backend/dist/
+
+# env / secrets
+.env
+.env.*
+**/.env
+**/.env.*
+!.env.example
+!**/.env.example
+
+# scrape raw (keep images in frontend/public; raw html is bulky source material)
+_scrape/pages/*.html
+_scrape/.venv/
+
+# misc
+.DS_Store
+*.log

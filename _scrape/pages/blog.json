@@ -1,0 +1,367 @@
+{
+  "slug": "blog",
+  "url": "https://www.bossclinician.com/blog",
+  "title": "Boss Clinician Blog | Business & Growth for Clinicians",
+  "description": "Practical strategies, tools, and insights to help clinicians grow profitable, sustainable practices without burnout.",
+  "images": [
+    {
+      "orig": "https://kajabi-storefronts-production.kajabi-cdn.com/kajabi-storefronts-production/file-uploads/themes/2157622920/settings_images/3a450fe-80ea-c151-11e0-56151df666_af669bce-6231-432b-ab04-a4010010514b.webp",
+      "local": "791da84c1a06.webp",
+      "alt": "Boss Clinician"
+    },
+    {
+      "orig": "https://kajabi-storefronts-production.kajabi-cdn.com/kajabi-storefronts-production/file-uploads/sites/2148299891/images/2e41d36-8fb7-3f1-07b0-d1d1037ed4_campaign-creators-yktK2qaiVHI-unsplash.jpg",
+      "local": "1d0fbe17dd36.jpg",
+      "alt": ""
+    },
+    {
+      "orig": "https://kajabi-storefronts-production.kajabi-cdn.com/kajabi-storefronts-production/file-uploads/sites/2148299891/images/3847dca-4332-4f5-844-eb876388326_c2febd-61aa-5b2f-ba54-f5bcb04534db_blog_social_image_8_1_.png",
+      "local": "24ea3347f734.png",
+      "alt": ""
+    },
+    {
+      "orig": "https://kajabi-storefronts-production.kajabi-cdn.com/kajabi-storefronts-production/file-uploads/blogs/2148060661/images/c2febd-61aa-5b2f-ba54-f5bcb04534db_blog_social_image_8_.png",
+      "local": "ddfa140b0679.png",
+      "alt": "Therapist releasing money guilt and learning to charge confidently in private practice"
+    },
+    {
+      "orig": "https://kajabi-storefronts-production.kajabi-cdn.com/kajabi-storefronts-production/file-uploads/blogs/2148060661/images/5b055c7-e62a-fda-236-a27e46c7f6a_yvette_howard_boss_clinician_1_.jpg",
+      "local": "2daeb7898d4c.jpg",
+      "alt": "Therapist overcoming fear to build a private practice with clarity and confidence"
+    },
+    {
+      "orig": "https://kajabi-storefronts-production.kajabi-cdn.com/kajabi-storefronts-production/file-uploads/blogs/2148060661/images/d25cc26-eac2-e83a-15b2-616581000_blog_social_image_4_.png",
+      "local": "e959c4fbb335.png",
+      "alt": "Therapist seeking peace of mind around audit-ready documentation"
+    },
+    {
+      "orig": "https://kajabi-storefronts-production.kajabi-cdn.com/kajabi-storefronts-production/file-uploads/blogs/2148060661/images/8c83ab8-d8f-63a5-c6ae-5685a8527517_blog_social_image_3_.png",
+      "local": "fcc4757526fe.png",
+      "alt": "What auditors look for in therapist documentation and audit reviews"
+    },
+    {
+      "orig": "https://kajabi-storefronts-production.kajabi-cdn.com/kajabi-storefronts-production/file-uploads/blogs/2148060661/images/6d00e1-33c-e86-d18-cd7a87222feb_Clinical_documentation_Audit_Ready_Notes.png",
+      "local": "4ca46715660a.png",
+      "alt": "Difference between clinical notes and audit-ready documentation for therapists"
+    },
+    {
+      "orig": "https://kajabi-storefronts-production.kajabi-cdn.com/kajabi-storefronts-production/file-uploads/blogs/2148060661/images/8e65570-e70c-e5b3-54c8-27cda4ebb7d0_0c30bf74-f502-483b-a6b1-1ba163dbad0f.png",
+      "local": "156bed401fea.png",
+      "alt": "Therapist concerned about audit-ready clinical documentation in private practice"
+    },
+    {
+      "orig": "https://kajabi-storefronts-production.kajabi-cdn.com/kajabi-storefronts-production/file-uploads/themes/2157622920/settings_images/8f858fc-728-61c2-b8de-726acc1c46_00ab9baa-d27c-41ba-897f-ec81fa623acf.jpeg",
+      "local": "2b6796d95501.jpeg",
+      "alt": "Yvette Howard private practice consultant and therapist business strategist"
+    },
+    {
+      "orig": "https://kajabi-storefronts-production.kajabi-cdn.com/kajabi-storefronts-production/file-uploads/themes/2157622920/settings_images/f7d1af-5daf-feba-0d17-c04ef2c0315_a526f544-8baa-41c6-8478-1d741aef2850.webp",
+      "local": "8e119e5e9c0d.webp",
+      "alt": "Boss Clinician logo — footer"
+    },
+    {
+      "orig": "https://kajabi-storefronts-production.kajabi-cdn.com/kajabi-storefronts-production/themes/2157622920/assets/placeholder.png?1780327412999895",
+      "local": "48d3402bda7e.png",
+      "alt": ""
+    },
+    {
+      "orig": "https://kajabi-storefronts-production.kajabi-cdn.com/kajabi-storefronts-production/file-uploads/themes/2157622920/settings_images/76d3c6b-ecf8-55ba-247-127c34b6e218_e40df24b-0d7a-4055-b6c7-944744815215.jpeg",
+      "local": "070867ef7570.jpeg",
+      "alt": "bg"
+    }
+  ],
+  "texts": [
+    {
+      "tag": "a",
+      "text": "ABOUT YVETTE"
+    },
+    {
+      "tag": "a",
+      "text": "WORK WITH ME"
+    },
+    {
+      "tag": "a",
+      "text": "COURSES"
+    },
+    {
+      "tag": "a",
+      "text": "FREE RESOURCES"
+    },
+    {
+      "tag": "a",
+      "text": "RETREATS"
+    },
+    {
+      "tag": "a",
+      "text": "BLOG"
+    },
+    {
+      "tag": "h2",
+      "text": "BEST OF"
+    },
+    {
+      "tag": "a",
+      "text": "Why Your Private Practice Marketing Isn’t Working (And What to Do Instead)"
+    },
+    {
+      "tag": "a",
+      "text": "boss clinician"
+    },
+    {
+      "tag": "a",
+      "text": "practice confidence"
+    },
+    {
+      "tag": "a",
+      "text": "therapist anxiety"
+    },
+    {
+      "tag": "a",
+      "text": "How to Stop Seeing 25+ Clients a Week and Still Hit Your Income Goals"
+    },
+    {
+      "tag": "a",
+      "text": "boss clinician"
+    },
+    {
+      "tag": "a",
+      "text": "practice confidence"
+    },
+    {
+      "tag": "a",
+      "text": "Afraid to Charge? Ditching the Money Guilt as a Therapist"
+    },
+    {
+      "tag": "a",
+      "text": "boss clinician"
+    },
+    {
+      "tag": "a",
+      "text": "money guilt"
+    },
+    {
+      "tag": "a",
+      "text": "private practice pricing"
+    },
+    {
+      "tag": "a",
+      "text": "therapist money mindset"
+    },
+    {
+      "tag": "a",
+      "text": "therapist sustainability"
+    },
+    {
+      "tag": "a",
+      "text": "Don’t Let Fear Delay the Practice You’re Meant to Build"
+    },
+    {
+      "tag": "a",
+      "text": "boss clinician"
+    },
+    {
+      "tag": "a",
+      "text": "practice growth"
+    },
+    {
+      "tag": "a",
+      "text": "private practice mindset"
+    },
+    {
+      "tag": "a",
+      "text": "therapist entrepreneurship"
+    },
+    {
+      "tag": "a",
+      "text": "therapist leadership"
+    },
+    {
+      "tag": "a",
+      "text": "The Peace of Mind Most Therapists Are Quietly Searching For"
+    },
+    {
+      "tag": "a",
+      "text": "audit preparedness"
+    },
+    {
+      "tag": "a",
+      "text": "practice confidence"
+    },
+    {
+      "tag": "a",
+      "text": "private practice compliance"
+    },
+    {
+      "tag": "a",
+      "text": "therapist anxiety"
+    },
+    {
+      "tag": "a",
+      "text": "What Auditors Actually Look For (And Why Most Therapists Are Never Told)"
+    },
+    {
+      "tag": "a",
+      "text": "audit readiness"
+    },
+    {
+      "tag": "a",
+      "text": "boss clinician"
+    },
+    {
+      "tag": "a",
+      "text": "medical necessity"
+    },
+    {
+      "tag": "a",
+      "text": "private practice compliance"
+    },
+    {
+      "tag": "a",
+      "text": "therapist documentation"
+    },
+    {
+      "tag": "a",
+      "text": "Clinical Notes vs Audit-Ready Notes: What Most Therapists Aren’t Told"
+    },
+    {
+      "tag": "a",
+      "text": "audit-ready notes"
+    },
+    {
+      "tag": "a",
+      "text": "clinical documentation"
+    },
+    {
+      "tag": "a",
+      "text": "medical necessity"
+    },
+    {
+      "tag": "a",
+      "text": "private practice systems"
+    },
+    {
+      "tag": "a",
+      "text": "therapist compliance"
+    },
+    {
+      "tag": "a",
+      "text": "Audit Proof Your Practice: The Moment I Realized My Notes Weren’t Enough"
+    },
+    {
+      "tag": "a",
+      "text": "audit readiness"
+    },
+    {
+      "tag": "a",
+      "text": "boss clinician"
+    },
+    {
+      "tag": "a",
+      "text": "clinical documentation"
+    },
+    {
+      "tag": "a",
+      "text": "private practice audit"
+    },
+    {
+      "tag": "a",
+      "text": "therapist compliance"
+    },
+    {
+      "tag": "p",
+      "text": "Categories"
+    },
+    {
+      "tag": "p",
+      "text": "Follow Us"
+    },
+    {
+      "tag": "p",
+      "text": "Free Masterclass"
+    },
+    {
+      "tag": "h1",
+      "text": "The 4-Step Blueprint to Building a Profitable Private Practice"
+    },
+    {
+      "tag": "p",
+      "text": "This FREE masterclass breaks it all down for you. You’ll learn a simple 4-step framework to start or grow your private practice with more confidence and less chaos. No guesswork. No overwhelm. No piecing together random advice."
+    },
+    {
+      "tag": "p",
+      "text": "If you want clear direction, a smarter not harder strategy, and a roadmap that helps you avoid the common pitfalls new practice owners face, this masterclass is your first step."
+    },
+    {
+      "tag": "button",
+      "text": "WATCH FREE CLASS NOW!"
+    },
+    {
+      "tag": "h1",
+      "text": "MEET YVETTE"
+    },
+    {
+      "tag": "p",
+      "text": "I’m here to help therapists turn their clinical skills into sustainable, aligned businesses—without burning out or breaking their values."
+    },
+    {
+      "tag": "p",
+      "text": "Here, it’s not either/or. It’s impact and income. Ethics and ease. Purpose and profit."
+    },
+    {
+      "tag": "p",
+      "text": "I didn’t start out wanting to be an entrepreneur—I started out trying to survive a broken system. I worked underpaid agency jobs, chased licensure, juggled multiple roles, and learned the hard way what school never taught us: being a great therapist doesn’t automatically build a great business."
+    },
+    {
+      "tag": "p",
+      "text": "So I built my own."
+    },
+    {
+      "tag": "p",
+      "text": "I grew from solo practitioner to group practice owner, made every mistake imaginable, navigated insurance chaos, scaled into a W2 agency, and learned how to lead a practice that supports both clients and clinicians. Today, I run a thriving group practice, serve as a clinical supervisor, and build businesses that create freedom, flexibility, and stability—for me and for the therapists I support."
+    },
+    {
+      "tag": "p",
+      "text": "Now, through Boss Clinician , I teach therapists how to become CEOs of their clinical expertise and build practices that actually support their lives."
+    },
+    {
+      "tag": "a",
+      "text": "LEARN MORE ABOUT ME"
+    },
+    {
+      "tag": "h1",
+      "text": "Ready for a real strategy?"
+    },
+    {
+      "tag": "a",
+      "text": "Apply to work with Yvette →"
+    },
+    {
+      "tag": "a",
+      "text": "Financial Disclaimer"
+    },
+    {
+      "tag": "a",
+      "text": "Privacy Policy"
+    },
+    {
+      "tag": "a",
+      "text": "Terms of Use"
+    },
+    {
+      "tag": "a",
+      "text": "Disclaimer"
+    },
+    {
+      "tag": "a",
+      "text": "Terms of Service"
+    },
+    {
+      "tag": "h4",
+      "text": "Join Our Free Trial"
+    },
+    {
+      "tag": "p",
+      "text": "Get started today before this once in a lifetime opportunity expires."
+    }
+  ]
+}

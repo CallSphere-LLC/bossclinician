@@ -1,0 +1,453 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /* ══════════════════════════════════════════════════════════════════════
+     THEME PALETTES
+     The semantic brand tokens (ink, cream, sand, surface, hairline, plum…)
+     resolve from these variables, so switching one class on the page shell
+     re-themes every component that uses them. Values are space-separated RGB
+     channels because Tailwind composes them as `rgb(var(--x) / <alpha>)`.
+     ══════════════════════════════════════════════════════════════════════ */
+
+  /* Light — the original marketing palette. Anything not wrapped in a theme
+     class still renders exactly as it did before. */
+  :root {
+    --c-ink: 15 30 58;
+    --c-ink-soft: 90 85 96;
+    --c-cream: 250 248 252;
+    --c-sand: 247 240 230;
+    --c-surface: 255 255 255;
+    --c-surface-raised: 250 248 252;
+    --c-hairline: 228 220 237;
+    --c-lilac-soft: 217 207 230;
+    --c-lilac-tint: 237 230 244;
+    --c-dark: 15 30 58;
+    --c-plum: 92 69 125;
+    --c-plum-deep: 61 45 92;
+  }
+
+  /* Public dark theme. `ink` inverts to near-white because it means "body
+     text", not "navy"; `plum` lifts to lavender because #5C457D as *text* on
+     a near-black field is ~1.6:1 — the same token has to keep its role, not
+     its hue. */
+  .theme-luxe {
+    --c-ink: 255 255 255;
+    --c-ink-soft: 139 121 168; /* orchid-dim */
+    --c-cream: 10 7 19; /* night */
+    --c-sand: 16 11 28; /* night-raised */
+    --c-surface: 16 11 28;
+    --c-surface-raised: 23 16 38;
+    --c-hairline: 56 46 78;
+    --c-lilac-soft: 167 139 196;
+    --c-lilac-tint: 30 21 48;
+    --c-dark: 6 4 11;
+    --c-plum: 185 162 214; /* orchid — readable on night */
+    --c-plum-deep: 216 202 235;
+  }
+
+  /* Admin console. Slightly lighter surfaces than the public theme and a
+     cooler hairline: a data grid needs its row separators to survive at 1px
+     under a bright screen, where the marketing theme can afford to whisper. */
+  .theme-console {
+    --c-ink: 237 233 245;
+    --c-ink-soft: 152 141 176;
+    --c-cream: 11 8 20;
+    --c-sand: 20 15 34;
+    --c-surface: 20 15 34;
+    --c-surface-raised: 27 20 44;
+    --c-hairline: 62 51 86;
+    --c-lilac-soft: 167 139 196;
+    --c-lilac-tint: 35 25 56;
+    --c-dark: 8 5 15;
+    --c-plum: 185 162 214;
+    --c-plum-deep: 216 202 235;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.001ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    @apply font-display text-ink;
+  }
+
+  :focus-visible {
+    outline: 2px solid #c9a46a;
+    outline-offset: 3px;
+    border-radius: 2px;
+  }
+
+  ::selection {
+    background: #ede6f4;
+    color: #0f1e3a;
+  }
+}
+
+@layer components {
+  .eyebrow {
+    @apply mb-4 inline-block text-[0.72rem] font-semibold uppercase tracking-[0.18em] text-plum;
+  }
+
+  /*
+   * Long-form article body on the dark theme.
+   *
+   * `prose-invert` is the base because `prose-slate` hard-codes slate-700 body
+   * text, which the token swap cannot reach — Typography's colours are baked
+   * into its own CSS variables, not our semantic tokens. Everything else is
+   * then pulled back toward the brand: Playfair headings, gold links and
+   * blockquote rule, orchid body at a slightly opened leading.
+   */
+  .prose-boss {
+    @apply prose prose-invert max-w-none
+      prose-headings:font-display prose-headings:font-medium prose-headings:text-white
+      prose-p:text-orchid-dim prose-p:leading-[1.85]
+      prose-li:text-orchid-dim prose-li:leading-[1.8]
+      prose-strong:text-white
+      prose-a:text-gold prose-a:no-underline hover:prose-a:underline
+      prose-blockquote:border-l-gold/60 prose-blockquote:font-display
+      prose-blockquote:not-italic prose-blockquote:text-orchid
+      prose-hr:border-white/10
+      prose-code:text-gold prose-code:before:content-none prose-code:after:content-none
+      prose-img:rounded-2xl;
+  }
+}
+
+.bg-gradient-animated {
+  background-size: 200% 200%;
+}
+
+/*
+ * Range slider used by the Resource Hub income calculator.
+ * Thumb/track pseudo-elements cannot be expressed as Tailwind utilities, so the
+ * chrome lives here. The track *fill* stays inline (it is derived from state).
+ */
+.range-gold {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  border-radius: 100px;
+  cursor: pointer;
+  outline: none;
+}
+
+.range-gold::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #c9a46a;
+  border: 2px solid #0f1e3a;
+  box-shadow: 0 0 0 2px rgba(201, 164, 106, 0.3);
+  cursor: pointer;
+}
+
+.range-gold::-moz-range-track {
+  height: 6px;
+  border-radius: 100px;
+  background: transparent;
+}
+
+.range-gold::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #c9a46a;
+  border: 2px solid #0f1e3a;
+  box-shadow: 0 0 0 2px rgba(201, 164, 106, 0.3);
+  cursor: pointer;
+}
+
+.range-gold:focus-visible {
+  outline: 2px solid #c9a46a;
+  outline-offset: 4px;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   OBSIDIAN LUXE
+   The dark theme's material layer. Everything here is either (a) not
+   expressible as a Tailwind utility (backdrop filters + mask compositing +
+   pseudo-element noise) or (b) a multi-property material that must stay
+   identical across every section, so it lives in one place rather than being
+   re-typed as a 12-class soup per component.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+@layer components {
+  /* Uppercase micro-label above a section title. Dark-surface variant.
+     0.68rem (10.9px) is a fine editorial label size on a desktop monitor and
+     a squint on a phone held at arm's length, so the phone value is raised and
+     the tracking eased — wide tracking costs more legibility the smaller the
+     type gets. */
+  .eyebrow-luxe {
+    @apply mb-4 inline-block text-[0.74rem] font-semibold uppercase tracking-[0.2em] text-gold/85 sm:mb-5 sm:text-[0.68rem] sm:tracking-[0.28em];
+  }
+
+  /* Long-form copy on dark: lighter weight, opened leading, softened colour.
+     Pure white body text on near-black vibrates; orchid reads as calm. */
+  .copy-luxe {
+    @apply text-[0.98rem] font-light leading-[1.85] text-orchid-dim;
+  }
+}
+
+/* ── Film grain ───────────────────────────────────────────────────────────
+   A flat near-black page reads as "cheap dark mode"; a low-opacity noise
+   field over it reads as printed matter. Fixed + pointer-events-none so it
+   costs one composited layer and never intercepts input. */
+.grain-overlay::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  pointer-events: none;
+  opacity: 0.5;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.42'/%3E%3C/svg%3E");
+}
+
+/* ── Glass ────────────────────────────────────────────────────────────────
+   One material, three elevations. `--glass-tint` lets a card carry an accent
+   without redefining the whole recipe. */
+.glass {
+  --glass-tint: 255, 255, 255;
+  position: relative;
+  background:
+    linear-gradient(
+      160deg,
+      rgba(var(--glass-tint), 0.075) 0%,
+      rgba(var(--glass-tint), 0.028) 45%,
+      rgba(255, 255, 255, 0.014) 100%
+    ),
+    rgba(10, 7, 19, 0.55);
+  backdrop-filter: blur(22px) saturate(135%);
+  -webkit-backdrop-filter: blur(22px) saturate(135%);
+  border: 1px solid rgba(255, 255, 255, 0.085);
+  box-shadow:
+    0 24px 60px -24px rgba(0, 0, 0, 0.85),
+    inset 0 1px 0 rgba(255, 255, 255, 0.07);
+}
+
+.glass-soft {
+  background: rgba(255, 255, 255, 0.035);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+}
+
+/* Gradient hairline border. A plain 1px border on dark glass looks drawn on;
+   masking a gradient into the border box makes the edge catch light at the
+   top and dissolve at the bottom, which is what real bevelled glass does. */
+.glass-edge::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(
+    150deg,
+    rgba(255, 255, 255, 0.28),
+    rgba(255, 255, 255, 0.04) 38%,
+    rgba(201, 164, 106, 0.22) 70%,
+    rgba(255, 255, 255, 0.03)
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+/* ── Cursor spotlight ─────────────────────────────────────────────────────
+   Driven by --mx/--my set on pointermove (see GlassCard). Opacity is the only
+   animated property, so hover costs no layout or paint of the card itself. */
+.spotlight::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  opacity: 0;
+  transition: opacity 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+  pointer-events: none;
+  background: radial-gradient(
+    340px circle at var(--mx, 50%) var(--my, 50%),
+    rgba(var(--spot, 201, 164, 106), 0.16),
+    transparent 62%
+  );
+}
+.spotlight:hover::after,
+.spotlight:focus-within::after {
+  opacity: 1;
+}
+
+/* ── Gold foil text ───────────────────────────────────────────────────────
+   Flat #C9A46A on near-black reads mustard. A multi-stop foil gradient with a
+   specular band near the middle reads as metal. */
+.text-foil {
+  background-image: linear-gradient(
+    100deg,
+    #a07840 0%,
+    #c9a46a 20%,
+    #f2e0ba 46%,
+    #d9b881 62%,
+    #b08a48 82%,
+    #8c6b34 100%
+  );
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  /* Descenders on Playfair italic get clipped by background-clip: text. */
+  padding-bottom: 0.08em;
+}
+
+/* ── Rules & dividers ─────────────────────────────────────────────────── */
+.rule-gold {
+  height: 1px;
+  background-image: linear-gradient(
+    90deg,
+    transparent,
+    rgba(201, 164, 106, 0.9) 30%,
+    rgba(242, 224, 186, 1) 50%,
+    rgba(201, 164, 106, 0.9) 70%,
+    transparent
+  );
+}
+
+.rule-faint {
+  height: 1px;
+  background-image: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.13) 50%,
+    transparent
+  );
+}
+
+/* ── Button sheen ─────────────────────────────────────────────────────────
+   A specular band that sweeps the gold button. Only runs on hover so idle
+   pages don't burn a compositor loop per button. */
+.sheen-host {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+.sheen-host::after {
+  content: "";
+  position: absolute;
+  top: -40%;
+  bottom: -40%;
+  left: 0;
+  width: 45%;
+  z-index: 1;
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.55),
+    transparent
+  );
+  transform: translateX(-140%) skewX(-18deg);
+}
+.sheen-host:hover::after {
+  animation: sheen 0.9s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* ── Portrait treatment ───────────────────────────────────────────────────
+   Bright studio photography dropped onto near-black looks pasted on. Fading
+   the image's own edges to transparent lets it sit *in* the dark instead. */
+.portrait-fade {
+  -webkit-mask-image: linear-gradient(
+      to bottom,
+      transparent 0%,
+      #000 16%,
+      #000 72%,
+      transparent 99%
+    ),
+    linear-gradient(to right, transparent 0%, #000 18%, #000 100%);
+  -webkit-mask-composite: source-in;
+  mask-image: linear-gradient(
+      to bottom,
+      transparent 0%,
+      #000 16%,
+      #000 72%,
+      transparent 99%
+    ),
+    linear-gradient(to right, transparent 0%, #000 18%, #000 100%);
+  mask-composite: intersect;
+}
+
+/* ── Marquee ──────────────────────────────────────────────────────────── */
+.marquee-mask {
+  -webkit-mask-image: linear-gradient(
+    90deg,
+    transparent,
+    #000 9%,
+    #000 91%,
+    transparent
+  );
+  mask-image: linear-gradient(90deg, transparent, #000 9%, #000 91%, transparent);
+}
+
+/* ── Dark chrome ──────────────────────────────────────────────────────── */
+.theme-luxe {
+  color-scheme: dark;
+  scrollbar-color: #2a1f3d #06040b;
+  scrollbar-width: thin;
+}
+.theme-luxe ::-webkit-scrollbar {
+  width: 11px;
+  height: 11px;
+}
+.theme-luxe ::-webkit-scrollbar-track {
+  background: #06040b;
+}
+.theme-luxe ::-webkit-scrollbar-thumb {
+  background: linear-gradient(#3a2b52, #241a36);
+  border-radius: 99px;
+  border: 3px solid #06040b;
+}
+.theme-luxe ::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(#4d3a6b, #33254a);
+}
+.theme-luxe ::selection {
+  background: rgba(201, 164, 106, 0.32);
+  color: #fff;
+}
+
+/* Motion budget: the ambient loops (aurora, marquee, glow) are decoration.
+   The global reduced-motion block above zeroes durations, which would freeze
+   a marquee mid-slide — so pin them to their rest state explicitly. */
+@media (prefers-reduced-motion: reduce) {
+  .animate-aurora-a,
+  .animate-aurora-b,
+  .animate-marquee,
+  .animate-pulse-glow,
+  .animate-scroll-cue,
+  .animate-sheen,
+  .sheen-host::after {
+    animation: none !important;
+    transform: none !important;
+  }
+}

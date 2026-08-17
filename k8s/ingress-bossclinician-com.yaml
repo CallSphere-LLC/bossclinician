@@ -1,0 +1,80 @@
+# Adds bossclinician.com + www.bossclinician.com alongside the existing
+# bossclinician.callsphere.site ingress (which stays working as a fallback).
+#
+# DO NOT APPLY until the Namecheap A records for @ and www point at this
+# server's public IP (2.24.200.155). cert-manager uses an HTTP-01 challenge,
+# which resolves the hostname over the public internet — issuance fails and
+# backs off if DNS still points at Kajabi.
+#
+#   kubectl apply -f k8s/ingress-bossclinician-com.yaml
+#   kubectl -n bossclinician get certificate boss-web-com-tls -w
+---
+# HTTP: serves the ACME HTTP-01 challenge, then redirects everything to HTTPS.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: boss-web-com-http
+  namespace: bossclinician
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: web
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: bossclinician.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: boss-web
+                port:
+                  number: 80
+    - host: www.bossclinician.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: boss-web
+                port:
+                  number: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: boss-web-com-https
+  namespace: bossclinician
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: bossclinician.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: boss-web
+                port:
+                  number: 80
+    - host: www.bossclinician.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: boss-web
+                port:
+                  number: 80
+  tls:
+    - hosts:
+        - bossclinician.com
+        - www.bossclinician.com
+      secretName: boss-web-com-tls

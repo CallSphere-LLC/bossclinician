@@ -1,0 +1,74 @@
+@font-face {
+    font-family: 'General Sans';
+    font-style: normal;
+    font-weight: 400;
+    src: local('General Sans'), url('https://fonts.cdnfonts.com/s/85793/GeneralSans-Regular.woff') format('woff');
+}
+@font-face {
+    font-family: 'General Sans';
+    font-style: italic;
+    font-weight: 400;
+    src: local('General Sans'), url('https://fonts.cdnfonts.com/s/85793/GeneralSans-Italic.woff') format('woff');
+}
+@font-face {
+    font-family: 'General Sans';
+    font-style: normal;
+    font-weight: 200;
+    src: local('General Sans'), url('https://fonts.cdnfonts.com/s/85793/GeneralSans-Extralight.woff') format('woff');
+}
+@font-face {
+    font-family: 'General Sans';
+    font-style: italic;
+    font-weight: 200;
+    src: local('General Sans'), url('https://fonts.cdnfonts.com/s/85793/GeneralSans-ExtralightItalic.woff') format('woff');
+}
+@font-face {
+    font-family: 'General Sans';
+    font-style: normal;
+    font-weight: 300;
+    src: local('General Sans'), url('https://fonts.cdnfonts.com/s/85793/GeneralSans-Light.woff') format('woff');
+}
+@font-face {
+    font-family: 'General Sans';
+    font-style: italic;
+    font-weight: 300;
+    src: local('General Sans'), url('https://fonts.cdnfonts.com/s/85793/GeneralSans-LightItalic.woff') format('woff');
+}
+@font-face {
+    font-family: 'General Sans';
+    font-style: normal;
+    font-weight: 500;
+    src: local('General Sans'), url('https://fonts.cdnfonts.com/s/85793/GeneralSans-Medium.woff') format('woff');
+}
+@font-face {
+    font-family: 'General Sans';
+    font-style: italic;
+    font-weight: 500;
+    src: local('General Sans'), url('https://fonts.cdnfonts.com/s/85793/GeneralSans-MediumItalic.woff') format('woff');
+}
+@font-face {
+    font-family: 'General Sans';
+    font-style: normal;
+    font-weight: 600;
+    src: local('General Sans'), url('https://fonts.cdnfonts.com/s/85793/GeneralSans-Semibold.woff') format('woff');
+}
+@font-face {
+    font-family: 'General Sans';
+    font-style: italic;
+    font-weight: 600;
+    src: local('General Sans'), url('https://fonts.cdnfonts.com/s/85793/GeneralSans-SemiboldItalic.woff') format('woff');
+}
+@font-face {
+    font-family: 'General Sans';
+    font-style: normal;
+    font-weight: 700;
+    src: local('General Sans'), url('https://fonts.cdnfonts.com/s/85793/GeneralSans-Bold.woff') format('woff');
+}
+@font-face {
+    font-family: 'General Sans';
+    font-style: italic;
+    font-weight: 700;
+    src: local('General Sans'), url('https://fonts.cdnfonts.com/s/85793/GeneralSans-BoldItalic.woff') format('woff');
+}
+
+

@@ -1,0 +1,94 @@
+{
+  "slug": "about",
+  "url": "https://www.bossclinician.com/about",
+  "title": "About",
+  "description": "Discover how to launch and grow your profitable private therapy practice with expert guidance from Yvette. Get started today!",
+  "images": [
+    {
+      "orig": "https://kajabi-storefronts-production.kajabi-cdn.com/kajabi-storefronts-production/file-uploads/themes/2157622920/settings_images/3a450fe-80ea-c151-11e0-56151df666_af669bce-6231-432b-ab04-a4010010514b.webp",
+      "local": "791da84c1a06.webp",
+      "alt": "Boss Clinician"
+    },
+    {
+      "orig": "https://kajabi-storefronts-production.kajabi-cdn.com/kajabi-storefronts-production/file-uploads/themes/2157622920/settings_images/c1891c4b-ed6f-447c-878c-c7fa51f4c2b4.jpg",
+      "local": "229c9978c56c.jpg",
+      "alt": ""
+    },
+    {
+      "orig": "https://kajabi-storefronts-production.kajabi-cdn.com/kajabi-storefronts-production/file-uploads/themes/2157622920/settings_images/f7d1af-5daf-feba-0d17-c04ef2c0315_a526f544-8baa-41c6-8478-1d741aef2850.webp",
+      "local": "8e119e5e9c0d.webp",
+      "alt": "Boss Clinician logo — footer"
+    },
+    {
+      "orig": "https://kajabi-storefronts-production.kajabi-cdn.com/kajabi-storefronts-production/themes/2157622920/assets/placeholder.png?1780327412999895",
+      "local": "48d3402bda7e.png",
+      "alt": ""
+    }
+  ],
+  "texts": [
+    {
+      "tag": "a",
+      "text": "ABOUT YVETTE"
+    },
+    {
+      "tag": "a",
+      "text": "WORK WITH ME"
+    },
+    {
+      "tag": "a",
+      "text": "COURSES"
+    },
+    {
+      "tag": "a",
+      "text": "FREE RESOURCES"
+    },
+    {
+      "tag": "a",
+      "text": "RETREATS"
+    },
+    {
+      "tag": "a",
+      "text": "BLOG"
+    },
+    {
+      "tag": "p",
+      "text": "About me"
+    },
+    {
+      "tag": "h2",
+      "text": "Hi, I’m Yvette! I can’t wait to help you create your dream private practice and live the life you desire to have."
+    },
+    {
+      "tag": "p",
+      "text": "Throughout my career as a LCSW, I've focused on helping people with their mental health, learning a lot along the way. Back in 2018, I started my own therapy practice, but I had no clue what I was doing. I read tons of books and articles, asked for advice on Facebook, and listened to podcasts. It was a process of trial and error, but eventually, I figured things out."
+    },
+    {
+      "tag": "a",
+      "text": "Financial Disclaimer"
+    },
+    {
+      "tag": "a",
+      "text": "Privacy Policy"
+    },
+    {
+      "tag": "a",
+      "text": "Terms of Use"
+    },
+    {
+      "tag": "a",
+      "text": "Disclaimer"
+    },
+    {
+      "tag": "a",
+      "text": "Terms of Service"
+    },
+    {
+      "tag": "h4",
+      "text": "Join Our Free Trial"
+    },
+    {
+      "tag": "p",
+      "text": "Get started today before this once in a lifetime opportunity expires."
+    }
+  ]
+}
