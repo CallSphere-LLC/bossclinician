@@ -13,7 +13,7 @@ import {
   type MemberCourseView,
   type MemberLessonView,
 } from "../../services/curriculum";
-import { isProtectedRef, signedFileUrl } from "../../services/signedUrls";
+import { deliverableUrl } from "../../services/signedUrls";
 import { downloadLinkPath, type LessonMediaKind } from "./downloads";
 
 /**
@@ -99,8 +99,8 @@ function playableUrl(input: {
   memberId: number;
   now: Date;
 }): { url: string; expiresAt: Date | null } {
-  if (!isProtectedRef(input.reference)) return { url: input.reference, expiresAt: null };
-  return signedFileUrl({
+  return deliverableUrl({
+    reference: input.reference,
     kind: input.kind,
     fileId: input.lessonId,
     memberId: input.memberId,
@@ -617,6 +617,24 @@ memberLibraryRouter.get(
         },
       });
       return;
+    }
+
+    // The instant this lesson was first opened, recorded once and never moved.
+    //
+    // It is the only evidence there is that time was spent on a lesson with
+    // nothing to play — a worksheet, a reading, a PDF — and it is what
+    // services/certificates.ts measures a CEU course's non-media lessons
+    // against, since "mark complete" on those writes a tick and no watch
+    // figure. ON CONFLICT DO NOTHING, so a lesson revisited a year later keeps
+    // the date it was first opened; an admin looking through "view as member"
+    // leaves no mark on the customer's record at all.
+    if (member.impersonatedBy === undefined) {
+      await pool.query(
+        `INSERT INTO lesson_progress (member_id, lesson_id, first_viewed_at, last_viewed_at)
+         VALUES ($1, $2, now(), now())
+         ON CONFLICT (member_id, lesson_id) DO NOTHING`,
+        [member.id, lesson.id]
+      );
     }
 
     const [content, files] = await Promise.all([

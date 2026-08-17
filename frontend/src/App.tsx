@@ -11,6 +11,7 @@ const About = lazy(() => import("@/pages/About"));
 const WorkWithMe = lazy(() => import("@/pages/WorkWithMe"));
 const Courses = lazy(() => import("@/pages/Courses"));
 const CourseDetail = lazy(() => import("@/pages/CourseDetail"));
+const AffiliateSignup = lazy(() => import("@/pages/AffiliateSignup"));
 const Resources = lazy(() => import("@/pages/Resources"));
 const ResourceHub = lazy(() => import("@/pages/ResourceHub"));
 const Blog = lazy(() => import("@/pages/Blog"));
@@ -52,6 +53,7 @@ const MemberCoaching = lazy(() => import("@/pages/member/Coaching"));
 const MemberCoachingSession = lazy(() => import("@/pages/member/CoachingSession"));
 const MemberPodcasts = lazy(() => import("@/pages/member/Podcasts"));
 const MemberNewsletters = lazy(() => import("@/pages/member/Newsletters"));
+const MemberAffiliatePortal = lazy(() => import("@/pages/member/AffiliatePortal"));
 const Checkout = lazy(() => import("@/pages/Checkout"));
 const CheckoutUpsell = lazy(() => import("@/pages/CheckoutUpsell"));
 
@@ -66,6 +68,7 @@ function PublicRoutes() {
           <Route path="/courses" element={<Courses />} />
           {/* Where 55 of the legacy bossclinician.com product URLs land. */}
           <Route path="/courses/:slug" element={<CourseDetail />} />
+          <Route path="/partners" element={<AffiliateSignup />} />
           <Route path="/resources" element={<Resources />} />
           <Route path="/resource-hub" element={<ResourceHub />} />
           <Route path="/blog" element={<Blog />} />
@@ -237,6 +240,14 @@ function MemberRoutes() {
           }
         />
         <Route
+          path="/partners/dashboard"
+          element={
+            <RequireMember>
+              <MemberAffiliatePortal />
+            </RequireMember>
+          }
+        />
+        <Route
           path="/newsletters"
           element={
             <RequireMember>
@@ -279,6 +290,7 @@ export default function App() {
         <Route path="/coaching/*" element={<MemberRoutes />} />
         <Route path="/podcasts" element={<MemberRoutes />} />
         <Route path="/newsletters" element={<MemberRoutes />} />
+        <Route path="/partners/dashboard" element={<MemberRoutes />} />
 
         {/* Ranked above /checkout/:offerSlug — React Router prefers a static
             segment to a dynamic one, so this keeps the success page from being

@@ -3,7 +3,9 @@ import path from "path";
 import { afterAll, describe, expect, it } from "vitest";
 import { env } from "../config/env";
 import {
+  deliverableUrl,
   DOWNLOAD_TTL_SECONDS,
+  isExternalRef,
   isProtectedRef,
   isStreamKind,
   protectedRef,
@@ -215,5 +217,91 @@ describe("resolveStoredFile", () => {
     fs.symlinkSync("/etc/passwd", link);
     scratch.push(link);
     await expect(resolveStoredFile(protectedRef(".test-escape"))).resolves.toBeNull();
+  });
+});
+
+/**
+ * The shape every customer-facing surface has to get right.
+ *
+ * There are three kinds of thing in a media column and only one of them is ours
+ * to sign. Getting it wrong in one direction publishes a paid file; getting it
+ * wrong in the other emits `https://site/protected:lesson-4.mp4`, which is a 404
+ * wearing the shape of a URL and reads to the customer as a broken player.
+ */
+describe("deliverableUrl", () => {
+  const forMember = { kind: "lesson-video" as const, fileId: 41, memberId: 7 };
+
+  it("signs a protected reference into a link the delivery route accepts", () => {
+    const { url, expiresAt } = deliverableUrl({ reference: protectedRef("l4.mp4"), ...forMember });
+
+    expect(url.startsWith("/api/files/")).toBe(true);
+    // The stored key must not survive into anything a browser is handed.
+    expect(url).not.toContain("l4.mp4");
+    expect(url).not.toContain("protected:");
+    expect(expiresAt).toBeInstanceOf(Date);
+
+    const payload = verifyDownload(url.slice("/api/files/".length));
+    expect(payload).toMatchObject({ kind: "lesson-video", fileId: 41, memberId: 7 });
+  });
+
+  it("passes a public upload path through untouched and unsigned", () => {
+    for (const reference of ["/uploads/cover.jpg", "cover.jpg"]) {
+      expect(deliverableUrl({ reference, ...forMember })).toEqual({
+        url: reference,
+        expiresAt: null,
+      });
+    }
+  });
+
+  it("passes somebody else's host through untouched", () => {
+    const reference = "https://player.vimeo.com/video/12345";
+    expect(deliverableUrl({ reference, ...forMember })).toEqual({ url: reference, expiresAt: null });
+  });
+
+  it("never returns a protected reference as a URL, whatever the kind", () => {
+    const kinds = [
+      "lesson-video",
+      "lesson-audio",
+      "lesson-captions",
+      "lesson-attachment",
+      "coaching-file",
+      "podcast-episode",
+      "community-media",
+    ] as const;
+
+    for (const kind of kinds) {
+      const { url } = deliverableUrl({
+        reference: protectedRef("paid/file.mp3"),
+        kind,
+        fileId: 3,
+        memberId: 9,
+      });
+      expect(url).not.toContain("protected:");
+      expect(verifyDownload(url.slice("/api/files/".length))?.kind).toBe(kind);
+    }
+  });
+
+  it("mints a link for the member it names and nobody else", () => {
+    const mine = deliverableUrl({ reference: protectedRef("l4.mp4"), ...forMember });
+    const theirs = deliverableUrl({
+      reference: protectedRef("l4.mp4"),
+      ...forMember,
+      memberId: 8,
+    });
+    expect(mine.url).not.toBe(theirs.url);
+  });
+});
+
+/** Which references belong to somebody else, and are therefore theirs to gate. */
+describe("isExternalRef", () => {
+  it("recognises an absolute link and nothing else", () => {
+    expect(isExternalRef("https://player.vimeo.com/video/1")).toBe(true);
+    expect(isExternalRef("http://example.com/a.mp4")).toBe(true);
+    expect(isExternalRef("  https://example.com/a.mp4  ")).toBe(true);
+
+    expect(isExternalRef("/uploads/a.mp4")).toBe(false);
+    expect(isExternalRef("a.mp4")).toBe(false);
+    expect(isExternalRef(protectedRef("a.mp4"))).toBe(false);
+    expect(isExternalRef("")).toBe(false);
   });
 });

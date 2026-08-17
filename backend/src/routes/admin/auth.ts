@@ -4,11 +4,12 @@ import { pool } from "../../db/pool";
 import { asyncHandler } from "../../utils/asyncHandler";
 import { loginSchema } from "../../validation/schemas";
 import { badRequest, unauthorized } from "../../utils/httpError";
-import { signToken } from "../../utils/jwt";
 import { requireAuth } from "../../middleware/auth";
 import { loginIpLimiter, loginEmailLimiter } from "../../middleware/rateLimit";
 import { rowToCamel } from "../../utils/case";
 import { AdminUser } from "../../types";
+import { issueAdminSession, revokeAdminSessionByToken } from "./adminUsers";
+import { verifySecondFactor } from "../../services/mfa";
 
 export const authRouter = Router();
 
@@ -18,6 +19,9 @@ export const authRouter = Router();
 const DUMMY_PASSWORD_HASH =
   "$2b$12$NA4go6EuMN5fPAkc7SUIbOwRRackOhFAPs0bc.2qhYsWdayZ/vdeC";
 
+/** Matches the JWT's own lifetime, so the row and the token expire together. */
+const SESSION_TTL_SECONDS = 7 * 24 * 60 * 60;
+
 authRouter.post(
   "/login",
   loginIpLimiter,
@@ -26,9 +30,11 @@ authRouter.post(
     const parsed = loginSchema.safeParse(req.body);
     if (!parsed.success) throw badRequest("Invalid login payload", parsed.error.flatten());
     const { email, password } = parsed.data;
+    const submittedCode = typeof req.body?.code === "string" ? req.body.code : "";
 
     const result = await pool.query(
-      "SELECT id, email, password_hash, name, role, created_at FROM admin_users WHERE email = $1",
+      `SELECT id, email, password_hash, name, role, created_at, status, mfa_enabled, mfa_secret
+         FROM admin_users WHERE email = $1`,
       [email]
     );
 
@@ -44,7 +50,44 @@ authRouter.post(
     const ok = await bcrypt.compare(password, row.password_hash);
     if (!ok) throw unauthorized("Invalid email or password");
 
-    const token = signToken({ sub: row.id, email: row.email, role: row.role });
+    // A suspended account has the right password and no business being here;
+    // an invited one has not set a password yet, so it cannot reach this line
+    // legitimately at all. Both answer the same as a wrong password, because
+    // "your account was suspended" is information an attacker can use.
+    if (row.status !== "active") throw unauthorized("Invalid email or password");
+
+    if (row.mfa_enabled) {
+      if (!submittedCode) {
+        // Deliberately after the password check: asking for a second factor
+        // before the first one is right would confirm that the email exists.
+        res.status(401).json({ error: "Enter the code from your app.", mfaRequired: true });
+        return;
+      }
+      const secondFactorOk = await verifySecondFactor(
+        row.id,
+        row.mfa_secret ?? "",
+        submittedCode
+      );
+      if (!secondFactorOk) {
+        res.status(401).json({ error: "That code didn't match.", mfaRequired: true });
+        return;
+      }
+    }
+
+    // The token is minted alongside the row that makes it revocable — a JWT on
+    // its own cannot be withdrawn before it expires, which is the whole reason
+    // admin_sessions exists.
+    const token = await issueAdminSession({
+      adminUserId: row.id,
+      email: row.email,
+      role: row.role,
+      userAgent: String(req.headers["user-agent"] ?? ""),
+      ip: req.ip ?? "",
+      ttlSeconds: SESSION_TTL_SECONDS,
+    });
+
+    await pool.query(`UPDATE admin_users SET last_login_at = now() WHERE id = $1`, [row.id]);
+
     const user = rowToCamel<AdminUser>({
       id: row.id,
       email: row.email,
@@ -67,5 +110,24 @@ authRouter.get(
     );
     if (result.rows.length === 0) throw unauthorized("User not found");
     res.json(rowToCamel<AdminUser>(result.rows[0]));
+  })
+);
+
+/**
+ * Signing out.
+ *
+ * Ends the session server-side rather than trusting the browser to forget the
+ * token. Unauthenticated on purpose: a token that has already been rejected as
+ * expired should still be revocable, and there is nothing to gain from
+ * presenting somebody else's token here — the only effect is ending it.
+ */
+authRouter.post(
+  "/logout",
+  asyncHandler(async (req, res) => {
+    const header = req.headers.authorization ?? "";
+    if (header.startsWith("Bearer ")) {
+      await revokeAdminSessionByToken(header.slice("Bearer ".length).trim());
+    }
+    res.status(204).end();
   })
 );

@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { formatCreditHours, normalizeVerificationCode, renderCertificatePdf } from "./certificates";
+import {
+  earnedCeuCredit,
+  formatCreditHours,
+  normalizeVerificationCode,
+  renderCertificatePdf,
+  requiredDwellSeconds,
+  type CeuLessonRecord,
+} from "./certificates";
 
 /**
  * The credit figure is the compliance-critical part of a certificate: a board
@@ -92,5 +99,103 @@ describe("renderCertificatePdf", () => {
     // files without the half carrying the credit hours.
     const pages = pdf.toString("latin1").match(/\/Type \/Page[^s]/g) ?? [];
     expect(pages).toHaveLength(1);
+  });
+});
+
+/**
+ * What a CE certificate costs, and what it still cannot stop.
+ *
+ * The document says a named therapist completed n hours of approved
+ * instruction, and a licensing board acts on that sentence. A video lesson is
+ * measured by the watch figure, which accrues no faster than the clock. A
+ * lesson with nothing to play — a reading, a PDF, a worksheet — has only the
+ * clock, so it is measured from the moment the lesson was opened to the moment
+ * it was ticked.
+ */
+
+const AT = (iso: string): Date => new Date(iso);
+
+function textLesson(over: Partial<CeuLessonRecord> = {}): CeuLessonRecord {
+  return {
+    contentType: "text",
+    durationMinutes: 10,
+    watchedPercent: 0,
+    firstViewedAt: AT("2026-03-01T10:00:00Z"),
+    completedAt: AT("2026-03-01T10:11:00Z"),
+    ...over,
+  };
+}
+
+describe("requiredDwellSeconds", () => {
+  it("takes the author's own estimate, which is what the CE approval was written against", () => {
+    expect(requiredDwellSeconds(10)).toBe(600);
+    expect(requiredDwellSeconds(45)).toBe(2700);
+  });
+
+  it("holds a floor, so twenty one-line lessons still cost something", () => {
+    expect(requiredDwellSeconds(0)).toBe(60);
+    expect(requiredDwellSeconds(0.5)).toBe(60);
+    expect(requiredDwellSeconds(-4)).toBe(60);
+  });
+
+  it("holds a ceiling, so a typo cannot make a certificate unobtainable", () => {
+    expect(requiredDwellSeconds(600)).toBe(3600);
+  });
+});
+
+describe("earnedCeuCredit", () => {
+  it("refuses a text course finished in a burst of ticks", () => {
+    // The whole defect: "mark complete" writes first_viewed_at and completed_at
+    // in the same instant, so a script can walk a ten-lesson course in a second.
+    const instant = AT("2026-03-01T10:00:00Z");
+    const burst = Array.from({ length: 5 }, () =>
+      textLesson({ firstViewedAt: instant, completedAt: instant })
+    );
+    expect(earnedCeuCredit(burst)).toBe(false);
+  });
+
+  it("accepts a text course read over the time it says it takes", () => {
+    expect(earnedCeuCredit([textLesson(), textLesson()])).toBe(true);
+  });
+
+  it("refuses the one lesson that was rushed, however honest the rest", () => {
+    expect(
+      earnedCeuCredit([
+        textLesson(),
+        textLesson({ completedAt: AT("2026-03-01T10:02:00Z") }),
+      ])
+    ).toBe(false);
+  });
+
+  it("refuses a lesson that was never opened or never finished", () => {
+    expect(earnedCeuCredit([textLesson({ firstViewedAt: null })])).toBe(false);
+    expect(earnedCeuCredit([textLesson({ completedAt: null })])).toBe(false);
+  });
+
+  it("still ignores the tick on a lesson with something to sit through", () => {
+    const watched = {
+      contentType: "video",
+      durationMinutes: 40,
+      firstViewedAt: AT("2026-03-01T10:00:00Z"),
+      completedAt: AT("2026-03-01T10:00:01Z"),
+    };
+    expect(earnedCeuCredit([{ ...watched, watchedPercent: 90 }])).toBe(true);
+    expect(earnedCeuCredit([{ ...watched, watchedPercent: 89 }])).toBe(false);
+    expect(earnedCeuCredit([{ ...watched, contentType: "audio", watchedPercent: 12 }])).toBe(false);
+  });
+
+  it("holds a mixed course to both rules at once", () => {
+    expect(
+      earnedCeuCredit([
+        { ...textLesson(), contentType: "video", watchedPercent: 95 },
+        textLesson({ contentType: "pdf" }),
+      ])
+    ).toBe(true);
+  });
+
+  it("treats a course with no published lessons as nothing to prove", () => {
+    // The rollup cannot reach 100% on an empty course, so this is only ever
+    // reached with lessons; vacuously true is the honest answer for the rule.
+    expect(earnedCeuCredit([])).toBe(true);
   });
 });

@@ -1,7 +1,7 @@
 import { env } from "../config/env";
 import { escapeHtml } from "./templates";
 import type { EmailContent } from "./memberTemplates";
-import { formatMoney } from "../services/pricing";
+import { formatAmount } from "../utils/money";
 
 /**
  * The money emails: the ones somebody receives because of something they bought.
@@ -53,7 +53,7 @@ export interface PurchaseReceiptInput {
  */
 export function purchaseReceipt(input: PurchaseReceiptInput): EmailContent {
   const name = greeting(input.buyerName);
-  const money = (cents: number) => formatMoney(cents, input.currency);
+  const money = (cents: number) => formatAmount(cents, input.currency);
   const total = money(input.totalCents);
   const libraryUrl = `${env.publicSiteUrl}/library`;
 
@@ -152,7 +152,7 @@ export interface DunningInput {
  */
 export function paymentFailedDunning(input: DunningInput): EmailContent {
   const name = greeting(input.buyerName);
-  const amount = formatMoney(input.amountCents, input.currency);
+  const amount = formatAmount(input.amountCents, input.currency);
   const url = input.payInvoiceUrl || `${env.publicSiteUrl}/account/billing`;
   const nextAttempt = input.nextAttemptAt;
   const last = nextAttempt === null;
@@ -221,7 +221,7 @@ export interface PaymentPlanCompletedInput {
  */
 export function paymentPlanCompleted(input: PaymentPlanCompletedInput): EmailContent {
   const name = greeting(input.buyerName);
-  const total = formatMoney(input.totalPaidCents, input.currency);
+  const total = formatAmount(input.totalPaidCents, input.currency);
   const libraryUrl = `${env.publicSiteUrl}/library`;
 
   const text = [
@@ -271,7 +271,7 @@ export interface PaymentPlanDefaultedInput {
  */
 export function paymentPlanDefaulted(input: PaymentPlanDefaultedInput): EmailContent {
   const name = greeting(input.buyerName);
-  const outstanding = formatMoney(input.outstandingCents, input.currency);
+  const outstanding = formatAmount(input.outstandingCents, input.currency);
   const billingUrl = `${env.publicSiteUrl}/account/billing`;
   const progress = `${input.installmentsPaid} of ${input.installmentCount} payments`;
 
@@ -323,7 +323,7 @@ export interface PaymentPlanDefaultedAlertInput {
  * put the money on somebody's desk while it is still collectable.
  */
 export function paymentPlanDefaultedAlert(input: PaymentPlanDefaultedAlertInput): EmailContent {
-  const outstanding = formatMoney(input.outstandingCents, input.currency);
+  const outstanding = formatAmount(input.outstandingCents, input.currency);
 
   const text = [
     `A payment plan has ended with money still owed.`,
@@ -374,7 +374,7 @@ export interface DisputeAlertInput {
  * dashboard, and says which charge to look at rather than trying to summarise it.
  */
 export function disputeAlert(input: DisputeAlertInput): EmailContent {
-  const amount = formatMoney(input.amountCents, input.currency);
+  const amount = formatAmount(input.amountCents, input.currency);
   const orderLine = input.orderId === null ? "(no matching order found)" : `#${input.orderId}`;
 
   const text = [
@@ -426,7 +426,7 @@ export interface PaymentPlanOverchargeInput {
  * only useful action is to make the noise loud and immediate.
  */
 export function paymentPlanOverchargeAlert(input: PaymentPlanOverchargeInput): EmailContent {
-  const amount = formatMoney(input.amountCents, input.currency);
+  const amount = formatAmount(input.amountCents, input.currency);
 
   const text = [
     `URGENT: a payment plan has been charged past its final installment.`,

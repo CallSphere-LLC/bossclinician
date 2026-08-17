@@ -26,6 +26,10 @@ import { adminTagsRouter } from "./tags";
 import { adminSegmentsRouter } from "./segments";
 import { adminSequencesRouter, adminEmailTemplatesRouter } from "./sequences";
 import { adminAutomationsV2Router } from "./automationsV2";
+import { adminAffiliatesRouter } from "./affiliates";
+import { adminSettingsV2Router } from "./settingsV2";
+import { adminUsersRouter, adminInviteRouter } from "./adminUsers";
+import { adminIntegrationsRouter } from "./integrations";
 
 export const adminRouter = Router();
 
@@ -60,3 +64,10 @@ adminRouter.use("/email-templates", requireAuth, adminEmailTemplatesRouter);
 // The original engine stays reachable at /growth/automations until its call
 // sites are repointed; these two are different paths, not a replacement in place.
 adminRouter.use("/automations", requireAuth, adminAutomationsV2Router);
+adminRouter.use("/affiliates", requireAuth, adminAffiliatesRouter);
+adminRouter.use("/settings-v2", requireAuth, adminSettingsV2Router);
+adminRouter.use("/admins", requireAuth, adminUsersRouter);
+adminRouter.use("/integrations", requireAuth, adminIntegrationsRouter);
+// Accepting an invite happens BEFORE the invitee has an account, so this one
+// router deliberately sits outside requireAuth. Its own token is the credential.
+adminRouter.use("/", adminInviteRouter);

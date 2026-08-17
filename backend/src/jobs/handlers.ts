@@ -4,6 +4,8 @@ import { releaseRedemption } from "../services/coupons";
 import { registerHandler } from "./worker";
 import { registerContactJobs } from "./contactRollup";
 import { registerEmailJobs } from "./emailJobs";
+import { registerAffiliateJobs } from "./affiliateJobs";
+import { registerWebhookJobs } from "./webhookJobs";
 
 /**
  * The job handlers that belong to no single feature.
@@ -225,4 +227,6 @@ export function registerCoreHandlers(): void {
   // running, but only if the registration itself is not the thing that is missing.
   registerContactJobs();
   registerEmailJobs();
+  registerAffiliateJobs();
+  registerWebhookJobs();
 }

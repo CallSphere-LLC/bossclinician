@@ -26,6 +26,13 @@ import Members from "@/pages/admin/Members";
 import Subscribers from "@/pages/admin/Subscribers";
 import Analytics from "@/pages/admin/Analytics";
 import SettingsPage from "@/pages/admin/Settings";
+import Affiliates from "@/pages/admin/Affiliates";
+import AffiliateDetail from "@/pages/admin/AffiliateDetail";
+import SettingsHub from "@/pages/admin/SettingsHub";
+import SettingsGroup from "@/pages/admin/SettingsGroup";
+import AdminUsers from "@/pages/admin/AdminUsers";
+import Integrations from "@/pages/admin/Integrations";
+import AcceptInvite from "@/pages/admin/AcceptInvite";
 import {
   CouponsPage,
   InvoicesPage,
@@ -93,6 +100,8 @@ function ProtectedRoutes() {
         <Route path="/sales/invoices" element={<InvoicesPage />} />
         <Route path="/sales/coupons" element={<CouponsPage />} />
         <Route path="/sales/payouts" element={<PayoutsPage />} />
+        <Route path="/partners" element={<Affiliates />} />
+        <Route path="/partners/:id" element={<AffiliateDetail />} />
 
         {/* Website */}
         <Route path="/blog" element={<BlogList />} />
@@ -127,7 +136,11 @@ function ProtectedRoutes() {
         <Route path="/analytics" element={<Analytics />} />
         <Route path="/analytics/reports" element={<Reports />} />
 
-        <Route path="/settings" element={<SettingsPage />} />
+        <Route path="/settings" element={<SettingsHub />} />
+        <Route path="/settings/team" element={<AdminUsers />} />
+        <Route path="/settings/connections" element={<Integrations />} />
+        <Route path="/settings/advanced" element={<SettingsPage />} />
+        <Route path="/settings/:group" element={<SettingsGroup />} />
         <Route path="*" element={<Navigate to="/admin" replace />} />
       </Routes>
     </AdminLayout>
@@ -138,6 +151,9 @@ export default function AdminApp() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      {/* The invitee has no account yet — a guard here would bounce them to a
+          sign-in they cannot pass. The token in the link is the credential. */}
+      <Route path="/invite/:token" element={<AcceptInvite />} />
       <Route path="/*" element={<ProtectedRoutes />} />
     </Routes>
   );

@@ -1,0 +1,528 @@
+import { Router } from "express";
+import { z } from "zod";
+import { pool } from "../../db/pool";
+import { renderMarkdown, renderTokens, sendEmail } from "../../email/provider";
+import { enrollContact, exitContact } from "../../services/sequences";
+import { upsertContact } from "../../services/contacts";
+import { asyncHandler } from "../../utils/asyncHandler";
+import { rowToCamel, rowsToCamel } from "../../utils/case";
+import { badRequest, notFound } from "../../utils/httpError";
+
+/**
+ * Sequence administration — mounted at /api/admin/sequences.
+ *
+ * The API is written in the vocabulary the screen uses rather than the
+ * database's: minutes rather than intervals, "waitDays"/"waitHours" rather than
+ * a single `delay_minutes`, and never an id where a name will do. The admin
+ * this serves is the business owner, not an engineer.
+ */
+
+export const adminSequencesRouter = Router();
+
+/* ----------------------------------------------------------------- schemas */
+
+const timeOfDay = z
+  .union([z.number().int().min(0).max(1439), z.string(), z.null()])
+  .optional()
+  .transform((value) => {
+    if (value === null || value === undefined || value === "") return null;
+    if (typeof value === "number") return value;
+    const match = /^(\d{1,2}):(\d{2})$/.exec(value.trim());
+    if (!match) return null;
+    return Number(match[1]) * 60 + Number(match[2]);
+  });
+
+const sequenceSchema = z.object({
+  name: z.string().trim().min(1, "Give this sequence a name").max(200),
+  slug: z.string().trim().max(200).optional(),
+  description: z.string().max(2000).optional(),
+  status: z.enum(["draft", "active", "paused", "archived"]).optional(),
+  topic: z.string().max(60).optional(),
+  skipWeekends: z.boolean().optional(),
+  sendWindowStartMinute: timeOfDay,
+  sendWindowEndMinute: timeOfDay,
+  useContactTimezone: z.boolean().optional(),
+  timezone: z.string().max(80).optional(),
+  exitOnPurchase: z.boolean().optional(),
+  exitTagId: z.number().int().positive().nullable().optional(),
+  completionTagId: z.number().int().positive().nullable().optional(),
+  allowReentry: z.boolean().optional(),
+});
+
+const emailSchema = z.object({
+  subject: z.string().max(500).optional(),
+  previewText: z.string().max(500).optional(),
+  bodyMd: z.string().max(200_000).optional(),
+  // The screen asks for days and hours; a single minute count is what the
+  // scheduler wants, and doing the arithmetic here keeps it out of the UI.
+  waitDays: z.number().int().min(0).max(365).optional(),
+  waitHours: z.number().int().min(0).max(23).optional(),
+  delayMinutes: z.number().int().min(0).optional(),
+  fromName: z.string().max(200).optional(),
+  fromEmail: z.string().max(200).optional(),
+  enabled: z.boolean().optional(),
+});
+
+function delayFrom(input: z.infer<typeof emailSchema>): number | undefined {
+  if (input.delayMinutes !== undefined) return input.delayMinutes;
+  if (input.waitDays === undefined && input.waitHours === undefined) return undefined;
+  return (input.waitDays ?? 0) * 1440 + (input.waitHours ?? 0) * 60;
+}
+
+function slugify(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+}
+
+/* -------------------------------------------------------------- sequences */
+
+adminSequencesRouter.get(
+  "/",
+  asyncHandler(async (_req, res) => {
+    const result = await pool.query(
+      `SELECT q.*,
+              (SELECT COUNT(*)::int FROM sequence_emails e WHERE e.sequence_id = q.id) AS email_count,
+              (SELECT COUNT(*)::int FROM sequence_subscriptions s
+                WHERE s.sequence_id = q.id AND s.status = 'active')                    AS active_count,
+              (SELECT COUNT(*)::int FROM sequence_subscriptions s
+                WHERE s.sequence_id = q.id AND s.status = 'completed')                 AS completed_count
+         FROM email_sequences q
+        ORDER BY q.name`
+    );
+    res.json(rowsToCamel(result.rows));
+  })
+);
+
+adminSequencesRouter.post(
+  "/",
+  asyncHandler(async (req, res) => {
+    const input = sequenceSchema.parse(req.body);
+    const slug = input.slug?.trim() || slugify(input.name) || `sequence-${Date.now()}`;
+
+    const result = await pool.query(
+      `INSERT INTO email_sequences
+         (name, slug, description, status, topic, skip_weekends,
+          send_window_start_minute, send_window_end_minute, use_contact_timezone, timezone,
+          exit_on_purchase, exit_tag_id, completion_tag_id, allow_reentry)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+       RETURNING *`,
+      [
+        input.name,
+        slug,
+        input.description ?? "",
+        input.status ?? "draft",
+        input.topic ?? "marketing",
+        input.skipWeekends ?? false,
+        input.sendWindowStartMinute ?? null,
+        input.sendWindowEndMinute ?? null,
+        input.useContactTimezone ?? true,
+        input.timezone ?? "America/New_York",
+        input.exitOnPurchase ?? true,
+        input.exitTagId ?? null,
+        input.completionTagId ?? null,
+        input.allowReentry ?? false,
+      ]
+    );
+    res.status(201).json(rowToCamel(result.rows[0]));
+  })
+);
+
+adminSequencesRouter.get(
+  "/:id",
+  asyncHandler(async (req, res) => {
+    const sequence = await pool.query(`SELECT * FROM email_sequences WHERE id = $1`, [
+      req.params.id,
+    ]);
+    if (sequence.rowCount === 0) throw notFound("Sequence not found");
+
+    const emails = await pool.query(
+      `SELECT * FROM sequence_emails WHERE sequence_id = $1 ORDER BY position`,
+      [req.params.id]
+    );
+
+    res.json({
+      ...rowToCamel(sequence.rows[0]),
+      emails: rowsToCamel(emails.rows),
+    });
+  })
+);
+
+adminSequencesRouter.patch(
+  "/:id",
+  asyncHandler(async (req, res) => {
+    const input = sequenceSchema.partial().parse(req.body);
+
+    // COALESCE against the typed parameter rather than building the column list
+    // dynamically: the set of updatable columns then cannot drift from what the
+    // schema above validates.
+    const result = await pool.query(
+      `UPDATE email_sequences SET
+          name        = COALESCE($2, name),
+          description = COALESCE($3, description),
+          status      = COALESCE($4, status),
+          topic       = COALESCE($5, topic),
+          skip_weekends = COALESCE($6, skip_weekends),
+          send_window_start_minute = CASE WHEN $7::boolean THEN $8::int ELSE send_window_start_minute END,
+          send_window_end_minute   = CASE WHEN $9::boolean THEN $10::int ELSE send_window_end_minute END,
+          use_contact_timezone = COALESCE($11, use_contact_timezone),
+          timezone    = COALESCE($12, timezone),
+          exit_on_purchase = COALESCE($13, exit_on_purchase),
+          exit_tag_id = CASE WHEN $14::boolean THEN $15::int ELSE exit_tag_id END,
+          completion_tag_id = CASE WHEN $16::boolean THEN $17::int ELSE completion_tag_id END,
+          allow_reentry = COALESCE($18, allow_reentry),
+          updated_at  = now()
+        WHERE id = $1
+        RETURNING *`,
+      [
+        req.params.id,
+        input.name ?? null,
+        input.description ?? null,
+        input.status ?? null,
+        input.topic ?? null,
+        input.skipWeekends ?? null,
+        "sendWindowStartMinute" in req.body,
+        input.sendWindowStartMinute ?? null,
+        "sendWindowEndMinute" in req.body,
+        input.sendWindowEndMinute ?? null,
+        input.useContactTimezone ?? null,
+        input.timezone ?? null,
+        input.exitOnPurchase ?? null,
+        "exitTagId" in req.body,
+        input.exitTagId ?? null,
+        "completionTagId" in req.body,
+        input.completionTagId ?? null,
+        input.allowReentry ?? null,
+      ]
+    );
+    if (result.rowCount === 0) throw notFound("Sequence not found");
+    res.json(rowToCamel(result.rows[0]));
+  })
+);
+
+adminSequencesRouter.delete(
+  "/:id",
+  asyncHandler(async (req, res) => {
+    const active = await pool.query<{ count: string }>(
+      `SELECT COUNT(*)::text AS count FROM sequence_subscriptions
+        WHERE sequence_id = $1 AND status = 'active'`,
+      [req.params.id]
+    );
+    if (Number(active.rows[0]?.count ?? 0) > 0) {
+      throw badRequest(
+        "People are part-way through this sequence. Pause it first, or wait for them to finish."
+      );
+    }
+
+    const result = await pool.query(`DELETE FROM email_sequences WHERE id = $1`, [req.params.id]);
+    if (result.rowCount === 0) throw notFound("Sequence not found");
+    res.status(204).end();
+  })
+);
+
+/* ----------------------------------------------------------------- emails */
+
+adminSequencesRouter.post(
+  "/:id/emails",
+  asyncHandler(async (req, res) => {
+    const input = emailSchema.parse(req.body);
+
+    const next = await pool.query<{ position: number }>(
+      `SELECT COALESCE(MAX(position), 0) + 1 AS position FROM sequence_emails WHERE sequence_id = $1`,
+      [req.params.id]
+    );
+
+    const result = await pool.query(
+      `INSERT INTO sequence_emails
+         (sequence_id, position, delay_minutes, subject, preview_text, body_md,
+          from_name, from_email, enabled)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       RETURNING *`,
+      [
+        req.params.id,
+        next.rows[0].position,
+        delayFrom(input) ?? 1440,
+        input.subject ?? "",
+        input.previewText ?? "",
+        input.bodyMd ?? "",
+        input.fromName ?? "",
+        input.fromEmail ?? "",
+        input.enabled ?? true,
+      ]
+    );
+    res.status(201).json(rowToCamel(result.rows[0]));
+  })
+);
+
+adminSequencesRouter.patch(
+  "/:id/emails/:emailId",
+  asyncHandler(async (req, res) => {
+    const input = emailSchema.parse(req.body);
+    const delay = delayFrom(input);
+
+    const result = await pool.query(
+      `UPDATE sequence_emails SET
+          subject       = COALESCE($3, subject),
+          preview_text  = COALESCE($4, preview_text),
+          body_md       = COALESCE($5, body_md),
+          delay_minutes = COALESCE($6, delay_minutes),
+          from_name     = COALESCE($7, from_name),
+          from_email    = COALESCE($8, from_email),
+          enabled       = COALESCE($9, enabled),
+          updated_at    = now()
+        WHERE id = $2 AND sequence_id = $1
+        RETURNING *`,
+      [
+        req.params.id,
+        req.params.emailId,
+        input.subject ?? null,
+        input.previewText ?? null,
+        input.bodyMd ?? null,
+        delay ?? null,
+        input.fromName ?? null,
+        input.fromEmail ?? null,
+        input.enabled ?? null,
+      ]
+    );
+    if (result.rowCount === 0) throw notFound("Email not found");
+    res.json(rowToCamel(result.rows[0]));
+  })
+);
+
+adminSequencesRouter.delete(
+  "/:id/emails/:emailId",
+  asyncHandler(async (req, res) => {
+    const result = await pool.query(
+      `DELETE FROM sequence_emails WHERE id = $2 AND sequence_id = $1`,
+      [req.params.id, req.params.emailId]
+    );
+    if (result.rowCount === 0) throw notFound("Email not found");
+    res.status(204).end();
+  })
+);
+
+/**
+ * PUT the whole running order.
+ *
+ * Two passes, because `(sequence_id, position)` is unique and swapping two
+ * emails would collide half way through the first one. Negative positions are
+ * a scratch space no real row ever occupies.
+ */
+adminSequencesRouter.post(
+  "/:id/emails/reorder",
+  asyncHandler(async (req, res) => {
+    const { order } = z
+      .object({ order: z.array(z.number().int().positive()).min(1) })
+      .parse(req.body);
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      for (const [index, emailId] of order.entries()) {
+        await client.query(
+          `UPDATE sequence_emails SET position = $3 WHERE id = $2 AND sequence_id = $1`,
+          [req.params.id, emailId, -(index + 1)]
+        );
+      }
+      for (const [index, emailId] of order.entries()) {
+        await client.query(
+          `UPDATE sequence_emails SET position = $3, updated_at = now()
+            WHERE id = $2 AND sequence_id = $1`,
+          [req.params.id, emailId, index + 1]
+        );
+      }
+      await client.query("COMMIT");
+    } catch (err) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      throw err;
+    } finally {
+      client.release();
+    }
+
+    const emails = await pool.query(
+      `SELECT * FROM sequence_emails WHERE sequence_id = $1 ORDER BY position`,
+      [req.params.id]
+    );
+    res.json(rowsToCamel(emails.rows));
+  })
+);
+
+/** Sends one email to a chosen address so it can be read before anybody else gets it. */
+adminSequencesRouter.post(
+  "/:id/emails/:emailId/test",
+  asyncHandler(async (req, res) => {
+    const { email } = z.object({ email: z.string().email() }).parse(req.body);
+
+    const result = await pool.query<{
+      subject: string;
+      body_md: string;
+      from_name: string;
+      from_email: string;
+    }>(
+      `SELECT subject, body_md, from_name, from_email FROM sequence_emails
+        WHERE id = $2 AND sequence_id = $1`,
+      [req.params.id, req.params.emailId]
+    );
+    const row = result.rows[0];
+    if (!row) throw notFound("Email not found");
+
+    const values = { firstName: "there", name: "Test reader", email };
+    const body = renderTokens(row.body_md, values);
+
+    // Sent as transactional: it is a preview going to the person who wrote it,
+    // not a commercial message to a subscriber, and it must not be stopped by
+    // that address happening to be on the suppression list.
+    await sendEmail({
+      to: email,
+      subject: `[Test] ${renderTokens(row.subject, values)}`,
+      text: body,
+      html: renderMarkdown(body),
+      sourceType: "transactional",
+      fromName: row.from_name,
+      fromEmail: row.from_email,
+    });
+
+    res.status(202).json({ ok: true, sentTo: email });
+  })
+);
+
+/* ------------------------------------------------------------ subscribers */
+
+adminSequencesRouter.get(
+  "/:id/subscribers",
+  asyncHandler(async (req, res) => {
+    const status = typeof req.query.status === "string" ? req.query.status : null;
+    const result = await pool.query(
+      `SELECT s.id, s.status, s.position, s.next_send_at, s.entered_at, s.completed_at,
+              s.exit_reason, c.id AS contact_id, c.email::text AS email, c.name
+         FROM sequence_subscriptions s
+         JOIN contacts c ON c.id = s.contact_id
+        WHERE s.sequence_id = $1 AND ($2::text IS NULL OR s.status = $2)
+        ORDER BY s.entered_at DESC
+        LIMIT 500`,
+      [req.params.id, status]
+    );
+    res.json(rowsToCamel(result.rows));
+  })
+);
+
+adminSequencesRouter.post(
+  "/:id/enroll",
+  asyncHandler(async (req, res) => {
+    const input = z
+      .object({
+        email: z.string().email().optional(),
+        name: z.string().max(200).optional(),
+        contactId: z.number().int().positive().optional(),
+      })
+      .parse(req.body);
+
+    const contactId =
+      input.contactId ??
+      (input.email
+        ? await upsertContact({ email: input.email, name: input.name, source: "admin" })
+        : null);
+    if (contactId === null) throw badRequest("Give an email address to add");
+
+    const result = await enrollContact(Number(req.params.id), contactId, { reason: "added by hand" });
+    if (result.outcome === "blocked") throw badRequest(friendlyBlock(result.reason));
+    res.status(201).json(result);
+  })
+);
+
+/** Turns the service's internal reason into something the owner can act on. */
+function friendlyBlock(reason: string): string {
+  switch (reason) {
+    case "sequence is not active":
+      return "Turn this sequence on before adding anybody to it.";
+    case "sequence has no emails":
+      return "Add at least one email before putting anybody through this.";
+    case "already been through this sequence":
+      return "They have already been through this one. Allow repeats if you want them to go again.";
+    default:
+      return "That person could not be added to this sequence.";
+  }
+}
+
+adminSequencesRouter.post(
+  "/:id/exit",
+  asyncHandler(async (req, res) => {
+    const { contactId } = z.object({ contactId: z.number().int().positive() }).parse(req.body);
+    const removed = await exitContact(Number(req.params.id), contactId, {
+      reason: "removed by hand",
+    });
+    res.json({ ok: removed });
+  })
+);
+
+/** Per-email open and click totals — the reason `email_messages` exists. */
+adminSequencesRouter.get(
+  "/:id/stats",
+  asyncHandler(async (req, res) => {
+    const result = await pool.query(
+      `SELECT e.id, e.position, e.subject,
+              COUNT(m.id) FILTER (WHERE m.status <> 'suppressed')::int AS sent,
+              COUNT(m.id) FILTER (WHERE m.first_opened_at IS NOT NULL)::int AS opened,
+              COUNT(m.id) FILTER (WHERE m.first_clicked_at IS NOT NULL)::int AS clicked,
+              COUNT(m.id) FILTER (WHERE m.status = 'bounced')::int AS bounced
+         FROM sequence_emails e
+         LEFT JOIN email_messages m
+           ON m.source_type = 'sequence' AND m.source_id = e.sequence_id AND m.subject = e.subject
+        WHERE e.sequence_id = $1
+        GROUP BY e.id, e.position, e.subject
+        ORDER BY e.position`,
+      [req.params.id]
+    );
+    res.json(rowsToCamel(result.rows));
+  })
+);
+
+/* ------------------------------------------------------- system templates */
+
+/**
+ * The transactional emails, editable without a deploy — mounted separately at
+ * /api/admin/email-templates.
+ *
+ * A deleted or disabled row falls back to the compiled-in copy, so the worst
+ * an edit can do is degrade to what shipped rather than to silence.
+ */
+export const adminEmailTemplatesRouter = Router();
+
+adminEmailTemplatesRouter.get(
+  "/",
+  asyncHandler(async (_req, res) => {
+    const result = await pool.query(
+      `SELECT id, key, name, description, subject, body_md, enabled, updated_at
+         FROM email_templates ORDER BY name`
+    );
+    res.json(rowsToCamel(result.rows));
+  })
+);
+
+adminEmailTemplatesRouter.patch(
+  "/:key",
+  asyncHandler(async (req, res) => {
+    const input = z
+      .object({
+        subject: z.string().max(500).optional(),
+        bodyMd: z.string().max(200_000).optional(),
+        enabled: z.boolean().optional(),
+      })
+      .parse(req.body);
+
+    const result = await pool.query(
+      `UPDATE email_templates SET
+          subject = COALESCE($2, subject),
+          body_md = COALESCE($3, body_md),
+          enabled = COALESCE($4, enabled),
+          updated_at = now()
+        WHERE key = $1
+        RETURNING id, key, name, description, subject, body_md, enabled, updated_at`,
+      [req.params.key, input.subject ?? null, input.bodyMd ?? null, input.enabled ?? null]
+    );
+    if (result.rowCount === 0) throw notFound("Template not found");
+    res.json(rowToCamel(result.rows[0]));
+  })
+);

@@ -8,9 +8,9 @@ import { badRequest, notFound } from "../../utils/httpError";
 import { optionalMember } from "../../middleware/memberAuth";
 import { listMemberProducts } from "../../services/access";
 import { validateCoupon, type ValidatedCoupon } from "../../services/coupons";
+import { formatAmount } from "../../utils/money";
 import {
   computeOrderTotal,
-  formatMoney,
   paymentPlanTotalCents,
   type BillingInterval,
   type OrderTotal,
@@ -34,28 +34,6 @@ type Queryable = Pick<PoolClient, "query"> | typeof pool;
 
 /** Roughly $1M. Above this a pay-what-you-want figure is a typo or an attack. */
 export const MAX_PWYW_CENTS = 99_999_999;
-
-/**
- * Money for display, on a page that must render whatever the row holds.
- *
- * `formatMoney` goes through `Intl.NumberFormat`, which throws on a currency
- * code it cannot parse. The offer editor now only accepts a currency from a
- * known list, so this is the second line rather than the first — but a row
- * written before that rule, or by hand, would otherwise take the whole sales
- * page down with a 500 over a three-letter typo.
- *
- * The fallback prints the code beside the amount instead of substituting a
- * currency of our choosing: a page that quietly renders an unknown code as
- * dollars is worse than one that admits it does not know the symbol.
- */
-export function formatAmount(cents: number, currency: string): string {
-  const code = currency || "usd";
-  try {
-    return formatMoney(cents, code);
-  } catch {
-    return `${code.toUpperCase()} ${(cents / 100).toFixed(2)}`;
-  }
-}
 
 export interface OfferRow {
   id: number;

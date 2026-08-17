@@ -8,6 +8,7 @@ import { adminRouter } from "./routes/admin";
 import { memberAuthRouter } from "./routes/auth";
 import { memberRouter } from "./routes/member";
 import { seoRouter } from "./routes/public/seo";
+import { apiV1Router } from "./routes/public/apiV1";
 import { notFoundHandler, errorHandler } from "./middleware/errorHandler";
 
 export function createApp(): Express {
@@ -55,6 +56,10 @@ export function createApp(): Express {
   // Root-level, not under /api: crawlers fetch these at fixed paths. nginx
   // routes exactly these two paths here instead of to the SPA.
   app.use("/", seoRouter);
+
+  // The Zapier-compatible surface. Its own bearer scheme (an API key, not a
+  // session), so it is mounted beside the app rather than inside it.
+  app.use("/api/v1", apiV1Router);
 
   app.use("/api/admin", adminRouter);
   // Member identity. /api/auth is the unauthenticated surface (register, login,

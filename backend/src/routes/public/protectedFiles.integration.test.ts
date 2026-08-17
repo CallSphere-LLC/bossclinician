@@ -28,6 +28,11 @@ const describeDb = hasTestDatabase ? describe : describe.skip;
 const VIDEO_BYTES = "the paid video";
 const VIDEO_KEY = "a1b2c3d4e5f60718.mp4";
 
+const PREVIEW_BYTES = "the sample lesson";
+const PREVIEW_KEY = "0f1e2d3c4b5a6978.mp4";
+const PREVIEW_ATTACHMENT_BYTES = "the sample workbook";
+const PREVIEW_ATTACHMENT_KEY = "9876543210abcdef.pdf";
+
 describeDb("protected file delivery (integration)", () => {
   let db: Awaited<ReturnType<typeof createTestDatabase>>;
   let client: Client;
@@ -38,6 +43,7 @@ describeDb("protected file delivery (integration)", () => {
   let strangerToken: string;
   let productId: number;
   let buyerId: number;
+  let previewAttachmentId: number;
 
   beforeAll(async () => {
     db = await createTestDatabase("protectedfiles");
@@ -53,6 +59,11 @@ describeDb("protected file delivery (integration)", () => {
     fs.mkdirSync(process.env.UPLOAD_DIR, { recursive: true });
     fs.mkdirSync(process.env.PROTECTED_UPLOAD_DIR, { recursive: true });
     fs.writeFileSync(path.join(process.env.PROTECTED_UPLOAD_DIR, VIDEO_KEY), VIDEO_BYTES);
+    fs.writeFileSync(path.join(process.env.PROTECTED_UPLOAD_DIR, PREVIEW_KEY), PREVIEW_BYTES);
+    fs.writeFileSync(
+      path.join(process.env.PROTECTED_UPLOAD_DIR, PREVIEW_ATTACHMENT_KEY),
+      PREVIEW_ATTACHMENT_BYTES
+    );
 
     const { createApp } = await import("../../app");
     const { signMemberAccessToken } = await import("../../auth/memberSession");
@@ -74,6 +85,29 @@ describeDb("protected file delivery (integration)", () => {
        VALUES ($1, 'the-lesson', 'The lesson', 'video', $2, true, 0)`,
       [mod.rows[0].id, `protected:${VIDEO_KEY}`]
     );
+
+    // A module that has not dripped yet, holding the lesson the sales page
+    // already plays to strangers. The player unlocks it and the redemption path
+    // has to agree, or the page renders and the video stalls.
+    const dripped = await client.query<{ id: number }>(
+      `INSERT INTO course_modules (course_id, title, drip_days, sort)
+       VALUES ($1, 'Module two', 14, 1) RETURNING id`,
+      [course.courseId]
+    );
+    const previewLesson = await client.query<{ id: number }>(
+      `INSERT INTO course_lessons
+         (module_id, slug, title, content_type, video_url, preview, published, sort)
+       VALUES ($1, 'the-sample', 'The sample', 'video', $2, true, true, 0)
+       RETURNING id`,
+      [dripped.rows[0].id, `protected:${PREVIEW_KEY}`]
+    );
+    const attachment = await client.query<{ id: number }>(
+      `INSERT INTO lesson_files (lesson_id, title, storage_path, filename, mime, sort)
+       VALUES ($1, 'Workbook', $2, 'workbook.pdf', 'application/pdf', 0)
+       RETURNING id`,
+      [previewLesson.rows[0].id, `protected:${PREVIEW_ATTACHMENT_KEY}`]
+    );
+    previewAttachmentId = attachment.rows[0].id;
 
     await client.query(
       `INSERT INTO access_grants (member_id, product_id, source, status)
@@ -141,6 +175,48 @@ describeDb("protected file delivery (integration)", () => {
       headers: { Authorization: `Bearer ${strangerToken}` },
     });
     expect(res.status).toBe(404);
+  });
+
+  it("plays a preview lesson sitting inside a module that has not dripped", async () => {
+    // Day one of a fourteen-day drip. The lesson page opens because `preview`
+    // overrides the schedule; the bytes have to follow the same rule.
+    const res = await fetch(`${baseUrl}/api/member/library/p-boundaries/lessons/the-sample`, {
+      headers: { Authorization: `Bearer ${buyerToken}` },
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { lesson: { locked: boolean; videoUrl: string } };
+    expect(body.lesson.locked).toBe(false);
+    expect(body.lesson.videoUrl.startsWith("/api/files/")).toBe(true);
+
+    const played = await fetch(`${baseUrl}${body.lesson.videoUrl}`);
+    expect(played.status).toBe(200);
+    await expect(played.text()).resolves.toBe(PREVIEW_BYTES);
+  });
+
+  it("hands over that preview lesson's workbook too", async () => {
+    const link = await fetch(
+      `${baseUrl}/api/member/downloads/lesson/${previewAttachmentId}/link`,
+      { method: "POST", headers: { Authorization: `Bearer ${buyerToken}` } }
+    );
+    expect(link.status).toBe(200);
+    const { url } = (await link.json()) as { url: string };
+
+    const file = await fetch(`${baseUrl}${url}`);
+    expect(file.status).toBe(200);
+    await expect(file.text()).resolves.toBe(PREVIEW_ATTACHMENT_BYTES);
+  });
+
+  it("lists that workbook as available rather than as locked", async () => {
+    const res = await fetch(`${baseUrl}/api/member/downloads`, {
+      headers: { Authorization: `Bearer ${buyerToken}` },
+    });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      files: { id: number; kind: string; available: boolean; linkUrl: string | null }[];
+    };
+    const workbook = body.files.find((f) => f.kind === "lesson" && f.id === previewAttachmentId);
+    expect(workbook?.available).toBe(true);
+    expect(workbook?.linkUrl).not.toBeNull();
   });
 
   it("stops working the moment the grant behind it is revoked", async () => {

@@ -1,0 +1,569 @@
+import crypto from "crypto";
+import { z } from "zod";
+import { env } from "../config/env";
+import { pool } from "../db/pool";
+import { sendMailStrict } from "./mailer";
+import { escapeHtml } from "./templates";
+
+/**
+ * The single door every outbound email goes through.
+ *
+ * Two things are true of this platform's mail that were not true before Phase 5,
+ * and both of them are the reason this file exists rather than a call to
+ * `sendMail` at each site.
+ *
+ * The first is reporting. Raw SMTP tells us nothing: the admin's open and click
+ * figures are zero and always will be, because nothing reports back. A provider
+ * that posts webhooks does report back, but only about messages it can name — so
+ * every send writes an `email_messages` row BEFORE the transport is called and
+ * stamps the provider's id on it afterwards. A message that is sent and not
+ * recorded is a bounce with nowhere to land.
+ *
+ * The second is the suppression list. A hard bounce or a spam complaint means
+ * that address must never be mailed marketing again, and "never again" is not a
+ * property any individual caller can be trusted to remember. The check lives
+ * here, ahead of the transport, so forgetting it is not something a caller is
+ * able to do.
+ */
+
+/* ------------------------------------------------------------------ topics */
+
+/**
+ * The subscription topics a contact can turn off individually.
+ *
+ * Deliberately a short, human list rather than one topic per sequence: a
+ * preferences page with forty checkboxes is a page nobody reads and everybody
+ * unsubscribes from wholesale. `transactional` is absent on purpose — a receipt
+ * is not something anyone may opt out of receiving.
+ */
+export const PREFERENCE_TOPICS = [
+  { topic: "marketing", label: "News, offers and launches" },
+  { topic: "product", label: "Course and product updates" },
+  { topic: "community", label: "Community digests" },
+  { topic: "events", label: "Event invitations and reminders" },
+] as const;
+
+export type PreferenceTopic = (typeof PREFERENCE_TOPICS)[number]["topic"];
+
+export function isKnownTopic(topic: string): boolean {
+  return PREFERENCE_TOPICS.some((t) => t.topic === topic);
+}
+
+/* ------------------------------------------------- preference link signing */
+
+/**
+ * HMAC over the contact id, following services/signedUrls.ts.
+ *
+ * Its own HKDF `info` string, so a preferences token and a download token are
+ * not interchangeable even though both are HMACs over JWT_SECRET. And no
+ * expiry: an unsubscribe link has to keep working in an email somebody finds in
+ * their archive three years from now, which is exactly the case where they most
+ * want it to.
+ */
+const PREFERENCES_INFO = "bossclinician/email-preferences/v1";
+const PREFERENCES_VERSION = "p1";
+
+let preferencesKey: Buffer | null = null;
+
+function prefsKey(): Buffer {
+  if (preferencesKey === null) {
+    preferencesKey = Buffer.from(
+      crypto.hkdfSync(
+        "sha256",
+        Buffer.from(env.jwtSecret, "utf8"),
+        Buffer.alloc(0),
+        Buffer.from(PREFERENCES_INFO, "utf8"),
+        32
+      )
+    );
+  }
+  return preferencesKey;
+}
+
+function signPrefs(body: string): string {
+  return crypto.createHmac("sha256", prefsKey()).update(body).digest("base64url");
+}
+
+export function signPreferencesToken(contactId: number): string {
+  const body = Buffer.from(`${PREFERENCES_VERSION}.${contactId}`, "utf8").toString("base64url");
+  return `${body}.${signPrefs(body)}`;
+}
+
+/** The contact id a token names, or null when the signature or shape does not hold. */
+export function verifyPreferencesToken(token: string): number | null {
+  const parts = token.split(".");
+  if (parts.length !== 2) return null;
+  const [body, provided] = parts;
+  if (!body || !provided) return null;
+
+  const expected = signPrefs(body);
+  // Lengths must match before timingSafeEqual, which throws rather than
+  // returning false when they differ.
+  if (provided.length !== expected.length) return null;
+  if (!crypto.timingSafeEqual(Buffer.from(provided, "utf8"), Buffer.from(expected, "utf8"))) {
+    return null;
+  }
+
+  const fields = Buffer.from(body, "base64url").toString("utf8").split(".");
+  if (fields.length !== 2 || fields[0] !== PREFERENCES_VERSION) return null;
+
+  const contactId = Number(fields[1]);
+  if (!Number.isSafeInteger(contactId) || contactId <= 0) return null;
+  return contactId;
+}
+
+/** Where a token is redeemed. Minting and serving have to agree, so it is stated once. */
+export const PREFERENCES_PATH = "/api/email/prefs";
+export const UNSUBSCRIBE_PATH = "/api/email/unsubscribe";
+
+export function preferencesUrl(contactId: number): string {
+  return `${env.publicSiteUrl}${PREFERENCES_PATH}/${signPreferencesToken(contactId)}`;
+}
+
+export function unsubscribeUrl(contactId: number): string {
+  return `${env.publicSiteUrl}${UNSUBSCRIBE_PATH}/${signPreferencesToken(contactId)}`;
+}
+
+/* ---------------------------------------------------------------- settings */
+
+const marketingSettingSchema = z.object({
+  fromName: z.string().default(""),
+  fromEmail: z.string().default(""),
+  replyTo: z.string().default(""),
+  address: z.string().default(""),
+  footer: z.string().default(""),
+});
+
+export type MarketingSettings = z.infer<typeof marketingSettingSchema>;
+
+// Deliberately a loose string rather than an enum: the settings screen offers
+// more services than have transports here, and a name this file does not
+// implement has to fall back to SMTP rather than fail a password reset.
+const providerSettingSchema = z.object({
+  provider: z.string().default("smtp"),
+  apiKey: z.string().default(""),
+  webhookSecret: z.string().default(""),
+});
+
+export type ProviderSettings = z.infer<typeof providerSettingSchema>;
+
+async function readSetting(key: string): Promise<unknown> {
+  const res = await pool.query<{ value: unknown }>(`SELECT value FROM settings WHERE key = $1`, [
+    key,
+  ]);
+  return res.rows[0]?.value ?? {};
+}
+
+export async function marketingSettings(): Promise<MarketingSettings> {
+  const parsed = marketingSettingSchema.safeParse(await readSetting("marketing_email"));
+  return parsed.success
+    ? parsed.data
+    : { fromName: "", fromEmail: "", replyTo: "", address: "", footer: "" };
+}
+
+export async function providerSettings(): Promise<ProviderSettings> {
+  const parsed = providerSettingSchema.safeParse(await readSetting("email_provider"));
+  const settings = parsed.success ? parsed.data : { provider: "smtp", apiKey: "", webhookSecret: "" };
+  // The environment wins over the database for the key itself: a secret in a
+  // settings row is a secret in a database backup, and the deployment already
+  // carries provider credentials this way.
+  return { ...settings, apiKey: process.env.RESEND_API_KEY || settings.apiKey };
+}
+
+/* --------------------------------------------------------------- transport */
+
+export interface ProviderMessage {
+  to: string;
+  from: string;
+  replyTo: string;
+  subject: string;
+  text: string;
+  html: string;
+  headers: Record<string, string>;
+}
+
+export interface EmailProvider {
+  readonly name: string;
+  send(message: ProviderMessage): Promise<{ providerMessageId: string }>;
+}
+
+/** The nodemailer path this platform has always used. */
+export const smtpProvider: EmailProvider = {
+  name: "smtp",
+  async send(message) {
+    const { messageId } = await sendMailStrict({
+      to: message.to,
+      from: message.from,
+      replyTo: message.replyTo,
+      subject: message.subject,
+      text: message.text,
+      html: message.html,
+      headers: message.headers,
+    });
+    return { providerMessageId: messageId };
+  },
+};
+
+const RESEND_ENDPOINT = "https://api.resend.com/emails";
+
+/**
+ * Resend, over its REST API rather than its SDK.
+ *
+ * One fetch against a documented endpoint is less to keep current than a
+ * dependency, and the platform is on Node 20 where fetch is built in. The id it
+ * returns is the join key for every webhook it will later post about this
+ * message, which is the whole reason for preferring it to SMTP.
+ */
+export function makeResendProvider(apiKey: string): EmailProvider {
+  return {
+    name: "resend",
+    async send(message) {
+      const response = await fetch(RESEND_ENDPOINT, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          from: message.from,
+          to: [message.to],
+          reply_to: message.replyTo || undefined,
+          subject: message.subject,
+          text: message.text,
+          html: message.html,
+          headers: message.headers,
+        }),
+      });
+
+      if (!response.ok) {
+        const detail = await response.text().catch(() => "");
+        throw new Error(`Resend rejected the message (${response.status}): ${detail.slice(0, 300)}`);
+      }
+
+      const body = (await response.json()) as { id?: string };
+      if (!body.id) throw new Error("Resend accepted the message but returned no id");
+      return { providerMessageId: body.id };
+    },
+  };
+}
+
+/**
+ * The transport the owner has configured.
+ *
+ * Falls back to SMTP when Resend is selected without a key rather than
+ * throwing: a half-finished settings change must not stop a password reset.
+ */
+export async function resolveProvider(): Promise<EmailProvider> {
+  const settings = await providerSettings();
+  if (settings.provider === "resend" && settings.apiKey) {
+    return makeResendProvider(settings.apiKey);
+  }
+  return smtpProvider;
+}
+
+/* ----------------------------------------------------------------- content */
+
+/**
+ * The small subset of Markdown the email editor actually produces.
+ *
+ * Not a Markdown library, and not trying to be one: headings, bold, italics,
+ * links, lists and paragraphs cover every sequence email in the live account,
+ * and a full parser is a dependency plus an HTML-injection surface in something
+ * that goes out over the owner's sending domain. Everything is escaped first,
+ * so an inline `<script>` in a body arrives as text.
+ */
+export function renderMarkdown(markdown: string): string {
+  const inline = (text: string): string =>
+    escapeHtml(text)
+      .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2">$1</a>')
+      .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+      .replace(/(^|[^*])\*([^*]+)\*/g, "$1<em>$2</em>");
+
+  const blocks = markdown.replace(/\r\n/g, "\n").split(/\n{2,}/);
+  const html: string[] = [];
+
+  for (const block of blocks) {
+    const trimmed = block.trim();
+    if (trimmed === "") continue;
+
+    const lines = trimmed.split("\n");
+    if (lines.every((line) => /^\s*[-*]\s+/.test(line))) {
+      const items = lines.map((line) => `<li>${inline(line.replace(/^\s*[-*]\s+/, ""))}</li>`);
+      html.push(`<ul>${items.join("")}</ul>`);
+      continue;
+    }
+
+    const heading = /^(#{1,3})\s+(.*)$/.exec(trimmed);
+    if (heading) {
+      const level = heading[1].length;
+      html.push(`<h${level}>${inline(heading[2])}</h${level}>`);
+      continue;
+    }
+
+    html.push(`<p>${lines.map(inline).join("<br>")}</p>`);
+  }
+
+  return html.join("\n");
+}
+
+/** Replaces {{firstName}} style tokens. Unknown tokens become empty, never the raw token. */
+export function renderTokens(template: string, values: Record<string, string>): string {
+  return template.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_match, key: string) => values[key] ?? "");
+}
+
+/* -------------------------------------------------------------------- send */
+
+export type EmailSourceType =
+  | "transactional"
+  | "broadcast"
+  | "sequence"
+  | "automation"
+  | "digest";
+
+export interface SendEmailInput {
+  to: string;
+  subject: string;
+  /** Plain text body. Required — a text/plain part is worth several points of deliverability. */
+  text: string;
+  /** Pre-rendered HTML. Omit and the text is wrapped in paragraphs. */
+  html?: string;
+  contactId?: number | null;
+  memberId?: number | null;
+  sourceType: EmailSourceType;
+  sourceId?: number | null;
+  /** Which preference switch governs this message. Ignored for transactional mail. */
+  topic?: string;
+  fromName?: string;
+  fromEmail?: string;
+  replyTo?: string;
+}
+
+export type SendOutcome = "sent" | "suppressed";
+
+export interface SendEmailResult {
+  /** The `email_messages` row, which exists even when nothing was sent. */
+  messageId: number;
+  outcome: SendOutcome;
+  providerMessageId: string;
+  /** Populated when `outcome` is "suppressed": why this address was skipped. */
+  suppressedReason: string;
+}
+
+/**
+ * Whether marketing may be sent to this address, and why not when it may not.
+ *
+ * Three independent gates, checked in the order that costs least. The
+ * suppression list is keyed on the address rather than the contact on purpose:
+ * an address stays suppressed through a contact being deleted and re-imported
+ * from a CSV, which is the exact route by which a sending domain dies.
+ */
+export async function marketingBlockReason(
+  email: string,
+  contactId: number | null | undefined,
+  topic: string
+): Promise<string | null> {
+  const suppressed = await pool.query<{ reason: string }>(
+    `SELECT reason FROM email_suppressions WHERE email = $1`,
+    [email]
+  );
+  if (suppressed.rows[0]) return `suppressed (${suppressed.rows[0].reason})`;
+
+  if (contactId === null || contactId === undefined) return null;
+
+  const contact = await pool.query<{ email_marketing_status: string }>(
+    `SELECT email_marketing_status FROM contacts WHERE id = $1`,
+    [contactId]
+  );
+  const status = contact.rows[0]?.email_marketing_status ?? "subscribed";
+  if (status !== "subscribed" && status !== "unconfirmed") {
+    return `contact is ${status}`;
+  }
+
+  if (topic) {
+    const preference = await pool.query<{ subscribed: boolean }>(
+      `SELECT subscribed FROM contact_email_preferences WHERE contact_id = $1 AND topic = $2`,
+      [contactId, topic]
+    );
+    if (preference.rows[0] && !preference.rows[0].subscribed) {
+      return `unsubscribed from ${topic}`;
+    }
+  }
+
+  return null;
+}
+
+function fromHeader(name: string, address: string): string {
+  if (!address) return env.smtp.from;
+  return name ? `${name} <${address}>` : address;
+}
+
+/**
+ * The CAN-SPAM block every marketing email carries.
+ *
+ * Not a nicety and not a setting anyone may switch off: a commercial email
+ * without a physical postal address and a working opt-out is illegal in the
+ * United States, where this list lives.
+ */
+function complianceBlock(
+  settings: MarketingSettings,
+  contactId: number
+): { text: string; html: string; unsubscribe: string } {
+  const unsubscribe = unsubscribeUrl(contactId);
+  const preferences = preferencesUrl(contactId);
+
+  const textParts = ["", "—", settings.footer, settings.address].filter(Boolean);
+  textParts.push(`Unsubscribe: ${unsubscribe}`);
+  textParts.push(`Change what you hear about: ${preferences}`);
+
+  const htmlParts = [
+    `<hr style="border:none;border-top:1px solid #e5e5e5;margin:32px 0 16px">`,
+    `<div style="color:#767676;font-size:12px;line-height:1.6">`,
+  ];
+  if (settings.footer) htmlParts.push(`<p>${escapeHtml(settings.footer)}</p>`);
+  if (settings.address) htmlParts.push(`<p>${escapeHtml(settings.address)}</p>`);
+  htmlParts.push(
+    `<p><a href="${escapeHtml(unsubscribe)}">Unsubscribe</a> &middot; ` +
+      `<a href="${escapeHtml(preferences)}">Change what you hear about</a></p>`,
+    `</div>`
+  );
+
+  return { text: textParts.join("\n"), html: htmlParts.join("\n"), unsubscribe };
+}
+
+/**
+ * Records, guards, sends, stamps.
+ *
+ * Throws when the transport fails, after marking the message `failed` — the
+ * caller is a queued job, and a job that cannot tell a failure from a success
+ * turns "the emails stopped" into something nobody finds out about.
+ */
+export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult> {
+  const to = input.to.trim().toLowerCase();
+  if (!to) throw new Error("No recipient address");
+
+  const isMarketing = input.sourceType !== "transactional";
+  const topic = input.topic ?? (isMarketing ? "marketing" : "");
+  const provider = await resolveProvider();
+
+  const inserted = await pool.query<{ id: string }>(
+    `INSERT INTO email_messages
+       (contact_id, member_id, to_email, source_type, source_id, topic, subject, provider, status)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'queued')
+     RETURNING id`,
+    [
+      input.contactId ?? null,
+      input.memberId ?? null,
+      to,
+      input.sourceType,
+      input.sourceId ?? null,
+      topic,
+      input.subject.slice(0, 500),
+      provider.name,
+    ]
+  );
+  const messageId = Number(inserted.rows[0].id);
+
+  if (isMarketing) {
+    const blocked = await marketingBlockReason(to, input.contactId, topic);
+    if (blocked) {
+      await pool.query(
+        `UPDATE email_messages SET status = 'suppressed', error = $2 WHERE id = $1`,
+        [messageId, blocked]
+      );
+      return { messageId, outcome: "suppressed", providerMessageId: "", suppressedReason: blocked };
+    }
+  }
+
+  const settings = await marketingSettings();
+  const headers: Record<string, string> = {};
+  let text = input.text;
+  let html = input.html ?? renderMarkdown(input.text);
+
+  // The compliance block needs a contact to address the opt-out to. A marketing
+  // send with no contact row cannot honour an unsubscribe and so must not go —
+  // every caller in this phase resolves a contact first.
+  if (isMarketing) {
+    if (input.contactId === null || input.contactId === undefined) {
+      await pool.query(
+        `UPDATE email_messages SET status = 'failed', error = $2 WHERE id = $1`,
+        [messageId, "marketing email with no contact to unsubscribe"]
+      );
+      throw new Error("A marketing email needs a contact so the reader can unsubscribe");
+    }
+
+    const block = complianceBlock(settings, input.contactId);
+    text = `${text}\n${block.text}`;
+    html = `${html}\n${block.html}`;
+    // RFC 8058: the POST form is what lets Gmail and Outlook show their own
+    // one-click unsubscribe button, which is the button people press instead of
+    // "report spam".
+    headers["List-Unsubscribe"] = `<${block.unsubscribe}>`;
+    headers["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click";
+  }
+
+  const message: ProviderMessage = {
+    to,
+    from: fromHeader(
+      input.fromName || settings.fromName,
+      input.fromEmail || settings.fromEmail
+    ),
+    replyTo: input.replyTo || settings.replyTo,
+    subject: input.subject,
+    text,
+    html,
+    headers,
+  };
+
+  try {
+    const { providerMessageId } = await provider.send(message);
+    await pool.query(
+      `UPDATE email_messages
+          SET status = 'sent', provider_message_id = NULLIF($2, ''), sent_at = now(), error = ''
+        WHERE id = $1`,
+      [messageId, providerMessageId]
+    );
+    return { messageId, outcome: "sent", providerMessageId, suppressedReason: "" };
+  } catch (err) {
+    const detail = (err instanceof Error ? err.message : String(err)).slice(0, 1000);
+    await pool.query(`UPDATE email_messages SET status = 'failed', error = $2 WHERE id = $1`, [
+      messageId,
+      detail,
+    ]);
+    throw err;
+  }
+}
+
+/**
+ * Adds an address to the suppression list and stops its contact being marketed to.
+ *
+ * Both halves, always: the list is what survives a re-import, the contact status
+ * is what every audience query filters on, and a bounce that updated only one of
+ * them would keep the address in exactly half the places that matter.
+ */
+export async function suppress(input: {
+  email: string;
+  reason: "bounce" | "complaint" | "manual" | "unsubscribe" | "invalid";
+  detail?: string;
+  /** The contact status to set. A complaint is not the same event as an opt-out. */
+  contactStatus?: "opted_out" | "bounced" | "complained";
+}): Promise<void> {
+  const email = input.email.trim().toLowerCase();
+  if (!email) return;
+
+  await pool.query(
+    `INSERT INTO email_suppressions (email, reason, detail)
+     VALUES ($1, $2, $3)
+     ON CONFLICT (email) DO UPDATE SET reason = EXCLUDED.reason, detail = EXCLUDED.detail`,
+    [email, input.reason, (input.detail ?? "").slice(0, 500)]
+  );
+
+  const status = input.contactStatus ?? "opted_out";
+  await pool.query(
+    `UPDATE contacts
+        SET email_marketing_status = $2,
+            opted_out_at = COALESCE(opted_out_at, now()),
+            updated_at = now()
+      WHERE email = $1`,
+    [email, status]
+  );
+}

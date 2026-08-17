@@ -6,13 +6,8 @@ import { asyncHandler } from "../../utils/asyncHandler";
 import { notFound, unauthorized } from "../../utils/httpError";
 import { denyImpersonation, type AuthedMember } from "../../middleware/memberAuth";
 import { hasCourseAccess, hasProductAccess } from "../../services/access";
-import {
-  DEFAULT_DRIP_SETTINGS,
-  describeUnlock,
-  parseReleaseTime,
-  resolveDripState,
-  type DripSettings,
-} from "../../services/drip";
+import { loadDripSettings } from "../../services/curriculum";
+import { describeUnlock, resolveDripState } from "../../services/drip";
 import {
   DOWNLOAD_TTL_SECONDS,
   isProtectedRef,
@@ -101,45 +96,6 @@ function sizeLabel(bytes: number): string {
   return `${rounded} ${units[unit]}`;
 }
 
-function isKnownTimezone(value: string): boolean {
-  try {
-    new Intl.DateTimeFormat("en-US", { timeZone: value });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-/**
- * The site-wide release schedule.
- *
- * `settings` is free-form JSONB the owner edits herself, so every field is
- * checked and anything unusable falls back to the default rather than throwing —
- * a mistyped timezone would otherwise make Intl throw and turn the whole
- * downloads page into a 500.
- */
-async function readDripSettings(): Promise<DripSettings> {
-  const found = await pool.query<{ value: unknown }>(
-    `SELECT value FROM settings WHERE key = 'drip'`
-  );
-  const value = found.rows[0]?.value;
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return DEFAULT_DRIP_SETTINGS;
-  }
-
-  const record = value as Record<string, unknown>;
-  const timezone = typeof record.timezone === "string" ? record.timezone.trim() : "";
-
-  return {
-    releaseMinute:
-      typeof record.releaseTime === "string"
-        ? parseReleaseTime(record.releaseTime)
-        : DEFAULT_DRIP_SETTINGS.releaseMinute,
-    timezone:
-      timezone !== "" && isKnownTimezone(timezone) ? timezone : DEFAULT_DRIP_SETTINGS.timezone,
-  };
-}
-
 /**
  * The courses a member owns, with the instant the drip schedule counts from.
  *
@@ -192,6 +148,7 @@ interface LessonFileRow extends FileRow {
   lesson_id: number;
   course_id: number;
   published: boolean;
+  preview: boolean;
   lesson_drip_days: number | null;
   lesson_drip_date: Date | null;
   module_drip_days: number | null;
@@ -217,6 +174,12 @@ function toEntitledFile(kind: DownloadFileKind, row: FileRow): EntitledFile {
  * released, so it is refused here rather than filtered out in the client. The
  * unlock date is the one thing the member is told, which is what the player
  * shows too.
+ *
+ * A preview lesson is exempt, for the same reason it is exempt in the outline
+ * and on the player: it is the lesson the sales page already plays to
+ * strangers. The exemption has to hold on both sides or the page renders, hands
+ * the player a signed link, and the redemption behind it 404s — a lesson that
+ * loads and then stalls, which reads as a broken video rather than as a rule.
  */
 async function assertReleased(
   memberId: number,
@@ -224,12 +187,15 @@ async function assertReleased(
   drip: {
     lesson: { dripDays: number | null; dripDate: Date | null };
     module: { dripDays: number | null; dripDate: Date | null };
+    preview: boolean;
   }
 ): Promise<void> {
+  if (drip.preview) return;
+
   const grantedAt = await dripAnchor(memberId, courseId);
   if (grantedAt === null) throw notFound(NOT_FOUND);
 
-  const settings = await readDripSettings();
+  const settings = await loadDripSettings();
   const state = resolveDripState({
     lesson: drip.lesson,
     module: drip.module,
@@ -276,7 +242,7 @@ export async function loadEntitledFile(
 
   const found = await pool.query<LessonFileRow>(
     `SELECT lf.id, lf.storage_path, lf.filename, lf.mime, lf.title, lf.size_bytes,
-            l.id AS lesson_id, l.published,
+            l.id AS lesson_id, l.published, l.preview,
             l.drip_days AS lesson_drip_days, l.drip_date AS lesson_drip_date,
             m.drip_days AS module_drip_days, m.drip_date AS module_drip_date,
             m.course_id
@@ -293,6 +259,7 @@ export async function loadEntitledFile(
   await assertReleased(memberId, row.course_id, {
     lesson: { dripDays: row.lesson_drip_days, dripDate: row.lesson_drip_date },
     module: { dripDays: row.module_drip_days, dripDate: row.module_drip_date },
+    preview: row.preview,
   });
 
   return toEntitledFile("lesson", row);
@@ -307,7 +274,10 @@ export async function loadEntitledFile(
  * over there is a compile error in the lookup below rather than a token nothing
  * knows how to serve.
  */
-export type LessonMediaKind = Exclude<StreamFileKind, "coaching-file">;
+export type LessonMediaKind = Exclude<
+  StreamFileKind,
+  "coaching-file" | "podcast-episode" | "community-media"
+>;
 
 /** What the delivery route needs to send bytes, for media with no file row. */
 export interface EntitledMedia {
@@ -320,6 +290,7 @@ export interface EntitledMedia {
 
 interface LessonMediaRow {
   published: boolean;
+  preview: boolean;
   course_id: number;
   video_url: string;
   audio_url: string;
@@ -354,7 +325,7 @@ export async function loadEntitledLessonMedia(
   lessonId: number
 ): Promise<EntitledMedia> {
   const found = await pool.query<LessonMediaRow>(
-    `SELECT l.published, l.video_url, l.audio_url, l.captions_url, l.attachment_url,
+    `SELECT l.published, l.preview, l.video_url, l.audio_url, l.captions_url, l.attachment_url,
             l.drip_days AS lesson_drip_days, l.drip_date AS lesson_drip_date,
             m.drip_days AS module_drip_days, m.drip_date AS module_drip_date,
             m.course_id
@@ -370,6 +341,7 @@ export async function loadEntitledLessonMedia(
   await assertReleased(memberId, row.course_id, {
     lesson: { dripDays: row.lesson_drip_days, dripDate: row.lesson_drip_date },
     module: { dripDays: row.module_drip_days, dripDate: row.module_drip_date },
+    preview: row.preview,
   });
 
   const reference = {
@@ -425,6 +397,7 @@ interface LessonFileListRow extends FileRow {
   created_at: Date;
   lesson_id: number;
   lesson_title: string;
+  preview: boolean;
   lesson_drip_days: number | null;
   lesson_drip_date: Date | null;
   module_title: string;
@@ -475,7 +448,7 @@ memberDownloadsRouter.get(
         `WITH owned AS (${OWNED_COURSES})
          SELECT lf.id, lf.title, lf.storage_path, lf.filename, lf.mime, lf.size_bytes,
                 lf.created_at,
-                l.id AS lesson_id, l.title AS lesson_title,
+                l.id AS lesson_id, l.title AS lesson_title, l.preview,
                 l.drip_days AS lesson_drip_days, l.drip_date AS lesson_drip_date,
                 m.title AS module_title,
                 m.drip_days AS module_drip_days, m.drip_date AS module_drip_date,
@@ -489,7 +462,7 @@ memberDownloadsRouter.get(
           ORDER BY c.title, m.sort, l.sort, lf.sort, lf.id`,
         [member.id]
       ),
-      readDripSettings(),
+      loadDripSettings(),
     ]);
 
     const now = new Date();
@@ -523,13 +496,17 @@ memberDownloadsRouter.get(
     });
 
     const lessonItems: DownloadItem[] = lessons.rows.map((row) => {
-      const state = resolveDripState({
+      const scheduled = resolveDripState({
         lesson: { dripDays: row.lesson_drip_days, dripDate: row.lesson_drip_date },
         module: { dripDays: row.module_drip_days, dripDate: row.module_drip_date },
         grantedAt: row.granted_at,
         now,
         settings,
       });
+      // A preview lesson's workbook is open the moment the course is, exactly as
+      // the lesson itself is — the list and the link endpoint answer the same
+      // question and must not answer it differently.
+      const state = row.preview ? { unlocked: true, unlocksAt: null } : scheduled;
       // A locked attachment keeps its title and gains an unlock date. That is
       // everything the player shows for a locked lesson, and no more: the
       // filename and size describe a file that has not been released, and there

@@ -23,6 +23,7 @@ import {
 } from "../../middleware/rateLimit";
 import { sendMail } from "../../email/mailer";
 import * as emails from "../../email/memberTemplates";
+import { linkContact, recordActivity, upsertContact } from "../../services/contacts";
 import {
   DEFAULT_TIMEZONE,
   MEMBER_PROFILE_COLUMNS,
@@ -408,6 +409,27 @@ memberAuthRoutes.post(
       }
       throw err;
     }
+
+    // Only this branch. The existing-account branches above deliberately touch
+    // nothing on the word of an unauthenticated request, and writing a contact
+    // there would be the one thing they did change — and would let this endpoint
+    // be used to stamp an activity entry on any address a stranger names.
+    const contactId = await upsertContact({
+      email: row.email,
+      firstName: row.first_name,
+      lastName: row.last_name,
+      timezone: row.timezone,
+      source: "member",
+      consentIp: req.ip ?? "",
+    });
+    await linkContact("member", row.id, contactId);
+    await recordActivity({
+      contactId,
+      kind: "account.created",
+      title: "Created an account",
+      subjectType: "member",
+      subjectId: row.id,
+    });
 
     await sendVerificationEmail(row);
 

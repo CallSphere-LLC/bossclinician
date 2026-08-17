@@ -613,33 +613,118 @@ function certificateEmail(input: {
   return { subject: `Your certificate for ${input.courseTitle}`, text, html };
 }
 
+/* ------------------------------------------------------- what CE credit costs */
+
 /**
- * Whether every lesson of this course that can be watched, was.
+ * The least time a lesson with nothing to play is worth.
+ *
+ * A CEU course delivered as reading and PDFs has no media to measure, so the
+ * clock is the only measurement available: how long passed between the member
+ * opening the lesson and saying they were done with it. The author's own
+ * estimate sets the figure where there is one, because that is the number they
+ * put on the page and the number the CE approval was written against.
+ *
+ * The floor stops a course of twenty one-line lessons from costing nothing at
+ * all. The ceiling stops a typo — 600 minutes for a two-page handout — from
+ * making a certificate unobtainable for everybody who reads it honestly.
+ */
+const MIN_DWELL_SECONDS = 60;
+const MAX_DWELL_SECONDS = 60 * 60;
+
+export function requiredDwellSeconds(durationMinutes: number): number {
+  const estimate = Math.round(Math.max(0, durationMinutes) * 60);
+  return Math.min(MAX_DWELL_SECONDS, Math.max(MIN_DWELL_SECONDS, estimate));
+}
+
+/** One published lesson of a course, and what this member has done with it. */
+export interface CeuLessonRecord {
+  contentType: string;
+  durationMinutes: number;
+  /** The credited watch figure. 0 for a lesson with nothing to play. */
+  watchedPercent: number;
+  /** When the lesson was first opened, or null if it never was. */
+  firstViewedAt: Date | null;
+  completedAt: Date | null;
+}
+
+/**
+ * Whether this member has actually done the work a CE certificate would attest.
  *
  * "Mark this lesson complete" is a convenience: it is how somebody says they are
  * done with a worksheet, and it writes a tick without touching `watched_percent`.
  * For a certificate carrying CE credit that is not enough, because the sentence
  * the document makes — this person completed n hours of approved instruction — is
- * one a licensing board acts on. So for a CEU course the ticks are ignored on any
- * lesson with something to sit through, and the watch figure has to be there.
+ * one a licensing board acts on. So the ticks are ignored, and each lesson is
+ * held to whatever it can be held to: a video or audio lesson to the watch
+ * figure, which `creditWatchedPercent` already accrues no faster than real time
+ * passes, and everything else to the gap between opening the lesson and
+ * finishing it.
  *
- * The limit is worth stating: it can only ask this of lessons that are video or
- * audio. A course delivered as reading has nothing measurable in it, and for
- * those lessons the member's own word remains the only evidence there is.
+ * The limit is worth stating plainly, because a certificate is a compliance
+ * record. Neither test proves attention, and neither is beyond a determined
+ * person: a script that opens each lesson, waits, and then ticks it produces
+ * exactly the same rows an honest reader does. What both remove is the cheap
+ * version — a course finished in a burst of requests in under a second — and a
+ * forgery that costs the length of the course is a forgery that costs the length
+ * of the course.
  */
-async function watchedEveryMediaLesson(memberId: number, courseId: number): Promise<boolean> {
-  const found = await pool.query<{ unwatched: number }>(
-    `SELECT COUNT(*)::int AS unwatched
+export function earnedCeuCredit(lessons: CeuLessonRecord[]): boolean {
+  return lessons.every((lesson) => {
+    if (lesson.contentType === "video" || lesson.contentType === "audio") {
+      return lesson.watchedPercent >= AUTO_COMPLETE_PERCENT;
+    }
+    if (lesson.completedAt === null || lesson.firstViewedAt === null) return false;
+    const seconds = (lesson.completedAt.getTime() - lesson.firstViewedAt.getTime()) / 1000;
+    return seconds >= requiredDwellSeconds(lesson.durationMinutes);
+  });
+}
+
+async function loadCeuLessonRecords(
+  memberId: number,
+  courseId: number
+): Promise<CeuLessonRecord[]> {
+  const found = await pool.query<{
+    content_type: string | null;
+    duration_minutes: number | null;
+    watched_percent: number | null;
+    first_viewed_at: Date | null;
+    completed_at: Date | null;
+  }>(
+    `SELECT l.content_type, l.duration_minutes,
+            lp.watched_percent, lp.first_viewed_at, lp.completed_at
        FROM course_lessons l
        JOIN course_modules m ON m.id = l.module_id
        LEFT JOIN lesson_progress lp ON lp.lesson_id = l.id AND lp.member_id = $1
-      WHERE m.course_id = $2
-        AND l.published
-        AND l.content_type IN ('video','audio')
-        AND COALESCE(lp.watched_percent, 0) < $3`,
-    [memberId, courseId, AUTO_COMPLETE_PERCENT]
+      WHERE m.course_id = $2 AND l.published`,
+    [memberId, courseId]
   );
-  return (found.rows[0]?.unwatched ?? 0) === 0;
+
+  return found.rows.map((row) => ({
+    contentType: row.content_type ?? "text",
+    durationMinutes: row.duration_minutes ?? 0,
+    watchedPercent: row.watched_percent ?? 0,
+    firstViewedAt: row.first_viewed_at,
+    completedAt: row.completed_at,
+  }));
+}
+
+/**
+ * Courses known to issue no certificate, remembered for a minute.
+ *
+ * The player calls the function below on every progress ping once a course
+ * reads 100%, which for somebody re-watching a course they finished last year
+ * is six times a minute for as long as the video runs. Most courses have no
+ * certificate template at all, and asking the database the same question that
+ * often to be told "no" again is the kind of cost that only shows up as a graph.
+ * A minute of staleness means a template added today starts issuing within a
+ * minute of being added, which nobody can perceive.
+ */
+const NO_TEMPLATE_TTL_MS = 60_000;
+const noTemplateUntil = new Map<number, number>();
+
+/** Drops the remembered answer. For tests, and for a template written mid-run. */
+export function clearCertificateTemplateCache(): void {
+  noTemplateUntil.clear();
 }
 
 /**
@@ -651,6 +736,12 @@ async function watchedEveryMediaLesson(memberId: number, courseId: number): Prom
  * rather than on the read that precedes it — two lessons completed in the same
  * second are two concurrent transactions, and the loser of that race must get
  * the winner's certificate back, not a second one and not an error.
+ *
+ * The two questions that can end it are asked first and in order of cost: is
+ * there already a certificate (one lookup on a unique index), and is there a
+ * template to issue one from (remembered, so the common answer is free).
+ * Everything after them is only reached on a course that can actually produce a
+ * document.
  */
 export async function issueCertificateIfEarned(
   memberId: number,
@@ -661,6 +752,18 @@ export async function issueCertificateIfEarned(
     [memberId, courseId]
   );
   if (existing.rows[0]) return existing.rows[0];
+
+  const knownEmpty = noTemplateUntil.get(courseId);
+  if (knownEmpty !== undefined) {
+    if (knownEmpty > Date.now()) return null;
+    noTemplateUntil.delete(courseId);
+  }
+
+  const template = await loadCompletionTemplate(courseId);
+  if (!template) {
+    noTemplateUntil.set(courseId, Date.now() + NO_TEMPLATE_TTL_MS);
+    return null;
+  }
 
   // Entitlement, not just completion: a course whose access was clawed back with
   // a refund must not mint a fresh certificate afterwards.
@@ -673,13 +776,15 @@ export async function issueCertificateIfEarned(
   const earned = progress.rows[0];
   if (!earned || earned.percent < 100) return null;
 
-  const template = await loadCompletionTemplate(courseId);
-  if (!template) return null;
-
   // Credit hours turn this from a keepsake into a compliance record, so a course
-  // carrying them is held to the stricter standard.
-  if (template.ceu_credit_quarter_hours > 0 && !(await watchedEveryMediaLesson(memberId, courseId)))
+  // carrying them is held to the stricter standard — on every lesson, not only
+  // on the ones with something to play.
+  if (
+    template.ceu_credit_quarter_hours > 0 &&
+    !earnedCeuCredit(await loadCeuLessonRecords(memberId, courseId))
+  ) {
     return null;
+  }
 
   const found = await pool.query<MemberRow & { course_title: string }>(
     `SELECT m.email, m.first_name, m.last_name, m.name, c.title AS course_title

@@ -1,3 +1,4 @@
+import path from "path";
 import { Request, Router } from "express";
 import { ipKeyGenerator, rateLimit } from "express-rate-limit";
 import { z } from "zod";
@@ -5,6 +6,7 @@ import type { PoolClient } from "pg";
 import { pool } from "../../db/pool";
 import { asyncHandler } from "../../utils/asyncHandler";
 import { badRequest, forbidden, notFound, unauthorized } from "../../utils/httpError";
+import { plainText } from "../../utils/plainText";
 import {
   denyImpersonation,
   requireVerifiedEmail,
@@ -17,6 +19,8 @@ import {
   notify,
   notifyMentions,
 } from "../../services/communityNotifications";
+import { deliverableUrl, readProtectedRef } from "../../services/signedUrls";
+import type { EntitledMedia } from "./downloads";
 
 /**
  * `/api/member/community` — the member's side of the community the admin has
@@ -134,26 +138,6 @@ function totalOf(row: { total_count: string | number } | undefined): number {
 }
 
 /* ----------------------------------------------------------- hostile input */
-
-/**
- * Anything tag-shaped, removed rather than escaped.
- *
- * Escaping would store `&lt;script&gt;`, which reads as literal noise in a React
- * client that escapes again, and becomes live markup the moment anything renders
- * it as HTML. Removing means the stored row is text in every renderer that will
- * ever read it. The second pass catches an unterminated `<img onerror=...` whose
- * closing bracket the author left off precisely so the first pass would miss it;
- * `<3` survives both, because a digit is not the start of a tag.
- */
-function plainText(value: string): string {
-  return value
-    .replace(/<\/?[a-zA-Z][^>]*>/g, "")
-    .replace(/<(?=[a-zA-Z/!?])/g, "")
-    // Control characters: invisible in every client, and a way to smuggle
-    // lookalike text past a moderator reading the same string.
-    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "")
-    .trim();
-}
 
 const textField = (max: number) => z.string().max(max).transform(plainText);
 
@@ -424,6 +408,51 @@ async function loadPost(
   const ctx = await enterCommunity(member, { id: post.community_id });
   if (post.channel_visibility === "private" && !ctx.moderator) throw notFound(POST_MISSING);
   return { post, ctx };
+}
+
+/**
+ * The media behind a signed community link, if the room is still open to them.
+ *
+ * The same three gates the feed applies, asked again at the moment the bytes are
+ * requested rather than trusted from when the page rendered: the post is still
+ * visible, the member may still be in the community access.ts admits them to,
+ * and a private channel is still only for its moderators. Two hours is long
+ * enough for a refund, a ban or a moderator taking the post down.
+ *
+ * Everything it refuses is the same 404, because a signed-out browser holding
+ * the link is the case this route mostly sees and it must learn nothing from
+ * which gate closed.
+ */
+export async function loadEntitledPostMedia(
+  memberId: number,
+  postId: number
+): Promise<EntitledMedia> {
+  const found = await pool.query<{
+    media_url: string;
+    community_id: number;
+    channel_visibility: string;
+    role: string | null;
+    banned_at: Date | null;
+  }>(
+    `SELECT p.media_url, ch.community_id, ch.visibility AS channel_visibility,
+            cm.role, cm.banned_at
+       FROM community_posts p
+       JOIN community_channels ch ON ch.id = p.channel_id
+       JOIN communities c         ON c.id  = ch.community_id
+       LEFT JOIN community_memberships cm
+         ON cm.community_id = ch.community_id AND cm.member_id = $2
+      WHERE p.id = $1 AND p.status = 'visible' AND c.published`,
+    [postId, memberId]
+  );
+  const row = found.rows[0];
+  const storageKey = row === undefined ? null : readProtectedRef(row.media_url);
+  if (!row || storageKey === null || row.banned_at !== null) throw notFound(POST_MISSING);
+
+  const moderator = row.role === "moderator" || row.role === "admin";
+  if (row.channel_visibility === "private" && !moderator) throw notFound(POST_MISSING);
+  if (!(await mayEnterCommunity(memberId, row.community_id))) throw notFound(POST_MISSING);
+
+  return { storagePath: row.media_url, filename: path.basename(storageKey), mime: "" };
 }
 
 /** The link a notification about a post should open. */
@@ -721,7 +750,16 @@ function toPostJson(
     kind: row.kind,
     title: row.title,
     body: row.body,
-    mediaUrl: row.media_url,
+    // A member's own post carries a link they pasted, which is already a URL.
+    // A post the host made from the admin can carry a file out of the protected
+    // directory instead, and that one has to be signed on the way out or the
+    // feed renders `https://site/protected:handout.pdf` and nothing plays.
+    mediaUrl: deliverableUrl({
+      reference: row.media_url,
+      kind: "community-media",
+      fileId: row.id,
+      memberId,
+    }).url,
     pinned: row.pinned,
     locked: row.locked,
     author: {

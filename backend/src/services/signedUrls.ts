@@ -70,7 +70,9 @@ export type StreamFileKind =
   | "lesson-audio"
   | "lesson-captions"
   | "lesson-attachment"
-  | "coaching-file";
+  | "coaching-file"
+  | "podcast-episode"
+  | "community-media";
 
 export type SignedFileKind = DownloadFileKind | StreamFileKind;
 
@@ -89,6 +91,8 @@ const KIND_TTL: Record<SignedFileKind, number> = {
   "lesson-captions": STREAM_TTL_SECONDS,
   "lesson-attachment": STREAM_TTL_SECONDS,
   "coaching-file": STREAM_TTL_SECONDS,
+  "podcast-episode": STREAM_TTL_SECONDS,
+  "community-media": STREAM_TTL_SECONDS,
 };
 
 const STREAM_KINDS: ReadonlySet<string> = new Set<StreamFileKind>([
@@ -97,6 +101,8 @@ const STREAM_KINDS: ReadonlySet<string> = new Set<StreamFileKind>([
   "lesson-captions",
   "lesson-attachment",
   "coaching-file",
+  "podcast-episode",
+  "community-media",
 ]);
 
 export function isStreamKind(kind: SignedFileKind): kind is StreamFileKind {
@@ -110,8 +116,8 @@ function isSignedFileKind(value: string): value is SignedFileKind {
 export interface DownloadPayload {
   /**
    * Which table `fileId` points at: product_files, lesson_files,
-   * course_lessons (the four `lesson-*` kinds, one per media column) or
-   * coaching_session_files.
+   * course_lessons (the four `lesson-*` kinds, one per media column),
+   * coaching_session_files, podcast_episodes or community_posts.
    */
   kind: SignedFileKind;
   fileId: number;
@@ -267,6 +273,45 @@ export function readProtectedRef(reference: string): string | null {
  */
 export function isProtectedRef(reference: string): boolean {
   return readProtectedRef(reference) !== null;
+}
+
+/**
+ * Whether this reference names a file on somebody else's host.
+ *
+ * A Vimeo embed, a Zoom recording, a caption file on a CDN: not ours to sign,
+ * not ours to serve, and already a working URL.
+ */
+export function isExternalRef(reference: string): boolean {
+  return /^https?:\/\//i.test(reference.trim());
+}
+
+/**
+ * The URL to hand a customer for one stored reference.
+ *
+ * Every surface that puts paid media in front of a member asks the same
+ * question, so it is answered once. A protected reference is signed into a link
+ * bound to that member and dead on its own clock; anything else is already an
+ * address a browser can fetch and is returned untouched. A caller that skips
+ * this and emits the stored value gets `https://site/protected:abc.mp3`, which
+ * is a 404 wearing the shape of a URL.
+ *
+ * `expiresAt` is null exactly when nothing was signed, which is also how a
+ * caller tells "this URL will stop working" from "this URL is permanent".
+ */
+export function deliverableUrl(input: {
+  reference: string;
+  kind: StreamFileKind;
+  fileId: number;
+  memberId: number;
+  now?: Date;
+}): { url: string; expiresAt: Date | null } {
+  if (!isProtectedRef(input.reference)) return { url: input.reference, expiresAt: null };
+  return signedFileUrl({
+    kind: input.kind,
+    fileId: input.fileId,
+    memberId: input.memberId,
+    now: input.now,
+  });
 }
 
 /**

@@ -3,7 +3,7 @@ import { motion } from "motion/react";
 import { Check, Copy, ExternalLink, FolderOpen, Play, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { adminApi } from "@/lib/api";
-import type { MediaAsset, MediaKind } from "@/types/admin";
+import type { MediaAsset, MediaKind, MediaVisibility } from "@/types/admin";
 import { cn } from "@/lib/cn";
 import { formatBytes, formatRelative } from "@/lib/format";
 import { friendlyError, pluralize } from "@/pages/admin/ui/friendly";
@@ -50,6 +50,40 @@ function copyLabel(kind: string): string {
   return "Copy link";
 }
 
+/**
+ * Who a file is for — the question, in the only two answers that exist.
+ *
+ * It decides which of the two storage areas the bytes land in, and that is not
+ * something a later edit can undo: the choice has to be made here, before the
+ * upload starts. "Public" and "protected" are words about directories; these are
+ * words about people, which is what the person choosing is actually thinking
+ * about.
+ */
+const AUDIENCES: { key: MediaVisibility; label: string; hint: string }[] = [
+  {
+    key: "public",
+    label: "Anyone on the website",
+    hint: "Pictures for your pages, blog covers, headshots — things a visitor should see.",
+  },
+  {
+    key: "protected",
+    label: "Only people who bought it",
+    hint: "Course videos, workbooks, anything somebody paid for. It never gets a public web address.",
+  },
+];
+
+/** The short version, for the badge on a file that is already uploaded. */
+function audienceBadge(visibility: MediaVisibility | undefined): string {
+  return visibility === "protected" ? "Buyers only" : "Everyone";
+}
+
+function isPaidFile(asset: MediaAsset): boolean {
+  return asset.visibility === "protected";
+}
+
+const PAID_FILE_NOTE =
+  "Only people who bought it can open this, so there's no web address to copy. Add it from inside the course, product or session it belongs to.";
+
 export default function MediaLibrary() {
   const [assets, setAssets] = useState<MediaAsset[] | null>(null);
   const [filter, setFilter] = useState<MediaKind | "all">("all");
@@ -57,6 +91,7 @@ export default function MediaLibrary() {
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<MediaAsset | null>(null);
   const [copiedId, setCopiedId] = useState<number | null>(null);
+  const [audience, setAudience] = useState<MediaVisibility>("public");
   const [confirm, confirmDialog] = useConfirm();
 
   const load = useCallback(() => {
@@ -168,7 +203,46 @@ export default function MediaLibrary() {
 
       {error && <ErrorNotice message={error} />}
 
-      <UploadDropzone onUploaded={handleUploaded} />
+      {/* Asked before the box, not after: the answer decides where the bytes are
+          written, and a file uploaded for everyone cannot be made private
+          afterwards without uploading it again. */}
+      <Card className="p-4">
+        <p className="text-sm font-semibold text-ink">Who is this file for?</p>
+        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          {AUDIENCES.map((choice) => {
+            const active = audience === choice.key;
+            return (
+              <button
+                key={choice.key}
+                type="button"
+                aria-pressed={active}
+                onClick={() => setAudience(choice.key)}
+                className={cn(
+                  "rounded-xl border p-3 text-left transition-colors",
+                  active
+                    ? "border-plum bg-lilac-tint/50"
+                    : "border-hairline hover:border-plum/40 hover:bg-lilac-tint/20",
+                )}
+              >
+                <span className="flex items-center gap-2 text-sm font-semibold text-ink">
+                  <span
+                    className={cn(
+                      "grid size-4 shrink-0 place-items-center rounded-full border",
+                      active ? "border-plum bg-plum text-white" : "border-hairline",
+                    )}
+                  >
+                    {active && <Check className="size-3" />}
+                  </span>
+                  {choice.label}
+                </span>
+                <span className="mt-1 block text-xs text-ink-soft">{choice.hint}</span>
+              </button>
+            );
+          })}
+        </div>
+      </Card>
+
+      <UploadDropzone onUploaded={handleUploaded} visibility={audience} />
 
       <Card>
         <div className="flex flex-wrap items-center gap-3 border-b border-hairline/60 px-4 py-3.5">
@@ -223,6 +297,7 @@ export default function MediaLibrary() {
               {visible.map((asset, i) => {
                 const Icon = iconForKind(asset.kind);
                 const name = asset.title || asset.originalName;
+                const paid = isPaidFile(asset);
                 return (
                   <motion.div
                     key={asset.id}
@@ -238,7 +313,14 @@ export default function MediaLibrary() {
                       aria-label={`Take a closer look at ${name}`}
                       className="relative block aspect-[4/3] w-full overflow-hidden bg-cream"
                     >
-                      {asset.kind === "image" ? (
+                      {/* A file only buyers can open has no web address, so an
+                          <img> or <video> pointed at it draws a broken frame.
+                          The icon is the honest picture of it. */}
+                      {paid ? (
+                        <span className="grid size-full place-items-center text-plum/45">
+                          <Icon className="size-9" />
+                        </span>
+                      ) : asset.kind === "image" ? (
                         <img
                           src={asset.url}
                           alt={name}
@@ -273,6 +355,12 @@ export default function MediaLibrary() {
                       >
                         {kindLabel(asset.kind)}
                       </Badge>
+                      <Badge
+                        tone={paid ? "gold" : "neutral"}
+                        className="absolute right-2 top-2 !bg-night-deep/80 ring-1 ring-white/15 !text-[0.6rem] backdrop-blur"
+                      >
+                        {audienceBadge(asset.visibility)}
+                      </Badge>
                     </button>
 
                     <div className="p-3">
@@ -285,15 +373,21 @@ export default function MediaLibrary() {
                       </p>
 
                       <div className="mt-2.5 flex gap-1.5">
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          className="h-8 flex-1 px-2 text-[0.7rem]"
-                          onClick={() => copyLink(asset)}
-                        >
-                          {copiedId === asset.id ? <Check /> : <Copy />}
-                          {copiedId === asset.id ? "Copied" : copyLabel(asset.kind)}
-                        </Button>
+                        {paid ? (
+                          <p className="flex-1 self-center text-[0.68rem] leading-snug text-ink-soft">
+                            Add it from inside the course or product it belongs to.
+                          </p>
+                        ) : (
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            className="h-8 flex-1 px-2 text-[0.7rem]"
+                            onClick={() => copyLink(asset)}
+                          >
+                            {copiedId === asset.id ? <Check /> : <Copy />}
+                            {copiedId === asset.id ? "Copied" : copyLabel(asset.kind)}
+                          </Button>
+                        )}
                         <Button
                           variant="dangerGhost"
                           size="iconSm"
@@ -319,7 +413,9 @@ export default function MediaLibrary() {
         title={preview?.title || preview?.originalName || "Your file"}
         description={
           preview
-            ? `${kindLabel(preview.kind)} · ${formatBytes(Number(preview.sizeBytes))} · added ${formatRelative(preview.createdAt)}`
+            ? `${kindLabel(preview.kind)} · ${formatBytes(Number(preview.sizeBytes))} · added ${formatRelative(preview.createdAt)} · ${
+                isPaidFile(preview) ? "Only people who bought it" : "Anyone on the website"
+              }`
             : undefined
         }
         size="xl"
@@ -327,7 +423,17 @@ export default function MediaLibrary() {
         {preview && (
           <div className="space-y-4">
             <div className="overflow-hidden rounded-xl bg-ink/5">
-              {preview.kind === "image" ? (
+              {isPaidFile(preview) ? (
+                <div className="p-10 text-center">
+                  <span className="mx-auto grid size-14 place-items-center rounded-2xl bg-lilac-tint text-plum">
+                    {(() => {
+                      const Icon = iconForKind(preview.kind);
+                      return <Icon className="size-7" />;
+                    })()}
+                  </span>
+                  <p className="mx-auto mt-4 max-w-md text-sm text-ink-soft">{PAID_FILE_NOTE}</p>
+                </div>
+              ) : preview.kind === "image" ? (
                 <img
                   src={preview.url}
                   alt={preview.title || preview.originalName}
@@ -352,22 +458,25 @@ export default function MediaLibrary() {
             </div>
 
             {/* The link itself is machinery — she needs to be able to hand it
-                to something, not to read it. */}
-            <div className="flex flex-wrap items-center gap-2 rounded-xl border border-hairline bg-cream/60 px-3 py-2">
-              <p className="min-w-0 flex-1 text-xs text-ink-soft">
-                Copy the link to use this anywhere on your site.
-              </p>
-              <Button asChild variant="ghost" size="sm">
-                <a href={preview.url} target="_blank" rel="noreferrer">
-                  <ExternalLink />
-                  Open in a new tab
-                </a>
-              </Button>
-              <Button variant="secondary" size="sm" onClick={() => copyLink(preview)}>
-                {copiedId === preview.id ? <Check /> : <Copy />}
-                {copiedId === preview.id ? "Copied" : copyLabel(preview.kind)}
-              </Button>
-            </div>
+                to something, not to read it. A file only buyers can open has no
+                link at all, so there is nothing to offer her here. */}
+            {!isPaidFile(preview) && (
+              <div className="flex flex-wrap items-center gap-2 rounded-xl border border-hairline bg-cream/60 px-3 py-2">
+                <p className="min-w-0 flex-1 text-xs text-ink-soft">
+                  Copy the link to use this anywhere on your site.
+                </p>
+                <Button asChild variant="ghost" size="sm">
+                  <a href={preview.url} target="_blank" rel="noreferrer">
+                    <ExternalLink />
+                    Open in a new tab
+                  </a>
+                </Button>
+                <Button variant="secondary" size="sm" onClick={() => copyLink(preview)}>
+                  {copiedId === preview.id ? <Check /> : <Copy />}
+                  {copiedId === preview.id ? "Copied" : copyLabel(preview.kind)}
+                </Button>
+              </div>
+            )}
           </div>
         )}
       </Modal>

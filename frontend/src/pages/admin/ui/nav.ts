@@ -71,6 +71,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { to: "/admin/sales/invoices", label: "Invoices", ready: true },
       { to: "/admin/sales/coupons", label: "Coupons", ready: true },
       { to: "/admin/sales/payouts", label: "Payouts", ready: true },
+      { to: "/admin/partners", label: "Partners", ready: true },
     ],
   },
   {

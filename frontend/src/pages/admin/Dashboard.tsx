@@ -1,14 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { motion } from "motion/react";
+import { toast } from "sonner";
 import {
   ArrowUpRight,
   BookOpen,
   CreditCard,
   FileText,
   Inbox,
+  Landmark,
   MessageSquare,
   Plus,
+  RefreshCw,
   Sparkles,
   TrendingDown,
   TrendingUp,
@@ -17,6 +19,7 @@ import {
   Wallet,
 } from "lucide-react";
 import { adminApi } from "@/lib/api";
+import { formatValue, reportsApi, type DashboardOverview as Overview } from "@/lib/reportsApi";
 import type { DashboardOverview, RevenueSummary, StripeStatus } from "@/types/admin";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/cn";
@@ -25,7 +28,6 @@ import {
   formatCurrency,
   formatNumber,
   formatRelative,
-  percentDelta,
 } from "@/lib/format";
 import {
   Badge,
@@ -38,41 +40,51 @@ import {
   Skeleton,
   leadStatusLabel,
 } from "@/pages/admin/ui/primitives";
-import { pluralize } from "@/pages/admin/ui/friendly";
+import { friendlyError, pluralize } from "@/pages/admin/ui/friendly";
 import { CHART_COLORS, DonutChart, Sparkline, TrendAreaChart } from "@/pages/admin/ui/Charts";
 
-type MetricKey = "gross" | "subscription" | "optins" | "offers";
+/**
+ * The screen Yvette opens every morning.
+ *
+ * The top row is the five figures she actually asks for — money coming in,
+ * money every month, people joining the list, things sold, and everything she
+ * has kept all time — each with the last thirty days behind it and a comparison
+ * against the thirty before. The Stripe balance joins them only when card
+ * payments are set up: a "£0.00 balance" tile on an account with no payment
+ * provider reads as a bank account somebody has emptied.
+ *
+ * Those five come from the nightly rollup rather than from live table scans, so
+ * this page is a handful of index lookups however many years of trade sit behind
+ * it. The one thing that must never happen is a silently stale figure, so the
+ * page says when it was last worked out and offers to do it again.
+ */
 
-interface Metric {
-  key: MetricKey;
-  label: string;
-  value: string;
-  /**
-   * One line saying what the number counts and over what period. The four tabs
-   * mix all-time counts with 30-day totals, which is impossible to guess from a
-   * label alone — so the selected tab always explains itself above the chart.
-   */
-  description: string;
-  delta: number | null;
-  seriesKey: string;
-  color: string;
-  currency: boolean;
-}
+/** The palette each tile charts in, in the order the tiles appear. */
+const TILE_COLORS: Record<string, string> = {
+  gross: CHART_COLORS.plum,
+  recurring: CHART_COLORS.gold,
+  optins: CHART_COLORS.green,
+  sold: CHART_COLORS.lilac,
+  net: CHART_COLORS.plumDeep,
+};
 
 export default function Dashboard() {
   const { user } = useAuth();
+  const [figures, setFigures] = useState<Overview | null>(null);
   const [overview, setOverview] = useState<DashboardOverview | null>(null);
   const [revenue, setRevenue] = useState<RevenueSummary | null>(null);
   const [stripe, setStripe] = useState<StripeStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [metric, setMetric] = useState<MetricKey>("gross");
+  const [selected, setSelected] = useState<string>("gross");
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
 
-    Promise.all([adminApi.overview(), adminApi.revenue()])
-      .then(([o, r]) => {
+    Promise.all([reportsApi.dashboard(30), adminApi.overview(), adminApi.revenue()])
+      .then(([f, o, r]) => {
         if (cancelled) return;
+        setFigures(f);
         setOverview(o);
         setRevenue(r);
       })
@@ -93,77 +105,32 @@ export default function Dashboard() {
     };
   }, []);
 
-  /** Chart rows: revenue series merged with the activity series by date. */
-  const chartData = useMemo(() => {
-    if (!overview || !revenue) return [];
-    const revenueByDate = new Map(revenue.series.map((p) => [p.date, p]));
+  const tiles = figures?.tiles ?? [];
+  const active = tiles.find((t) => t.key === selected) ?? tiles[0];
 
-    return overview.series.map((point) => {
-      const rev = revenueByDate.get(point.date);
-      const oneTime = rev?.oneTimeCents ?? 0;
-      const subscription = rev?.subscriptionCents ?? 0;
-      return {
-        date: point.date,
-        gross: oneTime + subscription,
-        subscription,
-        optins: point.subscribers,
-        offers: oneTime > 0 ? 1 : 0,
-      };
-    });
-  }, [overview, revenue]);
+  /** The selected tile's own daily series, ready for the big chart. */
+  const chartData = useMemo(
+    () => (active?.sparkline ?? []).map((p) => ({ date: p.date, value: p.value })),
+    [active],
+  );
 
-  const metrics: Metric[] = useMemo(() => {
-    if (!revenue || !overview) return [];
-    return [
-      {
-        key: "gross",
-        label: "Money coming in",
-        value: formatCurrency(revenue.last30Cents),
-        description:
-          "What you've been paid in the last 30 days. The chart shows each day's takings, and the little arrow compares it with the 30 days before.",
-        delta: percentDelta(revenue.last30Cents, revenue.prev30Cents),
-        seriesKey: "gross",
-        color: CHART_COLORS.plum,
-        currency: true,
-      },
-      {
-        key: "subscription",
-        label: "Money every month",
-        value: formatCurrency(revenue.mrrCents),
-        description:
-          "What everyone on a plan or membership adds up to each month. The chart shows those payments as they came in.",
-        delta: null,
-        seriesKey: "subscription",
-        color: CHART_COLORS.gold,
-        currency: true,
-      },
-      {
-        key: "optins",
-        label: "People on your list",
-        value: formatNumber(overview.totals.subscribers),
-        description:
-          "Everyone who has signed up to hear from you, all time. The chart shows how many joined each day.",
-        delta: null,
-        seriesKey: "optins",
-        color: CHART_COLORS.green,
-        currency: false,
-      },
-      {
-        key: "offers",
-        label: "Things sold",
-        value: formatNumber(revenue.ordersPaid),
-        description:
-          "How many times someone has bought from you, all time. The chart marks the days a sale came in.",
-        delta: null,
-        seriesKey: "offers",
-        color: CHART_COLORS.lilac,
-        currency: false,
-      },
-    ];
-  }, [revenue, overview]);
-
-  const activeMetric = metrics.find((m) => m.key === metric) ?? metrics[0];
-  const firstName = (user?.name || user?.email || "there").split(/[\s@]/)[0];
+  /**
+   * The activity series as plain rows.
+   *
+   * Recharts takes an indexable record; a named interface has no index
+   * signature, so the shape is spelled out here once rather than cast four
+   * times at the call sites.
+   */
+  const activitySeries = useMemo(
+    () =>
+      (overview?.series ?? []).map((p) => ({
+        date: p.date,
+        leads: p.leads,
+        subscribers: p.subscribers,
+        revenueCents: p.revenueCents,
+      })),
+    [overview],
+  );
 
   const leadDonut = useMemo(() => {
     const palette: Record<string, string> = {
@@ -181,6 +148,20 @@ export default function Dashboard() {
       color: palette[s.status] ?? CHART_COLORS.slate,
     }));
   }, [overview]);
+
+  const firstName = (user?.name || user?.email || "there").split(/[\s@]/)[0];
+
+  async function refreshFigures() {
+    setRefreshing(true);
+    try {
+      await reportsApi.refresh();
+      toast.success("We're working your figures out — check back in a minute or two.");
+    } catch (err) {
+      toast.error(friendlyError(err, "figure"));
+    } finally {
+      setRefreshing(false);
+    }
+  }
 
   if (error) {
     return (
@@ -223,15 +204,161 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Revenue command centre */}
+      {/* When the figures were last worked out */}
+      {figures && (
+        <p className="flex flex-wrap items-center gap-2 text-xs text-ink-soft">
+          {figures.figuresUpdatedAt ? (
+            <>Worked out {formatRelative(figures.figuresUpdatedAt)}, and again every night.</>
+          ) : (
+            <>Your figures haven't been worked out yet.</>
+          )}
+          <button
+            type="button"
+            onClick={refreshFigures}
+            disabled={refreshing}
+            className="inline-flex items-center gap-1 font-semibold text-plum hover:underline disabled:opacity-60"
+          >
+            <RefreshCw className={cn("size-3", refreshing && "animate-spin")} />
+            {refreshing ? "Working them out…" : "Work them out now"}
+          </button>
+        </p>
+      )}
+
+      {/* The daily numbers */}
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        {tiles.length === 0
+          ? Array.from({ length: 5 }, (_, i) => <Skeleton key={i} className="h-36 w-full" />)
+          : tiles.map((tile) => {
+              const chosen = tile.key === selected;
+              const colour = TILE_COLORS[tile.key] ?? CHART_COLORS.plum;
+              return (
+                <Card
+                  key={tile.key}
+                  className={cn(
+                    "overflow-hidden transition-colors",
+                    chosen && "border-plum-bright/45",
+                  )}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setSelected(tile.key)}
+                    aria-pressed={chosen}
+                    className="w-full px-5 pt-5 text-left"
+                  >
+                    <span className="block text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-ink-soft">
+                      {tile.label}
+                    </span>
+                    <span className="mt-2 flex flex-wrap items-baseline gap-2">
+                      <span className="font-display text-[1.7rem] leading-none text-ink">
+                        {formatValue(tile.value, tile.format, tile.currency)}
+                      </span>
+                      {tile.changePercent !== null && (
+                        <span
+                          className={cn(
+                            "inline-flex items-center gap-0.5 text-[0.7rem] font-bold",
+                            tile.changePercent >= 0 ? "text-green-bright" : "text-red-300",
+                          )}
+                        >
+                          {tile.changePercent >= 0 ? (
+                            <TrendingUp className="size-3" />
+                          ) : (
+                            <TrendingDown className="size-3" />
+                          )}
+                          {Math.abs(tile.changePercent)}%
+                        </span>
+                      )}
+                    </span>
+                    <span className="mt-1.5 block text-xs leading-relaxed text-ink-soft">
+                      {tile.description}
+                    </span>
+                  </button>
+
+                  {tile.sparkline.length > 0 && (
+                    <div className="-mx-1 mt-3">
+                      <Sparkline
+                        data={tile.sparkline.map((p) => ({ date: p.date, value: p.value }))}
+                        dataKey="value"
+                        color={colour}
+                      />
+                    </div>
+                  )}
+
+                  {tile.reportId && (
+                    <div className="border-t border-hairline/60 px-5 py-2.5">
+                      <Link
+                        to={`/admin/analytics/reports/${tile.reportId}`}
+                        className="inline-flex items-center gap-1 text-xs font-semibold text-plum hover:underline"
+                      >
+                        See the whole picture
+                        <ArrowUpRight className="size-3.5" />
+                      </Link>
+                    </div>
+                  )}
+                </Card>
+              );
+            })}
+
+        {/* Only when card payments are actually set up. */}
+        {figures?.balance && (
+          <Card className="overflow-hidden p-5">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-ink-soft">
+                  Waiting to reach your bank
+                </p>
+                <p className="mt-2 font-display text-[1.7rem] leading-none text-ink">
+                  {figures.balance.available.length === 0
+                    ? formatCurrency(0)
+                    : figures.balance.available
+                        .map((b) => formatValue(b.amountCents, "money", b.currency))
+                        .join(" · ")}
+                </p>
+                <p className="mt-1.5 text-xs leading-relaxed text-ink-soft">
+                  Ready to pay out
+                  {figures.balance.pending.length > 0 && (
+                    <>
+                      , with{" "}
+                      {figures.balance.pending
+                        .map((b) => formatValue(b.amountCents, "money", b.currency))
+                        .join(" · ")}{" "}
+                      still clearing
+                    </>
+                  )}
+                  .
+                </p>
+              </div>
+              <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-gold/[0.12] text-gold">
+                <Landmark className="size-4" />
+              </span>
+            </div>
+            <div className="mt-4 border-t border-hairline/70 pt-3">
+              <Link
+                to="/admin/sales/payouts"
+                className="inline-flex items-center gap-1 text-xs font-semibold text-plum hover:underline"
+              >
+                See your payouts
+                <ArrowUpRight className="size-3.5" />
+              </Link>
+            </div>
+          </Card>
+        )}
+      </div>
+
+      {/* The chart for whichever number she picked */}
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_19rem]">
         <Card className="overflow-hidden">
           <div className="flex flex-wrap items-center gap-2 border-b border-hairline/60 px-5 py-3.5">
-            <Badge tone="plum">Last 30 days</Badge>
-            <Badge tone="neutral">US dollars</Badge>
-            <p className="text-xs text-ink-soft">Pick a number to chart it below.</p>
+            <Badge tone="plum">Last {figures?.range.days ?? 30} days</Badge>
+            {active && active.format === "money" && (
+              <Badge tone="neutral">
+                {active.currency === "mixed"
+                  ? "More than one currency"
+                  : active.currency.toUpperCase()}
+              </Badge>
+            )}
+            <p className="text-xs text-ink-soft">Pick a number above to chart it here.</p>
             <Link
-              to="/admin/analytics"
+              to="/admin/analytics/reports"
               className="ml-auto inline-flex items-center gap-1 text-xs font-semibold text-plum hover:underline"
             >
               See all your numbers
@@ -239,67 +366,19 @@ export default function Dashboard() {
             </Link>
           </div>
 
-          {/* The four numbers she can chart — the toggle above says so out loud */}
-          <div
-            role="group"
-            aria-label="Choose which number to show on the chart"
-            className="grid grid-cols-2 divide-hairline/60 border-b border-hairline/60 sm:grid-cols-4 sm:divide-x"
-          >
-            {metrics.length === 0
-              ? Array.from({ length: 4 }, (_, i) => (
-                  <div key={i} className="px-5 py-4">
-                    <Skeleton className="h-3 w-24" />
-                    <Skeleton className="mt-2.5 h-7 w-28" />
-                  </div>
-                ))
-              : metrics.map((m) => {
-                  const selected = m.key === metric;
-                  return (
-                    <button
-                      key={m.key}
-                      type="button"
-                      onClick={() => setMetric(m.key)}
-                      aria-pressed={selected}
-                      className={cn(
-                        "relative px-5 py-4 text-left transition-colors",
-                        selected ? "bg-lilac-tint/40" : "hover:bg-cream/70",
-                      )}
-                    >
-                      {selected && (
-                        <motion.span
-                          layoutId="metric-underline"
-                          className="absolute inset-x-0 bottom-0 h-0.5 bg-plum"
-                          transition={{ type: "spring", stiffness: 400, damping: 32 }}
-                        />
-                      )}
-                      <span className="block text-xs font-semibold text-ink-soft">{m.label}</span>
-                      <span className="mt-1.5 flex items-baseline gap-2">
-                        <span className="font-display text-[1.35rem] text-ink">{m.value}</span>
-                        {m.delta !== null && (
-                          <span
-                            className={cn(
-                              "inline-flex items-center gap-0.5 text-[0.7rem] font-bold",
-                              m.delta >= 0 ? "text-green" : "text-red-300",
-                            )}
-                          >
-                            {m.delta >= 0 ? (
-                              <TrendingUp className="size-3" />
-                            ) : (
-                              <TrendingDown className="size-3" />
-                            )}
-                            {Math.abs(m.delta)}%
-                          </span>
-                        )}
-                      </span>
-                    </button>
-                  );
-                })}
-          </div>
-
           <div className="px-3 py-5 sm:px-5">
-            {activeMetric && (
+            {active && (
               <p className="mb-3 px-2 text-xs leading-relaxed text-ink-soft sm:px-1">
-                {activeMetric.description}
+                <span className="font-semibold text-ink">{active.label}.</span>{" "}
+                {active.description}
+                {active.previousValue !== null && (
+                  <>
+                    {" "}
+                    That's {formatValue(active.value, active.format, active.currency)} against{" "}
+                    {formatValue(active.previousValue, active.format, active.currency)} in the
+                    period before.
+                  </>
+                )}
               </p>
             )}
             {chartData.length === 0 ? (
@@ -307,12 +386,12 @@ export default function Dashboard() {
             ) : (
               <TrendAreaChart
                 data={chartData}
-                currency={activeMetric?.currency ?? false}
+                currency={active?.format === "money"}
                 series={[
                   {
-                    key: activeMetric?.seriesKey ?? "gross",
-                    label: activeMetric?.label ?? "Money coming in",
-                    color: activeMetric?.color ?? CHART_COLORS.plum,
+                    key: "value",
+                    label: active?.label ?? "Money coming in",
+                    color: TILE_COLORS[active?.key ?? "gross"] ?? CHART_COLORS.plum,
                   },
                 ]}
               />
@@ -404,8 +483,8 @@ export default function Dashboard() {
           }
           icon={<Inbox className="size-4" />}
           to="/admin/leads"
-          series={chartData}
-          seriesKey="optins"
+          series={activitySeries}
+          seriesKey="leads"
           color={CHART_COLORS.plum}
         />
         <StatTile
@@ -420,8 +499,8 @@ export default function Dashboard() {
           }
           icon={<Users className="size-4" />}
           to="/admin/members"
-          series={chartData}
-          seriesKey="optins"
+          series={activitySeries}
+          seriesKey="subscribers"
           color={CHART_COLORS.green}
         />
         <StatTile
@@ -430,8 +509,8 @@ export default function Dashboard() {
           hint={overview ? `Across ${pluralize(overview.totals.courses, "course")}` : undefined}
           icon={<BookOpen className="size-4" />}
           to="/admin/courses"
-          series={chartData}
-          seriesKey="gross"
+          series={activitySeries}
+          seriesKey="revenueCents"
           color={CHART_COLORS.gold}
         />
         {/* Points at the inbox that actually holds these conversations, rather
@@ -442,8 +521,8 @@ export default function Dashboard() {
           hint="Typed and voice chats on your site"
           icon={<MessageSquare className="size-4" />}
           to="/admin/conversations"
-          series={chartData}
-          seriesKey="subscription"
+          series={activitySeries}
+          seriesKey="subscribers"
           color={CHART_COLORS.lilac}
         />
       </div>

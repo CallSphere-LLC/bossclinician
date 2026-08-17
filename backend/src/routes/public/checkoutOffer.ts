@@ -18,6 +18,8 @@ import {
   type ValidatedCoupon,
 } from "../../services/coupons";
 import { fulfillPayment } from "../../services/fulfillment";
+import { resolveAttribution } from "../../services/affiliates";
+import { VISITOR_COOKIE } from "./affiliateTracking";
 import { addInterval, computeOrderTotal, type OrderTotal } from "../../services/pricing";
 import {
   MAX_PWYW_CENTS,
@@ -164,6 +166,17 @@ function refuseImpersonation(req: Request): void {
   if (req.member?.impersonatedBy !== undefined) {
     throw forbidden("Viewing as a member is read-only.");
   }
+}
+
+/**
+ * The partner-attribution token this browser is carrying, if any.
+ *
+ * HttpOnly, so it can only be read here — see routes/public/affiliateTracking.ts
+ * for why that matters.
+ */
+function visitorToken(req: Request): string {
+  const raw = req.cookies?.[VISITOR_COOKIE];
+  return typeof raw === "string" ? raw : "";
 }
 
 const submittedFieldSchema = z.record(z.union([z.string(), z.number(), z.boolean()]));
@@ -448,6 +461,8 @@ interface PendingOrderInput {
   source: string;
   /** Lines that would be 'offer' become this — an upsell order is one purchase, not two. */
   primaryLineKind?: "offer" | "upsell";
+  /** The first-party affiliate cookie, so this order can be credited to a partner. */
+  visitorToken: string;
 }
 
 interface PendingOrder {
@@ -488,13 +503,20 @@ async function createPendingOrder(input: PendingOrderInput): Promise<PendingOrde
       pwywAmountCents: input.pwywAmountCents,
     });
 
+    // Attribution is resolved HERE and written onto the order, once. Every
+    // figure downstream — the commission, the partner's statement, the payout —
+    // reads the frozen `affiliate_id` rather than the cookie. Resolving it again
+    // when the commission accrues weeks later would let whichever partner's link
+    // the buyer happened to click since then take a sale somebody else made.
+    const attributed = await resolveAttribution(input.visitorToken, input.offer.id, client);
+
     const orderRes = await client.query<{ id: number }>(
       `INSERT INTO orders
          (offer_id, member_id, email, amount_cents, currency, status,
           subtotal_cents, discount_cents, tax_cents, total_cents,
           coupon_id, coupon_code, billing_name, billing_phone, billing_address,
-          custom_field_data, parent_order_id, source)
-       VALUES ($1,$2,$3,$4,$5,'pending',$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+          custom_field_data, parent_order_id, source, affiliate_id, affiliate_click_id)
+       VALUES ($1,$2,$3,$4,$5,'pending',$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
        RETURNING id`,
       [
         input.offer.id,
@@ -514,6 +536,8 @@ async function createPendingOrder(input: PendingOrderInput): Promise<PendingOrde
         JSON.stringify(input.customFieldData),
         input.parentOrderId ?? null,
         input.source,
+        attributed?.affiliateId ?? null,
+        attributed?.clickId ?? null,
       ]
     );
     const orderId = orderRes.rows[0].id;
@@ -684,6 +708,7 @@ checkoutOfferRouter.post(
       pwywAmountCents: body.pwywAmountCents,
       taxRateBps,
       source: "checkout",
+      visitorToken: visitorToken(req),
     });
 
     const receipt = {
@@ -1099,6 +1124,11 @@ checkoutOfferRouter.post(
         parentOrderId: parent.id,
         source: "upsell",
         primaryLineKind: "upsell",
+        // An upsell is its own order, so its attribution is resolved at its own
+        // creation from the cookie the same browser is still carrying. The
+        // parent's credit is not copied across: if the window has since closed,
+        // the partner did not refer this purchase.
+        visitorToken: visitorToken(req),
       });
       orderId = created.orderId;
       total = created.total;

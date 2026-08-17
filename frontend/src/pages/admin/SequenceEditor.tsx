@@ -1,0 +1,693 @@
+import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { Link, useParams } from "react-router-dom";
+import {
+  ArrowLeft,
+  ArrowDown,
+  ArrowUp,
+  Clock,
+  Mail,
+  Pause,
+  Play,
+  Plus,
+  Send,
+  Trash2,
+} from "lucide-react";
+import { toast } from "sonner";
+import { formatDateTime, formatNumber } from "@/lib/format";
+import {
+  describeWait,
+  marketingApi,
+  minutesToTimeInput,
+  splitWait,
+  timeInputToMinutes,
+  type NamedOption,
+  type Sequence,
+  type SequenceEmail,
+  type SequenceEmailStats,
+  type SequenceSubscriber,
+} from "@/lib/marketingApi";
+import {
+  Badge,
+  Button,
+  Card,
+  CardHeader,
+  EmptyState,
+  ErrorNotice,
+  Field,
+  Input,
+  PageHeader,
+  Skeleton,
+  Textarea,
+} from "@/pages/admin/ui/primitives";
+import { Modal, useConfirm } from "@/pages/admin/ui/Dialog";
+import { friendlyError } from "@/pages/admin/ui/friendly";
+
+/**
+ * One sequence: its emails, its sending rules, and who is going through it.
+ *
+ * The rules are the part worth being careful about. "Only send on weekdays"
+ * and "only between 9am and 5pm" are two switches here and a fortnight of
+ * arithmetic behind them, and the wording has to promise exactly what the
+ * scheduler does — an email held until Monday morning is a surprise if the
+ * screen said it would go out in three days.
+ */
+
+const selectStyles =
+  "h-11 w-full rounded-xl border border-hairline bg-surface px-3 text-sm text-ink outline-none transition-colors focus-visible:border-plum focus-visible:ring-4 focus-visible:ring-plum/12";
+
+const TIMEZONES = [
+  "America/New_York",
+  "America/Chicago",
+  "America/Denver",
+  "America/Los_Angeles",
+  "Europe/London",
+  "Australia/Sydney",
+];
+
+interface EmailDraft {
+  id?: number;
+  subject: string;
+  previewText: string;
+  bodyMd: string;
+  waitDays: number;
+  waitHours: number;
+  enabled: boolean;
+}
+
+const BLANK_EMAIL: EmailDraft = {
+  subject: "",
+  previewText: "",
+  bodyMd: "",
+  waitDays: 1,
+  waitHours: 0,
+  enabled: true,
+};
+
+export default function SequenceEditor() {
+  const params = useParams<{ id: string }>();
+  const sequenceId = Number(params.id);
+
+  const [sequence, setSequence] = useState<Sequence | null>(null);
+  const [tags, setTags] = useState<NamedOption[]>([]);
+  const [subscribers, setSubscribers] = useState<SequenceSubscriber[] | null>(null);
+  const [stats, setStats] = useState<SequenceEmailStats[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [editing, setEditing] = useState<EmailDraft | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [testingId, setTestingId] = useState<number | null>(null);
+  const [testAddress, setTestAddress] = useState("");
+  const [confirm, confirmDialog] = useConfirm();
+
+  const load = useCallback(() => {
+    if (!Number.isFinite(sequenceId)) return;
+    marketingApi
+      .sequence(sequenceId)
+      .then((row) => {
+        setSequence(row);
+        setError(null);
+      })
+      .catch(() => setError("We couldn't load this sequence just now."));
+    marketingApi.sequenceSubscribers(sequenceId).then(setSubscribers).catch(() => setSubscribers([]));
+    marketingApi.sequenceStats(sequenceId).then(setStats).catch(() => setStats([]));
+  }, [sequenceId]);
+
+  useEffect(load, [load]);
+
+  useEffect(() => {
+    marketingApi
+      .builderOptions()
+      .then((options) => setTags(options.lists.tags ?? []))
+      .catch(() => setTags([]));
+  }, []);
+
+  async function patch(changes: Parameters<typeof marketingApi.updateSequence>[1]) {
+    if (!sequence) return;
+    try {
+      await marketingApi.updateSequence(sequence.id, changes);
+      load();
+    } catch (err) {
+      toast.error(friendlyError(err, "sequence"));
+    }
+  }
+
+  async function saveEmail(event: FormEvent) {
+    event.preventDefault();
+    if (!sequence || !editing) return;
+    if (!editing.subject.trim()) {
+      toast.error("Give this email a subject line first.");
+      return;
+    }
+
+    setSaving(true);
+    const draft = {
+      subject: editing.subject.trim(),
+      previewText: editing.previewText,
+      bodyMd: editing.bodyMd,
+      waitDays: editing.waitDays,
+      waitHours: editing.waitHours,
+      enabled: editing.enabled,
+    };
+
+    try {
+      if (editing.id) {
+        await marketingApi.updateSequenceEmail(sequence.id, editing.id, draft);
+      } else {
+        await marketingApi.addSequenceEmail(sequence.id, draft);
+      }
+      toast.success(editing.id ? "Email saved" : "Email added");
+      setEditing(null);
+      load();
+    } catch (err) {
+      toast.error(friendlyError(err, "email"));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function removeEmail(email: SequenceEmail) {
+    if (!sequence) return;
+    const ok = await confirm({
+      title: "Delete this email?",
+      description: `"${email.subject || "Untitled"}" will be removed from the sequence. Anybody part-way through will simply skip it.`,
+      confirmLabel: "Delete it",
+      destructive: true,
+    });
+    if (!ok) return;
+
+    try {
+      await marketingApi.deleteSequenceEmail(sequence.id, email.id);
+      toast.success("Email deleted");
+      load();
+    } catch (err) {
+      toast.error(friendlyError(err, "email"));
+    }
+  }
+
+  async function move(index: number, direction: -1 | 1) {
+    if (!sequence) return;
+    const order = sequence.emails.map((email) => email.id);
+    const target = index + direction;
+    if (target < 0 || target >= order.length) return;
+    [order[index], order[target]] = [order[target], order[index]];
+
+    try {
+      await marketingApi.reorderSequenceEmails(sequence.id, order);
+      load();
+    } catch (err) {
+      toast.error(friendlyError(err, "sequence"));
+    }
+  }
+
+  async function sendTest(event: FormEvent) {
+    event.preventDefault();
+    if (!sequence || testingId === null) return;
+    try {
+      await marketingApi.testSequenceEmail(sequence.id, testingId, testAddress.trim());
+      toast.success(`Test sent to ${testAddress.trim()}`);
+      setTestingId(null);
+      setTestAddress("");
+    } catch (err) {
+      toast.error(friendlyError(err, "email"));
+    }
+  }
+
+  if (error) return <ErrorNotice message={error} />;
+  if (!sequence) return <Skeleton className="h-96 rounded-2xl" />;
+
+  const isOn = sequence.status === "active";
+  const statsFor = (emailId: number): SequenceEmailStats | undefined =>
+    stats.find((row) => row.id === emailId);
+
+  return (
+    <div className="space-y-6">
+      <PageHeader
+        eyebrow="Email sequence"
+        title={sequence.name}
+        description={sequence.description || "Emails go out in this order, spaced as you set below."}
+        actions={
+          <div className="flex items-center gap-2">
+            <Button asChild size="sm" variant="ghost">
+              <Link to="/admin/marketing/sequences">
+                <ArrowLeft />
+                All sequences
+              </Link>
+            </Button>
+            <Button
+              size="sm"
+              variant={isOn ? "secondary" : "primary"}
+              onClick={() => void patch({ status: isOn ? "paused" : "active" })}
+            >
+              {isOn ? <Pause /> : <Play />}
+              {isOn ? "Pause sending" : "Start sending"}
+            </Button>
+          </div>
+        }
+      />
+
+      {!isOn && (
+        <Card className="border-gold/30 p-4">
+          <p className="text-sm text-ink-soft">
+            This sequence is paused, so nobody is being added and no emails are going out. Press
+            <strong className="text-ink"> Start sending</strong> when you are happy with it.
+          </p>
+        </Card>
+      )}
+
+      {/* ------------------------------------------------------------ emails */}
+
+      <Card>
+        <CardHeader
+          title="The emails"
+          subtitle="In the order they go out. The wait on each one is counted from the email before it."
+          icon={<Mail />}
+          action={
+            <Button size="sm" onClick={() => setEditing({ ...BLANK_EMAIL })}>
+              <Plus />
+              Add an email
+            </Button>
+          }
+        />
+
+        {sequence.emails.length === 0 ? (
+          <EmptyState
+            icon={<Mail />}
+            title="No emails yet"
+            description="Write the first one and it will go out as soon as somebody joins this sequence."
+            action={
+              <Button size="sm" onClick={() => setEditing({ ...BLANK_EMAIL, waitDays: 0 })}>
+                <Plus />
+                Write the first email
+              </Button>
+            }
+          />
+        ) : (
+          <ol className="divide-y divide-hairline/60">
+            {sequence.emails.map((email, index) => {
+              const wait = splitWait(email.delayMinutes);
+              const measured = statsFor(email.id);
+              return (
+                <li key={email.id} className="flex items-start gap-4 px-5 py-4">
+                  <div className="flex flex-col items-center gap-1 pt-1">
+                    <Button
+                      size="iconSm"
+                      variant="ghost"
+                      aria-label="Move earlier"
+                      disabled={index === 0}
+                      onClick={() => void move(index, -1)}
+                    >
+                      <ArrowUp />
+                    </Button>
+                    <span className="font-display text-sm text-ink-soft">{index + 1}</span>
+                    <Button
+                      size="iconSm"
+                      variant="ghost"
+                      aria-label="Move later"
+                      disabled={index === sequence.emails.length - 1}
+                      onClick={() => void move(index, 1)}
+                    >
+                      <ArrowDown />
+                    </Button>
+                  </div>
+
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-display text-base text-ink">
+                        {email.subject || "No subject yet"}
+                      </p>
+                      {!email.enabled && <Badge tone="slate">Turned off</Badge>}
+                    </div>
+                    <p className="mt-1 flex items-center gap-1.5 text-sm text-ink-soft">
+                      <Clock className="size-3.5" />
+                      {index === 0
+                        ? email.delayMinutes === 0
+                          ? "Goes out as soon as somebody joins"
+                          : `Goes out ${describeWait(email.delayMinutes)} after somebody joins`
+                        : `Goes out ${describeWait(email.delayMinutes)} than the one above`}
+                    </p>
+                    {measured && measured.sent > 0 && (
+                      <p className="mt-1 text-xs text-ink-soft/80">
+                        {formatNumber(measured.sent)} sent · {formatNumber(measured.opened)} opened ·{" "}
+                        {formatNumber(measured.clicked)} clicked
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="flex shrink-0 items-center gap-1">
+                    <Button
+                      size="iconSm"
+                      variant="ghost"
+                      aria-label="Send yourself a test"
+                      onClick={() => setTestingId(email.id)}
+                    >
+                      <Send />
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() =>
+                        setEditing({
+                          id: email.id,
+                          subject: email.subject,
+                          previewText: email.previewText,
+                          bodyMd: email.bodyMd,
+                          waitDays: wait.days,
+                          waitHours: wait.hours,
+                          enabled: email.enabled,
+                        })
+                      }
+                    >
+                      Edit
+                    </Button>
+                    <Button
+                      size="iconSm"
+                      variant="dangerGhost"
+                      aria-label="Delete this email"
+                      onClick={() => void removeEmail(email)}
+                    >
+                      <Trash2 />
+                    </Button>
+                  </div>
+                </li>
+              );
+            })}
+          </ol>
+        )}
+      </Card>
+
+      {/* ------------------------------------------------------ sending rules */}
+
+      <Card>
+        <CardHeader
+          title="When these can go out"
+          subtitle="Nothing is ever sent early — an email that comes due outside these hours waits for the next slot."
+          icon={<Clock />}
+        />
+        <div className="grid gap-5 p-5 sm:grid-cols-2">
+          <label className="flex items-start gap-3 text-sm text-ink">
+            <input
+              type="checkbox"
+              className="mt-1 size-4 rounded border-hairline text-plum focus-visible:ring-plum/30"
+              checked={sequence.skipWeekends}
+              onChange={(event) => void patch({ skipWeekends: event.target.checked })}
+            />
+            <span>
+              Weekdays only
+              <span className="block text-xs text-ink-soft">
+                Anything due on a Saturday or Sunday waits until Monday.
+              </span>
+            </span>
+          </label>
+
+          <label className="flex items-start gap-3 text-sm text-ink">
+            <input
+              type="checkbox"
+              className="mt-1 size-4 rounded border-hairline text-plum focus-visible:ring-plum/30"
+              checked={sequence.useContactTimezone}
+              onChange={(event) => void patch({ useContactTimezone: event.target.checked })}
+            />
+            <span>
+              Use each person's own time zone
+              <span className="block text-xs text-ink-soft">
+                Everyone gets it at the same hour of their morning, not yours.
+              </span>
+            </span>
+          </label>
+
+          <Field label="Not before" hint="Leave blank for any time">
+            <Input
+              type="time"
+              defaultValue={minutesToTimeInput(sequence.sendWindowStartMinute)}
+              onBlur={(event) =>
+                void patch({ sendWindowStartMinute: timeInputToMinutes(event.target.value) })
+              }
+            />
+          </Field>
+
+          <Field label="Not after" hint="Leave blank for any time">
+            <Input
+              type="time"
+              defaultValue={minutesToTimeInput(sequence.sendWindowEndMinute)}
+              onBlur={(event) =>
+                void patch({ sendWindowEndMinute: timeInputToMinutes(event.target.value) })
+              }
+            />
+          </Field>
+
+          <Field label="Your time zone" hint="Used when you are not using each person's own">
+            <select
+              className={selectStyles}
+              value={sequence.timezone}
+              onChange={(event) => void patch({ timezone: event.target.value })}
+            >
+              {TIMEZONES.map((zone) => (
+                <option key={zone} value={zone}>
+                  {zone.replace(/_/g, " ").replace("/", " — ")}
+                </option>
+              ))}
+            </select>
+          </Field>
+
+          <Field label="Tag them when they finish" hint="Optional">
+            <select
+              className={selectStyles}
+              value={sequence.completionTagId ?? ""}
+              onChange={(event) =>
+                void patch({
+                  completionTagId: event.target.value ? Number(event.target.value) : null,
+                })
+              }
+            >
+              <option value="">Don't tag them</option>
+              {tags.map((tag) => (
+                <option key={tag.id} value={tag.id}>
+                  {tag.name}
+                </option>
+              ))}
+            </select>
+          </Field>
+
+          <label className="flex items-start gap-3 text-sm text-ink sm:col-span-2">
+            <input
+              type="checkbox"
+              className="mt-1 size-4 rounded border-hairline text-plum focus-visible:ring-plum/30"
+              checked={sequence.exitOnPurchase}
+              onChange={(event) => void patch({ exitOnPurchase: event.target.checked })}
+            />
+            <span>
+              Stop the moment they buy something
+              <span className="block text-xs text-ink-soft">
+                Strongly recommended. Selling to somebody who has just bought is the quickest way
+                to lose them.
+              </span>
+            </span>
+          </label>
+
+          <label className="flex items-start gap-3 text-sm text-ink sm:col-span-2">
+            <input
+              type="checkbox"
+              className="mt-1 size-4 rounded border-hairline text-plum focus-visible:ring-plum/30"
+              checked={sequence.allowReentry}
+              onChange={(event) => void patch({ allowReentry: event.target.checked })}
+            />
+            <span>
+              Let the same person go through this more than once
+              <span className="block text-xs text-ink-soft">
+                Off means somebody who has been through it before is quietly skipped.
+              </span>
+            </span>
+          </label>
+        </div>
+      </Card>
+
+      {/* ------------------------------------------------------- subscribers */}
+
+      <Card>
+        <CardHeader
+          title="Who is going through this"
+          subtitle="The most recent five hundred."
+        />
+        {subscribers === null ? (
+          <div className="p-5">
+            <Skeleton className="h-24 rounded-xl" />
+          </div>
+        ) : subscribers.length === 0 ? (
+          <EmptyState
+            icon={<Mail />}
+            title="Nobody yet"
+            description="People arrive here from an automation, a form, or by being added by hand."
+          />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[560px] text-sm">
+              <thead className="border-b border-hairline/60 text-left text-xs text-ink-soft">
+                <tr>
+                  <th className="px-5 py-3 font-semibold">Who</th>
+                  <th className="px-5 py-3 font-semibold">Where they are</th>
+                  <th className="px-5 py-3 font-semibold">Next email</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-hairline/60">
+                {subscribers.slice(0, 25).map((row) => (
+                  <tr key={row.id}>
+                    <td className="px-5 py-3">
+                      <span className="text-ink">{row.name || row.email}</span>
+                      {row.name && (
+                        <span className="block text-xs text-ink-soft">{row.email}</span>
+                      )}
+                    </td>
+                    <td className="px-5 py-3 text-ink-soft">
+                      {row.status === "active"
+                        ? `On email ${row.position}`
+                        : row.status === "completed"
+                          ? "Finished"
+                          : "Left early"}
+                    </td>
+                    <td className="px-5 py-3 text-ink-soft">
+                      {row.nextSendAt ? formatDateTime(row.nextSendAt) : "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+
+      {/* ------------------------------------------------------------ modals */}
+
+      <Modal
+        open={editing !== null}
+        onOpenChange={(open) => !open && setEditing(null)}
+        title={editing?.id ? "Edit this email" : "Add an email"}
+        size="lg"
+        footer={
+          <>
+            <Button variant="secondary" size="sm" onClick={() => setEditing(null)}>
+              Cancel
+            </Button>
+            <Button size="sm" type="submit" form="sequence-email-form" disabled={saving}>
+              {saving ? "Saving…" : "Save email"}
+            </Button>
+          </>
+        }
+      >
+        {editing && (
+          <form id="sequence-email-form" onSubmit={saveEmail} className="grid gap-4 sm:grid-cols-2">
+            <Field label="Subject line" className="sm:col-span-2">
+              <Input
+                value={editing.subject}
+                onChange={(event) =>
+                  setEditing((draft) => draft && { ...draft, subject: event.target.value })
+                }
+                placeholder="The one thing I wish I'd known"
+                required
+                autoFocus
+              />
+            </Field>
+
+            <Field label="Wait this many days" hint="Counted from the email before it">
+              <Input
+                type="number"
+                min={0}
+                max={365}
+                value={editing.waitDays}
+                onChange={(event) =>
+                  setEditing(
+                    (draft) => draft && { ...draft, waitDays: Number(event.target.value) || 0 },
+                  )
+                }
+              />
+            </Field>
+
+            <Field label="…and this many hours">
+              <Input
+                type="number"
+                min={0}
+                max={23}
+                value={editing.waitHours}
+                onChange={(event) =>
+                  setEditing(
+                    (draft) => draft && { ...draft, waitHours: Number(event.target.value) || 0 },
+                  )
+                }
+              />
+            </Field>
+
+            <Field
+              label="Preview text"
+              hint="The line shown after the subject in the inbox"
+              className="sm:col-span-2"
+            >
+              <Input
+                value={editing.previewText}
+                onChange={(event) =>
+                  setEditing((draft) => draft && { ...draft, previewText: event.target.value })
+                }
+              />
+            </Field>
+
+            <Field
+              label="What the email says"
+              hint="Use {{firstName}} to greet them by name"
+              className="sm:col-span-2"
+            >
+              <Textarea
+                rows={12}
+                value={editing.bodyMd}
+                onChange={(event) =>
+                  setEditing((draft) => draft && { ...draft, bodyMd: event.target.value })
+                }
+                placeholder={"Hi {{firstName}},\n\nHere's what I wanted to share…"}
+              />
+            </Field>
+
+            <label className="flex items-center gap-3 text-sm text-ink sm:col-span-2">
+              <input
+                type="checkbox"
+                className="size-4 rounded border-hairline text-plum focus-visible:ring-plum/30"
+                checked={editing.enabled}
+                onChange={(event) =>
+                  setEditing((draft) => draft && { ...draft, enabled: event.target.checked })
+                }
+              />
+              Include this email in the sequence
+            </label>
+          </form>
+        )}
+      </Modal>
+
+      <Modal
+        open={testingId !== null}
+        onOpenChange={(open) => !open && setTestingId(null)}
+        title="Send yourself a test"
+        description="It goes out exactly as written, addressed to you."
+        size="sm"
+        footer={
+          <>
+            <Button variant="secondary" size="sm" onClick={() => setTestingId(null)}>
+              Cancel
+            </Button>
+            <Button size="sm" type="submit" form="sequence-test-form">
+              Send it
+            </Button>
+          </>
+        }
+      >
+        <form id="sequence-test-form" onSubmit={sendTest}>
+          <Field label="Send to">
+            <Input
+              type="email"
+              value={testAddress}
+              onChange={(event) => setTestAddress(event.target.value)}
+              placeholder="you@yourdomain.com"
+              required
+              autoFocus
+            />
+          </Field>
+        </form>
+      </Modal>
+
+      {confirmDialog}
+    </div>
+  );
+}

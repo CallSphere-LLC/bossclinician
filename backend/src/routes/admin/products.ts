@@ -131,6 +131,27 @@ function patched<T>(incoming: T | undefined, current: T): T {
   return incoming === undefined ? current : incoming;
 }
 
+/**
+ * Refuses a picture that was uploaded as something people pay for.
+ *
+ * A thumbnail is drawn on a sales page, in a library grid and inside an email,
+ * for people who have not signed in and for people who never will. A protected
+ * file has no address at all, so the only way to put one on a page is a link
+ * that dies in two hours — and a course tile that stops loading by the evening
+ * is a worse outcome than a course tile anybody can right-click. Caught where
+ * the picture is chosen, in the words she chose it with, rather than discovered
+ * as a broken image on a live page.
+ */
+function assertPresentationImage(field: string, value: string | null | undefined): void {
+  if (value === null || value === undefined || !isProtectedRef(value)) return;
+  throw issueError({
+    field,
+    message:
+      "That picture was uploaded for people who bought it, so it can't be shown where everyone " +
+      "can see it. Upload it again and choose 'anyone on the website'.",
+  });
+}
+
 /* -------------------------------------------------------------------- reads */
 
 adminProductsRouter.get(
@@ -222,6 +243,7 @@ adminProductsRouter.post(
     if (!parsed.success) throw badRequest("Invalid payload", parsed.error.flatten());
     const data = parsed.data;
 
+    assertPresentationImage("thumbnailUrl", data.thumbnailUrl);
     await assertResourcesExist(data);
 
     let created: ProductRow | undefined;
@@ -299,6 +321,7 @@ adminProductsRouter.put(
 
     const issue = productResourceIssue(merged.kind, merged);
     if (issue) throw issueError(issue);
+    assertPresentationImage("thumbnailUrl", patch.thumbnailUrl);
     await assertResourcesExist(merged);
 
     let after: ProductRow | undefined;

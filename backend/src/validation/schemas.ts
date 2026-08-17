@@ -1,4 +1,25 @@
 import { z } from "zod";
+import { isProtectedRef } from "../services/signedUrls";
+
+/**
+ * A picture that ends up on a page anybody can open.
+ *
+ * A blog cover, a course tile, a testimonial headshot: all of them are drawn for
+ * readers with no account. A file uploaded into the protected directory has no
+ * address at all, so the only way to render one is a link that dies within
+ * hours, and a cover image that stops loading overnight is a worse outcome than
+ * one that cannot be kept private. Refused where it is chosen, in the words the
+ * person choosing it used.
+ */
+const PAID_IMAGE =
+  "That picture was uploaded for people who bought it, so it can't be shown where everyone " +
+  "can see it. Upload it again and choose 'anyone on the website'.";
+
+const presentationImage = (max: number) =>
+  z
+    .string()
+    .max(max)
+    .refine((value) => !isProtectedRef(value), PAID_IMAGE);
 
 export const loginSchema = z.object({
   email: z.string().email().max(320),
@@ -58,7 +79,7 @@ export const blogSchema = z.object({
   title: z.string().min(1).max(300),
   excerpt: z.string().max(1000).default(""),
   bodyMd: z.string().max(50000).default(""),
-  coverImage: z.string().max(2000).nullable().optional(),
+  coverImage: presentationImage(2000).nullable().optional(),
   tags: z.array(z.string().max(50)).default([]),
   author: z.string().max(200).default("Yvette Howard, LCSW"),
   readMinutes: z.number().int().positive().default(4),
@@ -78,7 +99,7 @@ export const courseSchema = z.object({
   priceCents: z.number().int().min(0).max(99_999_999).nullable().optional(),
   currency: z.string().length(3).toLowerCase().default("usd"),
   stripePriceId: z.string().max(255).nullable().optional(),
-  image: z.string().max(2000).nullable().optional(),
+  image: presentationImage(2000).nullable().optional(),
   url: z.string().max(2000).default("#"),
   features: z.unknown().optional(),
   sort: z.number().int().default(0),
@@ -90,7 +111,7 @@ export const testimonialSchema = z.object({
   name: z.string().min(1).max(200),
   credential: z.string().max(200).default(""),
   quote: z.string().max(2000).default(""),
-  image: z.string().max(2000).nullable().optional(),
+  image: presentationImage(2000).nullable().optional(),
   sort: z.number().int().default(0),
   published: z.boolean().default(true),
 });
@@ -100,7 +121,7 @@ export const resourceSchema = z.object({
   slug: z.string().min(1).max(200),
   title: z.string().min(1).max(300),
   description: z.string().max(2000).default(""),
-  image: z.string().max(2000).nullable().optional(),
+  image: presentationImage(2000).nullable().optional(),
   ctaLabel: z.string().max(100).default("Download"),
   ctaUrl: z.string().max(2000).default("#"),
   kind: z.string().max(50).default("guide"),

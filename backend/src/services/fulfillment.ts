@@ -1,6 +1,8 @@
 import type { PoolClient } from "pg";
 import { pool } from "../db/pool";
+import { enqueue, PRIORITY } from "../jobs/queue";
 import { grantOfferAccess } from "./access";
+import { recordActivity, upsertContact } from "./contacts";
 import { buildInstallmentSchedule, type BillingInterval } from "./pricing";
 
 /**
@@ -120,8 +122,10 @@ export async function fulfillPayment(input: FulfillPaymentInput): Promise<Fulfil
       status: string;
       currency: string;
       total_cents: number;
+      affiliate_id: number | null;
     }>(
-      `SELECT id, offer_id, member_id, email, billing_name, status, currency, total_cents
+      `SELECT id, offer_id, member_id, email, billing_name, status, currency, total_cents,
+              affiliate_id
          FROM orders WHERE id = $1 FOR UPDATE`,
       [input.orderId]
     );
@@ -148,17 +152,44 @@ export async function fulfillPayment(input: FulfillPaymentInput): Promise<Fulfil
       createdMember = resolved.created;
     }
 
+    // The contact is resolved inside the transaction, so an order can never be
+    // marked paid against a person who does not exist because a later statement
+    // rolled back.
+    const contactId = email
+      ? await upsertContact({
+          email,
+          name: order.billing_name || "",
+          source: "customer",
+          client,
+        })
+      : null;
+
     await client.query(
       `UPDATE orders
           SET status = 'paid',
               member_id = COALESCE($2, member_id),
+              contact_id = COALESCE(contact_id, $6),
               email = CASE WHEN $3 <> '' THEN $3 ELSE email END,
               stripe_payment_intent_id = COALESCE($4, stripe_payment_intent_id),
               stripe_customer_id = COALESCE($5, stripe_customer_id),
               updated_at = now()
         WHERE id = $1`,
-      [order.id, memberId, email, input.paymentIntentId ?? null, input.stripeCustomerId ?? null]
+      [
+        order.id,
+        memberId,
+        email,
+        input.paymentIntentId ?? null,
+        input.stripeCustomerId ?? null,
+        contactId,
+      ]
     );
+
+    if (contactId && memberId) {
+      await client.query(
+        `UPDATE members SET contact_id = $2 WHERE id = $1 AND contact_id IS NULL`,
+        [memberId, contactId]
+      );
+    }
 
     // ON CONFLICT on the payment intent is the second idempotency guard: even
     // if the order row were somehow re-opened, the same charge cannot be
@@ -187,6 +218,29 @@ export async function fulfillPayment(input: FulfillPaymentInput): Promise<Fulfil
         input.occurredAt ?? new Date(),
       ]
     );
+
+    // Partner commission is accrued off the queue, not computed here.
+    //
+    // Two reasons it must not be inline. The rules live in the database and a
+    // rate lookup is not worth adding to the critical path of "the customer has
+    // paid, give them what they bought"; and a bug in commission arithmetic
+    // would otherwise roll back the whole fulfilment, leaving a charged
+    // customer locked out of their purchase over somebody else's percentage.
+    //
+    // Enqueued inside this transaction so the job row and the payment it
+    // describes commit together: no job for a payment that rolled back, and no
+    // payment without the job. `accrueForTransaction` is idempotent, so the
+    // dedupe key is belt and braces rather than the guarantee.
+    const transactionId = txRes.rows[0]?.id ?? null;
+    if (transactionId !== null && order.affiliate_id !== null) {
+      await enqueue({
+        kind: "affiliates.accrue",
+        payload: { transactionId },
+        priority: PRIORITY.normal,
+        dedupeKey: `affiliate-accrue:${transactionId}`,
+        client,
+      });
+    }
 
     let grantedProductIds: number[] = [];
     if (memberId && order.offer_id) {
@@ -228,6 +282,28 @@ export async function fulfillPayment(input: FulfillPaymentInput): Promise<Fulfil
           WHERE offer_id = $2 AND email = $3 AND recovered_at IS NULL`,
         [order.id, order.offer_id, email]
       );
+    }
+
+    if (contactId) {
+      // Titles come from `order_items`, which copies them at checkout. A join to
+      // `offers` would make a receipt from last year change its wording when the
+      // offer is renamed, and read as blank once it is deleted.
+      const items = await client.query<{ title: string }>(
+        `SELECT title FROM order_items WHERE order_id = $1 AND title <> '' ORDER BY id`,
+        [order.id]
+      );
+      const bought = items.rows.map((item) => item.title).join(", ");
+
+      await recordActivity({
+        contactId,
+        kind: "purchase",
+        title: bought ? `Bought ${bought}` : "Made a purchase",
+        subjectType: "order",
+        subjectId: order.id,
+        meta: { amountCents: input.amountCents, currency, orderId: order.id },
+        occurredAt: input.occurredAt,
+        client,
+      });
     }
 
     await client.query("COMMIT");
@@ -425,6 +501,42 @@ export async function recordRefund(input: {
       await client.query("ROLLBACK");
       return { recorded: false, fullyRefunded: false, revokedCount: 0 };
     }
+
+    // The same money, in the ledger.
+    //
+    // `refunds` is the operational record — which Stripe refund, why, and
+    // whether access went with it. `transactions` is the ledger every revenue
+    // figure is summed from. Writing only the first made the two diverge: net
+    // revenue computed from transactions alone counted every payment and no
+    // refund, so a fully refunded order still read as income.
+    //
+    // Stored positive with `kind = 'refund'`, so net revenue is
+    // SUM(payment) - SUM(refund) rather than a sum over signed amounts that a
+    // reader has to know the convention for. Guarded by the refund insert above
+    // rather than by its own conflict clause — this line is only reached when
+    // that INSERT actually created a row, which is what makes a redelivered
+    // charge.refunded a no-op here too.
+    const refundedMember = await client.query<{ member_id: number | null; email: string }>(
+      `SELECT member_id, email FROM orders WHERE id = $1`,
+      [input.orderId]
+    );
+
+    // No Stripe id on this row: `stripe_charge_id` means the charge, and the
+    // refund's own id belongs to the `refunds` row that owns it. Reconciliation
+    // goes ledger -> refunds -> Stripe rather than storing one system's id in a
+    // column named for another's.
+    await client.query(
+      `INSERT INTO transactions
+         (order_id, member_id, email, kind, status, amount_cents, currency, occurred_at)
+       VALUES ($1, $2, $3, 'refund', 'succeeded', $4, $5, now())`,
+      [
+        input.orderId,
+        refundedMember.rows[0]?.member_id ?? null,
+        refundedMember.rows[0]?.email ?? "",
+        input.amountCents,
+        input.currency ?? "usd",
+      ]
+    );
 
     // `collected` counts every payment that cleared on this order, whatever
     // became of it afterwards. A charge marked 'refunded' or 'disputed' still

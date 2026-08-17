@@ -353,6 +353,41 @@ export function accessExpiresAt(grantedAt: Date, expiresAfterDays: number | null
   return addInterval(grantedAt, "day", expiresAfterDays);
 }
 
+/** How a partner is paid on one sale. Mirrors `affiliate_commission_rules`. */
+export interface CommissionRule {
+  type: "percent" | "fixed" | "none";
+  /** Basis points: 30% is 3000, not 30 and not 0.3. */
+  rateBps: number;
+  fixedCents: number;
+}
+
+/**
+ * What a partner earns on one commission-bearing payment.
+ *
+ * Capped at the basis in both directions, which is the whole point of putting it
+ * here rather than inline: a rate typed as 30000 instead of 3000, or a $50 flat
+ * fee on a $27 tripwire, would otherwise pay out more than the sale collected.
+ * Negative and non-integer bases are refused for the same reason `assertCents`
+ * exists — a commission computed from a float is a rounding argument nobody can
+ * settle a month later.
+ *
+ * Percentages round to the nearest cent, matching `couponDiscountCents` above,
+ * so the two halves of an order's arithmetic round the same way.
+ */
+export function commissionCents(basisCents: number, rule: CommissionRule): number {
+  assertCents(basisCents, "commission basis");
+  if (basisCents === 0 || rule.type === "none") return 0;
+
+  if (rule.type === "fixed") {
+    if (rule.fixedCents <= 0) return 0;
+    return Math.min(basisCents, Math.floor(rule.fixedCents));
+  }
+
+  if (rule.rateBps <= 0) return 0;
+  const bps = Math.min(rule.rateBps, 10_000);
+  return Math.min(basisCents, Math.round((basisCents * bps) / 10_000));
+}
+
 /** Formats cents for display. Presentation only — never feed this back into arithmetic. */
 export function formatMoney(cents: number, currency = "usd"): string {
   return new Intl.NumberFormat("en-US", {

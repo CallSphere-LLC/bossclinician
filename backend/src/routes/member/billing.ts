@@ -9,7 +9,7 @@ import { asyncHandler } from "../../utils/asyncHandler";
 import { badRequest, notFound, serviceUnavailable, unauthorized } from "../../utils/httpError";
 import { denyImpersonation, type AuthedMember } from "../../middleware/memberAuth";
 import { escapeHtml } from "../../email/templates";
-import { formatMoney } from "../../services/pricing";
+import { formatAmount } from "../../utils/money";
 
 /**
  * `/api/member/billing` — the customer's own money: what they have bought, what
@@ -356,7 +356,7 @@ function soonestCharge(
     candidates.push({
       at: sub.nextChargeAt,
       amountCents: sub.nextChargeAmountCents,
-      amount: formatMoney(sub.nextChargeAmountCents, sub.currency),
+      amount: formatAmount(sub.nextChargeAmountCents, sub.currency),
       source: "subscription",
       description: sub.planName,
     });
@@ -367,7 +367,7 @@ function soonestCharge(
     candidates.push({
       at: plan.nextChargeAt,
       amountCents: plan.nextChargeAmountCents,
-      amount: formatMoney(plan.nextChargeAmountCents, plan.currency),
+      amount: formatAmount(plan.nextChargeAmountCents, plan.currency),
       source: "payment_plan",
       description: plan.offerTitle,
     });
@@ -440,7 +440,7 @@ memberBillingRouter.get(
       currency,
       purchaseCount: row?.purchase_count ?? 0,
       lifetimeSpendCents,
-      lifetimeSpend: formatMoney(lifetimeSpendCents, currency),
+      lifetimeSpend: formatAmount(lifetimeSpendCents, currency),
       activeSubscriptionCount: subscriptionsJson.length,
       activePaymentPlanCount: plansJson.length,
       subscriptions: subscriptionsJson,
@@ -871,7 +871,7 @@ function formatDate(value: string | null): string {
  * one would be script running with the member's session.
  */
 function renderReceipt(view: ReceiptView): string {
-  const money = (cents: number): string => escapeHtml(formatMoney(cents, view.currency));
+  const money = (cents: number): string => escapeHtml(formatAmount(cents, view.currency));
 
   const lines = view.lines
     .map(

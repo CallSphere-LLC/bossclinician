@@ -8,6 +8,7 @@ import { memberCertificatesRouter } from "./certificates";
 import { memberCommunityRouter } from "./community";
 import { memberCoachingRouter } from "./coaching";
 import { memberPublishingRouter } from "./publishing";
+import { memberAffiliateRouter } from "./affiliatePortal";
 
 /**
  * `/api/member/*` — everything a signed-in customer can do.
@@ -27,6 +28,7 @@ memberRouter.use("/certificates", memberCertificatesRouter);
 memberRouter.use("/downloads", memberDownloadsRouter);
 memberRouter.use("/community", memberCommunityRouter);
 memberRouter.use("/coaching", memberCoachingRouter);
+memberRouter.use("/affiliate", memberAffiliateRouter);
 
 // Progress routes are keyed on a lesson rather than on the product it belongs
 // to ("/lessons/:lessonId/progress"), so they sit at the root of the member

@@ -521,16 +521,25 @@ async function loadSessionFiles(memberId: number, sessionId: number): Promise<Se
 /**
  * The file behind a signed coaching link, if it is still this member's to open.
  *
- * Ownership is in the WHERE clause and asked again here rather than trusted from
- * the moment the link was minted, exactly as the download surface does: two
- * hours is long enough for a session to be handed to somebody else.
+ * Two questions, and the second is the one that costs a query. Whose session is
+ * it — answered in the WHERE clause, so somebody else's handout is not read at
+ * all. And are they still entitled to the package it belongs to — answered by
+ * access.ts, on every redemption, because that is what services/signedUrls.ts
+ * promises about a link of any kind and a session row alone cannot keep the
+ * promise: it survives the refund that took the grant away, so keying on it
+ * would let a refunded customer go on minting working links for as long as the
+ * row exists.
+ *
+ * A session booked against no offer — a call the admin arranged by hand, an
+ * import — has no package to check, and the member it was booked for is the
+ * whole of the answer there.
  */
 export async function loadOwnedSessionFile(
   memberId: number,
   fileId: number
 ): Promise<EntitledMedia> {
-  const res = await pool.query<{ title: string; url: string }>(
-    `SELECT f.title, f.url
+  const res = await pool.query<{ title: string; url: string; offer_id: number | null }>(
+    `SELECT f.title, f.url, s.offer_id
        FROM coaching_session_files f
        JOIN coaching_sessions s ON s.id = f.session_id
       WHERE f.id = $1 AND s.member_id = $2`,
@@ -538,6 +547,9 @@ export async function loadOwnedSessionFile(
   );
   const row = res.rows[0];
   if (!row || !isProtectedRef(row.url)) throw notFound(SESSION_FILE_NOT_FOUND);
+  if (row.offer_id !== null && !(await ownsOffer(memberId, row.offer_id))) {
+    throw notFound(SESSION_FILE_NOT_FOUND);
+  }
 
   return { storagePath: row.url, filename: sessionFileName(row.title, row.url), mime: "" };
 }

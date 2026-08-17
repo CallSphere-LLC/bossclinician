@@ -8,6 +8,8 @@ import { notFound } from "../../utils/httpError";
 import { optionalMember } from "../../middleware/memberAuth";
 import { loadEntitledFile, loadEntitledLessonMedia } from "../member/downloads";
 import { loadOwnedSessionFile } from "../member/coaching";
+import { loadEntitledPostMedia } from "../member/community";
+import { loadEntitledEpisodeAudio } from "../member/publishing";
 import { formatCreditHours, normalizeVerificationCode } from "../../services/certificates";
 import { isStreamKind, resolveStoredFile, verifyDownload } from "../../services/signedUrls";
 
@@ -180,10 +182,17 @@ verifyRouter.get(
     const kind = payload.kind;
 
     if (isStreamKind(kind)) {
+      // One branch per surface that owns paid media, each re-proving the
+      // entitlement its own way: a coaching package, a community room, a private
+      // show, or a course lesson's drip schedule.
       const media =
         kind === "coaching-file"
           ? await loadOwnedSessionFile(payload.memberId, payload.fileId)
-          : await loadEntitledLessonMedia(payload.memberId, kind, payload.fileId);
+          : kind === "community-media"
+            ? await loadEntitledPostMedia(payload.memberId, payload.fileId)
+            : kind === "podcast-episode"
+              ? await loadEntitledEpisodeAudio(payload.memberId, payload.fileId)
+              : await loadEntitledLessonMedia(payload.memberId, kind, payload.fileId);
 
       const mediaPath = await resolveStoredFile(media.storagePath);
       if (mediaPath === null) throw notFound(FILE_GONE);

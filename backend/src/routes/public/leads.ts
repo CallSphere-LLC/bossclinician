@@ -8,6 +8,7 @@ import { incomeProjection, newLeadNotification } from "../../email/templates";
 import { env } from "../../config/env";
 import { leadsLimiter } from "../../middleware/rateLimit";
 import { fireTriggerAsync } from "../../automations/engine";
+import { linkContact, recordActivity, upsertContact } from "../../services/contacts";
 
 export const leadsRouter = Router();
 
@@ -65,6 +66,28 @@ leadsRouter.post(
     );
 
     const id = result.rows[0].id as number;
+
+    // The lead row is the enquiry; the contact is the person who sent it. The
+    // same person filling in a second form adds to one timeline rather than
+    // becoming a second stranger.
+    const contactId = await upsertContact({
+      email,
+      name,
+      phone: phone ?? "",
+      source: `lead: ${source}`,
+      consentSource: source,
+      consentIp: req.ip ?? "",
+    });
+    await linkContact("lead", id, contactId);
+    await recordActivity({
+      contactId,
+      kind: "lead.created",
+      title: "Sent an enquiry",
+      body: message ?? "",
+      subjectType: "lead",
+      subjectId: id,
+      meta: { source },
+    });
 
     if (env.notifyEmail) {
       const { subject, text, html } = newLeadNotification({ name, email, phone, message, source });

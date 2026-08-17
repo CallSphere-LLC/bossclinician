@@ -4,12 +4,15 @@ import { rowToCamel, rowsToCamel } from "../../utils/case";
 import { asyncHandler } from "../../utils/asyncHandler";
 import { badRequest, notFound } from "../../utils/httpError";
 import { buildUpdate } from "../../utils/sqlUpdate";
+import { isExternalRef, isProtectedRef } from "../../services/signedUrls";
 
 /**
  * Course curriculum: course -> modules -> lessons.
  *
- * Mounted at /admin/curriculum. Lesson video/attachment fields hold URLs
- * produced by the media library, so a lesson never owns bytes directly.
+ * Mounted at /admin/curriculum. A lesson never owns bytes directly: its video
+ * and attachment fields hold a reference the media library produced, and the
+ * only two references worth holding are one into the protected directory and
+ * one on somebody else's host.
  */
 export const adminCurriculumRouter = Router();
 
@@ -47,6 +50,41 @@ const LESSON_FIELDS = [
   "published",
   "sort",
 ] as const;
+
+/**
+ * The two lesson columns that hold the thing somebody paid for.
+ *
+ * Keyed by the name the request uses; the label is what the sentence below calls
+ * it, in the words the person filling in the form would use.
+ */
+const LESSON_MEDIA: { key: string; label: string }[] = [
+  { key: "videoUrl", label: "video" },
+  { key: "attachmentUrl", label: "file" },
+];
+
+/**
+ * Refuses a lesson whose media anybody could open without paying.
+ *
+ * Three shapes can land in these columns and only two of them are safe. A
+ * protected reference is a file in the directory nothing serves, handed to the
+ * player as a link bound to one member and dead in two hours. An https:// link
+ * is somebody else's host — a Vimeo embed, a Zoom recording — and is theirs to
+ * gate, not ours. A bare key or an /uploads path is the third: a permanent,
+ * unexpiring, forwardable address on the open web, which is the entire course
+ * published by accident. Empty is fine; a lesson does not have to carry media.
+ */
+function assertPaidMedia(body: Record<string, unknown>): void {
+  for (const field of LESSON_MEDIA) {
+    const value = body[field.key];
+    if (value === undefined || value === null) continue;
+    const reference = String(value).trim();
+    if (reference === "" || isProtectedRef(reference) || isExternalRef(reference)) continue;
+    throw badRequest(
+      `That ${field.label} was uploaded for everyone, so anyone with the web address can watch ` +
+        `it without paying. Upload it again and choose 'only people who bought it'.`,
+    );
+  }
+}
 
 /** GET /admin/curriculum/:courseId — modules with their lessons nested. */
 adminCurriculumRouter.get(
@@ -134,6 +172,7 @@ adminCurriculumRouter.post(
     const body = req.body as Record<string, unknown>;
     const title = typeof body.title === "string" ? body.title.trim() : "";
     if (!title) throw badRequest("Lesson title is required");
+    assertPaidMedia(body);
 
     const result = await pool.query(
       `INSERT INTO course_lessons
@@ -159,6 +198,8 @@ adminCurriculumRouter.post(
 adminCurriculumRouter.put(
   "/lessons/:id",
   asyncHandler(async (req, res) => {
+    assertPaidMedia(req.body as Record<string, unknown>);
+
     const update = buildUpdate(req.body as Record<string, unknown>, LESSON_FIELDS);
     if (!update) throw badRequest("No updatable fields supplied");
 

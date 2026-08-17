@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import path from "path";
 import { Request, Router } from "express";
 import { ipKeyGenerator, rateLimit } from "express-rate-limit";
 import { z } from "zod";
@@ -8,6 +9,8 @@ import { asyncHandler } from "../../utils/asyncHandler";
 import { badRequest, notFound, unauthorized } from "../../utils/httpError";
 import { denyImpersonation, type AuthedMember } from "../../middleware/memberAuth";
 import { listMemberProducts } from "../../services/access";
+import { deliverableUrl, readProtectedRef } from "../../services/signedUrls";
+import type { EntitledMedia } from "./downloads";
 
 /**
  * `/api/member/podcasts` and `/api/member/newsletters` — the two things that
@@ -49,6 +52,8 @@ const TOKEN_LOCK_CLASS = 8242;
 
 const TOO_MANY = { error: "Too many requests. Please try again in a few minutes." };
 
+const EPISODE_NOT_FOUND = "We couldn't find that episode.";
+
 const byMember = (req: Request): string =>
   req.member ? `member:${req.member.id}` : ipKeyGenerator(req.ip ?? "");
 
@@ -75,6 +80,29 @@ function absoluteUrl(value: string): string {
   if (!trimmed) return "";
   if (/^https?:\/\//i.test(trimmed)) return trimmed;
   return `${env.publicSiteUrl.replace(/\/$/, "")}${trimmed.startsWith("/") ? "" : "/"}${trimmed}`;
+}
+
+/**
+ * The address to hand a player for one episode's audio.
+ *
+ * A private show is the whole of what somebody paid for, so its files live in
+ * the protected directory and are signed here into a link bound to this member.
+ * A public show's audio is already a working URL — a bare key under /uploads or
+ * a file on somebody's CDN — and is made absolute and passed through.
+ *
+ * The choice is made from the reference rather than from the show's visibility,
+ * because a public show pointed at a protected file is a mistake somebody can
+ * make in the admin, and signing it is the only reading of that mistake which
+ * does not produce `https://site/protected:episode-12.mp3` in a feed.
+ */
+function episodeAudioUrl(reference: string, episodeId: number, memberId: number): string {
+  const delivered = deliverableUrl({
+    reference,
+    kind: "podcast-episode",
+    fileId: episodeId,
+    memberId,
+  });
+  return delivered.expiresAt === null ? absoluteUrl(delivered.url) : delivered.url;
 }
 
 /* ------------------------------------------------------------- entitlement */
@@ -205,7 +233,10 @@ async function ensureFeedTokens(
   return tokens;
 }
 
-async function loadEpisodes(podcastIds: number[]): Promise<Map<number, EpisodeJson[]>> {
+async function loadEpisodes(
+  podcastIds: number[],
+  memberId: number
+): Promise<Map<number, EpisodeJson[]>> {
   const byPodcast = new Map<number, EpisodeJson[]>();
   if (podcastIds.length === 0) return byPodcast;
 
@@ -233,7 +264,7 @@ async function loadEpisodes(podcastIds: number[]): Promise<Map<number, EpisodeJs
       id: row.id,
       title: row.title,
       description: row.description,
-      audioUrl: absoluteUrl(row.audio_url),
+      audioUrl: episodeAudioUrl(row.audio_url, row.id, memberId),
       durationSeconds: row.duration_seconds,
       episodeNumber: row.episode_number,
       season: row.season,
@@ -242,6 +273,42 @@ async function loadEpisodes(podcastIds: number[]): Promise<Map<number, EpisodeJs
     byPodcast.set(row.podcast_id, list);
   }
   return byPodcast;
+}
+
+/**
+ * The audio behind a signed episode link, if it is still this member's to play.
+ *
+ * A private show is paid audio, so entitlement is re-asked of access.ts at the
+ * moment the bytes are requested — a two-hour link outlives a refund otherwise.
+ * A public show's episodes are already served to strangers by the public RSS
+ * route, so a signed link to one only has to name an episode that is published
+ * on a show that is published.
+ */
+export async function loadEntitledEpisodeAudio(
+  memberId: number,
+  episodeId: number
+): Promise<EntitledMedia> {
+  const found = await pool.query<{
+    audio_url: string;
+    podcast_id: number;
+    visibility: string;
+  }>(
+    `SELECT e.audio_url, e.podcast_id, p.visibility
+       FROM podcast_episodes e
+       JOIN podcasts p ON p.id = e.podcast_id
+      WHERE e.id = $1 AND e.published = true AND p.published = true`,
+    [episodeId]
+  );
+  const row = found.rows[0];
+  const storageKey = row === undefined ? null : readProtectedRef(row.audio_url);
+  if (!row || storageKey === null) throw notFound(EPISODE_NOT_FOUND);
+
+  if (row.visibility === "private") {
+    const owned = await ownedIds(memberId);
+    if (!owned.podcastIds.includes(row.podcast_id)) throw notFound(EPISODE_NOT_FOUND);
+  }
+
+  return { storagePath: row.audio_url, filename: path.basename(storageKey), mime: "" };
 }
 
 /**
@@ -272,7 +339,10 @@ memberPublishingRouter.get(
 
     const [tokens, episodes] = await Promise.all([
       ensureFeedTokens(member.id, privateOwned),
-      loadEpisodes(shows.rows.map((row) => row.id)),
+      loadEpisodes(
+        shows.rows.map((row) => row.id),
+        member.id
+      ),
     ]);
 
     const body: PodcastJson[] = shows.rows.map((row) => {
