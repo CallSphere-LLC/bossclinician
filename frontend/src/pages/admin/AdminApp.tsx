@@ -17,6 +17,10 @@ import MediaLibrary from "@/pages/admin/MediaLibrary";
 import TestimonialsAdmin from "@/pages/admin/TestimonialsAdmin";
 import ResourcesAdmin from "@/pages/admin/ResourcesAdmin";
 import Leads from "@/pages/admin/Leads";
+import Contacts from "@/pages/admin/Contacts";
+import ContactDetail from "@/pages/admin/ContactDetail";
+import Tags from "@/pages/admin/Tags";
+import Segments from "@/pages/admin/Segments";
 import Conversations from "@/pages/admin/Conversations";
 import Members from "@/pages/admin/Members";
 import Subscribers from "@/pages/admin/Subscribers";
@@ -102,6 +106,10 @@ function ProtectedRoutes() {
         <Route path="/marketing/forms" element={<Forms />} />
 
         {/* Contacts */}
+        <Route path="/contacts" element={<Contacts />} />
+        <Route path="/contacts/:id" element={<ContactDetail />} />
+        <Route path="/tags" element={<Tags />} />
+        <Route path="/segments" element={<Segments />} />
         <Route path="/leads" element={<Leads />} />
         <Route path="/conversations" element={<Conversations />} />
         <Route path="/members" element={<Members />} />

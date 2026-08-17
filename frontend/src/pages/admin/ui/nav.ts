@@ -101,6 +101,9 @@ export const NAV_GROUPS: NavGroup[] = [
     label: "Contacts",
     icon: Users,
     children: [
+      { to: "/admin/contacts", label: "People", ready: true },
+      { to: "/admin/segments", label: "Groups", ready: true },
+      { to: "/admin/tags", label: "Tags", ready: true },
       { to: "/admin/leads", label: "Leads Inbox", ready: true, badge: "leads" },
       { to: "/admin/conversations", label: "Conversations", ready: true },
       { to: "/admin/members", label: "Members", ready: true },

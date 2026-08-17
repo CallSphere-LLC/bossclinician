@@ -183,7 +183,21 @@ ON CONFLICT (email) DO UPDATE
       last_name  = COALESCE(NULLIF(EXCLUDED.last_name, ''), contacts.last_name),
       source     = 'member';
 
-UPDATE leads       l SET contact_id = c.id FROM contacts c WHERE lower(l.email) = c.email::text AND l.contact_id IS NULL;
-UPDATE subscribers s SET contact_id = c.id FROM contacts c WHERE lower(s.email) = c.email::text AND s.contact_id IS NULL;
-UPDATE members     m SET contact_id = c.id FROM contacts c WHERE lower(m.email::text) = c.email::text AND m.contact_id IS NULL;
-UPDATE orders      o SET contact_id = c.id FROM contacts c WHERE lower(o.email) = c.email::text AND o.contact_id IS NULL;
+-- Compared AS citext, not by casting the contact's address down to text.
+-- `lower(l.email) = c.email::text` is a text-to-text comparison and therefore
+-- case-sensitive: it happens to match today only because the inserts above
+-- lowercase everything, so the first writer to store a mixed-case address in
+-- `contacts` would silently stop linking. Letting citext decide makes the join
+-- mean what it says.
+UPDATE leads       l SET contact_id = c.id FROM contacts c WHERE l.email::citext = c.email AND l.contact_id IS NULL;
+UPDATE subscribers s SET contact_id = c.id FROM contacts c WHERE s.email::citext = c.email AND s.contact_id IS NULL;
+UPDATE members     m SET contact_id = c.id FROM contacts c WHERE m.email        = c.email AND m.contact_id IS NULL;
+UPDATE orders      o SET contact_id = c.id FROM contacts c WHERE o.email::citext = c.email AND o.contact_id IS NULL;
+
+-- The rollup that maintains lifetime_value_cents, order_count and the cached
+-- tag/segment counts. Without a schedule those figures sit at zero forever;
+-- migration 011 seeded the platform's other twelve schedules before this table
+-- existed, so it belongs here rather than there.
+INSERT INTO job_schedules (name, kind, every_minutes, timezone)
+VALUES ('contact-rollup', 'contacts.rollup', 60, 'America/New_York')
+ON CONFLICT (name) DO NOTHING;

@@ -21,6 +21,9 @@ import { adminChatsRouter } from "./chats";
 import { adminProductsRouter } from "./products";
 import { adminOffersRouter } from "./offers";
 import { adminRedirectsRouter } from "./redirects";
+import { adminContactsRouter } from "./contacts";
+import { adminTagsRouter } from "./tags";
+import { adminSegmentsRouter } from "./segments";
 
 export const adminRouter = Router();
 
@@ -47,3 +50,6 @@ adminRouter.use("/chats", requireAuth, adminChatsRouter);
 adminRouter.use("/products", requireAuth, adminProductsRouter);
 adminRouter.use("/offers", requireAuth, adminOffersRouter);
 adminRouter.use("/redirects", requireAuth, adminRedirectsRouter);
+adminRouter.use("/contacts", requireAuth, adminContactsRouter);
+adminRouter.use("/tags", requireAuth, adminTagsRouter);
+adminRouter.use("/segments", requireAuth, adminSegmentsRouter);

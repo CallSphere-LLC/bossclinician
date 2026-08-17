@@ -2,6 +2,7 @@ import { pool } from "../db/pool";
 import { sweepExpiredGrants } from "../services/access";
 import { releaseRedemption } from "../services/coupons";
 import { registerHandler } from "./worker";
+import { registerContactJobs } from "./contactRollup";
 
 /**
  * The job handlers that belong to no single feature.
@@ -216,4 +217,10 @@ export function registerCoreHandlers(): void {
   registerHandler("checkout.abandoned", () => sweepAbandonedCheckouts());
   registerHandler("jobs.retention", () => jobRetention());
   registerHandler("access.sweepExpired", async () => ({ expired: await sweepExpiredGrants() }));
+
+  // Feature modules register their own handlers. Imported and called here so a
+  // handler cannot be missing merely because nothing happened to reference its
+  // module — a job kind with no handler fails loudly rather than silently never
+  // running, but only if the registration itself is not the thing that is missing.
+  registerContactJobs();
 }
