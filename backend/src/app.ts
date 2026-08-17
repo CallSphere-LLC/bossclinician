@@ -32,6 +32,11 @@ export function createApp(): Express {
   // original bytes are gone and signature verification can never succeed.
   app.use("/api/stripe/webhook", express.raw({ type: "application/json", limit: "1mb" }));
 
+  // Same reason as the Stripe line above: the provider signs the bytes it sent,
+  // so once JSON has parsed the stream the original body is gone and no
+  // signature can ever verify.
+  app.use("/api/email/webhook", express.raw({ type: "application/json", limit: "1mb" }));
+
   app.use(express.json({ limit: "2mb" }));
   app.use(express.urlencoded({ extended: true }));
 

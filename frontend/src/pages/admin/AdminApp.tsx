@@ -40,6 +40,10 @@ import Newsletters from "@/pages/admin/Newsletters";
 import Campaigns from "@/pages/admin/Campaigns";
 import Funnels from "@/pages/admin/Funnels";
 import Automations from "@/pages/admin/Automations";
+import Sequences from "@/pages/admin/Sequences";
+import SequenceEditor from "@/pages/admin/SequenceEditor";
+import AutomationBuilder from "@/pages/admin/AutomationBuilder";
+import EmailTemplates from "@/pages/admin/EmailTemplates";
 import Forms from "@/pages/admin/Forms";
 import Events from "@/pages/admin/Events";
 import PagesAdmin from "@/pages/admin/PagesAdmin";
@@ -102,6 +106,10 @@ function ProtectedRoutes() {
         <Route path="/marketing/events" element={<Events />} />
         <Route path="/marketing/campaigns" element={<Campaigns />} />
         <Route path="/marketing/funnels" element={<Funnels />} />
+        <Route path="/marketing/sequences" element={<Sequences />} />
+        <Route path="/marketing/sequences/:id" element={<SequenceEditor />} />
+        <Route path="/marketing/automations-v2" element={<AutomationBuilder />} />
+        <Route path="/marketing/emails" element={<EmailTemplates />} />
         <Route path="/marketing/automations" element={<Automations />} />
         <Route path="/marketing/forms" element={<Forms />} />
 

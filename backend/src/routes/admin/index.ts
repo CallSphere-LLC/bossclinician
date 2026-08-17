@@ -24,6 +24,8 @@ import { adminRedirectsRouter } from "./redirects";
 import { adminContactsRouter } from "./contacts";
 import { adminTagsRouter } from "./tags";
 import { adminSegmentsRouter } from "./segments";
+import { adminSequencesRouter, adminEmailTemplatesRouter } from "./sequences";
+import { adminAutomationsV2Router } from "./automationsV2";
 
 export const adminRouter = Router();
 
@@ -53,3 +55,8 @@ adminRouter.use("/redirects", requireAuth, adminRedirectsRouter);
 adminRouter.use("/contacts", requireAuth, adminContactsRouter);
 adminRouter.use("/tags", requireAuth, adminTagsRouter);
 adminRouter.use("/segments", requireAuth, adminSegmentsRouter);
+adminRouter.use("/sequences", requireAuth, adminSequencesRouter);
+adminRouter.use("/email-templates", requireAuth, adminEmailTemplatesRouter);
+// The original engine stays reachable at /growth/automations until its call
+// sites are repointed; these two are different paths, not a replacement in place.
+adminRouter.use("/automations", requireAuth, adminAutomationsV2Router);

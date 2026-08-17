@@ -3,6 +3,7 @@ import { sweepExpiredGrants } from "../services/access";
 import { releaseRedemption } from "../services/coupons";
 import { registerHandler } from "./worker";
 import { registerContactJobs } from "./contactRollup";
+import { registerEmailJobs } from "./emailJobs";
 
 /**
  * The job handlers that belong to no single feature.
@@ -223,4 +224,5 @@ export function registerCoreHandlers(): void {
   // module — a job kind with no handler fails loudly rather than silently never
   // running, but only if the registration itself is not the thing that is missing.
   registerContactJobs();
+  registerEmailJobs();
 }

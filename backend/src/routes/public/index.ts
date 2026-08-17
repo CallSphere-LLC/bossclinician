@@ -15,6 +15,8 @@ import { offersRouter } from "./offers";
 import { checkoutOfferRouter } from "./checkoutOffer";
 import { stripeWebhookRouter } from "./stripeWebhook";
 import { growthPublicRouter } from "./growthPublic";
+import { emailWebhookRouter } from "./emailWebhook";
+import { emailPrefsRouter } from "./emailPrefs";
 import { redirectsRouter } from "./redirects";
 import { verifyRouter } from "./verify";
 
@@ -36,5 +38,7 @@ publicRouter.use(offersRouter);
 publicRouter.use(checkoutOfferRouter);
 publicRouter.use(stripeWebhookRouter);
 publicRouter.use(growthPublicRouter);
+publicRouter.use(emailWebhookRouter);
+publicRouter.use(emailPrefsRouter);
 publicRouter.use(verifyRouter);
 publicRouter.use(redirectsRouter);
