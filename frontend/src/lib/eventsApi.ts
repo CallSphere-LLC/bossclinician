@@ -212,13 +212,23 @@ export interface EventReport {
   conversionRate: number;
 }
 
+/**
+ * What a write returns: the stored row, without the registration counts, which
+ * are subqueries the list pays for and a save does not. Re-read with `list` or
+ * `get` when the counts matter.
+ */
+export type SavedEvent = Omit<
+  EventSummary,
+  "registrationCount" | "attendedCount" | "upcomingCount"
+>;
+
 export const eventsAdminApi = {
   list: () => request<EventSummary[]>("/admin/events"),
   get: (id: number) => request<EventDetail>(`/admin/events/${id}`),
   create: (draft: EventDraft & { title: string }) =>
-    request<EventSummary>("/admin/events", { method: "POST", body: body(draft) }),
+    request<SavedEvent>("/admin/events", { method: "POST", body: body(draft) }),
   update: (id: number, draft: EventDraft) =>
-    request<EventSummary>(`/admin/events/${id}`, { method: "PATCH", body: body(draft) }),
+    request<SavedEvent>(`/admin/events/${id}`, { method: "PATCH", body: body(draft) }),
   remove: (id: number) => request<void>(`/admin/events/${id}`, { method: "DELETE" }),
 
   registrations: (id: number) => request<Registrant[]>(`/admin/events/${id}/registrations`),

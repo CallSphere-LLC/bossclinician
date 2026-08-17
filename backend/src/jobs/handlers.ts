@@ -8,6 +8,7 @@ import { registerAffiliateJobs } from "./affiliateJobs";
 import { registerWebhookJobs } from "./webhookJobs";
 import { registerReportJobs } from "./reportJobs";
 import { registerEventJobs } from "./eventJobs";
+import { registerCoachingJobs } from "./coachingJobs";
 
 /**
  * The job handlers that belong to no single feature.
@@ -233,4 +234,5 @@ export function registerCoreHandlers(): void {
   registerWebhookJobs();
   registerReportJobs();
   registerEventJobs();
+  registerCoachingJobs();
 }

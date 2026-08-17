@@ -130,21 +130,32 @@ export interface FormSubmission {
   contactName: string | null;
 }
 
+/**
+ * What a write returns: the stored row alone. The tag names, the sequence name,
+ * the download's filename and the two counts are joins and subqueries that
+ * `get` pays for and a save does not, so merging one of these into the editor's
+ * state as if it were the full shape would empty those fields on screen.
+ */
+export type SavedForm = Omit<
+  FormDetail,
+  "applyTags" | "sequenceName" | "downloadFileName" | "fieldCount" | "submissionCount"
+>;
+
 export const formsApi = {
-  list: () => request<FormSummary[]>("/admin/forms"),
-  get: (id: number) => request<FormDetail>(`/admin/forms/${id}`),
+  list: () => request<FormSummary[]>("/admin/forms-v2"),
+  get: (id: number) => request<FormDetail>(`/admin/forms-v2/${id}`),
   create: (draft: FormDraft & { name: string }) =>
-    request<FormDetail>("/admin/forms", { method: "POST", body: body(draft) }),
+    request<SavedForm>("/admin/forms-v2", { method: "POST", body: body(draft) }),
   update: (id: number, draft: FormDraft) =>
-    request<FormDetail>(`/admin/forms/${id}`, { method: "PATCH", body: body(draft) }),
-  remove: (id: number) => request<void>(`/admin/forms/${id}`, { method: "DELETE" }),
+    request<SavedForm>(`/admin/forms-v2/${id}`, { method: "PATCH", body: body(draft) }),
+  remove: (id: number) => request<void>(`/admin/forms-v2/${id}`, { method: "DELETE" }),
 
   submissions: (id: number, offset = 0) =>
     request<{ total: number; submissions: FormSubmission[] }>(
-      `/admin/forms/${id}/submissions?offset=${offset}`,
+      `/admin/forms-v2/${id}/submissions?offset=${offset}`,
     ),
   removeSubmission: (id: number, submissionId: number) =>
-    request<void>(`/admin/forms/${id}/submissions/${submissionId}`, { method: "DELETE" }),
+    request<void>(`/admin/forms-v2/${id}/submissions/${submissionId}`, { method: "DELETE" }),
 
   /**
    * Bypasses `request` because the answer is a spreadsheet, not JSON — the
@@ -157,7 +168,7 @@ export const formsApi = {
    */
   exportCsv: async (id: number): Promise<Blob> => {
     const token = getToken();
-    const res = await fetch(`${API_BASE}/admin/forms/${id}/submissions.csv`, {
+    const res = await fetch(`${API_BASE}/admin/forms-v2/${id}/submissions.csv`, {
       headers: token ? { Authorization: `Bearer ${token}` } : undefined,
     });
     if (!res.ok) {

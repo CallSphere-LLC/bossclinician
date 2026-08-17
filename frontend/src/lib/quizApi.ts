@@ -239,22 +239,39 @@ export interface QuizReport {
   }[];
 }
 
+/**
+ * What a write actually returns.
+ *
+ * The write endpoints answer with the stored row and nothing else — no counts,
+ * no joined tag or sequence name, no nested answers, because assembling those
+ * costs three more queries on every keystroke-sized save. Saying so in the type
+ * is the point: a screen that merged one of these into its state believing it
+ * was the full shape would blank the very fields the editor is built around.
+ * Re-read with `get` after a structural change.
+ */
+export type SavedAssessment = Omit<
+  AssessmentSummary,
+  "questionCount" | "resultCount" | "attemptCount"
+>;
+export type SavedQuestion = Omit<EditableQuestion, "answers">;
+export type SavedResult = Omit<EditableResult, "tagName" | "sequenceName" | "attemptCount">;
+
 export const assessmentsApi = {
   list: () => request<AssessmentSummary[]>("/admin/assessments"),
   get: (id: number) => request<AssessmentDetail>(`/admin/assessments/${id}`),
   create: (draft: AssessmentDraft & { title: string }) =>
-    request<AssessmentSummary>("/admin/assessments", { method: "POST", body: body(draft) }),
+    request<SavedAssessment>("/admin/assessments", { method: "POST", body: body(draft) }),
   update: (id: number, draft: AssessmentDraft) =>
-    request<AssessmentSummary>(`/admin/assessments/${id}`, { method: "PATCH", body: body(draft) }),
+    request<SavedAssessment>(`/admin/assessments/${id}`, { method: "PATCH", body: body(draft) }),
   remove: (id: number) => request<void>(`/admin/assessments/${id}`, { method: "DELETE" }),
 
   addQuestion: (id: number, draft: QuestionDraft) =>
-    request<EditableQuestion>(`/admin/assessments/${id}/questions`, {
+    request<SavedQuestion>(`/admin/assessments/${id}/questions`, {
       method: "POST",
       body: body(draft),
     }),
   updateQuestion: (questionId: number, draft: QuestionDraft) =>
-    request<EditableQuestion>(`/admin/assessments/questions/${questionId}`, {
+    request<SavedQuestion>(`/admin/assessments/questions/${questionId}`, {
       method: "PATCH",
       body: body(draft),
     }),
@@ -280,12 +297,12 @@ export const assessmentsApi = {
     request<void>(`/admin/assessments/answers/${answerId}`, { method: "DELETE" }),
 
   addResult: (id: number, draft: ResultDraft) =>
-    request<EditableResult>(`/admin/assessments/${id}/results`, {
+    request<SavedResult>(`/admin/assessments/${id}/results`, {
       method: "POST",
       body: body(draft),
     }),
   updateResult: (resultId: number, draft: ResultDraft) =>
-    request<EditableResult>(`/admin/assessments/results/${resultId}`, {
+    request<SavedResult>(`/admin/assessments/results/${resultId}`, {
       method: "PATCH",
       body: body(draft),
     }),

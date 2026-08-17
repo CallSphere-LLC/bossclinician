@@ -1,4 +1,15 @@
-import { forwardRef, type ButtonHTMLAttributes, type HTMLAttributes, type InputHTMLAttributes, type ReactNode, type TextareaHTMLAttributes } from "react";
+import {
+  cloneElement,
+  forwardRef,
+  isValidElement,
+  useId,
+  type ButtonHTMLAttributes,
+  type HTMLAttributes,
+  type InputHTMLAttributes,
+  type ReactElement,
+  type ReactNode,
+  type TextareaHTMLAttributes,
+} from "react";
 import { Slot } from "@radix-ui/react-slot";
 import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/cn";
@@ -193,6 +204,25 @@ Textarea.displayName = "Textarea";
  * the owner hunting for which box she got wrong, so screens attach the
  * correction to the box it belongs to and say what to do about it.
  */
+/**
+ * A labelled form control.
+ *
+ * The label is associated with its control here rather than at the call site.
+ * `htmlFor` was optional and almost nobody passed it, which left every label in
+ * the admin console pointing at nothing: visually correct, and silent to a
+ * screen reader, on every screen. Fixing it per caller would have meant an id on
+ * roughly two hundred controls and would have regressed the first time somebody
+ * added one without.
+ *
+ * So the id is generated when it is not given and injected into the child. A
+ * caller that already sets its own `id` keeps it — `htmlFor` still wins, and a
+ * control that manages its own identity is not overwritten.
+ *
+ * The injection only reaches a single element child. A `Field` wrapping several
+ * controls (a date range, a pair of radios) has no single thing to point at, and
+ * for those the label is rendered as a group caption instead, which is the
+ * honest markup for that shape.
+ */
 export function Field({
   label,
   hint,
@@ -208,18 +238,36 @@ export function Field({
   children: ReactNode;
   className?: string;
 }) {
+  const generatedId = useId();
+  const errorId = `${generatedId}-error`;
+
+  const single = isValidElement(children) ? (children as ReactElement<Record<string, unknown>>) : null;
+  const existingId = single?.props?.id;
+  const controlId = htmlFor ?? (typeof existingId === "string" ? existingId : generatedId);
+
+  const control =
+    single && !htmlFor
+      ? cloneElement(single, {
+          id: controlId,
+          // Pointed at the error text so a screen reader reads the reason along
+          // with the field, rather than announcing an invalid control and
+          // leaving the user to hunt for why.
+          ...(error ? { "aria-invalid": true, "aria-describedby": errorId } : {}),
+        })
+      : children;
+
   return (
     <div className={className}>
       <label
-        htmlFor={htmlFor}
+        htmlFor={single || htmlFor ? controlId : undefined}
         className="mb-1.5 flex items-baseline gap-2 text-[0.8rem] font-semibold text-ink"
       >
         {label}
         {hint && <span className="font-normal text-ink-soft/80">{hint}</span>}
       </label>
-      {children}
+      {control}
       {error && (
-        <p className="mt-1.5 text-xs font-medium text-red-300" role="alert">
+        <p id={errorId} className="mt-1.5 text-xs font-medium text-red-300" role="alert">
           {error}
         </p>
       )}
