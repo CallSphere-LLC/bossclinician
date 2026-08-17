@@ -1092,7 +1092,8 @@ async function handleInvoicePaid(invoice: Stripe.Invoice): Promise<void> {
   const stripeSubscriptionId = invoiceSubscriptionId(invoice);
   const meta = invoiceMetadata(invoice);
   const paymentIntentId = invoicePaymentIntentId(invoice);
-  const paidAt = toDate(invoice.status_transitions?.paid_at) ?? toDate(invoice.created) ?? new Date();
+  const paidAt =
+    toDate(invoice.status_transitions?.paid_at) ?? toDate(invoice.created) ?? new Date();
 
   const plan = stripeSubscriptionId ? await loadPlan(stripeSubscriptionId) : null;
   const isPlan = plan !== null || meta.pricingType === "payment_plan";
@@ -1329,7 +1330,9 @@ async function handleInvoicePaymentFailed(invoice: Stripe.Invoice): Promise<void
     });
   }
 
-  log(`invoice ${invoice.id} failed (attempt ${attempt}); dunning sent to ${buyerEmail || "nobody"}`);
+  log(
+    `invoice ${invoice.id} failed (attempt ${attempt}); dunning sent to ${buyerEmail || "nobody"}`
+  );
 }
 
 /* ----------------------------------------------------------- subscriptions */
@@ -1410,7 +1413,8 @@ async function endSubscriptionAccess(input: {
     [input.localSubscriptionId, endsAt, truncate(input.reason, 500), input.orderId]
   );
   log(
-    `subscription ${input.stripeSubscriptionId} ending: ${clipped.rowCount ?? 0} grant(s) expire ${endsAt.toISOString()}`
+    `subscription ${input.stripeSubscriptionId} ending: ${clipped.rowCount ?? 0} ` +
+      `grant(s) expire ${endsAt.toISOString()}`
   );
 }
 
