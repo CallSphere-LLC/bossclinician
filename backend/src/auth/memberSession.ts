@@ -22,6 +22,20 @@ export const REFRESH_TOKEN_TTL_SECONDS = 30 * 24 * 60 * 60;
 export const REFRESH_COOKIE = "bc_member_refresh";
 
 /**
+ * A readable companion to the refresh cookie, holding no secret — its only
+ * content is "1".
+ *
+ * The refresh cookie is HttpOnly and path-scoped, so the browser cannot tell
+ * whether it exists. Without a hint, the app has to attempt a refresh on every
+ * page load just to find out, which spends a round trip on every anonymous
+ * visitor to the marketing site. This lets the client skip that call when there
+ * is plainly no session to restore.
+ *
+ * It is a hint and nothing more: forging it buys an attacker one 401.
+ */
+export const SESSION_HINT_COOKIE = "bc_member_active";
+
+/**
  * Member tokens are signed with a key derived from JWT_SECRET rather than with
  * JWT_SECRET itself (see auth/secrets.ts). The `aud` claim below is belt and
  * braces on top of that — the signature is what actually keeps an admin token
@@ -69,10 +83,25 @@ function cookieOptions(maxAgeMs: number) {
 
 export function setRefreshCookie(res: Response, rawToken: string): void {
   res.cookie(REFRESH_COOKIE, rawToken, cookieOptions(REFRESH_TOKEN_TTL_SECONDS * 1000));
+  // Readable by script and site-wide in scope, unlike the token itself, so the
+  // app can decide whether a silent refresh is worth attempting.
+  res.cookie(SESSION_HINT_COOKIE, "1", {
+    httpOnly: false,
+    secure: env.nodeEnv === "production",
+    sameSite: "lax",
+    path: "/",
+    maxAge: REFRESH_TOKEN_TTL_SECONDS * 1000,
+  });
 }
 
 export function clearRefreshCookie(res: Response): void {
   res.clearCookie(REFRESH_COOKIE, { ...cookieOptions(0), maxAge: undefined });
+  res.clearCookie(SESSION_HINT_COOKIE, {
+    httpOnly: false,
+    secure: env.nodeEnv === "production",
+    sameSite: "lax",
+    path: "/",
+  });
 }
 
 export interface IssueSessionInput {

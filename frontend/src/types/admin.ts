@@ -53,9 +53,17 @@ export interface Member {
   id: Id;
   email: string;
   name: string;
-  status: "active" | "invited" | "cancelled" | string;
+  status: "active" | "invited" | "suspended" | "cancelled" | string;
   createdAt: string;
   enrollmentCount: number;
+  firstName?: string | null;
+  lastName?: string | null;
+  avatarUrl?: string | null;
+  timezone?: string | null;
+  /** Null until they've clicked the link in their sign-up email. */
+  emailVerifiedAt?: string | null;
+  /** Null for someone who has an account but has never signed in. */
+  lastLoginAt?: string | null;
 }
 
 export interface Enrollment {

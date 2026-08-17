@@ -53,6 +53,18 @@ function detectTimezone(): string | undefined {
   }
 }
 
+/**
+ * Whether the server left a "you have a session" marker on the last sign-in.
+ *
+ * The refresh token itself is HttpOnly and scoped to /api/auth, so script
+ * cannot see it. Without this hint every anonymous visitor to the marketing
+ * site would spend a round trip discovering they are not signed in.
+ */
+function hasSessionHint(): boolean {
+  if (typeof document === "undefined") return false;
+  return document.cookie.split("; ").some((c) => c.startsWith("bc_member_active="));
+}
+
 export function MemberAuthProvider({ children }: { children: ReactNode }) {
   const [member, setMemberState] = useState<MemberProfile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -75,6 +87,12 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let cancelled = false;
+
+    if (!hasSessionHint()) {
+      setLoading(false);
+      return;
+    }
+
     (async () => {
       try {
         const { member: profile, accessToken } = await memberApi.refresh();

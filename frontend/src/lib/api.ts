@@ -305,6 +305,61 @@ export const adminApi = {
 
   // ---- Members ----
   membersList: () => request<Member[]>("/admin/members"),
+  /**
+   * The filtered view of the same list. Paging is always sent, which is what
+   * makes the endpoint answer with a counted page rather than a bare array —
+   * the total is what tells the screen its results were cut short.
+   */
+  membersSearch: (params: {
+    q?: string;
+    status?: string;
+    courseId?: number;
+    page?: number;
+    limit?: number;
+  }) => {
+    const qs = new URLSearchParams();
+    if (params.q) qs.set("q", params.q);
+    if (params.status) qs.set("status", params.status);
+    if (params.courseId) qs.set("courseId", String(params.courseId));
+    qs.set("page", String(params.page ?? 1));
+    qs.set("limit", String(params.limit ?? 200));
+    return request<{ items: Member[]; total: number; page: number; pageSize: number }>(
+      `/admin/members?${qs.toString()}`,
+    );
+  },
+  memberImpersonate: (id: number) =>
+    request<{ accessToken: string; member: Member }>(`/admin/members/${id}/impersonate`, {
+      method: "POST",
+    }),
+  memberResetPassword: (id: number) =>
+    request<{ ok: true }>(`/admin/members/${id}/reset-password`, { method: "POST" }),
+  memberSuspend: (id: number) => request<void>(`/admin/members/${id}/suspend`, { method: "POST" }),
+  memberReactivate: (id: number) =>
+    request<void>(`/admin/members/${id}/reactivate`, { method: "POST" }),
+  memberExport: (id: number) => request<Record<string, unknown>>(`/admin/members/${id}/export`),
+  /**
+   * Bypasses `request` because the answer is a spreadsheet, not JSON — the
+   * shared helper would try to parse it and throw away the file.
+   */
+  membersExportCsv: async () => {
+    const token = getToken();
+    const res = await fetch(`${API_BASE}/admin/members/export.csv`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    });
+    if (!res.ok) {
+      throw new ApiError("That download didn't finish. Please try again in a moment.", res.status);
+    }
+    return res.blob();
+  },
+  membersImport: (rows: Record<string, string>[]) =>
+    request<{
+      created: number;
+      updated: number;
+      skipped: number;
+      // A rejected line comes back either as a finished sentence or as the
+      // pieces to build one from, so the screen can always show a reason.
+      errors: (string | { row?: number; email?: string; message?: string })[];
+    }>("/admin/members/import", { method: "POST", body: JSON.stringify({ rows }) }),
   memberCreate: (data: { email: string; name?: string; status?: string }) =>
     request<Member>("/admin/members", { method: "POST", body: JSON.stringify(data) }),
   memberUpdate: (id: number, data: { name?: string; status?: string }) =>

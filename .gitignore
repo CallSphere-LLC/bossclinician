@@ -26,3 +26,4 @@ _scrape/.venv/
 # misc
 .DS_Store
 *.log
+backups/

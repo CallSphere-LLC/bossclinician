@@ -2,6 +2,7 @@ import { lazy, Suspense } from "react";
 import { Route, Routes } from "react-router-dom";
 import { Layout } from "@/components/layout/Layout";
 import { AuthProvider } from "@/hooks/useAuth";
+import { MemberAuthProvider, RequireMember } from "@/hooks/useMember";
 
 import Home from "@/pages/Home";
 import NotFound from "@/pages/NotFound";
@@ -27,6 +28,20 @@ const Terms = lazy(() => import("@/pages/legal/Terms"));
 const Disclaimer = lazy(() => import("@/pages/legal/Disclaimer"));
 const FinancialDisclaimer = lazy(() => import("@/pages/legal/FinancialDisclaimer"));
 const AdminApp = lazy(() => import("@/pages/admin/AdminApp"));
+
+// Member surfaces. Split from the marketing bundle because a visitor who never
+// signs in should not download the account area, and a member deep in the
+// course player should not be carrying the home page's motion code.
+const MemberLogin = lazy(() => import("@/pages/member/Login"));
+const MemberSignup = lazy(() => import("@/pages/member/Signup"));
+const MemberForgotPassword = lazy(() => import("@/pages/member/ForgotPassword"));
+const MemberResetPassword = lazy(() => import("@/pages/member/ResetPassword"));
+const MemberVerifyEmail = lazy(() => import("@/pages/member/VerifyEmail"));
+const MemberAccount = lazy(() => import("@/pages/member/Account"));
+const MemberProfile = lazy(() => import("@/pages/member/Profile"));
+const MemberSecurity = lazy(() => import("@/pages/member/Security"));
+const MemberBilling = lazy(() => import("@/pages/member/Billing"));
+const MemberPurchases = lazy(() => import("@/pages/member/Purchases"));
 
 function PublicRoutes() {
   return (
@@ -67,21 +82,99 @@ function PublicRoutes() {
   );
 }
 
+/**
+ * The member app: sign-in, the account area, and (from Phase 3) the library.
+ *
+ * Rendered outside `Layout` on purpose. These pages carry their own chrome —
+ * `AuthCard` for the signed-out screens and `MemberShell` for the signed-in
+ * ones — because the marketing header, footer and sales chat widget belong to a
+ * page that is trying to sell something, not to the product someone has already
+ * bought.
+ */
+function MemberRoutes() {
+  return (
+    <Suspense fallback={<MemberFallback />}>
+      <Routes>
+        <Route path="/login" element={<MemberLogin />} />
+        <Route path="/signup" element={<MemberSignup />} />
+        <Route path="/forgot-password" element={<MemberForgotPassword />} />
+        <Route path="/reset-password/:token" element={<MemberResetPassword />} />
+        <Route path="/verify-email/:token" element={<MemberVerifyEmail />} />
+
+        <Route
+          path="/account"
+          element={
+            <RequireMember>
+              <MemberAccount />
+            </RequireMember>
+          }
+        />
+        <Route
+          path="/account/profile"
+          element={
+            <RequireMember>
+              <MemberProfile />
+            </RequireMember>
+          }
+        />
+        <Route
+          path="/account/security"
+          element={
+            <RequireMember>
+              <MemberSecurity />
+            </RequireMember>
+          }
+        />
+        <Route
+          path="/account/billing"
+          element={
+            <RequireMember>
+              <MemberBilling />
+            </RequireMember>
+          }
+        />
+        <Route
+          path="/account/purchases"
+          element={
+            <RequireMember>
+              <MemberPurchases />
+            </RequireMember>
+          }
+        />
+      </Routes>
+    </Suspense>
+  );
+}
+
 export default function App() {
   return (
-    <Routes>
-      <Route
-        path="/admin/*"
-        element={
-          <AuthProvider>
-            <Suspense fallback={<AdminFallback />}>
-              <AdminApp />
-            </Suspense>
-          </AuthProvider>
-        }
-      />
-      <Route path="/*" element={<PublicRoutes />} />
-    </Routes>
+    // MemberAuthProvider wraps the marketing site too, so the header can offer
+    // "My library" to someone already signed in. It costs nothing for a
+    // stranger: with no session-hint cookie present it skips the refresh call
+    // entirely rather than discovering the absence over the network.
+    <MemberAuthProvider>
+      <Routes>
+        <Route
+          path="/admin/*"
+          element={
+            <AuthProvider>
+              <Suspense fallback={<AdminFallback />}>
+                <AdminApp />
+              </Suspense>
+            </AuthProvider>
+          }
+        />
+
+        <Route path="/login" element={<MemberRoutes />} />
+        <Route path="/signup" element={<MemberRoutes />} />
+        <Route path="/forgot-password" element={<MemberRoutes />} />
+        <Route path="/reset-password/*" element={<MemberRoutes />} />
+        <Route path="/verify-email/*" element={<MemberRoutes />} />
+        <Route path="/account/*" element={<MemberRoutes />} />
+
+        <Route path="/*" element={<PublicRoutes />} />
+      </Routes>
+    </MemberAuthProvider>
   );
 }
 
@@ -89,6 +182,18 @@ function AdminFallback() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-sand text-ink-soft">
       Loading admin…
+    </div>
+  );
+}
+
+function MemberFallback() {
+  return (
+    <div className="theme-luxe flex min-h-screen items-center justify-center bg-night-deep">
+      <span
+        className="size-9 animate-spin rounded-full border-2 border-lilac border-t-plum"
+        role="status"
+        aria-label="Loading"
+      />
     </div>
   );
 }
