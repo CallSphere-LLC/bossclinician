@@ -16,6 +16,9 @@ ENV NODE_ENV=production
 COPY package*.json ./
 RUN npm install --omit=dev
 COPY --from=build /app/dist ./dist
+# Operational scripts run against the live database from inside this container
+# (regenerating the nginx redirect map, for one), so they have to ship with it.
+COPY scripts ./scripts
 RUN mkdir -p /app/uploads && chown -R node:node /app
 
 # Run as the built-in non-root `node` user (uid 1000). CMD invokes the node

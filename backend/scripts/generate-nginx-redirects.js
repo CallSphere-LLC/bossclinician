@@ -27,6 +27,20 @@ function nginxValue(value) {
   return /[\s"']/.test(value) ? JSON.stringify(value) : value;
 }
 
+/**
+ * site.conf builds the Location header as `https://$host$redirect_target`, so a
+ * target that is already absolute would produce `https://host https://other/`.
+ * Off-site redirects are not a thing this map supports; catching it here beats
+ * discovering it as a broken link after a reload.
+ */
+function assertRelative(rows) {
+  const absolute = rows.filter((r) => !r.to_path.startsWith("/"));
+  if (absolute.length > 0) {
+    const list = absolute.map((r) => `${r.from_path} -> ${r.to_path}`).join(", ");
+    throw new Error(`Redirect targets must be site-relative paths. Offending rows: ${list}`);
+  }
+}
+
 async function main() {
   const connectionString =
     process.env.DATABASE_URL ||
@@ -41,6 +55,8 @@ async function main() {
       ORDER BY from_path`
   );
   await client.end();
+
+  assertRelative(rows);
 
   const permanent = rows.filter((r) => r.status_code === 301 || r.status_code === 308);
   const temporary = rows.filter((r) => r.status_code === 302 || r.status_code === 307);
