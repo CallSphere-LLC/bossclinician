@@ -137,13 +137,15 @@ export function PostComposer({
             <p className="text-sm font-semibold text-white">{authorName || "You"}</p>
           </div>
 
-          <div role="tablist" aria-label="What kind of post" className="flex flex-wrap gap-1.5">
+          {/* A group of toggles, not a tablist: there are no tabpanels here,
+              and `role="tab"` without them tells a screen reader to expect a
+              structure that does not exist. */}
+          <div role="group" aria-label="What kind of post" className="flex flex-wrap gap-1.5">
             {KINDS.map((item) => (
               <button
                 key={item.kind}
                 type="button"
-                role="tab"
-                aria-selected={kind === item.kind}
+                aria-pressed={kind === item.kind}
                 onClick={() => {
                   setKind(item.kind);
                   setError("");

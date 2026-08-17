@@ -189,11 +189,11 @@ function LessonRow({ lesson, productSlug, active, onNavigate }: LessonRowProps) 
 
   if (!lesson.unlocked) {
     return (
+      // The visible meta line already carries the unlock date, so this adds only
+      // the word the icon is carrying visually rather than repeating the date.
       <span className={cn(shell, "cursor-default")}>
+        <span className="sr-only">Locked. </span>
         {body}
-        <span className="sr-only">
-          Locked. {lesson.unlockLabel || "This lesson has not been released yet."}
-        </span>
       </span>
     );
   }

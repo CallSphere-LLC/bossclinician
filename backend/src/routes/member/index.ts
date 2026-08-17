@@ -1,6 +1,12 @@
 import { Router } from "express";
 import { requireMember } from "../../middleware/memberAuth";
 import { memberBillingRouter } from "./billing";
+import { memberLibraryRouter } from "./library";
+import { memberProgressRouter } from "./progress";
+import { memberDownloadsRouter } from "./downloads";
+import { memberCertificatesRouter } from "./certificates";
+import { memberCommunityRouter } from "./community";
+import { memberCoachingRouter } from "./coaching";
 
 /**
  * `/api/member/*` — everything a signed-in customer can do.
@@ -15,6 +21,15 @@ export const memberRouter = Router();
 memberRouter.use(requireMember);
 
 memberRouter.use("/billing", memberBillingRouter);
+memberRouter.use("/library", memberLibraryRouter);
+memberRouter.use("/certificates", memberCertificatesRouter);
+memberRouter.use("/downloads", memberDownloadsRouter);
+memberRouter.use("/community", memberCommunityRouter);
+memberRouter.use("/coaching", memberCoachingRouter);
 
-// Phase 3 mounts library, player, progress, downloads, certificates, community
-// and coaching here.
+// Progress routes are keyed on a lesson rather than on the product it belongs
+// to ("/lessons/:lessonId/progress"), so they sit at the root of the member
+// surface instead of under /library. The player already holds a lesson id by
+// the time it reports progress, and routing through the product slug would mean
+// re-deriving one from the other on every ten-second heartbeat.
+memberRouter.use(memberProgressRouter);

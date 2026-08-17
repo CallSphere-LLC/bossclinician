@@ -16,6 +16,7 @@ import { checkoutOfferRouter } from "./checkoutOffer";
 import { stripeWebhookRouter } from "./stripeWebhook";
 import { growthPublicRouter } from "./growthPublic";
 import { redirectsRouter } from "./redirects";
+import { verifyRouter } from "./verify";
 
 export const publicRouter = Router();
 
@@ -35,4 +36,5 @@ publicRouter.use(offersRouter);
 publicRouter.use(checkoutOfferRouter);
 publicRouter.use(stripeWebhookRouter);
 publicRouter.use(growthPublicRouter);
+publicRouter.use(verifyRouter);
 publicRouter.use(redirectsRouter);

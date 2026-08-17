@@ -280,7 +280,7 @@ function CommentNode({
               onClick={() => setReplyingTo(open ? null : comment.id)}
               aria-expanded={open}
               className={cn(
-                "inline-flex min-h-[2.25rem] items-center gap-1.5 text-xs font-semibold",
+                "inline-flex min-h-[2.75rem] items-center gap-1.5 text-xs font-semibold",
                 "uppercase tracking-[0.12em] text-orchid-dim transition-colors duration-300",
                 "hover:text-gold focus-visible:outline focus-visible:outline-2",
                 "focus-visible:outline-offset-2 focus-visible:outline-gold",
@@ -295,7 +295,7 @@ function CommentNode({
               type="button"
               onClick={() => onReport({ id: comment.id, authorName: comment.authorName })}
               className={cn(
-                "inline-flex min-h-[2.25rem] items-center gap-1.5 text-xs font-semibold",
+                "inline-flex min-h-[2.75rem] items-center gap-1.5 text-xs font-semibold",
                 "uppercase tracking-[0.12em] text-orchid-faint transition-colors duration-300",
                 "hover:text-red-400 focus-visible:outline focus-visible:outline-2",
                 "focus-visible:outline-offset-2 focus-visible:outline-gold",

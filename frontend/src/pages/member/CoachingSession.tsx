@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import {
@@ -9,6 +9,7 @@ import {
   Download,
   Loader2,
   Mic,
+  NotebookPen,
   Paperclip,
   Video,
 } from "lucide-react";
@@ -16,10 +17,9 @@ import { Seo } from "@/components/Seo";
 import { MemberShell } from "@/components/member/MemberShell";
 import { GlassCard } from "@/components/luxe/GlassCard";
 import { LuxeButton, LuxePill } from "@/components/luxe/LuxeButton";
-import { LuxeTextarea } from "@/components/luxe/LuxeField";
 import { useMember } from "@/hooks/useMember";
 import { MemberApiError } from "@/lib/memberApi";
-import { coachingApi, type CoachingSessionDetail } from "@/lib/coachingApi";
+import { coachingApi, type CoachingPolicy, type CoachingSession } from "@/lib/coachingApi";
 import { cn } from "@/lib/cn";
 import { AddToCalendar } from "@/components/booking/AddToCalendar";
 import { CancelSessionDialog } from "@/components/booking/CancelSessionDialog";
@@ -49,7 +49,8 @@ export default function CoachingSession() {
   const { member } = useMember();
   const { timezone, setTimezone, deviceTimezone } = useDisplayTimezone();
 
-  const [session, setSession] = useState<CoachingSessionDetail | null>(null);
+  const [session, setSession] = useState<CoachingSession | null>(null);
+  const [policy, setPolicy] = useState<CoachingPolicy | null>(null);
   const [missing, setMissing] = useState(false);
   const [error, setError] = useState("");
   const [rescheduling, setRescheduling] = useState(false);
@@ -61,7 +62,15 @@ export default function CoachingSession() {
       return;
     }
     try {
-      setSession(await coachingApi.session(id));
+      // The policy lives on the overview rather than on the session, and both
+      // the reschedule picker and the cancel dialog need it before they can say
+      // anything truthful — so neither screen opens until both have landed.
+      const [detail, overview] = await Promise.all([
+        coachingApi.session(id),
+        coachingApi.overview(),
+      ]);
+      setSession(detail.session);
+      setPolicy(overview.policy);
       setError("");
     } catch (err) {
       if (err instanceof MemberApiError && err.status === 404) {
@@ -85,7 +94,7 @@ export default function CoachingSession() {
   if (missing) return <NotFoundPanel />;
 
   const heading = session?.offerTitle || "Coaching session";
-  const when = session?.scheduledAt ? formatFullDateTime(session.scheduledAt, timezone) : "";
+  const when = session?.startsAt ? formatFullDateTime(session.startsAt, timezone) : "";
 
   return (
     <MemberShell title={heading} description={when || undefined}>
@@ -113,7 +122,7 @@ export default function CoachingSession() {
         )}
       </div>
 
-      {session && (
+      {session && policy && (
         <div className="mt-4 grid gap-6">
           <TimezoneNotice
             timezone={timezone}
@@ -123,26 +132,36 @@ export default function CoachingSession() {
 
           <WhenCard session={session} timezone={timezone} />
 
-          <AgendaCard
-            session={session}
-            viewingAsAdmin={viewingAsAdmin}
-            onSaved={setSession}
-          />
+          <AgendaCard session={session} />
 
-          <NotesCard session={session} viewingAsAdmin={viewingAsAdmin} onSaved={setSession} />
+          <NotesCard session={session} />
 
           {(session.recordingUrl || session.files.length > 0) && (
             <AfterwardsCard session={session} />
           )}
 
-          {(session.cancellation.canReschedule || session.cancellation.canCancel) && (
+          {(session.canReschedule || session.canCancel) && (
             <GlassCard spotlight={false} interactive={false} className="p-5 sm:p-6">
               <h2 className="font-display text-lg text-white">Need to change it?</h2>
               <p className="copy-luxe mt-2 max-w-xl text-sm">
-                {rescheduleSentence(session.policy)} {creditReturnSentence(session.policy)}
+                {rescheduleSentence(policy)} {creditReturnSentence(policy)}
               </p>
+              {session.changeDeadline && session.cancelRefundsCredit && (
+                <p className="mt-2 text-sm text-orchid">
+                  That means you have until{" "}
+                  <strong className="font-semibold text-white">
+                    {formatFullDateTime(session.changeDeadline, timezone)}
+                  </strong>
+                  .
+                </p>
+              )}
+              {session.canCancel && !session.cancelRefundsCredit && (
+                <p className="mt-2 text-sm font-medium text-amber-300">
+                  You are inside that window now, so cancelling will use the session up.
+                </p>
+              )}
               <div className="mt-5 flex flex-wrap gap-3">
-                {session.cancellation.canReschedule && (
+                {session.canReschedule && (
                   <LuxeButton
                     type="button"
                     variant="glass"
@@ -153,7 +172,7 @@ export default function CoachingSession() {
                     Move this call
                   </LuxeButton>
                 )}
-                {session.cancellation.canCancel && (
+                {session.canCancel && (
                   <LuxeButton
                     type="button"
                     variant="outline"
@@ -173,6 +192,7 @@ export default function CoachingSession() {
             open={rescheduling}
             onOpenChange={setRescheduling}
             session={session}
+            policy={policy}
             timezone={timezone}
             onTimezoneChange={setTimezone}
             deviceTimezone={deviceTimezone}
@@ -180,7 +200,7 @@ export default function CoachingSession() {
             onRescheduled={(updated) => {
               setSession(updated);
               toast.success(
-                `Moved to ${updated.scheduledAt ? formatFullDateTime(updated.scheduledAt, timezone) : "a new time"}.`,
+                `Moved to ${updated.startsAt ? formatFullDateTime(updated.startsAt, timezone) : "a new time"}.`,
               );
             }}
           />
@@ -189,15 +209,12 @@ export default function CoachingSession() {
             open={cancelling}
             onOpenChange={setCancelling}
             session={session}
+            policy={policy}
             timezone={timezone}
             viewingAsAdmin={viewingAsAdmin}
             onCancelled={(result) => {
               setSession(result.session);
-              toast.success(
-                result.creditReturned
-                  ? "Cancelled. The session is back on your package."
-                  : "Cancelled. That session counted as used.",
-              );
+              toast.success(result.message);
             }}
           />
         </div>
@@ -208,17 +225,11 @@ export default function CoachingSession() {
 
 /* ── When and where ─────────────────────────────────────────────────────── */
 
-function WhenCard({
-  session,
-  timezone,
-}: {
-  session: CoachingSessionDetail;
-  timezone: string;
-}) {
+function WhenCard({ session, timezone }: { session: CoachingSession; timezone: string }) {
   const cancelled = session.status === "cancelled";
   const upcoming = session.status === "scheduled";
   const differentZone =
-    session.scheduledAt !== null && !sameClock(session.timezone, timezone, session.scheduledAt);
+    session.startsAt !== null && !sameClock(session.timezone, timezone, session.startsAt);
 
   return (
     <GlassCard
@@ -231,8 +242,8 @@ function WhenCard({
         <LuxePill accent={cancelled ? "neutral" : upcoming ? "gold" : "green"}>
           {cancelled
             ? "Cancelled"
-            : upcoming && session.scheduledAt
-              ? formatRelativeDay(session.scheduledAt, timezone)
+            : upcoming && session.startsAt
+              ? formatRelativeDay(session.startsAt, timezone)
               : session.status === "no_show"
                 ? "Missed"
                 : "Completed"}
@@ -244,14 +255,14 @@ function WhenCard({
       </div>
 
       <p className="mt-3 text-balance font-display text-xl leading-snug text-white sm:text-2xl">
-        {session.scheduledAt ? formatFullDateTime(session.scheduledAt, timezone) : "No time set yet"}
+        {session.startsAt ? formatFullDateTime(session.startsAt, timezone) : "No time set yet"}
       </p>
 
       {/* Only when the two differ: a member who booked in Eastern and is now
           reading in Pacific needs both, and nobody else needs the clutter. */}
-      {differentZone && session.scheduledAt && (
+      {differentZone && session.startsAt && (
         <p className="mt-1.5 text-sm text-orchid-dim">
-          Booked as {formatFullDateTime(session.scheduledAt, session.timezone)}.
+          Booked as {formatFullDateTime(session.startsAt, session.timezone)}.
         </p>
       )}
 
@@ -260,18 +271,20 @@ function WhenCard({
       )}
 
       {upcoming && (
-        <div className="mt-5 flex flex-wrap items-center gap-x-5 gap-y-3">
+        <div className="mt-5 grid gap-4">
           {session.meetingUrl && (
-            <LuxeButton href={session.meetingUrl} target="_blank" variant="foil" size="sm">
-              <Video aria-hidden className="size-4" />
-              Join the call
-            </LuxeButton>
+            <div>
+              <LuxeButton href={session.meetingUrl} target="_blank" variant="foil" size="sm">
+                <Video aria-hidden className="size-4" />
+                Join the call
+              </LuxeButton>
+            </div>
           )}
-          {session.scheduledAt && (
+          {session.startsAt && (
             <AddToCalendar
-              icsUrl={session.calendarUrl}
+              sessionId={session.id}
               title={`${session.offerTitle} with Yvette Howard`}
-              startsAt={session.scheduledAt}
+              startsAt={session.startsAt}
               durationMinutes={session.durationMinutes}
               meetingUrl={session.meetingUrl}
               agenda={session.agenda}
@@ -287,161 +300,67 @@ function WhenCard({
   );
 }
 
-/* ── Agenda ─────────────────────────────────────────────────────────────── */
-
-function AgendaCard({
-  session,
-  viewingAsAdmin,
-  onSaved,
-}: {
-  session: CoachingSessionDetail;
-  viewingAsAdmin: boolean;
-  onSaved: (session: CoachingSessionDetail) => void;
-}) {
-  const editable = session.status === "scheduled" && !viewingAsAdmin;
-
-  return (
-    <EditableTextCard
-      heading="What you want to work on"
-      blurb="Yvette reads this before you meet, so the call can start on the real thing."
-      empty="Nothing written down yet."
-      value={session.agenda}
-      editable={editable}
-      label="Your agenda"
-      onSave={(next) => coachingApi.updateSession(session.id, { agenda: next })}
-      onSaved={onSaved}
-      savedMessage="Your agenda is saved."
-    />
-  );
-}
-
-/* ── Shared notes ───────────────────────────────────────────────────────── */
-
-function NotesCard({
-  session,
-  viewingAsAdmin,
-  onSaved,
-}: {
-  session: CoachingSessionDetail;
-  viewingAsAdmin: boolean;
-  onSaved: (session: CoachingSessionDetail) => void;
-}) {
-  return (
-    <EditableTextCard
-      heading="Shared notes"
-      blurb="A single page you and Yvette both write on — actions, numbers, the wording you landed on. Anything she types here appears for you too."
-      empty="No notes yet. They usually turn up during or just after the call."
-      value={session.sharedNotes}
-      editable={session.status !== "cancelled" && !viewingAsAdmin}
-      label="Shared notes"
-      onSave={(next) => coachingApi.updateSession(session.id, { sharedNotes: next })}
-      onSaved={onSaved}
-      savedMessage="Notes saved."
-    />
-  );
-}
+/* ── Agenda and notes ───────────────────────────────────────────────────── */
 
 /**
- * Both text panels are the same thing: a block of prose the member may edit
- * while the session is live, and read afterwards.
+ * What the member asked for when they booked.
+ *
+ * Read-only here on purpose: the agenda is written on the booking form and the
+ * shared notes are Yvette's to keep during the call. Neither has a member-facing
+ * write route, and an editable box that silently fails to save would be worse
+ * than an honest transcript of what was agreed.
  */
-function EditableTextCard({
+function AgendaCard({ session }: { session: CoachingSession }) {
+  return (
+    <TextCard
+      heading="What you wanted to work on"
+      blurb="Written when you booked, so Yvette can read it before you meet."
+      empty="Nothing was written down for this one."
+      value={session.agenda}
+    />
+  );
+}
+
+function NotesCard({ session }: { session: CoachingSession }) {
+  return (
+    <TextCard
+      heading="Shared notes"
+      blurb="Anything Yvette writes up for you — actions, numbers, the wording you landed on."
+      empty="No notes yet. They usually turn up during or just after the call."
+      value={session.sharedNotes}
+      icon
+    />
+  );
+}
+
+function TextCard({
   heading,
   blurb,
   empty,
   value,
-  editable,
-  label,
-  onSave,
-  onSaved,
-  savedMessage,
+  icon,
 }: {
   heading: string;
   blurb: string;
   empty: string;
   value: string;
-  editable: boolean;
-  label: string;
-  onSave: (value: string) => Promise<CoachingSessionDetail>;
-  onSaved: (session: CoachingSessionDetail) => void;
-  savedMessage: string;
+  icon?: boolean;
 }) {
-  const [draft, setDraft] = useState(value);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
-  const lastFromServer = useRef(value);
-
-  // Anything that returns the whole session — a reschedule, a cancel — replaces
-  // this text under the box. An untouched box adopts the new text; a box with
-  // unsaved edits in it keeps them, because losing typing to a background
-  // refresh is unforgivable.
-  useEffect(() => {
-    if (lastFromServer.current === value) return;
-    setDraft((current) => (current === lastFromServer.current ? value : current));
-    lastFromServer.current = value;
-  }, [value]);
-
-  const dirty = draft.trim() !== value.trim();
-
-  const save = async () => {
-    setSaving(true);
-    setError("");
-    try {
-      onSaved(await onSave(draft.trim()));
-      toast.success(savedMessage);
-    } catch (err) {
-      setError(
-        err instanceof MemberApiError ? err.message : "We could not save that. Please try again.",
-      );
-    } finally {
-      setSaving(false);
-    }
-  };
-
   return (
     <GlassCard spotlight={false} interactive={false} className="p-5 sm:p-6">
-      <h2 className="font-display text-lg text-white">{heading}</h2>
+      <h2 className="flex items-center gap-2 font-display text-lg text-white">
+        {icon && <NotebookPen aria-hidden className="size-4 text-gold" />}
+        {heading}
+      </h2>
       <p className="copy-luxe mt-2 max-w-xl text-sm">{blurb}</p>
-
-      {editable ? (
-        <>
-          <div className="mt-5">
-            <LuxeTextarea
-              label={label}
-              rows={5}
-              maxLength={5000}
-              value={draft}
-              onChange={(event) => setDraft(event.target.value)}
-            />
-          </div>
-          <div aria-live="polite" className="mt-3 min-h-[1.25rem]">
-            {error && (
-              <p role="alert" className="text-sm font-medium text-red-400">
-                {error}
-              </p>
-            )}
-          </div>
-          <LuxeButton
-            type="button"
-            variant="glass"
-            size="sm"
-            disabled={!dirty || saving}
-            onClick={() => void save()}
-          >
-            {saving && <Loader2 aria-hidden className="size-4 animate-spin" />}
-            {saving ? "Saving" : dirty ? "Save" : "Saved"}
-          </LuxeButton>
-        </>
-      ) : (
-        <p className="copy-luxe mt-4 whitespace-pre-wrap text-sm">{value.trim() || empty}</p>
-      )}
+      <p className="copy-luxe mt-4 whitespace-pre-wrap text-sm">{value.trim() || empty}</p>
     </GlassCard>
   );
 }
 
 /* ── Recording and files ────────────────────────────────────────────────── */
 
-function AfterwardsCard({ session }: { session: CoachingSessionDetail }) {
+function AfterwardsCard({ session }: { session: CoachingSession }) {
   return (
     <GlassCard spotlight={false} interactive={false} className="p-5 sm:p-6">
       <h2 className="font-display text-lg text-white">From the call</h2>

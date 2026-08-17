@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { MemberApiError } from "@/lib/memberApi";
-import { coachingApi, type AvailabilitySlot } from "@/lib/coachingApi";
+import { coachingApi, type CoachingSlot } from "@/lib/coachingApi";
 import { SlotPicker } from "@/components/booking/SlotPicker";
 import { addDays } from "@/components/booking/timezone";
 
@@ -9,19 +9,23 @@ export const DAYS_PER_WINDOW = 14;
 
 /**
  * The picker plus the fetching behind it, shared by first-time booking and by
- * rescheduling. Which of `creditId` / `sessionId` is set tells the server whose
- * session length to use; everything else about the two flows is identical.
+ * rescheduling. Both spend the same offer, so both ask the same endpoint; the
+ * only difference is what happens to the answer.
+ *
+ * The calendar the server will re-check at booking time is the one it draws
+ * here, so nothing about which slots exist is decided in the browser.
  */
 export function SlotSearch({
-  creditId,
-  sessionId,
+  offerSlug,
   timezone,
+  horizonDays,
   selected,
   onSelect,
 }: {
-  creditId?: number;
-  sessionId?: number;
+  offerSlug: string;
   timezone: string;
+  /** How far ahead the calendar is open at all; paging stops there. */
+  horizonDays: number;
   selected: string | null;
   onSelect: (startsAt: string) => void;
 }) {
@@ -29,7 +33,7 @@ export function SlotSearch({
   // which would otherwise reshuffle the day strip under their thumb.
   const [anchor] = useState(() => new Date());
   const [offsetDays, setOffsetDays] = useState(0);
-  const [slots, setSlots] = useState<AvailabilitySlot[]>([]);
+  const [slots, setSlots] = useState<CoachingSlot[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -46,9 +50,7 @@ export function SlotSearch({
 
     (async () => {
       try {
-        const window = await coachingApi.availability({
-          creditId,
-          sessionId,
+        const window = await coachingApi.slots(offerSlug, {
           from: from.toISOString(),
           to: to.toISOString(),
         });
@@ -73,11 +75,16 @@ export function SlotSearch({
     };
     // Deliberately not keyed on `timezone`. The slots are instants; changing the
     // zone re-labels them and must not throw away the one already chosen.
-  }, [creditId, sessionId, anchor, offsetDays, rangeStart]);
+  }, [offerSlug, anchor, offsetDays, rangeStart]);
 
   const shift = useCallback((days: number) => {
     setOffsetDays((current) => Math.max(0, current + days));
   }, []);
+
+  // The server clamps anything past the horizon back to an empty range, so
+  // paging further would answer "nothing open" for a reason that has nothing to
+  // do with how busy the coach is.
+  const canGoForward = offsetDays + DAYS_PER_WINDOW < Math.max(horizonDays, DAYS_PER_WINDOW);
 
   return (
     <SlotPicker
@@ -91,6 +98,7 @@ export function SlotSearch({
       daysShown={DAYS_PER_WINDOW}
       onShiftRange={shift}
       canGoBack={offsetDays > 0}
+      canGoForward={canGoForward}
     />
   );
 }

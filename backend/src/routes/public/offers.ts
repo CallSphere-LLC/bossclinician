@@ -35,6 +35,28 @@ type Queryable = Pick<PoolClient, "query"> | typeof pool;
 /** Roughly $1M. Above this a pay-what-you-want figure is a typo or an attack. */
 export const MAX_PWYW_CENTS = 99_999_999;
 
+/**
+ * Money for display, on a page that must render whatever the row holds.
+ *
+ * `formatMoney` goes through `Intl.NumberFormat`, which throws on a currency
+ * code it cannot parse. The offer editor now only accepts a currency from a
+ * known list, so this is the second line rather than the first — but a row
+ * written before that rule, or by hand, would otherwise take the whole sales
+ * page down with a 500 over a three-letter typo.
+ *
+ * The fallback prints the code beside the amount instead of substituting a
+ * currency of our choosing: a page that quietly renders an unknown code as
+ * dollars is worse than one that admits it does not know the symbol.
+ */
+export function formatAmount(cents: number, currency: string): string {
+  const code = currency || "usd";
+  try {
+    return formatMoney(cents, code);
+  } catch {
+    return `${code.toUpperCase()} ${(cents / 100).toFixed(2)}`;
+  }
+}
+
 export interface OfferRow {
   id: number;
   title: string;
@@ -192,6 +214,28 @@ const taxSettingsSchema = z.object({
 });
 
 /**
+ * The address a request body is allowed to price with.
+ *
+ * `address` is optional on the checkout and quote bodies unless the offer asks
+ * for one, and it is the last field a buyer can post that still moves the
+ * total: naming a country with no rule configured drops the order to the
+ * default rate, which on a site that taxes one region and not the rest is a
+ * discount anybody can take. Where the offer does not collect an address there
+ * is nothing to key a rate on, so the configured default stands and the body is
+ * ignored. Where it does, the address is required, stored on the order and
+ * written to `tax_records`, so the figure charged can be answered for later.
+ *
+ * An address the server already holds — the parent order's, on an upsell — is
+ * not a submitted address and does not come through here.
+ */
+export function submittedTaxAddress(
+  offer: OfferRow,
+  submitted?: BillingAddress | null
+): BillingAddress | null {
+  return offer.collect_address ? (submitted ?? null) : null;
+}
+
+/**
  * The tax rate for an order, in basis points.
  *
  * Read from the `tax` settings row and keyed by where the buyer says they are.
@@ -347,10 +391,10 @@ export function totalToJson(total: OrderTotal): Record<string, unknown> {
     totalCents: total.totalCents,
     currency: total.currency,
     formatted: {
-      subtotal: formatMoney(total.subtotalCents, total.currency),
-      discount: formatMoney(total.discountCents, total.currency),
-      tax: formatMoney(total.taxCents, total.currency),
-      total: formatMoney(total.totalCents, total.currency),
+      subtotal: formatAmount(total.subtotalCents, total.currency),
+      discount: formatAmount(total.discountCents, total.currency),
+      tax: formatAmount(total.taxCents, total.currency),
+      total: formatAmount(total.totalCents, total.currency),
     },
   };
 }
@@ -433,7 +477,7 @@ offersRouter.get(
         title: b.title || b.product_title,
         description: b.description,
         amountCents: b.amount_cents,
-        formattedAmount: formatMoney(b.amount_cents, offer.currency || "usd"),
+        formattedAmount: formatAmount(b.amount_cents, offer.currency),
         product: {
           slug: b.product_slug,
           title: b.product_title,
@@ -528,7 +572,7 @@ offersRouter.post(
       else couponError = check.reason;
     }
 
-    const taxRateBps = await resolveTaxRateBps(offer, body.address);
+    const taxRateBps = await resolveTaxRateBps(offer, submittedTaxAddress(offer, body.address));
     const total = computeOrderTotal({
       offer: priced,
       bumps,

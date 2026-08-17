@@ -55,7 +55,12 @@ interface PostCardProps {
   canModerate: boolean;
   /** False for a member who has not confirmed their address yet. */
   canWrite: boolean;
-  onChange: (post: CommunityPost) => void;
+  /**
+   * Applied to whatever the list currently holds for this post, not to the copy
+   * this render closed over — a reaction and a comment can be in flight at the
+   * same moment, and each would otherwise overwrite the other's result.
+   */
+  onChange: (postId: number, update: (post: CommunityPost) => CommunityPost) => void;
   onRemove: (postId: number) => void;
   /** Opens the thread on mount, for a notification that pointed at a comment. */
   defaultOpenComments?: boolean;
@@ -88,7 +93,7 @@ export function PostCard({
         onRemove(post.id);
         toast.success("Hidden from the feed.");
       } else {
-        onChange(result);
+        onChange(post.id, () => result);
         toast.success(MODERATION_TOAST[action]);
       }
     } catch (err) {
@@ -184,7 +189,7 @@ export function PostCard({
           carriesMedia={carriesMedia}
           onCancel={() => setEditing(false)}
           onSaved={(saved) => {
-            onChange(saved);
+            onChange(post.id, () => saved);
             setEditing(false);
           }}
         />
@@ -202,7 +207,7 @@ export function PostCard({
               postId={post.id}
               poll={post.poll}
               locked={post.locked}
-              onChange={(poll) => onChange({ ...post, poll })}
+              onChange={(poll) => onChange(post.id, (current) => ({ ...current, poll }))}
             />
           )}
         </div>
@@ -215,12 +220,12 @@ export function PostCard({
             reactions={post.reactions}
             available={reactionEmoji}
             onChange={(reactions) =>
-              onChange({
-                ...post,
+              onChange(post.id, (current) => ({
+                ...current,
                 reactions,
                 reactionCount: reactions.reduce((sum, r) => sum + r.count, 0),
                 myReactions: reactions.filter((r) => r.mine).map((r) => r.emoji),
-              })
+              }))
             }
           />
 
@@ -250,7 +255,10 @@ export function PostCard({
           locked={post.locked}
           canWrite={canWrite}
           onCountChange={(delta) =>
-            onChange({ ...post, commentCount: Math.max(0, post.commentCount + delta) })
+            onChange(post.id, (current) => ({
+              ...current,
+              commentCount: Math.max(0, current.commentCount + delta),
+            }))
           }
         />
       )}

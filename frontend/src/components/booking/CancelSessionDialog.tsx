@@ -3,7 +3,12 @@ import { AlertTriangle, Loader2, RotateCcw } from "lucide-react";
 import { LuxeButton } from "@/components/luxe/LuxeButton";
 import { LuxeTextarea } from "@/components/luxe/LuxeField";
 import { MemberApiError } from "@/lib/memberApi";
-import { coachingApi, type CancelResult, type CoachingSessionDetail } from "@/lib/coachingApi";
+import {
+  coachingApi,
+  type CancelResult,
+  type CoachingPolicy,
+  type CoachingSession,
+} from "@/lib/coachingApi";
 import { cn } from "@/lib/cn";
 import { LuxeDialog } from "@/components/booking/LuxeDialog";
 import { creditReturnSentence, hoursInWords } from "@/components/booking/policyText";
@@ -22,13 +27,15 @@ export function CancelSessionDialog({
   open,
   onOpenChange,
   session,
+  policy,
   timezone,
   viewingAsAdmin,
   onCancelled,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  session: CoachingSessionDetail;
+  session: CoachingSession;
+  policy: CoachingPolicy;
   timezone: string;
   viewingAsAdmin: boolean;
   onCancelled: (result: CancelResult) => void;
@@ -37,7 +44,7 @@ export function CancelSessionDialog({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
-  const returns = session.cancellation.creditWillReturn;
+  const returns = session.cancelRefundsCredit;
 
   const submit = async () => {
     setSubmitting(true);
@@ -63,9 +70,7 @@ export function CancelSessionDialog({
       open={open}
       onOpenChange={onOpenChange}
       title="Cancel this call?"
-      description={
-        session.scheduledAt ? formatFullDateTime(session.scheduledAt, timezone) : undefined
-      }
+      description={session.startsAt ? formatFullDateTime(session.startsAt, timezone) : undefined}
       footer={
         <>
           <LuxeButton
@@ -114,13 +119,13 @@ export function CancelSessionDialog({
           </p>
           <p className="mt-1.5 text-sm leading-relaxed text-orchid">
             {returns
-              ? `You are cancelling more than ${hoursInWords(session.policy.creditReturnHours)} ahead, so you can book it again whenever suits you.`
-              : `The call starts inside ${hoursInWords(session.policy.creditReturnHours)}, which is too late for the session to return to your package.`}
+              ? `You are cancelling more than ${hoursInWords(policy.cancellationWindowHours)} ahead, so you can book it again whenever suits you.`
+              : `The call starts inside ${hoursInWords(policy.cancellationWindowHours)}, which is too late for the session to return to your package.`}
           </p>
         </div>
       </div>
 
-      <p className="copy-luxe mt-4 text-sm">{creditReturnSentence(session.policy)}</p>
+      <p className="copy-luxe mt-4 text-sm">{creditReturnSentence(policy)}</p>
 
       <div className="mt-5">
         <LuxeTextarea

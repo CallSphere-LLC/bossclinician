@@ -12,6 +12,8 @@ import {
   disputeAlert,
   paymentFailedDunning,
   paymentPlanCompleted,
+  paymentPlanDefaulted,
+  paymentPlanDefaultedAlert,
   paymentPlanOverchargeAlert,
   purchaseReceipt,
   type ReceiptLine,
@@ -164,39 +166,82 @@ function log(message: string): void {
 
 /* ----------------------------------------------------------- the event log */
 
-type EventClaim = { claimed: true; attempts: number } | { claimed: false };
+type EventClaim =
+  | { claimed: true; attempts: number }
+  /** `inFlight` distinguishes work another delivery is doing from work that is done. */
+  | { claimed: false; inFlight: boolean };
 
 /**
- * Records the raw event and claims the right to process it.
+ * How long one delivery may hold an event before another may take it over.
  *
- * **This single statement is the idempotency backbone of the whole file.**
- * `stripe_events.id` is the primary key, so a redelivery of an event already
- * carried to completion cannot insert and cannot pass the DO UPDATE's WHERE —
- * no row comes back, the caller acknowledges 200, and nothing downstream runs a
- * second time. Every "did this already happen?" question below ultimately rests
- * on this.
+ * The claim has to be reclaimable at all, or a process killed mid-handler
+ * wedges its event until somebody notices by hand. The window is far longer
+ * than any handler here takes and far shorter than the three days Stripe keeps
+ * retrying, so the takeover is done by an ordinary retry.
+ */
+const CLAIM_TIMEOUT_SECONDS = 15 * 60;
+
+/**
+ * Records the raw event and claims the exclusive right to process it.
+ *
+ * **This is the idempotency backbone of the whole file.** `stripe_events.id` is
+ * the primary key, so a redelivery of an event already carried to completion
+ * cannot insert and cannot pass the DO UPDATE's WHERE — no row comes back, the
+ * caller acknowledges 200, and nothing downstream runs a second time. Every
+ * "did this already happen?" question below ultimately rests on this.
+ *
+ * The claim is a state the handler holds, not a moment the statement passes
+ * through, and the difference is the whole point. A row marked 'received' and
+ * committed releases its lock immediately, which claims nothing: Stripe retries
+ * a delivery it has had no answer to in about ten seconds, the handler is still
+ * running, and the retry finds a row it is allowed to re-claim. Two handlers on
+ * one event is not a theoretical race — it is the ordinary shape of a timeout
+ * retry — and it doubles every write whose guard is weaker than a unique key.
+ * 'processing' is therefore held for as long as the handler runs; only
+ * `markProcessed` and `markFailed` give it back, and only a claim older than
+ * `CLAIM_TIMEOUT_SECONDS` (the process died holding it) can be taken.
  *
  * The conflict is DO UPDATE rather than DO NOTHING for one specific reason: an
  * attempt that FAILED returned 500 precisely so Stripe would retry, and DO
- * NOTHING would make that retry look like a duplicate and drop it. Only
- * 'processed' and 'ignored' are final; 'received' (a delivery that crashed
- * mid-flight) and 'failed' are re-claimable. Row-level locking on the UPDATE is
- * also what serialises two deliveries of the same event arriving together.
+ * NOTHING would make that retry look like a duplicate and drop it. 'processed'
+ * and 'ignored' are final, 'failed' is re-claimable at once, and a stale
+ * 'processing' — or a 'received' row, one stored without a claim, whose age is
+ * taken from `received_at` — is re-claimable once its holder has timed out.
  */
 async function claimEvent(event: Stripe.Event): Promise<EventClaim> {
   const res = await pool.query<{ attempts: number }>(
-    `INSERT INTO stripe_events (id, type, api_version, payload)
-     VALUES ($1, $2, $3, $4)
+    `INSERT INTO stripe_events (id, type, api_version, payload, status, claimed_at)
+     VALUES ($1, $2, $3, $4, 'processing', now())
      ON CONFLICT (id) DO UPDATE
-       SET status = 'received'
-       WHERE stripe_events.status IN ('received', 'failed')
+       SET status = 'processing', claimed_at = now()
+       WHERE stripe_events.status = 'failed'
+          OR (stripe_events.status IN ('processing', 'received')
+              AND COALESCE(stripe_events.claimed_at, stripe_events.received_at)
+                  < now() - $5::int * INTERVAL '1 second')
      RETURNING attempts`,
-    [event.id, event.type, event.api_version ?? "", JSON.stringify(event)]
+    [
+      event.id,
+      event.type,
+      event.api_version ?? "",
+      JSON.stringify(event),
+      CLAIM_TIMEOUT_SECONDS,
+    ]
   );
 
   const row = res.rows[0];
-  if (!row) return { claimed: false };
-  return { claimed: true, attempts: row.attempts };
+  if (row) return { claimed: true, attempts: row.attempts };
+
+  // Why the claim was refused decides what Stripe is told, so it is read back
+  // rather than assumed. Finished work is worth a 200 — that is what stops the
+  // retries — but a delivery still in flight has no outcome yet, and answering
+  // 200 on its behalf would promise a result this request has not seen and
+  // cannot produce if the other one dies.
+  const existing = await pool.query<{ status: string }>(
+    `SELECT status FROM stripe_events WHERE id = $1`,
+    [event.id]
+  );
+  const status = existing.rows[0]?.status ?? "";
+  return { claimed: false, inFlight: status === "processing" || status === "received" };
 }
 
 async function markProcessed(eventId: string, handled: boolean): Promise<void> {
@@ -446,6 +491,14 @@ async function enrichTransaction(paymentIntentId: string, facts: PaymentFacts): 
  * `transactions.stripe_payment_intent_id` is UNIQUE — a failure row holding that
  * id would make `fulfillPayment`'s own insert a no-op and leave the eventual
  * success recorded as a failure, with the revenue reports built on top of it.
+ *
+ * Not every decline has a charge, though: one refused before Stripe creates it —
+ * a failed authentication, a card the network rejects outright — carries a NULL,
+ * and `=` against NULL is unknown, so a charge-id guard silently matches nothing
+ * and every replay writes another row into the money ledger. `IS NOT DISTINCT
+ * FROM` makes the comparison hold for NULL too, and the attempt is then
+ * identified by the intent's own creation instant, which is fixed for the life
+ * of the PaymentIntent and therefore identical on every delivery of it.
  */
 async function recordFailedAttempt(input: {
   orderId: number | null;
@@ -462,7 +515,16 @@ async function recordFailedAttempt(input: {
        (order_id, member_id, email, kind, status, amount_cents,
         currency, stripe_charge_id, failure_reason, occurred_at)
      SELECT $1, $2, $3, 'payment', 'failed', $4, $5, $6, $7, $8
-      WHERE NOT EXISTS (SELECT 1 FROM transactions t WHERE t.stripe_charge_id = $6)`,
+      WHERE NOT EXISTS (
+              SELECT 1 FROM transactions t
+               WHERE t.stripe_charge_id IS NOT DISTINCT FROM $6::text
+                 AND (t.stripe_charge_id IS NOT NULL
+                      OR (t.kind = 'payment'
+                          AND t.status = 'failed'
+                          AND t.order_id IS NOT DISTINCT FROM $1::int
+                          AND t.amount_cents = $4::int
+                          AND t.occurred_at = $8::timestamptz))
+            )`,
     [
       input.orderId,
       input.memberId,
@@ -791,6 +853,13 @@ async function localSubscriptionId(stripeSubscriptionId: string): Promise<number
  * event-level guard for payment plans, because advancing an installment counter
  * is the one operation here that is not naturally idempotent — a second run
  * would consume the customer's next payment before they had made it.
+ *
+ * "Not paid yet" is the whole of that key for a payment, because an invoice is
+ * paid once. It is not the whole of it for a failure: an invoice can genuinely
+ * be declined several times, so status alone cannot tell the second decline
+ * apart from the second delivery of the first, and the caller sends a dunning
+ * email on whatever it is told is new. Stripe's attempt number is what separates
+ * them, and a failure therefore has to be newer than the one already recorded.
  */
 async function upsertInvoice(input: {
   stripeInvoiceId: string;
@@ -805,6 +874,8 @@ async function upsertInvoice(input: {
   taxCents: number;
   currency: string;
   status: "paid" | "failed";
+  /** Stripe's count of payment attempts on this invoice; the failure key. */
+  attemptCount: number;
   hostedInvoiceUrl: string;
   pdfUrl: string;
   periodStart: Date | null;
@@ -815,8 +886,8 @@ async function upsertInvoice(input: {
     `INSERT INTO invoices
        (stripe_invoice_id, subscription_id, payment_plan_id, member_id, order_id, number,
         email, amount_due_cents, amount_paid_cents, tax_cents, currency, status,
-        hosted_invoice_url, pdf_url, period_start, period_end, paid_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+        hosted_invoice_url, pdf_url, period_start, period_end, paid_at, attempt_count)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
      ON CONFLICT (stripe_invoice_id) DO UPDATE SET
        subscription_id   = COALESCE(EXCLUDED.subscription_id, invoices.subscription_id),
        payment_plan_id   = COALESCE(EXCLUDED.payment_plan_id, invoices.payment_plan_id),
@@ -833,8 +904,10 @@ async function upsertInvoice(input: {
        pdf_url           = EXCLUDED.pdf_url,
        period_start      = COALESCE(EXCLUDED.period_start, invoices.period_start),
        period_end        = COALESCE(EXCLUDED.period_end, invoices.period_end),
-       paid_at           = COALESCE(EXCLUDED.paid_at, invoices.paid_at)
+       paid_at           = COALESCE(EXCLUDED.paid_at, invoices.paid_at),
+       attempt_count     = GREATEST(invoices.attempt_count, EXCLUDED.attempt_count)
      WHERE invoices.status <> 'paid'
+       AND (EXCLUDED.status <> 'failed' OR invoices.attempt_count < EXCLUDED.attempt_count)
      RETURNING id`,
     [
       input.stripeInvoiceId,
@@ -854,6 +927,7 @@ async function upsertInvoice(input: {
       input.periodStart,
       input.periodEnd,
       input.paidAt,
+      input.attemptCount,
     ]
   );
   return res.rows.length > 0;
@@ -910,18 +984,80 @@ async function firstTransactionForOrder(orderId: number): Promise<number | null>
 }
 
 /**
- * Sets up the installment schedule after a payment plan's first charge clears.
+ * What one charge of a payment plan actually costs this customer.
+ *
+ * `offers.amount_cents` is the list price of one installment, and it is the
+ * wrong figure the moment a coupon is applied: the card is charged the
+ * discounted amount, so a schedule built from the list price tells a customer on
+ * 3 x $1,250 with 20% off that they still owe $2,500 when they owe $2,000, and
+ * later emails them that they paid $3,750 when they paid $3,000. The order is
+ * where the discount was actually worked out, so the schedule follows the order.
+ *
+ * Bumps and tax are excluded deliberately. A bump is a one-off that rides along
+ * on the first invoice and is never charged again, so folding it into the
+ * per-installment figure would inflate every remaining payment.
+ *
+ * The two figures differ only for a coupon that discounts a single charge:
+ * Stripe applies it once, so the opening installment is discounted and the rest
+ * are billed in full.
+ */
+async function planInstallmentPricing(
+  order: OrderRow,
+  listCents: number
+): Promise<{ recurringCents: number; firstCents: number }> {
+  const res = await pool.query<{ offer_cents: number; coupon_duration: string | null }>(
+    `SELECT COALESCE((SELECT SUM(i.amount_cents)::int
+                        FROM order_items i
+                       WHERE i.order_id = o.id AND i.kind = 'offer'), 0) AS offer_cents,
+            c.duration AS coupon_duration
+       FROM orders o
+       LEFT JOIN coupons c ON c.id = o.coupon_id
+      WHERE o.id = $1`,
+    [order.id]
+  );
+
+  const row = res.rows[0];
+  // The legacy course path writes no order_items, so the offer's own price is
+  // the only statement of what the recurring line costs.
+  const offerCents = row && row.offer_cents > 0 ? row.offer_cents : listCents;
+
+  // The coupon came off the whole order; the offer line's share of it is the
+  // part that comes off this charge.
+  const share =
+    order.subtotal_cents > 0
+      ? Math.min(offerCents, Math.round((order.discount_cents * offerCents) / order.subtotal_cents))
+      : 0;
+  const firstCents = Math.max(0, offerCents - share);
+
+  return {
+    firstCents,
+    recurringCents: row?.coupon_duration === "forever" ? firstCents : offerCents,
+  };
+}
+
+/**
+ * Sets up the installment schedule when a payment plan's opening invoice settles.
  *
  * The plan's shape is read from the offer rather than from the event's metadata:
  * metadata is a string round-tripped through a third party, and `offers` is where
  * "3 x $1,250" is actually defined. Metadata only stands in if the offer has
- * since been deleted.
+ * since been deleted. The prices come from the order, which is the only place
+ * that knows what this customer was charged.
  */
 async function startPaymentPlan(input: {
   order: OrderRow;
   meta: OfferMetadata;
+  /**
+   * The member the plan belongs to, taken from the fulfilment that just ran
+   * rather than from the order as it was read: a guest checkout has no member
+   * until the first payment creates one, and a plan with a null member_id is
+   * invisible on the billing page and untouchable when the plan defaults.
+   */
+  memberId: number | null;
   stripeSubscriptionId: string;
   stripeCustomerId: string | null;
+  /** What the opening invoice collected. Zero means no installment was paid. */
+  collectedCents: number;
   startAt: Date;
 }): Promise<number | null> {
   const offerId = input.order.offer_id ?? input.meta.offerId ?? null;
@@ -941,20 +1077,24 @@ async function startPaymentPlan(input: {
   const offer = offerRes.rows[0];
 
   const installmentCount = offer?.installment_count ?? input.meta.installmentCount;
-  const installmentCents = offer?.amount_cents ?? input.meta.installmentCents;
+  const listCents = offer?.amount_cents ?? input.meta.installmentCents;
   if (installmentCount === undefined || installmentCount === null) {
     log(`offer ${offerId} has no installment_count; cannot build a plan schedule`);
     return null;
   }
-  if (installmentCents === undefined || installmentCents === null) return null;
+  if (listCents === undefined || listCents === null) return null;
+
+  const pricing = await planInstallmentPricing(input.order, listCents);
 
   return createPaymentPlan({
     orderId: input.order.id,
     offerId,
-    memberId: input.order.member_id,
+    memberId: input.memberId ?? input.order.member_id,
     email: input.order.email,
-    installmentCents,
+    installmentCents: pricing.recurringCents,
+    firstInstallmentCents: pricing.firstCents,
     installmentCount,
+    firstInstallmentPaid: input.collectedCents > 0,
     interval: offer?.interval ?? "month",
     intervalCount: offer?.interval_count ?? 1,
     currency: offer?.currency ?? input.order.currency,
@@ -1088,11 +1228,31 @@ async function advancePaymentPlan(input: {
         buyerName: order?.billing_name ?? "",
         description: order ? describe(order) : "your payment plan",
         installmentCount: completedPlan.installment_count,
-        totalPaidCents: completedPlan.installment_cents * completedPlan.installment_count,
+        totalPaidCents: await planPaidToDate(completedPlan.id),
         currency: completedPlan.currency,
       }),
     });
   }
+}
+
+/**
+ * What a plan has actually taken from the customer.
+ *
+ * Summed from the installments rather than multiplied out of
+ * `installment_cents`, which is the shape of the contract and not a record of
+ * the money: a coupon that discounted the opening charge, or the rounding
+ * remainder the schedule puts on the final one, both make the multiplication
+ * disagree with the card statement. Telling somebody they have paid $3,750 when
+ * they paid $3,000 is the kind of receipt that starts a chargeback.
+ */
+async function planPaidToDate(planId: number): Promise<number> {
+  const res = await pool.query<{ cents: number }>(
+    `SELECT COALESCE(SUM(amount_cents), 0)::int AS cents
+       FROM payment_plan_installments
+      WHERE payment_plan_id = $1 AND status = 'paid'`,
+    [planId]
+  );
+  return res.rows[0]?.cents ?? 0;
 }
 
 /**
@@ -1102,8 +1262,14 @@ async function advancePaymentPlan(input: {
  * was bought — but it leaves `subscription_id` NULL, and that column is the only
  * precise handle on "the access this subscription is paying for". Without it,
  * cancelling would have to revoke by offer, which would also take back a
- * separate outright purchase of the same thing. Granting and this link must stay
- * together: revocation reads exactly what this writes.
+ * separate outright purchase of the same thing. Revocation reads exactly what
+ * this writes.
+ *
+ * It takes two events to write it — the one that creates the grant and the one
+ * that creates the `subscriptions` row — and Stripe guarantees nothing about
+ * which arrives first, so both call this and the second one to arrive completes
+ * the link. Matching only NULLs is what makes that safe to run twice, and what
+ * keeps it off a grant a later outright purchase has since taken over.
  */
 async function linkGrantsToSubscription(orderId: number, subscriptionId: number): Promise<void> {
   await pool.query(
@@ -1149,6 +1315,7 @@ async function handleInvoicePaid(invoice: Stripe.Invoice): Promise<void> {
     taxCents: (invoice.total_taxes ?? []).reduce((sum, tax) => sum + tax.amount, 0),
     currency: invoice.currency,
     status: "paid",
+    attemptCount: invoice.attempt_count || 1,
     hostedInvoiceUrl: invoice.hosted_invoice_url ?? "",
     pdfUrl: invoice.invoice_pdf ?? "",
     periodStart: toDate(invoice.period_start),
@@ -1175,23 +1342,36 @@ async function handleInvoicePaid(invoice: Stripe.Invoice): Promise<void> {
     );
   }
 
-  // The first charge is identified by the order still being unpaid rather than
-  // by billing_reason: if the opening invoice were ever missed, the next one
-  // must still fulfil the purchase rather than treat it as a renewal.
-  const isFirstCharge = order !== null && order.status !== "paid";
+  // Money that actually moved. Stripe marks a $0 invoice `paid` — a trial's
+  // opening invoice is exactly that — so `paid` and `charged` are separate
+  // questions, and everything that credits a customer for a payment keys on
+  // this one.
+  const collectedCents = invoice.amount_paid;
 
-  if (isFirstCharge && order !== null) {
+  // Delivery is the other question, and it is answered by the order still being
+  // unpaid rather than by billing_reason or by the amount. Two reasons: if the
+  // opening invoice were ever missed, the next one must still fulfil the
+  // purchase rather than treat it as a renewal; and a trial collects nothing and
+  // still has to hand over the product, because for the length of the trial the
+  // product IS what the customer signed up for.
+  const opensTheOrder = order !== null && order.status !== "paid";
+
+  if (opensTheOrder && order !== null) {
     const result = await settleOrderPayment(order, {
       paymentIntentId,
       chargeId: null,
-      amountCents: invoice.amount_paid,
+      amountCents: collectedCents,
       currency: invoice.currency,
       email: invoice.customer_email ?? order.email,
       stripeCustomerId: idOf(invoice.customer),
       occurredAt: paidAt,
     });
 
-    if (subscriptionId !== null && result.memberId !== null) {
+    // Whether THIS delivery was the one that granted the access is beside the
+    // point — charge.succeeded may have got there first and reported nothing
+    // done. The link is owed by the grants that exist, so it is written whenever
+    // the subscription is known and skipped only when it is not.
+    if (subscriptionId !== null) {
       await linkGrantsToSubscription(order.id, subscriptionId);
     }
 
@@ -1199,8 +1379,10 @@ async function handleInvoicePaid(invoice: Stripe.Invoice): Promise<void> {
       const planId = await startPaymentPlan({
         order,
         meta,
+        memberId: result.memberId,
         stripeSubscriptionId,
         stripeCustomerId: idOf(invoice.customer),
+        collectedCents,
         startAt: paidAt,
       });
       if (planId !== null) {
@@ -1208,7 +1390,13 @@ async function handleInvoicePaid(invoice: Stripe.Invoice): Promise<void> {
           invoice.id,
           planId,
         ]);
-        log(`plan ${planId} opened for order ${order.id}: installment 1 of the schedule paid`);
+        log(
+          `plan ${planId} opened for order ${order.id}${
+            collectedCents > 0
+              ? ": installment 1 of the schedule paid"
+              : " with nothing collected: the schedule starts at installment 1, unpaid"
+          }`
+        );
       }
     }
     return;
@@ -1221,17 +1409,24 @@ async function handleInvoicePaid(invoice: Stripe.Invoice): Promise<void> {
     subscriptionId,
     memberId: order?.member_id ?? plan?.member_id ?? null,
     email: invoice.customer_email ?? order?.email ?? plan?.email ?? "",
-    amountCents: invoice.amount_paid,
+    amountCents: collectedCents,
     currency: invoice.currency,
     paymentIntentId,
     occurredAt: paidAt,
   });
 
   if (isPlan && stripeSubscriptionId) {
+    // An installment is a payment, so only money advances the counter. A $0
+    // invoice that consumed one would leave a three-payment contract collecting
+    // two before Stripe stopped billing.
+    if (collectedCents <= 0) {
+      log(`invoice ${invoice.id} collected nothing; the plan's counter stays put`);
+      return;
+    }
     await advancePaymentPlan({
       stripeSubscriptionId,
       transactionId,
-      amountCents: invoice.amount_paid,
+      amountCents: collectedCents,
       currency: invoice.currency,
       paidAt,
     });
@@ -1268,6 +1463,13 @@ async function handleInvoicePaymentFailed(invoice: Stripe.Invoice): Promise<void
   const subscriptionId =
     !isPlan && stripeSubscriptionId ? await localSubscriptionId(stripeSubscriptionId) : null;
 
+  // Which decline this is. Stripe is the authority on how many times it has
+  // tried, and every count here is raised to that number rather than
+  // incremented: `+ 1` is not idempotent, and a handler that throws after the
+  // increment returns 500, is retried, and counts one decline twice —
+  // inflating the number that decides when somebody loses access.
+  let attempt = invoice.attempt_count || 1;
+
   const claimed = await upsertInvoice({
     stripeInvoiceId: invoice.id,
     subscriptionId,
@@ -1281,6 +1483,7 @@ async function handleInvoicePaymentFailed(invoice: Stripe.Invoice): Promise<void
     taxCents: (invoice.total_taxes ?? []).reduce((sum, tax) => sum + tax.amount, 0),
     currency: invoice.currency,
     status: "failed",
+    attemptCount: attempt,
     hostedInvoiceUrl: invoice.hosted_invoice_url ?? "",
     pdfUrl: invoice.invoice_pdf ?? "",
     periodStart: toDate(invoice.period_start),
@@ -1288,22 +1491,17 @@ async function handleInvoicePaymentFailed(invoice: Stripe.Invoice): Promise<void
     paidAt: null,
   });
 
-  // The invoice is already settled. Stripe does not guarantee delivery order, so
-  // a failed first attempt can arrive after the retry that succeeded — and
-  // "your payment didn't go through" is the worst possible email to send
-  // somebody whose payment went through.
+  // This decline has already been dealt with — the invoice has since been paid,
+  // or this attempt is one the invoice already records. Stripe does not
+  // guarantee delivery order, so a first attempt can arrive after the retry that
+  // succeeded, and "your payment didn't go through" is the worst possible email
+  // to send somebody whose payment went through; a repeat of an attempt already
+  // dunned for is the second-worst.
   if (!claimed) {
-    log(`invoice ${invoice.id} failure ignored: the invoice is already paid`);
+    log(`invoice ${invoice.id} failure ignored: attempt ${attempt} is already recorded`);
     return;
   }
 
-  // The counter is raised to Stripe's own attempt count rather than incremented
-  // by one. `+ 1` is not idempotent: a handler that throws after the increment
-  // returns 500, Stripe retries, and the same single decline gets counted twice
-  // — inflating the number that decides when somebody loses access. GREATEST
-  // against `attempt_count` converges on the truth no matter how many times this
-  // runs, and Stripe is the authority on how many times it has tried.
-  let attempt = invoice.attempt_count || 1;
   if (subscriptionId !== null) {
     const bumped = await pool.query<{ failed_payment_count: number }>(
       `UPDATE subscriptions
@@ -1372,19 +1570,183 @@ async function handleInvoicePaymentFailed(invoice: Stripe.Invoice): Promise<void
  */
 const ACCESS_ENDING_STATUSES = new Set(["canceled", "unpaid", "incomplete_expired"]);
 
+/** Recorded on the grants a defaulted plan takes back, so the reason survives. */
+const PLAN_DEFAULT_REASON = "payment plan defaulted";
+
+/**
+ * What becomes of a payment plan's access when its Stripe subscription ends.
+ *
+ * Every plan's subscription ends — that is what `cancel_at` is for — so "the
+ * subscription is over" says nothing on its own about whether the customer paid.
+ * Two opposite outcomes arrive as the same event, and reading them the wrong way
+ * round either robs a paying customer or gives the product away:
+ *
+ *  - **COMPLETED — nothing outstanding.** The subscription was cancelled
+ *    *because* the customer finished paying. A plan is a purchase in
+ *    installments, not a rental: "3 x $1,250" buys the same $3,750 course as one
+ *    payment does, and what they bought is theirs. Access is kept.
+ *  - **DEFAULTED — installments still owed.** Dunning ran out, or the
+ *    subscription was cancelled part-way through. The member is holding a $3,750
+ *    product having paid $1,250, and unless this fires nothing in the system
+ *    ever notices. Access goes back, the plan is marked cancelled, and both the
+ *    customer and the admin are told.
+ *
+ * Outstanding *money* is the test rather than the installment counter, because
+ * the two can disagree: a plan discounted to nothing bills $0 invoices, which
+ * never advance the counter and are not owed either.
+ *
+ * What goes back is what the offer granted. A bump bought on the same order was
+ * paid for outright on the first invoice and is granted without an offer, so it
+ * stays — the customer owes nothing on it.
+ *
+ * The plan row is locked for the decision, so a final invoice.paid arriving at
+ * the same moment either commits first — and this reads a settled plan — or
+ * waits behind it.
+ */
+async function endPaymentPlanAccess(input: {
+  stripeSubscriptionId: string;
+  reason: string;
+}): Promise<void> {
+  const client: PoolClient = await pool.connect();
+  let defaulted: { plan: PlanRow; outstandingCents: number; revokedCount: number } | null = null;
+
+  try {
+    await client.query("BEGIN");
+
+    const planRes = await client.query<PlanRow>(
+      `SELECT ${PLAN_COLUMNS} FROM payment_plans
+        WHERE stripe_subscription_id = $1
+        FOR UPDATE`,
+      [input.stripeSubscriptionId]
+    );
+    const plan = planRes.rows[0];
+    if (!plan) {
+      // The opening charge never cleared, so no plan was ever opened and no
+      // access was ever granted against one.
+      await client.query("ROLLBACK");
+      return;
+    }
+
+    const owed = await client.query<{ cents: number }>(
+      `SELECT COALESCE(SUM(amount_cents), 0)::int AS cents
+         FROM payment_plan_installments
+        WHERE payment_plan_id = $1 AND status <> 'paid'`,
+      [plan.id]
+    );
+    const outstandingCents = owed.rows[0]?.cents ?? 0;
+
+    if (outstandingCents <= 0) {
+      await client.query("ROLLBACK");
+      log(
+        `plan ${plan.id} ended paid up (${plan.installments_paid} of ` +
+          `${plan.installment_count} installments); access kept`
+      );
+      return;
+    }
+
+    const marked = await client.query<{ id: number }>(
+      `UPDATE payment_plans
+          SET status = 'canceled',
+              canceled_at = COALESCE(canceled_at, now()),
+              cancel_reason = $2,
+              next_charge_at = NULL,
+              updated_at = now()
+        WHERE id = $1 AND status <> 'canceled'
+        RETURNING id`,
+      [plan.id, truncate(input.reason, 500)]
+    );
+    if (!marked.rows[0]) {
+      // A second delivery of the same ending; the first one took it back.
+      await client.query("ROLLBACK");
+      return;
+    }
+
+    // Charges that will never be attempted now the subscription is gone. Left
+    // 'scheduled', they would keep the member's billing page promising a next
+    // payment date on a plan that is over.
+    await client.query(
+      `UPDATE payment_plan_installments
+          SET status = 'skipped'
+        WHERE payment_plan_id = $1 AND status IN ('scheduled', 'failed')`,
+      [plan.id]
+    );
+
+    let revokedCount = 0;
+    if (plan.member_id !== null && plan.offer_id !== null) {
+      revokedCount = await revokeOfferAccess({
+        memberId: plan.member_id,
+        offerId: plan.offer_id,
+        reason: PLAN_DEFAULT_REASON,
+        client,
+      });
+    }
+
+    await client.query("COMMIT");
+    defaulted = { plan, outstandingCents, revokedCount };
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+
+  if (defaulted === null) return;
+
+  const { plan, outstandingCents, revokedCount } = defaulted;
+  log(
+    `plan ${plan.id} defaulted: ${plan.installments_paid} of ${plan.installment_count} ` +
+      `installments paid, ${outstandingCents} outstanding — revoked ${revokedCount} grant(s)`
+  );
+
+  const order = plan.order_id ? await loadOrderById(plan.order_id) : null;
+  const description = order ? describe(order) : "your purchase";
+
+  // Fire-and-forget, as everywhere else here: the entitlement decision is
+  // committed, and an SMTP outage must not turn it into a retried webhook that
+  // starts the whole sequence again.
+  if (plan.email) {
+    void sendMail({
+      to: plan.email,
+      ...paymentPlanDefaulted({
+        buyerName: order?.billing_name ?? "",
+        description,
+        installmentsPaid: plan.installments_paid,
+        installmentCount: plan.installment_count,
+        outstandingCents,
+        currency: plan.currency,
+      }),
+    });
+  }
+
+  if (env.notifyEmail) {
+    void sendMail({
+      to: env.notifyEmail,
+      ...paymentPlanDefaultedAlert({
+        buyerEmail: plan.email,
+        description,
+        installmentsPaid: plan.installments_paid,
+        installmentCount: plan.installment_count,
+        outstandingCents,
+        currency: plan.currency,
+        revokedCount,
+        stripeSubscriptionId: input.stripeSubscriptionId,
+      }),
+    });
+  }
+}
+
 /**
  * Ends the access a subscription was paying for, honouring the grace period.
  *
- * Two things this deliberately does not do:
+ * Only ever reached for a real subscription: `handleSubscriptionChange` sends
+ * payment plans to `endPaymentPlanAccess` instead, because "the subscription
+ * ended" means the opposite thing for something that was bought rather than
+ * rented.
  *
- *  - **It never touches a payment plan.** A plan is bought, not rented: the
- *    subscription behind "3 x $1,250" is cancelled by design the moment the
- *    third charge lands, and revoking there would take a course away from
- *    somebody who has just finished paying for it in full.
- *  - **It only revokes grants this subscription created.** The `order_id` guard
- *    is the subtle half: `grantAccess` overwrites `order_id` when the same
- *    product is later bought outright, so a grant pointing at a different order
- *    is access the member paid for separately and must keep.
+ * It only revokes grants this subscription created, which is the subtle half:
+ * `grantAccess` overwrites `order_id` when the same product is later bought
+ * outright, so a grant pointing at a different order is access the member paid
+ * for separately and must keep.
  */
 async function endSubscriptionAccess(input: {
   stripeSubscriptionId: string;
@@ -1393,11 +1755,6 @@ async function endSubscriptionAccess(input: {
   periodEnd: Date | null;
   reason: string;
 }): Promise<void> {
-  const plan = await loadPlan(input.stripeSubscriptionId);
-  if (plan !== null) {
-    log(`subscription ${input.stripeSubscriptionId} is payment plan ${plan.id}; access kept`);
-    return;
-  }
   if (input.localSubscriptionId === null) return;
 
   const { cancelGraceDays } = await billingSettings();
@@ -1456,12 +1813,11 @@ async function handleSubscriptionChange(
   // arrives before the payment_plans row exists.
   if (meta.pricingType === "payment_plan" || (await loadPlan(sub.id)) !== null) {
     if (deleted || ACCESS_ENDING_STATUSES.has(sub.status)) {
-      await endSubscriptionAccess({
+      await endPaymentPlanAccess({
         stripeSubscriptionId: sub.id,
-        localSubscriptionId: null,
-        orderId: meta.orderId ?? null,
-        periodEnd: null,
-        reason: "payment plan ended",
+        reason: deleted
+          ? "the plan's subscription was canceled"
+          : `the plan's subscription became ${sub.status}`,
       });
     }
     return;
@@ -1533,6 +1889,17 @@ async function handleSubscriptionChange(
   const subscriptionId = upserted.rows[0]?.id ?? null;
   log(`subscription ${sub.id} mirrored as ${status}`);
 
+  // This row is half of the link between a subscription and the access it pays
+  // for, and it is the half that may arrive second: invoice.paid grants the
+  // access and can only link it if this row already exists. Completing the link
+  // from whichever side lands last is what makes the outcome independent of a
+  // delivery order Stripe does not promise — and it is done before the ending
+  // below, because revocation matches on `subscription_id` and a grant left
+  // unlinked is a membership that is never taken back.
+  if (subscriptionId !== null && order !== null) {
+    await linkGrantsToSubscription(order.id, subscriptionId);
+  }
+
   // cancel_at_period_end is not an ending: the customer keeps everything until
   // the period actually runs out, and Stripe sends deleted when it does.
   if (deleted || ACCESS_ENDING_STATUSES.has(status)) {
@@ -1568,6 +1935,22 @@ async function loadTransactionForCharge(
   return res.rows[0] ?? null;
 }
 
+/**
+ * The identity of a refund Stripe told us about without itemising it.
+ *
+ * `refunds.stripe_refund_id` is UNIQUE, and that uniqueness is the only thing
+ * standing between one refund and its money being added to `refunded_cents`
+ * twice — which flips a partially refunded order to 'refunded' and takes back
+ * access the customer still owns. A NULL cannot do that job: `ON CONFLICT` never
+ * fires on one, so every delivery writes another row. The charge plus its
+ * running refunded total is the identity Stripe would have supplied: the same on
+ * every delivery of the same state, and different the moment a further refund
+ * moves the total, which is then recorded on its own.
+ */
+function reconciledRefundKey(charge: Stripe.Charge): string {
+  return `${charge.id}:refunded:${charge.amount_refunded}`;
+}
+
 async function handleChargeRefunded(charge: Stripe.Charge): Promise<void> {
   const paymentIntentId = idOf(charge.payment_intent);
   const transaction = await loadTransactionForCharge(paymentIntentId, charge.id);
@@ -1577,9 +1960,15 @@ async function handleChargeRefunded(charge: Stripe.Charge): Promise<void> {
     return;
   }
 
-  const fullyRefunded = charge.amount_refunded >= charge.amount;
+  // This charge and the order it belongs to are different questions. A charge is
+  // one installment of a payment plan or one month of a subscription, so a
+  // charge refunded in full says nothing about whether the order has been made
+  // whole — `recordRefund` weighs each refund against everything the order
+  // collected, and it is that comparison, not this one, that decides access.
+  const chargeFullyRefunded = charge.amount_refunded >= charge.amount;
   const { revokeAccessOnFullRefund } = await billingSettings();
-  const revoke = fullyRefunded && revokeAccessOnFullRefund;
+  let orderFullyRefunded = false;
+  let revokedCount = 0;
 
   // Stripe re-sends the whole charge with every refund attached, so each Stripe
   // refund id is recorded on its own and `recordRefund`'s unique guard makes a
@@ -1587,16 +1976,18 @@ async function handleChargeRefunded(charge: Stripe.Charge): Promise<void> {
   // double-count the first refund on the second event.
   const refunds = charge.refunds?.data ?? [];
   for (const refund of refunds) {
-    await recordRefund({
+    const result = await recordRefund({
       orderId: transaction.order_id,
       transactionId: transaction.id,
       amountCents: refund.amount,
       currency: refund.currency,
       reason: refund.reason ?? "",
-      revokeAccess: revoke,
+      revokeAccessOnFullRefund,
       stripeRefundId: refund.id,
       createdByEmail: "stripe",
     });
+    orderFullyRefunded = orderFullyRefunded || result.fullyRefunded;
+    revokedCount += result.revokedCount;
   }
 
   if (refunds.length === 0 && charge.amount_refunded > 0) {
@@ -1605,19 +1996,22 @@ async function handleChargeRefunded(charge: Stripe.Charge): Promise<void> {
     const order = await loadOrderById(transaction.order_id);
     const outstanding = charge.amount_refunded - (order?.refunded_cents ?? 0);
     if (outstanding > 0) {
-      await recordRefund({
+      const result = await recordRefund({
         orderId: transaction.order_id,
         transactionId: transaction.id,
         amountCents: outstanding,
         currency: charge.currency,
         reason: "",
-        revokeAccess: revoke,
+        revokeAccessOnFullRefund,
+        stripeRefundId: reconciledRefundKey(charge),
         createdByEmail: "stripe",
       });
+      orderFullyRefunded = orderFullyRefunded || result.fullyRefunded;
+      revokedCount += result.revokedCount;
     }
   }
 
-  if (fullyRefunded) {
+  if (chargeFullyRefunded) {
     await pool.query(`UPDATE transactions SET status = 'refunded' WHERE id = $1`, [
       transaction.id,
     ]);
@@ -1625,8 +2019,8 @@ async function handleChargeRefunded(charge: Stripe.Charge): Promise<void> {
 
   log(
     `charge ${charge.id} refunded ${charge.amount_refunded} of ${charge.amount}${
-      revoke ? " — access revoked" : ""
-    }`
+      orderFullyRefunded ? ` — order ${transaction.order_id} fully refunded` : ""
+    }${revokedCount > 0 ? `, revoked ${revokedCount} grant(s)` : ""}`
   );
 }
 
@@ -1764,6 +2158,16 @@ stripeWebhookRouter.post(
 
     const claim = await claimEvent(event);
     if (!claim.claimed) {
+      if (claim.inFlight) {
+        // Another delivery is inside the handler for this event. 409 rather than
+        // 200 on purpose: a 2xx tells Stripe the event is done with, and if the
+        // delivery that holds it then fails there would be no retry left to put
+        // it right. Stripe retries this, and the retry finds either a finished
+        // event (200 below) or a claim it can take over.
+        log(`${event.type} ${event.id} is already being processed by another delivery`);
+        res.status(409).json({ error: "Event is already being processed" });
+        return;
+      }
       // Already carried to completion. Acknowledging stops Stripe retrying it.
       log(`${event.type} ${event.id} is a redelivery of a finished event; ignoring`);
       res.json({ received: true, duplicate: true });

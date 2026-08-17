@@ -94,7 +94,7 @@ export function ReactionBar({
             reaction.count === 1 ? "person" : "people"
           }${reaction.mine ? ", including you" : ""}`}
           className={cn(
-            "inline-flex min-h-[2.25rem] items-center gap-1.5 rounded-full border px-3",
+            "inline-flex min-h-[2.75rem] items-center gap-1.5 rounded-full border px-3",
             "text-sm leading-none transition-colors duration-300",
             "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold",
             "disabled:cursor-not-allowed disabled:opacity-50",
@@ -115,7 +115,7 @@ export function ReactionBar({
             disabled={disabled}
             aria-label="Add a reaction"
             className={cn(
-              "grid size-9 place-items-center rounded-full border border-white/12 bg-white/[0.03]",
+              "grid size-11 place-items-center rounded-full border border-white/12 bg-white/[0.03]",
               "text-orchid-dim transition-colors duration-300",
               "hover:border-gold/40 hover:bg-white/[0.07] hover:text-gold",
               "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold",

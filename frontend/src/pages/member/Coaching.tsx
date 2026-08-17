@@ -19,7 +19,7 @@ import {
   coachingApi,
   type CoachingOverview,
   type CoachingPackage,
-  type CoachingSessionSummary,
+  type CoachingSession,
 } from "@/lib/coachingApi";
 import { cn } from "@/lib/cn";
 import { CreditMeter } from "@/components/booking/CreditMeter";
@@ -44,6 +44,7 @@ export default function Coaching() {
 
   const [overview, setOverview] = useState<CoachingOverview | null>(null);
   const [error, setError] = useState("");
+  const [justBooked, setJustBooked] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -64,7 +65,7 @@ export default function Coaching() {
 
   const viewingAsAdmin = member?.impersonatedBy != null;
   const hasPackages = (overview?.packages.length ?? 0) > 0;
-  const bookable = overview?.packages.filter((row) => row.bookable) ?? [];
+  const bookable = overview?.packages.filter((row) => row.canBook && row.offerSlug !== null) ?? [];
 
   return (
     <MemberShell
@@ -101,10 +102,7 @@ export default function Coaching() {
             <>
               {overview.upcoming.length > 0 && (
                 <section aria-labelledby="upcoming-heading">
-                  <h2
-                    id="upcoming-heading"
-                    className="font-display text-xl text-white"
-                  >
+                  <h2 id="upcoming-heading" className="font-display text-xl text-white">
                     Coming up
                   </h2>
                   <ul className="mt-4 grid gap-3">
@@ -132,14 +130,21 @@ export default function Coaching() {
                 </section>
               )}
 
-              {bookable.length > 0 ? (
+              {/* Kept mounted after the last credit is spent, so the member who
+                  just booked keeps the confirmation — the meeting link and the
+                  calendar button — instead of watching it be replaced by "you
+                  have nothing left" the moment it succeeds. */}
+              {bookable.length > 0 || justBooked ? (
                 <BookingFlow
                   packages={overview.packages}
                   policy={overview.policy}
-                  coachTimezone={overview.coachTimezone}
+                  siteTimezone={overview.timezone}
                   timezone={timezone}
                   viewingAsAdmin={viewingAsAdmin}
-                  onBooked={() => void load()}
+                  onBooked={() => {
+                    setJustBooked(true);
+                    void load();
+                  }}
                 />
               ) : (
                 hasPackages && <OutOfCredits />
@@ -173,25 +178,19 @@ export default function Coaching() {
 
 /* ── Upcoming ───────────────────────────────────────────────────────────── */
 
-function UpcomingCard({
-  session,
-  timezone,
-}: {
-  session: CoachingSessionSummary;
-  timezone: string;
-}) {
+function UpcomingCard({ session, timezone }: { session: CoachingSession; timezone: string }) {
   return (
     <GlassCard accent="gold" spotlight={false} interactive={false} className="p-5 sm:p-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
           <p className="flex flex-wrap items-center gap-2.5">
             <LuxePill accent="gold">
-              {session.scheduledAt ? formatRelativeDay(session.scheduledAt, timezone) : "Unscheduled"}
+              {session.startsAt ? formatRelativeDay(session.startsAt, timezone) : "Unscheduled"}
             </LuxePill>
             <span className="text-sm text-orchid-dim">{session.offerTitle}</span>
           </p>
           <p className="mt-2.5 text-balance font-display text-xl leading-snug text-white">
-            {session.scheduledAt ? formatListDateTime(session.scheduledAt, timezone) : "No time yet"}
+            {session.startsAt ? formatListDateTime(session.startsAt, timezone) : "No time yet"}
           </p>
           <p className="mt-1.5 flex items-center gap-2 text-sm text-orchid">
             <Clock aria-hidden className="size-3.5 text-gold" />
@@ -220,41 +219,58 @@ function UpcomingCard({
 
 /* ── Packages ───────────────────────────────────────────────────────────── */
 
+/**
+ * Why a package cannot be spent, in words a member can act on.
+ *
+ * The server answers only yes or no, and "unavailable" is the kind of label
+ * that sends somebody to the contact form to ask what it means.
+ */
+function unavailableReason(row: CoachingPackage): string {
+  if (row.canBook) return "";
+  if (row.expiresAt && new Date(row.expiresAt).getTime() <= Date.now()) {
+    return `This package ran out on ${formatDate(row.expiresAt)}. Get in touch and we will sort it out.`;
+  }
+  if (row.sessionsRemaining === 0) {
+    return "Every session on this package has been used.";
+  }
+  return "This package is not bookable online at the moment — email us and we will find you a time.";
+}
+
 function PackageCard({ row }: { row: CoachingPackage }) {
+  const reason = unavailableReason(row);
+
   return (
     <GlassCard
       spotlight={false}
       interactive={false}
-      className={cn("h-full p-5 sm:p-6", !row.bookable && "opacity-75")}
+      className={cn("h-full p-5 sm:p-6", !row.canBook && "opacity-75")}
     >
       <div className="flex flex-wrap items-center gap-2.5">
-        <h3 className="font-display text-lg text-white">{row.title}</h3>
+        <h3 className="font-display text-lg text-white">{row.offerTitle}</h3>
         {row.format === "group" && <LuxePill accent="plum">Group</LuxePill>}
       </div>
       <p className="mt-1.5 text-sm text-orchid-dim">{durationLabel(row.durationMinutes)} a call</p>
 
       <CreditMeter used={row.sessionsUsed} total={row.sessionsTotal} className="mt-5" />
 
-      {row.expiresAt && (
+      {row.expiresAt && row.canBook && (
         <p className="mt-3 text-xs text-orchid-faint">Use these by {formatDate(row.expiresAt)}</p>
       )}
-      {!row.bookable && row.unavailableReason && (
-        <p className="mt-3 text-xs font-medium text-amber-300">{row.unavailableReason}</p>
-      )}
+      {reason && <p className="mt-3 text-xs font-medium text-amber-300">{reason}</p>}
     </GlassCard>
   );
 }
 
 /* ── Past ───────────────────────────────────────────────────────────────── */
 
-const STATUS_LABEL: Record<CoachingSessionSummary["status"], string> = {
+const STATUS_LABEL: Record<string, string> = {
   scheduled: "Scheduled",
   completed: "Completed",
   cancelled: "Cancelled",
   no_show: "Missed",
 };
 
-function PastRow({ session, timezone }: { session: CoachingSessionSummary; timezone: string }) {
+function PastRow({ session, timezone }: { session: CoachingSession; timezone: string }) {
   return (
     <Link
       to={`/coaching/sessions/${session.id}`}
@@ -268,10 +284,10 @@ function PastRow({ session, timezone }: { session: CoachingSessionSummary; timez
           {session.offerTitle}
         </p>
         <p className="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-orchid-faint">
-          {session.scheduledAt ? formatListDateTime(session.scheduledAt, timezone) : "No time set"}
+          {session.startsAt ? formatListDateTime(session.startsAt, timezone) : "No time set"}
           <span aria-hidden>·</span>
-          {STATUS_LABEL[session.status]}
-          {session.hasRecording && (
+          {STATUS_LABEL[session.status] ?? "Past"}
+          {session.recordingUrl && (
             <>
               <span aria-hidden>·</span>
               <span className="inline-flex items-center gap-1 text-gold">

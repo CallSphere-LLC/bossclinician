@@ -251,6 +251,112 @@ export function paymentPlanCompleted(input: PaymentPlanCompletedInput): EmailCon
   return { subject: `Paid in full — ${input.description}`, text, html };
 }
 
+export interface PaymentPlanDefaultedInput {
+  buyerName: string;
+  description: string;
+  installmentsPaid: number;
+  installmentCount: number;
+  outstandingCents: number;
+  currency: string;
+}
+
+/**
+ * Sent when a payment plan ends with installments still owed.
+ *
+ * The counterpart to `paymentPlanCompleted`, and the harder of the two to
+ * write: the customer has paid real money and is losing access anyway. It says
+ * exactly how far they got and what is left, because the commonest cause is a
+ * card that expired months ago and the commonest outcome, once somebody
+ * notices, is that they want to finish paying.
+ */
+export function paymentPlanDefaulted(input: PaymentPlanDefaultedInput): EmailContent {
+  const name = greeting(input.buyerName);
+  const outstanding = formatMoney(input.outstandingCents, input.currency);
+  const billingUrl = `${env.publicSiteUrl}/account/billing`;
+  const progress = `${input.installmentsPaid} of ${input.installmentCount} payments`;
+
+  const text = [
+    `Hi ${name},`,
+    ``,
+    `The payment plan for ${input.description} has stopped after ${progress}, with ${outstanding} still outstanding, and your access has been paused.`,
+    ``,
+    `Almost every time this happens it is a card that expired or was replaced rather than any decision on your part. If that's the case here, nothing is lost — reply to this email and I'll get the plan restarted and your access back on.`,
+    ``,
+    `Your billing details: ${billingUrl}`,
+    ``,
+    `— Yvette`,
+  ].join("\n");
+
+  const html = [
+    `<p>Hi ${escapeHtml(name)},</p>`,
+    `<p>The payment plan for <strong>${escapeHtml(
+      input.description
+    )}</strong> has stopped after ${progress}, with <strong>${escapeHtml(
+      outstanding
+    )}</strong> still outstanding, and your access has been paused.</p>`,
+    `<p>Almost every time this happens it is a card that expired or was replaced rather than any decision on your part. If that's the case here, nothing is lost — reply to this email and I'll get the plan restarted and your access back on.</p>`,
+    `<p><a href="${escapeHtml(billingUrl)}">Your billing details</a></p>`,
+    `<p>— Yvette</p>`,
+  ].join("\n");
+
+  return { subject: `Your payment plan for ${input.description} has stopped`, text, html };
+}
+
+export interface PaymentPlanDefaultedAlertInput {
+  buyerEmail: string;
+  description: string;
+  installmentsPaid: number;
+  installmentCount: number;
+  outstandingCents: number;
+  currency: string;
+  revokedCount: number;
+  stripeSubscriptionId: string;
+}
+
+/**
+ * Admin alert for a payment plan that ended unpaid.
+ *
+ * A defaulted plan is the one billing failure nobody finds out about on their
+ * own: Stripe's dunning has already run its course, the customer has stopped
+ * hearing from it, and the only visible trace is a member who quietly stops
+ * being charged. Access has been taken back automatically, so this exists to
+ * put the money on somebody's desk while it is still collectable.
+ */
+export function paymentPlanDefaultedAlert(input: PaymentPlanDefaultedAlertInput): EmailContent {
+  const outstanding = formatMoney(input.outstandingCents, input.currency);
+
+  const text = [
+    `A payment plan has ended with money still owed.`,
+    ``,
+    `Buyer: ${input.buyerEmail || "(unknown)"}`,
+    `Bought: ${input.description}`,
+    `Paid: ${input.installmentsPaid} of ${input.installmentCount} installments`,
+    `Outstanding: ${outstanding}`,
+    `Stripe subscription: ${input.stripeSubscriptionId}`,
+    ``,
+    `The plan is marked cancelled and ${input.revokedCount} access grant(s) have been revoked, so the customer no longer has what they were part-way through paying for.`,
+    ``,
+    `They have been emailed. If it turns out to be an expired card, taking the remaining ${outstanding} and restoring access is usually the outcome everybody wants.`,
+  ].join("\n");
+
+  const html = [
+    `<p>A payment plan has ended with money still owed.</p>`,
+    `<p>`,
+    `Buyer: ${escapeHtml(input.buyerEmail || "(unknown)")}<br>`,
+    `Bought: ${escapeHtml(input.description)}<br>`,
+    `Paid: ${input.installmentsPaid} of ${input.installmentCount} installments<br>`,
+    `Outstanding: <strong>${escapeHtml(outstanding)}</strong><br>`,
+    `Stripe subscription: ${escapeHtml(input.stripeSubscriptionId)}`,
+    `</p>`,
+    `<p>The plan is marked cancelled and ${input.revokedCount} access grant(s) have been revoked, so the customer no longer has what they were part-way through paying for.</p>`,
+    `<p>They have been emailed. If it turns out to be an expired card, taking the remaining ${escapeHtml(
+      outstanding
+    )} and restoring access is usually the outcome everybody wants.</p>`,
+  ].join("\n");
+
+  return { subject: `Payment plan defaulted: ${outstanding} outstanding`, text, html };
+}
+
 export interface DisputeAlertInput {
   buyerEmail: string;
   amountCents: number;

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { CalendarX2, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import { cn } from "@/lib/cn";
-import type { AvailabilitySlot } from "@/lib/coachingApi";
+import type { CoachingSlot } from "@/lib/coachingApi";
 import {
   addDays,
   dayKeyInZone,
@@ -15,7 +15,7 @@ interface DayGroup {
   key: string;
   /** The first slot of the day, used for every label so the zone does the work. */
   sample: string;
-  slots: AvailabilitySlot[];
+  slots: CoachingSlot[];
 }
 
 /**
@@ -27,7 +27,7 @@ interface DayGroup {
  * read. Grouping server-side is how a booking screen ends up showing an empty
  * Tuesday that is actually full.
  */
-function groupByDay(slots: AvailabilitySlot[], timezone: string): Map<string, DayGroup> {
+function groupByDay(slots: CoachingSlot[], timezone: string): Map<string, DayGroup> {
   const groups = new Map<string, DayGroup>();
   const sorted = [...slots].sort(
     (a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime(),
@@ -53,8 +53,9 @@ export function SlotPicker({
   daysShown,
   onShiftRange,
   canGoBack,
+  canGoForward,
 }: {
-  slots: AvailabilitySlot[];
+  slots: CoachingSlot[];
   timezone: string;
   loading: boolean;
   error: string;
@@ -65,6 +66,8 @@ export function SlotPicker({
   daysShown: number;
   onShiftRange: (days: number) => void;
   canGoBack: boolean;
+  /** False at the far edge of the booking horizon, where nothing is open yet. */
+  canGoForward: boolean;
 }) {
   const groups = useMemo(() => groupByDay(slots, timezone), [slots, timezone]);
 
@@ -120,7 +123,7 @@ export function SlotPicker({
         <button
           type="button"
           onClick={() => onShiftRange(daysShown)}
-          disabled={loading}
+          disabled={!canGoForward || loading}
           className={arrowClass}
           aria-label="Show later dates"
         >
@@ -207,7 +210,9 @@ export function SlotPicker({
             <CalendarX2 aria-hidden className="size-6 text-orchid-dim" />
             <p className="mt-3 text-sm text-white">Nothing open in these dates.</p>
             <p className="copy-luxe mt-1.5 max-w-xs text-balance text-sm">
-              Try the next fortnight — Yvette opens her calendar a few weeks at a time.
+              {canGoForward
+                ? "Try the next fortnight — Yvette opens her calendar a few weeks at a time."
+                : "That is as far ahead as the calendar goes for now. Check back in a week or two."}
             </p>
           </div>
         )}

@@ -29,10 +29,18 @@ export type CouponResult =
   | { ok: false; reason: string };
 
 /**
- * One message for "no such code", "switched off" and "misconfigured".
+ * One message for every reason a code cannot be used here.
  *
- * Distinguishing them would turn the coupon field into an oracle that confirms
- * which codes exist, which is exactly how a private launch discount escapes.
+ * "No such code", "switched off", "misconfigured", "not started yet",
+ * "expired", "all fifty taken" and "not for this offer" are one answer on
+ * purpose. Each of the last four is only reachable for a code that exists, so
+ * telling them apart turns the coupon field into an oracle that confirms which
+ * codes are real — at 120 tries per ten minutes, that is how a private launch
+ * discount escapes before the launch.
+ *
+ * The one distinction kept below is "you have already used this", which is
+ * reached only by a code that exists, is live, and applies to this offer, and
+ * which tells the shopper nothing except their own history.
  */
 const UNKNOWN_CODE = "That code isn't valid.";
 
@@ -110,11 +118,15 @@ export async function validateCoupon(
   }
 
   const now = Date.now();
-  if (row.starts_at && row.starts_at.getTime() > now) {
-    return { ok: false, reason: "That code isn't active yet." };
-  }
-  if (row.expires_at && row.expires_at.getTime() <= now) {
-    return { ok: false, reason: "That code has expired." };
+  if (row.starts_at && row.starts_at.getTime() > now) return { ok: false, reason: UNKNOWN_CODE };
+  if (row.expires_at && row.expires_at.getTime() <= now) return { ok: false, reason: UNKNOWN_CODE };
+
+  if (row.scope === "offers") {
+    const scoped = await db.query(
+      `SELECT 1 FROM coupon_offers WHERE coupon_id = $1 AND offer_id = $2`,
+      [row.id, offerId]
+    );
+    if (scoped.rows.length === 0) return { ok: false, reason: UNKNOWN_CODE };
   }
 
   // Counted from the ledger, not from `coupons.redeemed`. The denormalised
@@ -129,17 +141,33 @@ export async function validateCoupon(
       [row.id]
     );
     if ((taken.rows[0]?.used ?? 0) >= row.max_redemptions) {
-      return { ok: false, reason: "That code has been fully redeemed." };
+      return { ok: false, reason: UNKNOWN_CODE };
     }
   }
 
-  if (row.scope === "offers") {
-    const scoped = await db.query(
-      `SELECT 1 FROM coupon_offers WHERE coupon_id = $1 AND offer_id = $2`,
-      [row.id, offerId]
+  // A fixed-amount coupon carries its own currency, and the arithmetic that
+  // spends it only knows how to subtract cents from cents. A `5000 usd` code on
+  // a EUR offer therefore takes €50 off — right sum, wrong money, and wrong by
+  // whatever the exchange rate happens to be that day. Percentages have no
+  // currency and are safe on any offer, which is why only this branch checks.
+  if (amountOffCents !== null) {
+    const offerRow = await db.query<{ currency: string }>(
+      `SELECT currency FROM offers WHERE id = $1`,
+      [offerId]
     );
-    if (scoped.rows.length === 0) {
-      return { ok: false, reason: "That code doesn't apply to this offer." };
+    const offerCurrency = (offerRow.rows[0]?.currency || "usd").toLowerCase();
+    const couponCurrency = (row.currency || "usd").toLowerCase();
+    if (couponCurrency !== offerCurrency) {
+      // Answered as UNKNOWN_CODE, not explained. A currency mismatch is the
+      // store's own misconfiguration — the category that message already covers
+      // — and there is nothing the shopper could do with the detail except use
+      // it to confirm the code exists. It goes to the log instead, where the
+      // person who can fix it will find it.
+      console.error(
+        `[coupons] ${row.code} discounts ${couponCurrency.toUpperCase()} and offer ${offerId} is ` +
+          `priced in ${offerCurrency.toUpperCase()}; the code was refused.`
+      );
+      return { ok: false, reason: UNKNOWN_CODE };
     }
   }
 

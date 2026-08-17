@@ -227,6 +227,7 @@ function pricingShapeOf(row: OfferRow): OfferPricingShape {
     minAmountCents: row.min_amount_cents,
     interval: row.interval,
     installmentCount: row.installment_count,
+    trialDays: row.trial_days,
   };
 }
 
@@ -406,9 +407,49 @@ adminOffersRouter.put(
       minAmountCents: patched(patch.minAmountCents, before.min_amount_cents),
       interval: patched(patch.interval, before.interval),
       installmentCount: patched(patch.installmentCount, before.installment_count),
+      trialDays: patched(patch.trialDays, before.trial_days),
     };
     const issue = offerPricingIssue(pricing);
     if (issue) throw issueError(issue);
+
+    const currency = patched(patch.currency, before.currency);
+    const intervalCount = patched(patch.intervalCount, before.interval_count);
+
+    // A `stripe_price_id` is the price *in Stripe*, and it is the figure a
+    // subscription is actually billed against; the columns above are only what
+    // the sales page promises. The moment the two can disagree they do — edit a
+    // $99/mo offer to $149 and the page, the quote, `orders.total_cents` and the
+    // receipt all say $149 while Stripe collects $99 every month, forever.
+    // Reverse the edit and every later subscriber is undercharged instead.
+    //
+    // So any change to the money or the billing shape releases the pinned Price,
+    // and the next sale mints one that matches the page. `duplicate` below drops
+    // the same ids for the same reason.
+    //
+    // Customers already subscribed keep the Price they signed up on. That
+    // asymmetry is deliberate and not an oversight: a live subscription is a
+    // price somebody agreed to, and an edit in this screen is not their consent
+    // to a different one. Moving existing subscribers is a separate, explicit
+    // act with its own notice period.
+    //
+    // `stripe_product_id` is kept. A Product carries the name, not the amount,
+    // so reusing it keeps one entry in the Stripe catalogue per offer rather
+    // than one per price change.
+    const repriced =
+      pricing.pricingType !== before.pricing_type ||
+      pricing.amountCents !== before.amount_cents ||
+      pricing.interval !== before.interval ||
+      intervalCount !== before.interval_count ||
+      currency !== before.currency;
+
+    // An offer wired to a Price built in the Stripe dashboard names it in the
+    // same request, and that naming wins over the release.
+    const stripePriceId =
+      patch.stripePriceId !== undefined
+        ? patch.stripePriceId
+        : repriced
+          ? null
+          : before.stripe_price_id;
 
     const thankYouPageId = patched(patch.thankYouPageId, before.thank_you_page_id);
     if (patch.thankYouPageId !== undefined) await assertThankYouPageExists(thankYouPageId);
@@ -459,14 +500,14 @@ adminOffersRouter.put(
           patched(patch.description, before.description),
           patched(patch.checkoutHeadline, before.checkout_headline),
           patched(patch.thumbnailUrl, before.thumbnail_url),
-          patched(patch.currency, before.currency),
+          currency,
           pricing.pricingType,
           pricing.amountCents,
           pricing.minAmountCents,
           pricing.interval,
-          patched(patch.intervalCount, before.interval_count),
+          intervalCount,
           pricing.installmentCount,
-          patched(patch.trialDays, before.trial_days),
+          pricing.trialDays,
           patched(patch.collectTax, before.collect_tax),
           patched(patch.collectAddress, before.collect_address),
           patched(patch.collectPhone, before.collect_phone),
@@ -476,7 +517,7 @@ adminOffersRouter.put(
           patched(patch.redirectUrl, before.redirect_url),
           thankYouPageId,
           patched(patch.accessExpiresAfterDays, before.access_expires_after_days),
-          patched(patch.stripePriceId, before.stripe_price_id),
+          stripePriceId,
           patched(patch.stripeProductId, before.stripe_product_id),
           id,
         ],

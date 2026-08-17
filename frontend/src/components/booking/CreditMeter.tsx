@@ -14,12 +14,13 @@ export function CreditMeter({
   className,
 }: {
   used: number;
-  total: number;
+  /** null for an open-ended package, which has no ledger to draw down. */
+  total: number | null;
   className?: string;
 }) {
   // An open-ended package (session_count 0) has nothing to fill. A bar pinned
   // at either end would be a lie in both directions.
-  if (total <= 0) {
+  if (total === null || total <= 0) {
     return (
       <p className={cn("text-sm text-orchid", className)}>
         <span className="font-semibold text-white">{used}</span>{" "}

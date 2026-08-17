@@ -45,6 +45,25 @@ export const PRICING_TYPES = [
 
 export const BILLING_INTERVALS = ["day", "week", "month", "year"] as const satisfies readonly BillingInterval[];
 
+/**
+ * The currencies this site can price, charge and display in.
+ *
+ * A list rather than "any three letters", for two reasons. `Intl.NumberFormat`
+ * refuses a code it does not recognise, and every figure on the sales page, the
+ * quote and the receipt goes through it — so a typo in this box takes the
+ * checkout down rather than showing a wrong symbol. And every entry here is a
+ * two-decimal currency, because the arithmetic is in integer cents throughout:
+ * a zero-decimal currency such as JPY would render a ¥2,700 charge as ¥27.
+ *
+ * Adding one is a single line here, plus a check that it divides by 100.
+ */
+export const SUPPORTED_CURRENCIES = ["usd", "cad", "gbp", "eur", "aud", "nzd"] as const;
+export type SupportedCurrency = (typeof SUPPORTED_CURRENCIES)[number];
+
+export function isSupportedCurrency(value: string): value is SupportedCurrency {
+  return (SUPPORTED_CURRENCIES as readonly string[]).includes(value.trim().toLowerCase());
+}
+
 export const PRODUCT_RESOURCE_FIELDS = [
   "courseId",
   "communityId",
@@ -136,6 +155,7 @@ export interface OfferPricingShape {
   minAmountCents: number;
   interval: BillingInterval | null;
   installmentCount: number | null;
+  trialDays: number;
 }
 
 /**
@@ -192,6 +212,17 @@ export function offerPricingIssue(offer: OfferPricingShape): CommerceIssue | nul
             "for 3 x $1,250, enter $1,250.",
         };
       }
+      // A plan is a fixed number of payments for a fixed total. A free trial
+      // delays the first one without adding a fourth, so "3 x $1,250" collects
+      // $2,500 and the customer keeps everything.
+      if (offer.trialDays > 0) {
+        return {
+          field: "trialDays",
+          message:
+            "A payment plan cannot have a free trial — the customer agreed to a set number of payments, " +
+            "and a trial gives one of them away. Set the trial to 0 days, or sell this as a subscription.",
+        };
+      }
       return null;
 
     case "pwyw":
@@ -229,6 +260,18 @@ const nullableIdRef = idRef.nullable();
 const moneyCents = z.number().int().min(0).max(99_999_999);
 
 const sortOrder = z.number().int().min(-9999).max(9999);
+
+const CURRENCY_CHOICES = SUPPORTED_CURRENCIES.map((code) => code.toUpperCase()).join(", ");
+
+/** Stored lowercase, which is what Stripe expects and what the offer rows hold. */
+const currencySchema = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .refine(
+    (value): value is SupportedCurrency => isSupportedCurrency(value),
+    `Choose one of the currencies this site can charge in: ${CURRENCY_CHOICES}.`,
+  );
 
 const slugSchema = z
   .string()
@@ -343,7 +386,7 @@ const offerFields = {
   description: z.string().trim().max(10_000).default(""),
   checkoutHeadline: z.string().trim().max(300).default(""),
   thumbnailUrl: z.string().trim().max(2000).default(""),
-  currency: z.string().trim().length(3).toLowerCase().default("usd"),
+  currency: currencySchema.default("usd"),
 
   pricingType: z.enum(PRICING_TYPES).default("one_time"),
   amountCents: moneyCents.default(0),

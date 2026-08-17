@@ -7,16 +7,17 @@ import { LuxeTextarea } from "@/components/luxe/LuxeField";
 import { MemberApiError } from "@/lib/memberApi";
 import {
   coachingApi,
-  type CancellationPolicy,
+  type BookResult,
   type CoachingPackage,
-  type CoachingSessionDetail,
+  type CoachingPolicy,
+  type CoachingSession,
 } from "@/lib/coachingApi";
 import { cn } from "@/lib/cn";
 import { CreditMeter } from "@/components/booking/CreditMeter";
 import { SlotSearch } from "@/components/booking/SlotSearch";
 import { ZoneLine } from "@/components/booking/TimezoneNotice";
 import { AddToCalendar } from "@/components/booking/AddToCalendar";
-import { creditReturnSentence } from "@/components/booking/policyText";
+import { creditReturnSentence, noticeSentence } from "@/components/booking/policyText";
 import {
   durationLabel,
   formatFullDateTime,
@@ -26,24 +27,32 @@ import {
 
 type Step = "package" | "slot" | "confirm" | "done";
 
+/** A package that can actually be spent: in date, in credit, and still on sale. */
+type BookablePackage = CoachingPackage & { offerSlug: string };
+
+function isBookable(row: CoachingPackage): row is BookablePackage {
+  return row.canBook && row.offerSlug !== null;
+}
+
 export function BookingFlow({
   packages,
   policy,
-  coachTimezone,
+  siteTimezone,
   timezone,
   viewingAsAdmin,
   onBooked,
 }: {
   packages: CoachingPackage[];
-  policy: CancellationPolicy;
-  coachTimezone: string;
+  policy: CoachingPolicy;
+  /** The zone the business keeps its calendar in, for the "and hers is" line. */
+  siteTimezone: string;
   /** The zone every time in this flow is drawn in; the page owns the control. */
   timezone: string;
   /** An admin looking at somebody else's account must not book their calls. */
   viewingAsAdmin: boolean;
-  onBooked: (session: CoachingSessionDetail) => void;
+  onBooked: (result: BookResult) => void;
 }) {
-  const bookable = useMemo(() => packages.filter((row) => row.bookable), [packages]);
+  const bookable = useMemo(() => packages.filter(isBookable), [packages]);
 
   // With one package there is no choice to make, so the flow opens on the
   // calendar. Offering a one-item list is a step that exists only to be clicked.
@@ -53,15 +62,15 @@ export function BookingFlow({
   );
   const [selected, setSelected] = useState<string | null>(null);
   const [agenda, setAgenda] = useState("");
-  const [booked, setBooked] = useState<CoachingSessionDetail | null>(null);
+  const [booked, setBooked] = useState<CoachingSession | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
 
   // Looked up by id rather than held as an object, so a credit count refreshed
   // by the page behind this flow shows through instead of going stale mid-book.
-  const chosen = chosenId === null ? null : (packages.find((row) => row.creditId === chosenId) ?? null);
+  const chosen = chosenId === null ? null : (bookable.find((row) => row.creditId === chosenId) ?? null);
 
-  const pickPackage = (row: CoachingPackage) => {
+  const pickPackage = (row: BookablePackage) => {
     setChosenId(row.creditId);
     setSelected(null);
     setStep("slot");
@@ -72,16 +81,16 @@ export function BookingFlow({
     setSubmitting(true);
     setSubmitError("");
     try {
-      const session = await coachingApi.book({
-        creditId: chosen.creditId,
+      const result = await coachingApi.book({
+        offerSlug: chosen.offerSlug,
         startsAt: selected,
         // Recorded so a later "you booked this as 9am Eastern" is answerable.
         timezone,
         agenda: agenda.trim(),
       });
-      setBooked(session);
+      setBooked(result.session);
       setStep("done");
-      onBooked(session);
+      onBooked(result);
     } catch (error) {
       setSubmitError(
         error instanceof MemberApiError
@@ -141,7 +150,7 @@ export function BookingFlow({
                 )}
               >
                 <div className="flex flex-wrap items-center gap-3">
-                  <span className="font-display text-lg text-white">{row.title}</span>
+                  <span className="font-display text-lg text-white">{row.offerTitle}</span>
                   <LuxePill accent="gold">{durationLabel(row.durationMinutes)}</LuxePill>
                   {row.format === "group" && <LuxePill accent="plum">Group</LuxePill>}
                 </div>
@@ -160,8 +169,9 @@ export function BookingFlow({
 
           <div className="mt-5">
             <SlotSearch
-              creditId={chosen.creditId}
+              offerSlug={chosen.offerSlug}
               timezone={timezone}
+              horizonDays={policy.bookingHorizonDays}
               selected={selected}
               onSelect={setSelected}
             />
@@ -216,7 +226,7 @@ export function BookingFlow({
           packageRow={chosen}
           startsAt={selected}
           timezone={timezone}
-          coachTimezone={coachTimezone}
+          siteTimezone={siteTimezone}
           policy={policy}
           agenda={agenda}
           onAgendaChange={setAgenda}
@@ -237,7 +247,7 @@ function ConfirmStep({
   packageRow,
   startsAt,
   timezone,
-  coachTimezone,
+  siteTimezone,
   policy,
   agenda,
   onAgendaChange,
@@ -247,11 +257,11 @@ function ConfirmStep({
   onBack,
   onConfirm,
 }: {
-  packageRow: CoachingPackage;
+  packageRow: BookablePackage;
   startsAt: string;
   timezone: string;
-  coachTimezone: string;
-  policy: CancellationPolicy;
+  siteTimezone: string;
+  policy: CoachingPolicy;
   agenda: string;
   onAgendaChange: (value: string) => void;
   submitting: boolean;
@@ -260,7 +270,8 @@ function ConfirmStep({
   onBack: () => void;
   onConfirm: () => void;
 }) {
-  const differentZone = !sameClock(coachTimezone, timezone, startsAt);
+  const differentZone = !sameClock(siteTimezone, timezone, startsAt);
+  const notice = noticeSentence(policy);
 
   return (
     <div>
@@ -273,7 +284,7 @@ function ConfirmStep({
         </p>
         <p className="mt-2 text-sm text-orchid">
           Times shown in {zoneSentence(timezone, startsAt)}.
-          {differentZone && ` That is ${formatFullDateTime(startsAt, coachTimezone)} where Yvette is.`}
+          {differentZone && ` That is ${formatFullDateTime(startsAt, siteTimezone)} where Yvette is.`}
         </p>
 
         <dl className="mt-5 grid gap-x-8 gap-y-3 sm:grid-cols-2">
@@ -291,8 +302,8 @@ function ConfirmStep({
               Comes out of
             </dt>
             <dd className="mt-1 text-sm text-white">
-              {packageRow.title}
-              {packageRow.sessionsTotal > 0 && (
+              {packageRow.offerTitle}
+              {packageRow.sessionsRemaining !== null && (
                 <span className="text-orchid-dim">
                   {" "}
                   — {packageRow.sessionsRemaining} left before this one
@@ -310,7 +321,7 @@ function ConfirmStep({
           rows={4}
           maxLength={2000}
           onChange={(event) => onAgendaChange(event.target.value)}
-          hint="Yvette reads this before the call, so you can start on the real thing instead of catching her up. You can change it any time before you meet."
+          hint="Yvette reads this before the call, so you can start on the real thing instead of catching her up."
         />
       </div>
 
@@ -320,7 +331,7 @@ function ConfirmStep({
           If you need to change it
         </p>
         <p className="copy-luxe mt-2.5 text-sm">{creditReturnSentence(policy)}</p>
-        {policy.summary && <p className="copy-luxe mt-2 text-sm">{policy.summary}</p>}
+        {notice && <p className="copy-luxe mt-2 text-sm">{notice}</p>}
       </div>
 
       <div aria-live="polite" className="mt-5 min-h-[1.25rem]">
@@ -364,7 +375,7 @@ function BookedPanel({
   canBookAgain,
   onBookAgain,
 }: {
-  session: CoachingSessionDetail;
+  session: CoachingSession;
   timezone: string;
   canBookAgain: boolean;
   onBookAgain: () => void;
@@ -384,11 +395,11 @@ function BookedPanel({
         <div role="status" className="min-w-0">
           <h2 className="font-display text-2xl text-white">You are booked in.</h2>
           <p className="mt-2 text-balance text-lg text-white">
-            {session.scheduledAt ? formatFullDateTime(session.scheduledAt, timezone) : "—"}
+            {session.startsAt ? formatFullDateTime(session.startsAt, timezone) : "—"}
           </p>
           <p className="copy-luxe mt-1.5 text-sm">
-            {durationLabel(session.durationMinutes)} with Yvette. A confirmation is on its way to
-            your inbox, and a reminder follows the day before.
+            {durationLabel(session.durationMinutes)} with Yvette. A confirmation and a calendar
+            invitation are on their way to your inbox.
           </p>
         </div>
       </div>
@@ -410,12 +421,12 @@ function BookedPanel({
         </div>
       )}
 
-      {session.scheduledAt && (
+      {session.startsAt && (
         <div className="mt-6">
           <AddToCalendar
-            icsUrl={session.calendarUrl}
+            sessionId={session.id}
             title={`${session.offerTitle} with Yvette Howard`}
-            startsAt={session.scheduledAt}
+            startsAt={session.startsAt}
             durationMinutes={session.durationMinutes}
             meetingUrl={session.meetingUrl}
             agenda={session.agenda}

@@ -30,6 +30,7 @@ import {
   parseCustomFields,
   resolveTaxRateBps,
   selectBumps,
+  submittedTaxAddress,
   toPricedOffer,
   totalToJson,
   type BillingAddress,
@@ -325,18 +326,37 @@ async function resolveStripeCustomerId(input: {
  * wins. Otherwise one is minted from the offer's own figures and written back,
  * so the second sale of the same plan reuses it rather than filling the account
  * with a Price per checkout.
+ *
+ * Editing the amount, the currency or the billing shape releases the pinned id
+ * (see PUT /admin/offers/:id), so the mint here is not a once-in-a-lifetime
+ * event and the idempotency key has to distinguish one set of figures from the
+ * next. Two shoppers arriving together on the first sale of a plan then share
+ * one Price instead of creating two for the same $99/mo.
+ *
+ * The Product is reused when the offer already has one: it carries the name,
+ * not the amount, so one entry per offer is right and one per repricing is not.
  */
 async function ensureRecurringPrice(offer: OfferRow): Promise<string> {
   if (offer.stripe_price_id) return offer.stripe_price_id;
   if (!offer.interval) throw badRequest("This offer is not set up for recurring billing");
 
-  const price = await stripe().prices.create({
-    currency: offer.currency || "usd",
-    unit_amount: offer.amount_cents,
-    recurring: { interval: offer.interval, interval_count: offer.interval_count },
-    product_data: { name: offer.title },
-    metadata: { offerId: String(offer.id), offerSlug: offer.slug },
-  });
+  const currency = offer.currency || "usd";
+  const price = await stripe().prices.create(
+    {
+      currency,
+      unit_amount: offer.amount_cents,
+      recurring: { interval: offer.interval, interval_count: offer.interval_count },
+      ...(offer.stripe_product_id
+        ? { product: offer.stripe_product_id }
+        : { product_data: { name: offer.title } }),
+      metadata: { offerId: String(offer.id), offerSlug: offer.slug },
+    },
+    {
+      idempotencyKey:
+        `offer-price-${offer.id}-${currency}-${offer.amount_cents}` +
+        `-${offer.interval}-${offer.interval_count}`,
+    }
+  );
 
   const productId = typeof price.product === "string" ? price.product : price.product.id;
   await pool.query(
@@ -374,12 +394,42 @@ async function ensureStripeCoupon(coupon: ValidatedCoupon): Promise<string> {
     params.currency = coupon.currency;
   }
 
-  const created = await stripe().coupons.create(params);
+  // Keyed on our coupon id: if the write-back below is lost, the next checkout
+  // to use the code gets the same Stripe coupon rather than a duplicate.
+  const created = await stripe().coupons.create(params, {
+    idempotencyKey: `offer-coupon-${coupon.id}`,
+  });
   await pool.query(
     `UPDATE coupons SET stripe_coupon_id = $2 WHERE id = $1 AND stripe_coupon_id IS NULL`,
     [coupon.id, created.id]
   );
   return created.id;
+}
+
+/**
+ * Removes pending invoice items whose subscription never came into being.
+ *
+ * A pending invoice item is attached to the CUSTOMER, not to an invoice and not
+ * to an order, so one that outlives the checkout that created it is collected
+ * on whatever that customer is billed for next: a $97 line on some other
+ * subscription's renewal, with no order behind it, no `order_items` row and no
+ * access granted. Nobody would ever find it from this end.
+ *
+ * Best effort by design. The order is already on its way to `failed` and the
+ * caller has a real error to report; a sweep that threw would replace it with a
+ * more confusing one, so a failure here is logged and the original stands.
+ */
+async function discardInvoiceItems(ids: string[]): Promise<void> {
+  for (const id of ids) {
+    await stripe()
+      .invoiceItems.del(id)
+      .catch((err: unknown) => {
+        console.error(
+          `[checkout] left a pending invoice item on a Stripe customer: ${id}`,
+          (err as Error).message
+        );
+      });
+  }
 }
 
 interface PendingOrderInput {
@@ -483,6 +533,30 @@ async function createPendingOrder(input: PendingOrderInput): Promise<PendingOrde
           line.quantity,
           line.unitCents,
           line.amountCents,
+        ]
+      );
+    }
+
+    // Written in the same transaction as the order it belongs to, because a
+    // tax figure that can exist without its order — or an order whose tax
+    // cannot be explained — is not an audit trail. `rate_bps` is the rate that
+    // was actually applied; the address beside it is the one recorded on the
+    // order, which is what a tax authority asks to see.
+    if (input.taxRateBps > 0 || total.taxCents > 0) {
+      await client.query(
+        `INSERT INTO tax_records
+           (order_id, country, state, postal_code, rate_bps,
+            taxable_cents, tax_cents, currency, provider)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'internal')`,
+        [
+          orderId,
+          input.billingAddress.country ?? "",
+          input.billingAddress.state ?? "",
+          input.billingAddress.postalCode ?? "",
+          input.taxRateBps,
+          total.taxableCents,
+          total.taxCents,
+          total.currency,
         ]
       );
     }
@@ -595,7 +669,7 @@ checkoutOfferRouter.post(
     const billingName = body.name ?? "";
     const billingAddress = body.address ?? {};
 
-    const taxRateBps = await resolveTaxRateBps(offer, billingAddress);
+    const taxRateBps = await resolveTaxRateBps(offer, submittedTaxAddress(offer, billingAddress));
 
     const { orderId, total, coupon } = await createPendingOrder({
       offer,
@@ -664,21 +738,12 @@ checkoutOfferRouter.post(
       };
 
       if (isRecurring(offer)) {
+        // Everything that can fail is resolved before the first invoice item
+        // exists. Minting the Price, mirroring the coupon and working out where
+        // a payment plan stops are all calls that can throw — a coupon whose
+        // currency differs from the offer's is the everyday example — and each
+        // one used to throw with a $97 bump already sitting on the customer.
         const priceId = await ensureRecurringPrice(offer);
-
-        // Bumps are one-off purchases riding along with a recurring one. A
-        // pending invoice item lands on the subscription's first invoice, so
-        // the buyer is charged once for it rather than every renewal.
-        for (const line of total.lines) {
-          if (line.kind !== "bump") continue;
-          await stripe().invoiceItems.create({
-            customer: customerId,
-            amount: line.amountCents,
-            currency: total.currency,
-            description: line.title,
-            metadata: { orderId: String(orderId), productId: String(line.productId ?? "") },
-          });
-        }
 
         const params: Stripe.SubscriptionCreateParams = {
           customer: customerId,
@@ -707,9 +772,40 @@ checkoutOfferRouter.post(
           params.cancel_at = Math.floor(lastCharge.getTime() / 1000);
         }
 
-        const subscription = await stripe().subscriptions.create(params, {
-          idempotencyKey: `offer-order-${orderId}`,
-        });
+        const bumpLines = total.lines.filter((line) => line.kind === "bump");
+        const invoiceItemIds: string[] = [];
+
+        let subscription: Stripe.Subscription;
+        try {
+          // Bumps are one-off purchases riding along with a recurring one. A
+          // pending invoice item lands on the subscription's first invoice, so
+          // the buyer is charged once for it rather than every renewal — which
+          // means it has to exist before `subscriptions.create` raises that
+          // invoice. The window cannot be closed, only made as narrow as one
+          // call and swept if that call fails.
+          for (const [index, line] of bumpLines.entries()) {
+            const item = await stripe().invoiceItems.create(
+              {
+                customer: customerId,
+                amount: line.amountCents,
+                currency: total.currency,
+                description: line.title,
+                metadata: { orderId: String(orderId), productId: String(line.productId ?? "") },
+              },
+              // Keyed on the order and the line, so a checkout retried after a
+              // network timeout charges for the bump once rather than twice.
+              { idempotencyKey: `offer-order-${orderId}-bump-${index}` }
+            );
+            invoiceItemIds.push(item.id);
+          }
+
+          subscription = await stripe().subscriptions.create(params, {
+            idempotencyKey: `offer-order-${orderId}`,
+          });
+        } catch (err) {
+          await discardInvoiceItems(invoiceItemIds);
+          throw err;
+        }
 
         const invoice =
           typeof subscription.latest_invoice === "string" ? null : subscription.latest_invoice;
@@ -805,7 +901,16 @@ checkoutOfferRouter.post(
       res.status(204).end();
       return;
     }
-    const { offerSlug, email, firstName } = parsed.data;
+    const { offerSlug, firstName } = parsed.data;
+
+    // The same rule the charge follows: a signed-in buyer's own address wins
+    // over whatever the form posted. It is also what stops a member typing a
+    // stranger's address and having their own member_id written onto that
+    // person's recovery row — a row keyed on an address, joined to an account
+    // that never asked for it. An impersonated session claims nothing, because
+    // "view as member" is read-only everywhere else on this router too.
+    const member = req.member?.impersonatedBy === undefined ? req.member : undefined;
+    const email = (member?.email ?? parsed.data.email).trim().toLowerCase();
 
     const offer = await loadPublishedOffer(offerSlug);
     if (offer) {
@@ -823,14 +928,7 @@ checkoutOfferRouter.post(
            amount_cents = EXCLUDED.amount_cents,
            updated_at   = now()
          WHERE abandoned_checkouts.recovered_at IS NULL`,
-        [
-          offer.id,
-          email.toLowerCase(),
-          firstName ?? "",
-          req.member?.id ?? null,
-          offer.amount_cents,
-          offer.currency || "usd",
-        ]
+        [offer.id, email, firstName ?? "", member?.id ?? null, offer.amount_cents, offer.currency || "usd"]
       );
     }
 

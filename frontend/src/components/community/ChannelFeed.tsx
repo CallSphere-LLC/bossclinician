@@ -61,6 +61,16 @@ export function ChannelFeed({ communitySlug, channelSlug, role }: ChannelFeedPro
   // Guards the observer against firing twice for the same page while the first
   // request is still in flight — the sentinel stays on screen until it lands.
   const inFlight = useRef(false);
+  /**
+   * Which channel the visible list belongs to.
+   *
+   * Every response is checked against this before it is applied. Without it, a
+   * slow page of one channel lands after the reader has moved to another and
+   * repaints the new room with the old room's posts — which looks exactly like
+   * a permissions bug and is the reason this ref exists rather than a boolean.
+   */
+  const feedKey = `${communitySlug}/${channelSlug}`;
+  const currentKey = useRef(feedKey);
 
   const deepLinkedPost = Number(searchParams.get("post")) || 0;
 
@@ -73,6 +83,7 @@ export function ChannelFeed({ communitySlug, channelSlug, role }: ChannelFeedPro
 
       try {
         const data = await communityApi.posts(communitySlug, channelSlug, wanted, PER_PAGE);
+        if (currentKey.current !== feedKey) return;
         setChannel(data.channel);
         setReactionEmoji(data.reactionEmoji);
         setHasMore(data.hasMore);
@@ -84,6 +95,7 @@ export function ChannelFeed({ communitySlug, channelSlug, role }: ChannelFeedPro
         });
         setError("");
       } catch (err) {
+        if (currentKey.current !== feedKey) return;
         setError(
           err instanceof MemberApiError
             ? err.message
@@ -91,22 +103,29 @@ export function ChannelFeed({ communitySlug, channelSlug, role }: ChannelFeedPro
         );
       } finally {
         inFlight.current = false;
-        setLoading(false);
-        setLoadingMore(false);
+        if (currentKey.current === feedKey) {
+          setLoading(false);
+          setLoadingMore(false);
+        }
       }
     },
-    [communitySlug, channelSlug],
+    [communitySlug, channelSlug, feedKey],
   );
 
   // Switching channels starts over rather than appending: the two lists are
   // different rooms, and merging them would put one channel's posts in another.
   useEffect(() => {
+    currentKey.current = feedKey;
+    // Cleared outright rather than awaited: the request still running belongs to
+    // the channel just left, and its result is discarded by the key check above.
+    inFlight.current = false;
     setPosts([]);
     setChannel(null);
     setPage(0);
     setHasMore(false);
+    setLoading(true);
     void loadPage(1);
-  }, [loadPage]);
+  }, [feedKey, loadPage]);
 
   useEffect(() => {
     const node = sentinel.current;
@@ -192,9 +211,21 @@ export function ChannelFeed({ communitySlug, channelSlug, role }: ChannelFeedPro
     [communitySlug, channelSlug, member],
   );
 
-  const replacePost = useCallback((next: CommunityPost) => {
-    setPosts((current) => current.map((p) => (p.id === next.id ? next : p)));
-  }, []);
+  /**
+   * Applied as an updater rather than a finished post.
+   *
+   * A card can have a reaction, a vote and a comment all in flight at once, and
+   * each of those callbacks closed over the post as it was when the card last
+   * rendered. Handing the list a whole object built from that stale copy is how
+   * a vote silently undoes the reaction registered a moment earlier; handing it
+   * a function that reads the current row cannot.
+   */
+  const updatePost = useCallback(
+    (id: number, update: (post: CommunityPost) => CommunityPost) => {
+      setPosts((current) => current.map((p) => (p.id === id ? update(p) : p)));
+    },
+    [],
+  );
 
   const removePost = useCallback((id: number) => {
     setPosts((current) => current.filter((p) => p.id !== id));
@@ -268,7 +299,7 @@ export function ChannelFeed({ communitySlug, channelSlug, role }: ChannelFeedPro
                 reactionEmoji={reactionEmoji}
                 canModerate={canModerate(role)}
                 canWrite={Boolean(verified) && !impersonated}
-                onChange={replacePost}
+                onChange={updatePost}
                 onRemove={removePost}
                 defaultOpenComments={post.id === deepLinkedPost}
               />

@@ -251,18 +251,32 @@ export async function fulfillPayment(input: FulfillPaymentInput): Promise<Fulfil
 /**
  * Sets up the installment schedule for a payment-plan order.
  *
- * Called once, after the first installment is fulfilled. Stripe drives the
+ * Called once, when the order's first invoice settles. Stripe drives the
  * remaining charges as a subscription with a fixed iteration count; this table
  * is what lets the member see "2 of 3 payments made" without a round trip to
  * Stripe, and what the plan reports are built from.
+ *
+ * `firstInstallmentPaid` is the load-bearing argument. An invoice can settle
+ * without collecting anything — a trial period is exactly that — and an
+ * installment is a payment, so the opening row is credited only when the money
+ * moved. Crediting it on a $0 invoice hands the customer a charge they never
+ * made: a three-payment contract collects two and Stripe stops.
  */
 export async function createPaymentPlan(input: {
   orderId: number;
   offerId: number;
   memberId: number | null;
   email: string;
+  /** What each recurring charge costs, after any discount that applies to it. */
   installmentCents: number;
+  /**
+   * The opening charge, when a coupon discounts only the first one and it
+   * therefore differs from the rest of the schedule.
+   */
+  firstInstallmentCents?: number;
   installmentCount: number;
+  /** Whether the opening invoice actually collected money. */
+  firstInstallmentPaid: boolean;
   interval: BillingInterval;
   intervalCount?: number;
   currency?: string;
@@ -284,12 +298,14 @@ export async function createPaymentPlan(input: {
   try {
     await client.query("BEGIN");
 
+    const installmentsPaid = input.firstInstallmentPaid ? 1 : 0;
+
     const planRes = await client.query<{ id: number }>(
       `INSERT INTO payment_plans
          (order_id, offer_id, member_id, email, installment_cents, installment_count,
           installments_paid, currency, interval, interval_count, status,
           next_charge_at, stripe_customer_id, stripe_subscription_id)
-       VALUES ($1,$2,$3,$4,$5,$6,1,$7,$8,$9,'active',$10,$11,$12)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'active',$11,$12,$13)
        ON CONFLICT (stripe_subscription_id) DO NOTHING
        RETURNING id`,
       [
@@ -299,10 +315,13 @@ export async function createPaymentPlan(input: {
         input.email,
         input.installmentCents,
         input.installmentCount,
+        installmentsPaid,
         input.currency ?? "usd",
         input.interval,
         input.intervalCount ?? 1,
-        schedule[1]?.dueAt ?? null,
+        // The next charge is the first row the customer still owes, which is
+        // row one itself when the opening invoice collected nothing.
+        schedule[installmentsPaid]?.dueAt ?? null,
         input.stripeCustomerId ?? null,
         input.stripeSubscriptionId ?? null,
       ]
@@ -317,6 +336,9 @@ export async function createPaymentPlan(input: {
 
     for (const installment of schedule) {
       const isFirst = installment.sequence === 1;
+      const settled = isFirst && input.firstInstallmentPaid;
+      const amountCents =
+        isFirst ? (input.firstInstallmentCents ?? installment.amountCents) : installment.amountCents;
       await client.query(
         `INSERT INTO payment_plan_installments
            (payment_plan_id, sequence, amount_cents, due_at, paid_at, transaction_id, status)
@@ -325,11 +347,11 @@ export async function createPaymentPlan(input: {
         [
           planId,
           installment.sequence,
-          installment.amountCents,
+          amountCents,
           installment.dueAt,
-          isFirst ? startAt : null,
-          isFirst ? (input.firstTransactionId ?? null) : null,
-          isFirst ? "paid" : "scheduled",
+          settled ? startAt : null,
+          settled ? (input.firstTransactionId ?? null) : null,
+          settled ? "paid" : "scheduled",
         ]
       );
     }
@@ -345,11 +367,22 @@ export async function createPaymentPlan(input: {
 }
 
 /**
- * Records a refund and, when asked, takes the access back.
+ * Records a refund and, when the order is now fully refunded, takes the access
+ * back.
  *
- * Access revocation is a choice rather than automatic: a partial refund, or a
- * goodwill refund on a course someone genuinely completed, should usually leave
- * them their access. The caller decides; this records what was decided.
+ * "Fully refunded" is measured against what the order actually COLLECTED — the
+ * sum of its cleared payments — and never against `total_cents`, which holds the
+ * price of a single charge. One order can be three installments of a plan or
+ * thirty monthly renewals, so comparing a refund to one charge's price gets it
+ * wrong in both directions: refunding one $1,250 installment of a 3 x $1,250
+ * plan would read as a full refund and strip every grant while two thirds of the
+ * money is still ours, and a customer who has paid all three could never be
+ * refunded more than the first before the order stopped counting.
+ *
+ * Revocation is deliberately tied to the order being made whole again rather
+ * than left to the caller's reading of a single Stripe charge: a partial refund,
+ * or a goodwill refund on a course someone genuinely completed, leaves them
+ * their access.
  */
 export async function recordRefund(input: {
   orderId: number;
@@ -357,19 +390,23 @@ export async function recordRefund(input: {
   amountCents: number;
   currency?: string;
   reason?: string;
-  revokeAccess: boolean;
+  /** Whether a refund that settles the whole order also takes the access back. */
+  revokeAccessOnFullRefund: boolean;
   stripeRefundId?: string | null;
   createdByEmail?: string;
-}): Promise<{ recorded: boolean; revokedCount: number }> {
+}): Promise<{ recorded: boolean; fullyRefunded: boolean; revokedCount: number }> {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
 
+    // Recorded before the order is touched: the unique guard on the Stripe
+    // refund id is what stops a redelivered charge.refunded from adding the
+    // same money to `refunded_cents` twice.
     const inserted = await client.query<{ id: number }>(
       `INSERT INTO refunds
          (order_id, transaction_id, amount_cents, currency, reason, revoked_access,
           stripe_refund_id, created_by_email)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+       VALUES ($1,$2,$3,$4,$5,false,$6,$7)
        ON CONFLICT (stripe_refund_id) DO NOTHING
        RETURNING id`,
       [
@@ -378,37 +415,54 @@ export async function recordRefund(input: {
         input.amountCents,
         input.currency ?? "usd",
         (input.reason ?? "").slice(0, 500),
-        input.revokeAccess,
         input.stripeRefundId ?? null,
         input.createdByEmail ?? "",
       ]
     );
 
-    if (!inserted.rows[0]) {
+    const refundId = inserted.rows[0]?.id;
+    if (!refundId) {
       await client.query("ROLLBACK");
-      return { recorded: false, revokedCount: 0 };
+      return { recorded: false, fullyRefunded: false, revokedCount: 0 };
     }
 
+    // `collected` counts every payment that cleared on this order, whatever
+    // became of it afterwards. A charge marked 'refunded' or 'disputed' still
+    // contributed the money it took; dropping it as its status changes would
+    // shrink the denominator and make a later partial refund look like a full
+    // one.
     const orderRes = await client.query<{
       member_id: number | null;
       offer_id: number | null;
-      total_cents: number;
+      refunded_cents: number;
+      collected_cents: number;
     }>(
-      `UPDATE orders
-          SET refunded_cents = refunded_cents + $2,
+      `UPDATE orders o
+          SET refunded_cents = o.refunded_cents + $2,
               status = CASE
-                         WHEN refunded_cents + $2 >= total_cents THEN 'refunded'
-                         ELSE status
+                         WHEN collected.cents > 0 AND o.refunded_cents + $2 >= collected.cents
+                           THEN 'refunded'
+                         ELSE o.status
                        END,
               updated_at = now()
-        WHERE id = $1
-        RETURNING member_id, offer_id, total_cents`,
+         FROM (SELECT COALESCE(SUM(t.amount_cents), 0)::int AS cents
+                 FROM transactions t
+                WHERE t.order_id = $1
+                  AND t.kind = 'payment'
+                  AND t.status IN ('succeeded', 'refunded', 'disputed')) collected
+        WHERE o.id = $1
+        RETURNING o.member_id, o.offer_id, o.refunded_cents, collected.cents AS collected_cents`,
       [input.orderId, input.amountCents]
     );
 
-    let revokedCount = 0;
     const order = orderRes.rows[0];
-    if (input.revokeAccess && order?.member_id) {
+    const fullyRefunded =
+      order !== undefined &&
+      order.collected_cents > 0 &&
+      order.refunded_cents >= order.collected_cents;
+
+    let revokedCount = 0;
+    if (fullyRefunded && input.revokeAccessOnFullRefund && order?.member_id) {
       const revoked = await client.query(
         `UPDATE access_grants
             SET status = 'revoked', revoked_at = now(), revoke_reason = 'refunded', updated_at = now()
@@ -416,10 +470,11 @@ export async function recordRefund(input: {
         [order.member_id, input.orderId]
       );
       revokedCount = revoked.rowCount ?? 0;
+      await client.query(`UPDATE refunds SET revoked_access = true WHERE id = $1`, [refundId]);
     }
 
     await client.query("COMMIT");
-    return { recorded: true, revokedCount };
+    return { recorded: true, fullyRefunded, revokedCount };
   } catch (err) {
     await client.query("ROLLBACK");
     throw err;
