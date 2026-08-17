@@ -155,21 +155,38 @@ seoRouter.get(
 );
 
 /**
- * robots.txt.
+ * Whether crawlers may index this host.
  *
- * Indexing is OFF by default and switched on with SEO_ALLOW_INDEXING=true.
+ * Off unless something says otherwise, and either the environment variable or
+ * the website settings row can say so. Both are honoured because the switch on
+ * the settings screen would otherwise be decorative — it appeared to work and
+ * changed nothing, which is the worst possible shape for a control whose entire
+ * job is a one-way door at DNS cutover.
  *
- * The reason is specific to this migration: bossclinician.callsphere.site is a
- * staging host for a rebuild of bossclinician.com, which is live and indexed.
- * Letting a crawler index both would put the staging copy in competition with
- * the real site for its own content. The flag flips as part of the DNS cutover,
- * not before.
+ * The default matters here: bossclinician.callsphere.site is a staging host for
+ * a rebuild of bossclinician.com, which is live and indexed. Letting a crawler
+ * index both puts the staging copy in competition with the real site for its
+ * own content.
  */
-seoRouter.get("/robots.txt", (_req, res) => {
+async function indexingAllowed(): Promise<boolean> {
+  if (env.seoAllowIndexing) return true;
+  try {
+    const res = await pool.query<{ value: { allowIndexing?: unknown } }>(
+      `SELECT value FROM settings WHERE key = 'seo'`
+    );
+    return res.rows[0]?.value?.allowIndexing === true;
+  } catch {
+    // A settings table that cannot be read must not accidentally open the site
+    // to indexing — the default is closed.
+    return false;
+  }
+}
+
+seoRouter.get("/robots.txt", asyncHandler(async (_req, res) => {
   res.type("text/plain");
   res.set("Cache-Control", "public, max-age=3600");
 
-  if (!env.seoAllowIndexing) {
+  if (!(await indexingAllowed())) {
     res.send(
       [
         "# Staging host for the bossclinician.com rebuild — deliberately not indexed.",
@@ -203,4 +220,4 @@ seoRouter.get("/robots.txt", (_req, res) => {
       "",
     ].join("\n")
   );
-});
+}));
