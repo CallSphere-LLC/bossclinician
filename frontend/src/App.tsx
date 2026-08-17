@@ -10,6 +10,7 @@ import NotFound from "@/pages/NotFound";
 const About = lazy(() => import("@/pages/About"));
 const WorkWithMe = lazy(() => import("@/pages/WorkWithMe"));
 const Courses = lazy(() => import("@/pages/Courses"));
+const CourseDetail = lazy(() => import("@/pages/CourseDetail"));
 const Resources = lazy(() => import("@/pages/Resources"));
 const ResourceHub = lazy(() => import("@/pages/ResourceHub"));
 const Blog = lazy(() => import("@/pages/Blog"));
@@ -52,6 +53,8 @@ function PublicRoutes() {
           <Route path="/about" element={<About />} />
           <Route path="/work-with-me" element={<WorkWithMe />} />
           <Route path="/courses" element={<Courses />} />
+          {/* Where 55 of the legacy bossclinician.com product URLs land. */}
+          <Route path="/courses/:slug" element={<CourseDetail />} />
           <Route path="/resources" element={<Resources />} />
           <Route path="/resource-hub" element={<ResourceHub />} />
           <Route path="/blog" element={<Blog />} />

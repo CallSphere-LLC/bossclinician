@@ -11,8 +11,11 @@ import { subscribeRouter } from "./subscribe";
 import { chatRouter } from "./chat";
 import { realtimeRouter } from "./realtime";
 import { checkoutRouter } from "./checkout";
+import { offersRouter } from "./offers";
+import { checkoutOfferRouter } from "./checkoutOffer";
 import { stripeWebhookRouter } from "./stripeWebhook";
 import { growthPublicRouter } from "./growthPublic";
+import { redirectsRouter } from "./redirects";
 
 export const publicRouter = Router();
 
@@ -28,5 +31,8 @@ publicRouter.use(subscribeRouter);
 publicRouter.use(chatRouter);
 publicRouter.use(realtimeRouter);
 publicRouter.use(checkoutRouter);
+publicRouter.use(offersRouter);
+publicRouter.use(checkoutOfferRouter);
 publicRouter.use(stripeWebhookRouter);
 publicRouter.use(growthPublicRouter);
+publicRouter.use(redirectsRouter);

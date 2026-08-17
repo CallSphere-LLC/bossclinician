@@ -106,6 +106,11 @@ async function request<T>(
 
 export const api = {
   courses: () => request<Course[]>("/courses"),
+  /**
+   * One course with its curriculum outline and the offers it is sold through.
+   * The route every legacy product URL redirects to — see the `redirects` table.
+   */
+  courseDetail: (slug: string) => request<Course>(`/courses/${encodeURIComponent(slug)}`),
   resources: () => request<Resource[]>("/resources"),
   testimonials: () => request<Testimonial[]>("/testimonials"),
   blogList: (params?: { tag?: string; page?: number; limit?: number }) => {

@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { requireMember } from "../../middleware/memberAuth";
+import { memberBillingRouter } from "./billing";
 
 /**
  * `/api/member/*` — everything a signed-in customer can do.
@@ -13,5 +14,7 @@ export const memberRouter = Router();
 
 memberRouter.use(requireMember);
 
-// Phase 2 mounts billing here; Phase 3 mounts library, player, progress,
-// downloads, certificates, community and coaching.
+memberRouter.use("/billing", memberBillingRouter);
+
+// Phase 3 mounts library, player, progress, downloads, certificates, community
+// and coaching here.

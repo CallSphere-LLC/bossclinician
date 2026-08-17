@@ -1,22 +1,1704 @@
 import { Router } from "express";
+import { z } from "zod";
 import type Stripe from "stripe";
+import type { PoolClient } from "pg";
 import { pool } from "../../db/pool";
 import { asyncHandler } from "../../utils/asyncHandler";
 import { stripe } from "../../stripe/client";
 import { env, stripeEnabled } from "../../config/env";
 import { sendMail } from "../../email/mailer";
 import { orderPaidNotification } from "../../email/templates";
+import {
+  disputeAlert,
+  paymentFailedDunning,
+  paymentPlanCompleted,
+  paymentPlanOverchargeAlert,
+  purchaseReceipt,
+  type ReceiptLine,
+} from "../../email/commerceTemplates";
 import { fireTriggerAsync } from "../../automations/engine";
-
-export const stripeWebhookRouter = Router();
+import {
+  createPaymentPlan,
+  fulfillPayment,
+  recordRefund,
+  type FulfillResult,
+} from "../../services/fulfillment";
+import { grantOfferAccess, revokeOfferAccess } from "../../services/access";
+import { sendSetPasswordLink } from "../../services/setPasswordLink";
+import { addInterval, type BillingInterval } from "../../services/pricing";
 
 /**
- * Stripe webhook receiver — the ONLY place an order becomes `paid`.
+ * Stripe webhook receiver — the only place money becomes access.
  *
  * Requires the raw request body for signature verification, so app.ts mounts
  * express.raw() on this path ahead of the JSON body parser. If the body has
  * already been parsed to an object, verification will (correctly) fail.
+ *
+ * Four rules hold across every handler below:
+ *
+ *  1. **The raw event is stored before anything acts on it.** `stripe_events` is
+ *     both the idempotency key and the only forensic record of what Stripe
+ *     actually said when a payment later reconciles wrong.
+ *  2. **Orders are never marked paid here.** `services/fulfillment.ts` owns that
+ *     transition, because the admin's "record a manual payment" action has to
+ *     produce byte-identical results and two implementations would drift.
+ *  3. **Entitlement is only ever written through `services/access.ts`.** No
+ *     handler decides access by reading `orders` or `subscriptions`.
+ *  4. **Failure returns 500.** Stripe retries on 500 and gives up on 2xx, so
+ *     swallowing an error is how a paid customer silently never gets access.
  */
+export const stripeWebhookRouter = Router();
+
+/** Postgres int4 ceiling: an id it cannot hold is bad data, not a failed query. */
+const MAX_INT4 = 2_147_483_647;
+
+/* --------------------------------------------------------------- settings */
+
+/**
+ * Billing behaviour Yvette can change without a deploy.
+ *
+ * Defaults are the conservative reading in both directions: no grace period
+ * (access stops when the subscription does, which is what the customer agreed
+ * to), and a full refund takes back what it paid for.
+ */
+const billingSettingsSchema = z.object({
+  /** Extra days of access after a subscription ends. 0 = it ends with the period. */
+  cancelGraceDays: z.number().int().min(0).max(365).default(0),
+  revokeAccessOnFullRefund: z.boolean().default(true),
+});
+
+type BillingSettings = z.infer<typeof billingSettingsSchema>;
+
+const DEFAULT_BILLING_SETTINGS: BillingSettings = billingSettingsSchema.parse({});
+
+/**
+ * A half-edited settings row must not be able to stop a payment being fulfilled,
+ * so anything unparseable falls back to the defaults rather than throwing.
+ */
+async function billingSettings(): Promise<BillingSettings> {
+  const res = await pool.query<{ value: unknown }>(
+    `SELECT value FROM settings WHERE key = 'billing'`
+  );
+  const parsed = billingSettingsSchema.safeParse(res.rows[0]?.value ?? {});
+  return parsed.success ? parsed.data : DEFAULT_BILLING_SETTINGS;
+}
+
+/* --------------------------------------------------------------- metadata */
+
+/**
+ * The checkout's metadata, validated rather than trusted.
+ *
+ * These keys are written by routes/public/checkoutOffer.ts and come back on the
+ * event, but they arrive as free-text strings that have made a round trip
+ * through a third party, and `Number("")` is 0 — an id that would silently
+ * address the wrong row. Every field is parsed, and a field that fails parsing
+ * becomes `undefined` instead of poisoning the whole object.
+ */
+const metadataId = z
+  .string()
+  .regex(/^\d{1,10}$/)
+  .transform(Number)
+  .refine((n) => n > 0 && n <= MAX_INT4)
+  .optional()
+  .catch(undefined);
+
+const offerMetadataSchema = z.object({
+  orderId: metadataId,
+  offerId: metadataId,
+  parentOrderId: metadataId,
+  pricingType: z
+    .enum(["one_time", "subscription", "payment_plan", "free", "pwyw"])
+    .optional()
+    .catch(undefined),
+  installmentCount: z
+    .string()
+    .regex(/^\d{1,6}$/)
+    .transform(Number)
+    .refine((n) => n > 1)
+    .optional()
+    .catch(undefined),
+  installmentCents: z
+    .string()
+    .regex(/^\d{1,10}$/)
+    .transform(Number)
+    .refine((n) => n >= 0)
+    .optional()
+    .catch(undefined),
+});
+
+type OfferMetadata = z.infer<typeof offerMetadataSchema>;
+
+const EMPTY_METADATA: OfferMetadata = offerMetadataSchema.parse({});
+
+function readMetadata(raw: Stripe.Metadata | null | undefined): OfferMetadata {
+  const parsed = offerMetadataSchema.safeParse(raw ?? {});
+  return parsed.success ? parsed.data : EMPTY_METADATA;
+}
+
+/* ---------------------------------------------------------------- helpers */
+
+/** Stripe timestamps are Unix seconds; every column here is TIMESTAMPTZ. */
+function toDate(unix: number | null | undefined): Date | null {
+  return typeof unix === "number" ? new Date(unix * 1000) : null;
+}
+
+/**
+ * Stripe sends an id where the API would send an expanded object. Webhook
+ * payloads are never expanded, but the types allow both and reading `.id` off a
+ * string yields undefined rather than an error, which is how an id ends up NULL.
+ */
+function idOf(value: string | { id: string } | null | undefined): string | null {
+  if (typeof value === "string") return value;
+  return value?.id ?? null;
+}
+
+function truncate(value: string, max: number): string {
+  return value.length > max ? value.slice(0, max) : value;
+}
+
+function log(message: string): void {
+  // eslint-disable-next-line no-console
+  console.log(`[stripe:webhook] ${message}`);
+}
+
+/* ----------------------------------------------------------- the event log */
+
+type EventClaim = { claimed: true; attempts: number } | { claimed: false };
+
+/**
+ * Records the raw event and claims the right to process it.
+ *
+ * **This single statement is the idempotency backbone of the whole file.**
+ * `stripe_events.id` is the primary key, so a redelivery of an event already
+ * carried to completion cannot insert and cannot pass the DO UPDATE's WHERE —
+ * no row comes back, the caller acknowledges 200, and nothing downstream runs a
+ * second time. Every "did this already happen?" question below ultimately rests
+ * on this.
+ *
+ * The conflict is DO UPDATE rather than DO NOTHING for one specific reason: an
+ * attempt that FAILED returned 500 precisely so Stripe would retry, and DO
+ * NOTHING would make that retry look like a duplicate and drop it. Only
+ * 'processed' and 'ignored' are final; 'received' (a delivery that crashed
+ * mid-flight) and 'failed' are re-claimable. Row-level locking on the UPDATE is
+ * also what serialises two deliveries of the same event arriving together.
+ */
+async function claimEvent(event: Stripe.Event): Promise<EventClaim> {
+  const res = await pool.query<{ attempts: number }>(
+    `INSERT INTO stripe_events (id, type, api_version, payload)
+     VALUES ($1, $2, $3, $4)
+     ON CONFLICT (id) DO UPDATE
+       SET status = 'received'
+       WHERE stripe_events.status IN ('received', 'failed')
+     RETURNING attempts`,
+    [event.id, event.type, event.api_version ?? "", JSON.stringify(event)]
+  );
+
+  const row = res.rows[0];
+  if (!row) return { claimed: false };
+  return { claimed: true, attempts: row.attempts };
+}
+
+async function markProcessed(eventId: string, handled: boolean): Promise<void> {
+  await pool.query(
+    `UPDATE stripe_events
+        SET status = $2, processed_at = now(), error = ''
+      WHERE id = $1`,
+    [eventId, handled ? "processed" : "ignored"]
+  );
+}
+
+async function markFailed(eventId: string, err: unknown): Promise<void> {
+  const message = err instanceof Error ? err.message : String(err);
+  await pool.query(
+    `UPDATE stripe_events
+        SET status = 'failed', error = $2, attempts = attempts + 1
+      WHERE id = $1`,
+    [eventId, truncate(message, 2000)]
+  );
+}
+
+/* ------------------------------------------------------------------ orders */
+
+interface OrderRow {
+  id: number;
+  offer_id: number | null;
+  member_id: number | null;
+  email: string;
+  billing_name: string;
+  status: string;
+  currency: string;
+  subtotal_cents: number;
+  discount_cents: number;
+  tax_cents: number;
+  total_cents: number;
+  refunded_cents: number;
+  coupon_code: string;
+  course_title: string;
+  offer_title: string | null;
+}
+
+const ORDER_SELECT = `
+  SELECT o.id, o.offer_id, o.member_id, o.email, o.billing_name, o.status, o.currency,
+         o.subtotal_cents, o.discount_cents, o.tax_cents, o.total_cents, o.refunded_cents,
+         o.coupon_code, o.course_title, f.title AS offer_title
+    FROM orders o
+    LEFT JOIN offers f ON f.id = o.offer_id`;
+
+async function loadOrderById(id: number): Promise<OrderRow | null> {
+  const res = await pool.query<OrderRow>(`${ORDER_SELECT} WHERE o.id = $1`, [id]);
+  return res.rows[0] ?? null;
+}
+
+async function loadOrderByPaymentIntent(paymentIntentId: string): Promise<OrderRow | null> {
+  const res = await pool.query<OrderRow>(
+    `${ORDER_SELECT} WHERE o.stripe_payment_intent_id = $1`,
+    [paymentIntentId]
+  );
+  return res.rows[0] ?? null;
+}
+
+async function loadOrderBySession(sessionId: string): Promise<OrderRow | null> {
+  const res = await pool.query<OrderRow>(`${ORDER_SELECT} WHERE o.stripe_session_id = $1`, [
+    sessionId,
+  ]);
+  return res.rows[0] ?? null;
+}
+
+/** What the buyer thinks they bought, for receipts and automation payloads. */
+function describe(order: OrderRow): string {
+  return order.offer_title || order.course_title || `Order #${order.id}`;
+}
+
+/**
+ * The order a payment belongs to.
+ *
+ * The metadata id is preferred over the Stripe id because it is the link the
+ * checkout established deliberately; the Stripe id lookup covers the legacy
+ * hosted-checkout path, which predates the metadata and has no orderId to send.
+ */
+async function resolveOrder(
+  meta: OfferMetadata,
+  paymentIntentId: string | null
+): Promise<OrderRow | null> {
+  if (meta.orderId !== undefined) {
+    const byMetadata = await loadOrderById(meta.orderId);
+    if (byMetadata) return byMetadata;
+  }
+  if (paymentIntentId) return loadOrderByPaymentIntent(paymentIntentId);
+  return null;
+}
+
+/* -------------------------------------------------------- payment settling */
+
+interface PaymentFacts {
+  paymentIntentId: string | null;
+  chargeId: string | null;
+  amountCents: number;
+  currency: string;
+  email: string | null;
+  stripeCustomerId: string | null;
+  paymentMethod?: { brand?: string; last4?: string; type?: string };
+  country?: string;
+  state?: string;
+  occurredAt: Date;
+}
+
+/**
+ * The buyer's copy of the transaction, plus the way into the account if the
+ * purchase just created one.
+ *
+ * Both are fire-and-forget: the money has moved and the access has been granted
+ * by the time this runs, so an SMTP outage must not turn a completed purchase
+ * into a retried webhook that tries to fulfil it all over again.
+ */
+async function sendPurchaseEmails(order: OrderRow, result: FulfillResult): Promise<void> {
+  const items = await pool.query<{ title: string; quantity: number; amount_cents: number }>(
+    `SELECT title, quantity, amount_cents FROM order_items WHERE order_id = $1 ORDER BY id`,
+    [order.id]
+  );
+
+  const lines: ReceiptLine[] =
+    items.rows.length > 0
+      ? items.rows.map((row) => ({
+          title: row.title,
+          quantity: row.quantity,
+          amountCents: row.amount_cents,
+        }))
+      : // The legacy course path writes no order_items, so the order itself is
+        // the only line there is.
+        [{ title: describe(order), quantity: 1, amountCents: order.total_cents }];
+
+  if (order.email) {
+    void sendMail({
+      to: order.email,
+      ...purchaseReceipt({
+        buyerName: order.billing_name,
+        orderId: order.id,
+        lines,
+        subtotalCents: order.subtotal_cents,
+        discountCents: order.discount_cents,
+        couponCode: order.coupon_code,
+        taxCents: order.tax_cents,
+        totalCents: order.total_cents,
+        currency: order.currency,
+      }),
+    });
+  }
+
+  // A guest checkout creates an account with no password. This link is the only
+  // way to claim it, and the library it opens already contains a paid purchase.
+  if (result.createdMember && result.memberId !== null) {
+    void sendSetPasswordLink(result.memberId);
+  }
+}
+
+function notifyAdminOfSale(order: OrderRow): void {
+  if (!env.notifyEmail) return;
+  void sendMail({
+    to: env.notifyEmail,
+    ...orderPaidNotification({
+      courseTitle: describe(order),
+      email: order.email,
+      amountCents: order.total_cents,
+      currency: order.currency,
+    }),
+  });
+}
+
+/**
+ * Records a payment against an order and sends what a first payment sends.
+ *
+ * `fulfillPayment` is idempotent and reports `fulfilled: false` for a delivery
+ * that changed nothing, which is what gates the emails: a replay must not
+ * produce a second receipt or a second set-password link.
+ */
+async function settleOrderPayment(
+  order: OrderRow,
+  facts: PaymentFacts
+): Promise<FulfillResult> {
+  const result = await fulfillPayment({
+    orderId: order.id,
+    paymentIntentId: facts.paymentIntentId,
+    chargeId: facts.chargeId,
+    amountCents: facts.amountCents,
+    currency: facts.currency,
+    email: facts.email ?? order.email,
+    paymentMethod: facts.paymentMethod,
+    country: facts.country,
+    state: facts.state,
+    stripeCustomerId: facts.stripeCustomerId,
+    occurredAt: facts.occurredAt,
+  });
+
+  if (!result.fulfilled) {
+    log(`order ${order.id} was already fulfilled; nothing to do`);
+    return result;
+  }
+
+  log(`order ${order.id} paid — granted products [${result.grantedProductIds.join(", ")}]`);
+  await sendPurchaseEmails(order, result);
+  notifyAdminOfSale(order);
+  fireTriggerAsync("order_paid", {
+    email: order.email,
+    courseTitle: describe(order),
+    amountCents: order.total_cents,
+  });
+
+  return result;
+}
+
+/**
+ * Fills in the card details a PaymentIntent event does not carry.
+ *
+ * `payment_intent.succeeded` sends `latest_charge` as a bare id, so the brand and
+ * last four only exist on the Charge object. Whichever of the two events loses
+ * the race still has something the winner did not, and this is the cheap half:
+ * purely cosmetic, for the payments report, and never the thing that fulfils.
+ */
+async function enrichTransaction(paymentIntentId: string, facts: PaymentFacts): Promise<void> {
+  await pool.query(
+    `UPDATE transactions
+        SET payment_method_brand = CASE WHEN payment_method_brand = '' THEN $2 ELSE payment_method_brand END,
+            payment_method_last4 = CASE WHEN payment_method_last4 = '' THEN $3 ELSE payment_method_last4 END,
+            payment_method_type  = CASE WHEN payment_method_type  = '' THEN $4 ELSE payment_method_type  END,
+            country              = CASE WHEN country = '' THEN $5 ELSE country END,
+            state                = CASE WHEN state   = '' THEN $6 ELSE state   END,
+            stripe_charge_id     = COALESCE(stripe_charge_id, $7)
+      WHERE stripe_payment_intent_id = $1`,
+    [
+      paymentIntentId,
+      facts.paymentMethod?.brand ?? "",
+      facts.paymentMethod?.last4 ?? "",
+      facts.paymentMethod?.type ?? "",
+      facts.country ?? "",
+      facts.state ?? "",
+      facts.chargeId,
+    ]
+  );
+}
+
+/**
+ * Records a declined attempt.
+ *
+ * Deliberately keyed on the charge and NOT on the PaymentIntent: a declined
+ * PaymentIntent can be retried with another card and succeed on the same id, and
+ * `transactions.stripe_payment_intent_id` is UNIQUE — a failure row holding that
+ * id would make `fulfillPayment`'s own insert a no-op and leave the eventual
+ * success recorded as a failure, with the revenue reports built on top of it.
+ */
+async function recordFailedAttempt(input: {
+  orderId: number | null;
+  memberId: number | null;
+  email: string;
+  amountCents: number;
+  currency: string;
+  chargeId: string | null;
+  reason: string;
+  occurredAt: Date;
+}): Promise<void> {
+  await pool.query(
+    `INSERT INTO transactions
+       (order_id, member_id, email, kind, status, amount_cents,
+        currency, stripe_charge_id, failure_reason, occurred_at)
+     SELECT $1, $2, $3, 'payment', 'failed', $4, $5, $6, $7, $8
+      WHERE NOT EXISTS (SELECT 1 FROM transactions t WHERE t.stripe_charge_id = $6)`,
+    [
+      input.orderId,
+      input.memberId,
+      input.email,
+      input.amountCents,
+      input.currency,
+      input.chargeId,
+      truncate(input.reason, 500),
+      input.occurredAt,
+    ]
+  );
+}
+
+/* --------------------------------------------------------- checkout events */
+
+/**
+ * The legacy hosted-checkout subscription path.
+ *
+ * Offer checkout drives subscriptions through the Payment Element and never
+ * creates a Checkout Session, so this only ever fires for `plans` sold by
+ * routes/public/checkout.ts. A trial means there is no payment yet and
+ * payment_status never reaches "paid", so the subscription is recorded here and
+ * customer.subscription.* keeps it in step from then on.
+ */
+async function mirrorLegacyPlanSubscription(session: Stripe.Checkout.Session): Promise<void> {
+  const subscriptionId = idOf(session.subscription);
+  if (!subscriptionId) return;
+
+  const email = (session.customer_details?.email ?? session.customer_email ?? "")
+    .trim()
+    .toLowerCase();
+  const planIdRaw = session.metadata?.planId ?? "";
+  const planId = /^\d{1,10}$/.test(planIdRaw) && Number(planIdRaw) <= MAX_INT4
+    ? Number(planIdRaw)
+    : null;
+
+  let memberId: number | null = null;
+  if (email) {
+    const member = await pool.query<{ id: number }>(
+      `INSERT INTO members (email, name, status) VALUES ($1, '', 'active')
+       ON CONFLICT (email) DO UPDATE SET updated_at = now()
+       RETURNING id`,
+      [email]
+    );
+    memberId = member.rows[0]?.id ?? null;
+  }
+
+  await pool.query(
+    `INSERT INTO subscriptions
+       (member_id, plan_id, email, stripe_customer_id, stripe_subscription_id,
+        status, amount_cents, currency)
+     VALUES ($1, $2, $3, $4, $5, 'active', $6, $7)
+     ON CONFLICT (stripe_subscription_id) DO UPDATE
+       SET member_id = COALESCE(EXCLUDED.member_id, subscriptions.member_id),
+           plan_id   = COALESCE(EXCLUDED.plan_id, subscriptions.plan_id),
+           status    = 'active',
+           updated_at = now()`,
+    [
+      memberId,
+      planId,
+      email,
+      idOf(session.customer),
+      subscriptionId,
+      session.amount_total ?? 0,
+      session.currency ?? "usd",
+    ]
+  );
+
+  // A paid plan can unlock a community; enrol on purchase rather than on first
+  // visit, so the welcome post is there when they arrive.
+  if (planId !== null && memberId !== null) {
+    await pool.query(
+      `INSERT INTO community_memberships (community_id, member_id)
+       SELECT p.community_id, $2 FROM plans p
+        WHERE p.id = $1 AND p.community_id IS NOT NULL
+       ON CONFLICT (community_id, member_id) DO NOTHING`,
+      [planId, memberId]
+    );
+  }
+}
+
+/** A Checkout Session that has actually been paid, whatever collected it. */
+async function settleSessionPayment(session: Stripe.Checkout.Session): Promise<void> {
+  const meta = readMetadata(session.metadata);
+  const paymentIntentId = idOf(session.payment_intent);
+
+  const order =
+    (meta.orderId !== undefined ? await loadOrderById(meta.orderId) : null) ??
+    (await loadOrderBySession(session.id)) ??
+    (paymentIntentId ? await loadOrderByPaymentIntent(paymentIntentId) : null);
+
+  if (!order) {
+    log(`session ${session.id} paid but no matching order — nothing fulfilled`);
+    return;
+  }
+
+  const address = session.customer_details?.address ?? null;
+  await settleOrderPayment(order, {
+    paymentIntentId,
+    chargeId: null,
+    amountCents: session.amount_total ?? order.total_cents,
+    currency: session.currency ?? order.currency,
+    email: session.customer_details?.email ?? session.customer_email ?? null,
+    stripeCustomerId: idOf(session.customer),
+    country: address?.country ?? "",
+    state: address?.state ?? "",
+    occurredAt: toDate(session.created) ?? new Date(),
+  });
+}
+
+async function handleSessionCompleted(session: Stripe.Checkout.Session): Promise<void> {
+  if (session.mode === "subscription") {
+    await mirrorLegacyPlanSubscription(session);
+    return;
+  }
+
+  // `complete` and unpaid is the normal shape for a delayed method such as a
+  // bank debit. checkout.session.async_payment_succeeded is the event that says
+  // the money arrived, and acting here would grant access on an unpaid order.
+  if (session.payment_status !== "paid") {
+    log(`session ${session.id} completed but payment_status=${session.payment_status}; waiting`);
+    return;
+  }
+
+  await settleSessionPayment(session);
+}
+
+async function handleSessionExpired(session: Stripe.Checkout.Session): Promise<void> {
+  const meta = readMetadata(session.metadata);
+  await pool.query(
+    `UPDATE orders SET status = 'expired', updated_at = now()
+      WHERE (id = $1 OR stripe_session_id = $2) AND status = 'pending'`,
+    [meta.orderId ?? null, session.id]
+  );
+}
+
+async function handleSessionAsyncFailed(session: Stripe.Checkout.Session): Promise<void> {
+  const meta = readMetadata(session.metadata);
+  await pool.query(
+    `UPDATE orders SET status = 'failed', updated_at = now()
+      WHERE (id = $1 OR stripe_session_id = $2) AND status <> 'paid'`,
+    [meta.orderId ?? null, session.id]
+  );
+}
+
+/* ---------------------------------------------------------- payment intents */
+
+async function handlePaymentIntentSucceeded(intent: Stripe.PaymentIntent): Promise<void> {
+  const meta = readMetadata(intent.metadata);
+  const order = await resolveOrder(meta, intent.id);
+
+  // A PaymentIntent raised by an invoice has no order of its own; invoice.paid
+  // owns the subscription and payment-plan side of the ledger.
+  if (!order) {
+    log(`payment_intent ${intent.id} has no order — leaving it to invoice.paid`);
+    return;
+  }
+
+  await settleOrderPayment(order, {
+    paymentIntentId: intent.id,
+    chargeId: idOf(intent.latest_charge),
+    amountCents: intent.amount_received || intent.amount,
+    currency: intent.currency,
+    email: intent.receipt_email,
+    stripeCustomerId: idOf(intent.customer),
+    occurredAt: toDate(intent.created) ?? new Date(),
+  });
+}
+
+/**
+ * The same payment, seen as a Charge.
+ *
+ * Handled as well as payment_intent.succeeded because only this payload carries
+ * the card brand and last four, and Stripe does not guarantee which of the two
+ * arrives first. `fulfillPayment` is idempotent, so whichever wins fulfils and
+ * the loser either enriches the transaction or does nothing at all.
+ */
+async function handleChargeSucceeded(charge: Stripe.Charge): Promise<void> {
+  const paymentIntentId = idOf(charge.payment_intent);
+  const meta = readMetadata(charge.metadata);
+  const order = await resolveOrder(meta, paymentIntentId);
+  if (!order) return;
+
+  const card = charge.payment_method_details?.card ?? null;
+  const address = charge.billing_details?.address ?? null;
+  const facts: PaymentFacts = {
+    paymentIntentId,
+    chargeId: charge.id,
+    amountCents: charge.amount_captured || charge.amount,
+    currency: charge.currency,
+    email: charge.billing_details?.email ?? charge.receipt_email,
+    stripeCustomerId: idOf(charge.customer),
+    paymentMethod: {
+      brand: card?.brand ?? "",
+      last4: card?.last4 ?? "",
+      type: charge.payment_method_details?.type ?? "",
+    },
+    country: address?.country ?? "",
+    state: address?.state ?? "",
+    occurredAt: toDate(charge.created) ?? new Date(),
+  };
+
+  const result = await settleOrderPayment(order, facts);
+  if (!result.fulfilled && paymentIntentId) {
+    await enrichTransaction(paymentIntentId, facts);
+  }
+}
+
+async function handlePaymentIntentFailed(intent: Stripe.PaymentIntent): Promise<void> {
+  const meta = readMetadata(intent.metadata);
+  const order = await resolveOrder(meta, intent.id);
+  const reason =
+    intent.last_payment_error?.message ??
+    intent.last_payment_error?.code ??
+    "The payment was declined";
+
+  if (order) {
+    // Never touch a paid order: a failed attempt can arrive after a successful
+    // retry, and un-paying an order would revoke access somebody has paid for.
+    await pool.query(
+      `UPDATE orders SET status = 'failed', updated_at = now()
+        WHERE id = $1 AND status <> 'paid'`,
+      [order.id]
+    );
+  }
+
+  await recordFailedAttempt({
+    orderId: order?.id ?? null,
+    memberId: order?.member_id ?? null,
+    email: order?.email ?? intent.receipt_email ?? "",
+    amountCents: intent.amount,
+    currency: intent.currency,
+    chargeId: idOf(intent.latest_charge),
+    reason,
+    occurredAt: toDate(intent.created) ?? new Date(),
+  });
+
+  log(`payment_intent ${intent.id} failed: ${reason}`);
+}
+
+/* ---------------------------------------------------------------- invoices */
+
+interface PlanRow {
+  id: number;
+  order_id: number | null;
+  offer_id: number | null;
+  member_id: number | null;
+  email: string;
+  installment_cents: number;
+  installment_count: number;
+  installments_paid: number;
+  currency: string;
+  status: string;
+}
+
+const PLAN_COLUMNS = `id, order_id, offer_id, member_id, email, installment_cents,
+                      installment_count, installments_paid, currency, status`;
+
+async function loadPlan(stripeSubscriptionId: string): Promise<PlanRow | null> {
+  const res = await pool.query<PlanRow>(
+    `SELECT ${PLAN_COLUMNS} FROM payment_plans WHERE stripe_subscription_id = $1`,
+    [stripeSubscriptionId]
+  );
+  return res.rows[0] ?? null;
+}
+
+function invoiceSubscriptionId(invoice: Stripe.Invoice): string | null {
+  // The flat `invoice.subscription` field was replaced by the polymorphic
+  // `parent` object, which is why the API version is pinned in stripe/client.ts.
+  return idOf(invoice.parent?.subscription_details?.subscription);
+}
+
+function invoiceMetadata(invoice: Stripe.Invoice): OfferMetadata {
+  // An immutable snapshot of the subscription's metadata taken when the invoice
+  // was finalised — the offer and order ids without an API call to fetch them.
+  return readMetadata(invoice.parent?.subscription_details?.metadata);
+}
+
+function invoicePaymentIntentId(invoice: Stripe.Invoice): string | null {
+  for (const payment of invoice.payments?.data ?? []) {
+    const intentId = idOf(payment.payment?.payment_intent);
+    if (intentId) return intentId;
+  }
+  return null;
+}
+
+async function localSubscriptionId(stripeSubscriptionId: string): Promise<number | null> {
+  const res = await pool.query<{ id: number }>(
+    `SELECT id FROM subscriptions WHERE stripe_subscription_id = $1`,
+    [stripeSubscriptionId]
+  );
+  return res.rows[0]?.id ?? null;
+}
+
+/**
+ * Mirrors the invoice and claims the right to act on it.
+ *
+ * `invoices.stripe_invoice_id` is UNIQUE, and the guard on the conflict path
+ * makes this the per-invoice idempotency key: an invoice already recorded as
+ * paid returns no row, and the caller stops. That matters more than the
+ * event-level guard for payment plans, because advancing an installment counter
+ * is the one operation here that is not naturally idempotent — a second run
+ * would consume the customer's next payment before they had made it.
+ */
+async function upsertInvoice(input: {
+  stripeInvoiceId: string;
+  subscriptionId: number | null;
+  paymentPlanId: number | null;
+  memberId: number | null;
+  orderId: number | null;
+  number: string;
+  email: string;
+  amountDueCents: number;
+  amountPaidCents: number;
+  taxCents: number;
+  currency: string;
+  status: "paid" | "failed";
+  hostedInvoiceUrl: string;
+  pdfUrl: string;
+  periodStart: Date | null;
+  periodEnd: Date | null;
+  paidAt: Date | null;
+}): Promise<boolean> {
+  const res = await pool.query<{ id: number }>(
+    `INSERT INTO invoices
+       (stripe_invoice_id, subscription_id, payment_plan_id, member_id, order_id, number,
+        email, amount_due_cents, amount_paid_cents, tax_cents, currency, status,
+        hosted_invoice_url, pdf_url, period_start, period_end, paid_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+     ON CONFLICT (stripe_invoice_id) DO UPDATE SET
+       subscription_id   = COALESCE(EXCLUDED.subscription_id, invoices.subscription_id),
+       payment_plan_id   = COALESCE(EXCLUDED.payment_plan_id, invoices.payment_plan_id),
+       member_id         = COALESCE(EXCLUDED.member_id, invoices.member_id),
+       order_id          = COALESCE(EXCLUDED.order_id, invoices.order_id),
+       number            = EXCLUDED.number,
+       email             = EXCLUDED.email,
+       amount_due_cents  = EXCLUDED.amount_due_cents,
+       amount_paid_cents = EXCLUDED.amount_paid_cents,
+       tax_cents         = EXCLUDED.tax_cents,
+       currency          = EXCLUDED.currency,
+       status            = EXCLUDED.status,
+       hosted_invoice_url = EXCLUDED.hosted_invoice_url,
+       pdf_url           = EXCLUDED.pdf_url,
+       period_start      = COALESCE(EXCLUDED.period_start, invoices.period_start),
+       period_end        = COALESCE(EXCLUDED.period_end, invoices.period_end),
+       paid_at           = COALESCE(EXCLUDED.paid_at, invoices.paid_at)
+     WHERE invoices.status <> 'paid'
+     RETURNING id`,
+    [
+      input.stripeInvoiceId,
+      input.subscriptionId,
+      input.paymentPlanId,
+      input.memberId,
+      input.orderId,
+      input.number,
+      input.email,
+      input.amountDueCents,
+      input.amountPaidCents,
+      input.taxCents,
+      input.currency,
+      input.status,
+      input.hostedInvoiceUrl,
+      input.pdfUrl,
+      input.periodStart,
+      input.periodEnd,
+      input.paidAt,
+    ]
+  );
+  return res.rows.length > 0;
+}
+
+/**
+ * Records a recurring charge that is not the first one on its order.
+ *
+ * These cannot go through `fulfillPayment`: it exists to move an order from
+ * pending to paid exactly once, and installment two of a plan is a second charge
+ * against an order that is already paid. The order-level rule still holds —
+ * nothing here writes `orders.status`.
+ */
+async function recordRecurringPayment(input: {
+  orderId: number | null;
+  subscriptionId: number | null;
+  memberId: number | null;
+  email: string;
+  amountCents: number;
+  currency: string;
+  paymentIntentId: string | null;
+  occurredAt: Date;
+}): Promise<number | null> {
+  const res = await pool.query<{ id: number }>(
+    `INSERT INTO transactions
+       (order_id, subscription_id, member_id, email, kind, status, amount_cents,
+        currency, stripe_payment_intent_id, occurred_at)
+     VALUES ($1,$2,$3,$4,'payment','succeeded',$5,$6,$7,$8)
+     ON CONFLICT (stripe_payment_intent_id) DO NOTHING
+     RETURNING id`,
+    [
+      input.orderId,
+      input.subscriptionId,
+      input.memberId,
+      input.email,
+      input.amountCents,
+      input.currency,
+      input.paymentIntentId,
+      input.occurredAt,
+    ]
+  );
+  return res.rows[0]?.id ?? null;
+}
+
+/** The first payment's transaction, for linking installment 1 of a plan. */
+async function firstTransactionForOrder(orderId: number): Promise<number | null> {
+  const res = await pool.query<{ id: number }>(
+    `SELECT id FROM transactions
+      WHERE order_id = $1 AND kind = 'payment' AND status = 'succeeded'
+      ORDER BY id LIMIT 1`,
+    [orderId]
+  );
+  return res.rows[0]?.id ?? null;
+}
+
+/**
+ * Sets up the installment schedule after a payment plan's first charge clears.
+ *
+ * The plan's shape is read from the offer rather than from the event's metadata:
+ * metadata is a string round-tripped through a third party, and `offers` is where
+ * "3 x $1,250" is actually defined. Metadata only stands in if the offer has
+ * since been deleted.
+ */
+async function startPaymentPlan(input: {
+  order: OrderRow;
+  meta: OfferMetadata;
+  stripeSubscriptionId: string;
+  stripeCustomerId: string | null;
+  startAt: Date;
+}): Promise<number | null> {
+  const offerId = input.order.offer_id ?? input.meta.offerId ?? null;
+  if (offerId === null) return null;
+
+  const offerRes = await pool.query<{
+    amount_cents: number;
+    currency: string;
+    interval: BillingInterval | null;
+    interval_count: number;
+    installment_count: number | null;
+  }>(
+    `SELECT amount_cents, currency, interval, interval_count, installment_count
+       FROM offers WHERE id = $1`,
+    [offerId]
+  );
+  const offer = offerRes.rows[0];
+
+  const installmentCount = offer?.installment_count ?? input.meta.installmentCount;
+  const installmentCents = offer?.amount_cents ?? input.meta.installmentCents;
+  if (installmentCount === undefined || installmentCount === null) {
+    log(`offer ${offerId} has no installment_count; cannot build a plan schedule`);
+    return null;
+  }
+  if (installmentCents === undefined || installmentCents === null) return null;
+
+  return createPaymentPlan({
+    orderId: input.order.id,
+    offerId,
+    memberId: input.order.member_id,
+    email: input.order.email,
+    installmentCents,
+    installmentCount,
+    interval: offer?.interval ?? "month",
+    intervalCount: offer?.interval_count ?? 1,
+    currency: offer?.currency ?? input.order.currency,
+    startAt: input.startAt,
+    stripeCustomerId: input.stripeCustomerId,
+    stripeSubscriptionId: input.stripeSubscriptionId,
+    firstTransactionId: await firstTransactionForOrder(input.order.id),
+  });
+}
+
+/**
+ * Advances a payment plan by exactly one installment, and stops it at the end.
+ *
+ * This is the whole difference between a payment plan and a subscription, and
+ * getting it wrong bills a customer forever. Two invariants:
+ *
+ *  - **`installments_paid` never passes `installment_count`.** The plan stops
+ *    itself in Stripe — routes/public/checkoutOffer.ts creates the subscription
+ *    with `cancel_at` set to the final installment date — so an invoice arriving
+ *    after the last one means that safeguard has failed and somebody who has
+ *    finished paying is being charged again. The counter is left alone (the
+ *    plan's own records stay truthful) and the admin is paged, because no code
+ *    here can un-charge a card.
+ *  - **One invoice advances one installment.** The row lock plus
+ *    `status <> 'paid'` on the installment means a concurrent or replayed
+ *    delivery updates nothing rather than eating the customer's next payment.
+ */
+async function advancePaymentPlan(input: {
+  stripeSubscriptionId: string;
+  transactionId: number | null;
+  amountCents: number;
+  currency: string;
+  paidAt: Date;
+}): Promise<void> {
+  const client: PoolClient = await pool.connect();
+  let completedPlan: PlanRow | null = null;
+  let overcharged: PlanRow | null = null;
+
+  try {
+    await client.query("BEGIN");
+
+    const planRes = await client.query<PlanRow>(
+      `SELECT ${PLAN_COLUMNS} FROM payment_plans
+        WHERE stripe_subscription_id = $1
+        FOR UPDATE`,
+      [input.stripeSubscriptionId]
+    );
+    const plan = planRes.rows[0];
+    if (!plan) {
+      await client.query("ROLLBACK");
+      return;
+    }
+
+    const nextSequence = plan.installments_paid + 1;
+    if (plan.status === "completed" || nextSequence > plan.installment_count) {
+      await client.query("ROLLBACK");
+      overcharged = plan;
+    } else {
+      const marked = await client.query<{ id: number }>(
+        `UPDATE payment_plan_installments
+            SET status = 'paid',
+                paid_at = $3,
+                transaction_id = COALESCE($4, transaction_id)
+          WHERE payment_plan_id = $1 AND sequence = $2 AND status <> 'paid'
+          RETURNING id`,
+        [plan.id, nextSequence, input.paidAt, input.transactionId]
+      );
+
+      if (!marked.rows[0]) {
+        // Somebody else already recorded this installment.
+        await client.query("ROLLBACK");
+      } else {
+        const isFinal = nextSequence >= plan.installment_count;
+        const nextDue = await client.query<{ due_at: Date | null }>(
+          `SELECT due_at FROM payment_plan_installments
+            WHERE payment_plan_id = $1 AND sequence = $2`,
+          [plan.id, nextSequence + 1]
+        );
+
+        await client.query(
+          `UPDATE payment_plans
+              SET installments_paid = $2,
+                  status = $3,
+                  completed_at = CASE WHEN $3 = 'completed' THEN now() ELSE completed_at END,
+                  next_charge_at = $4,
+                  updated_at = now()
+            WHERE id = $1`,
+          [
+            plan.id,
+            nextSequence,
+            isFinal ? "completed" : "active",
+            isFinal ? null : (nextDue.rows[0]?.due_at ?? null),
+          ]
+        );
+
+        await client.query("COMMIT");
+        log(
+          `plan ${plan.id}: installment ${nextSequence} of ${plan.installment_count} paid${
+            isFinal ? " — plan complete, no further charges" : ""
+          }`
+        );
+        if (isFinal) completedPlan = plan;
+      }
+    }
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+
+  if (overcharged !== null && env.notifyEmail) {
+    void sendMail({
+      to: env.notifyEmail,
+      ...paymentPlanOverchargeAlert({
+        buyerEmail: overcharged.email,
+        amountCents: input.amountCents,
+        currency: input.currency,
+        installmentCount: overcharged.installment_count,
+        installmentsPaid: overcharged.installments_paid,
+        stripeSubscriptionId: input.stripeSubscriptionId,
+      }),
+    });
+  }
+
+  if (completedPlan !== null && completedPlan.email) {
+    const order = completedPlan.order_id ? await loadOrderById(completedPlan.order_id) : null;
+    void sendMail({
+      to: completedPlan.email,
+      ...paymentPlanCompleted({
+        buyerName: order?.billing_name ?? "",
+        description: order ? describe(order) : "your payment plan",
+        installmentCount: completedPlan.installment_count,
+        totalPaidCents: completedPlan.installment_cents * completedPlan.installment_count,
+        currency: completedPlan.currency,
+      }),
+    });
+  }
+}
+
+/**
+ * Ties the access an order granted to the subscription that pays for it.
+ *
+ * `fulfillPayment` grants against the order, which is right — the order is what
+ * was bought — but it leaves `subscription_id` NULL, and that column is the only
+ * precise handle on "the access this subscription is paying for". Without it,
+ * cancelling would have to revoke by offer, which would also take back a
+ * separate outright purchase of the same thing. Granting and this link must stay
+ * together: revocation reads exactly what this writes.
+ */
+async function linkGrantsToSubscription(orderId: number, subscriptionId: number): Promise<void> {
+  await pool.query(
+    `UPDATE access_grants
+        SET subscription_id = $2, updated_at = now()
+      WHERE order_id = $1 AND subscription_id IS NULL`,
+    [orderId, subscriptionId]
+  );
+}
+
+async function handleInvoicePaid(invoice: Stripe.Invoice): Promise<void> {
+  const stripeSubscriptionId = invoiceSubscriptionId(invoice);
+  const meta = invoiceMetadata(invoice);
+  const paymentIntentId = invoicePaymentIntentId(invoice);
+  const paidAt = toDate(invoice.status_transitions?.paid_at) ?? toDate(invoice.created) ?? new Date();
+
+  const plan = stripeSubscriptionId ? await loadPlan(stripeSubscriptionId) : null;
+  const isPlan = plan !== null || meta.pricingType === "payment_plan";
+  const order =
+    meta.orderId !== undefined
+      ? await loadOrderById(meta.orderId)
+      : plan?.order_id
+        ? await loadOrderById(plan.order_id)
+        : null;
+
+  // A payment plan is not a subscription and deliberately has no subscriptions
+  // row: it lives in payment_plans, and invoices reach it through
+  // payment_plan_id. See the migration's note on the two being distinct.
+  const subscriptionId =
+    !isPlan && stripeSubscriptionId ? await localSubscriptionId(stripeSubscriptionId) : null;
+
+  const claimed = await upsertInvoice({
+    stripeInvoiceId: invoice.id,
+    subscriptionId,
+    paymentPlanId: plan?.id ?? null,
+    memberId: order?.member_id ?? plan?.member_id ?? null,
+    orderId: order?.id ?? null,
+    number: invoice.number ?? "",
+    email: invoice.customer_email ?? order?.email ?? "",
+    amountDueCents: invoice.amount_due,
+    amountPaidCents: invoice.amount_paid,
+    taxCents: (invoice.total_taxes ?? []).reduce((sum, tax) => sum + tax.amount, 0),
+    currency: invoice.currency,
+    status: "paid",
+    hostedInvoiceUrl: invoice.hosted_invoice_url ?? "",
+    pdfUrl: invoice.invoice_pdf ?? "",
+    periodStart: toDate(invoice.period_start),
+    periodEnd: toDate(invoice.period_end),
+    paidAt,
+  });
+
+  if (!claimed) {
+    log(`invoice ${invoice.id} was already recorded as paid; nothing to advance`);
+    return;
+  }
+
+  // A payment clears whatever dunning state the subscription was in.
+  if (subscriptionId !== null) {
+    await pool.query(
+      `UPDATE subscriptions
+          SET status = 'active',
+              failed_payment_count = 0,
+              current_period_start = COALESCE($2, current_period_start),
+              current_period_end = COALESCE($3, current_period_end),
+              updated_at = now()
+        WHERE id = $1`,
+      [subscriptionId, toDate(invoice.period_start), toDate(invoice.period_end)]
+    );
+  }
+
+  // The first charge is identified by the order still being unpaid rather than
+  // by billing_reason: if the opening invoice were ever missed, the next one
+  // must still fulfil the purchase rather than treat it as a renewal.
+  const isFirstCharge = order !== null && order.status !== "paid";
+
+  if (isFirstCharge && order !== null) {
+    const result = await settleOrderPayment(order, {
+      paymentIntentId,
+      chargeId: null,
+      amountCents: invoice.amount_paid,
+      currency: invoice.currency,
+      email: invoice.customer_email ?? order.email,
+      stripeCustomerId: idOf(invoice.customer),
+      occurredAt: paidAt,
+    });
+
+    if (subscriptionId !== null && result.memberId !== null) {
+      await linkGrantsToSubscription(order.id, subscriptionId);
+    }
+
+    if (isPlan && stripeSubscriptionId && plan === null) {
+      const planId = await startPaymentPlan({
+        order,
+        meta,
+        stripeSubscriptionId,
+        stripeCustomerId: idOf(invoice.customer),
+        startAt: paidAt,
+      });
+      if (planId !== null) {
+        await pool.query(`UPDATE invoices SET payment_plan_id = $2 WHERE stripe_invoice_id = $1`, [
+          invoice.id,
+          planId,
+        ]);
+        log(`plan ${planId} opened for order ${order.id}: installment 1 of the schedule paid`);
+      }
+    }
+    return;
+  }
+
+  // Every charge after the first: recorded as its own transaction, because one
+  // order can be three installments or thirty monthly renewals.
+  const transactionId = await recordRecurringPayment({
+    orderId: order?.id ?? plan?.order_id ?? null,
+    subscriptionId,
+    memberId: order?.member_id ?? plan?.member_id ?? null,
+    email: invoice.customer_email ?? order?.email ?? plan?.email ?? "",
+    amountCents: invoice.amount_paid,
+    currency: invoice.currency,
+    paymentIntentId,
+    occurredAt: paidAt,
+  });
+
+  if (isPlan && stripeSubscriptionId) {
+    await advancePaymentPlan({
+      stripeSubscriptionId,
+      transactionId,
+      amountCents: invoice.amount_paid,
+      currency: invoice.currency,
+      paidAt,
+    });
+    return;
+  }
+
+  // A renewal of a membership whose access expires has to push the expiry out,
+  // or the member loses what they have just paid for. grantOfferAccess never
+  // shortens an existing grant, so this is safe on a lifetime one too.
+  const offerId = order?.offer_id ?? meta.offerId ?? null;
+  if (order?.member_id && offerId !== null) {
+    await grantOfferAccess({
+      memberId: order.member_id,
+      offerId,
+      orderId: order.id,
+      subscriptionId,
+      source: "purchase",
+    });
+  }
+}
+
+async function handleInvoicePaymentFailed(invoice: Stripe.Invoice): Promise<void> {
+  const stripeSubscriptionId = invoiceSubscriptionId(invoice);
+  const meta = invoiceMetadata(invoice);
+  const plan = stripeSubscriptionId ? await loadPlan(stripeSubscriptionId) : null;
+  const isPlan = plan !== null || meta.pricingType === "payment_plan";
+  const order =
+    meta.orderId !== undefined
+      ? await loadOrderById(meta.orderId)
+      : plan?.order_id
+        ? await loadOrderById(plan.order_id)
+        : null;
+
+  const subscriptionId =
+    !isPlan && stripeSubscriptionId ? await localSubscriptionId(stripeSubscriptionId) : null;
+
+  const claimed = await upsertInvoice({
+    stripeInvoiceId: invoice.id,
+    subscriptionId,
+    paymentPlanId: plan?.id ?? null,
+    memberId: order?.member_id ?? plan?.member_id ?? null,
+    orderId: order?.id ?? null,
+    number: invoice.number ?? "",
+    email: invoice.customer_email ?? order?.email ?? "",
+    amountDueCents: invoice.amount_due,
+    amountPaidCents: invoice.amount_paid,
+    taxCents: (invoice.total_taxes ?? []).reduce((sum, tax) => sum + tax.amount, 0),
+    currency: invoice.currency,
+    status: "failed",
+    hostedInvoiceUrl: invoice.hosted_invoice_url ?? "",
+    pdfUrl: invoice.invoice_pdf ?? "",
+    periodStart: toDate(invoice.period_start),
+    periodEnd: toDate(invoice.period_end),
+    paidAt: null,
+  });
+
+  // The invoice is already settled. Stripe does not guarantee delivery order, so
+  // a failed first attempt can arrive after the retry that succeeded — and
+  // "your payment didn't go through" is the worst possible email to send
+  // somebody whose payment went through.
+  if (!claimed) {
+    log(`invoice ${invoice.id} failure ignored: the invoice is already paid`);
+    return;
+  }
+
+  // The counter is raised to Stripe's own attempt count rather than incremented
+  // by one. `+ 1` is not idempotent: a handler that throws after the increment
+  // returns 500, Stripe retries, and the same single decline gets counted twice
+  // — inflating the number that decides when somebody loses access. GREATEST
+  // against `attempt_count` converges on the truth no matter how many times this
+  // runs, and Stripe is the authority on how many times it has tried.
+  let attempt = invoice.attempt_count || 1;
+  if (subscriptionId !== null) {
+    const bumped = await pool.query<{ failed_payment_count: number }>(
+      `UPDATE subscriptions
+          SET failed_payment_count = GREATEST(failed_payment_count, $2),
+              status = 'past_due',
+              updated_at = now()
+        WHERE id = $1
+        RETURNING failed_payment_count`,
+      [subscriptionId, attempt]
+    );
+    attempt = bumped.rows[0]?.failed_payment_count ?? attempt;
+  }
+
+  if (plan !== null) {
+    // The installment stays unpaid and the counter stays put, so a successful
+    // retry lands on the same sequence rather than skipping it.
+    await pool.query(
+      `UPDATE payment_plan_installments
+          SET status = 'failed'
+        WHERE payment_plan_id = $1 AND sequence = $2 AND status = 'scheduled'`,
+      [plan.id, plan.installments_paid + 1]
+    );
+    await pool.query(
+      `UPDATE payment_plans SET status = 'past_due', updated_at = now()
+        WHERE id = $1 AND status = 'active'`,
+      [plan.id]
+    );
+  }
+
+  // No `transactions` row for a failed invoice, deliberately. That table is the
+  // money ledger — one row per movement — and a decline moved nothing; the
+  // invoice row above already records it, with the URL to fix the card, and it
+  // records it idempotently, which an insert with no natural key here could not.
+  // A declined one-time PaymentIntent is the different case: there is no invoice
+  // to carry the record, which is what recordFailedAttempt exists for.
+
+  const buyerEmail = invoice.customer_email ?? order?.email ?? plan?.email ?? "";
+  if (buyerEmail) {
+    void sendMail({
+      to: buyerEmail,
+      ...paymentFailedDunning({
+        buyerName: order?.billing_name ?? "",
+        description: order ? describe(order) : "your subscription",
+        amountCents: invoice.amount_due,
+        currency: invoice.currency,
+        attempt,
+        payInvoiceUrl: invoice.hosted_invoice_url ?? "",
+        nextAttemptAt: toDate(invoice.next_payment_attempt),
+      }),
+    });
+  }
+
+  log(`invoice ${invoice.id} failed (attempt ${attempt}); dunning sent to ${buyerEmail || "nobody"}`);
+}
+
+/* ----------------------------------------------------------- subscriptions */
+
+/**
+ * The statuses that mean the subscription is no longer paying for anything.
+ *
+ * `unpaid` is included deliberately: it is where Stripe parks a subscription
+ * once dunning is exhausted, and treating it as still-live is how somebody keeps
+ * access for months after their card stopped working.
+ */
+const ACCESS_ENDING_STATUSES = new Set(["canceled", "unpaid", "incomplete_expired"]);
+
+/**
+ * Ends the access a subscription was paying for, honouring the grace period.
+ *
+ * Two things this deliberately does not do:
+ *
+ *  - **It never touches a payment plan.** A plan is bought, not rented: the
+ *    subscription behind "3 x $1,250" is cancelled by design the moment the
+ *    third charge lands, and revoking there would take a course away from
+ *    somebody who has just finished paying for it in full.
+ *  - **It only revokes grants this subscription created.** The `order_id` guard
+ *    is the subtle half: `grantAccess` overwrites `order_id` when the same
+ *    product is later bought outright, so a grant pointing at a different order
+ *    is access the member paid for separately and must keep.
+ */
+async function endSubscriptionAccess(input: {
+  stripeSubscriptionId: string;
+  localSubscriptionId: number | null;
+  orderId: number | null;
+  periodEnd: Date | null;
+  reason: string;
+}): Promise<void> {
+  const plan = await loadPlan(input.stripeSubscriptionId);
+  if (plan !== null) {
+    log(`subscription ${input.stripeSubscriptionId} is payment plan ${plan.id}; access kept`);
+    return;
+  }
+  if (input.localSubscriptionId === null) return;
+
+  const { cancelGraceDays } = await billingSettings();
+
+  // They paid for the period they are in, so access runs to the end of it, plus
+  // whatever grace Yvette has configured on top.
+  const base = input.periodEnd ?? new Date();
+  const endsAt = cancelGraceDays > 0 ? addInterval(base, "day", cancelGraceDays) : base;
+
+  if (endsAt.getTime() <= Date.now()) {
+    const revoked = await pool.query(
+      `UPDATE access_grants
+          SET status = 'revoked', revoked_at = now(), revoke_reason = $2, updated_at = now()
+        WHERE subscription_id = $1
+          AND status = 'active'
+          AND ($3::int IS NULL OR order_id IS NULL OR order_id = $3)`,
+      [input.localSubscriptionId, truncate(input.reason, 500), input.orderId]
+    );
+    log(
+      `subscription ${input.stripeSubscriptionId} ended: revoked ${revoked.rowCount ?? 0} grant(s)`
+    );
+    return;
+  }
+
+  // Still inside the paid period or the grace window: let it lapse on its own
+  // rather than revoking now. LEAST never extends access that already ends
+  // sooner, and a grant with no expiry gets one for the first time here.
+  const clipped = await pool.query(
+    `UPDATE access_grants
+        SET expires_at = CASE
+                           WHEN expires_at IS NULL THEN $2
+                           ELSE LEAST(expires_at, $2)
+                         END,
+            revoke_reason = $3,
+            updated_at = now()
+      WHERE subscription_id = $1
+        AND status = 'active'
+        AND ($4::int IS NULL OR order_id IS NULL OR order_id = $4)`,
+    [input.localSubscriptionId, endsAt, truncate(input.reason, 500), input.orderId]
+  );
+  log(
+    `subscription ${input.stripeSubscriptionId} ending: ${clipped.rowCount ?? 0} grant(s) expire ${endsAt.toISOString()}`
+  );
+}
+
+async function handleSubscriptionChange(
+  sub: Stripe.Subscription,
+  deleted: boolean
+): Promise<void> {
+  const meta = readMetadata(sub.metadata);
+
+  // A payment plan's Stripe subscription is bookkeeping for a fixed number of
+  // charges, not a membership, so it is never mirrored into `subscriptions`.
+  // Recognising it from the metadata matters because subscription.created
+  // arrives before the payment_plans row exists.
+  if (meta.pricingType === "payment_plan" || (await loadPlan(sub.id)) !== null) {
+    if (deleted || ACCESS_ENDING_STATUSES.has(sub.status)) {
+      await endSubscriptionAccess({
+        stripeSubscriptionId: sub.id,
+        localSubscriptionId: null,
+        orderId: meta.orderId ?? null,
+        periodEnd: null,
+        reason: "payment plan ended",
+      });
+    }
+    return;
+  }
+
+  // Stripe moved current_period_* off the subscription and onto each item.
+  // Single-price subscriptions have exactly one.
+  const item = sub.items?.data?.[0];
+  const periodStart = toDate(item?.current_period_start);
+  const periodEnd = toDate(item?.current_period_end);
+  const recurring = item?.price?.recurring ?? null;
+  const status = deleted ? "canceled" : sub.status;
+
+  const order = meta.orderId !== undefined ? await loadOrderById(meta.orderId) : null;
+
+  const upserted = await pool.query<{ id: number }>(
+    `INSERT INTO subscriptions
+       (member_id, offer_id, email, stripe_customer_id, stripe_subscription_id, status,
+        current_period_start, current_period_end, cancel_at_period_end, trial_ends_at,
+        canceled_at, ended_at, amount_cents, currency, interval, interval_count)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+     ON CONFLICT (stripe_subscription_id) DO UPDATE SET
+       member_id            = COALESCE(EXCLUDED.member_id, subscriptions.member_id),
+       offer_id             = COALESCE(EXCLUDED.offer_id, subscriptions.offer_id),
+       email                = CASE WHEN EXCLUDED.email <> '' THEN EXCLUDED.email
+                                   ELSE subscriptions.email END,
+       stripe_customer_id   = COALESCE(EXCLUDED.stripe_customer_id, subscriptions.stripe_customer_id),
+       -- Stripe does not guarantee delivery order, and a stale 'active' landing
+       -- after a cancellation would resurrect a subscription nobody is paying
+       -- for. Cancellation is terminal: a resumed customer gets a new
+       -- subscription id, never this row back.
+       status               = CASE WHEN subscriptions.status = 'canceled'
+                                        AND EXCLUDED.status <> 'canceled'
+                                   THEN subscriptions.status
+                                   ELSE EXCLUDED.status END,
+       current_period_start = COALESCE(EXCLUDED.current_period_start, subscriptions.current_period_start),
+       current_period_end   = COALESCE(EXCLUDED.current_period_end, subscriptions.current_period_end),
+       cancel_at_period_end = EXCLUDED.cancel_at_period_end,
+       trial_ends_at        = COALESCE(EXCLUDED.trial_ends_at, subscriptions.trial_ends_at),
+       canceled_at          = COALESCE(EXCLUDED.canceled_at, subscriptions.canceled_at),
+       ended_at             = COALESCE(EXCLUDED.ended_at, subscriptions.ended_at),
+       amount_cents         = CASE WHEN EXCLUDED.amount_cents > 0 THEN EXCLUDED.amount_cents
+                                   ELSE subscriptions.amount_cents END,
+       currency             = EXCLUDED.currency,
+       interval             = EXCLUDED.interval,
+       interval_count       = EXCLUDED.interval_count,
+       updated_at           = now()
+     RETURNING id`,
+    [
+      order?.member_id ?? null,
+      order?.offer_id ?? meta.offerId ?? null,
+      order?.email ?? "",
+      idOf(sub.customer),
+      sub.id,
+      status,
+      periodStart,
+      periodEnd,
+      sub.cancel_at_period_end,
+      toDate(sub.trial_end),
+      toDate(sub.canceled_at),
+      toDate(sub.ended_at),
+      item?.price?.unit_amount ?? 0,
+      sub.currency,
+      recurring?.interval ?? "month",
+      recurring?.interval_count ?? 1,
+    ]
+  );
+
+  const subscriptionId = upserted.rows[0]?.id ?? null;
+  log(`subscription ${sub.id} mirrored as ${status}`);
+
+  // cancel_at_period_end is not an ending: the customer keeps everything until
+  // the period actually runs out, and Stripe sends deleted when it does.
+  if (deleted || ACCESS_ENDING_STATUSES.has(status)) {
+    await endSubscriptionAccess({
+      stripeSubscriptionId: sub.id,
+      localSubscriptionId: subscriptionId,
+      orderId: order?.id ?? meta.orderId ?? null,
+      periodEnd,
+      reason: deleted ? "subscription canceled" : `subscription ${status}`,
+    });
+  }
+}
+
+/* ------------------------------------------------------ refunds & disputes */
+
+interface ChargeTransaction {
+  id: number;
+  order_id: number | null;
+  email: string;
+}
+
+async function loadTransactionForCharge(
+  paymentIntentId: string | null,
+  chargeId: string | null
+): Promise<ChargeTransaction | null> {
+  const res = await pool.query<ChargeTransaction>(
+    `SELECT id, order_id, email FROM transactions
+      WHERE kind = 'payment'
+        AND (stripe_payment_intent_id = $1 OR stripe_charge_id = $2)
+      ORDER BY id DESC LIMIT 1`,
+    [paymentIntentId, chargeId]
+  );
+  return res.rows[0] ?? null;
+}
+
+async function handleChargeRefunded(charge: Stripe.Charge): Promise<void> {
+  const paymentIntentId = idOf(charge.payment_intent);
+  const transaction = await loadTransactionForCharge(paymentIntentId, charge.id);
+
+  if (!transaction || transaction.order_id === null) {
+    log(`charge ${charge.id} refunded but no order-linked transaction found`);
+    return;
+  }
+
+  const fullyRefunded = charge.amount_refunded >= charge.amount;
+  const { revokeAccessOnFullRefund } = await billingSettings();
+  const revoke = fullyRefunded && revokeAccessOnFullRefund;
+
+  // Stripe re-sends the whole charge with every refund attached, so each Stripe
+  // refund id is recorded on its own and `recordRefund`'s unique guard makes a
+  // second sighting of an earlier one a no-op. Summing them here instead would
+  // double-count the first refund on the second event.
+  const refunds = charge.refunds?.data ?? [];
+  for (const refund of refunds) {
+    await recordRefund({
+      orderId: transaction.order_id,
+      transactionId: transaction.id,
+      amountCents: refund.amount,
+      currency: refund.currency,
+      reason: refund.reason ?? "",
+      revokeAccess: revoke,
+      stripeRefundId: refund.id,
+      createdByEmail: "stripe",
+    });
+  }
+
+  if (refunds.length === 0 && charge.amount_refunded > 0) {
+    // No refund list on the payload: reconcile against what the order already
+    // knows about so only the unrecorded remainder is written.
+    const order = await loadOrderById(transaction.order_id);
+    const outstanding = charge.amount_refunded - (order?.refunded_cents ?? 0);
+    if (outstanding > 0) {
+      await recordRefund({
+        orderId: transaction.order_id,
+        transactionId: transaction.id,
+        amountCents: outstanding,
+        currency: charge.currency,
+        reason: "",
+        revokeAccess: revoke,
+        createdByEmail: "stripe",
+      });
+    }
+  }
+
+  if (fullyRefunded) {
+    await pool.query(`UPDATE transactions SET status = 'refunded' WHERE id = $1`, [
+      transaction.id,
+    ]);
+  }
+
+  log(
+    `charge ${charge.id} refunded ${charge.amount_refunded} of ${charge.amount}${
+      revoke ? " — access revoked" : ""
+    }`
+  );
+}
+
+async function handleDisputeCreated(dispute: Stripe.Dispute): Promise<void> {
+  const chargeId = idOf(dispute.charge);
+  const paymentIntentId = idOf(dispute.payment_intent);
+
+  const flagged = await pool.query<{ id: number; order_id: number | null; email: string }>(
+    `UPDATE transactions
+        SET status = 'disputed'
+      WHERE kind = 'payment'
+        AND (stripe_payment_intent_id = $1 OR stripe_charge_id = $2)
+      RETURNING id, order_id, email`,
+    [paymentIntentId, chargeId]
+  );
+  const transaction = flagged.rows[0] ?? null;
+
+  // Access is deliberately left alone. A dispute is an accusation, not an
+  // outcome; pulling a course the moment one is filed punishes the customer for
+  // a bank's paperwork, and the money is already held either way.
+  if (env.notifyEmail) {
+    void sendMail({
+      to: env.notifyEmail,
+      ...disputeAlert({
+        buyerEmail: transaction?.email ?? "",
+        amountCents: dispute.amount,
+        currency: dispute.currency,
+        reason: dispute.reason,
+        chargeId: chargeId ?? "(unknown)",
+        orderId: transaction?.order_id ?? null,
+      }),
+    });
+  }
+
+  log(`dispute ${dispute.id} opened on charge ${chargeId ?? "(unknown)"}: ${dispute.reason}`);
+}
+
+/* -------------------------------------------------------------- dispatcher */
+
+/** Returns false for an event this system has nothing to do about. */
+async function dispatch(event: Stripe.Event): Promise<boolean> {
+  switch (event.type) {
+    case "checkout.session.completed":
+      await handleSessionCompleted(event.data.object);
+      return true;
+
+    case "checkout.session.async_payment_succeeded":
+      await settleSessionPayment(event.data.object);
+      return true;
+
+    case "checkout.session.async_payment_failed":
+      await handleSessionAsyncFailed(event.data.object);
+      return true;
+
+    case "checkout.session.expired":
+      await handleSessionExpired(event.data.object);
+      return true;
+
+    case "payment_intent.succeeded":
+      await handlePaymentIntentSucceeded(event.data.object);
+      return true;
+
+    case "payment_intent.payment_failed":
+      await handlePaymentIntentFailed(event.data.object);
+      return true;
+
+    case "charge.succeeded":
+      await handleChargeSucceeded(event.data.object);
+      return true;
+
+    case "charge.refunded":
+      await handleChargeRefunded(event.data.object);
+      return true;
+
+    case "charge.dispute.created":
+      await handleDisputeCreated(event.data.object);
+      return true;
+
+    case "invoice.paid":
+      await handleInvoicePaid(event.data.object);
+      return true;
+
+    case "invoice.payment_failed":
+      await handleInvoicePaymentFailed(event.data.object);
+      return true;
+
+    case "customer.subscription.created":
+    case "customer.subscription.updated":
+      await handleSubscriptionChange(event.data.object, false);
+      return true;
+
+    case "customer.subscription.deleted":
+      await handleSubscriptionChange(event.data.object, true);
+      return true;
+
+    default:
+      return false;
+  }
+}
+
+/* ----------------------------------------------------------------- receiver */
+
 stripeWebhookRouter.post(
   "/stripe/webhook",
   asyncHandler(async (req, res) => {
@@ -33,6 +1715,11 @@ stripeWebhookRouter.post(
 
     let event: Stripe.Event;
     try {
+      // The HMAC is the validation on this endpoint. There is no zod schema over
+      // the body because the body is not a request payload — it is Stripe's own
+      // object graph, and anything that has not been signed with the endpoint
+      // secret is discarded before a single field is read. The fields this
+      // codebase put there itself (metadata) ARE parsed, in readMetadata.
       event = stripe().webhooks.constructEvent(
         req.body as Buffer,
         signature,
@@ -45,205 +1732,27 @@ stripeWebhookRouter.post(
       return;
     }
 
-    switch (event.type) {
-      case "checkout.session.completed": {
-        const session = event.data.object as Stripe.Checkout.Session;
-
-        // Subscription checkout settles differently from one-time payment: with
-        // a trial there is no payment at all yet, so it never reaches
-        // payment_status === "paid". Record the subscription and stop here;
-        // customer.subscription.* keeps it in sync from now on.
-        if (session.mode === "subscription") {
-          const subscriptionId =
-            typeof session.subscription === "string"
-              ? session.subscription
-              : (session.subscription?.id ?? null);
-          const customerId =
-            typeof session.customer === "string"
-              ? session.customer
-              : (session.customer?.id ?? null);
-          const planId = session.metadata?.planId ? Number(session.metadata.planId) : null;
-          const subEmail = session.customer_details?.email ?? session.customer_email ?? "";
-
-          if (subscriptionId) {
-            // Ensure a member record exists so the subscription has an owner.
-            const member = subEmail
-              ? await pool.query(
-                  `INSERT INTO members (email, name, status) VALUES ($1, '', 'active')
-                   ON CONFLICT (email) DO UPDATE SET updated_at = now()
-                   RETURNING id`,
-                  [subEmail.toLowerCase()]
-                )
-              : null;
-
-            await pool.query(
-              `INSERT INTO subscriptions
-                 (member_id, plan_id, email, stripe_customer_id, stripe_subscription_id,
-                  status, amount_cents, currency)
-               VALUES ($1,$2,$3,$4,$5,'active',$6,$7)
-               ON CONFLICT (stripe_subscription_id) DO UPDATE
-                 SET status = 'active', updated_at = now()`,
-              [
-                member?.rows[0]?.id ?? null,
-                planId,
-                subEmail.toLowerCase(),
-                customerId,
-                subscriptionId,
-                session.amount_total ?? 0,
-                session.currency ?? "usd",
-              ]
-            );
-
-            // Paid plans can unlock a community — enroll the member on purchase.
-            if (planId && member?.rows[0]?.id) {
-              await pool.query(
-                `INSERT INTO community_memberships (community_id, member_id)
-                 SELECT p.community_id, $2 FROM plans p
-                  WHERE p.id = $1 AND p.community_id IS NOT NULL
-                 ON CONFLICT (community_id, member_id) DO NOTHING`,
-                [planId, member.rows[0].id]
-              );
-            }
-          }
-          break;
-        }
-
-        // `complete` + unpaid happens for async methods; only mark paid on paid.
-        if (session.payment_status !== "paid") break;
-
-        const email =
-          session.customer_details?.email ?? session.customer_email ?? "";
-        const paymentIntentId =
-          typeof session.payment_intent === "string"
-            ? session.payment_intent
-            : (session.payment_intent?.id ?? null);
-
-        // Idempotent: Stripe retries webhooks, and `status <> 'paid'` in the
-        // WHERE clause means a duplicate delivery updates zero rows and sends
-        // no second notification email.
-        const updated = await pool.query(
-          `UPDATE orders
-              SET status = 'paid',
-                  email = CASE WHEN $2 <> '' THEN $2 ELSE email END,
-                  amount_cents = $3,
-                  stripe_payment_intent_id = $4,
-                  updated_at = now()
-            WHERE stripe_session_id = $1 AND status <> 'paid'
-        RETURNING course_title, email, amount_cents, currency`,
-          [session.id, email, session.amount_total ?? 0, paymentIntentId]
-        );
-
-        const order = updated.rows[0];
-        if (order) {
-          fireTriggerAsync("order_paid", {
-            email: order.email,
-            courseTitle: order.course_title,
-            amountCents: order.amount_cents,
-          });
-        }
-        if (order && env.notifyEmail) {
-          const { subject, text, html } = orderPaidNotification({
-            courseTitle: order.course_title,
-            email: order.email,
-            amountCents: order.amount_cents,
-            currency: order.currency,
-          });
-          void sendMail({ to: env.notifyEmail, subject, text, html });
-        }
-        break;
-      }
-
-      case "checkout.session.expired": {
-        const session = event.data.object as Stripe.Checkout.Session;
-        await pool.query(
-          `UPDATE orders SET status = 'expired', updated_at = now()
-            WHERE stripe_session_id = $1 AND status = 'pending'`,
-          [session.id]
-        );
-        break;
-      }
-
-      case "checkout.session.async_payment_failed": {
-        const session = event.data.object as Stripe.Checkout.Session;
-        await pool.query(
-          `UPDATE orders SET status = 'failed', updated_at = now()
-            WHERE stripe_session_id = $1 AND status <> 'paid'`,
-          [session.id]
-        );
-        break;
-      }
-
-      // Stripe is the source of truth for subscription lifecycle; mirror it
-      // rather than trying to infer state transitions locally.
-      case "customer.subscription.created":
-      case "customer.subscription.updated":
-      case "customer.subscription.deleted": {
-        const sub = event.data.object as Stripe.Subscription;
-        // Stripe moved current_period_end off the subscription and onto each
-        // subscription item. Single-price subscriptions have exactly one item.
-        const periodEndUnix = sub.items?.data?.[0]?.current_period_end;
-        const periodEnd =
-          typeof periodEndUnix === "number"
-            ? new Date(periodEndUnix * 1000).toISOString()
-            : null;
-
-        await pool.query(
-          `UPDATE subscriptions
-              SET status = $2,
-                  current_period_end = $3,
-                  cancel_at_period_end = $4,
-                  updated_at = now()
-            WHERE stripe_subscription_id = $1`,
-          [
-            sub.id,
-            event.type === "customer.subscription.deleted" ? "canceled" : sub.status,
-            periodEnd,
-            sub.cancel_at_period_end ?? false,
-          ]
-        );
-        break;
-      }
-
-      case "invoice.paid":
-      case "invoice.payment_failed": {
-        const invoice = event.data.object as Stripe.Invoice;
-        // The flat `invoice.subscription` field was replaced by the polymorphic
-        // `parent` object in recent API versions.
-        const parentSubscription = invoice.parent?.subscription_details?.subscription;
-        const subscriptionId =
-          typeof parentSubscription === "string"
-            ? parentSubscription
-            : (parentSubscription?.id ?? null);
-
-        // ON CONFLICT keeps this idempotent across Stripe's retries.
-        await pool.query(
-          `INSERT INTO invoices
-             (stripe_invoice_id, subscription_id, email, amount_paid_cents, currency,
-              status, hosted_invoice_url)
-           VALUES ($1,
-                   (SELECT id FROM subscriptions WHERE stripe_subscription_id = $2),
-                   $3, $4, $5, $6, $7)
-           ON CONFLICT (stripe_invoice_id) DO UPDATE
-             SET status = EXCLUDED.status,
-                 amount_paid_cents = EXCLUDED.amount_paid_cents`,
-          [
-            invoice.id,
-            subscriptionId,
-            invoice.customer_email ?? "",
-            invoice.amount_paid ?? 0,
-            invoice.currency ?? "usd",
-            event.type === "invoice.paid" ? "paid" : "failed",
-            invoice.hosted_invoice_url ?? "",
-          ]
-        );
-        break;
-      }
-
-      default:
-        // Unhandled event types are acknowledged so Stripe stops retrying them.
-        break;
+    const claim = await claimEvent(event);
+    if (!claim.claimed) {
+      // Already carried to completion. Acknowledging stops Stripe retrying it.
+      log(`${event.type} ${event.id} is a redelivery of a finished event; ignoring`);
+      res.json({ received: true, duplicate: true });
+      return;
+    }
+    if (claim.attempts > 0) {
+      log(`${event.type} ${event.id} retry (${claim.attempts} previous attempt(s))`);
     }
 
-    res.json({ received: true });
+    try {
+      const handled = await dispatch(event);
+      await markProcessed(event.id, handled);
+      res.json({ received: true });
+    } catch (err) {
+      console.error(`[stripe] ${event.type} ${event.id} failed:`, err);
+      await markFailed(event.id, err);
+      // 500 on purpose: Stripe retries a 5xx with backoff, and the stored event
+      // is re-claimable. Any 2xx here would abandon the delivery for good.
+      res.status(500).json({ error: "Webhook processing failed" });
+    }
   })
 );
