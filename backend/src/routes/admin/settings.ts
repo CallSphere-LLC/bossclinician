@@ -2,6 +2,8 @@ import { Router } from "express";
 import { pool } from "../../db/pool";
 import { asyncHandler } from "../../utils/asyncHandler";
 import { badRequest } from "../../utils/httpError";
+import { clearSettingsCache } from "../../services/settings";
+import { clearDripSettingsCache } from "../../services/curriculum";
 import { settingsUpdateSchema } from "../../validation/schemas";
 
 export const adminSettingsRouter = Router();
@@ -31,6 +33,13 @@ adminSettingsRouter.put(
         [key, JSON.stringify(value)]
       );
     }
+
+    // Several readers cache settings in process — the drip release hour is read
+    // on every progress ping and every lesson unlock, so it is not re-queried
+    // per request. Saving here has to invalidate them, or an edit appears to do
+    // nothing for a minute and gets saved again.
+    clearSettingsCache();
+    if (entries.some(([key]) => key === "drip")) clearDripSettingsCache();
 
     const result = await pool.query("SELECT key, value FROM settings WHERE key != 'seed_completed'");
     const merged: Record<string, unknown> = {};
