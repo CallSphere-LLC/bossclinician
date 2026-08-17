@@ -269,6 +269,13 @@ adminEventsRouter.get(
     res.json(
       result.rows.map((row) => ({
         ...rowToCamel(row as unknown as Record<string, unknown>),
+        // A BIGSERIAL arrives from node-postgres as a string, because a bigint
+        // does not fit a JS number in the general case. These ids are row
+        // counts on one event and are nowhere near that, so they are sent as
+        // numbers — otherwise every client has to remember to coerce, and the
+        // one that forgets builds a URL out of the right value and a payload
+        // out of the wrong type.
+        id: Number(row.id),
         // Written out here so every screen reads a session time the same way,
         // in the event's own zone rather than the browser's.
         sessionLabel: describeSession(row.session_at, row.timezone),

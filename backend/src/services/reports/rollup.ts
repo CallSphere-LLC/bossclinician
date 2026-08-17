@@ -208,8 +208,15 @@ const METRICS: MetricSource[] = [
     /**
      * Refunds come from `refunds`, not from `transactions.kind = 'refund'`.
      *
-     * `services/fulfillment.ts` writes only the former; counting both would
-     * double every refund the day something starts writing the latter too.
+     * Both are written — `refunds` is the operational record carrying the
+     * Stripe refund id and whether access went with it, `transactions` is the
+     * ledger. Reading either would give the same total, and reading BOTH would
+     * double every refund, so this picks one deliberately: the table that can
+     * be reconciled against Stripe.
+     *
+     * What keeps that safe on the revenue side is the `kind = 'payment'` filter
+     * in CLEARED. Widen that to all transactions and refunds start being
+     * counted as income as well as being subtracted.
      */
     metric: "refunds",
     sql: `

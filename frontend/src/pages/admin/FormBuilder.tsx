@@ -20,6 +20,7 @@ import {
   POST_ACTION_LABEL,
   formsApi,
   needsOptions,
+  saveCsv,
   type FieldType,
   type FormDetail,
   type FormField,
@@ -184,7 +185,7 @@ function FieldBlock({
                 onChange({
                   contactField:
                     event.target.value === OWN_DETAIL
-                      ? field.label || "A detail of your own"
+                      ? (field.label || "A detail of your own").slice(0, 60)
                       : event.target.value,
                 })
               }
@@ -201,6 +202,7 @@ function FieldBlock({
                 className="mt-2"
                 aria-label={`The detail “${field.label}” is saved as`}
                 value={field.contactField ?? ""}
+                maxLength={60}
                 onChange={(event) => onChange({ contactField: event.target.value })}
                 placeholder="Practice size"
               />
@@ -325,6 +327,7 @@ export default function FormBuilder() {
   const [saveProblem, setSaveProblem] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [replies, setReplies] = useState<FormSubmission[] | null>(null);
+  const [downloading, setDownloading] = useState(false);
 
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState("");
@@ -367,10 +370,11 @@ export default function FormBuilder() {
     setDraft(null);
     setDirty(false);
     setReplies(null);
+    setError(null);
     formsApi
       .get(openId)
       .then(setDraft)
-      .catch((err) => toast.error(friendlyError(err, "form")));
+      .catch((err) => setError(friendlyError(err, "form")));
     loadReplies(openId);
   }, [openId, loadReplies]);
 
@@ -563,6 +567,26 @@ export default function FormBuilder() {
     },
     [confirm, loadList, loadReplies, openId],
   );
+
+  /**
+   * The spreadsheet is fetched rather than linked to.
+   *
+   * The export route is behind the same sign-in as everything else, and a link
+   * the browser follows on its own carries no credentials — so the honest
+   * version asks for the file, then hands the bytes to the save dialog.
+   */
+  const downloadReplies = useCallback(async () => {
+    if (!draft) return;
+    setDownloading(true);
+    try {
+      const blob = await formsApi.exportCsv(draft.id);
+      saveCsv(blob, `${draft.slug}-replies.csv`);
+    } catch (err) {
+      toast.error(friendlyError(err, "form"));
+    } finally {
+      setDownloading(false);
+    }
+  }, [draft]);
 
   const replyColumns = useMemo<ColumnDef<FormSubmission, unknown>[]>(() => {
     const fields = draft?.fields ?? [];
@@ -785,7 +809,19 @@ export default function FormBuilder() {
 
   /* ── One form ─────────────────────────────────────────────────────────── */
 
-  if (!draft) return <Skeleton className="h-96 rounded-2xl" />;
+  if (!draft) {
+    return error ? (
+      <div className="space-y-4">
+        <ErrorNotice message={error} />
+        <Button size="sm" variant="secondary" onClick={closeForm}>
+          <ArrowLeft />
+          All forms
+        </Button>
+      </div>
+    ) : (
+      <Skeleton className="h-96 rounded-2xl" />
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -919,54 +955,57 @@ export default function FormBuilder() {
               What happens the moment they press the button?
             </legend>
             {POST_ACTIONS.map((action) => (
-              <label
+              <div
                 key={action}
-                className={`flex cursor-pointer gap-3 rounded-xl border p-3.5 transition-colors ${
+                className={`rounded-xl border p-3.5 transition-colors ${
                   draft.postAction === action
                     ? "border-gold/50 bg-gold/[0.08]"
                     : "border-hairline bg-white/[0.03] hover:border-white/20"
                 }`}
               >
-                <input
-                  type="radio"
-                  name="post-action"
-                  value={action}
-                  checked={draft.postAction === action}
-                  onChange={() => change({ postAction: action })}
-                  className="mt-0.5 size-4 border-hairline text-plum focus-visible:ring-plum/30"
-                />
-                <span className="min-w-0 flex-1">
-                  <span className="block text-sm font-semibold text-ink">
+                <label className="flex cursor-pointer items-center gap-3">
+                  <input
+                    type="radio"
+                    name="post-action"
+                    value={action}
+                    checked={draft.postAction === action}
+                    onChange={() => change({ postAction: action })}
+                    className="size-4 border-hairline text-plum focus-visible:ring-plum/30"
+                  />
+                  <span className="text-sm font-semibold text-ink">
                     {POST_ACTION_LABEL[action]}
                   </span>
-                  {draft.postAction === action && action === "message" && (
-                    <Textarea
-                      rows={3}
-                      className="mt-2.5"
-                      aria-label="The thank-you message"
-                      value={draft.successMessage}
-                      onChange={(event) => change({ successMessage: event.target.value })}
-                      placeholder="Thank you — I will come back to you within two working days."
-                    />
-                  )}
-                  {draft.postAction === action && action === "redirect" && (
-                    <Input
-                      className="mt-2.5"
-                      aria-label="The page to send them to"
-                      value={draft.redirectUrl}
-                      onChange={(event) => change({ redirectUrl: event.target.value })}
-                      placeholder="/thank-you"
-                    />
-                  )}
-                  {draft.postAction === action && action === "download" && (
-                    <span className="mt-2.5 block text-xs text-ink-soft">
-                      {draft.downloadFileName
-                        ? `They get ${draft.downloadFileName}.`
-                        : "Pick the file in your Media Library and it will be attached here."}
-                    </span>
-                  )}
-                </span>
-              </label>
+                </label>
+
+                {/* Outside the label: a box nested inside one steals the click
+                    that was meant for the box. */}
+                {draft.postAction === action && action === "message" && (
+                  <Textarea
+                    rows={3}
+                    className="mt-2.5"
+                    aria-label="The thank-you message"
+                    value={draft.successMessage}
+                    onChange={(event) => change({ successMessage: event.target.value })}
+                    placeholder="Thank you — I will come back to you within two working days."
+                  />
+                )}
+                {draft.postAction === action && action === "redirect" && (
+                  <Input
+                    className="mt-2.5"
+                    aria-label="The page to send them to"
+                    value={draft.redirectUrl}
+                    onChange={(event) => change({ redirectUrl: event.target.value })}
+                    placeholder="/thank-you"
+                  />
+                )}
+                {draft.postAction === action && action === "download" && (
+                  <p className="mt-2.5 text-xs text-ink-soft">
+                    {draft.downloadFileName
+                      ? `They get ${draft.downloadFileName}.`
+                      : "Pick the file in your Media Library and it will be attached here."}
+                  </p>
+                )}
+              </div>
             ))}
           </fieldset>
 
@@ -1035,11 +1074,14 @@ export default function FormBuilder() {
               Everything people have sent through this form, newest first.
             </p>
           </div>
-          <Button asChild size="sm" variant="secondary">
-            <a href={formsApi.exportUrl(draft.id)} download>
-              <Download />
-              Download as a spreadsheet
-            </a>
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => void downloadReplies()}
+            disabled={downloading}
+          >
+            <Download />
+            {downloading ? "Getting it ready…" : "Download as a spreadsheet"}
           </Button>
         </div>
 

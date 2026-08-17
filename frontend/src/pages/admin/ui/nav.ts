@@ -97,7 +97,10 @@ export const NAV_GROUPS: NavGroup[] = [
       { to: "/admin/marketing/automations-v2", label: "Automations", ready: true },
       { to: "/admin/marketing/emails", label: "Email Templates", ready: true },
       { to: "/admin/marketing/automations", label: "Automations (old)", ready: true },
-      { to: "/admin/marketing/forms", label: "Forms", ready: true },
+      { to: "/admin/marketing/quizzes", label: "Quizzes", ready: true },
+      { to: "/admin/marketing/events-v2", label: "Events", ready: true },
+      { to: "/admin/marketing/forms-v2", label: "Forms", ready: true },
+      { to: "/admin/marketing/forms", label: "Forms (old)", ready: true },
     ],
   },
   {

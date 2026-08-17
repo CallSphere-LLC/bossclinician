@@ -51,6 +51,12 @@ import Sequences from "@/pages/admin/Sequences";
 import SequenceEditor from "@/pages/admin/SequenceEditor";
 import AutomationBuilder from "@/pages/admin/AutomationBuilder";
 import EmailTemplates from "@/pages/admin/EmailTemplates";
+import Assessments from "@/pages/admin/Assessments";
+import AssessmentEditor from "@/pages/admin/AssessmentEditor";
+import EventsAdmin from "@/pages/admin/EventsAdmin";
+import FormBuilder from "@/pages/admin/FormBuilder";
+import ReportsHub from "@/pages/admin/ReportsHub";
+import ReportView from "@/pages/admin/ReportView";
 import Forms from "@/pages/admin/Forms";
 import Events from "@/pages/admin/Events";
 import PagesAdmin from "@/pages/admin/PagesAdmin";
@@ -120,6 +126,10 @@ function ProtectedRoutes() {
         <Route path="/marketing/automations-v2" element={<AutomationBuilder />} />
         <Route path="/marketing/emails" element={<EmailTemplates />} />
         <Route path="/marketing/automations" element={<Automations />} />
+        <Route path="/marketing/quizzes" element={<Assessments />} />
+        <Route path="/marketing/quizzes/:id" element={<AssessmentEditor />} />
+        <Route path="/marketing/events-v2" element={<EventsAdmin />} />
+        <Route path="/marketing/forms-v2" element={<FormBuilder />} />
         <Route path="/marketing/forms" element={<Forms />} />
 
         {/* Contacts */}
@@ -134,7 +144,11 @@ function ProtectedRoutes() {
 
         {/* Analytics */}
         <Route path="/analytics" element={<Analytics />} />
-        <Route path="/analytics/reports" element={<Reports />} />
+        <Route path="/analytics/reports" element={<ReportsHub />} />
+        <Route path="/analytics/reports/:reportId" element={<ReportView />} />
+        {/* The previous four-report screen, kept reachable rather than deleted:
+            it still works, and nothing is lost if the new hub has a gap. */}
+        <Route path="/analytics/reports-legacy" element={<Reports />} />
 
         <Route path="/settings" element={<SettingsHub />} />
         <Route path="/settings/team" element={<AdminUsers />} />

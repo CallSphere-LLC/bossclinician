@@ -618,7 +618,10 @@ export default function AssessmentEditor() {
   const [confirm, confirmDialog] = useConfirm();
 
   const load = useCallback(() => {
-    if (!Number.isFinite(quizId)) return;
+    if (!Number.isFinite(quizId)) {
+      setError("We couldn’t find that quiz.");
+      return;
+    }
     assessmentsApi
       .get(quizId)
       .then((row) => {
@@ -906,7 +909,19 @@ export default function AssessmentEditor() {
     [],
   );
 
-  if (error) return <ErrorNotice message={error} />;
+  if (error) {
+    return (
+      <div className="space-y-4">
+        <ErrorNotice message={error} />
+        <Button asChild size="sm" variant="secondary">
+          <Link to="/admin/marketing/quizzes">
+            <ArrowLeft />
+            All quizzes
+          </Link>
+        </Button>
+      </div>
+    );
+  }
   if (!detail) return <Skeleton className="h-96 rounded-2xl" />;
 
   const graded = detail.kind === "graded";

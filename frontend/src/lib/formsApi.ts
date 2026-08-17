@@ -145,9 +145,45 @@ export const formsApi = {
     ),
   removeSubmission: (id: number, submissionId: number) =>
     request<void>(`/admin/forms/${id}/submissions/${submissionId}`, { method: "DELETE" }),
-  /** The export is a download, not a fetch — the browser follows this itself. */
-  exportUrl: (id: number) => `${API_BASE}/admin/forms/${id}/submissions.csv`,
+
+  /**
+   * Bypasses `request` because the answer is a spreadsheet, not JSON — the
+   * shared helper would try to parse it and throw the file away.
+   *
+   * A plain `<a href download>` cannot be used here, however obvious it looks:
+   * the route is behind `requireAuth`, which reads an `Authorization` header,
+   * and a browser-initiated download sends none. The link would come back 401
+   * and the owner would get a file containing the word "Unauthorized".
+   */
+  exportCsv: async (id: number): Promise<Blob> => {
+    const token = getToken();
+    const res = await fetch(`${API_BASE}/admin/forms/${id}/submissions.csv`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    });
+    if (!res.ok) {
+      throw new ApiError("That download didn't finish. Please try again in a moment.", res.status);
+    }
+    return res.blob();
+  },
 };
+
+/**
+ * Hands a fetched spreadsheet to the browser as a save dialog.
+ *
+ * The object URL is revoked on the next tick rather than immediately: Safari
+ * has not started reading it when the click returns, and revoking too early
+ * gives a download that silently produces nothing.
+ */
+export function saveCsv(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+}
 
 /* ── Wording ────────────────────────────────────────────────────────────── */
 

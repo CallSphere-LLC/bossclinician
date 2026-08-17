@@ -498,7 +498,7 @@ adminAssessmentsRouter.get(
   "/:id/attempts",
   asyncHandler(async (req, res) => {
     const limit = Math.min(Number(req.query.limit) || 100, 500);
-    const result = await pool.query(
+    const result = await pool.query<{ id: string }>(
       `SELECT t.id, t.email::text AS email, t.score, t.max_score, t.percent, t.passed,
               t.completed_at, r.title AS result_title, c.name AS contact_name, c.id AS contact_id
          FROM assessment_attempts t
@@ -509,7 +509,10 @@ adminAssessmentsRouter.get(
         LIMIT $2`,
       [req.params.id, limit]
     );
-    res.json(rowsToCamel(result.rows));
+    // The attempt id is a BIGSERIAL, which node-postgres hands back as a string
+    // because a bigint does not fit a JS number in the general case. Coerced
+    // here so a client is not left to remember it.
+    res.json(result.rows.map((row) => ({ ...rowToCamel(row), id: Number(row.id) })));
   })
 );
 

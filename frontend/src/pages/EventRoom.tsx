@@ -276,7 +276,7 @@ export default function EventRoom() {
         >
           {refusal.opensAt && (
             <p className="text-[1.05rem] leading-relaxed text-white/90">
-              Doors open at {formatLocal(refusal.opensAt)}, your time.
+              Doors open at {formatInZone(refusal.opensAt, refusal.timezone)}.
             </p>
           )}
           {/* The exact time above says the same thing, so the ticking line is
@@ -307,7 +307,7 @@ export default function EventRoom() {
         >
           <p className="copy-luxe max-w-[46ch] text-pretty">
             {refusal.closedAt
-              ? `The recording was available until ${formatLocalDate(refusal.closedAt)}, and it has now come down.`
+              ? `The recording was available until ${formatDateInZone(refusal.closedAt, refusal.timezone)}, and it has now come down.`
               : "The recording has come down."}{" "}
             If you still need what was covered, email {contactPage.email} and I'll point you to the
             next time it runs.
@@ -421,7 +421,7 @@ export default function EventRoom() {
             <p className="text-sm text-orchid-dim">
               <span className="sr-only">
                 {replay ? "This replay is available until " : "This session ends at "}
-                {formatLocal(access.closesAt)}, your time.
+                {formatInZone(access.closesAt, access.timezone)}.
               </span>
               {closesIn !== null && closesIn > 0 && (
                 <span aria-hidden>

@@ -12,6 +12,9 @@ const WorkWithMe = lazy(() => import("@/pages/WorkWithMe"));
 const Courses = lazy(() => import("@/pages/Courses"));
 const CourseDetail = lazy(() => import("@/pages/CourseDetail"));
 const AffiliateSignup = lazy(() => import("@/pages/AffiliateSignup"));
+const Quiz = lazy(() => import("@/pages/Quiz"));
+const EventRegister = lazy(() => import("@/pages/EventRegister"));
+const EventRoom = lazy(() => import("@/pages/EventRoom"));
 const Resources = lazy(() => import("@/pages/Resources"));
 const ResourceHub = lazy(() => import("@/pages/ResourceHub"));
 const Blog = lazy(() => import("@/pages/Blog"));
@@ -69,6 +72,11 @@ function PublicRoutes() {
           {/* Where 55 of the legacy bossclinician.com product URLs land. */}
           <Route path="/courses/:slug" element={<CourseDetail />} />
           <Route path="/partners" element={<AffiliateSignup />} />
+          {/* One route per builder-created thing, so a quiz or an event is
+              shareable the moment it is published — no deploy to add one. */}
+          <Route path="/quiz/:slug" element={<Quiz />} />
+          <Route path="/events/:slug" element={<EventRegister />} />
+          <Route path="/events/:slug/room" element={<EventRoom />} />
           <Route path="/resources" element={<Resources />} />
           <Route path="/resource-hub" element={<ResourceHub />} />
           <Route path="/blog" element={<Blog />} />
