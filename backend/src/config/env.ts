@@ -98,6 +98,12 @@ export const env = {
   // host serving the same content to crawlers competes with it. See
   // routes/public/seo.ts.
   seoAllowIndexing: (process.env.SEO_ALLOW_INDEXING ?? "false").toLowerCase() === "true",
+
+  // The job worker runs inside the API process. The work is IO-bound — sending
+  // mail, calling Stripe — so it does not compete with request handling for the
+  // thing requests actually need, and one service is one thing to deploy and
+  // watch. Set false to move it to its own container without a code change.
+  workerEnabled: (process.env.WORKER_ENABLED ?? "true").toLowerCase() !== "false",
 };
 
 export const stripeEnabled = (): boolean => env.stripe.secretKey.length > 0;

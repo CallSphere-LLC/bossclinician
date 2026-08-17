@@ -1,5 +1,13 @@
 services:
   db:
+    # Shared box: several other applications and a k3s cluster live here, so a
+    # runaway container must hit a wall rather than take the host with it.
+    deploy:
+      resources:
+        limits:
+          memory: 768M
+        reservations:
+          memory: 256M
     image: postgres:16-alpine
     restart: unless-stopped
     security_opt: ["no-new-privileges:true"]
@@ -16,6 +24,14 @@ services:
       retries: 10
 
   ai:
+    # Shared box: several other applications and a k3s cluster live here, so a
+    # runaway container must hit a wall rather than take the host with it.
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 128M
     build: ./ai
     restart: unless-stopped
     security_opt: ["no-new-privileges:true"]
@@ -27,6 +43,14 @@ services:
         condition: service_healthy
 
   backend:
+    # Shared box: several other applications and a k3s cluster live here, so a
+    # runaway container must hit a wall rather than take the host with it.
+    deploy:
+      resources:
+        limits:
+          memory: 768M
+        reservations:
+          memory: 192M
     build: ./backend
     restart: unless-stopped
     security_opt: ["no-new-privileges:true"]
@@ -58,6 +82,14 @@ services:
         condition: service_started
 
   frontend:
+    # Shared box: several other applications and a k3s cluster live here, so a
+    # runaway container must hit a wall rather than take the host with it.
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+        reservations:
+          memory: 16M
     build:
       context: ./frontend
       args:
@@ -69,6 +101,14 @@ services:
       - "80"
 
   nginx:
+    # Shared box: several other applications and a k3s cluster live here, so a
+    # runaway container must hit a wall rather than take the host with it.
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+        reservations:
+          memory: 16M
     image: nginx:1.27-alpine
     restart: unless-stopped
     security_opt: ["no-new-privileges:true"]
