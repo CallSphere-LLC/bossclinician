@@ -43,6 +43,17 @@ const MemberProfile = lazy(() => import("@/pages/member/Profile"));
 const MemberSecurity = lazy(() => import("@/pages/member/Security"));
 const MemberBilling = lazy(() => import("@/pages/member/Billing"));
 const MemberPurchases = lazy(() => import("@/pages/member/Purchases"));
+const MemberLibrary = lazy(() => import("@/pages/member/Library"));
+const MemberCoursePlayer = lazy(() => import("@/pages/member/CoursePlayer"));
+const MemberCommunity = lazy(() => import("@/pages/member/Community"));
+const MemberCommunityChannel = lazy(() => import("@/pages/member/CommunityChannel"));
+const MemberCommunityProfile = lazy(() => import("@/pages/member/CommunityProfile"));
+const MemberCoaching = lazy(() => import("@/pages/member/Coaching"));
+const MemberCoachingSession = lazy(() => import("@/pages/member/CoachingSession"));
+const MemberPodcasts = lazy(() => import("@/pages/member/Podcasts"));
+const MemberNewsletters = lazy(() => import("@/pages/member/Newsletters"));
+const Checkout = lazy(() => import("@/pages/Checkout"));
+const CheckoutUpsell = lazy(() => import("@/pages/CheckoutUpsell"));
 
 function PublicRoutes() {
   return (
@@ -144,6 +155,95 @@ function MemberRoutes() {
             </RequireMember>
           }
         />
+
+        <Route
+          path="/library"
+          element={
+            <RequireMember>
+              <MemberLibrary />
+            </RequireMember>
+          }
+        />
+        <Route
+          path="/library/:productSlug"
+          element={
+            <RequireMember>
+              <MemberCoursePlayer />
+            </RequireMember>
+          }
+        />
+        <Route
+          path="/library/:productSlug/lessons/:lessonSlug"
+          element={
+            <RequireMember>
+              <MemberCoursePlayer />
+            </RequireMember>
+          }
+        />
+        <Route
+          path="/community"
+          element={
+            <RequireMember>
+              <MemberCommunity />
+            </RequireMember>
+          }
+        />
+        <Route
+          path="/community/:slug"
+          element={
+            <RequireMember>
+              <MemberCommunity />
+            </RequireMember>
+          }
+        />
+        <Route
+          path="/community/:slug/channels/:channelSlug"
+          element={
+            <RequireMember>
+              <MemberCommunityChannel />
+            </RequireMember>
+          }
+        />
+        <Route
+          path="/community/:slug/members/:memberId"
+          element={
+            <RequireMember>
+              <MemberCommunityProfile />
+            </RequireMember>
+          }
+        />
+        <Route
+          path="/coaching"
+          element={
+            <RequireMember>
+              <MemberCoaching />
+            </RequireMember>
+          }
+        />
+        <Route
+          path="/coaching/sessions/:id"
+          element={
+            <RequireMember>
+              <MemberCoachingSession />
+            </RequireMember>
+          }
+        />
+        <Route
+          path="/podcasts"
+          element={
+            <RequireMember>
+              <MemberPodcasts />
+            </RequireMember>
+          }
+        />
+        <Route
+          path="/newsletters"
+          element={
+            <RequireMember>
+              <MemberNewsletters />
+            </RequireMember>
+          }
+        />
       </Routes>
     </Suspense>
   );
@@ -174,6 +274,37 @@ export default function App() {
         <Route path="/reset-password/*" element={<MemberRoutes />} />
         <Route path="/verify-email/*" element={<MemberRoutes />} />
         <Route path="/account/*" element={<MemberRoutes />} />
+        <Route path="/library/*" element={<MemberRoutes />} />
+        <Route path="/community/*" element={<MemberRoutes />} />
+        <Route path="/coaching/*" element={<MemberRoutes />} />
+        <Route path="/podcasts" element={<MemberRoutes />} />
+        <Route path="/newsletters" element={<MemberRoutes />} />
+
+        {/* Ranked above /checkout/:offerSlug — React Router prefers a static
+            segment to a dynamic one, so this keeps the success page from being
+            read as an offer whose slug happens to be "success". */}
+        <Route path="/checkout/success" element={<PublicRoutes />} />
+
+        {/* Checkout stays outside RequireMember: it is still a sales page, and a
+            guest buying without an account must not meet a sign-in wall. It is
+            wrapped in Suspense of its own because it is not part of either
+            existing bundle. */}
+        <Route
+          path="/checkout/:offerSlug"
+          element={
+            <Suspense fallback={<MemberFallback />}>
+              <Checkout />
+            </Suspense>
+          }
+        />
+        <Route
+          path="/checkout/:offerSlug/upsell/:step"
+          element={
+            <Suspense fallback={<MemberFallback />}>
+              <CheckoutUpsell />
+            </Suspense>
+          }
+        />
 
         <Route path="/*" element={<PublicRoutes />} />
       </Routes>

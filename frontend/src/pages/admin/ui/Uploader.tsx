@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { CloudUpload, FileText, Film, Music, Image as ImageIcon, X } from "lucide-react";
 import { toast } from "sonner";
 import { uploadMediaWithProgress } from "@/lib/api";
-import type { MediaAsset } from "@/types/admin";
+import type { MediaAsset, MediaVisibility } from "@/types/admin";
 import { cn } from "@/lib/cn";
 import { formatBytes } from "@/lib/format";
 import { friendlyError } from "@/pages/admin/ui/friendly";
@@ -45,10 +45,21 @@ export function UploadDropzone({
   onUploaded,
   accept,
   compact = false,
+  visibility = "public",
 }: {
   onUploaded: (asset: MediaAsset) => void;
   accept?: string;
   compact?: boolean;
+  /**
+   * Where the file is stored, and therefore who can open it.
+   *
+   * Defaults to "public" because most uploads in this admin are website
+   * imagery — a blog cover, a headshot, a course thumbnail — and those have to
+   * be reachable by a browser with no session. Every screen that uploads
+   * something a customer paid for passes "protected" explicitly: course video,
+   * lesson attachments, download-product files, coaching recordings.
+   */
+  visibility?: MediaVisibility;
 }) {
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [dragging, setDragging] = useState(false);
@@ -68,6 +79,7 @@ export function UploadDropzone({
 
         uploadMediaWithProgress(
           file,
+          visibility,
           (percent) =>
             setQueue((prev) =>
               prev.map((item) => (item.id === id ? { ...item, progress: percent } : item)),
@@ -104,7 +116,7 @@ export function UploadDropzone({
           });
       }
     },
-    [onUploaded],
+    [onUploaded, visibility],
   );
 
   function handleDrop(e: DragEvent<HTMLDivElement>) {

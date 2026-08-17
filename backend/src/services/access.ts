@@ -220,6 +220,100 @@ export async function hasCourseAccess(memberId: number, courseId: number): Promi
   return res.rows.length > 0;
 }
 
+/**
+ * Whether a community is something somebody sells.
+ *
+ * Three separate facts each say so on their own — a product of kind 'community'
+ * pointing at the room, a plan that unlocks it, or the admin's own 'paid' flag —
+ * and any one of them means the room has a door. A community none of them names
+ * is open: there is nothing to buy, so entitlement is not a question that applies
+ * to it, and that is exactly what a free community is.
+ *
+ * This is the only thing in this module that reads a table other than
+ * `access_grants`, and it reads the catalogue to answer "is there a door", never
+ * "may this person walk through it". The second question has one answer, below.
+ *
+ * Deliberately blind to `products.status`: a product withdrawn from the shop
+ * still sold the room to everybody holding it, and reading an archived product
+ * as "nobody sells this" would swing the door open the moment the admin tidies
+ * up the catalogue.
+ */
+const COMMUNITY_IS_SOLD = `(
+       c.access = 'paid'
+    OR EXISTS (SELECT 1 FROM products sp
+                WHERE sp.community_id = c.id AND sp.kind = 'community')
+    OR EXISTS (SELECT 1 FROM plans pl WHERE pl.community_id = c.id)
+  )`;
+
+/**
+ * A live grant for a product that sells this room; `$1` is the member.
+ *
+ * Product status is left out here for the mirror-image reason: archiving a
+ * product takes it out of the library grid, and must never take a paying member
+ * out of the room they are standing in.
+ */
+const COMMUNITY_IS_GRANTED = `(EXISTS (
+    SELECT 1 FROM access_grants g
+      JOIN products gp ON gp.id = g.product_id
+     WHERE g.member_id = $1 AND gp.kind = 'community' AND gp.community_id = c.id
+       AND g.status = 'active' AND (g.expires_at IS NULL OR g.expires_at > now())
+  ) OR EXISTS (
+    -- Entitlements that never take the shape of a grant. A membership created
+    -- by an admin, by an automation, or by a plan subscription has no product
+    -- behind it — plans unlock a community directly — so judging those by
+    -- grants alone would shut out the people who actually paid.
+    --
+    -- 'purchase' is deliberately absent: that source DOES have a grant, and
+    -- reading the membership instead would restore the original bug, where a
+    -- refunded member kept the room because the row recording their standing
+    -- was still there.
+    SELECT 1 FROM community_memberships lm
+     WHERE lm.member_id = $1 AND lm.community_id = c.id
+       AND lm.banned_at IS NULL
+       AND lm.source IN ('manual', 'automation', 'plan')
+       AND (
+         lm.source <> 'plan'
+         -- A plan-sourced membership lasts exactly as long as the subscription
+         -- paying for it. Without this, cancelling still left the room open.
+         OR lm.subscription_id IS NULL
+         OR EXISTS (
+           SELECT 1 FROM subscriptions sub
+            WHERE sub.id = lm.subscription_id
+              AND sub.status IN ('active', 'trialing', 'past_due')
+         )
+       )
+  ))`;
+
+/**
+ * Whether a member may be inside a community right now.
+ *
+ * Asked on every entry rather than once at the door. A `community_memberships`
+ * row is a record of standing — points, badges, role, history — and is kept on
+ * purpose when a refund revokes the grant behind it, so it can never be the
+ * thing that answers this question: a door made of a row nobody deletes is a
+ * door that never closes.
+ */
+export async function mayEnterCommunity(memberId: number, communityId: number): Promise<boolean> {
+  const res = await pool.query(
+    `SELECT 1 FROM communities c
+      WHERE c.id = $2 AND (NOT ${COMMUNITY_IS_SOLD} OR ${COMMUNITY_IS_GRANTED})
+      LIMIT 1`,
+    [memberId, communityId]
+  );
+  return res.rows.length > 0;
+}
+
+/** The same question asked of every room at once — the query behind the listing. */
+export async function listEnterableCommunityIds(memberId: number): Promise<number[]> {
+  const res = await pool.query<{ id: number }>(
+    `SELECT c.id FROM communities c
+      WHERE NOT ${COMMUNITY_IS_SOLD} OR ${COMMUNITY_IS_GRANTED}
+      ORDER BY c.id`,
+    [memberId]
+  );
+  return res.rows.map((row) => row.id);
+}
+
 export interface OwnedProduct {
   grantId: number;
   productId: number;

@@ -1,17 +1,53 @@
-import { Router } from "express";
+import { Router, type Request } from "express";
 import multer from "multer";
 import path from "path";
 import crypto from "crypto";
 import fs from "fs";
+import { z } from "zod";
 import { pool } from "../../db/pool";
-import { rowToCamel, rowsToCamel } from "../../utils/case";
+import { rowToCamel } from "../../utils/case";
 import { asyncHandler } from "../../utils/asyncHandler";
 import { env } from "../../config/env";
 import { badRequest, notFound } from "../../utils/httpError";
+import { isProtectedRef, protectedRef } from "../../services/signedUrls";
 
 export const adminMediaRouter = Router();
 
 fs.mkdirSync(env.uploadDir, { recursive: true });
+fs.mkdirSync(env.protectedUploadDir, { recursive: true });
+
+/**
+ * Where an upload lands, and therefore who can open it.
+ *
+ * Asked at upload time rather than worked out from the file type, because the
+ * same mp4 is a promotional trailer on the sales page and the second lesson of a
+ * $297 course, and nothing about the bytes says which. Being wrong in one
+ * direction is a broken image on a blog post; in the other it is the course
+ * given away, so there is no default — the request has to say.
+ */
+const VISIBILITIES = ["public", "protected"] as const;
+type Visibility = (typeof VISIBILITIES)[number];
+
+const uploadQuerySchema = z.object({ visibility: z.enum(VISIBILITIES) });
+
+const VISIBILITY_REQUIRED =
+  "Say whether this file is for everyone or only for people who bought it.";
+
+function storageDir(visibility: Visibility): string {
+  return visibility === "protected" ? env.protectedUploadDir : env.uploadDir;
+}
+
+/**
+ * Fails closed.
+ *
+ * The upload route validates the query before a byte is read, so an unusable
+ * value never reaches here. If one ever did, the safe place to put a file is the
+ * directory nobody can browse.
+ */
+function requestedVisibility(req: Request): Visibility {
+  const parsed = uploadQuerySchema.safeParse(req.query);
+  return parsed.success ? parsed.data.visibility : "protected";
+}
 
 export interface MediaAsset {
   id: number;
@@ -24,6 +60,14 @@ export interface MediaAsset {
   title: string;
   folder: string;
   createdAt: string;
+}
+
+/** What the library shows, plus which of the two directories the file is in. */
+type MediaAssetJson = MediaAsset & { visibility: Visibility };
+
+function toMediaJson(row: Record<string, unknown>): MediaAssetJson {
+  const asset = rowToCamel<MediaAsset>(row);
+  return { ...asset, visibility: isProtectedRef(asset.url) ? "protected" : "public" };
 }
 
 /**
@@ -120,7 +164,7 @@ function kindFromMime(mime: string): string {
 }
 
 const storage = multer.diskStorage({
-  destination: (_req, _file, cb) => cb(null, env.uploadDir),
+  destination: (req, _file, cb) => cb(null, storageDir(requestedVisibility(req))),
   filename: (_req, file, cb) => {
     const ext = path.extname(file.originalname) || "";
     const name = `${crypto.randomBytes(8).toString("hex")}${ext.toLowerCase()}`;
@@ -152,11 +196,31 @@ adminMediaRouter.get(
             [kind],
           )
         : await pool.query("SELECT * FROM media_assets ORDER BY created_at DESC");
-    res.json(rowsToCamel<MediaAsset>(result.rows));
+    res.json(result.rows.map(toMediaJson));
   }),
 );
 
+/**
+ * POST /admin/media?visibility=public|protected
+ *
+ * The visibility rides in the query string rather than in the form, because the
+ * destination has to be known before the first byte is written and a multipart
+ * field is only readable once it has been parsed — which, for a field the client
+ * happened to append after the file, is far too late.
+ *
+ * `url` is what every other table stores to point at this asset. A public file
+ * gets the path it is served from; a protected one gets a reference that names
+ * the storage key and no location, since it has no URL of its own and is only
+ * ever reachable through a signed link.
+ */
 adminMediaRouter.post("/", (req, res, next) => {
+  const query = uploadQuerySchema.safeParse(req.query);
+  if (!query.success) {
+    next(badRequest(VISIBILITY_REQUIRED, query.error.flatten()));
+    return;
+  }
+  const { visibility } = query.data;
+
   upload.single("file")(req, res, (err) => {
     if (err) {
       if (err instanceof multer.MulterError) {
@@ -173,7 +237,8 @@ adminMediaRouter.post("/", (req, res, next) => {
       return;
     }
 
-    const url = `/uploads/${file.filename}`;
+    const url =
+      visibility === "protected" ? protectedRef(file.filename) : `/uploads/${file.filename}`;
     // Non-null: fileFilter already rejected anything resolveMime can't map.
     const mime = resolveMime(file.mimetype, file.originalname) ?? file.mimetype;
     const kind = kindFromMime(mime);
@@ -186,11 +251,13 @@ adminMediaRouter.post("/", (req, res, next) => {
         [file.filename, file.originalname, url, mime, kind, file.size, file.originalname],
       )
       .then((result) => {
-        res.status(201).json(rowToCamel<MediaAsset>(result.rows[0]));
+        res.status(201).json(toMediaJson(result.rows[0]));
       })
       .catch((dbErr: unknown) => {
         // The bytes are already on disk; don't leave an orphan if the row fails.
-        fs.promises.unlink(path.join(env.uploadDir, file.filename)).catch(() => undefined);
+        fs.promises
+          .unlink(path.join(storageDir(visibility), file.filename))
+          .catch(() => undefined);
         next(dbErr);
       });
   });
@@ -207,7 +274,7 @@ adminMediaRouter.patch(
       [title, req.params.id],
     );
     if (result.rowCount === 0) throw notFound("Media asset not found");
-    res.json(rowToCamel<MediaAsset>(result.rows[0]));
+    res.json(toMediaJson(result.rows[0]));
   }),
 );
 
@@ -215,14 +282,17 @@ adminMediaRouter.delete(
   "/:id",
   asyncHandler(async (req, res) => {
     const result = await pool.query(
-      "DELETE FROM media_assets WHERE id = $1 RETURNING filename",
+      "DELETE FROM media_assets WHERE id = $1 RETURNING filename, url",
       [req.params.id],
     );
     if (result.rowCount === 0) throw notFound("Media asset not found");
 
-    // basename() so a doctored filename column can never escape uploadDir.
-    const filename = path.basename(String(result.rows[0].filename));
-    await fs.promises.unlink(path.join(env.uploadDir, filename)).catch(() => undefined);
+    // The row's own url says which of the two directories holds the bytes, and
+    // basename() so a doctored filename column can never escape either of them.
+    const stored = result.rows[0] as { filename: unknown; url: unknown };
+    const directory = storageDir(isProtectedRef(String(stored.url)) ? "protected" : "public");
+    const filename = path.basename(String(stored.filename));
+    await fs.promises.unlink(path.join(directory, filename)).catch(() => undefined);
 
     res.status(204).end();
   }),

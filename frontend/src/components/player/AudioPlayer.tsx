@@ -4,6 +4,7 @@ import type { ProgressResult } from "@/lib/libraryApi";
 import { SpeedControl, useStoredPlaybackRate } from "@/components/player/SpeedControl";
 import { useMediaKeys } from "@/components/player/useMediaKeys";
 import { useMediaProgress } from "@/components/player/useMediaProgress";
+import { useRenewableSource } from "@/components/player/useRenewableSource";
 
 interface AudioPlayerProps {
   lessonId: number;
@@ -42,6 +43,8 @@ export function AudioPlayer({
 
   useMediaProgress({ media: audioRef, lessonId, startAt, initialPercent, onSaved });
   useMediaKeys(audioRef, true);
+  // As in VideoPlayer: a renewed signed URL must not restart the lesson.
+  useRenewableSource(audioRef, src);
 
   useEffect(() => {
     const el = audioRef.current;

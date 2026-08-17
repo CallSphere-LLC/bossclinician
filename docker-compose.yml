@@ -35,12 +35,20 @@ services:
       DATABASE_URL: postgres://boss:${DB_PASSWORD:?DB_PASSWORD is required}@db:5432/bossclinician
       AI_BASE_URL: http://ai:8000
       UPLOAD_DIR: /app/uploads
+      PROTECTED_UPLOAD_DIR: /app/uploads-protected
       # Keep in sync with nginx client_max_body_size in nginx/site.conf.
       MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-512}
     volumes:
-      # Named volume, not a bind mount: uploaded media must survive
+      # Named volumes, not bind mounts: uploaded media must survive
       # `docker compose build` / container replacement.
+      #
+      # Two of them, because the app keeps two storage roots. /app/uploads is
+      # served at /uploads to anyone who asks and holds blog covers, testimonial
+      # photos and avatars. /app/uploads-protected holds everything a customer
+      # paid for and is reachable only through a signed link. Nesting the second
+      # inside the first would put every course video back on the open web.
       - uploads_data:/app/uploads
+      - protected_uploads_data:/app/uploads-protected
     expose:
       - "4000"
     depends_on:
@@ -79,3 +87,4 @@ services:
 volumes:
   db_data:
   uploads_data:
+  protected_uploads_data:

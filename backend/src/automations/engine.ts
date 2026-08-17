@@ -125,7 +125,8 @@ async function runAction(action: ActionRow, payload: TriggerPayload): Promise<st
       const memberId = await ensureMember(payload);
       if (!memberId) return "join_community: skipped (no email)";
       await pool.query(
-        `INSERT INTO community_memberships (community_id, member_id) VALUES ($1, $2)
+        `INSERT INTO community_memberships (community_id, member_id, source)
+         VALUES ($1, $2, 'automation')
          ON CONFLICT (community_id, member_id) DO NOTHING`,
         [communityId, memberId],
       );

@@ -305,9 +305,12 @@ adminCommunityRouter.post(
     if (!memberId) throw badRequest("memberId is required");
 
     const result = await pool.query(
-      `INSERT INTO community_memberships (community_id, member_id, role)
-       VALUES ($1, $2, $3)
-       ON CONFLICT (community_id, member_id) DO UPDATE SET role = EXCLUDED.role
+      // source 'manual': Yvette putting somebody in a room IS the entitlement.
+      // There is no purchase to point at and none should be required.
+      `INSERT INTO community_memberships (community_id, member_id, role, source)
+       VALUES ($1, $2, $3, 'manual')
+       ON CONFLICT (community_id, member_id) DO UPDATE
+         SET role = EXCLUDED.role, source = 'manual'
        RETURNING *`,
       [req.params.id, memberId, role ?? "member"],
     );

@@ -79,21 +79,29 @@ interface CertificateJson {
 }
 
 function toCertificateJson(row: CertificateRow, courseSlug: string | null): CertificateJson {
+  const revoked = row.revoked_at !== null;
+
   return {
     id: row.id,
     courseId: row.course_id,
     courseSlug,
     courseTitle: row.course_title,
     recipientName: row.recipient_name,
-    verificationCode: row.verification_code,
-    verifyUrl: `/verify/${row.verification_code}`,
-    downloadUrl: `/api/member/certificates/${row.id}/download`,
+    // A withdrawn certificate keeps its place in the list, because it happened
+    // and a member left wondering where it went would only write in and ask. Its
+    // code does not come with it: the code is the thing you hand a licensing
+    // board to have the credit vouched for, and this one no longer is. The
+    // download route refuses it too, so neither half of the record is issued
+    // from a withdrawal the member is disputing.
+    verificationCode: revoked ? "" : row.verification_code,
+    verifyUrl: revoked ? "" : `/verify/${row.verification_code}`,
+    downloadUrl: revoked ? "" : `/api/member/certificates/${row.id}/download`,
     creditQuarterHours: row.ceu_credit_quarter_hours,
     creditHours: formatCreditHours(row.ceu_credit_quarter_hours),
     providerNumber: row.ceu_provider_number,
     completedAt: row.completed_at.toISOString(),
     issuedAt: row.issued_at.toISOString(),
-    revoked: row.revoked_at !== null,
+    revoked,
     revokedAt: iso(row.revoked_at),
   };
 }

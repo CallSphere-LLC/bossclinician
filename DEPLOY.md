@@ -12,6 +12,13 @@
    - an `Ingress` (Traefik) with TLS for that host (reuse cluster cert-manager / Let's Encrypt).
 3. DNS: `A` record `bossclinician.callsphere.site` → server public IP. Provider for `callsphere.site` = TBD (ask user).
 
+## Storage
+Two volumes, and they are not interchangeable:
+- `uploads_data` → `/app/uploads` (`UPLOAD_DIR`). Served at `/uploads` to anyone: blog covers, testimonial photos, member avatars.
+- `protected_uploads_data` → `/app/uploads-protected` (`PROTECTED_UPLOAD_DIR`). Course video, lesson attachments, download-product files, coaching session files, certificate PDFs. Nothing serves this directory; the app hands out signed, expiring, member-bound links instead.
+
+Back both up. The second holds every course video, and nothing in a database dump can rebuild it. `PROTECTED_UPLOAD_DIR` must not point inside `UPLOAD_DIR` — the backend refuses to start if it does.
+
 ## Secrets needed from user (put in gitignored .env files, never commit)
 - `OPENAI_API_KEY` → `ai/.env` (separate business; ideally its own key).
 - `SMTP_*` + `NOTIFY_EMAIL` → `backend/.env` (optional; logs until provided).

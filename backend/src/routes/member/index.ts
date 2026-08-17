@@ -7,6 +7,7 @@ import { memberDownloadsRouter } from "./downloads";
 import { memberCertificatesRouter } from "./certificates";
 import { memberCommunityRouter } from "./community";
 import { memberCoachingRouter } from "./coaching";
+import { memberPublishingRouter } from "./publishing";
 
 /**
  * `/api/member/*` — everything a signed-in customer can do.
@@ -33,3 +34,9 @@ memberRouter.use("/coaching", memberCoachingRouter);
 // the time it reports progress, and routing through the product slug would mean
 // re-deriving one from the other on every ten-second heartbeat.
 memberRouter.use(memberProgressRouter);
+
+// Publishing serves two sibling surfaces — "/podcasts" and "/newsletters" —
+// plus the "/email-preferences" toggle they share, so like progress above it
+// declares whole member-surface paths and mounts at the root rather than under
+// a prefix of its own.
+memberRouter.use(memberPublishingRouter);

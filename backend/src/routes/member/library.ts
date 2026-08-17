@@ -13,6 +13,8 @@ import {
   type MemberCourseView,
   type MemberLessonView,
 } from "../../services/curriculum";
+import { isProtectedRef, signedFileUrl } from "../../services/signedUrls";
+import { downloadLinkPath, type LessonMediaKind } from "./downloads";
 
 /**
  * `/api/member/library` — everything the customer has paid for, and the player
@@ -77,14 +79,34 @@ const PRODUCT_MISSING = "We couldn't find that in your library.";
 const LESSON_MISSING = "We couldn't find that lesson.";
 
 /**
- * The path the downloads surface serves a lesson attachment from.
+ * A URL the player can use directly, for whatever a lesson's media column holds.
  *
- * Held in one constant because it is a contract with routes/member/downloads.ts
- * rather than a string this file is free to change: the bytes are never linked
- * directly, always minted per request behind an entitlement check.
+ * Three cases, and only the first of them is ours. A protected reference names a
+ * file in the directory nothing serves, so it is signed here into a link bound to
+ * this member and dead in two hours. An /uploads path is a file the owner
+ * uploaded as public and is already a working URL. An absolute link belongs to
+ * somebody else — a Vimeo embed, a caption file on a CDN — and is passed through
+ * untouched.
+ *
+ * The result goes straight into a <video src>, which is why it is a URL and not
+ * an endpoint to POST to: an element cannot send an Authorization header, so the
+ * credential has to be in the address.
  */
-const lessonFileDownloadPath = (fileId: number): string =>
-  `/api/member/downloads/lesson-files/${fileId}`;
+function playableUrl(input: {
+  reference: string;
+  kind: LessonMediaKind;
+  lessonId: number;
+  memberId: number;
+  now: Date;
+}): { url: string; expiresAt: Date | null } {
+  if (!isProtectedRef(input.reference)) return { url: input.reference, expiresAt: null };
+  return signedFileUrl({
+    kind: input.kind,
+    fileId: input.lessonId,
+    memberId: input.memberId,
+    now: input.now,
+  });
+}
 
 /* ------------------------------------------------------------------- library */
 
@@ -367,7 +389,7 @@ async function loadProductFiles(productId: number): Promise<ProductFileJson[]> {
     mime: f.mime,
     // BIGINT arrives from pg as a string.
     sizeBytes: Number(f.size_bytes) || 0,
-    downloadUrl: `/api/member/downloads/product-files/${f.id}`,
+    downloadUrl: downloadLinkPath("product", f.id),
   }));
 }
 
@@ -620,6 +642,23 @@ memberLibraryRouter.get(
     const body = content.rows[0];
     if (!body) throw notFound(LESSON_MISSING);
 
+    // One instant for all four, so the player has a single moment to refresh
+    // against rather than four expiries a few milliseconds apart.
+    const mintedAt = new Date();
+    const sign = (reference: string, kind: LessonMediaKind) =>
+      playableUrl({ reference, kind, lessonId: lesson.id, memberId: member.id, now: mintedAt });
+
+    const media = {
+      video: sign(body.video_url, "lesson-video"),
+      audio: sign(body.audio_url, "lesson-audio"),
+      captions: sign(body.captions_url, "lesson-captions"),
+      attachment: sign(body.attachment_url, "lesson-attachment"),
+    };
+    const mediaExpiresAt =
+      [media.video, media.audio, media.captions, media.attachment]
+        .map((signed) => signed.expiresAt)
+        .find((value) => value !== null) ?? null;
+
     res.json({
       ...shared,
       lesson: {
@@ -636,15 +675,19 @@ memberLibraryRouter.get(
         videoDurationSeconds: lesson.videoDurationSeconds,
         preview: lesson.preview,
         bodyMd: body.body_md,
-        videoUrl: body.video_url,
-        audioUrl: body.audio_url,
+        videoUrl: media.video.url,
+        audioUrl: media.audio.url,
         // Author-written markup for an 'embed' lesson (a Vimeo iframe, a Typeform).
         // It comes from the admin, not from a member, and the player must still
         // render it in a sandboxed frame rather than into its own document.
         embedHtml: body.embed_html,
         transcript: body.transcript,
-        captionsUrl: body.captions_url,
-        attachmentUrl: body.attachment_url,
+        captionsUrl: media.captions.url,
+        attachmentUrl: media.attachment.url,
+        // Null when nothing above needed signing. Otherwise the moment the four
+        // URLs stop working, so a player left open through a long lesson can
+        // reload this response before its source dies mid-sentence.
+        mediaExpiresAt: mediaExpiresAt === null ? null : mediaExpiresAt.toISOString(),
         commentsEnabled: lesson.commentsEnabled,
         notesEnabled: lesson.notesEnabled,
         files: files.rows.map((f) => ({
@@ -653,7 +696,7 @@ memberLibraryRouter.get(
           filename: f.filename,
           mime: f.mime,
           sizeBytes: Number(f.size_bytes) || 0,
-          downloadUrl: lessonFileDownloadPath(f.id),
+          downloadUrl: downloadLinkPath("lesson", f.id),
         })),
         progress: {
           completed: lesson.completed,

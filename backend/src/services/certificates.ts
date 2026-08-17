@@ -8,7 +8,8 @@ import { sendMail } from "../email/mailer";
 import { escapeHtml } from "../email/templates";
 import type { EmailContent } from "../email/memberTemplates";
 import { hasCourseAccess } from "./access";
-import { resolveStoredFile, uploadPath } from "./signedUrls";
+import { AUTO_COMPLETE_PERCENT } from "./curriculum";
+import { protectedRef, resolveStoredFile, uploadPath } from "./signedUrls";
 
 /**
  * CEU certificates.
@@ -28,7 +29,14 @@ import { resolveStoredFile, uploadPath } from "./signedUrls";
  * since been re-approved for a different number.
  */
 
-/** Where certificate PDFs live, relative to the upload root. */
+/**
+ * Where certificate PDFs live, inside the protected storage root.
+ *
+ * A certificate names a therapist and states what they are qualified to claim.
+ * It is delivered by /api/member/certificates/:id/download, which checks that it
+ * belongs to the person asking and that it has not been withdrawn — neither of
+ * which a static file server would do.
+ */
 const CERTIFICATE_DIR = "certificates";
 
 export const CERTIFICATE_COLUMNS = `id, template_id, member_id, product_id, course_id,
@@ -129,9 +137,13 @@ export function normalizeVerificationCode(input: string): string | null {
     .replace(/[IL]/g, "1");
 
   // The prefix is optional on input: people paste the code with or without it.
-  const body = cleaned.startsWith(CODE_PREFIX)
-    ? cleaned.slice(CODE_PREFIX.length)
-    : cleaned;
+  // Length decides which was typed, because B and C are both in the alphabet and
+  // one body in a thousand begins "BC" — stripping those two on sight would turn
+  // a genuine certificate, retyped without its prefix, into the same "no such
+  // certificate" a board administrator gets for a forgery.
+  const prefixed =
+    cleaned.length === CODE_PREFIX.length + CODE_BODY_LENGTH && cleaned.startsWith(CODE_PREFIX);
+  const body = prefixed ? cleaned.slice(CODE_PREFIX.length) : cleaned;
 
   if (body.length !== CODE_BODY_LENGTH) return null;
   for (const char of body) {
@@ -509,19 +521,21 @@ async function writeCertificatePdf(row: CertificateRow): Promise<string> {
     artwork: await artworkFor(template),
   });
 
-  // Named for the verification code rather than the certificate id: the upload
-  // directory is served as static files, so a predictable name would let anyone
-  // walk /uploads/certificates/1.pdf upwards and collect other people's
-  // certificates. 80 random bits cannot be walked.
-  const relative = path.posix.join(CERTIFICATE_DIR, `${row.verification_code}.pdf`);
-  const absolute = uploadPath(relative);
-  if (absolute === null) throw new Error("Certificate path escaped the upload directory");
+  // Named for the verification code rather than the certificate id, so the file
+  // for a given certificate can always be found again from the code printed on
+  // its own face — which is what makes re-rendering a lost one a lookup rather
+  // than a search.
+  const reference = protectedRef(
+    path.posix.join(CERTIFICATE_DIR, `${row.verification_code}.pdf`)
+  );
+  const absolute = uploadPath(reference);
+  if (absolute === null) throw new Error("Certificate path escaped the storage directory");
 
   await fs.promises.mkdir(path.dirname(absolute), { recursive: true });
   await fs.promises.writeFile(absolute, pdf);
 
-  await pool.query(`UPDATE certificates SET pdf_path = $2 WHERE id = $1`, [row.id, relative]);
-  row.pdf_path = relative;
+  await pool.query(`UPDATE certificates SET pdf_path = $2 WHERE id = $1`, [row.id, reference]);
+  row.pdf_path = reference;
   return absolute;
 }
 
@@ -600,6 +614,35 @@ function certificateEmail(input: {
 }
 
 /**
+ * Whether every lesson of this course that can be watched, was.
+ *
+ * "Mark this lesson complete" is a convenience: it is how somebody says they are
+ * done with a worksheet, and it writes a tick without touching `watched_percent`.
+ * For a certificate carrying CE credit that is not enough, because the sentence
+ * the document makes — this person completed n hours of approved instruction — is
+ * one a licensing board acts on. So for a CEU course the ticks are ignored on any
+ * lesson with something to sit through, and the watch figure has to be there.
+ *
+ * The limit is worth stating: it can only ask this of lessons that are video or
+ * audio. A course delivered as reading has nothing measurable in it, and for
+ * those lessons the member's own word remains the only evidence there is.
+ */
+async function watchedEveryMediaLesson(memberId: number, courseId: number): Promise<boolean> {
+  const found = await pool.query<{ unwatched: number }>(
+    `SELECT COUNT(*)::int AS unwatched
+       FROM course_lessons l
+       JOIN course_modules m ON m.id = l.module_id
+       LEFT JOIN lesson_progress lp ON lp.lesson_id = l.id AND lp.member_id = $1
+      WHERE m.course_id = $2
+        AND l.published
+        AND l.content_type IN ('video','audio')
+        AND COALESCE(lp.watched_percent, 0) < $3`,
+    [memberId, courseId, AUTO_COMPLETE_PERCENT]
+  );
+  return (found.rows[0]?.unwatched ?? 0) === 0;
+}
+
+/**
  * Issues the certificate for a finished course, or returns null.
  *
  * Called from wherever progress is written, and safe to call on every lesson
@@ -632,6 +675,11 @@ export async function issueCertificateIfEarned(
 
   const template = await loadCompletionTemplate(courseId);
   if (!template) return null;
+
+  // Credit hours turn this from a keepsake into a compliance record, so a course
+  // carrying them is held to the stricter standard.
+  if (template.ceu_credit_quarter_hours > 0 && !(await watchedEveryMediaLesson(memberId, courseId)))
+    return null;
 
   const found = await pool.query<MemberRow & { course_title: string }>(
     `SELECT m.email, m.first_name, m.last_name, m.name, c.title AS course_title

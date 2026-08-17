@@ -10,8 +10,20 @@ export type Id = number;
 
 export type MediaKind = "image" | "video" | "audio" | "document" | "file";
 
+/**
+ * Which storage root a file lives in, and therefore who can reach it.
+ *
+ * `public` is served at /uploads to anyone — blog covers, testimonial photos,
+ * avatars. `protected` is reachable only through a signed, expiring,
+ * member-bound link, and is where anything a customer paid for belongs. The
+ * same mp4 can legitimately be either, so it is chosen at upload rather than
+ * inferred.
+ */
+export type MediaVisibility = "public" | "protected";
+
 export interface MediaAsset {
   id: Id;
+  visibility?: MediaVisibility;
   filename: string;
   originalName: string;
   url: string;

@@ -35,6 +35,7 @@ import type {
   Invoice,
   LeaderboardEntry,
   MediaAsset,
+  MediaVisibility,
   Member,
   Payment,
   Plan,
@@ -262,10 +263,20 @@ export const adminApi = {
       { method: "POST", body: JSON.stringify({ topic, tone, keywords }) },
     ),
 
-  uploadMedia: (file: File) => {
+  /**
+   * `visibility` decides which storage root the file lands in, and it is not
+   * optional: a public file is served to anyone at /uploads, a protected one is
+   * reachable only through a signed, expiring, member-bound link. A course
+   * video and a blog cover are the same mp4 to a mimetype check, so the caller
+   * has to say which it is.
+   */
+  uploadMedia: (file: File, visibility: MediaVisibility) => {
     const form = new FormData();
     form.append("file", file);
-    return request<MediaAsset>("/admin/media", { method: "POST", body: form });
+    return request<MediaAsset>(`/admin/media?visibility=${visibility}`, {
+      method: "POST",
+      body: form,
+    });
   },
 
   // ---- Dashboard ----
@@ -586,6 +597,7 @@ export const adminApi = {
  */
 export function uploadMediaWithProgress(
   file: File,
+  visibility: MediaVisibility,
   onProgress: (percent: number) => void,
   signal?: AbortSignal,
 ): Promise<MediaAsset> {
@@ -594,7 +606,7 @@ export function uploadMediaWithProgress(
     form.append("file", file);
 
     const xhr = new XMLHttpRequest();
-    xhr.open("POST", `${API_BASE}/admin/media`);
+    xhr.open("POST", `${API_BASE}/admin/media?visibility=${visibility}`);
 
     const token = getToken();
     if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);

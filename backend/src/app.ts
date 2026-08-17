@@ -39,6 +39,12 @@ export function createApp(): Express {
     app.use(morgan(env.nodeEnv === "production" ? "combined" : "dev"));
   }
 
+  // Anonymous, unexpiring, ahead of every router: whatever is in this directory
+  // is on the open web. That is the right answer for a blog cover, a testimonial
+  // photo or a member's avatar, and it is why nothing a customer paid for is
+  // stored here — course video, lesson attachments, product files, coaching
+  // files and certificate PDFs live in env.protectedUploadDir, which is outside
+  // this tree and reachable only through a signed link (services/signedUrls.ts).
   app.use("/uploads", express.static(env.uploadDir));
 
   // Root-level, not under /api: crawlers fetch these at fixed paths. nginx

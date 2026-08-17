@@ -223,6 +223,22 @@ export interface UnlockedLesson extends LessonCommon {
   transcript: string;
   captionsUrl: string;
   attachmentUrl: string;
+  /**
+   * When the four media URLs above stop working, or null if none needed signing.
+   *
+   * A lesson's own video, audio, captions and PDF live in the protected upload
+   * directory, which nothing serves by path: the server hands them over as
+   * signed links bound to this member and dead two hours after they were minted.
+   * That is longer than any lesson, but not longer than a lesson left paused
+   * over lunch, and when it passes the media element's next range request comes
+   * back 404 — the video stops mid-sentence with no way back but a reload.
+   *
+   * So the expiry is part of the contract rather than an implementation detail
+   * the client is left to discover: the player reloads this response shortly
+   * before the moment named here and swaps in fresh URLs. An unsigned lesson —
+   * a Vimeo embed, a public /uploads path — has nothing to expire and sends null.
+   */
+  mediaExpiresAt: string | null;
   commentsEnabled: boolean;
   notesEnabled: boolean;
   files: LessonFile[];

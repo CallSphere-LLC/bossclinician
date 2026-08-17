@@ -5,18 +5,23 @@ import { rateLimit } from "express-rate-limit";
 import { pool } from "../../db/pool";
 import { asyncHandler } from "../../utils/asyncHandler";
 import { notFound } from "../../utils/httpError";
-import { loadEntitledFile } from "../member/downloads";
+import { optionalMember } from "../../middleware/memberAuth";
+import { loadEntitledFile, loadEntitledLessonMedia } from "../member/downloads";
+import { loadOwnedSessionFile } from "../member/coaching";
 import { formatCreditHours, normalizeVerificationCode } from "../../services/certificates";
-import { resolveStoredFile, verifyDownload } from "../../services/signedUrls";
+import { isStreamKind, resolveStoredFile, verifyDownload } from "../../services/signedUrls";
 
 /**
  * The two endpoints that are public because the credential is in the URL.
  *
  * `/api/files/:token` carries a signed token that names one file and one member
- * and dies fifteen minutes after it was minted, so there is nothing for a session
- * to add: the browser follows a link, and a link cannot carry a Bearer header.
- * `/api/verify/:code` is public because the person checking a certificate is a
- * licensing board with no account and no reason to have one.
+ * and dies on its own clock. It has to work without a session, because the
+ * things that fetch it are a browser following a download link and a <video>
+ * element loading its source, and neither can carry a Bearer header. Where a
+ * session does happen to be present it is honoured: a member signed in as
+ * somebody else is refused, which is the one case a forwarded link can actually
+ * be caught in. `/api/verify/:code` is public because the person checking a
+ * certificate is a licensing board with no account and no reason to have one.
  *
  * Neither is unguarded. The token is verified and the entitlement behind it is
  * re-checked against services/access.ts on every hit, and the verification code
@@ -28,12 +33,15 @@ const TOO_MANY = { error: "Too many requests. Please try again later." };
 
 /**
  * Keyed on IP, because a download link is redeemed by a browser that has not
- * signed in. Generous: a member who bought a toolkit of thirty worksheets clicks
- * thirty times in a row, and that is the intended use.
+ * signed in. Generous on purpose, and for two reasons: a member who bought a
+ * toolkit of thirty worksheets clicks thirty times in a row, and a lesson video
+ * comes back here for every seek the viewer makes. A clinic shares one address
+ * between all of them. The token is unguessable, so this ceiling is about what a
+ * flood would cost us rather than about what it could reach.
  */
 const fileLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 200,
+  max: 600,
   standardHeaders: true,
   legacyHeaders: false,
   message: TOO_MANY,
@@ -69,7 +77,7 @@ function safeMime(value: string): string {
  * Express encodes the header correctly, but the value still becomes the name the
  * file lands under on the member's disk, and "../../.bashrc" is not a filename.
  */
-function safeFilename(file: { filename: string; title: string }): string {
+function safeFilename(file: { filename: string; title?: string }): string {
   const candidate = path.basename((file.filename || file.title || "download").trim());
   // Control characters, quotes and backslashes out: the first would let a
   // filename inject a second header line, and a backslash is a path separator on
@@ -121,22 +129,41 @@ async function recordDownload(input: {
   }
 }
 
+const FILE_GONE = "That file isn't available at the moment. Please let us know.";
+
 /**
  * GET /api/files/:token — public by design; the token is the credential.
  *
- * The order matters. Signature and expiry first, then entitlement re-checked
- * through access.ts (fifteen minutes is long enough for a refund to be
- * processed), then the path resolved inside the upload root, and only then any
- * disk read. A path that escapes that root turns this endpoint into a reader for
- * every file the process can open, which is why resolution happens in one place
- * and returns null rather than a guess.
+ * The order matters. Signature and expiry first, then the requester if there is
+ * one, then the account behind the token, then entitlement re-checked through
+ * access.ts — a link outlives the decision that minted it, and a refund
+ * processed in between has to take effect on the next request, not the next
+ * link. Then the path resolved inside its storage root, and only then a read. A
+ * path that escapes that root turns this endpoint into a reader for every file
+ * the process can open, which is why resolution happens in one place and returns
+ * null rather than a guess.
+ *
+ * Two kinds of thing come out of here. A purchased file is sent as an
+ * attachment and written to download_events, because when a paid PDF turns up in
+ * a Facebook group that log is the only record of where it went. A lesson's own
+ * video, audio, captions or PDF, and a coaching session's handouts, are sent
+ * inline for a player to read — no event row, since a single viewing issues one
+ * request per seek and a log of those answers nothing.
  */
 verifyRouter.get(
   "/files/:token",
   fileLimiter,
+  optionalMember,
   asyncHandler(async (req, res, next) => {
     const payload = verifyDownload(String(req.params.token ?? ""));
     if (payload === null) throw notFound(LINK_DEAD);
+
+    // A link that reached somebody else's browser is refused for them — the
+    // extent of what binding the member id can enforce. A signed-out browser
+    // holding the link inside its lifetime cannot be told from the member, which
+    // is why the lifetime is short and why services/signedUrls.ts says so
+    // plainly rather than promising more.
+    if (req.member && req.member.id !== payload.memberId) throw notFound(LINK_DEAD);
 
     // The token stands in for a session on a route requireMember never runs on,
     // so it has to answer the same question that middleware does: an account
@@ -150,16 +177,46 @@ verifyRouter.get(
       throw notFound(LINK_DEAD);
     }
 
-    const file = await loadEntitledFile(payload.memberId, payload.kind, payload.fileId);
+    const kind = payload.kind;
+
+    if (isStreamKind(kind)) {
+      const media =
+        kind === "coaching-file"
+          ? await loadOwnedSessionFile(payload.memberId, payload.fileId)
+          : await loadEntitledLessonMedia(payload.memberId, kind, payload.fileId);
+
+      const mediaPath = await resolveStoredFile(media.storagePath);
+      if (mediaPath === null) throw notFound(FILE_GONE);
+
+      // Content-Type is left to sendFile unless the row recorded one: it reads
+      // the extension of a name we generated ourselves, which is a better answer
+      // than a MIME type typed into an admin form.
+      if (media.mime !== "") res.setHeader("Content-Type", safeMime(media.mime));
+      res.setHeader(
+        "Content-Disposition",
+        media.filename === "" ? "inline" : `inline; filename="${safeFilename(media)}"`
+      );
+      res.setHeader("X-Content-Type-Options", "nosniff");
+      res.setHeader("Cache-Control", "private, no-store");
+      res.setHeader("Referrer-Policy", "no-referrer");
+
+      // sendFile rather than a bare stream: a <video> seeks by asking for byte
+      // ranges, and a response that ignores Range is one the player can only
+      // ever play from the beginning.
+      res.sendFile(mediaPath, (err) => {
+        if (err && !res.headersSent) next(err);
+      });
+      return;
+    }
+
+    const file = await loadEntitledFile(payload.memberId, kind, payload.fileId);
 
     const absolutePath = await resolveStoredFile(file.storagePath);
-    if (absolutePath === null) {
-      throw notFound("That file isn't available at the moment. Please let us know.");
-    }
+    if (absolutePath === null) throw notFound(FILE_GONE);
     const stat = await fs.promises.stat(absolutePath);
 
     await recordDownload({
-      kind: payload.kind,
+      kind,
       fileId: file.id,
       memberId: payload.memberId,
       ip: req.ip ?? "",

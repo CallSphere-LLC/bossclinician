@@ -15,8 +15,10 @@ import {
 } from "../../services/drip";
 import {
   DOWNLOAD_TTL_SECONDS,
-  signDownload,
+  isProtectedRef,
+  signedFileUrl,
   type DownloadFileKind,
+  type StreamFileKind,
 } from "../../services/signedUrls";
 
 /**
@@ -169,7 +171,7 @@ async function dripAnchor(memberId: number, courseId: number): Promise<Date | nu
 export interface EntitledFile {
   kind: DownloadFileKind;
   id: number;
-  /** Relative to the upload root. Never leaves the server. */
+  /** A reference into the protected storage root. Never leaves the server. */
   storagePath: string;
   filename: string;
   mime: string;
@@ -206,6 +208,39 @@ function toEntitledFile(kind: DownloadFileKind, row: FileRow): EntitledFile {
     title: row.title,
     sizeBytes: bigintToNumber(row.size_bytes),
   };
+}
+
+/**
+ * Refuses anything a lesson's release schedule has not reached yet.
+ *
+ * An undripped lesson's workbook — or its video — is content that has not been
+ * released, so it is refused here rather than filtered out in the client. The
+ * unlock date is the one thing the member is told, which is what the player
+ * shows too.
+ */
+async function assertReleased(
+  memberId: number,
+  courseId: number,
+  drip: {
+    lesson: { dripDays: number | null; dripDate: Date | null };
+    module: { dripDays: number | null; dripDate: Date | null };
+  }
+): Promise<void> {
+  const grantedAt = await dripAnchor(memberId, courseId);
+  if (grantedAt === null) throw notFound(NOT_FOUND);
+
+  const settings = await readDripSettings();
+  const state = resolveDripState({
+    lesson: drip.lesson,
+    module: drip.module,
+    grantedAt,
+    now: new Date(),
+    settings,
+  });
+
+  if (!state.unlocked && state.unlocksAt) {
+    throw notFound(`That file unlocks on ${describeUnlock(state.unlocksAt, settings.timezone)}.`);
+  }
 }
 
 /**
@@ -255,26 +290,97 @@ export async function loadEntitledFile(
   if (!row || !row.published) throw notFound(NOT_FOUND);
   if (!(await hasCourseAccess(memberId, row.course_id))) throw notFound(NOT_FOUND);
 
-  const grantedAt = await dripAnchor(memberId, row.course_id);
-  if (grantedAt === null) throw notFound(NOT_FOUND);
-
-  const settings = await readDripSettings();
-  const state = resolveDripState({
+  await assertReleased(memberId, row.course_id, {
     lesson: { dripDays: row.lesson_drip_days, dripDate: row.lesson_drip_date },
     module: { dripDays: row.module_drip_days, dripDate: row.module_drip_date },
-    grantedAt,
-    now: new Date(),
-    settings,
   });
 
-  // An undripped lesson's workbook is content that has not been released yet, so
-  // it is refused here rather than filtered out in the client. The unlock date is
-  // the one thing the member is told, which is what the player shows too.
-  if (!state.unlocked && state.unlocksAt) {
-    throw notFound(`That file unlocks on ${describeUnlock(state.unlocksAt, settings.timezone)}.`);
-  }
-
   return toEntitledFile("lesson", row);
+}
+
+/* ------------------------------------------------------------ lesson media */
+
+/**
+ * The player's own media: one token kind per lesson column that can hold a file.
+ *
+ * Derived from the streaming kinds rather than listed again, so a kind added
+ * over there is a compile error in the lookup below rather than a token nothing
+ * knows how to serve.
+ */
+export type LessonMediaKind = Exclude<StreamFileKind, "coaching-file">;
+
+/** What the delivery route needs to send bytes, for media with no file row. */
+export interface EntitledMedia {
+  /** Relative to a storage root. Never leaves the server. */
+  storagePath: string;
+  filename: string;
+  /** Empty when the extension is the better answer than anything we recorded. */
+  mime: string;
+}
+
+interface LessonMediaRow {
+  published: boolean;
+  course_id: number;
+  video_url: string;
+  audio_url: string;
+  captions_url: string;
+  attachment_url: string;
+  lesson_drip_days: number | null;
+  lesson_drip_date: Date | null;
+  module_drip_days: number | null;
+  module_drip_date: Date | null;
+}
+
+/**
+ * The video, audio, captions or PDF behind a lesson, if this member may play it.
+ *
+ * The same three questions as a lesson attachment — is it published, does the
+ * member hold the course, has the drip schedule reached it — asked again at the
+ * moment the bytes are requested rather than trusted from the minute the player
+ * page was rendered.
+ *
+ * All four columns are selected and the one the kind names is picked in JS. The
+ * kind comes out of a signed token and could only ever be one of four literals,
+ * but a column name assembled from it would still be a column name assembled at
+ * runtime, and that is not a habit worth having in a file-serving path.
+ *
+ * A column holding anything but a protected reference is a 404: an /uploads path
+ * or a Vimeo link is already a working URL and is handed to the player as-is, so
+ * a token naming one is a token that should never have been minted.
+ */
+export async function loadEntitledLessonMedia(
+  memberId: number,
+  kind: LessonMediaKind,
+  lessonId: number
+): Promise<EntitledMedia> {
+  const found = await pool.query<LessonMediaRow>(
+    `SELECT l.published, l.video_url, l.audio_url, l.captions_url, l.attachment_url,
+            l.drip_days AS lesson_drip_days, l.drip_date AS lesson_drip_date,
+            m.drip_days AS module_drip_days, m.drip_date AS module_drip_date,
+            m.course_id
+       FROM course_lessons l
+       JOIN course_modules m ON m.id = l.module_id
+      WHERE l.id = $1`,
+    [lessonId]
+  );
+  const row = found.rows[0];
+  if (!row || !row.published) throw notFound(NOT_FOUND);
+  if (!(await hasCourseAccess(memberId, row.course_id))) throw notFound(NOT_FOUND);
+
+  await assertReleased(memberId, row.course_id, {
+    lesson: { dripDays: row.lesson_drip_days, dripDate: row.lesson_drip_date },
+    module: { dripDays: row.module_drip_days, dripDate: row.module_drip_date },
+  });
+
+  const reference = {
+    "lesson-video": row.video_url,
+    "lesson-audio": row.audio_url,
+    "lesson-captions": row.captions_url,
+    "lesson-attachment": row.attachment_url,
+  }[kind];
+
+  if (!isProtectedRef(reference)) throw notFound(NOT_FOUND);
+  return { storagePath: reference, filename: "", mime: "" };
 }
 
 /* ---------------------------------------------------------------- listing -- */
@@ -329,7 +435,14 @@ interface LessonFileListRow extends FileRow {
   granted_at: Date;
 }
 
-function linkPath(kind: DownloadFileKind, id: number): string {
+/**
+ * Where a link is asked for.
+ *
+ * Exported because the library surface lists the same files against the same
+ * endpoint, and two files agreeing by coincidence on a URL shape is how one of
+ * them ends up pointing at a route that does not exist.
+ */
+export function downloadLinkPath(kind: DownloadFileKind, id: number): string {
   return `/api/member/downloads/${kind}/${id}/link`;
 }
 
@@ -395,7 +508,7 @@ memberDownloadsRouter.get(
         available: true,
         unlocksAt: null,
         unlockLabel: null,
-        linkUrl: linkPath("product", row.id),
+        linkUrl: downloadLinkPath("product", row.id),
         productId: row.product_id,
         productTitle: row.product_title,
         productSlug: row.product_slug,
@@ -436,7 +549,7 @@ memberDownloadsRouter.get(
         unlocksAt: state.unlocksAt === null ? null : state.unlocksAt.toISOString(),
         unlockLabel:
           state.unlocksAt === null ? null : describeUnlock(state.unlocksAt, settings.timezone),
-        linkUrl: state.unlocked ? linkPath("lesson", row.id) : null,
+        linkUrl: state.unlocked ? downloadLinkPath("lesson", row.id) : null,
         productId: null,
         productTitle: "",
         productSlug: "",
@@ -482,12 +595,10 @@ memberDownloadsRouter.post(
     const { kind, id } = parsed.data;
 
     const file = await loadEntitledFile(member.id, kind, id);
-    const { token, expiresAt } = signDownload({ kind, fileId: file.id, memberId: member.id });
+    const { url, expiresAt } = signedFileUrl({ kind, fileId: file.id, memberId: member.id });
 
     res.json({
-      // Relative on purpose: the link is for this member's browser on this
-      // origin, and an absolute URL is the shape that ends up pasted elsewhere.
-      url: `/api/files/${token}`,
+      url,
       filename: file.filename,
       title: file.title,
       sizeBytes: file.sizeBytes,

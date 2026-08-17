@@ -13,11 +13,15 @@ import {
 import { hasCourseAccess } from "../../services/access";
 import {
   AUTO_COMPLETE_PERCENT,
+  creditWatchedPercent,
   loadDripSettings,
   recomputeCourseProgress,
   type CourseRollup,
+  type StoredWatch,
 } from "../../services/curriculum";
+import { issueCertificateIfEarned } from "../../services/certificates";
 import { resolveDripState, describeUnlock } from "../../services/drip";
+import { plainText } from "../../utils/plainText";
 
 /**
  * `/api/member` — what a member writes while working through a course: how far
@@ -49,7 +53,9 @@ const byMember = (req: Request): string =>
  * Deliberately generous. The player posts its position every few seconds for as
  * long as a video is open, so a member with a lesson running in one tab and
  * another in a second tab legitimately produces a few hundred writes an hour.
- * The ceiling is here to stop a loop, not to ration watching.
+ * The ceiling is here to stop a loop, not to ration watching, and not to pace
+ * completion — what a write is worth is decided by `creditWatchedPercent`, which
+ * is why this can afford to be generous.
  */
 const progressLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -104,6 +110,10 @@ interface OwnedLesson {
   unlocked: boolean;
   unlocksAt: Date | null;
   timezone: string;
+  /** Everything needed to decide what a watch report has earned. */
+  videoDurationSeconds: number;
+  durationMinutes: number;
+  watch: StoredWatch;
 }
 
 interface LessonGateRow {
@@ -114,15 +124,21 @@ interface LessonGateRow {
   preview: boolean;
   comments_enabled: boolean;
   notes_enabled: boolean;
+  video_duration_seconds: number;
+  duration_minutes: number;
   lesson_drip_days: number | null;
   lesson_drip_date: Date | null;
   module_drip_days: number | null;
   module_drip_date: Date | null;
   granted_at: Date | null;
+  watched_percent: number | null;
+  watched_seconds: number | null;
+  last_viewed_at: Date | null;
 }
 
 /**
- * The lesson plus the clock its drip schedule runs on.
+ * The lesson plus the clock its drip schedule runs on and the watch record so
+ * far.
  *
  * The LEFT JOIN LATERAL fetches `granted_at` — the instant the drip counts from
  * — because that is the one thing access.ts does not expose and every unlock
@@ -130,17 +146,24 @@ interface LessonGateRow {
  * decision is `hasCourseAccess` below, so entitlement still has exactly one
  * source. The earliest live grant wins where a course was bought twice (once
  * alone, once inside a bundle) — a second purchase must not restart the drip.
+ *
+ * `video_duration_seconds` and the stored watch figures ride along because a
+ * progress write is judged against them, and reading them here costs one join on
+ * a unique index rather than a second round trip on the player's hot path.
  */
 const LESSON_GATE_SQL = `
   SELECT l.id, l.title, l.module_id, m.course_id, l.preview,
          l.comments_enabled, l.notes_enabled,
+         l.video_duration_seconds, l.duration_minutes,
          l.drip_days AS lesson_drip_days,
          l.drip_date AS lesson_drip_date,
          m.drip_days AS module_drip_days,
          m.drip_date AS module_drip_date,
-         gr.granted_at
+         gr.granted_at,
+         lp.watched_percent, lp.watched_seconds, lp.last_viewed_at
     FROM course_lessons l
     JOIN course_modules m ON m.id = l.module_id
+    LEFT JOIN lesson_progress lp ON lp.lesson_id = l.id AND lp.member_id = $1
     LEFT JOIN LATERAL (
       SELECT MIN(g.granted_at) AS granted_at
         FROM access_grants g
@@ -191,6 +214,13 @@ async function loadOwnedLesson(memberId: number, lessonId: number): Promise<Owne
     unlocked: row.preview || state.unlocked,
     unlocksAt: row.preview ? null : state.unlocksAt,
     timezone: settings.timezone,
+    videoDurationSeconds: row.video_duration_seconds,
+    durationMinutes: row.duration_minutes,
+    watch: {
+      watchedPercent: row.watched_percent ?? 0,
+      watchedSeconds: row.watched_seconds ?? 0,
+      lastViewedAt: row.last_viewed_at,
+    },
   };
 }
 
@@ -211,6 +241,11 @@ function assertUnlocked(lesson: OwnedLesson): void {
 
 /* ------------------------------------------------------------------ progress */
 
+/**
+ * What the player reports. Neither figure is stored as sent: `watchedPercent` is
+ * the client's own reading of a media element, and `creditWatchedPercent` decides
+ * what it is worth against the lesson's length and the clock.
+ */
 const progressSchema = z.object({
   positionSeconds: z.number().finite().min(0).max(1_000_000),
   watchedPercent: z.number().finite().min(0).max(100),
@@ -225,24 +260,28 @@ interface ProgressRow {
 /**
  * The one statement a progress ping runs.
  *
- * `watched_percent` takes the greater of what is stored and what arrived, so
- * scrubbing backwards cannot un-earn the 90% that triggers auto-completion, and
- * `completed_at` is set from that same maximum rather than from the incoming
- * figure alone. Position is *not* monotonic: it is where to resume from, and
- * jumping back is exactly the thing a member does on purpose.
+ * `watched_percent` and `watched_seconds` both take the greater of what is stored
+ * and what the ping earned, so scrubbing backwards cannot un-earn the 90% that
+ * triggers auto-completion, and `completed_at` is set from that same maximum
+ * rather than from the incoming figure alone. Taking the maximum is also what
+ * makes concurrent pings harmless: each one carries a total computed from the
+ * same stored row, so firing a hundred at once earns exactly what one of them
+ * would. Position is *not* monotonic: it is where to resume from, and jumping
+ * back is exactly the thing a member does on purpose.
  *
  * Auto-completion never re-arms: once `completed_at` is set it is kept, so a
  * member who deliberately un-ticks a lesson is not overruled by the next ping.
  */
 const PROGRESS_UPSERT_SQL = `
   INSERT INTO lesson_progress
-    (member_id, lesson_id, last_position_seconds, watched_percent, completed_at,
+    (member_id, lesson_id, last_position_seconds, watched_percent, watched_seconds, completed_at,
      first_viewed_at, last_viewed_at)
-  VALUES ($1, $2, $3::int, $4::int,
+  VALUES ($1, $2, $3::int, $4::int, $6::int,
           CASE WHEN $4::int >= $5::int THEN now() ELSE NULL END, now(), now())
   ON CONFLICT (member_id, lesson_id) DO UPDATE SET
     last_position_seconds = EXCLUDED.last_position_seconds,
     watched_percent       = GREATEST(lesson_progress.watched_percent, EXCLUDED.watched_percent),
+    watched_seconds       = GREATEST(lesson_progress.watched_seconds, EXCLUDED.watched_seconds),
     completed_at          = CASE
                               WHEN lesson_progress.completed_at IS NOT NULL
                                 THEN lesson_progress.completed_at
@@ -260,6 +299,13 @@ const PROGRESS_UPSERT_SQL = `
  * Together, or neither: a `course_progress` row that disagrees with the
  * `lesson_progress` rows under it is a progress bar that argues with its own
  * ticks, and the member has no way to make it agree again.
+ *
+ * The certificate is issued from here, after the commit, so that every route
+ * that can finish a course issues one — a member who completes their last lesson
+ * has earned the document whether or not they ever find the claim button. It
+ * runs outside the transaction because it reads the rollup it depends on and
+ * writes a PDF, and it is idempotent on UNIQUE (member_id, course_id), so the
+ * duplicate call a second ping makes is a lookup.
  */
 async function writeProgress(
   memberId: number,
@@ -268,18 +314,35 @@ async function writeProgress(
   params: unknown[]
 ): Promise<{ progress: ProgressRow | null; rollup: CourseRollup }> {
   const client: PoolClient = await pool.connect();
+  let rollup: CourseRollup;
+  let progress: ProgressRow | null;
   try {
     await client.query("BEGIN");
     const written = await client.query<ProgressRow>(statement, params);
-    const rollup = await recomputeCourseProgress(memberId, courseId, client);
+    rollup = await recomputeCourseProgress(memberId, courseId, client);
     await client.query("COMMIT");
-    return { progress: written.rows[0] ?? null, rollup };
+    progress = written.rows[0] ?? null;
   } catch (err) {
     await client.query("ROLLBACK").catch(() => undefined);
     throw err;
   } finally {
     client.release();
   }
+
+  if (rollup.percent >= 100) {
+    try {
+      await issueCertificateIfEarned(memberId, courseId);
+    } catch (err) {
+      // The progress the member just made is recorded and is what they are
+      // waiting on. A certificate that failed to mint is recoverable from
+      // POST /certificates/claim and from the next ping; a 500 here would tell
+      // them their last lesson did not save.
+      // eslint-disable-next-line no-console
+      console.error(`[progress] certificate for member ${memberId} course ${courseId}:`, err);
+    }
+  }
+
+  return { progress, rollup };
 }
 
 function progressJson(lessonId: number, row: ProgressRow | null, rollup: CourseRollup) {
@@ -301,6 +364,11 @@ function progressJson(lessonId: number, row: ProgressRow | null, rollup: CourseR
  * transaction with the rollup. The drip settings behind the unlock check are
  * cached in-process, so the steady-state cost of a ping is the gate and the
  * write.
+ *
+ * What lands in `watched_percent` is `creditWatchedPercent`'s answer, not the
+ * body's. The stored figure is what completes a lesson, what fills the rollup and
+ * what a CEU certificate is issued against, so it cannot be a number a browser
+ * chose.
  */
 memberProgressRouter.post(
   "/lessons/:lessonId/progress",
@@ -316,6 +384,21 @@ memberProgressRouter.post(
     const lesson = await loadOwnedLesson(member.id, lessonId);
     assertUnlocked(lesson);
 
+    const verdict = creditWatchedPercent({
+      positionSeconds: parsed.data.positionSeconds,
+      claimedPercent: parsed.data.watchedPercent,
+      lesson: {
+        videoDurationSeconds: lesson.videoDurationSeconds,
+        durationMinutes: lesson.durationMinutes,
+      },
+      stored: lesson.watch,
+      now: new Date(),
+    });
+    // A position and a percentage that cannot both be true of the same lesson is
+    // refused rather than quietly clamped: a player never sends one, so the only
+    // thing a silent clamp would achieve is to keep whoever did from noticing.
+    if (!verdict.ok) throw badRequest(verdict.message);
+
     // The columns are integers; a player reporting 47.6% is rounded rather than
     // rejected, because a fractional percent is not a client error.
     const { progress, rollup } = await writeProgress(
@@ -326,8 +409,9 @@ memberProgressRouter.post(
         member.id,
         lesson.id,
         Math.round(parsed.data.positionSeconds),
-        Math.round(parsed.data.watchedPercent),
+        verdict.percent,
         AUTO_COMPLETE_PERCENT,
+        verdict.watchedSeconds,
       ]
     );
 
@@ -337,6 +421,17 @@ memberProgressRouter.post(
 
 /* ------------------------------------------------------------ manual complete */
 
+/**
+ * The tick, and deliberately nothing else.
+ *
+ * `watched_percent` is left where it was — 0 for a lesson never played — because
+ * that column is the record of what was actually sat through, and this route is
+ * the member telling us they are done with a lesson, not that they watched it.
+ * The two are the same thing for a worksheet and are not the same thing for a
+ * CEU video, which is why `issueCertificateIfEarned` reads the watch figure
+ * rather than the tick before putting credit hours on a document a licensing
+ * board will read.
+ */
 const MARK_COMPLETE_SQL = `
   INSERT INTO lesson_progress
     (member_id, lesson_id, last_position_seconds, watched_percent, completed_at,
@@ -350,16 +445,19 @@ const MARK_COMPLETE_SQL = `
   RETURNING last_position_seconds, watched_percent, completed_at`;
 
 /**
- * Un-ticking clears the watched figure along with the completion.
+ * Un-ticking clears the watched figures along with the completion.
  *
  * It is the one place the monotonic rule gives way, and it has to: leaving 94%
  * behind would let the next progress ping re-complete the lesson within seconds,
  * so the member's explicit "I am not done with this" would be silently overruled
- * by the player. The resume position survives, so they do not lose their place.
+ * by the player. `watched_seconds` goes with it, because it is the same statement
+ * said in the other unit — leaving the seconds behind would rebuild the
+ * percentage on the next ping. The resume position survives, so they do not lose
+ * their place.
  */
 const MARK_INCOMPLETE_SQL = `
   UPDATE lesson_progress
-     SET completed_at = NULL, watched_percent = 0, last_viewed_at = now()
+     SET completed_at = NULL, watched_percent = 0, watched_seconds = 0, last_viewed_at = now()
    WHERE member_id = $1 AND lesson_id = $2
   RETURNING last_position_seconds, watched_percent, completed_at`;
 
@@ -489,13 +587,28 @@ memberProgressRouter.put(
 
 /* ------------------------------------------------------------------ comments */
 
+/**
+ * Stripped of markup on the way in, exactly as the community module does it.
+ *
+ * A lesson discussion is the one place a member's words are shown to other paying
+ * members, and there is no moderation screen for these rows yet. Storing markup
+ * and trusting whatever renders it later makes every future renderer — a digest
+ * email, an export, the moderation screen when it arrives — a place this turns
+ * into stored XSS on a course somebody paid for.
+ */
+const commentBody = z
+  .string()
+  .max(10_000)
+  .transform(plainText)
+  .refine((value) => value.length > 0, "Please write something first.");
+
 const commentSchema = z.object({
-  body: z.string().trim().min(1, "Please write something first.").max(10_000),
+  body: commentBody,
   parentId: idSchema.nullish(),
 });
 
 const commentEditSchema = z.object({
-  body: z.string().trim().min(1, "Please write something first.").max(10_000),
+  body: commentBody,
 });
 
 interface CommentRow {

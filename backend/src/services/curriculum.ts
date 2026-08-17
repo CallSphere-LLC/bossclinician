@@ -30,6 +30,152 @@ type Queryable = Pick<PoolClient, "query"> | typeof pool;
 /** Percent watched at which a video marks itself done without being asked. */
 export const AUTO_COMPLETE_PERCENT = 90;
 
+/* ------------------------------------------------- what a watch claim is worth */
+
+/**
+ * How much of a lesson a progress report has actually earned.
+ *
+ * A browser can say anything, and a member who wants a CEU certificate they did
+ * not sit through has an obvious reason to. Nothing here makes that impossible —
+ * a script that behaves like a player over the same wall-clock hour is
+ * indistinguishable from a player. What it does is remove the cheap forgeries:
+ * the percentage is derived from the position wherever the media's length is on
+ * record rather than taken from the request, a position and a percentage that
+ * cannot both be true are refused, and credit accrues no faster than real time
+ * passes, so a course cannot be finished in a burst of requests.
+ *
+ * Pure, and separated from the route for that reason: this is the rule a
+ * compliance record rests on, and it is worth being able to test it directly.
+ */
+
+/**
+ * The fastest the player runs. `SpeedControl` offers 2x; the quarter on top
+ * absorbs the ten-second write cadence and the gap between the browser's clock
+ * and ours, so somebody listening at double speed is never told they were too
+ * quick.
+ */
+const MAX_PLAYBACK_RATE = 2.5;
+
+/**
+ * A longer gap than this between two reports is not watching.
+ *
+ * The player writes every ten seconds while something plays, and a backgrounded
+ * tab has its timers throttled to roughly one a minute, so two minutes is
+ * generous for the honest case. The ceiling is what stops a script that pings
+ * twice an hour from banking an hour of credit on each one.
+ */
+const MAX_CREDITED_GAP_SECONDS = 120;
+
+/**
+ * What the very first report on a lesson is worth. There is no earlier
+ * timestamp to measure from, and the player's first write lands about ten
+ * seconds into playback.
+ */
+const FIRST_REPORT_SECONDS = 15;
+
+/**
+ * The length assumed for a lesson carrying neither a media duration nor the
+ * author's own estimate. Nothing can be checked against a length nobody
+ * recorded; this at least keeps 0 to 100 from happening inside four seconds.
+ */
+const UNMEASURED_LESSON_SECONDS = 600;
+
+/** Below this a lesson is short enough that "at the start" says nothing. */
+const MEANINGFUL_LESSON_SECONDS = 60;
+
+export interface LessonWatchFacts {
+  /** Length of the media itself. 0 when nobody recorded one. */
+  videoDurationSeconds: number;
+  /** The author's estimate of how long the lesson takes. 0 when unset. */
+  durationMinutes: number;
+}
+
+export interface StoredWatch {
+  /** The highest figure credited so far. */
+  watchedPercent: number;
+  /** Seconds of the lesson credited so far. */
+  watchedSeconds: number;
+  /** When the previous report landed, or null when this is the first. */
+  lastViewedAt: Date | null;
+}
+
+export type WatchVerdict =
+  | { ok: true; percent: number; watchedSeconds: number }
+  | { ok: false; message: string };
+
+const CONTRADICTORY =
+  "That progress report doesn't match the position in the lesson. Please reload the page and try again.";
+
+export function creditWatchedPercent(input: {
+  positionSeconds: number;
+  /** What the client says it has watched — evidence, never the answer. */
+  claimedPercent: number;
+  lesson: LessonWatchFacts;
+  stored: StoredWatch;
+  now: Date;
+}): WatchVerdict {
+  const position = Math.max(0, Math.round(input.positionSeconds));
+  const claimed = Math.min(100, Math.max(0, Math.round(input.claimedPercent)));
+
+  // The media's own length is the only figure the server knows to be true. The
+  // author's estimate is a label on a page and can be out by minutes, so it sets
+  // the pace credit accrues at but never converts a position into a percentage.
+  const measured = input.lesson.videoDurationSeconds > 0;
+  const estimate = Math.max(0, Math.round(input.lesson.durationMinutes * 60));
+  const reference = measured
+    ? input.lesson.videoDurationSeconds
+    : estimate > 0
+      ? estimate
+      : UNMEASURED_LESSON_SECONDS;
+
+  const fromPosition = Math.min(100, Math.floor((position * 100) / Math.max(1, reference)));
+
+  // Second nought of a lesson that runs for minutes, reported as watched: the two
+  // halves of that report cannot both be true, and no player sends it. Refused
+  // rather than quietly clamped, because a silent clamp only keeps whoever sent it
+  // from noticing. Somebody who scrubs back to the start of a lesson they have
+  // already watched is the honest version of the same shape, and the figure
+  // already on record is what tells them apart.
+  const atTheVeryStart =
+    reference >= MEANINGFUL_LESSON_SECONDS && position < FIRST_REPORT_SECONDS;
+  if (
+    atTheVeryStart &&
+    claimed >= AUTO_COMPLETE_PERCENT &&
+    input.stored.watchedPercent < AUTO_COMPLETE_PERCENT
+  ) {
+    return { ok: false, message: CONTRADICTORY };
+  }
+
+  const sinceLast =
+    input.stored.lastViewedAt === null
+      ? FIRST_REPORT_SECONDS
+      : Math.min(
+          MAX_CREDITED_GAP_SECONDS,
+          Math.max(0, (input.now.getTime() - input.stored.lastViewedAt.getTime()) / 1000)
+        );
+
+  // The running total is kept in seconds of lesson rather than in percent because
+  // percent is too coarse to add to: ten seconds of a two-hour lecture rounds to
+  // nothing, and a total that rounds to nothing never moves. Seconds of lesson,
+  // not of clock — somebody listening at double speed covers two of the first for
+  // each one of the second, and it is the lesson being measured.
+  const watchedSeconds = Math.min(
+    reference,
+    Math.round(input.stored.watchedSeconds + sinceLast * MAX_PLAYBACK_RATE)
+  );
+
+  // Which makes a forty-minute lesson take at least sixteen minutes of wall clock
+  // to reach 100, however many requests are spent trying, and a course of them
+  // impossible to finish in a burst.
+  const ceiling = Math.min(100, Math.floor((watchedSeconds * 100) / reference));
+
+  return {
+    ok: true,
+    percent: Math.min(measured ? fromPosition : claimed, ceiling),
+    watchedSeconds,
+  };
+}
+
 /* ------------------------------------------------------------ drip settings */
 
 interface CachedSettings {

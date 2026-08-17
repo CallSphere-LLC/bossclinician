@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import path from "path";
 import { Request, Router } from "express";
 import { ipKeyGenerator, rateLimit } from "express-rate-limit";
 import type { PoolClient } from "pg";
@@ -26,6 +27,8 @@ import {
   loadBusySessions,
   loadCoachingPolicy,
 } from "../../services/coachingCalendar";
+import { isProtectedRef, signedFileUrl } from "../../services/signedUrls";
+import type { EntitledMedia } from "./downloads";
 
 /**
  * `/api/member/coaching` — booking, rescheduling and cancelling sessions.
@@ -52,6 +55,7 @@ const DAY_MS = 24 * 60 * MINUTE_MS;
 const MAX_WINDOW_DAYS = 62;
 
 const SESSION_NOT_FOUND = "We couldn't find that session.";
+const SESSION_FILE_NOT_FOUND = "We couldn't find that file.";
 const OFFER_NOT_FOUND = "We couldn't find that coaching package.";
 
 /**
@@ -222,36 +226,92 @@ interface CreditRow {
 /**
  * Creates the credit rows a member's purchases entitle them to.
  *
- * Access grants are the record of what was bought; `coaching_credits` is the
- * ledger of what is left. Nothing writes the ledger at checkout yet, so it is
- * derived here from the grant the buyer already holds — idempotent, and driven
- * entirely by access.ts's notion of entitlement rather than by orders.
+ * Access grants are the record of what may be opened; `coaching_credits` is the
+ * ledger of what is left to spend. Nothing writes the ledger at checkout yet, so
+ * it is derived here — the live grant from access.ts is what makes a package
+ * bookable at all, and the paid orders behind it are what say how many packages
+ * were bought.
  *
- * The advisory lock is what makes "insert if absent" safe without a unique
- * constraint to lean on: two tabs opening /coaching at the same moment would
- * otherwise both see no row and both insert one, and the member would appear to
- * own the package twice.
+ * One row per paid order, which is the whole point: somebody who works through
+ * all six sessions and buys the package again has bought six more, and keying
+ * the ledger on (member, product) would hand them a re-activated grant, no
+ * sessions and a message telling them they have used everything. Keying on the
+ * order also makes this idempotent against a redelivered webhook — the same
+ * order can only ever produce the row it already produced.
+ *
+ * A grant with no order behind it at all — a manual grant from the admin, an
+ * automation, an import — is one package, once. The advisory lock is what makes
+ * "insert if absent" safe without a unique constraint to lean on: two tabs
+ * opening /coaching at the same moment would otherwise both see no row and both
+ * insert one.
+ *
+ * An admin looking through "view as member" writes nothing here: the ledger is
+ * the member's, and a row created under that window is indistinguishable from
+ * one the member's own visit created.
  */
-async function ensureCoachingCredits(memberId: number): Promise<void> {
+async function ensureCoachingCredits(member: AuthedMember): Promise<void> {
+  if (member.impersonatedBy !== undefined) return;
+
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    await client.query(`SELECT pg_advisory_xact_lock($1, $2)`, [CALENDAR_LOCK_CLASS, memberId]);
+    await client.query(`SELECT pg_advisory_xact_lock($1, $2)`, [CALENDAR_LOCK_CLASS, member.id]);
     await client.query(
-      `INSERT INTO coaching_credits
-         (member_id, coaching_offer_id, product_id, sessions_total, expires_at)
-       SELECT $1, p.coaching_offer_id, p.id, GREATEST(o.session_count, 0), g.expires_at
-         FROM access_grants g
-         JOIN products p        ON p.id = g.product_id
-         JOIN coaching_offers o ON o.id = p.coaching_offer_id
-        WHERE g.member_id = $1
-          AND g.status = 'active'
-          AND (g.expires_at IS NULL OR g.expires_at > now())
-          AND NOT EXISTS (
-            SELECT 1 FROM coaching_credits c
-             WHERE c.member_id = $1 AND c.product_id = p.id
-          )`,
-      [memberId]
+      `WITH live AS (
+         SELECT p.id AS product_id, p.coaching_offer_id,
+                GREATEST(o.session_count, 0) AS sessions_total, g.expires_at
+           FROM access_grants g
+           JOIN products p        ON p.id = g.product_id
+           JOIN coaching_offers o ON o.id = p.coaching_offer_id
+          WHERE g.member_id = $1
+            AND g.status = 'active'
+            AND (g.expires_at IS NULL OR g.expires_at > now())
+       ),
+       -- Bundles are expanded one level, matching what grantOfferAccess hands
+       -- out: a package bought inside a bundle is a package bought.
+       delivered AS (
+         SELECT ord.id AS order_id, ord.status, op.product_id
+           FROM orders ord
+           JOIN offer_products op ON op.offer_id = ord.offer_id
+          WHERE ord.member_id = $1
+          UNION
+         SELECT ord.id, ord.status, bi.product_id
+           FROM orders ord
+           JOIN offer_products op       ON op.offer_id = ord.offer_id
+           JOIN product_bundle_items bi ON bi.bundle_product_id = op.product_id
+          WHERE ord.member_id = $1
+       ),
+       owed AS (
+         SELECT l.product_id, l.coaching_offer_id, l.sessions_total, l.expires_at, d.order_id
+           FROM live l
+           JOIN delivered d ON d.product_id = l.product_id AND d.status = 'paid'
+          UNION ALL
+         -- Entitlement with nothing bought behind it has no order to key on, so
+         -- it is worth one package and only ever the first one: an admin
+         -- restoring access after a refund is putting somebody back where they
+         -- were, not handing them six more sessions. A later purchase still adds
+         -- its own row above.
+         SELECT l.product_id, l.coaching_offer_id, l.sessions_total, l.expires_at, NULL::int
+           FROM live l
+          WHERE NOT EXISTS (
+                  SELECT 1 FROM delivered d
+                   WHERE d.product_id = l.product_id AND d.status = 'paid'
+                )
+            AND NOT EXISTS (
+                  SELECT 1 FROM coaching_credits c
+                   WHERE c.member_id = $1 AND c.product_id = l.product_id
+                )
+       )
+       INSERT INTO coaching_credits
+         (member_id, coaching_offer_id, product_id, order_id, sessions_total, expires_at)
+       SELECT $1, w.coaching_offer_id, w.product_id, w.order_id, w.sessions_total, w.expires_at
+         FROM owed w
+        WHERE NOT EXISTS (
+          SELECT 1 FROM coaching_credits c
+           WHERE c.member_id = $1 AND c.product_id = w.product_id
+             AND c.order_id IS NOT DISTINCT FROM w.order_id
+        )`,
+      [member.id]
     );
     await client.query("COMMIT");
   } catch (err) {
@@ -435,12 +495,65 @@ function toSessionJson(
   };
 }
 
-async function loadSessionFiles(sessionId: number): Promise<SessionFileJson[]> {
+/**
+ * The handouts and recordings attached to one session.
+ *
+ * A file the coach uploaded for a supervision session is as private as the
+ * session itself, so it lives in the protected directory and is handed over as a
+ * link bound to this member rather than as a path anyone could open. A `url`
+ * pointing somewhere else — a Zoom recording, a Google Doc — is passed through
+ * as it stands, because it is not ours to sign.
+ */
+async function loadSessionFiles(memberId: number, sessionId: number): Promise<SessionFileJson[]> {
   const res = await pool.query<{ id: number; title: string; url: string }>(
     `SELECT id, title, url FROM coaching_session_files WHERE session_id = $1 ORDER BY id`,
     [sessionId]
   );
-  return res.rows.map((row) => ({ id: row.id, title: row.title, url: row.url }));
+  return res.rows.map((row) => ({
+    id: row.id,
+    title: row.title,
+    url: isProtectedRef(row.url)
+      ? signedFileUrl({ kind: "coaching-file", fileId: row.id, memberId }).url
+      : row.url,
+  }));
+}
+
+/**
+ * The file behind a signed coaching link, if it is still this member's to open.
+ *
+ * Ownership is in the WHERE clause and asked again here rather than trusted from
+ * the moment the link was minted, exactly as the download surface does: two
+ * hours is long enough for a session to be handed to somebody else.
+ */
+export async function loadOwnedSessionFile(
+  memberId: number,
+  fileId: number
+): Promise<EntitledMedia> {
+  const res = await pool.query<{ title: string; url: string }>(
+    `SELECT f.title, f.url
+       FROM coaching_session_files f
+       JOIN coaching_sessions s ON s.id = f.session_id
+      WHERE f.id = $1 AND s.member_id = $2`,
+    [fileId, memberId]
+  );
+  const row = res.rows[0];
+  if (!row || !isProtectedRef(row.url)) throw notFound(SESSION_FILE_NOT_FOUND);
+
+  return { storagePath: row.url, filename: sessionFileName(row.title, row.url), mime: "" };
+}
+
+/**
+ * The name the file lands under on the member's own disk.
+ *
+ * The coach's title is the name that means something a year later ("Session 3
+ * homework"), but it is typed free-hand and rarely carries an extension, and a
+ * PDF saved without one opens in nothing. The stored key supplies that.
+ */
+function sessionFileName(title: string, reference: string): string {
+  const extension = path.extname(reference);
+  const base = title.trim();
+  if (base === "") return path.basename(reference);
+  return base.toLowerCase().endsWith(extension.toLowerCase()) ? base : `${base}${extension}`;
 }
 
 /** Ownership is in the WHERE clause, so another member's session simply is not found. */
@@ -714,7 +827,7 @@ memberCoachingRouter.get(
     const member = currentMember(req);
     const now = new Date();
 
-    await ensureCoachingCredits(member.id);
+    await ensureCoachingCredits(member);
 
     const policy = await loadCoachingPolicy();
     const zone = readTimezone(req.query.timezone, policy.timezone);
@@ -855,7 +968,7 @@ memberCoachingRouter.post(
 
     // Someone who lands straight on a booking link has never loaded the
     // dashboard, so their ledger row may not exist yet.
-    await ensureCoachingCredits(member.id);
+    await ensureCoachingCredits(member);
 
     const policy = await loadCoachingPolicy();
     const zone = readTimezone(parsed.data.timezone, policy.timezone);
@@ -1012,7 +1125,7 @@ memberCoachingRouter.get(
 
     const policy = await loadCoachingPolicy();
     const zone = readTimezone(req.query.timezone, sessionTimezone(row, policy.timezone));
-    const files = await loadSessionFiles(row.id);
+    const files = await loadSessionFiles(member.id, row.id);
 
     res.json({ session: toSessionJson(row, policy, new Date(), { timezone: zone, files }) });
   })

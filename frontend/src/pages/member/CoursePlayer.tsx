@@ -39,6 +39,14 @@ import { contentTypeLabel, lessonLengthLabel } from "@/components/player/lessonM
 import { cn } from "@/lib/cn";
 
 /**
+ * How long before a signed media link expires the player fetches a new one.
+ *
+ * Long enough to cover a slow request and a retry on a phone signal, short
+ * enough that the renewed link still carries almost its whole life.
+ */
+const MEDIA_RENEW_MARGIN_MS = 2 * 60 * 1000;
+
+/**
  * The course player, and the landing page for everything else that can be owned.
  *
  * One component for `/library/:productSlug` and `/library/:productSlug/lessons/:lessonSlug`
@@ -111,6 +119,74 @@ export default function CoursePlayer() {
       cancelled = true;
     };
   }, [productSlug, lessonSlug]);
+
+  /*
+   * Renew the lesson's signed media URLs before they expire.
+   *
+   * Video, audio, captions and the PDF are served from links that die two hours
+   * after they were minted, and the server says when in `mediaExpiresAt`. Left
+   * alone, a lesson someone paused over lunch resumes into a 404: the element
+   * has a src that no longer resolves, and the failure looks like a broken
+   * course rather than an expired link.
+   *
+   * Only the media fields are folded back in. `progress` is deliberately left as
+   * it was, exactly as `applyProgress` leaves it — it feeds `startAt`, and
+   * changing it would restart the media hook and seek the member to wherever the
+   * last ping landed. `useRenewableSource` handles the src swap itself.
+   */
+  const currentLesson = lessonData?.lesson;
+  const lessonId = currentLesson?.id ?? null;
+  const mediaExpiresAt =
+    currentLesson && !currentLesson.locked ? currentLesson.mediaExpiresAt : null;
+
+  useEffect(() => {
+    if (!lessonSlug || lessonId === null || mediaExpiresAt === null) return;
+
+    const expiresAt = new Date(mediaExpiresAt).getTime();
+    if (Number.isNaN(expiresAt)) return;
+
+    // Early enough that the refetch has time to land, and clamped at zero so a
+    // link already inside the margin is renewed immediately rather than never.
+    const delay = Math.max(0, expiresAt - Date.now() - MEDIA_RENEW_MARGIN_MS);
+
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      void libraryApi
+        .getLesson(productSlug, lessonSlug)
+        .then((fresh) => {
+          if (cancelled || fresh.lesson.locked) return;
+          const renewed = fresh.lesson;
+
+          setLessonData((current) => {
+            // The member may have moved on, or the lesson may have locked behind
+            // them, while this was in flight.
+            if (!current || current.lesson.locked || current.lesson.id !== renewed.id) {
+              return current;
+            }
+            return {
+              ...current,
+              lesson: {
+                ...current.lesson,
+                videoUrl: renewed.videoUrl,
+                audioUrl: renewed.audioUrl,
+                captionsUrl: renewed.captionsUrl,
+                attachmentUrl: renewed.attachmentUrl,
+                mediaExpiresAt: renewed.mediaExpiresAt,
+              },
+            };
+          });
+        })
+        // A failed renewal is silent: the member is still watching a link that
+        // works, and the only thing to say would be about an expiry they cannot
+        // act on. The next attempt is scheduled when this effect re-runs.
+        .catch(() => undefined);
+    }, delay);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [productSlug, lessonSlug, lessonId, mediaExpiresAt]);
 
   /**
    * Folds a progress write back into what is on screen.

@@ -10,7 +10,7 @@ import {
   requireVerifiedEmail,
   type AuthedMember,
 } from "../../middleware/memberAuth";
-import { listMemberProducts } from "../../services/access";
+import { listEnterableCommunityIds, mayEnterCommunity } from "../../services/access";
 import {
   NOTIFICATION_KINDS,
   awardPoints,
@@ -259,33 +259,21 @@ const COMMUNITY_SELECT = `
    WHERE c.published`;
 
 /**
- * The communities a member holds a live grant for.
- *
- * Asked of access.ts and nowhere else. A community product is a product like any
- * other — bought, bundled, granted by an automation, revoked on refund — and
- * re-deriving that here from `orders` or `subscriptions` would be a second
- * answer to a question that is only allowed one.
- */
-async function grantedCommunityIds(memberId: number): Promise<number[]> {
-  const owned = await listMemberProducts(memberId);
-  return [
-    ...new Set(
-      owned.flatMap((p) =>
-        p.kind === "community" && p.communityId !== null ? [p.communityId] : []
-      )
-    ),
-  ];
-}
-
-/**
  * Resolves a community this member may be inside, or throws.
  *
- * Two ways in, exactly as specified: a membership row someone put there, or a
- * live grant for a product of kind 'community' pointing at it. A grant with no
- * membership row auto-joins on first visit, because the row is what carries
- * their points, their profile and their place in the directory — making the
- * member click "join" for something they have already paid for is a step that
- * exists only to be forgotten.
+ * Entitlement is asked of access.ts on every entry, and the membership row is no
+ * part of the answer. That row is a record of standing — points, badges, role,
+ * history — so a refund revokes the grant and leaves it exactly where it was,
+ * and a door made of a row nobody deletes is a door that never closes. access.ts
+ * answers instead: a live grant for a product that sells this community, or a
+ * community nobody sells at all, which is what a free one is.
+ *
+ * Somebody entitled but not yet enrolled auto-joins on first visit, because that
+ * row is also their profile and their place in the directory — making the member
+ * click "join" for something they have already paid for is a step that exists
+ * only to be forgotten. An admin looking through "view as member" enrols nobody:
+ * that window is for looking, and a join date on a customer's account is a
+ * change to it.
  *
  * A ban is a 403 and not the usual 404: they know the room exists, they were in
  * it, and pretending it vanished would just have them mailing support about a
@@ -293,34 +281,43 @@ async function grantedCommunityIds(memberId: number): Promise<number[]> {
  * and a 403 would confirm which ones are worth trying again later.
  */
 async function enterCommunity(
-  memberId: number,
+  member: AuthedMember,
   where: { slug: string } | { id: number }
 ): Promise<CommunityContext> {
   const bySlug = "slug" in where;
   const found = await pool.query<CommunityRow>(
     `${COMMUNITY_SELECT} AND ${bySlug ? "c.slug = $2" : "c.id = $2"}`,
-    [memberId, bySlug ? where.slug : where.id]
+    [member.id, bySlug ? where.slug : where.id]
   );
   const row = found.rows[0];
   if (!row) throw notFound(COMMUNITY_MISSING);
 
   if (row.banned_at !== null) throw forbidden(BANNED);
+  if (!(await mayEnterCommunity(member.id, row.id))) throw notFound(COMMUNITY_MISSING);
 
   let membership = row;
-  if (membership.membership_id === null) {
-    const granted = await grantedCommunityIds(memberId);
-    if (!granted.includes(row.id)) throw notFound(COMMUNITY_MISSING);
-
+  if (membership.membership_id === null && member.impersonatedBy === undefined) {
     await pool.query(
-      `INSERT INTO community_memberships (community_id, member_id, role)
-       VALUES ($1, $2, 'member')
+      // Auto-join only ever happens after mayEnterCommunity has said yes, so
+      // the source records what let them in: a purchase-backed grant, or a room
+      // that is simply open. Neither is re-read as permission later.
+      // The source is decided in SQL from whether anything sells this room, so
+      // it cannot drift from the predicate in access.ts that reads it back.
+      `INSERT INTO community_memberships (community_id, member_id, role, source)
+       SELECT c.id, $2, 'member',
+              CASE WHEN c.access = 'paid'
+                     OR EXISTS (SELECT 1 FROM products sp
+                                 WHERE sp.community_id = c.id AND sp.kind = 'community')
+                     OR EXISTS (SELECT 1 FROM plans pl WHERE pl.community_id = c.id)
+                   THEN 'purchase' ELSE 'free' END
+         FROM communities c WHERE c.id = $1
        ON CONFLICT (community_id, member_id) DO NOTHING`,
-      [row.id, memberId]
+      [row.id, member.id]
     );
     // Re-read rather than trust the INSERT's RETURNING: the ON CONFLICT branch
     // returns nothing, and two tabs opening the community at once both land here.
     const rejoined = await pool.query<CommunityRow>(`${COMMUNITY_SELECT} AND c.id = $2`, [
-      memberId,
+      member.id,
       row.id,
     ]);
     const joined = rejoined.rows[0];
@@ -349,8 +346,9 @@ async function enterCommunity(
 
 /** Every `/:slug` route opens the same way: prove the room before reading it. */
 async function enterFromParams(req: Request): Promise<CommunityContext> {
-  const member = currentMember(req);
-  return enterCommunity(member.id, { slug: readSlug(req.params.slug, COMMUNITY_MISSING) });
+  return enterCommunity(currentMember(req), {
+    slug: readSlug(req.params.slug, COMMUNITY_MISSING),
+  });
 }
 
 interface ChannelRow {
@@ -406,7 +404,7 @@ interface PostRow {
  * moderated post is not a post with a "removed" banner, it is gone.
  */
 async function loadPost(
-  memberId: number,
+  member: AuthedMember,
   postId: number
 ): Promise<{ post: PostRow; ctx: CommunityContext }> {
   const found = await pool.query<PostRow>(
@@ -423,7 +421,7 @@ async function loadPost(
   const post = found.rows[0];
   if (!post || post.status !== "visible") throw notFound(POST_MISSING);
 
-  const ctx = await enterCommunity(memberId, { id: post.community_id });
+  const ctx = await enterCommunity(member, { id: post.community_id });
   if (post.channel_visibility === "private" && !ctx.moderator) throw notFound(POST_MISSING);
   return { post, ctx };
 }
@@ -450,16 +448,17 @@ interface CommunityListRow {
 /**
  * GET /api/member/community
  *
- * Every room the member may walk into: the ones they have a membership row in,
- * and the ones a live grant entitles them to but which they have not opened yet.
- * The second group is the interesting one — somebody who bought a membership
- * this morning must see it here before the auto-join has ever run.
+ * Every room the member may walk into, and only those: the free ones, and the
+ * ones a live grant entitles them to whether or not they have opened one yet.
+ * Somebody who bought a membership this morning must see it here before the
+ * auto-join has ever run, and somebody refunded last night must not see it at
+ * all — which is why the membership row is not what this admits on either.
  */
 memberCommunityRouter.get(
   "/",
   asyncHandler(async (req, res) => {
     const member = currentMember(req);
-    const granted = await grantedCommunityIds(member.id);
+    const enterable = await listEnterableCommunityIds(member.id);
 
     const found = await pool.query<CommunityListRow>(
       `SELECT c.id, c.slug, c.name, c.description, c.cover_image,
@@ -479,10 +478,10 @@ memberCommunityRouter.get(
          LEFT JOIN community_memberships cm
            ON cm.community_id = c.id AND cm.member_id = $1
         WHERE c.published
-          AND (cm.id IS NOT NULL OR c.id = ANY($2::int[]))
+          AND c.id = ANY($2::int[])
           AND cm.banned_at IS NULL
         ORDER BY c.name`,
-      [member.id, granted]
+      [member.id, enterable]
     );
 
     res.json({
@@ -960,7 +959,7 @@ memberCommunityRouter.patch(
     const parsed = postEditSchema.safeParse(req.body ?? {});
     if (!parsed.success) throw badRequest("Invalid post", parsed.error.flatten());
 
-    const { post, ctx } = await loadPost(member.id, postId);
+    const { post, ctx } = await loadPost(member, postId);
     if (post.member_id === null || post.member_id !== member.id) throw notFound(POST_MISSING);
     if (post.locked) throw forbidden("This post has been locked.");
 
@@ -999,7 +998,7 @@ memberCommunityRouter.delete(
     const member = currentMember(req);
     const postId = readParamId(req.params.id, POST_MISSING);
 
-    const { post } = await loadPost(member.id, postId);
+    const { post } = await loadPost(member, postId);
     if (post.member_id === null || post.member_id !== member.id) throw notFound(POST_MISSING);
 
     await pool.query(
@@ -1095,7 +1094,7 @@ memberCommunityRouter.get(
   asyncHandler(async (req, res) => {
     const member = currentMember(req);
     const postId = readParamId(req.params.id, POST_MISSING);
-    const { post } = await loadPost(member.id, postId);
+    const { post } = await loadPost(member, postId);
 
     const found = await pool.query<CommentRow>(`${COMMENT_SELECT} ORDER BY c.created_at, c.id`, [
       post.id,
@@ -1127,7 +1126,7 @@ memberCommunityRouter.post(
     if (!parsed.success) throw badRequest("Invalid comment", parsed.error.flatten());
     const { body, parentId } = parsed.data;
 
-    const { post, ctx } = await loadPost(member.id, postId);
+    const { post, ctx } = await loadPost(member, postId);
     if (post.locked) throw forbidden("Comments are closed on this post.");
 
     let parentAuthorId: number | null = null;
@@ -1241,7 +1240,7 @@ memberCommunityRouter.post(
       throw badRequest("That isn't a reaction we support.", parsed.error.flatten());
     }
 
-    const { post } = await loadPost(member.id, postId);
+    const { post } = await loadPost(member, postId);
 
     await withTransaction(async (client) => {
       // ON CONFLICT DO NOTHING plus RETURNING is what keeps `reaction_count`
@@ -1283,7 +1282,7 @@ memberCommunityRouter.delete(
       throw badRequest("That isn't a reaction we support.", parsed.error.flatten());
     }
 
-    const { post } = await loadPost(member.id, postId);
+    const { post } = await loadPost(member, postId);
 
     await withTransaction(async (client) => {
       const removed = await client.query(
@@ -1331,7 +1330,7 @@ memberCommunityRouter.post(
     if (!parsed.success) throw badRequest("Invalid vote", parsed.error.flatten());
     const { optionId } = parsed.data;
 
-    const { post } = await loadPost(member.id, postId);
+    const { post } = await loadPost(member, postId);
     if (post.kind !== "poll") throw badRequest("That post isn't a poll.");
     if (post.locked) throw forbidden("This poll has been closed.");
 
@@ -1409,7 +1408,7 @@ memberCommunityRouter.post(
     const parsed = reportSchema.safeParse(req.body ?? {});
     if (!parsed.success) throw badRequest("Invalid report", parsed.error.flatten());
 
-    const { post } = await loadPost(member.id, postId);
+    const { post } = await loadPost(member, postId);
 
     const already = await pool.query(
       `SELECT 1 FROM community_reports
@@ -1448,7 +1447,7 @@ memberCommunityRouter.post(
 
     // Reached through the post, so a comment id alone proves nothing: the member
     // still has to be entitled to the community the comment was written in.
-    await loadPost(member.id, comment.post_id);
+    await loadPost(member, comment.post_id);
 
     const already = await pool.query(
       `SELECT 1 FROM community_reports
@@ -1495,7 +1494,7 @@ memberCommunityRouter.post(
     const challenge = found.rows[0];
     if (!challenge) throw notFound(CHALLENGE_MISSING);
 
-    await enterCommunity(member.id, { id: challenge.community_id });
+    await enterCommunity(member, { id: challenge.community_id });
 
     const now = new Date();
     if (challenge.starts_at !== null && now < challenge.starts_at) {
@@ -1566,7 +1565,7 @@ memberCommunityRouter.post(
     const event = found.rows[0];
     if (!event) throw notFound(EVENT_MISSING);
 
-    await enterCommunity(member.id, { id: event.community_id });
+    await enterCommunity(member, { id: event.community_id });
 
     const saved = await pool.query<{ status: string }>(
       `INSERT INTO community_event_rsvps (event_id, member_id, status)

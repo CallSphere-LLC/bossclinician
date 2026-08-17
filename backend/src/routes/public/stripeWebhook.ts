@@ -597,11 +597,17 @@ async function mirrorLegacyPlanSubscription(session: Stripe.Checkout.Session): P
   // visit, so the welcome post is there when they arrive.
   if (planId !== null && memberId !== null) {
     await pool.query(
-      `INSERT INTO community_memberships (community_id, member_id)
-       SELECT p.community_id, $2 FROM plans p
+      // source 'plan': the subscription is the entitlement, so the door reads
+      // this row rather than looking for a grant that a plan never creates.
+      `INSERT INTO community_memberships (community_id, member_id, source, subscription_id)
+       SELECT p.community_id, $2, 'plan',
+              (SELECT s.id FROM subscriptions s WHERE s.stripe_subscription_id = $3)
+         FROM plans p
         WHERE p.id = $1 AND p.community_id IS NOT NULL
-       ON CONFLICT (community_id, member_id) DO NOTHING`,
-      [planId, memberId]
+       ON CONFLICT (community_id, member_id) DO UPDATE
+         SET source = 'plan',
+             subscription_id = COALESCE(EXCLUDED.subscription_id, community_memberships.subscription_id)`,
+      [planId, memberId, subscriptionId]
     );
   }
 }
@@ -769,11 +775,30 @@ async function handlePaymentIntentFailed(intent: Stripe.PaymentIntent): Promise<
   if (order) {
     // Never touch a paid order: a failed attempt can arrive after a successful
     // retry, and un-paying an order would revoke access somebody has paid for.
-    await pool.query(
-      `UPDATE orders SET status = 'failed', updated_at = now()
-        WHERE id = $1 AND status <> 'paid'`,
-      [order.id]
-    );
+    //
+    // The coupon redemption is released in the same transaction. This is the
+    // most-travelled way an order dies — an ordinary card decline in the
+    // Payment Element — and holding the redemption would mean the shopper who
+    // was declined is told "you've already used that code" when they retry with
+    // another card, while a limited code silently loses a use to a sale that
+    // never happened.
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const failed = await client.query<{ id: number }>(
+        `UPDATE orders SET status = 'failed', updated_at = now()
+          WHERE id = $1 AND status <> 'paid'
+          RETURNING id`,
+        [order.id]
+      );
+      if (failed.rows[0]) await releaseRedemption(client, failed.rows[0].id);
+      await client.query("COMMIT");
+    } catch (err) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      throw err;
+    } finally {
+      client.release();
+    }
   }
 
   await recordFailedAttempt({
@@ -906,7 +931,14 @@ async function upsertInvoice(input: {
        period_end        = COALESCE(EXCLUDED.period_end, invoices.period_end),
        paid_at           = COALESCE(EXCLUDED.paid_at, invoices.paid_at),
        attempt_count     = GREATEST(invoices.attempt_count, EXCLUDED.attempt_count)
-     WHERE invoices.status <> 'paid'
+     -- Claimed on settled_at, not on status. Writing the invoice row is the
+     -- FIRST thing this handler does and settling the order is the last, so
+     -- having recorded an invoice is not evidence the work it implies ever
+     -- finished. Keying the claim on the row existing meant a handler that
+     -- threw half way was never retried successfully: the redelivery saw a paid
+     -- invoice, reported nothing to do, and left the order pending with the
+     -- money taken.
+     WHERE invoices.settled_at IS NULL
        AND (EXCLUDED.status <> 'failed' OR invoices.attempt_count < EXCLUDED.attempt_count)
      RETURNING id`,
     [
@@ -1124,6 +1156,15 @@ async function startPaymentPlan(input: {
  */
 async function advancePaymentPlan(input: {
   stripeSubscriptionId: string;
+  /**
+   * The idempotency key for this credit.
+   *
+   * Everything else in the invoice handler is naturally idempotent, but this is
+   * not: it advances a counter by one. A retry after a partial failure would
+   * credit a second installment and mark the plan paid off a payment early, so
+   * the invoice is recorded on the row and a repeat becomes a no-op.
+   */
+  stripeInvoiceId: string;
   transactionId: number | null;
   amountCents: number;
   currency: string;
@@ -1157,10 +1198,19 @@ async function advancePaymentPlan(input: {
         `UPDATE payment_plan_installments
             SET status = 'paid',
                 paid_at = $3,
-                transaction_id = COALESCE($4, transaction_id)
+                transaction_id = COALESCE($4, transaction_id),
+                stripe_invoice_id = $5
           WHERE payment_plan_id = $1 AND sequence = $2 AND status <> 'paid'
+            -- The unique index on stripe_invoice_id would reject a second
+            -- credit for the same invoice anyway; refusing it here turns that
+            -- into a quiet no-op instead of an exception that fails the whole
+            -- delivery and sends Stripe back round again.
+            AND NOT EXISTS (
+              SELECT 1 FROM payment_plan_installments prior
+               WHERE prior.stripe_invoice_id = $5
+            )
           RETURNING id`,
-        [plan.id, nextSequence, input.paidAt, input.transactionId]
+        [plan.id, nextSequence, input.paidAt, input.transactionId, input.stripeInvoiceId]
       );
 
       if (!marked.rows[0]) {
@@ -1280,6 +1330,20 @@ async function linkGrantsToSubscription(orderId: number, subscriptionId: number)
   );
 }
 
+/**
+ * Records that everything an invoice implies has been done.
+ *
+ * Written last, on purpose. Until it is set, a redelivery re-claims the invoice
+ * and runs the handler again — which is what makes a partial failure
+ * recoverable rather than silently final.
+ */
+async function markInvoiceSettled(stripeInvoiceId: string): Promise<void> {
+  await pool.query(
+    `UPDATE invoices SET settled_at = now() WHERE stripe_invoice_id = $1 AND settled_at IS NULL`,
+    [stripeInvoiceId]
+  );
+}
+
 async function handleInvoicePaid(invoice: Stripe.Invoice): Promise<void> {
   const stripeSubscriptionId = invoiceSubscriptionId(invoice);
   const meta = invoiceMetadata(invoice);
@@ -1324,7 +1388,7 @@ async function handleInvoicePaid(invoice: Stripe.Invoice): Promise<void> {
   });
 
   if (!claimed) {
-    log(`invoice ${invoice.id} was already recorded as paid; nothing to advance`);
+    log(`invoice ${invoice.id} is already settled; nothing to advance`);
     return;
   }
 
@@ -1425,11 +1489,13 @@ async function handleInvoicePaid(invoice: Stripe.Invoice): Promise<void> {
     }
     await advancePaymentPlan({
       stripeSubscriptionId,
+      stripeInvoiceId: invoice.id,
       transactionId,
       amountCents: collectedCents,
       currency: invoice.currency,
       paidAt,
     });
+    await markInvoiceSettled(invoice.id);
     return;
   }
 
@@ -1446,6 +1512,8 @@ async function handleInvoicePaid(invoice: Stripe.Invoice): Promise<void> {
       source: "purchase",
     });
   }
+
+  await markInvoiceSettled(invoice.id);
 }
 
 async function handleInvoicePaymentFailed(invoice: Stripe.Invoice): Promise<void> {

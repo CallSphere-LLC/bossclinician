@@ -48,6 +48,16 @@ describe("normalizeVerificationCode", () => {
     expect(normalizeVerificationCode("BC-4KQ2-9XJH-7M3T-P8ZR".replace("1", "I"))).toBe(canonical);
   });
 
+  it("reads a body that happens to begin BC as a body, not a prefix", () => {
+    // One code in a thousand starts with the two letters the prefix uses. Typed
+    // back without its prefix, a genuine certificate must still verify rather
+    // than getting the answer a forgery gets.
+    const bodyStartsWithBc = "BC-BCQ2-9XJH-7M3T-P8ZR";
+    expect(normalizeVerificationCode(bodyStartsWithBc)).toBe(bodyStartsWithBc);
+    expect(normalizeVerificationCode("BCQ29XJH7M3TP8ZR")).toBe(bodyStartsWithBc);
+    expect(normalizeVerificationCode("BCQ2-9XJH-7M3T-P8ZR")).toBe(bodyStartsWithBc);
+  });
+
   it("refuses anything that could not be a code", () => {
     expect(normalizeVerificationCode("")).toBeNull();
     expect(normalizeVerificationCode("BC-4KQ2")).toBeNull();

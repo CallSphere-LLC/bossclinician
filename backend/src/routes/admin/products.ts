@@ -4,6 +4,7 @@ import { rowToCamel, rowsToCamel } from "../../utils/case";
 import { asyncHandler } from "../../utils/asyncHandler";
 import { badRequest, notFound } from "../../utils/httpError";
 import { recordAdminAction } from "../../services/adminAudit";
+import { isProtectedRef } from "../../services/signedUrls";
 import {
   bundleContentsSchema,
   idParamSchema,
@@ -451,6 +452,25 @@ async function assertMediaExists(mediaId: number | null): Promise<void> {
   }
 }
 
+/**
+ * A product's files are the thing somebody paid for.
+ *
+ * They are delivered by a signed link that expires and knows whose it is, and
+ * none of that means anything if the same bytes also sit at an address the
+ * customer can copy out of the page and post. A file uploaded for everyone
+ * already has such an address, so attaching one here is refused rather than
+ * silently sold.
+ */
+function assertProtectedFile(storagePath: string): void {
+  if (isProtectedRef(storagePath)) return;
+  throw issueError({
+    field: "storagePath",
+    message:
+      "That file was uploaded for everyone, so anyone with the web address can open it without paying. " +
+      "Upload it again and choose 'only people who bought it'.",
+  });
+}
+
 adminProductsRouter.get(
   "/:id/files",
   asyncHandler(async (req, res) => {
@@ -475,6 +495,7 @@ adminProductsRouter.post(
 
     await loadProduct(id);
     await assertMediaExists(data.mediaId);
+    assertProtectedFile(data.storagePath);
 
     const result = await pool.query<ProductFileRow>(
       `INSERT INTO product_files AS f
@@ -529,6 +550,7 @@ adminProductsRouter.put(
     if (!before) throw notFound("File not found");
 
     if (patch.mediaId !== undefined) await assertMediaExists(patch.mediaId);
+    if (patch.storagePath !== undefined) assertProtectedFile(patch.storagePath);
 
     // Merged in JS rather than with COALESCE, because a request clearing the
     // media link sends null and COALESCE cannot tell that from an absent key.

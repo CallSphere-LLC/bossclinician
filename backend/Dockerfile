@@ -19,7 +19,10 @@ COPY --from=build /app/dist ./dist
 # Operational scripts run against the live database from inside this container
 # (regenerating the nginx redirect map, for one), so they have to ship with it.
 COPY scripts ./scripts
-RUN mkdir -p /app/uploads && chown -R node:node /app
+# Both storage roots exist in the image so the volumes mounted over them inherit
+# this ownership. A directory Docker creates for a missing mount point belongs to
+# root, and the `node` user below could not write an upload into it.
+RUN mkdir -p /app/uploads /app/uploads-protected && chown -R node:node /app
 
 # Run as the built-in non-root `node` user (uid 1000). CMD invokes the node
 # binary directly (on PATH), so the non-root HOME change doesn't break startup.

@@ -4,6 +4,7 @@ import type { ProgressResult } from "@/lib/libraryApi";
 import { SpeedControl, useStoredPlaybackRate } from "@/components/player/SpeedControl";
 import { useMediaKeys } from "@/components/player/useMediaKeys";
 import { useMediaProgress } from "@/components/player/useMediaProgress";
+import { useRenewableSource } from "@/components/player/useRenewableSource";
 
 interface VideoPlayerProps {
   lessonId: number;
@@ -41,6 +42,9 @@ export function VideoPlayer({
 
   useMediaProgress({ media: videoRef, lessonId, startAt, initialPercent, onSaved });
   useMediaKeys(videoRef, true);
+  // The signed URL is renewed before it expires; this is what stops the swap
+  // from restarting a lesson somebody is an hour into.
+  useRenewableSource(videoRef, src);
 
   // Reapplied on every source change: `playbackRate` is a property of the
   // element, and loading a new lesson into a fresh one resets it to 1.

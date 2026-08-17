@@ -666,9 +666,12 @@ function VideoPickerModal({
       size="xl"
     >
       <div className="space-y-5">
+        {/* Lesson video is the thing being sold, so it goes to the protected
+            root and is delivered only through a signed link. */}
         <UploadDropzone
           compact
           accept="video/*"
+          visibility="protected"
           onUploaded={(asset) => setVideos((prev) => (prev ? [asset, ...prev] : [asset]))}
         />
 
