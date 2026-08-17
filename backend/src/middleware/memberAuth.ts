@@ -127,6 +127,36 @@ export async function optionalMember(
 }
 
 /**
+ * Refuses any request carrying an impersonation token.
+ *
+ * "View as member" is a window, not a set of hands. A write made through it
+ * lands on the customer's account attributed to the customer — their profile,
+ * their sessions, their billing — while the audit trail records only that a
+ * token was issued, so nothing afterwards can say which of the two people did
+ * it. Reading is what the feature is for; writing is indistinguishable from the
+ * member acting alone, and that is the part that must not be possible.
+ *
+ * MUST be applied to every member route that changes state, including every one
+ * Phase 2 and Phase 3 add. A write route without it is a path by which an admin
+ * can act as any customer with nothing in the log to show for it.
+ */
+export function denyImpersonation(
+  req: Request,
+  _res: Response,
+  next: NextFunction
+): void {
+  if (!req.member) {
+    next(unauthorized("Please sign in to continue"));
+    return;
+  }
+  if (req.member.impersonatedBy !== undefined) {
+    next(forbidden("Viewing as a member is read-only."));
+    return;
+  }
+  next();
+}
+
+/**
  * Requires a verified email address on top of authentication.
  *
  * Applied to the routes where an unverified address would cause real harm —

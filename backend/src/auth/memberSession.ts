@@ -134,8 +134,24 @@ interface SessionRow {
   id: number;
   member_id: number;
   revoked_at: string | null;
+  revoked_reason: string;
   expires_at: string;
 }
+
+/**
+ * How long after a rotation a second presentation of the old token is still
+ * treated as an honest race rather than theft.
+ *
+ * Two tabs restored together, or a phone and a laptop waking at the same
+ * moment, present the identical cookie within milliseconds of each other. That
+ * has to keep working. A stolen token replayed inside the same few seconds also
+ * gets through, which is the accepted trade every rotating-refresh
+ * implementation makes — the alternative is signing honest people out daily.
+ */
+const ROTATION_GRACE_MS = 30_000;
+
+/** Revocations that are the member's own doing, and must never look like theft. */
+const DELIBERATE_REVOCATIONS = new Set(["logout", "admin", "password_change", "suspended"]);
 
 export type RefreshOutcome =
   | { status: "ok"; memberId: number; refreshToken: string }
@@ -146,10 +162,21 @@ export type RefreshOutcome =
 /**
  * Rotates a refresh token.
  *
- * Runs in a transaction with `SELECT ... FOR UPDATE` so two tabs refreshing at
- * the same instant cannot both mint a successor from the same row — without the
- * lock, the loser of that race looks exactly like token theft and would log the
- * member out for doing nothing wrong.
+ * `SELECT ... FOR UPDATE` serialises two simultaneous refreshes, but on its own
+ * that is not enough: the transaction that loses the race then re-reads the row
+ * with `revoked_at` already set by the winner, and a naive implementation reads
+ * that as a replayed token and signs the member out everywhere. Two tabs
+ * restored at once is all it takes.
+ *
+ * So a revoked row is classified rather than rejected outright:
+ *
+ *   - revoked deliberately (logout, admin action, password change) — invalid,
+ *     but not theft. Burning the chain here would mean signing out of device B
+ *     also signs out device A, which asked for it.
+ *   - rotated within the grace window, successor still live — an honest
+ *     concurrent refresh. Issue a fresh token on the same chain.
+ *   - rotated outside the window, or the successor is already gone — a token
+ *     that should no longer exist has been presented. Burn every session.
  */
 export async function rotateRefreshToken(
   rawToken: string,
@@ -160,7 +187,7 @@ export async function rotateRefreshToken(
     await client.query("BEGIN");
 
     const found = await client.query<SessionRow>(
-      `SELECT id, member_id, revoked_at, expires_at
+      `SELECT id, member_id, revoked_at, revoked_reason, expires_at
          FROM member_sessions
         WHERE token_hash = $1
         FOR UPDATE`,
@@ -173,12 +200,46 @@ export async function rotateRefreshToken(
       return { status: "invalid" };
     }
 
-    // Already rotated or explicitly logged out, yet presented again: the only
-    // way that happens is a copy of the token surviving somewhere it shouldn't.
-    // Burn every session this member has rather than just this one.
     if (session.revoked_at) {
+      if (DELIBERATE_REVOCATIONS.has(session.revoked_reason)) {
+        await client.query("ROLLBACK");
+        return { status: "invalid" };
+      }
+
+      const age = Date.now() - new Date(session.revoked_at).getTime();
+      if (age <= ROTATION_GRACE_MS) {
+        // Confirm the chain is genuinely still live before forgiving this. If
+        // the successor has itself been revoked, the sequence is not a race —
+        // something is replaying an old token from further back.
+        const successor = await client.query<{ id: number }>(
+          `SELECT id FROM member_sessions
+            WHERE previous_id = $1 AND revoked_at IS NULL AND expires_at > now()
+            LIMIT 1`,
+          [session.id]
+        );
+
+        if (successor.rows[0]) {
+          const raced = generateToken();
+          await client.query(
+            `INSERT INTO member_sessions
+               (member_id, token_hash, previous_id, user_agent, ip, expires_at)
+             VALUES ($1, $2, $3, $4, $5, $6)`,
+            [
+              session.member_id,
+              hashToken(raced),
+              session.id,
+              (meta.userAgent ?? "").slice(0, 500),
+              (meta.ip ?? "").slice(0, 64),
+              expiresIn(REFRESH_TOKEN_TTL_SECONDS),
+            ]
+          );
+          await client.query("COMMIT");
+          return { status: "ok", memberId: session.member_id, refreshToken: raced };
+        }
+      }
+
       await client.query(
-        `UPDATE member_sessions SET revoked_at = now()
+        `UPDATE member_sessions SET revoked_at = now(), revoked_reason = 'reuse'
           WHERE member_id = $1 AND revoked_at IS NULL`,
         [session.member_id]
       );
@@ -187,16 +248,19 @@ export async function rotateRefreshToken(
     }
 
     if (new Date(session.expires_at).getTime() <= Date.now()) {
-      await client.query(`UPDATE member_sessions SET revoked_at = now() WHERE id = $1`, [
-        session.id,
-      ]);
+      await client.query(
+        `UPDATE member_sessions SET revoked_at = now(), revoked_reason = 'expired' WHERE id = $1`,
+        [session.id]
+      );
       await client.query("COMMIT");
       return { status: "invalid" };
     }
 
     const raw = generateToken();
     await client.query(
-      `UPDATE member_sessions SET revoked_at = now(), last_used_at = now() WHERE id = $1`,
+      `UPDATE member_sessions
+          SET revoked_at = now(), revoked_reason = 'rotated', last_used_at = now()
+        WHERE id = $1`,
       [session.id]
     );
     await client.query(
@@ -222,20 +286,34 @@ export async function rotateRefreshToken(
   }
 }
 
+/**
+ * Reasons a session ends that are the member's or the admin's own doing.
+ *
+ * These are recorded so a later presentation of the token is read as "this
+ * session is over" rather than as theft — see rotateRefreshToken.
+ */
+export type DeliberateRevocation = "logout" | "admin" | "password_change" | "suspended";
+
 /** Revokes one session by its raw token (logout on this device). */
-export async function revokeRefreshToken(rawToken: string): Promise<void> {
+export async function revokeRefreshToken(
+  rawToken: string,
+  reason: DeliberateRevocation = "logout"
+): Promise<void> {
   await pool.query(
-    `UPDATE member_sessions SET revoked_at = now()
+    `UPDATE member_sessions SET revoked_at = now(), revoked_reason = $2
       WHERE token_hash = $1 AND revoked_at IS NULL`,
-    [hashToken(rawToken)]
+    [hashToken(rawToken), reason]
   );
 }
 
 /** Revokes every live session for a member (password change, admin suspend, GDPR delete). */
-export async function revokeAllMemberSessions(memberId: number): Promise<void> {
+export async function revokeAllMemberSessions(
+  memberId: number,
+  reason: DeliberateRevocation = "admin"
+): Promise<void> {
   await pool.query(
-    `UPDATE member_sessions SET revoked_at = now()
+    `UPDATE member_sessions SET revoked_at = now(), revoked_reason = $2
       WHERE member_id = $1 AND revoked_at IS NULL`,
-    [memberId]
+    [memberId, reason]
   );
 }

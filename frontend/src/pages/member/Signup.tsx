@@ -33,6 +33,13 @@ export default function Signup() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  /**
+   * Set when the address already had an account and the server emailed a link
+   * rather than signing anyone in. The server answers identically whether that
+   * account had a password or not, so this screen must not speculate about
+   * which — it says "check your email" and nothing more.
+   */
+  const [checkEmail, setCheckEmail] = useState(false);
 
   if (!loading && member) return <Navigate to={AFTER_SIGNUP} replace />;
 
@@ -46,8 +53,9 @@ export default function Signup() {
     }
 
     setSubmitting(true);
+    let signedIn: boolean;
     try {
-      await signUp({
+      signedIn = await signUp({
         email: email.trim(),
         password,
         firstName: firstName.trim(),
@@ -59,8 +67,39 @@ export default function Signup() {
       return;
     }
 
+    if (!signedIn) {
+      setCheckEmail(true);
+      setSubmitting(false);
+      return;
+    }
+
     toast.success("You're in. Check your inbox — a confirmation email is on its way.");
     navigate(AFTER_SIGNUP, { replace: true });
+  }
+
+  if (checkEmail) {
+    return (
+      <AuthCard
+        documentTitle="Check your email · Boss Clinician"
+        description="Finish setting up your Boss Clinician account."
+        title="Check your email"
+        subtitle={`We've sent a link to ${email.trim()}.`}
+        footer={
+          <>
+            Already know your password? <AuthLink to="/login">Sign in</AuthLink>
+          </>
+        }
+      >
+        <p className="text-sm leading-relaxed text-orchid">
+          Open it to finish setting up your account. If you already have one, the email will point
+          you at signing in instead.
+        </p>
+        <p className="mt-4 text-sm leading-relaxed text-orchid-faint">
+          Nothing in your inbox after a few minutes? Check your spam folder, or{" "}
+          <AuthLink to="/forgot-password">request a new link</AuthLink>.
+        </p>
+      </AuthCard>
+    );
   }
 
   return (

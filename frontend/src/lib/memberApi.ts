@@ -72,6 +72,26 @@ interface AuthSuccess {
   accessToken: string;
 }
 
+/**
+ * Registration has two outcomes, and the difference is not an error.
+ *
+ * A brand-new address is signed straight in. An address that already has an
+ * account — whether or not it has a password yet — gets a link in the inbox
+ * instead, and the response says only that. The server deliberately answers the
+ * two existing-account cases identically, so this type must not try to
+ * distinguish them either.
+ */
+export interface RegistrationPending {
+  status: "check_email";
+  message: string;
+}
+
+export type RegisterResult = AuthSuccess | RegistrationPending;
+
+export function isRegistrationPending(result: RegisterResult): result is RegistrationPending {
+  return (result as RegistrationPending).status === "check_email";
+}
+
 async function parseError(res: Response): Promise<MemberApiError> {
   let message = "Something went wrong. Please try again in a moment.";
   let details: unknown;
@@ -119,9 +139,23 @@ async function refreshAccessToken(): Promise<boolean> {
   return refreshInFlight;
 }
 
-interface RequestOptions extends RequestInit {
+export interface RequestOptions extends RequestInit {
   /** Set on the refresh call itself, to stop it recursing into a refresh. */
   skipRefresh?: boolean;
+}
+
+/**
+ * The single authenticated fetch for the whole member app.
+ *
+ * Exported so each domain can keep its own client module — `libraryApi`,
+ * `commerceApi`, `communityApi` and so on — instead of everything piling into
+ * this file. They all share one access token, one refresh, and one error shape,
+ * which is the part that must not be duplicated: a second copy of the refresh
+ * logic would rotate the cookie behind this one's back and each would see the
+ * other's rotation as a stolen token.
+ */
+export async function memberRequest<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  return request<T>(path, options);
 }
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
@@ -163,7 +197,7 @@ export const memberApi = {
     lastName?: string;
     timezone?: string;
   }) =>
-    request<AuthSuccess>("/auth/register", {
+    request<RegisterResult>("/auth/register", {
       method: "POST",
       body: JSON.stringify(input),
       skipRefresh: true,

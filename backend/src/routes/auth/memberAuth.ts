@@ -69,11 +69,20 @@ const MAGIC_LINK_TTL_MINUTES = 15;
  * Durable sign-in throttling, counted in `member_login_attempts` rather than in
  * express-rate-limit's memory: process memory resets on every deploy and is not
  * shared between replicas, and credential stuffing is patient enough to notice.
- * Both keys are checked — the IP catches one host working through a list of
- * addresses, the email catches a botnet working through one account.
  */
 const LOGIN_WINDOW_MINUTES = 15;
 const LOGIN_MAX_FAILURES = 5;
+
+/**
+ * The ceiling for one address across ALL source IPs.
+ *
+ * Deliberately far above the per-IP limit. Its job is to stop a botnet grinding
+ * one account, not to let a stranger lock somebody out — at this height a third
+ * party would need 40 failures inside 15 minutes, which costs them far more than
+ * the per-IP limit already costs, while a real person mistyping their own
+ * password never comes close.
+ */
+const LOGIN_DISTRIBUTED_MAX_FAILURES = 40;
 
 /** A member can ask for this many password-reset emails per window before we stop sending. */
 const RESET_WINDOW_MINUTES = 15;
@@ -134,20 +143,71 @@ async function recordLoginAttempt(email: string, ip: string, successful: boolean
   );
 }
 
+/**
+ * Clears an account's failure history.
+ *
+ * Called after any event that proves the real owner is present — a successful
+ * sign-in, or a completed password reset. Without this, a lockout survives the
+ * two things a locked-out person will actually try, and the only remedy is to
+ * wait out whoever caused it.
+ */
+export async function clearLoginFailures(email: string): Promise<void> {
+  await pool.query(
+    `DELETE FROM member_login_attempts WHERE email = $1 AND successful = false`,
+    [email]
+  );
+}
+
+/**
+ * Opportunistic retention. The table is only ever read over a 15-minute window,
+ * so anything older is dead weight; trimming it on write avoids needing a job
+ * runner for a table that would otherwise grow forever.
+ */
+async function trimLoginAttempts(): Promise<void> {
+  await pool.query(
+    `DELETE FROM member_login_attempts
+      WHERE created_at < now() - make_interval(mins => $1)`,
+    [LOGIN_WINDOW_MINUTES * 4]
+  );
+}
+
+/**
+ * Whether this sign-in attempt should be refused before the password is checked.
+ *
+ * The email-keyed counter is scoped to the SAME IP as the caller, which is the
+ * whole point. Counting an address's failures across all IPs turns the throttle
+ * into a weapon: five wrong guesses from anywhere would lock the real owner out
+ * of their own account, and since the check runs before the password is
+ * verified, a correct password would not clear it. An attacker only had to keep
+ * one failure inside the window to make the lockout permanent.
+ *
+ * Credential stuffing from many IPs against one account is still bounded — by
+ * the per-IP ceiling, and by the global ceiling below, which trips when one
+ * address is under attack from a whole range at once but is set high enough
+ * that ordinary forgetfulness cannot reach it.
+ */
 async function isLoginThrottled(email: string, ip: string): Promise<boolean> {
-  const result = await pool.query<{ ip_failures: string; email_failures: string }>(
-    `SELECT count(*) FILTER (WHERE ip = $1)    AS ip_failures,
-            count(*) FILTER (WHERE email = $2) AS email_failures
+  const result = await pool.query<{
+    ip_failures: string;
+    same_ip_email_failures: string;
+    email_failures_all_ips: string;
+  }>(
+    `SELECT count(*) FILTER (WHERE ip = $1)                     AS ip_failures,
+            count(*) FILTER (WHERE ip = $1 AND email = $2)      AS same_ip_email_failures,
+            count(*) FILTER (WHERE email = $2)                  AS email_failures_all_ips
        FROM member_login_attempts
       WHERE successful = false
         AND created_at > now() - make_interval(mins => $3)`,
     [ip, email, LOGIN_WINDOW_MINUTES]
   );
+
   const row = result.rows[0];
   if (!row) return false;
+
   return (
     Number(row.ip_failures) >= LOGIN_MAX_FAILURES ||
-    Number(row.email_failures) >= LOGIN_MAX_FAILURES
+    Number(row.same_ip_email_failures) >= LOGIN_MAX_FAILURES ||
+    Number(row.email_failures_all_ips) >= LOGIN_DISTRIBUTED_MAX_FAILURES
   );
 }
 
@@ -163,11 +223,80 @@ async function findByEmail(email: string): Promise<LookupRow | null> {
   return result.rows[0] ?? null;
 }
 
+/**
+ * Issues a set-password link for an account that has never had a password.
+ *
+ * Shares `member_password_resets` with the forgotten-password flow, including
+ * its per-account ceiling — without that, an unauthenticated signup form is a
+ * button anyone can press to send mail to any customer, as many times as they
+ * like, from the site's own domain.
+ */
+async function sendSetPasswordEmail(member: {
+  id: number;
+  email: string;
+  first_name: string;
+}): Promise<void> {
+  const recent = await pool.query<{ count: string }>(
+    `SELECT count(*) AS count
+       FROM member_password_resets
+      WHERE member_id = $1
+        AND created_at > now() - make_interval(mins => $2)`,
+    [member.id, RESET_WINDOW_MINUTES]
+  );
+  if (Number(recent.rows[0]?.count ?? 0) >= RESET_MAX_PER_WINDOW) return;
+
+  // Outstanding links for this account are burned first. Otherwise every
+  // request leaves another live token behind, so a day of them accumulates into
+  // a day's worth of working keys to the same door.
+  await pool.query(
+    `UPDATE member_password_resets SET used_at = now()
+      WHERE member_id = $1 AND used_at IS NULL`,
+    [member.id]
+  );
+
+  const raw = generateToken();
+  await pool.query(
+    `INSERT INTO member_password_resets (member_id, token_hash, expires_at) VALUES ($1, $2, $3)`,
+    [member.id, hashToken(raw), expiresIn(PASSWORD_RESET_TTL_MINUTES * 60)]
+  );
+
+  void sendMail({
+    to: member.email,
+    ...emails.setPassword({
+      firstName: member.first_name,
+      token: raw,
+      expiresInMinutes: PASSWORD_RESET_TTL_MINUTES,
+    }),
+  });
+}
+
 async function sendVerificationEmail(member: {
   id: number;
   email: string;
   first_name: string;
 }): Promise<void> {
+  // The same durable per-account ceiling forgot-password uses. Without it,
+  // resend-verification is an unauthenticated button that sends mail from this
+  // domain to any unverified address, as often as the caller likes — the
+  // IP+email rate limiter alone is defeated by changing IP.
+  const recent = await pool.query<{ count: string }>(
+    `SELECT count(*) AS count
+       FROM member_email_verifications
+      WHERE member_id = $1
+        AND created_at > now() - make_interval(mins => $2)`,
+    [member.id, RESET_WINDOW_MINUTES]
+  );
+  if (Number(recent.rows[0]?.count ?? 0) >= RESET_MAX_PER_WINDOW) return;
+
+  // Supersede outstanding links rather than adding to them: each one lives 24
+  // hours, so a day of resends would otherwise leave a day's worth of
+  // simultaneously-valid tokens for the same address.
+  await pool.query(
+    `UPDATE member_email_verifications SET used_at = now()
+      WHERE member_id = $1 AND used_at IS NULL`,
+    [member.id]
+  );
+
   const raw = generateToken();
   await pool.query(
     `INSERT INTO member_email_verifications (member_id, email, token_hash, expires_at)
@@ -189,12 +318,35 @@ async function sendVerificationEmail(member: {
 /**
  * POST /api/auth/register
  *
- * Two paths into the same response. A brand-new address inserts a member; an
- * address that already exists *without* a password hash — someone Yvette
- * invited by hand, or a guest checkout that never chose credentials — has its
- * password set instead of being refused. That claim path is what stops a paying
- * customer from being told their own email is taken by a ghost of themselves.
+ * A brand-new address inserts a member and signs them straight in. An address
+ * that already exists gets a mail instead, and the response says only "check
+ * your email".
+ *
+ * The asymmetry is deliberate and load-bearing. Password-less member rows are
+ * the norm here, not the exception — every guest checkout, every admin-added
+ * member, every CSV import row, every lead captured by an automation, and every
+ * magic-link-only member has one. Letting this endpoint set a password on such a
+ * row and hand back a session would mean anyone who knows a customer's email
+ * address owns their account, their purchases and their library, having proved
+ * nothing. The token in the mail is the proof; the request never can be.
+ *
+ * Signing a genuinely NEW address in immediately is safe for the same reason it
+ * is not safe for an existing one: a row created a millisecond ago has no
+ * purchases, no access grants and no history attached to it, so there is nothing
+ * there to take.
+ *
+ * Both existing-account branches return byte-identical responses, so this cannot
+ * be used to tell a claimable account from one that already has a password. It
+ * does still reveal whether an address is registered at all — an unavoidable
+ * property of any signup form that refuses duplicates, and a far smaller problem
+ * than the takeover it replaces. Which of the two mails arrives is visible only
+ * to whoever actually reads that inbox, which is exactly the right audience.
  */
+const REGISTRATION_PENDING = {
+  status: "check_email" as const,
+  message: "Check your email — we've sent you a link to finish setting up your account.",
+};
+
 memberAuthRoutes.post(
   "/register",
   memberRegisterLimiter,
@@ -210,61 +362,51 @@ memberAuthRoutes.post(
     if (!strength.ok) throw badRequest(strength.reason ?? "Please choose a stronger password.");
 
     const existing = await findByEmail(email);
-    if (existing && (existing.password_hash || SIGN_IN_BLOCKED.has(existing.status))) {
-      throw new HttpError(409, "That email is already registered. Try signing in instead.");
+    if (existing) {
+      // The member row is not touched here — not the password, not the name,
+      // not the status. Nothing about an existing account changes on the word
+      // of an unauthenticated request.
+      if (!existing.password_hash && !SIGN_IN_BLOCKED.has(existing.status)) {
+        await sendSetPasswordEmail(existing);
+      } else if (!SIGN_IN_BLOCKED.has(existing.status)) {
+        void sendMail({
+          to: existing.email,
+          ...emails.registrationAttempted({ firstName: existing.first_name }),
+        });
+      }
+      res.status(200).json(REGISTRATION_PENDING);
+      return;
     }
 
     const passwordHash = await hashPassword(password);
     const displayName = `${firstName} ${lastName}`.trim();
 
     let row: MemberProfileRow;
-    if (existing) {
-      const claimed = await pool.query<MemberProfileRow>(
-        `UPDATE members
-            SET password_hash = $2,
-                first_name    = $3,
-                last_name     = $4,
-                name          = COALESCE(NULLIF($5, ''), name),
-                timezone      = COALESCE($6, timezone),
-                status        = CASE WHEN status = 'invited' THEN 'active' ELSE status END,
-                updated_at    = now()
-          WHERE id = $1
-          RETURNING ${MEMBER_PROFILE_COLUMNS}`,
+    try {
+      const created = await pool.query<MemberProfileRow>(
+        `INSERT INTO members (email, name, first_name, last_name, password_hash, timezone, status)
+         VALUES ($1, $2, $3, $4, $5, $6, 'active')
+         RETURNING ${MEMBER_PROFILE_COLUMNS}`,
         [
-          existing.id,
-          passwordHash,
+          email,
+          displayName,
           firstName,
           lastName,
-          displayName,
-          parsed.data.timezone ?? null,
+          passwordHash,
+          parsed.data.timezone ?? DEFAULT_TIMEZONE,
         ]
       );
-      row = claimed.rows[0];
-    } else {
-      try {
-        const created = await pool.query<MemberProfileRow>(
-          `INSERT INTO members (email, name, first_name, last_name, password_hash, timezone, status)
-           VALUES ($1, $2, $3, $4, $5, $6, 'active')
-           RETURNING ${MEMBER_PROFILE_COLUMNS}`,
-          [
-            email,
-            displayName,
-            firstName,
-            lastName,
-            passwordHash,
-            parsed.data.timezone ?? DEFAULT_TIMEZONE,
-          ]
-        );
-        row = created.rows[0];
-      } catch (err) {
-        // Two signups for the same address in the same instant: the unique index
-        // is the arbiter, and the loser gets the answer it would have got a
-        // moment earlier.
-        if (isUniqueViolation(err)) {
-          throw new HttpError(409, "That email is already registered. Try signing in instead.");
-        }
-        throw err;
+      row = created.rows[0];
+    } catch (err) {
+      // Two signups for the same address in the same instant. The unique index
+      // is the arbiter, and the loser gets the answer it would have got a
+      // moment earlier — which is now the neutral one, so the race cannot be
+      // used to distinguish an existing account either.
+      if (isUniqueViolation(err)) {
+        res.status(200).json(REGISTRATION_PENDING);
+        return;
       }
+      throw err;
     }
 
     await sendVerificationEmail(row);
@@ -286,8 +428,11 @@ memberAuthRoutes.post(
     const { email, password } = parsed.data;
     const meta = clientMeta(req);
 
+    // No attempt is recorded here. Counting a request that was refused without
+    // ever checking a password lets the window extend itself: one call every
+    // fourteen minutes would hold the counter above the limit indefinitely, and
+    // the account would never unlock. Only a real credential check counts.
     if (await isLoginThrottled(email, meta.ip)) {
-      await recordLoginAttempt(email, meta.ip, false);
       throw new HttpError(429, GENERIC_THROTTLED);
     }
 
@@ -302,7 +447,12 @@ memberAuthRoutes.post(
       throw unauthorized(GENERIC_CREDENTIALS);
     }
 
+    // Proof the real owner is here, so the failure history goes: whatever
+    // produced it is no longer relevant, and leaving it would let a stale run of
+    // wrong guesses lock them out again on their next visit.
+    await clearLoginFailures(email);
     await recordLoginAttempt(email, meta.ip, true);
+    void trimLoginAttempts();
     await pool.query(`UPDATE members SET last_login_at = now() WHERE id = $1`, [member.id]);
 
     const session = await startSession(res, toMemberProfile(member), meta);
@@ -452,12 +602,22 @@ memberAuthRoutes.post(
                 -- Clicking a link that only arrived at that address proves the
                 -- address, so an unverified account is verified on the way past.
                 email_verified_at = COALESCE(email_verified_at, now()),
+                -- An invited or guest-checkout row becomes a real account here.
+                -- This is the ONLY path that sets a first password, because it
+                -- is the only one that proves who owns the inbox.
+                status            = CASE WHEN status = 'invited' THEN 'active' ELSE status END,
                 updated_at        = now()
           WHERE id = $1
+            -- An erased account stays erased. Reset tokens outlive the
+            -- anonymisation that voided them, and one clicked afterwards would
+            -- otherwise put a password back on a row that no longer represents
+            -- anybody.
+            AND status <> 'deleted'
           RETURNING id, email, first_name`,
         [reset.member_id, passwordHash]
       );
       member = updated.rows[0];
+      if (!member) throw badRequest(GENERIC_LINK);
 
       await client.query("COMMIT");
     } catch (err) {
@@ -467,8 +627,13 @@ memberAuthRoutes.post(
       client.release();
     }
 
-    await revokeAllMemberSessions(member.id);
+    await revokeAllMemberSessions(member.id, "password_change");
     clearRefreshCookie(res);
+
+    // Resetting the password is the other thing a locked-out person will try,
+    // and it proves they hold the inbox. Leaving the failure history in place
+    // would mean the reset appeared to work and sign-in still refused them.
+    await clearLoginFailures(member.email);
 
     void sendMail({
       to: member.email,
@@ -524,9 +689,17 @@ memberAuthRoutes.post(
                 email_verified_at = COALESCE(email_verified_at, now()),
                 updated_at        = now()
           WHERE id = $1
+            -- An erased account stays erased. This statement writes an email
+            -- address back onto the row, and a verification link outlives the
+            -- anonymisation by up to 24 hours — so without this guard, a member
+            -- who asked to be forgotten and then clicked a link still sitting in
+            -- their inbox would restore the address the deletion removed, while
+            -- the audit log went on asserting it was gone.
+            AND status <> 'deleted'
           RETURNING email, first_name`,
         [verification.member_id, verification.email]
       );
+      if (!updated.rows[0]) throw badRequest(GENERIC_LINK);
       member = {
         ...updated.rows[0],
         firstVerification: before.rows[0]?.email_verified_at == null,
@@ -613,6 +786,28 @@ memberAuthRoutes.post(
 
     const member = await findByEmail(parsed.data.email);
     if (member && member.status === "active") {
+      // Ceiling first. This endpoint mails a bearer sign-in link, so flooding it
+      // is worse than ordinary inbox noise: it trains the recipient to expect
+      // unprompted "click here to sign in" mail from us, which is precisely the
+      // habit a phishing campaign against this audience would rely on.
+      const recent = await pool.query<{ count: string }>(
+        `SELECT count(*) AS count
+           FROM member_magic_links
+          WHERE member_id = $1
+            AND created_at > now() - make_interval(mins => $2)`,
+        [member.id, RESET_WINDOW_MINUTES]
+      );
+      if (Number(recent.rows[0]?.count ?? 0) >= RESET_MAX_PER_WINDOW) {
+        res.json({ ok: true });
+        return;
+      }
+
+      await pool.query(
+        `UPDATE member_magic_links SET used_at = now()
+          WHERE member_id = $1 AND used_at IS NULL`,
+        [member.id]
+      );
+
       const raw = generateToken();
       await pool.query(
         `INSERT INTO member_magic_links (member_id, token_hash, expires_at) VALUES ($1, $2, $3)`,

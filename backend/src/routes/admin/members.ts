@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
+import type { PoolClient } from "pg";
 import { pool } from "../../db/pool";
 import { rowToCamel, rowsToCamel } from "../../utils/case";
 import { asyncHandler } from "../../utils/asyncHandler";
@@ -12,7 +13,9 @@ import {
   ACCESS_TOKEN_TTL_SECONDS,
   revokeAllMemberSessions,
   signMemberAccessToken,
+  type DeliberateRevocation,
 } from "../../auth/memberSession";
+import { adminImpersonateLimiter } from "../../middleware/rateLimit";
 import { recordAdminAction, recordAdminActionStrict } from "../../services/adminAudit";
 
 /** Members (students), their enrollments, and the account actions an admin can take on them. Mounted at /admin/members. */
@@ -339,6 +342,39 @@ adminMembersRouter.put(
 );
 
 /**
+ * Typed against the session module's union rather than spelled inline, so the
+ * reason recorded here stays one the rotation path recognises as deliberate.
+ */
+const ERASURE_REVOCATION: DeliberateRevocation = "admin";
+
+/**
+ * Removes everything that could bring an erased member back.
+ *
+ * The three token tables each hold links that stay live for up to 24 hours and
+ * each of them writes to the member row: a verification link restores the real
+ * address and marks it verified, a reset link sets a password, a magic link
+ * opens a session. Leaving them outstanding means the erased person can undo
+ * the erasure from their inbox — putting the address back into the CSV export
+ * while the audit row still says it was removed.
+ *
+ * Takes the caller's client so it lands in the same transaction as the erasure
+ * itself; `revokeAllMemberSessions` runs on its own connection and would commit
+ * separately, leaving a window in which the row is marked deleted and a token
+ * that reverses it is still redeemable.
+ */
+async function purgeMemberCredentials(client: PoolClient, id: number): Promise<void> {
+  await client.query(`DELETE FROM member_email_verifications WHERE member_id = $1`, [id]);
+  await client.query(`DELETE FROM member_password_resets WHERE member_id = $1`, [id]);
+  await client.query(`DELETE FROM member_magic_links WHERE member_id = $1`, [id]);
+  await client.query(
+    `UPDATE member_sessions
+        SET revoked_at = now(), revoked_reason = $2
+      WHERE member_id = $1 AND revoked_at IS NULL`,
+    [id, ERASURE_REVOCATION],
+  );
+}
+
+/**
  * DELETE /admin/members/:id — a deletion request, not a DELETE statement.
  *
  * A member who has paid for something cannot simply vanish: `orders` is the
@@ -366,33 +402,51 @@ adminMembersRouter.delete(
       return;
     }
 
-    // orders are keyed by the email that paid, and that column is plain TEXT
-    // while members.email is CITEXT. Without the casts Postgres resolves this
-    // to case-sensitive text equality, and a member who checked out as
-    // "Y@x.com" would look like they had never bought anything.
-    const orders = await pool.query<{ count: number }>(
-      `SELECT COUNT(*)::int AS count FROM orders o WHERE o.email::citext = $1::citext`,
-      [member.email],
-    );
-    const hasOrders = (orders.rows[0]?.count ?? 0) > 0;
+    // One transaction covers the whole erasure: the row and every credential
+    // that could reach it have to stop existing together, or there is an
+    // interval in which one of them has been dealt with and the other has not.
+    const client = await pool.connect();
+    let hasOrders = false;
+    try {
+      await client.query("BEGIN");
 
-    if (hasOrders) {
-      // .invalid is reserved by RFC 2606 and can never be delivered to or
-      // registered by anyone, so the placeholder address cannot collide with a
-      // future real member or leak mail to a stranger.
-      await pool.query(
-        `UPDATE members
-            SET email = $2, name = '', first_name = '', last_name = '', avatar_url = '',
-                password_hash = NULL, email_verified_at = NULL, status = 'deleted',
-                updated_at = now()
-          WHERE id = $1`,
-        [id, `deleted-${id}@removed.invalid`],
+      // orders are keyed by the email that paid, and that column is plain TEXT
+      // while members.email is CITEXT. Without the casts Postgres resolves this
+      // to case-sensitive text equality, and a member who checked out as
+      // "Y@x.com" would look like they had never bought anything.
+      const orders = await client.query<{ count: number }>(
+        `SELECT COUNT(*)::int AS count FROM orders o WHERE o.email::citext = $1::citext`,
+        [member.email],
       );
-      await revokeAllMemberSessions(id);
-    } else {
-      // ON DELETE CASCADE takes the sessions with it, so there is nothing left
-      // to revoke.
-      await pool.query(`DELETE FROM members WHERE id = $1`, [id]);
+      hasOrders = (orders.rows[0]?.count ?? 0) > 0;
+
+      // Runs on both branches. ON DELETE CASCADE would carry these away on the
+      // second one, but an erasure guarantee that holds only on the branch that
+      // happens to have been taken is one that will eventually be wrong.
+      await purgeMemberCredentials(client, id);
+
+      if (hasOrders) {
+        // .invalid is reserved by RFC 2606 and can never be delivered to or
+        // registered by anyone, so the placeholder address cannot collide with a
+        // future real member or leak mail to a stranger.
+        await client.query(
+          `UPDATE members
+              SET email = $2, name = '', first_name = '', last_name = '', avatar_url = '',
+                  password_hash = NULL, email_verified_at = NULL, status = 'deleted',
+                  updated_at = now()
+            WHERE id = $1`,
+          [id, `deleted-${id}@removed.invalid`],
+        );
+      } else {
+        await client.query(`DELETE FROM members WHERE id = $1`, [id]);
+      }
+
+      await client.query("COMMIT");
+    } catch (err) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      throw err;
+    } finally {
+      client.release();
     }
 
     // Only the shape of the record is logged, never the name or address that
@@ -427,11 +481,18 @@ adminMembersRouter.delete(
  * `impersonatedBy` claim gets dropped and the session comes back as the member
  * themselves.
  *
+ * What the token can do is bounded on the other side: `denyImpersonation` sits
+ * on every member route that writes, so this is a way to see a customer's
+ * account and not a way to act in it. That matters here because a write made
+ * with this token is recorded as the customer's own, and the log below is the
+ * last thing said about the session.
+ *
  * The audit row is written first and is allowed to fail the request — see
  * recordAdminActionStrict for why this endpoint inverts the usual rule.
  */
 adminMembersRouter.post(
   "/:id/impersonate",
+  adminImpersonateLimiter,
   asyncHandler(async (req, res) => {
     const id = parseId(req.params.id);
     const adminId = req.user?.sub;

@@ -10,7 +10,8 @@ import { badRequest, notFound, unauthorized } from "../../utils/httpError";
 import { hashToken } from "../../auth/tokens";
 import { checkPasswordStrength, hashPassword, verifyPassword } from "../../auth/password";
 import { clearRefreshCookie } from "../../auth/memberSession";
-import { requireMember, type AuthedMember } from "../../middleware/memberAuth";
+import { denyImpersonation, requireMember, type AuthedMember } from "../../middleware/memberAuth";
+import { memberAvatarLimiter } from "../../middleware/rateLimit";
 import { sendMail } from "../../email/mailer";
 import * as emails from "../../email/memberTemplates";
 import {
@@ -39,6 +40,13 @@ export const memberAccountRoutes = Router();
 
 memberAccountRoutes.use("/me", requireMember);
 
+/**
+ * Every route below that writes carries `denyImpersonation` alongside its
+ * handler. It is spelled out per route rather than mounted once, because the
+ * reads under `/me` are exactly what impersonation exists to serve — a blanket
+ * guard here would turn "view as member" into "view nothing".
+ */
+
 /** requireMember has already run; this keeps the guarantee in the type system too. */
 function currentMember(req: Request): AuthedMember {
   if (!req.member) throw unauthorized("Please sign in to continue");
@@ -64,6 +72,7 @@ memberAccountRoutes.get(
  */
 memberAccountRoutes.patch(
   "/me",
+  denyImpersonation,
   asyncHandler(async (req, res) => {
     const member = currentMember(req);
     const parsed = updateProfileSchema.safeParse(req.body);
@@ -107,6 +116,7 @@ memberAccountRoutes.patch(
  */
 memberAccountRoutes.post(
   "/me/password",
+  denyImpersonation,
   asyncHandler(async (req, res) => {
     const member = currentMember(req);
     const parsed = changePasswordSchema.safeParse(req.body);
@@ -136,9 +146,13 @@ memberAccountRoutes.post(
 
     const raw = readRefreshCookie(req);
     const keep = raw ? hashToken(raw) : null;
+    // The reason matters as much as the revocation: a session ended without one
+    // looks like a rotated token when the signed-out device next refreshes, and
+    // that is read as theft — which would burn the very session this endpoint
+    // went out of its way to keep alive.
     await pool.query(
       `UPDATE member_sessions
-          SET revoked_at = now()
+          SET revoked_at = now(), revoked_reason = 'password_change'
         WHERE member_id = $1
           AND revoked_at IS NULL
           AND ($2::text IS NULL OR token_hash <> $2)`,
@@ -193,6 +207,24 @@ const avatarUpload = multer({
   },
 });
 
+/** The public prefix every file this endpoint stores is served under. */
+const UPLOAD_URL_PREFIX = "/uploads/";
+
+/**
+ * Deletes a stored upload, if the name is one this endpoint could have written.
+ *
+ * Names are generated here and never taken from the client, so a value that is
+ * not a plain filename means the column it came from was tampered with — and
+ * joining that to the upload directory is how a delete escapes it. Such a name
+ * is ignored rather than followed. A file that has already gone is the outcome
+ * this function wanted anyway, so ENOENT is not an error.
+ */
+async function unlinkUpload(filename: string): Promise<void> {
+  if (filename !== path.basename(filename)) return;
+  if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(filename)) return;
+  await fs.promises.unlink(path.join(env.uploadDir, filename)).catch(() => undefined);
+}
+
 /** Bridges multer's callback style into the async handler so one error path serves both. */
 function receiveAvatar(req: Request, res: Response): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -211,9 +243,19 @@ function receiveAvatar(req: Request, res: Response): Promise<void> {
   });
 }
 
-/** POST /api/auth/me/avatar — multipart, field name `file`. */
+/**
+ * POST /api/auth/me/avatar — multipart, field name `file`.
+ *
+ * A member holds one avatar at a time, on disk as well as in the row: the file
+ * the new one replaces is deleted along with the library entry that recorded
+ * it. Without that, a profile photo is an append-only write into the volume the
+ * course video lives on, and every re-crop a member tries leaves another row in
+ * Yvette's media library for her to wonder about.
+ */
 memberAccountRoutes.post(
   "/me/avatar",
+  denyImpersonation,
+  memberAvatarLimiter,
   asyncHandler(async (req, res) => {
     const member = currentMember(req);
     await receiveAvatar(req, res);
@@ -221,10 +263,21 @@ memberAccountRoutes.post(
     const file = req.file;
     if (!file) throw badRequest("No image uploaded (the field name must be 'file').");
 
-    const url = `/uploads/${file.filename}`;
+    const url = `${UPLOAD_URL_PREFIX}${file.filename}`;
+    let replaced: string | null = null;
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
+
+      // Locked before it is read, so two uploads racing cannot both see the same
+      // previous avatar: the loser would delete a file the winner had already
+      // accounted for and leave its own behind with nothing pointing at it.
+      const current = await client.query<{ avatar_url: string }>(
+        `SELECT avatar_url FROM members WHERE id = $1 FOR UPDATE`,
+        [member.id]
+      );
+      const previous = current.rows[0]?.avatar_url ?? "";
+
       // The library row exists so Yvette can see (and delete) what members have
       // uploaded; the members row is what the site actually renders.
       await client.query(
@@ -236,18 +289,30 @@ memberAccountRoutes.post(
         `UPDATE members SET avatar_url = $2, updated_at = now() WHERE id = $1`,
         [member.id, url]
       );
+
+      // Only what this endpoint stored is reclaimed. An avatar_url pointing
+      // somewhere else — a URL Yvette pasted in, an asset from the library —
+      // belongs to whoever put it there and is not ours to delete.
+      if (previous.startsWith(UPLOAD_URL_PREFIX) && previous !== url) {
+        await client.query(`DELETE FROM media_assets WHERE url = $1`, [previous]);
+        replaced = previous.slice(UPLOAD_URL_PREFIX.length);
+      }
+
       await client.query("COMMIT");
     } catch (err) {
       await client.query("ROLLBACK").catch(() => undefined);
       // The bytes are already on disk; don't leave an orphan behind a failed row.
-      await fs.promises.unlink(path.join(env.uploadDir, file.filename)).catch(() => undefined);
+      await unlinkUpload(file.filename);
       throw err;
     } finally {
       client.release();
     }
 
-    // The previous file is left in place on purpose: it may still be referenced
-    // by the media library row that recorded it.
+    // Deliberately after the commit. A filesystem delete cannot be rolled back,
+    // so doing it inside the transaction would mean a later failure left the
+    // member's row pointing at a file that no longer exists.
+    if (replaced !== null) await unlinkUpload(replaced);
+
     res.json({ avatarUrl: url });
   })
 );
@@ -309,14 +374,19 @@ memberAccountRoutes.get(
  */
 memberAccountRoutes.delete(
   "/me/sessions/:id",
+  denyImpersonation,
   asyncHandler(async (req, res) => {
     const member = currentMember(req);
     const parsed = sessionIdParamSchema.safeParse(req.params);
     if (!parsed.success) throw notFound("We couldn't find that session.");
 
+    // Recorded as a logout, because that is what it is from the other device's
+    // point of view: without the reason, that device's next silent refresh
+    // presents a revoked token, which is read as theft and signs out every
+    // other device the member has — including this one.
     const result = await pool.query<{ token_hash: string }>(
       `UPDATE member_sessions
-          SET revoked_at = now()
+          SET revoked_at = now(), revoked_reason = 'logout'
         WHERE id = $1
           AND member_id = $2
           AND revoked_at IS NULL

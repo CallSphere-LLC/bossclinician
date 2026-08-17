@@ -143,3 +143,36 @@ export const memberTokenLimiter = rateLimit({
   legacyHeaders: false,
   message: GENERIC_RATE_LIMIT_MESSAGE,
 });
+
+/**
+ * Avatar uploads — the one route on which a member can write megabytes to the
+ * server's disk, and it shares a volume with the course video.
+ *
+ * Keyed on the member rather than the IP, because the route is authenticated
+ * and a clinic whose staff all sit behind one address must not share a
+ * profile-photo budget. Ten an hour is far beyond how often anyone changes
+ * their picture and far below what it takes to fill a disk.
+ */
+export const memberAvatarLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: GENERIC_RATE_LIMIT_MESSAGE,
+  keyGenerator: (req: Request): string =>
+    req.member ? `member:${req.member.id}` : ipKeyGenerator(req.ip ?? ""),
+});
+
+/**
+ * Impersonation. Every call mints a working key to a customer's account, so the
+ * ceiling is deliberately low: support looking at one member's screen is a
+ * considered act, while a script walking the member list issuing tokens is not
+ * something the audit log should be left to discover afterwards.
+ */
+export const adminImpersonateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: GENERIC_RATE_LIMIT_MESSAGE,
+});

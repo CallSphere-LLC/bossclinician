@@ -206,3 +206,78 @@ export function passwordChanged(input: { firstName: string }): EmailContent {
 
   return { subject: "Your password was changed", text, html };
 }
+
+/**
+ * Sent when someone tries to sign up with an address that already has a working
+ * account.
+ *
+ * The signup response says only "check your email", so this is what tells the
+ * real owner what happened — and, if it was not them, that somebody is probing
+ * their address. It deliberately contains no link and no token: there is
+ * nothing here for a stranger to act on, because a stranger is exactly who may
+ * have triggered it.
+ */
+export function registrationAttempted(input: { firstName: string }): EmailContent {
+  const name = greeting(input.firstName);
+  const signIn = `${env.publicSiteUrl}/login`;
+  const reset = `${env.publicSiteUrl}/forgot-password`;
+
+  const text = [
+    `Hi ${name},`,
+    ``,
+    `Someone just tried to create a Boss Clinician account with this email address, but you already have one.`,
+    ``,
+    `If that was you, you can sign in here: ${signIn}`,
+    `Forgotten your password? Reset it here: ${reset}`,
+    ``,
+    `If it wasn't you, you don't need to do anything — nothing about your account has changed, and no one was given access to it.`,
+    ``,
+    `— Yvette`,
+  ].join("\n");
+
+  const html = [
+    `<p>Hi ${escapeHtml(name)},</p>`,
+    `<p>Someone just tried to create a Boss Clinician account with this email address, but you already have one.</p>`,
+    `<p>If that was you, you can <a href="${escapeHtml(signIn)}">sign in here</a>. Forgotten your password? <a href="${escapeHtml(reset)}">Reset it here</a>.</p>`,
+    `<p>If it wasn't you, you don't need to do anything — nothing about your account has changed, and no one was given access to it.</p>`,
+    `<p>— Yvette</p>`,
+  ].join("\n");
+
+  return { subject: "You already have a Boss Clinician account", text, html };
+}
+
+/**
+ * Sent to finish an account that exists but has never had a password — a guest
+ * checkout, an admin-added member, a CSV import, or a lead captured by an
+ * automation.
+ *
+ * This link is the only way such an account can be claimed. Registration will
+ * not do it, because a request cannot prove who owns an inbox and this can.
+ */
+export function setPassword(input: TokenEmailInput): EmailContent {
+  const name = greeting(input.firstName);
+  const url = link("/reset-password", input.token);
+  const window = validFor(input.expiresInMinutes);
+
+  const text = [
+    `Hi ${name},`,
+    ``,
+    `You already have a Boss Clinician account — it was created when you bought something, or when Yvette added you — it just doesn't have a password yet.`,
+    ``,
+    `Choose one here and you're in: ${url}`,
+    ``,
+    `This link works for ${window}. Anything you've already bought is waiting in your library.`,
+    ``,
+    `— Yvette`,
+  ].join("\n");
+
+  const html = [
+    `<p>Hi ${escapeHtml(name)},</p>`,
+    `<p>You already have a Boss Clinician account — it was created when you bought something, or when Yvette added you — it just doesn't have a password yet.</p>`,
+    `<p><a href="${escapeHtml(url)}">Choose one here and you're in</a>.</p>`,
+    `<p>This link works for ${escapeHtml(window)}. Anything you've already bought is waiting in your library.</p>`,
+    `<p>— Yvette</p>`,
+  ].join("\n");
+
+  return { subject: "Finish setting up your Boss Clinician account", text, html };
+}

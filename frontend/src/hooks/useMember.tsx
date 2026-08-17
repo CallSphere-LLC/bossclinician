@@ -10,6 +10,7 @@ import {
 } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import {
+  isRegistrationPending,
   memberApi,
   setAccessToken,
   setSignedOutHandler,
@@ -29,12 +30,18 @@ interface MemberAuthValue {
   /** True until the initial refresh settles. Guards render a spinner, not a redirect. */
   loading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
+  /**
+   * Resolves `true` when the account was created and the member is now signed
+   * in, and `false` when the address already existed and a link was emailed
+   * instead. Both are successful outcomes — the caller renders a different
+   * screen, not an error.
+   */
   signUp: (input: {
     email: string;
     password: string;
     firstName: string;
     lastName?: string;
-  }) => Promise<void>;
+  }) => Promise<boolean>;
   signInWithToken: (token: string) => Promise<void>;
   signOut: () => Promise<void>;
   /** Replaces the cached profile after a save, without a round trip. */
@@ -137,11 +144,10 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
 
   const signUp = useCallback(
     async (input: { email: string; password: string; firstName: string; lastName?: string }) => {
-      const { member: profile, accessToken } = await memberApi.register({
-        ...input,
-        timezone: detectTimezone(),
-      });
-      applySession(profile, accessToken);
+      const result = await memberApi.register({ ...input, timezone: detectTimezone() });
+      if (isRegistrationPending(result)) return false;
+      applySession(result.member, result.accessToken);
+      return true;
     },
     [applySession],
   );
