@@ -50,6 +50,7 @@ export const NAV_GROUPS: NavGroup[] = [
     icon: Package,
     children: [
       { to: "/admin/products", label: "All Products", ready: true },
+      { to: "/admin/catalogue", label: "Your Catalogue", ready: true },
       { to: "/admin/courses", label: "Courses", ready: true },
       { to: "/admin/community", label: "Community", ready: true },
       { to: "/admin/media", label: "Media Library", ready: true },
@@ -63,6 +64,7 @@ export const NAV_GROUPS: NavGroup[] = [
     label: "Sales",
     icon: CreditCard,
     children: [
+      { to: "/admin/offers", label: "Offers", ready: true },
       { to: "/admin/sales/payments", label: "Payments", ready: true },
       { to: "/admin/sales/plans", label: "Plans & Pricing", ready: true },
       { to: "/admin/sales/subscriptions", label: "Subscriptions", ready: true },

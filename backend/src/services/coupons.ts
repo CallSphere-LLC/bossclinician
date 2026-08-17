@@ -117,8 +117,20 @@ export async function validateCoupon(
     return { ok: false, reason: "That code has expired." };
   }
 
-  if (row.max_redemptions !== null && row.redeemed >= row.max_redemptions) {
-    return { ok: false, reason: "That code has been fully redeemed." };
+  // Counted from the ledger, not from `coupons.redeemed`. The denormalised
+  // counter is maintained for the admin list, but a cap enforced against a
+  // cached number is a cap that silently stops existing the moment anything
+  // fails to increment it.
+  if (row.max_redemptions !== null) {
+    const taken = await db.query<{ used: number }>(
+      `SELECT count(*)::int AS used
+         FROM coupon_redemptions
+        WHERE coupon_id = $1 AND released_at IS NULL`,
+      [row.id]
+    );
+    if ((taken.rows[0]?.used ?? 0) >= row.max_redemptions) {
+      return { ok: false, reason: "That code has been fully redeemed." };
+    }
   }
 
   if (row.scope === "offers") {
@@ -132,15 +144,14 @@ export async function validateCoupon(
   }
 
   if (row.max_per_contact !== null && email) {
-    // An order carrying the code IS the redemption record: it is written in the
-    // same transaction as the charge and survives a refund, so a buy-refund-buy
-    // loop cannot mine a one-per-customer code.
+    // Also the ledger rather than paid orders. An order sits `pending` for the
+    // seconds between the charge and Stripe's webhook, so counting settled
+    // orders let two checkouts opened together both see zero uses and both go
+    // through. A redemption row exists before the customer reaches Stripe.
     const used = await db.query<{ used: number }>(
       `SELECT count(*)::int AS used
-         FROM orders
-        WHERE coupon_id = $1
-          AND lower(email) = lower($2)
-          AND status IN ('paid', 'refunded')`,
+         FROM coupon_redemptions
+        WHERE coupon_id = $1 AND email = $2 AND released_at IS NULL`,
       [row.id, email]
     );
     if ((used.rows[0]?.used ?? 0) >= row.max_per_contact) {
@@ -161,4 +172,70 @@ export async function validateCoupon(
       stripeCouponId: row.stripe_coupon_id,
     },
   };
+}
+
+/**
+ * Claims one redemption of a coupon for an order.
+ *
+ * MUST be called inside the same transaction that creates the order, while the
+ * coupon row is held under `FOR UPDATE` — that lock plus this insert is what
+ * makes the cap real. Validation alone cannot enforce it: two checkouts reading
+ * the count a millisecond apart both pass, and only a row written before either
+ * reaches Stripe serialises them.
+ */
+export async function claimRedemption(
+  client: Queryable,
+  input: {
+    couponId: number;
+    orderId: number;
+    memberId?: number | null;
+    email: string;
+    amountCents: number;
+  }
+): Promise<void> {
+  await client.query(
+    `INSERT INTO coupon_redemptions (coupon_id, order_id, member_id, email, amount_cents)
+     VALUES ($1, $2, $3, $4, $5)
+     ON CONFLICT (order_id) WHERE order_id IS NOT NULL DO NOTHING`,
+    [input.couponId, input.orderId, input.memberId ?? null, input.email, input.amountCents]
+  );
+
+  await client.query(
+    `UPDATE coupons SET redeemed = (
+       SELECT count(*) FROM coupon_redemptions
+        WHERE coupon_id = $1 AND released_at IS NULL
+     ) WHERE id = $1`,
+    [input.couponId]
+  );
+}
+
+/**
+ * Gives a redemption back when the order it belonged to never completed.
+ *
+ * Without this, an abandoned checkout permanently consumes one of fifty launch
+ * codes — the customer who closed the tab has quietly taken a seat from someone
+ * who would have paid.
+ */
+export async function releaseRedemption(
+  client: Queryable,
+  orderId: number
+): Promise<void> {
+  const released = await client.query<{ coupon_id: number }>(
+    `UPDATE coupon_redemptions
+        SET released_at = now()
+      WHERE order_id = $1 AND released_at IS NULL
+      RETURNING coupon_id`,
+    [orderId]
+  );
+
+  const couponId = released.rows[0]?.coupon_id;
+  if (!couponId) return;
+
+  await client.query(
+    `UPDATE coupons SET redeemed = (
+       SELECT count(*) FROM coupon_redemptions
+        WHERE coupon_id = $1 AND released_at IS NULL
+     ) WHERE id = $1`,
+    [couponId]
+  );
 }

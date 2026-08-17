@@ -23,6 +23,7 @@ import {
   recordRefund,
   type FulfillResult,
 } from "../../services/fulfillment";
+import { releaseRedemption } from "../../services/coupons";
 import { grantOfferAccess, revokeOfferAccess } from "../../services/access";
 import { sendSetPasswordLink } from "../../services/setPasswordLink";
 import { addInterval, type BillingInterval } from "../../services/pricing";
@@ -589,22 +590,47 @@ async function handleSessionCompleted(session: Stripe.Checkout.Session): Promise
   await settleSessionPayment(session);
 }
 
+/**
+ * Ends a pending order and gives back anything it was holding.
+ *
+ * The coupon redemption is the part that matters: it is claimed when the order
+ * is created, so a checkout that expires or fails must return it. Otherwise
+ * every abandoned cart permanently consumes one of a limited code's uses.
+ */
+async function closePendingOrder(
+  orderId: number | null,
+  sessionId: string,
+  status: "expired" | "failed"
+): Promise<void> {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const closed = await client.query<{ id: number }>(
+      `UPDATE orders SET status = $3, updated_at = now()
+        WHERE (id = $1 OR stripe_session_id = $2) AND status = 'pending'
+        RETURNING id`,
+      [orderId, sessionId, status]
+    );
+    for (const row of closed.rows) {
+      await releaseRedemption(client, row.id);
+    }
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => undefined);
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 async function handleSessionExpired(session: Stripe.Checkout.Session): Promise<void> {
   const meta = readMetadata(session.metadata);
-  await pool.query(
-    `UPDATE orders SET status = 'expired', updated_at = now()
-      WHERE (id = $1 OR stripe_session_id = $2) AND status = 'pending'`,
-    [meta.orderId ?? null, session.id]
-  );
+  await closePendingOrder(meta.orderId ?? null, session.id, "expired");
 }
 
 async function handleSessionAsyncFailed(session: Stripe.Checkout.Session): Promise<void> {
   const meta = readMetadata(session.metadata);
-  await pool.query(
-    `UPDATE orders SET status = 'failed', updated_at = now()
-      WHERE (id = $1 OR stripe_session_id = $2) AND status <> 'paid'`,
-    [meta.orderId ?? null, session.id]
-  );
+  await closePendingOrder(meta.orderId ?? null, session.id, "failed");
 }
 
 /* ---------------------------------------------------------- payment intents */

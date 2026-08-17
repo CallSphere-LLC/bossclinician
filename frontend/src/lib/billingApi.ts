@@ -2,201 +2,244 @@
  * Billing & purchases client.
  *
  * Sits on `memberRequest` so it shares the one access token, the one
- * single-flight refresh and the one error shape with every other member
- * screen. Nothing here manages auth; it only knows the shape of the money.
+ * single-flight refresh and the one error shape with every other member screen.
+ * Nothing here manages auth; it only knows the shape of the money.
  *
- * Every amount crossing this boundary is an integer of minor currency units
- * and every total is calculated server-side. The client never multiplies an
+ * Every amount crossing this boundary is an integer of minor currency units and
+ * every total is calculated server-side. Nothing in this file multiplies an
  * instalment by a count or subtracts a refund from a total: the backend owns
- * that arithmetic, and a second implementation up here is how the two figures
- * start disagreeing on a customer's receipt.
+ * that arithmetic, and a second implementation up here is how two figures start
+ * disagreeing on a customer's receipt.
  */
 
-import { memberRequest } from "@/lib/memberApi";
+import { getAccessToken, memberRequest, MemberApiError } from "@/lib/memberApi";
 import { formatCurrency } from "@/lib/format";
 
-/* ── Shared vocabulary ──────────────────────────────────────────────────── */
-
-export type BillingInterval = "day" | "week" | "month" | "year";
-
-/* ── The card on file ───────────────────────────────────────────────────── */
-
-export interface CardOnFile {
-  /** "Visa", "Mastercard" — already title-cased for display by the server. */
-  brand: string;
-  last4: string;
-  expMonth: number | null;
-  expYear: number | null;
-}
-
-export interface CardOnFileResponse {
-  card: CardOnFile | null;
-}
-
-/** Where to send the member to type a new card. Always a Stripe-hosted page. */
-export interface CardUpdateSession {
-  url: string;
-}
-
 /* ── Subscriptions ──────────────────────────────────────────────────────── */
-
-export type SubscriptionState =
-  | "trialing"
-  | "active"
-  | "past_due"
-  | "paused"
-  | "canceled"
-  | "incomplete"
-  | "unpaid";
 
 export interface MemberSubscription {
   id: number;
   /** Copied at purchase, so a renamed offer does not rewrite history. */
-  title: string;
-  state: SubscriptionState;
+  planName: string;
+  status: string;
   amountCents: number;
   currency: string;
-  interval: BillingInterval;
+  interval: string;
   intervalCount: number;
+  currentPeriodStart: string | null;
   currentPeriodEnd: string | null;
-  cancelAtPeriodEnd: boolean;
   trialEndsAt: string | null;
-  pausedAt: string | null;
+  cancelAtPeriodEnd: boolean;
   canceledAt: string | null;
+  paused: boolean;
+  pausedAt: string | null;
+  endedAt: string | null;
+  cancelReason: string;
+  cancelFeedback: string;
+  /** Null whenever nothing is due: paused, ending, or already ended. */
+  nextChargeAt: string | null;
+  nextChargeAmountCents: number | null;
+  createdAt: string;
 }
 
 /**
- * Why someone left, captured as a fixed set rather than free text: the whole
- * point of asking is being able to count the answers later.
+ * Why someone is leaving, as a closed list.
  *
- * The values are what the server stores; only the labels are ever on screen.
+ * The options are served alongside the subscriptions rather than written out
+ * here, because the endpoint validates the answer against its own enum — a
+ * second copy in the frontend is a form that silently stops submitting the day
+ * the two drift.
  */
-export const CANCEL_REASONS = [
-  { value: "too_expensive", label: "It costs more than I can spend right now" },
-  { value: "not_using", label: "I am not using it" },
-  { value: "missing_feature", label: "Something I needed is missing" },
-  { value: "found_alternative", label: "I found something that suits me better" },
-  { value: "temporary_pause", label: "I only need a break for a while" },
-  { value: "other", label: "Something else" },
-] as const;
+export interface CancelReasonOption {
+  value: string;
+  label: string;
+}
 
-export type CancelReason = (typeof CANCEL_REASONS)[number]["value"];
+export interface SubscriptionsResponse {
+  subscriptions: MemberSubscription[];
+  cancelReasons: CancelReasonOption[];
+}
 
 export interface CancelSubscriptionInput {
-  reason: CancelReason;
-  /** Optional free text. Sent trimmed, or omitted when the member left it blank. */
+  reason: string;
+  /** Required for "something else", optional otherwise. Sent trimmed. */
   feedback?: string;
 }
 
 /* ── Payment plans ──────────────────────────────────────────────────────── */
 
-export type PaymentPlanState = "active" | "completed" | "past_due" | "canceled";
+export interface PlanInstallment {
+  sequence: number;
+  amountCents: number;
+  dueAt: string | null;
+  paidAt: string | null;
+  status: string;
+}
 
 export interface MemberPaymentPlan {
   id: number;
-  title: string;
-  state: PaymentPlanState;
+  offerTitle: string;
+  status: string;
   installmentCents: number;
   installmentCount: number;
   installmentsPaid: number;
-  /** Server-calculated so it always reconciles with the charges taken. */
-  totalCents: number;
-  remainingCents: number;
+  /** "2 of 3 payments made" — built server-side so every screen says it once. */
+  progressLabel: string;
   currency: string;
-  interval: BillingInterval;
+  interval: string;
   intervalCount: number;
+  remainingCents: number;
+  remainingInstallmentCount: number;
   nextChargeAt: string | null;
+  nextChargeAmountCents: number | null;
   completedAt: string | null;
+  canceledAt: string | null;
+  createdAt: string;
+  installments: PlanInstallment[];
 }
 
 /* ── Invoices ───────────────────────────────────────────────────────────── */
 
-export type InvoiceState = "paid" | "open" | "void" | "uncollectible" | "draft";
-
 export interface MemberInvoice {
   id: number;
-  /** Human invoice number for an expense claim. Empty when none was issued. */
-  number: string;
-  description: string;
-  amountPaidCents: number;
+  /** The reference an expense claim needs. Null when none was issued. */
+  number: string | null;
+  status: string;
   currency: string;
-  state: InvoiceState;
-  paidAt: string | null;
-  createdAt: string;
+  amountPaidCents: number;
+  amountDueCents: number;
+  taxCents: number;
+  /** Stripe's own copies. Null for anything invoiced outside Stripe. */
+  hostedInvoiceUrl: string | null;
+  pdfUrl: string | null;
   periodStart: string | null;
   periodEnd: string | null;
-  /** Stripe-hosted, unguessable, safe to link straight from the page. */
-  hostedInvoiceUrl: string;
-  pdfUrl: string;
+  paidAt: string | null;
+  createdAt: string;
+  orderId: number | null;
+  subscriptionId: number | null;
+  paymentPlanId: number | null;
+  /** Our own printable receipt. Authenticated — see `showReceipt`. */
+  receiptUrl: string;
+}
+
+export interface InvoicesPage {
+  invoices: MemberInvoice[];
+  total: number;
+  limit: number;
+  offset: number;
 }
 
 /* ── Purchases ──────────────────────────────────────────────────────────── */
 
-export type PurchaseState = "paid" | "pending" | "failed" | "expired";
-
-export interface PurchaseItem {
-  id: number;
+export interface OrderItem {
   title: string;
+  /** Whether this line was the offer itself, an added extra, or an upsell. */
+  kind: string;
   quantity: number;
+  unitCents: number;
   amountCents: number;
-  /** Where this landed in the library. Empty when it is not a thing to open. */
-  libraryPath: string;
 }
 
-export interface PurchaseRefund {
-  id: number;
-  amountCents: number;
-  refundedAt: string;
-  /** Whether the refund also closed access to what was bought. */
-  revokedAccess: boolean;
-}
-
-export interface MemberPurchase {
+export interface MemberOrder {
   id: number;
   title: string;
-  purchasedAt: string;
-  state: PurchaseState;
+  offerSlug: string | null;
+  status: string;
+  currency: string;
   subtotalCents: number;
   discountCents: number;
   taxCents: number;
   totalCents: number;
   refundedCents: number;
-  currency: string;
-  /** The code the member typed, shown back to them beside their discount. */
   couponCode: string;
+  source: string;
+  createdAt: string;
+  items: OrderItem[];
+}
+
+export interface OrderTransaction {
+  id: number;
+  kind: string;
+  status: string;
+  amountCents: number;
+  currency: string;
   cardBrand: string;
   cardLast4: string;
-  items: PurchaseItem[];
-  refunds: PurchaseRefund[];
-  /** Stripe-hosted receipt. Empty for an order Yvette entered by hand. */
-  receiptUrl: string;
+  methodType: string;
+  failureReason: string;
+  occurredAt: string;
+}
+
+export interface OrderRefund {
+  id: number;
+  amountCents: number;
+  currency: string;
+  reason: string;
+  /** Whether the refund also closed access to what it covered. */
+  accessRemoved: boolean;
+  createdAt: string;
+}
+
+export interface MemberOrderDetail extends MemberOrder {
+  transactions: OrderTransaction[];
+  refunds: OrderRefund[];
+}
+
+export interface OrdersPage {
+  orders: MemberOrder[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+/* ── The card on file ───────────────────────────────────────────────────── */
+
+/**
+ * Where to send someone to type a new card.
+ *
+ * Stripe's hosted portal when one is configured, and a SetupIntent for our own
+ * Payment Element when it is not. Exactly one of the two fields is filled in.
+ */
+export interface PaymentMethodSession {
+  type: "portal" | "setup_intent";
+  url: string | null;
+  clientSecret: string | null;
 }
 
 /* ── Calls ──────────────────────────────────────────────────────────────── */
 
 /*
- * Every path here hangs off the already-authenticated `/api/member` router, and
- * every read is scoped to the signed-in member server-side — the client never
- * passes an owner along with a row it wants.
+ * Every path hangs off the already-authenticated `/api/member` router, and every
+ * read is scoped to the signed-in member server-side — nothing here passes an
+ * owner along with the row it wants.
  *
  * The billing screen also hides the write actions while an admin is viewing
  * someone's account, but that is a courtesy, not the boundary: the server
- * refuses a state change made through an impersonated session, so nothing here
+ * refuses a billing change made through an impersonated session, so nothing
  * depends on the button being disabled.
  */
+
+interface PageQuery {
+  limit?: number;
+  offset?: number;
+}
+
+function pageQuery({ limit, offset }: PageQuery): string {
+  const params = new URLSearchParams();
+  if (limit !== undefined) params.set("limit", String(limit));
+  if (offset !== undefined) params.set("offset", String(offset));
+  const query = params.toString();
+  return query ? `?${query}` : "";
+}
+
 export const billingApi = {
-  cardOnFile: () => memberRequest<CardOnFileResponse>("/member/billing/payment-method"),
+  subscriptions: () => memberRequest<SubscriptionsResponse>("/member/billing/subscriptions"),
 
-  /** Returns the hosted page to send the member to; it does not save a card. */
-  startCardUpdate: () =>
-    memberRequest<CardUpdateSession>("/member/billing/payment-method", { method: "PUT" }),
-
-  subscriptions: () => memberRequest<MemberSubscription[]>("/member/billing/subscriptions"),
-
-  /** Cancels at the end of the period already paid for, never mid-period. */
+  /** Ends at the close of the period already paid for, never the same day. */
   cancelSubscription: (id: number, input: CancelSubscriptionInput) =>
-    memberRequest<MemberSubscription>(`/member/billing/subscriptions/${id}`, {
-      method: "DELETE",
+    memberRequest<MemberSubscription>(`/member/billing/subscriptions/${id}/cancel`, {
+      method: "POST",
       body: JSON.stringify(input),
     }),
 
@@ -210,24 +253,98 @@ export const billingApi = {
       method: "POST",
     }),
 
-  paymentPlans: () => memberRequest<MemberPaymentPlan[]>("/member/billing/payment-plans"),
+  paymentPlans: () =>
+    memberRequest<{ paymentPlans: MemberPaymentPlan[] }>("/member/billing/payment-plans"),
 
-  invoices: () => memberRequest<MemberInvoice[]>("/member/billing/invoices"),
+  invoices: (page: PageQuery = {}) =>
+    memberRequest<InvoicesPage>(`/member/billing/invoices${pageQuery(page)}`),
 
-  purchases: () => memberRequest<MemberPurchase[]>("/member/purchases"),
+  orders: (page: PageQuery = {}) =>
+    memberRequest<OrdersPage>(`/member/billing/orders${pageQuery(page)}`),
+
+  order: (id: number) => memberRequest<MemberOrderDetail>(`/member/billing/orders/${id}`),
+
+  /** Starts a card update; it does not save anything by itself. */
+  startPaymentMethodUpdate: () =>
+    memberRequest<PaymentMethodSession>("/member/billing/payment-method/session", {
+      method: "POST",
+    }),
 };
+
+/* ── Receipts ───────────────────────────────────────────────────────────── */
+
+/** Thrown when the browser refuses the window, so the page can say why. */
+export class PopupBlockedError extends Error {
+  constructor() {
+    super("popup blocked");
+  }
+}
+
+/**
+ * The receipt is a document, not JSON, so it cannot travel through
+ * `memberRequest` — but it is Bearer-authenticated like everything else, which
+ * rules out a plain link too. One ordinary call through `memberRequest` is what
+ * refreshes an expired token: a second refresh implementation here would rotate
+ * the cookie behind that one's back, and each would then read the other's
+ * rotation as a stolen token.
+ */
+async function fetchReceipt(receiptUrl: string): Promise<string> {
+  const send = async (): Promise<Response> => {
+    const token = getAccessToken();
+    return fetch(receiptUrl, {
+      credentials: "include",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+  };
+
+  let res = await send();
+  if (res.status === 401) {
+    await memberRequest<unknown>("/auth/me");
+    res = await send();
+  }
+  if (!res.ok) throw new MemberApiError("We could not open that receipt.", res.status);
+  return res.text();
+}
+
+/**
+ * Opens a receipt in its own tab, ready to print or save as a PDF.
+ *
+ * The window is claimed synchronously, before the fetch: opening it afterwards
+ * is not something the browser can attribute to the click, and it gets
+ * swallowed as an unsolicited popup. Callers must therefore invoke this
+ * straight from the event handler rather than after an await of their own.
+ */
+export async function showReceipt(receiptUrl: string): Promise<void> {
+  const tab = window.open("", "_blank");
+  if (!tab) throw new PopupBlockedError();
+  // A blob URL carries this origin, so the receipt would otherwise be able to
+  // reach back through `opener` into the signed-in app.
+  tab.opener = null;
+
+  try {
+    const html = await fetchReceipt(receiptUrl);
+    const url = URL.createObjectURL(new Blob([html], { type: "text/html" }));
+    tab.location.replace(url);
+    // Long enough for the tab to have loaded it, short enough not to hold the
+    // document in memory for the rest of the session.
+    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  } catch (err) {
+    tab.close();
+    throw err;
+  }
+}
 
 /* ── Turning the data into English ──────────────────────────────────────── */
 
 /*
  * These live beside the types rather than in a page because the billing screen
- * and the cancellation dialog have to describe the same subscription in the
- * same words — a plan that reads "$49.00 a month" on the page and "$49/mo" in
- * the dialog looks like two different plans at the moment someone is deciding
- * whether to keep it.
+ * and the cancellation dialog have to describe the same plan in the same words
+ * — one that reads "$49.00 a month" on the page and "$49/mo" in the dialog
+ * looks like two different plans at the moment someone is deciding whether to
+ * keep it.
  */
 
-const INTERVAL_NOUN: Record<BillingInterval, string> = {
+const INTERVAL_NOUN: Record<string, string> = {
   day: "day",
   week: "week",
   month: "month",
@@ -235,8 +352,9 @@ const INTERVAL_NOUN: Record<BillingInterval, string> = {
 };
 
 /** "a month" / "every 3 months" — reads naturally after a price. */
-export function describeInterval(interval: BillingInterval, count: number): string {
+export function describeInterval(interval: string, count: number): string {
   const noun = INTERVAL_NOUN[interval];
+  if (!noun) return count > 1 ? `every ${count} payments apart` : "regularly";
   if (count <= 1) return `a ${noun}`;
   return `every ${count} ${noun}s`;
 }
@@ -245,7 +363,7 @@ export function describeInterval(interval: BillingInterval, count: number): stri
 export function describeRecurringPrice(
   amountCents: number,
   currency: string,
-  interval: BillingInterval,
+  interval: string,
   intervalCount: number,
 ): string {
   return `${formatCurrency(amountCents, currency)} ${describeInterval(interval, intervalCount)}`;
@@ -259,4 +377,15 @@ export function describePlanShape(plan: MemberPaymentPlan): string {
       ? `one ${describeInterval(plan.interval, 1)}`
       : describeInterval(plan.interval, plan.intervalCount);
   return `${plan.installmentCount} payments of ${each}, ${cadence}`;
+}
+
+/**
+ * The server's own wording wherever it sent some — it knows why it refused,
+ * and it phrases its refusals for the customer rather than for a log.
+ */
+export function billingErrorMessage(err: unknown, fallback: string): string {
+  if (err instanceof PopupBlockedError) {
+    return "Your browser blocked the new tab. Allow pop-ups for this site and try again.";
+  }
+  return err instanceof MemberApiError && err.message ? err.message : fallback;
 }

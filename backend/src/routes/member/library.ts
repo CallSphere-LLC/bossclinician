@@ -240,11 +240,17 @@ memberLibraryRouter.get(
       };
     });
 
-    const groups = KIND_ORDER.map((kind) => ({
-      kind,
-      label: KIND_LABELS[kind] ?? "Other",
-      items: items.filter((item) => item.kind === kind),
-    })).filter((group) => group.items.length > 0);
+    // Anything owned whose kind KIND_ORDER has not heard of lands in a group at
+    // the end rather than vanishing from the page — a shelf that quietly omits
+    // something the customer paid for is the one failure here nobody would spot.
+    const kinds = [...new Set([...KIND_ORDER, ...items.map((item) => item.kind)])];
+    const groups = kinds
+      .map((kind) => ({
+        kind,
+        label: KIND_LABELS[kind] ?? "Other",
+        items: items.filter((item) => item.kind === kind),
+      }))
+      .filter((group) => group.items.length > 0);
 
     res.json({
       items,

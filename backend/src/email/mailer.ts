@@ -20,11 +20,19 @@ function getTransporter(): Transporter {
   return transporter;
 }
 
+export interface MailAttachment {
+  filename: string;
+  content: string;
+  contentType: string;
+}
+
 export interface SendMailInput {
   to: string;
   subject: string;
   text: string;
   html?: string;
+  /** Calendar invitations, so a booking lands in the reader's diary in one click. */
+  attachments?: MailAttachment[];
 }
 
 /** Sends mail; on any failure (or unconfigured SMTP) logs instead of throwing. */
@@ -38,6 +46,7 @@ export async function sendMail(input: SendMailInput): Promise<void> {
       subject: input.subject,
       text: input.text,
       html: input.html ?? `<p>${input.text}</p>`,
+      attachments: input.attachments,
     });
     if (!env.smtp.host) {
       // jsonTransport puts the whole message in info.message (a Buffer)

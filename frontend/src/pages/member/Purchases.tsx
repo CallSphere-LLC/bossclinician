@@ -1,42 +1,53 @@
 import { useEffect, useState } from "react";
-import { ArrowUpRight, Receipt } from "lucide-react";
+import { toast } from "sonner";
+import { ArrowUpRight, ChevronDown, Loader2, Receipt } from "lucide-react";
 import { Seo } from "@/components/Seo";
 import { MemberShell } from "@/components/member/MemberShell";
 import { GlassCard } from "@/components/luxe/GlassCard";
 import { LuxeButton, LuxePill } from "@/components/luxe/LuxeButton";
+import { cn } from "@/lib/cn";
 import { formatCurrency, formatDate } from "@/lib/format";
-import { billingApi, type MemberPurchase, type PurchaseItem } from "@/lib/billingApi";
+import {
+  billingApi,
+  billingErrorMessage,
+  showReceipt,
+  type MemberOrder,
+  type MemberOrderDetail,
+} from "@/lib/billingApi";
 
 /**
  * Purchases.
  *
  * The member's own record of what they have paid this business, which makes
  * completeness the whole point: a refunded order stays on the list with the
- * refund written next to it, and a failed payment says plainly that nothing was
- * taken. Quietly dropping either would leave someone comparing this page against
- * a bank statement and finding it wrong.
+ * refund written next to it, in the same words a bank statement would use.
+ * Quietly dropping it would leave someone comparing the two and finding this
+ * one wrong.
  *
- * Anything that granted access carries a link into the library, because "where
- * is the thing I bought" is the question this page is opened to answer far more
- * often than "what did it cost".
+ * Anything still theirs carries a link into the library, because "where is the
+ * thing I bought" is the question this page is opened to answer far more often
+ * than "what did it cost".
  */
+
+/** Enough to cover a year of buying without a second request for most people. */
+const PAGE_SIZE = 25;
+
 export default function Purchases() {
-  const [purchases, setPurchases] = useState<MemberPurchase[] | null>(null);
+  const [orders, setOrders] = useState<MemberOrder[] | null>(null);
+  const [total, setTotal] = useState(0);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState("");
+  /** Invoice id per order, for the receipt link. Absent until it loads. */
+  const [receipts, setReceipts] = useState<Map<number, string>>(new Map());
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        const rows = await billingApi.purchases();
+        const page = await billingApi.orders({ limit: PAGE_SIZE });
         if (cancelled) return;
-        // Newest first is the promise this page makes; ordering it here keeps
-        // that true regardless of how the list arrives.
-        setPurchases(
-          [...rows].sort(
-            (a, b) => new Date(b.purchasedAt).getTime() - new Date(a.purchasedAt).getTime(),
-          ),
-        );
+        setOrders(page.orders);
+        setTotal(page.total);
         setError("");
       } catch {
         if (!cancelled) {
@@ -48,6 +59,45 @@ export default function Purchases() {
       cancelled = true;
     };
   }, []);
+
+  // Separate on purpose: a receipt that will not load is a missing link on one
+  // row, not a reason to withhold somebody's purchase history.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const page = await billingApi.invoices({ limit: 100 });
+        if (cancelled) return;
+        const byOrder = new Map<number, string>();
+        for (const invoice of page.invoices) {
+          if (invoice.orderId !== null && !byOrder.has(invoice.orderId)) {
+            byOrder.set(invoice.orderId, invoice.receiptUrl);
+          }
+        }
+        setReceipts(byOrder);
+      } catch {
+        // No receipt links this time round.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const loadMore = async () => {
+    setLoadingMore(true);
+    try {
+      const page = await billingApi.orders({ limit: PAGE_SIZE, offset: orders?.length ?? 0 });
+      setOrders((prev) => [...(prev ?? []), ...page.orders]);
+      setTotal(page.total);
+    } catch (err) {
+      toast.error(billingErrorMessage(err, "We could not load the rest just now."));
+    } finally {
+      setLoadingMore(false);
+    }
+  };
+
+  const hasMore = orders !== null && orders.length < total;
 
   return (
     <MemberShell
@@ -65,23 +115,38 @@ export default function Purchases() {
           </GlassCard>
         )}
 
-        {!error && purchases === null && (
+        {!error && orders === null && (
           <GlassCard spotlight={false} interactive={false} className="p-6 sm:p-8">
             <p className="text-sm text-orchid-dim">Loading your purchases…</p>
           </GlassCard>
         )}
 
-        {!error && purchases !== null && purchases.length === 0 && <NothingYet />}
+        {!error && orders !== null && orders.length === 0 && <NothingYet />}
 
-        {!error && purchases !== null && purchases.length > 0 && (
+        {!error && orders !== null && orders.length > 0 && (
           <>
             <ul className="grid gap-5">
-              {purchases.map((purchase) => (
-                <li key={purchase.id}>
-                  <PurchaseCard purchase={purchase} />
+              {orders.map((order) => (
+                <li key={order.id}>
+                  <PurchaseCard order={order} receiptUrl={receipts.get(order.id) ?? null} />
                 </li>
               ))}
             </ul>
+
+            {hasMore && (
+              <div className="mt-8 flex justify-center">
+                <LuxeButton
+                  type="button"
+                  variant="glass"
+                  size="sm"
+                  disabled={loadingMore}
+                  onClick={() => void loadMore()}
+                >
+                  {loadingMore && <Loader2 aria-hidden className="size-4 animate-spin" />}
+                  {loadingMore ? "Loading" : "Show earlier purchases"}
+                </LuxeButton>
+              </div>
+            )}
 
             <p className="mt-8 flex flex-wrap items-center gap-x-2 text-sm text-orchid-dim">
               Your plans, instalments and the card you pay with live in
@@ -97,7 +162,7 @@ export default function Purchases() {
 }
 
 /**
- * The `quiet` variant carries no padding of its own, so a text link in a list
+ * The `quiet` variant carries no padding of its own, so a text action in a list
  * needs the tap target adding back — these rows are read on a phone.
  */
 const QUIET_LINK = "min-h-[44px] text-[0.72rem] tracking-[0.14em]";
@@ -131,122 +196,225 @@ function NothingYet() {
   );
 }
 
-function PurchaseCard({ purchase }: { purchase: MemberPurchase }) {
-  const { pill, note } = describePurchase(purchase);
-  const charged = purchase.state === "paid";
-  const openable = purchase.items.filter((item) => item.libraryPath !== "");
+function PurchaseCard({ order, receiptUrl }: { order: MemberOrder; receiptUrl: string | null }) {
+  const [detail, setDetail] = useState<MemberOrderDetail | null>(null);
+  const [open, setOpen] = useState(false);
+  const [loadingDetail, setLoadingDetail] = useState(false);
+
+  const detailId = `purchase-detail-${order.id}`;
+  const refundedInFull = order.refundedCents > 0 && order.refundedCents >= order.totalCents;
+  const partlyRefunded = order.refundedCents > 0 && !refundedInFull;
+  const stillYours = order.refundedCents < order.totalCents;
+
+  const toggle = async () => {
+    if (open) {
+      setOpen(false);
+      return;
+    }
+    setOpen(true);
+    if (detail !== null || loadingDetail) return;
+
+    setLoadingDetail(true);
+    try {
+      setDetail(await billingApi.order(order.id));
+    } catch (err) {
+      toast.error(billingErrorMessage(err, "We could not load the detail of that one just now."));
+      setOpen(false);
+    } finally {
+      setLoadingDetail(false);
+    }
+  };
+
+  // Not awaited before the window is claimed: `showReceipt` opens the tab
+  // first, and anything awaited ahead of it costs the click its permission.
+  const openReceipt = () => {
+    if (receiptUrl === null) return;
+    void showReceipt(receiptUrl).catch((err: unknown) => {
+      toast.error(billingErrorMessage(err, "We could not open that receipt just now."));
+    });
+  };
 
   return (
     <GlassCard spotlight={false} interactive={false} className="p-6 sm:p-7">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-8">
         <div className="min-w-0">
           <h2 className="flex flex-wrap items-center gap-2.5 font-display text-lg text-white">
-            {purchase.title}
-            {pill && <LuxePill accent={pill.accent}>{pill.label}</LuxePill>}
+            {order.title}
+            {refundedInFull && <LuxePill accent="neutral">Refunded</LuxePill>}
+            {partlyRefunded && <LuxePill accent="neutral">Partly refunded</LuxePill>}
           </h2>
-          <p className="mt-1.5 text-xs text-orchid-faint">
-            {formatDate(purchase.purchasedAt)}
-            {purchase.cardBrand && purchase.cardLast4 && (
-              <>
-                {" · "}
-                <span className="capitalize">{purchase.cardBrand}</span> ending{" "}
-                {purchase.cardLast4}
-              </>
-            )}
-          </p>
+          <p className="mt-1.5 text-xs text-orchid-faint">{formatDate(order.createdAt)}</p>
         </div>
 
         <div className="shrink-0 sm:text-right">
           <p className="font-display text-xl text-white">
-            {formatCurrency(purchase.totalCents, purchase.currency)}
+            {formatCurrency(order.totalCents, order.currency)}
           </p>
           <p className="mt-0.5 text-[0.68rem] font-semibold uppercase tracking-[0.14em] text-orchid-faint">
-            {charged ? "Paid" : "Not charged"}
+            {refundedInFull ? "Refunded" : "Paid"}
           </p>
         </div>
       </div>
 
-      {note && <p className="copy-luxe mt-4 text-sm">{note}</p>}
-
-      {purchase.items.length > 1 && (
+      {order.items.length > 1 && (
         <ul className="mt-5 divide-y divide-white/[0.05] border-y border-white/[0.05]">
-          {purchase.items.map((item) => (
+          {order.items.map((item, index) => (
             <li
-              key={item.id}
+              key={`${item.title}-${index}`}
               className="flex flex-wrap items-center justify-between gap-x-6 gap-y-1.5 py-3"
             >
               <span className="min-w-0 text-sm text-orchid">
                 {item.title}
                 {item.quantity > 1 && ` × ${item.quantity}`}
+                {describeItemKind(item.kind) && (
+                  <span className="ml-2 text-xs text-orchid-faint">
+                    {describeItemKind(item.kind)}
+                  </span>
+                )}
               </span>
-              <span className="flex items-center gap-5">
-                <span className="text-sm text-orchid-dim">
-                  {formatCurrency(item.amountCents, purchase.currency)}
-                </span>
-                <ItemLibraryLink item={item} />
+              <span className="text-sm text-orchid-dim">
+                {formatCurrency(item.amountCents, order.currency)}
               </span>
             </li>
           ))}
         </ul>
       )}
 
-      <MoneyBreakdown purchase={purchase} />
+      <MoneyBreakdown order={order} />
 
-      {purchase.refunds.length > 0 && (
-        <ul className="mt-4 grid gap-1.5">
-          {purchase.refunds.map((refund) => (
-            <li key={refund.id} className="text-sm text-lilac">
-              {formatCurrency(refund.amountCents, purchase.currency)} was refunded to you on{" "}
-              {formatDate(refund.refundedAt)}.
-              {refund.revokedAccess && " Access to what it covered was closed at the same time."}
-            </li>
-          ))}
-        </ul>
+      {order.refundedCents > 0 && (
+        <p className="mt-4 text-sm text-lilac">
+          {refundedInFull
+            ? `All ${formatCurrency(order.refundedCents, order.currency)} of this was refunded to you.`
+            : `${formatCurrency(order.refundedCents, order.currency)} of this was refunded to you.`}
+        </p>
       )}
 
-      {/* Skipped entirely for an order that was never charged and granted
-          nothing — an empty row of actions is just a gap in the card. */}
-      {(charged || openable.length > 0) && (
-        <div className="mt-5 flex flex-wrap items-center gap-x-6 gap-y-3">
-          {purchase.items.length === 1 && <ItemLibraryLink item={purchase.items[0]} />}
+      <div className="mt-5 flex flex-wrap items-center gap-x-6 gap-y-3">
+        {stillYours && (
+          <LuxeButton to="/library" variant="quiet" className={QUIET_LINK}>
+            <span className="inline-flex items-center gap-1.5">
+              Open in your library
+              <ArrowUpRight aria-hidden className="size-3.5" />
+            </span>
+          </LuxeButton>
+        )}
 
-          {purchase.items.length > 1 && openable.length > 0 && (
-            <LuxeButton to="/library" variant="quiet" className={QUIET_LINK}>
-              Open your library
-            </LuxeButton>
-          )}
+        {receiptUrl !== null ? (
+          <LuxeButton
+            type="button"
+            variant="quiet"
+            className={QUIET_LINK}
+            onClick={openReceipt}
+          >
+            View receipt
+          </LuxeButton>
+        ) : (
+          <span className="text-xs text-orchid-faint">Ask us if you need a receipt for this one</span>
+        )}
 
-          {purchase.receiptUrl ? (
-            <LuxeButton
-              href={purchase.receiptUrl}
-              variant="quiet"
-              target="_blank"
-              className={QUIET_LINK}
-            >
-              View receipt
-            </LuxeButton>
-          ) : (
-            charged && (
-              <span className="text-xs text-orchid-faint">
-                Ask us if you need a receipt for this one
-              </span>
-            )
+        <button
+          type="button"
+          aria-expanded={open}
+          aria-controls={detailId}
+          onClick={() => void toggle()}
+          className={cn(
+            "inline-flex min-h-[44px] items-center gap-1.5 text-[0.72rem] font-semibold uppercase",
+            "tracking-[0.14em] text-orchid transition-colors duration-300 hover:text-gold",
+            "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold",
           )}
+        >
+          {open ? "Hide the detail" : "See the detail"}
+          <ChevronDown
+            aria-hidden
+            className={cn("size-3.5 transition-transform duration-300", open && "rotate-180")}
+          />
+        </button>
+      </div>
+
+      {open && (
+        <div id={detailId} aria-live="polite" className="mt-5 border-t border-white/[0.06] pt-5">
+          {loadingDetail && <p className="text-sm text-orchid-dim">Loading the detail…</p>}
+          {detail && <PurchaseDetail detail={detail} />}
         </div>
       )}
     </GlassCard>
   );
 }
 
-function ItemLibraryLink({ item }: { item: PurchaseItem }) {
-  if (!item.libraryPath) return null;
+/** What an extra line on the order actually was, in the buyer's own terms. */
+function describeItemKind(kind: string): string {
+  if (kind === "bump") return "added at checkout";
+  if (kind === "upsell") return "added just after";
+  return "";
+}
+
+function PurchaseDetail({ detail }: { detail: MemberOrderDetail }) {
+  // Refunds have their own section below, where they can say what happened to
+  // the access as well as to the money.
+  const payments = detail.transactions.filter((t) => t.kind === "payment");
+
   return (
-    <LuxeButton to={item.libraryPath} variant="quiet" className={QUIET_LINK}>
-      <span className="inline-flex items-center gap-1.5">
-        Open
-        <ArrowUpRight aria-hidden className="size-3.5" />
-      </span>
-    </LuxeButton>
+    <div className="grid gap-4">
+      {payments.length > 0 && (
+        <div>
+          <h3 className="text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-orchid">
+            Payments
+          </h3>
+          <ul className="mt-2 grid gap-1.5">
+            {payments.map((payment) => (
+              <li key={payment.id} className="text-sm text-orchid-dim">
+                {payment.status === "succeeded" ? (
+                  <>
+                    {formatCurrency(payment.amountCents, payment.currency)} paid on{" "}
+                    {formatDate(payment.occurredAt)}
+                    {payment.cardLast4 && (
+                      <>
+                        {" · "}
+                        {payment.cardBrand ? (
+                          <span className="capitalize">{payment.cardBrand}</span>
+                        ) : (
+                          "card"
+                        )}{" "}
+                        ending {payment.cardLast4}
+                      </>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    A payment of {formatCurrency(payment.amountCents, payment.currency)} did not go
+                    through on {formatDate(payment.occurredAt)}. Nothing was taken.
+                  </>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {detail.refunds.length > 0 && (
+        <div>
+          <h3 className="text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-orchid">
+            Refunds
+          </h3>
+          <ul className="mt-2 grid gap-1.5">
+            {detail.refunds.map((refund) => (
+              <li key={refund.id} className="text-sm text-lilac">
+                {formatCurrency(refund.amountCents, refund.currency)} was refunded to you on{" "}
+                {formatDate(refund.createdAt)}.
+                {refund.accessRemoved && " Access to what it covered was closed at the same time."}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {payments.length === 0 && detail.refunds.length === 0 && (
+        <p className="text-sm text-orchid-dim">
+          This one was arranged for you directly rather than paid through the website.
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -254,33 +422,25 @@ function ItemLibraryLink({ item }: { item: PurchaseItem }) {
  * Only the lines that actually happened. A row of "Discount $0.00 / Tax $0.00"
  * on every receipt trains people to stop reading the one that matters.
  */
-function MoneyBreakdown({ purchase }: { purchase: MemberPurchase }) {
-  const hasDiscount = purchase.discountCents > 0;
-  const hasTax = purchase.taxCents > 0;
-  const hasRefund = purchase.refundedCents > 0;
-  if (!hasDiscount && !hasTax && !hasRefund) return null;
+function MoneyBreakdown({ order }: { order: MemberOrder }) {
+  const hasDiscount = order.discountCents > 0;
+  const hasTax = order.taxCents > 0;
+  if (!hasDiscount && !hasTax) return null;
 
   return (
     <dl className="mt-5 grid max-w-xs gap-1.5 text-sm">
-      <Line label="Before discount" value={formatCurrency(purchase.subtotalCents, purchase.currency)} />
+      {/* An order taken by the older single-course checkout never recorded one. */}
+      {order.subtotalCents > 0 && (
+        <Line label="Before discount" value={formatCurrency(order.subtotalCents, order.currency)} />
+      )}
       {hasDiscount && (
         <Line
-          label={purchase.couponCode ? `Discount (${purchase.couponCode})` : "Discount"}
-          value={`−${formatCurrency(purchase.discountCents, purchase.currency)}`}
+          label={order.couponCode ? `Discount (${order.couponCode})` : "Discount"}
+          value={`−${formatCurrency(order.discountCents, order.currency)}`}
         />
       )}
-      {hasTax && <Line label="Tax" value={formatCurrency(purchase.taxCents, purchase.currency)} />}
-      <Line
-        label="You paid"
-        value={formatCurrency(purchase.totalCents, purchase.currency)}
-        emphasis
-      />
-      {hasRefund && (
-        <Line
-          label="Refunded"
-          value={`−${formatCurrency(purchase.refundedCents, purchase.currency)}`}
-        />
-      )}
+      {hasTax && <Line label="Tax" value={formatCurrency(order.taxCents, order.currency)} />}
+      <Line label="You paid" value={formatCurrency(order.totalCents, order.currency)} emphasis />
     </dl>
   );
 }
@@ -300,42 +460,4 @@ function Line({
       <dd className={emphasis ? "font-medium text-white" : "text-orchid"}>{value}</dd>
     </div>
   );
-}
-
-interface StatePill {
-  label: string;
-  accent: "neutral" | "gold" | "plum" | "green";
-}
-
-function describePurchase(purchase: MemberPurchase): { pill: StatePill | null; note: string } {
-  if (purchase.state === "failed") {
-    return {
-      pill: { label: "Payment did not go through", accent: "gold" },
-      note: "Nothing was taken from your card, so there is nothing to refund. You are welcome to try again whenever you like.",
-    };
-  }
-
-  if (purchase.state === "pending") {
-    return {
-      pill: { label: "Waiting on payment", accent: "gold" },
-      note: "We have not taken a payment for this yet. If you meant to buy it, starting the checkout again will pick up where you left off.",
-    };
-  }
-
-  if (purchase.state === "expired") {
-    return {
-      pill: { label: "Never completed", accent: "neutral" },
-      note: "This checkout was left unfinished, so nothing was charged.",
-    };
-  }
-
-  if (purchase.refundedCents >= purchase.totalCents && purchase.refundedCents > 0) {
-    return { pill: { label: "Refunded", accent: "neutral" }, note: "" };
-  }
-
-  if (purchase.refundedCents > 0) {
-    return { pill: { label: "Partly refunded", accent: "neutral" }, note: "" };
-  }
-
-  return { pill: null, note: "" };
 }

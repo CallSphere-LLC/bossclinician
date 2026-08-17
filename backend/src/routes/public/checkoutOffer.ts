@@ -11,7 +11,12 @@ import { stripe } from "../../stripe/client";
 import { env, stripeEnabled } from "../../config/env";
 import { optionalMember } from "../../middleware/memberAuth";
 import { safeEqual } from "../../auth/tokens";
-import { validateCoupon, type ValidatedCoupon } from "../../services/coupons";
+import {
+  claimRedemption,
+  releaseRedemption,
+  validateCoupon,
+  type ValidatedCoupon,
+} from "../../services/coupons";
 import { fulfillPayment } from "../../services/fulfillment";
 import { addInterval, computeOrderTotal, type OrderTotal } from "../../services/pricing";
 import {
@@ -273,23 +278,37 @@ async function loadOrderTotal(orderId: number): Promise<OrderTotal> {
  *
  * Reusing it keeps a returning customer's saved cards and receipts on one
  * record, which is also what lets an upsell charge a card entered months ago.
+ *
+ * That reuse is gated on an AUTHENTICATED member and nothing else. Matching on
+ * a submitted email would let a signed-out stranger type a customer's address
+ * and be handed that customer's Stripe id — and with it, their saved card. The
+ * concrete attack: post a trial subscription offer with the victim's email,
+ * abandon the tab, and Stripe bills the victim's default payment method when
+ * the trial ends, on a subscription they never agreed to. The same handle also
+ * makes the post-purchase upsell an off-session charge against their card.
+ *
+ * An unverified email address proves nothing, so it may not be used to reach an
+ * existing payment relationship. A guest gets a fresh customer; the records are
+ * merged later against the account they claim, where ownership is proven.
  */
 async function resolveStripeCustomerId(input: {
   memberId: number | null;
   email: string;
   name: string;
 }): Promise<string> {
-  const existing = await pool.query<{ stripe_customer_id: string }>(
-    `SELECT stripe_customer_id
-       FROM orders
-      WHERE stripe_customer_id IS NOT NULL
-        AND (($1::int IS NOT NULL AND member_id = $1) OR lower(email) = lower($2))
-      ORDER BY created_at DESC
-      LIMIT 1`,
-    [input.memberId, input.email]
-  );
-  const found = existing.rows[0]?.stripe_customer_id;
-  if (found) return found;
+  if (input.memberId !== null) {
+    const existing = await pool.query<{ stripe_customer_id: string }>(
+      `SELECT stripe_customer_id
+         FROM orders
+        WHERE stripe_customer_id IS NOT NULL
+          AND member_id = $1
+        ORDER BY created_at DESC
+        LIMIT 1`,
+      [input.memberId]
+    );
+    const found = existing.rows[0]?.stripe_customer_id;
+    if (found) return found;
+  }
 
   const customer = await stripe().customers.create({
     email: input.email,
@@ -468,6 +487,19 @@ async function createPendingOrder(input: PendingOrderInput): Promise<PendingOrde
       );
     }
 
+    // Inside the same transaction, while the coupon row is still locked. The
+    // check above only read a count; this is what makes the cap binding, and
+    // without it two shoppers reaching the last of a limited code both pass.
+    if (coupon) {
+      await claimRedemption(client, {
+        couponId: coupon.id,
+        orderId,
+        memberId: input.memberId,
+        email: input.email,
+        amountCents: total.discountCents,
+      });
+    }
+
     await client.query("COMMIT");
     return { orderId, total, coupon };
   } catch (err) {
@@ -478,12 +510,28 @@ async function createPendingOrder(input: PendingOrderInput): Promise<PendingOrde
   }
 }
 
-/** An order that never reached Stripe is dead, not waiting. */
+/**
+ * An order that never reached Stripe is dead, not waiting.
+ *
+ * Its coupon redemption goes back on the shelf: a customer who closed the tab
+ * must not permanently consume one of fifty launch codes.
+ */
 async function markOrderFailed(orderId: number): Promise<void> {
-  await pool.query(
-    `UPDATE orders SET status = 'failed', updated_at = now() WHERE id = $1 AND status = 'pending'`,
-    [orderId]
-  );
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query(
+      `UPDATE orders SET status = 'failed', updated_at = now() WHERE id = $1 AND status = 'pending'`,
+      [orderId]
+    );
+    await releaseRedemption(client, orderId);
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => undefined);
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 /* ---------------------------------------------------------------- checkout */
@@ -818,26 +866,30 @@ interface ParentOrderRow {
   stripe_payment_intent_id: string | null;
 }
 
-/** The card the parent order was paid with, so the upsell needs no re-entry. */
+/**
+ * The card the parent order was actually paid with, so the upsell needs no
+ * re-entry.
+ *
+ * Strictly the payment method on the parent's own PaymentIntent. Falling back
+ * to "any card on that Stripe customer" looks equivalent and is not: an order
+ * can reach `paid` without a payment ever being made — a $0 trial invoice does
+ * exactly that — leaving a valid receipt token for an order whose customer
+ * record was never charged. Listing the customer's cards from there turns the
+ * upsell into an off-session charge against a card the buyer never presented
+ * for this purchase.
+ *
+ * If this order did not move money, there is no card it earned the right to
+ * charge, and the customer is asked for one.
+ */
 async function savedPaymentMethodId(parent: ParentOrderRow): Promise<string | null> {
-  if (parent.stripe_payment_intent_id) {
-    const intent = await stripe().paymentIntents.retrieve(parent.stripe_payment_intent_id);
-    const method =
-      typeof intent.payment_method === "string"
-        ? intent.payment_method
-        : (intent.payment_method?.id ?? null);
-    if (method) return method;
-  }
+  if (!parent.stripe_payment_intent_id) return null;
 
-  if (parent.stripe_customer_id) {
-    const methods = await stripe().paymentMethods.list({
-      customer: parent.stripe_customer_id,
-      limit: 1,
-    });
-    return methods.data[0]?.id ?? null;
-  }
+  const intent = await stripe().paymentIntents.retrieve(parent.stripe_payment_intent_id);
+  if (intent.status !== "succeeded") return null;
 
-  return null;
+  return typeof intent.payment_method === "string"
+    ? intent.payment_method
+    : (intent.payment_method?.id ?? null);
 }
 
 /**

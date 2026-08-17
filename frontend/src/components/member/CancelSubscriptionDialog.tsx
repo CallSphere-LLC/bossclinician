@@ -9,12 +9,11 @@ import { cn } from "@/lib/cn";
 import { formatDate } from "@/lib/format";
 import {
   billingApi,
-  CANCEL_REASONS,
+  billingErrorMessage,
   describeRecurringPrice,
-  type CancelReason,
+  type CancelReasonOption,
   type MemberSubscription,
 } from "@/lib/billingApi";
-import { MemberApiError } from "@/lib/memberApi";
 
 /**
  * Cancellation, asked honestly.
@@ -23,31 +22,39 @@ import { MemberApiError } from "@/lib/memberApi";
  * actually means — access runs to the date already paid for and then stops, and
  * that sentence is in the first paragraph rather than a footnote. And it does
  * not hide the pause option behind the cancel confirmation, because a slow
- * month is the most common reason someone lands here and pausing is usually the
- * thing they actually wanted; making them cancel to discover that costs them
- * their place and costs the business the subscription.
+ * month is the most common reason someone lands here and pausing is usually
+ * what they actually wanted; making them cancel to discover that costs them
+ * their place and costs the business the plan.
  *
  * The reason is required because it is the only structured record of why people
- * leave. The free-text box beside it is optional, because a required essay just
- * teaches people to type "n/a".
+ * leave. The free-text box beside it is optional except under "something else",
+ * where it is the whole answer — a required essay everywhere else just teaches
+ * people to type "n/a".
  */
+
+/** The one option whose free text the server insists on. */
+const REASON_NEEDING_DETAIL = "other";
 
 interface CancelSubscriptionDialogProps {
   subscription: MemberSubscription;
-  /** Called with the server's updated subscription after cancel or pause. */
+  /** Served with the subscriptions, so the form offers what the server accepts. */
+  reasons: CancelReasonOption[];
+  /** Called with the server's updated plan after either cancelling or pausing. */
   onUpdated: (next: MemberSubscription) => void;
   onClose: () => void;
 }
 
 export function CancelSubscriptionDialog({
   subscription,
+  reasons,
   onUpdated,
   onClose,
 }: CancelSubscriptionDialogProps) {
   const reduceMotion = useReducedMotion();
-  const [reason, setReason] = useState<CancelReason | "">("");
+  const [reason, setReason] = useState("");
   const [feedback, setFeedback] = useState("");
   const [reasonError, setReasonError] = useState("");
+  const [feedbackError, setFeedbackError] = useState("");
   const [formError, setFormError] = useState("");
   const [busy, setBusy] = useState<"cancel" | "pause" | null>(null);
 
@@ -62,17 +69,26 @@ export function CancelSubscriptionDialog({
     ? formatDate(subscription.currentPeriodEnd)
     : null;
 
+  // Nothing to pause on a plan that is already paused or already ending.
+  const canPause = !subscription.paused && !subscription.cancelAtPeriodEnd;
+
   const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setFormError("");
 
     if (!reason) {
-      setReasonError("Please pick one so we know what to fix.");
+      setReasonError("Please pick one so we know what to put right.");
       return;
     }
     setReasonError("");
 
     const trimmed = feedback.trim();
+    if (reason === REASON_NEEDING_DETAIL && trimmed === "") {
+      setFeedbackError("Please tell us a little about why you are cancelling.");
+      return;
+    }
+    setFeedbackError("");
+
     setBusy("cancel");
     try {
       const next = await billingApi.cancelSubscription(subscription.id, {
@@ -86,11 +102,9 @@ export function CancelSubscriptionDialog({
           : "Cancelled. You will not be charged again.",
       );
       onClose();
-    } catch (error) {
+    } catch (err) {
       setFormError(
-        error instanceof MemberApiError
-          ? error.message
-          : "We could not cancel it just now. Please try again in a moment.",
+        billingErrorMessage(err, "We could not cancel it just now. Please try again in a moment."),
       );
     } finally {
       setBusy(null);
@@ -105,11 +119,9 @@ export function CancelSubscriptionDialog({
       onUpdated(next);
       toast.success("Paused. Nothing more will be charged until you start it again.");
       onClose();
-    } catch (error) {
+    } catch (err) {
       setFormError(
-        error instanceof MemberApiError
-          ? error.message
-          : "We could not pause it just now. Please try again in a moment.",
+        billingErrorMessage(err, "We could not pause it just now. Please try again in a moment."),
       );
     } finally {
       setBusy(null);
@@ -144,7 +156,7 @@ export function CancelSubscriptionDialog({
             <div className="flex items-start justify-between gap-4 border-b border-white/[0.07] px-5 py-4 sm:px-7">
               <div className="min-w-0">
                 <RadixDialog.Title className="font-display text-xl text-white">
-                  Cancel {subscription.title}?
+                  Cancel {subscription.planName}?
                 </RadixDialog.Title>
                 <RadixDialog.Description className="mt-1.5 text-sm text-orchid-dim">
                   {price}
@@ -189,7 +201,7 @@ export function CancelSubscriptionDialog({
                   Anything you bought outright is untouched — this only ends the recurring part.
                 </p>
 
-                {subscription.pausedAt === null && (
+                {canPause && (
                   <div className="mt-6 rounded-2xl border border-gold/25 bg-gold/[0.06] p-4 sm:p-5">
                     <div className="flex items-start gap-3.5">
                       <PauseCircle aria-hidden className="mt-0.5 size-5 shrink-0 text-gold" />
@@ -199,7 +211,8 @@ export function CancelSubscriptionDialog({
                         </h3>
                         <p className="copy-luxe mt-1.5 text-sm">
                           Pausing stops the payments and holds your place. Nothing is charged while
-                          you are paused, and you can start again whenever you are ready.
+                          you are paused, you are not billed for the gap afterwards, and you can
+                          start again whenever you are ready.
                         </p>
                         <LuxeButton
                           type="button"
@@ -229,7 +242,7 @@ export function CancelSubscriptionDialog({
                   </legend>
 
                   <div className="mt-3.5 grid gap-2">
-                    {CANCEL_REASONS.map((option) => {
+                    {reasons.map((option) => {
                       const selected = reason === option.value;
                       return (
                         <label
@@ -239,7 +252,7 @@ export function CancelSubscriptionDialog({
                             "text-sm transition-colors duration-300",
                             selected
                               ? "border-gold/50 bg-gold/[0.08] text-white"
-                              : "border-white/12 bg-white/[0.03] text-orchid hover:border-white/25 hover:text-white",
+                              : "border-white/10 bg-white/[0.03] text-orchid hover:border-white/25 hover:text-white",
                           )}
                         >
                           <input
@@ -247,10 +260,10 @@ export function CancelSubscriptionDialog({
                             name="cancelReason"
                             value={option.value}
                             checked={selected}
-                            required
                             onChange={() => {
                               setReason(option.value);
                               setReasonError("");
+                              setFeedbackError("");
                             }}
                             className="size-4 shrink-0 accent-gold"
                           />
@@ -271,13 +284,26 @@ export function CancelSubscriptionDialog({
 
                 <div className="mt-4">
                   <LuxeTextarea
-                    label="Anything else you would like Yvette to know?"
+                    label={
+                      reason === REASON_NEEDING_DETAIL
+                        ? "What made you decide to cancel?"
+                        : "Anything else you would like Yvette to know?"
+                    }
                     name="cancelFeedback"
                     rows={3}
                     value={feedback}
-                    hint="Optional — but it is read, and it is how things get better."
-                    maxLength={1000}
-                    onChange={(event) => setFeedback(event.target.value)}
+                    required={reason === REASON_NEEDING_DETAIL}
+                    error={feedbackError}
+                    hint={
+                      reason === REASON_NEEDING_DETAIL
+                        ? "A sentence is plenty."
+                        : "Optional — but it is read, and it is how things get better."
+                    }
+                    maxLength={2000}
+                    onChange={(event) => {
+                      setFeedback(event.target.value);
+                      setFeedbackError("");
+                    }}
                   />
                 </div>
               </div>

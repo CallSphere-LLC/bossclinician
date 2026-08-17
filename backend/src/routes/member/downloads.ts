@@ -417,17 +417,19 @@ memberDownloadsRouter.get(
         now,
         settings,
       });
-      const sizeBytes = bigintToNumber(row.size_bytes);
-
       // A locked attachment keeps its title and gains an unlock date. That is
-      // everything the player shows for a locked lesson, and no more.
+      // everything the player shows for a locked lesson, and no more: the
+      // filename and size describe a file that has not been released, and there
+      // is no button beside them to use either one with.
+      const sizeBytes = state.unlocked ? bigintToNumber(row.size_bytes) : 0;
+
       return {
         kind: "lesson",
         id: row.id,
-        title: row.title || row.filename || "Download",
+        title: row.title || (state.unlocked ? row.filename : "") || "Download",
         description: "",
-        filename: row.filename,
-        mime: row.mime,
+        filename: state.unlocked ? row.filename : "",
+        mime: state.unlocked ? row.mime : "",
         sizeBytes,
         sizeLabel: sizeLabel(sizeBytes),
         available: state.unlocked,

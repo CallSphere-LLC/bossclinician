@@ -549,7 +549,10 @@ const COMMENT_SELECT = `
      AND (c.status = 'visible' OR (c.status = 'pending' AND c.member_id = $2))`;
 
 function authorNameOf(row: CommentRow): string {
-  if (row.admin_user_id !== null) return row.admin_name || "Yvette";
+  // The business name rather than a guess at which person is behind the admin
+  // account, for the same reason billing does it: an empty `name` column must
+  // not put somebody's name on words they may not have written.
+  if (row.admin_user_id !== null) return row.admin_name || "Boss Clinician";
   const split = `${row.first_name ?? ""} ${row.last_name ?? ""}`.trim();
   return split || row.member_name || row.author_name || "Member";
 }

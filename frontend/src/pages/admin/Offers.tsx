@@ -35,7 +35,7 @@ import {
 import { DataTable, RowActions } from "@/pages/admin/ui/DataTable";
 import { useConfirm } from "@/pages/admin/ui/Dialog";
 import { StripeBanner } from "@/pages/admin/ui/StripeBanner";
-import { PUBLISH_LABEL, pluralize, shareLink, webAddress } from "@/pages/admin/ui/friendly";
+import { pluralize, shareLink, webAddress } from "@/pages/admin/ui/friendly";
 
 /**
  * The offers list — every price she sells at, and how each one is doing.
@@ -178,7 +178,7 @@ export default function Offers() {
       title: `Archive “${offer.title}”?`,
       description:
         offer.purchaseCount > 0
-          ? `It stops selling straight away. Everyone who already bought it keeps what they paid for, and it stays in your sales history.`
+          ? "It stops selling straight away. Everyone who already bought it keeps what they paid for, and it stays in your sales history."
           : "It stops selling straight away and moves out of your way. You can bring it back as a draft later.",
       confirmLabel: "Yes, archive it",
     });
@@ -239,16 +239,12 @@ export default function Offers() {
       },
       {
         id: "status",
-        // Sorted on the word on the badge, not the state behind it.
+        // Sorted on the words on the badge, not the state behind them.
         accessorFn: (offer) => OFFER_STATUS_LABEL[offer.status],
         header: "Status",
         cell: ({ row }) => (
           <Badge tone={STATUS_TONE[row.original.status]}>
-            {row.original.status === "published"
-              ? PUBLISH_LABEL.live
-              : row.original.status === "draft"
-                ? PUBLISH_LABEL.draft
-                : "Archived"}
+            {OFFER_STATUS_LABEL[row.original.status]}
           </Badge>
         ),
       },

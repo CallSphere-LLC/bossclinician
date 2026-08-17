@@ -1,6 +1,6 @@
 import { ApiError, getToken } from "@/lib/api";
 import { formatCurrency } from "@/lib/format";
-import { friendlyError } from "@/pages/admin/ui/friendly";
+import { PUBLISH_LABEL, friendlyError } from "@/pages/admin/ui/friendly";
 
 /**
  * Offers & catalogue client for the admin console.
@@ -484,9 +484,10 @@ export const PRODUCT_STATUS_LABEL: Record<CatalogStatus, string> = {
   archived: "Retired",
 };
 
+/** An offer is a page on her site, so it borrows the console's own wording. */
 export const OFFER_STATUS_LABEL: Record<CatalogStatus, string> = {
-  published: "Live",
-  draft: "Draft",
+  published: PUBLISH_LABEL.live,
+  draft: PUBLISH_LABEL.draft,
   archived: "Archived",
 };
 
@@ -498,7 +499,7 @@ export const PRICING_CHOICES: {
 }[] = [
   { value: "one_time", label: "One payment", blurb: "They pay once and it's theirs." },
   { value: "payment_plan", label: "A payment plan", blurb: "Split into a set number of payments, then it stops." },
-  { value: "subscription", label: "A subscription", blurb: "They pay every month until they cancel." },
+  { value: "subscription", label: "A subscription", blurb: "They keep paying until they cancel." },
   { value: "free", label: "Free", blurb: "No card, no charge — a lead magnet or a gift." },
   { value: "pwyw", label: "Let them choose what to pay", blurb: "You set the least they can pay." },
 ];

@@ -1,36 +1,44 @@
 import {
   useEffect,
+  useMemo,
   useState,
   type Dispatch,
   type ReactNode,
   type SetStateAction,
 } from "react";
 import { toast } from "sonner";
+import { Elements, PaymentElement, useElements, useStripe } from "@stripe/react-stripe-js";
+import type { StripeElementsOptions } from "@stripe/stripe-js";
 import { CalendarClock, CreditCard, FileText, Loader2, Repeat } from "lucide-react";
 import { Seo } from "@/components/Seo";
 import { MemberShell } from "@/components/member/MemberShell";
 import { CancelSubscriptionDialog } from "@/components/member/CancelSubscriptionDialog";
 import { GlassCard } from "@/components/luxe/GlassCard";
 import { LuxeButton, LuxePill } from "@/components/luxe/LuxeButton";
+import { getStripe, luxeAppearance, stripeConfigured } from "@/components/checkout/stripeClient";
 import { useMember } from "@/hooks/useMember";
 import { formatCurrency, formatDate } from "@/lib/format";
 import {
   billingApi,
+  billingErrorMessage,
   describePlanShape,
   describeRecurringPrice,
-  type CardOnFileResponse,
+  showReceipt,
+  type CancelReasonOption,
   type MemberInvoice,
   type MemberPaymentPlan,
   type MemberSubscription,
+  type PlanInstallment,
+  type SubscriptionsResponse,
 } from "@/lib/billingApi";
 
 /**
  * Billing.
  *
  * Four panels, four independent loads. A member whose receipts fail to fetch
- * must still be able to see the plan that is about to renew and the card it will
- * charge, so nothing here is gated behind one combined request that can take the
- * whole page down with it.
+ * must still be able to see the plan that is about to renew and the card it
+ * will charge, so nothing here is gated behind one combined request that can
+ * take the whole page down with it.
  *
  * Every figure on this screen is the member's own money, which sets the bar for
  * how it is written: currency with its symbol and both decimal places, dates as
@@ -44,20 +52,17 @@ export default function Billing() {
   // refusal never has to be explained as an error.
   const viewingAsAdmin = member?.impersonatedBy != null;
 
-  const subscriptions = useResource(
-    billingApi.subscriptions,
-    "We could not load your plans just now.",
-  );
-  const plans = useResource(
-    billingApi.paymentPlans,
-    "We could not load your payment plans just now.",
-  );
-  const card = useResource(billingApi.cardOnFile, "We could not load your card just now.");
-  const invoices = useResource(billingApi.invoices, "We could not load your receipts just now.");
+  const subscriptions = useResource(loadSubscriptions, "We could not load your plans just now.");
+  const plans = useResource(loadPaymentPlans, "We could not load your payment plans just now.");
+  const card = useResource(loadLastCardUsed, "We could not load your card just now.");
+  const invoices = useResource(loadInvoices, "We could not load your receipts just now.");
 
-  const hasRecurring =
-    (subscriptions.data ?? []).some((row) => row.state !== "canceled") ||
-    (plans.data ?? []).some((row) => row.state === "active" || row.state === "past_due");
+  // Someone with nothing recurring and nothing yet paid has no card to change,
+  // and offering the button anyway only leads to a refusal they cannot act on.
+  const hasSomethingToCharge =
+    (subscriptions.data?.subscriptions ?? []).some(
+      (row) => row.endedAt === null && row.status !== "canceled",
+    ) || (plans.data ?? []).some((row) => row.status === "active" || row.status === "past_due");
 
   return (
     <MemberShell
@@ -69,7 +74,11 @@ export default function Billing() {
       <div className="grid gap-6">
         <SubscriptionsPanel resource={subscriptions} readOnly={viewingAsAdmin} />
         <PaymentPlansPanel resource={plans} />
-        <CardPanel resource={card} readOnly={viewingAsAdmin} hasRecurring={hasRecurring} />
+        <CardPanel
+          resource={card}
+          readOnly={viewingAsAdmin}
+          hasSomethingToCharge={hasSomethingToCharge}
+        />
         <InvoicesPanel resource={invoices} />
       </div>
     </MemberShell>
@@ -87,8 +96,8 @@ interface Resource<T> {
 }
 
 /**
- * `load` must be a stable reference — every caller passes a method off the
- * `billingApi` object, so the effect runs once per mount rather than per render.
+ * `load` must be a stable reference — every caller passes a function defined at
+ * module scope, so the effect runs once per mount rather than per render.
  */
 function useResource<T>(load: () => Promise<T>, failureMessage: string): Resource<T> {
   const [data, setData] = useState<T | null>(null);
@@ -115,6 +124,44 @@ function useResource<T>(load: () => Promise<T>, failureMessage: string): Resourc
   }, [load, failureMessage]);
 
   return { data, loading, error, set: setData };
+}
+
+const loadSubscriptions = (): Promise<SubscriptionsResponse> => billingApi.subscriptions();
+
+const loadPaymentPlans = async (): Promise<MemberPaymentPlan[]> =>
+  (await billingApi.paymentPlans()).paymentPlans;
+
+/** Deep enough to cover years of monthly invoices without a second page. */
+const loadInvoices = async (): Promise<MemberInvoice[]> =>
+  (await billingApi.invoices({ limit: 100 })).invoices;
+
+interface CardUsed {
+  brand: string;
+  last4: string;
+  at: string;
+}
+
+/**
+ * The card the member last actually paid with.
+ *
+ * There is no "card on file" to read back, because we do not hold one — the
+ * card lives with the payment provider and only ever comes back to us as a
+ * brand and four digits attached to a payment that succeeded. That is the
+ * honest thing to show: a card they will recognise, and the one an update
+ * replaces.
+ */
+async function loadLastCardUsed(): Promise<CardUsed | null> {
+  const page = await billingApi.orders({ limit: 1 });
+  const latest = page.orders[0];
+  if (!latest) return null;
+
+  const detail = await billingApi.order(latest.id);
+  const payment = [...detail.transactions]
+    .reverse()
+    .find((t) => t.kind === "payment" && t.status === "succeeded" && t.cardLast4 !== "");
+  if (!payment) return null;
+
+  return { brand: payment.cardBrand, last4: payment.cardLast4, at: payment.occurredAt };
 }
 
 /* ── Panel furniture ────────────────────────────────────────────────────── */
@@ -158,10 +205,15 @@ function EmptyNote({ children }: { children: ReactNode }) {
 }
 
 /**
- * The `quiet` variant carries no padding of its own, so a text link in a list
+ * The `quiet` variant carries no padding of its own, so a text action in a list
  * needs the tap target adding back — these rows are read on a phone.
  */
 const QUIET_LINK = "min-h-[44px] text-[0.72rem] tracking-[0.14em]";
+
+interface StatePill {
+  label: string;
+  accent: "neutral" | "gold" | "plum" | "green";
+}
 
 /* ── Plans ──────────────────────────────────────────────────────────────── */
 
@@ -169,15 +221,24 @@ function SubscriptionsPanel({
   resource,
   readOnly,
 }: {
-  resource: Resource<MemberSubscription[]>;
+  resource: Resource<SubscriptionsResponse>;
   readOnly: boolean;
 }) {
   const [cancelling, setCancelling] = useState<MemberSubscription | null>(null);
   const [busyId, setBusyId] = useState<number | null>(null);
-  const rows = resource.data ?? [];
+
+  const rows = resource.data?.subscriptions ?? [];
+  const reasons: CancelReasonOption[] = resource.data?.cancelReasons ?? [];
 
   const replace = (next: MemberSubscription) => {
-    resource.set((prev) => (prev ?? []).map((row) => (row.id === next.id ? next : row)));
+    resource.set((prev) =>
+      prev === null
+        ? prev
+        : {
+            ...prev,
+            subscriptions: prev.subscriptions.map((row) => (row.id === next.id ? next : row)),
+          },
+    );
   };
 
   const setPaused = async (subscription: MemberSubscription, paused: boolean) => {
@@ -192,11 +253,14 @@ function SubscriptionsPanel({
           ? "Paused. Nothing more will be charged until you start it again."
           : "You are back on. Your next payment picks up as normal.",
       );
-    } catch {
+    } catch (err) {
       toast.error(
-        paused
-          ? "We could not pause it just now. Please try again in a moment."
-          : "We could not start it again just now. Please try again in a moment.",
+        billingErrorMessage(
+          err,
+          paused
+            ? "We could not pause it just now. Please try again in a moment."
+            : "We could not start it again just now. Please try again in a moment.",
+        ),
       );
     } finally {
       setBusyId(null);
@@ -222,12 +286,13 @@ function SubscriptionsPanel({
             {rows.map((subscription) => {
               const { pill, detail } = describeSubscription(subscription);
               const busy = busyId === subscription.id;
-              const paused = subscription.pausedAt !== null;
               // Nothing left to decide once it has ended or is already set to:
               // pausing or cancelling a plan that stops on a known date would
               // only ask the member to make the same choice twice.
               const settled =
-                subscription.state === "canceled" || subscription.cancelAtPeriodEnd;
+                subscription.endedAt !== null ||
+                subscription.status === "canceled" ||
+                subscription.cancelAtPeriodEnd;
 
               return (
                 <li
@@ -236,7 +301,7 @@ function SubscriptionsPanel({
                 >
                   <div className="min-w-0">
                     <p className="flex flex-wrap items-center gap-2.5 text-sm font-medium text-white">
-                      {subscription.title}
+                      {subscription.planName}
                       {pill && <LuxePill accent={pill.accent}>{pill.label}</LuxePill>}
                     </p>
                     <p className="mt-1.5 text-sm text-orchid">
@@ -251,16 +316,16 @@ function SubscriptionsPanel({
                   </div>
 
                   {!settled && !readOnly && (
-                    <div className="flex shrink-0 flex-wrap gap-3">
+                    <div className="flex shrink-0 flex-wrap items-center gap-3">
                       <LuxeButton
                         type="button"
                         variant="outline"
                         size="sm"
                         disabled={busy}
-                        onClick={() => void setPaused(subscription, !paused)}
+                        onClick={() => void setPaused(subscription, !subscription.paused)}
                       >
                         {busy && <Loader2 aria-hidden className="size-4 animate-spin" />}
-                        {paused ? "Start again" : "Pause"}
+                        {subscription.paused ? "Start again" : "Pause"}
                       </LuxeButton>
                       <LuxeButton
                         type="button"
@@ -288,17 +353,13 @@ function SubscriptionsPanel({
       {cancelling && (
         <CancelSubscriptionDialog
           subscription={cancelling}
+          reasons={reasons}
           onUpdated={replace}
           onClose={() => setCancelling(null)}
         />
       )}
     </BillingPanel>
   );
-}
-
-interface StatePill {
-  label: string;
-  accent: "neutral" | "gold" | "plum" | "green";
 }
 
 /**
@@ -309,25 +370,39 @@ function describeSubscription(subscription: MemberSubscription): {
   pill: StatePill | null;
   detail: string;
 } {
-  const renewal = subscription.currentPeriodEnd ? formatDate(subscription.currentPeriodEnd) : null;
+  const renewal = subscription.nextChargeAt ? formatDate(subscription.nextChargeAt) : null;
+  const paidUntil = subscription.currentPeriodEnd
+    ? formatDate(subscription.currentPeriodEnd)
+    : null;
 
-  if (subscription.state === "canceled") {
+  if (subscription.endedAt !== null || subscription.status === "canceled") {
     return {
       pill: { label: "Ended", accent: "neutral" },
-      detail: subscription.canceledAt
-        ? `Ended ${formatDate(subscription.canceledAt)}. Nothing more will be charged.`
+      detail: subscription.endedAt
+        ? `Ended ${formatDate(subscription.endedAt)}. Nothing more will be charged.`
         : "Nothing more will be charged.",
     };
   }
 
-  if (subscription.pausedAt !== null) {
+  if (subscription.paused) {
     return {
       pill: { label: "Paused", accent: "neutral" },
-      detail: `Paused since ${formatDate(subscription.pausedAt)}. Nothing is being charged while it is paused.`,
+      detail: subscription.pausedAt
+        ? `Paused since ${formatDate(subscription.pausedAt)}. Nothing is charged while it is paused.`
+        : "Nothing is charged while it is paused.",
     };
   }
 
-  if (subscription.state === "past_due" || subscription.state === "unpaid") {
+  if (subscription.cancelAtPeriodEnd) {
+    return {
+      pill: { label: "Ending", accent: "neutral" },
+      detail: paidUntil
+        ? `Ends ${paidUntil}. You keep everything until then, and will not be charged again.`
+        : "You keep everything until the end of the time you have paid for.",
+    };
+  }
+
+  if (subscription.status === "past_due" || subscription.status === "unpaid") {
     return {
       pill: { label: "Needs a payment", accent: "gold" },
       detail:
@@ -335,23 +410,14 @@ function describeSubscription(subscription: MemberSubscription): {
     };
   }
 
-  if (subscription.state === "incomplete") {
+  if (subscription.status === "incomplete") {
     return {
       pill: { label: "Not started", accent: "gold" },
-      detail: "This has not started yet because the first payment has not gone through.",
+      detail: "This has not started yet, because the first payment has not gone through.",
     };
   }
 
-  if (subscription.cancelAtPeriodEnd) {
-    return {
-      pill: { label: "Ending", accent: "neutral" },
-      detail: renewal
-        ? `Ends ${renewal}. You keep everything until then, and will not be charged again.`
-        : "You keep everything until the end of the time you have paid for.",
-    };
-  }
-
-  if (subscription.state === "trialing" && subscription.trialEndsAt) {
+  if (subscription.status === "trialing" && subscription.trialEndsAt) {
     return {
       pill: { label: "Free trial", accent: "gold" },
       detail: `Free until ${formatDate(subscription.trialEndsAt)}, when the first payment is taken.`,
@@ -360,7 +426,10 @@ function describeSubscription(subscription: MemberSubscription): {
 
   return {
     pill: { label: "Active", accent: "green" },
-    detail: renewal ? `Renews ${renewal}.` : "Renews automatically.",
+    detail:
+      renewal && subscription.nextChargeAmountCents !== null
+        ? `Renews ${renewal} — ${formatCurrency(subscription.nextChargeAmountCents, subscription.currency)}.`
+        : "Renews automatically.",
   };
 }
 
@@ -386,14 +455,14 @@ function PaymentPlansPanel({ resource }: { resource: Resource<MemberPaymentPlan[
         <ul className="divide-y divide-white/[0.07]">
           {rows.map((plan) => (
             <li key={plan.id} className="py-5 first:pt-1">
-              <p className="text-sm font-medium text-white">{plan.title}</p>
+              <p className="text-sm font-medium text-white">{plan.offerTitle}</p>
               <p className="mt-1.5 text-sm text-orchid">
-                {plan.installmentsPaid} of {plan.installmentCount} payments made
-                {plan.state === "active" && plan.nextChargeAt && (
+                {plan.progressLabel}
+                {plan.nextChargeAt !== null && plan.nextChargeAmountCents !== null && (
                   <>
                     {" — next on "}
                     {formatDate(plan.nextChargeAt)},{" "}
-                    {formatCurrency(plan.installmentCents, plan.currency)}
+                    {formatCurrency(plan.nextChargeAmountCents, plan.currency)}
                   </>
                 )}
               </p>
@@ -401,6 +470,22 @@ function PaymentPlansPanel({ resource }: { resource: Resource<MemberPaymentPlan[
               <PlanProgress paid={plan.installmentsPaid} total={plan.installmentCount} />
 
               <p className="mt-2.5 text-xs text-orchid-faint">{describePlanState(plan)}</p>
+
+              {plan.installments.length > 0 && (
+                <ul className="mt-4 grid max-w-md gap-1.5">
+                  {plan.installments.map((installment) => (
+                    <li
+                      key={installment.sequence}
+                      className="flex items-baseline justify-between gap-6 text-xs"
+                    >
+                      <span className="text-orchid-dim">{describeInstallment(installment)}</span>
+                      <span className="shrink-0 text-orchid">
+                        {formatCurrency(installment.amountCents, plan.currency)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </li>
           ))}
         </ul>
@@ -428,16 +513,32 @@ function PlanProgress({ paid, total }: { paid: number; total: number }) {
 function describePlanState(plan: MemberPaymentPlan): string {
   const shape = describePlanShape(plan);
 
-  if (plan.state === "completed") {
+  if (plan.status === "completed") {
     return `Paid in full${plan.completedAt ? ` on ${formatDate(plan.completedAt)}` : ""} — nothing more to pay. What you bought is yours to keep.`;
   }
-  if (plan.state === "canceled") {
+  if (plan.status === "canceled") {
     return `${shape}. This plan was stopped, so no further payments will be taken.`;
   }
-  if (plan.state === "past_due") {
+  if (plan.status === "past_due") {
     return `${shape}. The last payment did not go through — updating the card below will pick it back up.`;
   }
-  return `${shape}. ${formatCurrency(plan.remainingCents, plan.currency)} left of ${formatCurrency(plan.totalCents, plan.currency)}.`;
+  return `${shape}. ${formatCurrency(plan.remainingCents, plan.currency)} left to pay.`;
+}
+
+function describeInstallment(installment: PlanInstallment): string {
+  const number = `Payment ${installment.sequence}`;
+
+  if (installment.status === "paid") {
+    if (!installment.paidAt) return `${number} · paid`;
+    return `${number} · paid ${formatDate(installment.paidAt)}`;
+  }
+  if (installment.status === "failed") {
+    if (!installment.dueAt) return `${number} · did not go through`;
+    return `${number} · did not go through on ${formatDate(installment.dueAt)}`;
+  }
+  if (installment.status === "skipped") return `${number} · not taken`;
+  if (!installment.dueAt) return `${number} · to come`;
+  return `${number} · due ${formatDate(installment.dueAt)}`;
 }
 
 /* ── Card on file ───────────────────────────────────────────────────────── */
@@ -445,29 +546,41 @@ function describePlanState(plan: MemberPaymentPlan): string {
 function CardPanel({
   resource,
   readOnly,
-  hasRecurring,
+  hasSomethingToCharge,
 }: {
-  resource: Resource<CardOnFileResponse>;
+  resource: Resource<CardUsed | null>;
   readOnly: boolean;
-  hasRecurring: boolean;
+  hasSomethingToCharge: boolean;
 }) {
   const [starting, setStarting] = useState(false);
-  const card = resource.data?.card ?? null;
+  const [setupSecret, setSetupSecret] = useState<string | null>(null);
+  const [error, setError] = useState("");
+  const card = resource.data;
 
   const start = async () => {
     setStarting(true);
+    setError("");
     try {
-      const session = await billingApi.startCardUpdate();
-      // A full navigation rather than a new tab: this is opened from an async
-      // call, which a popup blocker treats as unsolicited and swallows.
-      window.location.assign(session.url);
-    } catch {
-      toast.error("We could not open the card form just now. Please try again in a moment.");
+      const session = await billingApi.startPaymentMethodUpdate();
+      if (session.type === "portal" && session.url !== null) {
+        // A full navigation rather than a new tab: this is opened from an async
+        // call, which a popup blocker treats as unsolicited and swallows.
+        window.location.assign(session.url);
+        return;
+      }
+      if (session.clientSecret !== null && stripeConfigured()) {
+        setSetupSecret(session.clientSecret);
+        return;
+      }
+      setError("We could not open the card form just now. Please try again in a moment.");
+    } catch (err) {
+      setError(
+        billingErrorMessage(err, "We could not open the card form just now. Please try again in a moment."),
+      );
+    } finally {
       setStarting(false);
     }
   };
-
-  const showButton = !readOnly && (card !== null || hasRecurring);
 
   return (
     <BillingPanel
@@ -483,50 +596,51 @@ function CardPanel({
             <p className="text-sm font-medium text-white">
               {/* Capitalised in CSS so a brand that arrives lower-cased still
                   reads as a name rather than a field value. */}
-              <span className="capitalize">{card.brand}</span> ending {card.last4}
+              {card.brand ? <span className="capitalize">{card.brand}</span> : "Card"} ending{" "}
+              {card.last4}
             </p>
             <p className="mt-1 text-xs text-orchid-faint">
-              {card.expMonth && card.expYear
-                ? `Expires ${String(card.expMonth).padStart(2, "0")}/${card.expYear}`
-                : "This is the card every payment is taken from."}
+              The card your last payment was taken from, on {formatDate(card.at)}.
             </p>
           </div>
-          {showButton && (
-            <LuxeButton
-              type="button"
-              variant="outline"
-              size="sm"
-              className="shrink-0"
-              disabled={starting}
-              onClick={() => void start()}
-            >
-              {starting && <Loader2 aria-hidden className="size-4 animate-spin" />}
-              {starting ? "Opening" : "Update card"}
-            </LuxeButton>
+          {!readOnly && (
+            <UpdateCardButton starting={starting} onClick={() => void start()} label="Update card" />
           )}
         </div>
       ) : (
         <>
           <EmptyNote>
-            Nothing here yet — the card you pay with will appear here after your first purchase.
+            Nothing here yet — the card you pay with will appear here after your first payment.
           </EmptyNote>
-          {showButton && (
-            <LuxeButton
-              type="button"
-              variant="outline"
-              size="sm"
-              className="mt-5"
-              disabled={starting}
-              onClick={() => void start()}
-            >
-              {starting && <Loader2 aria-hidden className="size-4 animate-spin" />}
-              {starting ? "Opening" : "Add a card"}
-            </LuxeButton>
+          {!readOnly && hasSomethingToCharge && (
+            <div className="mt-5">
+              <UpdateCardButton
+                starting={starting}
+                onClick={() => void start()}
+                label="Add a card"
+              />
+            </div>
           )}
         </>
       )}
 
-      {card && (
+      <div aria-live="polite">
+        {error && (
+          <p role="alert" className="mt-4 text-sm font-medium text-red-400">
+            {error}
+          </p>
+        )}
+      </div>
+
+      {setupSecret && (
+        <NewCardForm clientSecret={setupSecret} onDone={() => setSetupSecret(null)} />
+      )}
+
+      {readOnly ? (
+        <p className="mt-4 text-xs text-orchid-faint">
+          The card can only be changed by the person it belongs to.
+        </p>
+      ) : (
         <p className="mt-4 text-xs text-orchid-faint">
           Card details are held by our payment provider, never by us.
         </p>
@@ -535,10 +649,144 @@ function CardPanel({
   );
 }
 
+function UpdateCardButton({
+  starting,
+  onClick,
+  label,
+}: {
+  starting: boolean;
+  onClick: () => void;
+  label: string;
+}) {
+  return (
+    <LuxeButton
+      type="button"
+      variant="outline"
+      size="sm"
+      className="shrink-0"
+      disabled={starting}
+      onClick={onClick}
+    >
+      {starting && <Loader2 aria-hidden className="size-4 animate-spin" />}
+      {starting ? "Opening" : label}
+    </LuxeButton>
+  );
+}
+
+/**
+ * The card field, for the times the hosted portal is not available.
+ *
+ * The server hands back a setup secret instead of a portal link when there is
+ * no portal configuration to send anyone to, and the card has to be collected
+ * somewhere — never on a field of ours, always inside the provider's own frame.
+ */
+function NewCardForm({ clientSecret, onDone }: { clientSecret: string; onDone: () => void }) {
+  const stripePromise = useMemo(() => getStripe(), []);
+  const options = useMemo<StripeElementsOptions>(
+    () => ({ clientSecret, appearance: luxeAppearance }),
+    [clientSecret],
+  );
+
+  if (!stripePromise) {
+    return (
+      <p className="mt-5 text-sm text-orchid-dim">
+        Card changes are unavailable at the moment. Please get in touch and we will sort it out.
+      </p>
+    );
+  }
+
+  return (
+    <div className="mt-6 rounded-2xl border border-white/[0.09] bg-white/[0.02] p-4 sm:p-5">
+      <Elements stripe={stripePromise} options={options}>
+        <NewCardFields onDone={onDone} />
+      </Elements>
+    </div>
+  );
+}
+
+function NewCardFields({ onDone }: { onDone: () => void }) {
+  const stripe = useStripe();
+  const elements = useElements();
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const save = async () => {
+    if (!stripe || !elements) return;
+    setSaving(true);
+    setError("");
+
+    const outcome = await stripe.confirmSetup({
+      elements,
+      confirmParams: { return_url: `${window.location.origin}/account/billing` },
+      redirect: "if_required",
+    });
+
+    if (outcome.error) {
+      setError(
+        outcome.error.message ??
+          "That card could not be saved. Please check the details or try another card.",
+      );
+      setSaving(false);
+      return;
+    }
+
+    // Saved, and deliberately no promise about which payment it will be used
+    // for: the card is on the account from here, and what it is charged for is
+    // decided when the next payment is taken.
+    toast.success("Your new card is saved.");
+    setSaving(false);
+    onDone();
+  };
+
+  return (
+    <form
+      onSubmit={(event) => {
+        event.preventDefault();
+        void save();
+      }}
+      noValidate
+    >
+      <PaymentElement options={{ layout: { type: "tabs", defaultCollapsed: false } }} />
+
+      <div aria-live="polite">
+        {error && (
+          <p role="alert" className="mt-4 text-sm font-medium text-red-400">
+            {error}
+          </p>
+        )}
+      </div>
+
+      <div className="mt-5 flex flex-wrap items-center gap-3">
+        <LuxeButton type="submit" variant="foil" size="sm" disabled={saving || !stripe}>
+          {saving && <Loader2 aria-hidden className="size-4 animate-spin" />}
+          {saving ? "Saving" : "Save this card"}
+        </LuxeButton>
+        <LuxeButton
+          type="button"
+          variant="quiet"
+          className={QUIET_LINK}
+          disabled={saving}
+          onClick={onDone}
+        >
+          Not now
+        </LuxeButton>
+      </div>
+    </form>
+  );
+}
+
 /* ── Receipts ───────────────────────────────────────────────────────────── */
 
 function InvoicesPanel({ resource }: { resource: Resource<MemberInvoice[]> }) {
   const rows = resource.data ?? [];
+
+  // Not awaited before the window is claimed: `showReceipt` opens the tab
+  // first, and anything awaited ahead of it costs the click its permission.
+  const open = (invoice: MemberInvoice) => {
+    void showReceipt(invoice.receiptUrl).catch((err: unknown) => {
+      toast.error(billingErrorMessage(err, "We could not open that receipt just now."));
+    });
+  };
 
   return (
     <BillingPanel
@@ -559,58 +807,71 @@ function InvoicesPanel({ resource }: { resource: Resource<MemberInvoice[]> }) {
         </>
       ) : (
         <ul className="divide-y divide-white/[0.07]">
-          {rows.map((invoice) => (
-            <li
-              key={invoice.id}
-              className="flex flex-col gap-3 py-4 first:pt-1 sm:flex-row sm:items-center sm:justify-between sm:gap-6"
-            >
-              <div className="min-w-0">
-                <p className="flex flex-wrap items-center gap-2.5 text-sm font-medium text-white">
-                  {invoice.description || "Your purchase"}
-                  {invoice.state === "open" && <LuxePill accent="gold">Unpaid</LuxePill>}
-                  {invoice.state === "void" && <LuxePill accent="neutral">Cancelled</LuxePill>}
-                  {invoice.state === "uncollectible" && (
-                    <LuxePill accent="gold">Payment outstanding</LuxePill>
-                  )}
-                </p>
-                <p className="mt-1 text-xs text-orchid-faint">
-                  {formatDate(invoice.paidAt ?? invoice.createdAt)} ·{" "}
-                  {formatCurrency(invoice.amountPaidCents, invoice.currency)}
-                  {invoice.number && ` · No. ${invoice.number}`}
-                </p>
-              </div>
+          {rows.map((invoice) => {
+            const pill = describeInvoice(invoice);
+            const amountCents =
+              invoice.status === "paid" ? invoice.amountPaidCents : invoice.amountDueCents;
 
-              <div className="flex shrink-0 flex-wrap items-center gap-5">
-                {invoice.hostedInvoiceUrl && (
+            return (
+              <li
+                key={invoice.id}
+                className="flex flex-col gap-3 py-4 first:pt-1 sm:flex-row sm:items-center sm:justify-between sm:gap-6"
+              >
+                <div className="min-w-0">
+                  <p className="flex flex-wrap items-center gap-2.5 text-sm font-medium text-white">
+                    {formatDate(invoice.paidAt ?? invoice.createdAt)} ·{" "}
+                    {formatCurrency(amountCents, invoice.currency)}
+                    {pill && <LuxePill accent={pill.accent}>{pill.label}</LuxePill>}
+                  </p>
+                  {invoiceDetail(invoice) && (
+                    <p className="mt-1 text-xs text-orchid-faint">{invoiceDetail(invoice)}</p>
+                  )}
+                </div>
+
+                <div className="flex shrink-0 flex-wrap items-center gap-5">
                   <LuxeButton
-                    href={invoice.hostedInvoiceUrl}
+                    type="button"
                     variant="quiet"
-                    target="_blank"
                     className={QUIET_LINK}
+                    onClick={() => open(invoice)}
                   >
-                    View
+                    View receipt
                   </LuxeButton>
-                )}
-                {invoice.pdfUrl && (
-                  <LuxeButton
-                    href={invoice.pdfUrl}
-                    variant="quiet"
-                    target="_blank"
-                    className={QUIET_LINK}
-                  >
-                    Download
-                  </LuxeButton>
-                )}
-                {!invoice.hostedInvoiceUrl && !invoice.pdfUrl && (
-                  <span className="text-xs text-orchid-faint">
-                    Ask us if you need a copy of this one
-                  </span>
-                )}
-              </div>
-            </li>
-          ))}
+                  {invoice.pdfUrl && (
+                    <LuxeButton
+                      href={invoice.pdfUrl}
+                      variant="quiet"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={QUIET_LINK}
+                    >
+                      Download
+                    </LuxeButton>
+                  )}
+                </div>
+              </li>
+            );
+          })}
         </ul>
       )}
     </BillingPanel>
   );
+}
+
+function describeInvoice(invoice: MemberInvoice): StatePill | null {
+  if (invoice.status === "open") return { label: "Not paid yet", accent: "gold" };
+  if (invoice.status === "uncollectible") return { label: "Payment outstanding", accent: "gold" };
+  if (invoice.status === "void") return { label: "Cancelled", accent: "neutral" };
+  if (invoice.status === "draft") return { label: "Not issued yet", accent: "neutral" };
+  return null;
+}
+
+/** The reference an expense claim needs, and the dates a renewal covered. */
+function invoiceDetail(invoice: MemberInvoice): string {
+  const parts: string[] = [];
+  if (invoice.number) parts.push(`Reference ${invoice.number}`);
+  if (invoice.periodStart && invoice.periodEnd) {
+    parts.push(`Covers ${formatDate(invoice.periodStart)} to ${formatDate(invoice.periodEnd)}`);
+  }
+  return parts.join(" · ");
 }

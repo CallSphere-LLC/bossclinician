@@ -161,7 +161,8 @@ export function formatCreditHours(quarterHours: number): string {
 
 /* ----------------------------------------------------------------- PDF ----- */
 
-const PAPER: [number, number] = [792, 612];
+/** US Letter, landscape — the shape a CE certificate gets printed and filed in. */
+const PAPER = "LETTER";
 const INK = "#1B1626";
 const PLUM = "#4B2E83";
 const GOLD = "#C9A46A";
@@ -230,8 +231,10 @@ export async function renderCertificatePdf(content: CertificateContent): Promise
     },
   });
 
-  const width = PAPER[0];
-  const height = PAPER[1];
+  // Read back rather than assumed: pdfkit swaps the page dimensions for a
+  // landscape layout, and every coordinate below is measured from these.
+  const width = doc.page.width;
+  const height = doc.page.height;
   const inner = { x: 64, width: width - 128 };
   const centered = { width: inner.width, align: "center" as const };
 
@@ -380,14 +383,14 @@ export async function renderCertificatePdf(content: CertificateContent): Promise
     .text(
       `Verify at ${env.publicSiteUrl.replace(/^https?:\/\//, "")}/verify/${content.verificationCode}`,
       inner.x,
-      height - 62,
+      height - 68,
       { ...centered, characterSpacing: 0.4 }
     );
   doc
     .font("Helvetica-Bold")
     .fontSize(9)
     .fillColor(INK)
-    .text(content.verificationCode, inner.x, height - 50, { ...centered, characterSpacing: 1.2 });
+    .text(content.verificationCode, inner.x, height - 56, { ...centered, characterSpacing: 1.2 });
 
   return pdfToBuffer(doc);
 }
@@ -442,10 +445,18 @@ async function artworkFor(template: TemplateRow | null): Promise<CertificateArtw
   };
 }
 
-async function loadTemplate(courseId: number, issueOn?: string): Promise<TemplateRow | null> {
-  // A template can be attached to the course or to the product that sells it.
-  // The course-level one wins when both exist: it is the more specific answer to
-  // "what does a certificate for this course look like".
+/**
+ * The template a completed course issues from.
+ *
+ * A template can be attached to the course or to the product that sells it; the
+ * course-level one wins when both exist, being the more specific answer to "what
+ * does a certificate for this course look like".
+ *
+ * `issue_on` is pinned to 'completion' here. An 'assessment' template waits for a
+ * passing score and a 'manual' one waits for Yvette, and finishing the lessons is
+ * not either of those things.
+ */
+async function loadCompletionTemplate(courseId: number): Promise<TemplateRow | null> {
   const found = await pool.query<TemplateRow>(
     `SELECT t.id, t.product_id, t.title, t.body, t.signature_image, t.signature_name,
             t.signature_title, t.logo_url, t.ceu_credit_quarter_hours,
@@ -453,11 +464,11 @@ async function loadTemplate(courseId: number, issueOn?: string): Promise<Templat
        FROM certificate_templates t
        LEFT JOIN products p ON p.id = t.product_id
       WHERE t.enabled
+        AND t.issue_on = 'completion'
         AND (t.course_id = $1 OR p.course_id = $1)
-        AND ($2::text IS NULL OR t.issue_on = $2)
       ORDER BY (t.course_id = $1) DESC, t.id
       LIMIT 1`,
-    [courseId, issueOn ?? null]
+    [courseId]
   );
   return found.rows[0] ?? null;
 }
@@ -473,7 +484,7 @@ async function loadTemplateById(templateId: number): Promise<TemplateRow | null>
 }
 
 /** A filename the recipient will recognise a year later in their downloads folder. */
-export function certificateFilename(row: CertificateRow): string {
+function certificateFilename(row: CertificateRow): string {
   const slug = row.course_title
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
@@ -619,7 +630,7 @@ export async function issueCertificateIfEarned(
   const earned = progress.rows[0];
   if (!earned || earned.percent < 100) return null;
 
-  const template = await loadTemplate(courseId, "completion");
+  const template = await loadCompletionTemplate(courseId);
   if (!template) return null;
 
   const found = await pool.query<MemberRow & { course_title: string }>(

@@ -4,6 +4,9 @@ import { AdminLayout } from "@/pages/admin/AdminLayout";
 import Login from "@/pages/admin/Login";
 import Dashboard from "@/pages/admin/Dashboard";
 import Products from "@/pages/admin/Products";
+import ProductsCatalog from "@/pages/admin/ProductsCatalog";
+import Offers from "@/pages/admin/Offers";
+import OfferEditor from "@/pages/admin/OfferEditor";
 import BlogList from "@/pages/admin/BlogList";
 import BlogEditor from "@/pages/admin/BlogEditor";
 import CoursesAdmin from "@/pages/admin/CoursesAdmin";
@@ -62,6 +65,7 @@ function ProtectedRoutes() {
 
         {/* Products */}
         <Route path="/products" element={<Products />} />
+        <Route path="/catalogue" element={<ProductsCatalog />} />
         <Route path="/courses" element={<CoursesAdmin />} />
         <Route path="/courses/:id/curriculum" element={<CourseBuilder />} />
         <Route path="/community" element={<CommunityList />} />
@@ -72,6 +76,9 @@ function ProtectedRoutes() {
         <Route path="/newsletters" element={<Newsletters />} />
 
         {/* Sales */}
+        <Route path="/offers" element={<Offers />} />
+        <Route path="/offers/new" element={<OfferEditor />} />
+        <Route path="/offers/:id" element={<OfferEditor />} />
         <Route path="/sales/payments" element={<PaymentsPage />} />
         <Route path="/sales/plans" element={<PlansPage />} />
         <Route path="/sales/subscriptions" element={<SubscriptionsPage />} />
