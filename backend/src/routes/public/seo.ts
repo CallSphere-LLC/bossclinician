@@ -103,23 +103,24 @@ seoRouter.get(
           priority: "0.8",
         }),
       },
-      {
-        sql: `SELECT slug, updated_at FROM pages ORDER BY slug`,
-        map: (r) => ({
-          loc: `${base}/${r.slug as string}`,
-          lastmod: r.updated_at as string,
-          changefreq: "monthly",
-          priority: "0.6",
-        }),
-      },
-      {
-        sql: `SELECT slug FROM podcasts WHERE published = true`,
-        map: (r) => ({
-          loc: `${base}/podcasts/${r.slug as string}`,
-          changefreq: "weekly",
-          priority: "0.7",
-        }),
-      },
+      // Two blocks were removed from here rather than fixed, because there was
+      // nothing to fix: they advertised paths the app does not route.
+      //
+      //  - `pages` was emitted as `/<slug>`. That table holds the *content* of
+      //    the hand-built pages — the rows are read by `/api/pages/:slug` to
+      //    fill in a page that already has its own route. There is no
+      //    `/:slug` route, so every one of those URLs was a 404 with a
+      //    priority attached to it.
+      //  - `podcasts` was emitted as `/podcasts/<slug>`. `/podcasts` exists,
+      //    but only inside the member area behind `RequireMember`, and there
+      //    is no per-show route at all.
+      //
+      // Submitting either is worse than omitting it: a sitemap full of 404s is
+      // how a domain loses the crawl budget it needs on the week it changes
+      // platforms, which is exactly the week this file matters. If a public
+      // podcast page is built later, its block belongs back here — checked
+      // against the route table in frontend/src/App.tsx, which is the list of
+      // paths that actually resolve.
     ];
 
     for (const block of blocks) {

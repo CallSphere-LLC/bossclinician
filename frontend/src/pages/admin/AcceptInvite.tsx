@@ -81,6 +81,10 @@ export default function AcceptInvite() {
                   id="invite-password"
                   type="password"
                   required
+                  /* The server refuses anything shorter, and its reason is
+                     turned into a generic "check the highlighted fields" on the
+                     way back — so the box has to say so itself. */
+                  minLength={10}
                   autoComplete="new-password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}

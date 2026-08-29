@@ -40,6 +40,7 @@ import {
   Field,
   Input,
   PageHeader,
+  selectStyles,
   Skeleton,
   Textarea,
 } from "@/pages/admin/ui/primitives";
@@ -89,9 +90,6 @@ const VISIBILITY_LABEL: Record<string, string> = {
   public: "Anyone can listen",
   private: "Members only",
 };
-
-const selectStyles =
-  "h-11 w-full rounded-xl border border-hairline bg-surface px-3 text-sm outline-none focus-visible:border-plum";
 
 /* --------------------------------------------------- Writing box + toolbar */
 
@@ -314,7 +312,9 @@ export default function Podcasts() {
       .growthList<Podcast>("podcasts")
       .then((list) => {
         setShows(list);
-        setActive((prev) => prev ?? list[0] ?? null);
+        // Re-read by id so the panel shows what was just saved — keeping the
+        // old object left "Members only" looking like it had not applied.
+        setActive((prev) => (prev ? (list.find((s) => s.id === prev.id) ?? list[0]) : list[0]) ?? null);
       })
       .catch(() => setError("We couldn't load your shows. Try refreshing the page."));
   }, []);

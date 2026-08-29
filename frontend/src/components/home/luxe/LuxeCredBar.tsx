@@ -1,4 +1,5 @@
-import { motion, useReducedMotion } from "motion/react";
+import { motion } from "motion/react";
+import { useEntranceMotion } from "@/hooks/useEntranceMotion";
 import { Marquee } from "@/components/luxe/Marquee";
 import { cn } from "@/lib/cn";
 
@@ -25,7 +26,7 @@ const PASSES = 3;
  * at 390px instead of stacking into a four-line block.
  */
 export function LuxeCredBar({ className }: { className?: string }) {
-  const reduce = useReducedMotion();
+  const reduce = useEntranceMotion();
 
   return (
     <motion.div

@@ -2,7 +2,7 @@
 # Source: the `redirects` table. Regenerate with:
 #   docker compose exec backend node scripts/generate-nginx-redirects.js
 #   docker compose exec nginx nginx -s reload
-# Generated from 94 rows.
+# Generated from 122 rows.
 
 # The podcast episode paths (/podcasts/<show>/episodes/<id>) overflow the
 # 64-byte default bucket, and nginx refuses to start rather than truncating.
@@ -16,6 +16,9 @@ map $uri $redirect_target {
     /about_yvette /about;
     /all-courses /courses;
     /audit-private-practice-replay /resources;
+    /blog/alma-vs-private-pay-group-practice-numbers /blog;
+    /blog/how-to-stop-seeing-25-clients-a-week /blog/how-to-stop-seeing-25-clients-a-week-and-still-hit-your-income-goals;
+    /blog/is-talkspace-right-for-your-practice-goals /blog;
     /boss-assessment /practice-quiz;
     /boss-builders-sales-page /work-with-me;
     /boss-clinician-home /;
@@ -49,6 +52,16 @@ map $uri $redirect_target {
     /masterclass-review-sheet /resources;
     /next-steps-consult /apply;
     /offer-quiz /practice-quiz;
+    /offers/boofdeo2 /retreats;
+    /offers/boofdeo2/checkout /retreats;
+    /offers/eghehsbl /store;
+    /offers/eghehsbl/checkout /store;
+    /offers/gswshbtx /store;
+    /offers/gswshbtx/checkout /store;
+    /offers/ykwzvqdz /store;
+    /offers/ykwzvqdz/checkout /store;
+    /offers/z9zxy5pi /retreats;
+    /offers/z9zxy5pi/checkout /retreats;
     /on-demand-audit-your-private-practice /resources;
     /podcasts/lyrical-reflections /podcasts/lyrical-reflections;
     /podcasts/lyrical-reflections/episodes/2148691037 /podcasts/lyrical-reflections;
@@ -78,12 +91,27 @@ map $uri $redirect_target {
     /protect-your-practice /courses/private-practice-protection-pack;
     /protectionpackthanks /checkout/success;
     /rampedrevenue /courses/ramp-up-rate-formula;
+    /ready-quiz /practice-quiz;
     /reluctant-form /practice-quiz;
     /replay-audit-your-ppractice-edu /resources;
     /replay-audit-your-practice /resources;
     /reset-audit /resources;
     /reset-audit-form /resources;
     /reset-planner-form /practice-reset-planner;
+    /resource_redirect/landing_pages/2150414734 /courses/fully-booked-toolkit;
+    /resource_redirect/landing_pages/2150427089 /courses/from-profile-to-profit;
+    /resource_redirect/landing_pages/2151053468 /courses/credential-with-confidence;
+    /resource_redirect/landing_pages/2151053560 /courses/credentialing-success-formula;
+    /resource_redirect/landing_pages/2151054099 /courses/private-practice-starter-suite;
+    /resource_redirect/landing_pages/2151104751 /courses/ramp-up-rate-formula;
+    /resource_redirect/landing_pages/2151230875 /courses/provider-partnership-guide;
+    /resource_redirect/landing_pages/2151230877 /courses/private-practice-protection-pack;
+    /resource_redirect/landing_pages/2151750533 /courses/directory-makeover-audit;
+    /resource_redirect/offers/7n6ffee2 /courses/rate-negotiation-letter-template;
+    /resource_redirect/offers/jfvdgdjf /courses/prepare-to-profit-journal;
+    /resource_redirect/offers/jgx2ulva /courses/marketing-mastery-for-therapists;
+    /resource_redirect/offers/wmz5rngn /courses/therapist-niche-clarity-accelerator;
+    /resource_redirect/offers/yhc3aisz /courses/client-consultation-call-script;
     /resourcehub /resource-hub;
     /retreat-thank-you-page /retreats;
     /retreatagreement /terms;

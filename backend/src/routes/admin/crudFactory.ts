@@ -2,7 +2,6 @@ import { Router } from "express";
 import { z } from "zod";
 import { asyncHandler } from "../../utils/asyncHandler";
 import { badRequest, notFound } from "../../utils/httpError";
-import { requireRole } from "../../middleware/requireRole";
 
 interface Repo<T extends { id: number }> {
   list(opts?: { where?: string; params?: unknown[]; orderBy?: string }): Promise<T[]>;
@@ -66,9 +65,13 @@ export function buildAdminCrudRouter<T extends { id: number }>(
     })
   );
 
+  // Deleting is gated at the mount, with the rest of the module's writes — see
+  // the `moduleGate` in routes/admin/index.ts. It used to be `requireRole("admin")`
+  // here, which since the roles migration excluded `owner`: Yvette's own account
+  // is the owner, so the delete button on her blog, course, testimonial and
+  // resource screens answered 403 for her and worked for everybody else.
   router.delete(
     "/:id",
-    requireRole("admin"),
     asyncHandler(async (req, res) => {
       const id = Number(req.params.id);
       if (!Number.isInteger(id)) throw badRequest("Invalid id");

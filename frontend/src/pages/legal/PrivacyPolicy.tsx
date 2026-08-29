@@ -1,10 +1,11 @@
 import type { ReactNode } from "react";
-import { motion, useReducedMotion } from "motion/react";
+import { motion } from "motion/react";
 import { Seo } from "@/components/Seo";
 import { GlassCard } from "@/components/luxe/GlassCard";
 import { LuxePageHero } from "@/components/luxe/LuxePageHero";
 import { LuxePill } from "@/components/luxe/LuxeButton";
 import { GoldRule, Section } from "@/components/luxe/Section";
+import { useEntranceMotion } from "@/hooks/useEntranceMotion";
 import { cn } from "@/lib/cn";
 
 /* ── Document model ───────────────────────────────────────────────────────
@@ -280,7 +281,7 @@ function Bullets({ items }: { items: ReactNode[] }) {
 }
 
 export default function PrivacyPolicy() {
-  const reduce = useReducedMotion();
+  const reduce = useEntranceMotion();
 
   return (
     <>

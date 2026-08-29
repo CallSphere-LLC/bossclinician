@@ -90,13 +90,21 @@ export const NAV_GROUPS: NavGroup[] = [
     label: "Marketing",
     icon: Megaphone,
     children: [
-      { to: "/admin/marketing/events", label: "Events", ready: true },
+      // Two different things were both called "Events": this one schedules an
+      // event inside a community, while "Events" below takes registrations for
+      // a webinar or a live class. Identical labels meant picking one at random
+      // and finding the event she made nowhere in the other.
+      { to: "/admin/marketing/events", label: "Community Events", ready: true },
       { to: "/admin/marketing/campaigns", label: "Email Campaigns", ready: true },
       { to: "/admin/marketing/funnels", label: "Funnels", ready: true },
       { to: "/admin/marketing/sequences", label: "Email Sequences", ready: true },
       { to: "/admin/marketing/automations-v2", label: "Automations", ready: true },
       { to: "/admin/marketing/emails", label: "Email Templates", ready: true },
-      { to: "/admin/marketing/automations", label: "Automations (old)", ready: true },
+      // The first automations screen is deliberately not listed. It reads and
+      // writes the same records as the one above, in an older shape: opening an
+      // automation built above and saving it there flattens its conditions into
+      // text the engine cannot read, and the automation quietly stops running.
+      // The route still exists for anyone who has the address.
       { to: "/admin/marketing/quizzes", label: "Quizzes", ready: true },
       { to: "/admin/marketing/events-v2", label: "Events", ready: true },
       { to: "/admin/marketing/forms-v2", label: "Forms", ready: true },

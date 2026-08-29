@@ -8,6 +8,7 @@ import { adminRouter } from "./routes/admin";
 import { memberAuthRouter } from "./routes/auth";
 import { memberRouter } from "./routes/member";
 import { seoRouter } from "./routes/public/seo";
+import { renderRouter } from "./routes/public/render";
 import { apiV1Router } from "./routes/public/apiV1";
 import { notFoundHandler, errorHandler } from "./middleware/errorHandler";
 
@@ -15,8 +16,20 @@ export function createApp(): Express {
   const app = express();
 
   app.disable("x-powered-by");
-  // Behind nginx/Traefik: trust the first hop so req.ip / X-Forwarded-For
-  // reflect the real client IP (required for correct rate-limit keying).
+  // Behind nginx/Traefik: trust exactly one hop. This value is COUPLED to
+  // nginx/site.conf, which forwards X-Forwarded-For verbatim rather than
+  // appending to it (see the comment there). If nginx ever goes back to
+  // $proxy_add_x_forwarded_for, it appends a hop and this must become 2 —
+  // and if you raise it to 2 while nginx still passes through, a client can
+  // forge its own X-Forwarded-For. Change the two together or not at all.
+  //
+  // Note this does NOT currently yield the visitor's address: the k3d load
+  // balancer is a plain TCP proxy and the Traefik Service uses
+  // externalTrafficPolicy: Cluster, so the source IP is replaced upstream of
+  // us. req.ip is a constant in production, which means every per-IP rate
+  // limiter is effectively global and consentIp/audit IPs are not evidence.
+  // Fixing that needs PROXY protocol on the k3d LB and the Traefik
+  // entrypoints together; see docs/bugs/infra.md.
   app.set("trust proxy", 1);
 
   const corsOrigin = env.frontendOrigin === "*" ? true : env.frontendOrigin;
@@ -36,7 +49,13 @@ export function createApp(): Express {
   // Same reason as the Stripe line above: the provider signs the bytes it sent,
   // so once JSON has parsed the stream the original body is gone and no
   // signature can ever verify.
-  app.use("/api/email/webhook", express.raw({ type: "application/json", limit: "1mb" }));
+  //
+  // Every content type, not just JSON: Amazon SNS — which is how SES reports
+  // deliveries and bounces — posts its JSON under `text/plain`, and a type
+  // filter that misses it leaves the body unparsed and every notification
+  // unverifiable. Nothing but webhooks is mounted under this path, so accepting
+  // the bytes whatever they claim to be costs nothing.
+  app.use("/api/email/webhook", express.raw({ type: () => true, limit: "1mb" }));
 
   app.use(express.json({ limit: "2mb" }));
   app.use(express.urlencoded({ extended: true }));
@@ -67,6 +86,12 @@ export function createApp(): Express {
   app.use("/api/auth", memberAuthRouter);
   app.use("/api/member", memberRouter);
   app.use("/api", publicRouter);
+
+  // Server-rendered marketing HTML. Last, and matching only its own explicit
+  // list of paths, so it can never shadow an API route or the static mounts
+  // above it. nginx sends exactly these paths here; everything else still
+  // reaches the frontend container as the client-rendered shell.
+  app.use("/", renderRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

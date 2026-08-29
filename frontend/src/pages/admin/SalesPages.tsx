@@ -23,6 +23,7 @@ import {
   Field,
   Input,
   PageHeader,
+  selectStyles,
   Textarea,
   type BadgeProps,
 } from "@/pages/admin/ui/primitives";
@@ -406,7 +407,7 @@ export function PlansPage() {
                 id="plan-interval"
                 value={form.interval}
                 onChange={(e) => setForm((f) => ({ ...f, interval: e.target.value }))}
-                className="h-11 w-full rounded-xl border border-hairline bg-surface px-3 text-sm outline-none focus-visible:border-plum focus-visible:ring-4 focus-visible:ring-plum/12"
+                className={selectStyles}
               >
                 <option value="month">Every month</option>
                 <option value="year">Every year</option>

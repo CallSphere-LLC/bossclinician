@@ -187,12 +187,45 @@ export const api = {
 
 // ---- Admin ----
 
+/**
+ * Splits a whole name into the first/last pair the member row also carries.
+ *
+ * Everything up to the first space is the first name and the rest is the last,
+ * which is wrong for some names and right for the overwhelming majority — and
+ * it is only ever used to keep the pair agreeing with the whole name that was
+ * typed, never to decide how somebody is addressed. A caller that already holds
+ * the two halves passes them and this leaves them alone.
+ */
+function withSplitName<T extends { name?: string; firstName?: string; lastName?: string }>(
+  data: T,
+): T {
+  if (data.name === undefined || data.firstName !== undefined || data.lastName !== undefined) {
+    return data;
+  }
+  const whole = data.name.trim();
+  const gap = whole.indexOf(" ");
+  return {
+    ...data,
+    firstName: gap === -1 ? whole : whole.slice(0, gap),
+    lastName: gap === -1 ? "" : whole.slice(gap + 1).trim(),
+  };
+}
+
 export const adminApi = {
   login: (email: string, password: string) =>
     request<{ token: string; user: AdminUser }>("/admin/login", {
       method: "POST",
       body: JSON.stringify({ email, password }),
     }),
+  /**
+   * Ends the session on the server as well as in this browser.
+   *
+   * Dropping the token locally is not signing out: the session row stays live
+   * until it expires, it keeps showing on the "where you're signed in" list as
+   * though the laptop were still open, and anything that copied the token
+   * before it was cleared still works. Answers 204 and never a body.
+   */
+  logout: () => request<void>("/admin/logout", { method: "POST" }),
   me: () => request<AdminUser>("/admin/me"),
   stats: () => request<AdminStats>("/admin/stats"),
 
@@ -291,6 +324,20 @@ export const adminApi = {
       body: JSON.stringify({ title }),
     }),
   mediaDelete: (id: number) => request<void>(`/admin/media/${id}`, { method: "DELETE" }),
+  /**
+   * A URL the admin can actually play or show.
+   *
+   * A file only buyers can open is stored as `protected:<key>`, which is a
+   * reference and not an address — handed straight to a <video> it draws an
+   * empty box. This trades it for a signed link that works for a couple of
+   * hours. A public file comes back unchanged, so callers never have to ask
+   * which sort they are holding.
+   */
+  mediaPreview: (reference: string) =>
+    request<{ url: string; expiresAt: string | null }>("/admin/media/preview", {
+      method: "POST",
+      body: JSON.stringify({ reference }),
+    }),
 
   // ---- Curriculum ----
   curriculum: (courseId: number) => request<CourseModule[]>(`/admin/curriculum/${courseId}`),
@@ -378,8 +425,31 @@ export const adminApi = {
     }>("/admin/members/import", { method: "POST", body: JSON.stringify({ rows }) }),
   memberCreate: (data: { email: string; name?: string; status?: string }) =>
     request<Member>("/admin/members", { method: "POST", body: JSON.stringify(data) }),
-  memberUpdate: (id: number, data: { name?: string; status?: string }) =>
-    request<Member>(`/admin/members/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  /**
+   * Saves a member's details.
+   *
+   * A member's name is stored three ways — `name`, `first_name`, `last_name` —
+   * and every screen that shows one prefers the pair, falling back to `name`
+   * only when the pair is empty. So sending `name` on its own writes a column
+   * nothing displays: the edit box accepts a new name, the save succeeds, and
+   * the row in the table is unchanged. Whoever passes a whole name here means
+   * "this is what they are called", so the pair is filled in from it unless the
+   * caller has the two halves already and passes them itself.
+   */
+  memberUpdate: (
+    id: number,
+    data: {
+      name?: string;
+      firstName?: string;
+      lastName?: string;
+      timezone?: string;
+      status?: string;
+    },
+  ) =>
+    request<Member>(`/admin/members/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(withSplitName(data)),
+    }),
   memberDelete: (id: number) => request<void>(`/admin/members/${id}`, { method: "DELETE" }),
   memberEnrollments: (id: number) => request<Enrollment[]>(`/admin/members/${id}/enrollments`),
   memberEnroll: (id: number, courseId: number) =>
@@ -470,6 +540,18 @@ export const adminApi = {
   eventCreate: (communityId: number, data: Record<string, unknown>) =>
     request<CommunityEvent>(`/admin/community/${communityId}/events`, {
       method: "POST",
+      body: JSON.stringify(data),
+    }),
+  /**
+   * Changes a community event that is already on the calendar.
+   *
+   * Without this the only way to move an event an hour later is to delete it
+   * and schedule a new one, which drops every RSVP against it. The events tab
+   * in the admin still offers no edit form — wiring one up is what this is for.
+   */
+  eventUpdate: (id: number, data: Record<string, unknown>) =>
+    request<CommunityEvent>(`/admin/community/events/${id}`, {
+      method: "PUT",
       body: JSON.stringify(data),
     }),
   eventDelete: (id: number) =>

@@ -241,11 +241,44 @@ adminSegmentsRouter.put(
  * `email_campaigns.segment_id` is `ON DELETE SET NULL`, so a broadcast that was
  * sent to this group keeps its own record of having been sent — it simply stops
  * naming a group that no longer exists.
+ *
+ * A campaign that has NOT gone out yet is a different matter, and the reason
+ * for the check below. `resolveAudience` reads the segment when there is one and
+ * falls back to the legacy `audience` column when there is not — and that column
+ * defaults to `all_subscribers`. So deleting a group that a scheduled email is
+ * pointed at does not cancel the email; it silently re-points it at the entire
+ * list, and the next tick sends it with nobody in the loop.
+ *
+ * The check is written as "anything that is not finished" rather than as a list
+ * of the states that block. The list version named draft, scheduled and sending
+ * and left out `failed` — which services/broadcasts.ts writes whenever a send
+ * cannot start, and which the console still offers a Send button for. Deleting a
+ * group a failed campaign pointed at, then pressing Send, mailed the whole list.
+ * `status` has no CHECK constraint behind it and is writable through the generic
+ * campaigns CRUD route, so any list of blocking states is a list that can be
+ * walked around; `sent` is the only state from which the segment genuinely no
+ * longer matters, because that campaign will never resolve an audience again.
  */
 adminSegmentsRouter.delete(
   "/:id",
   asyncHandler(async (req, res) => {
     const id = parseId(req.params.id);
+
+    const inUse = await pool.query<{ name: string }>(
+      `SELECT name FROM email_campaigns
+        WHERE segment_id = $1 AND status <> 'sent'
+        ORDER BY id
+        LIMIT 3`,
+      [id]
+    );
+    if (inUse.rowCount) {
+      throw badRequest(
+        `This group is still chosen as the audience for ${inUse.rows
+          .map((row) => `"${row.name}"`)
+          .join(", ")}. Point those emails at another group first.`
+      );
+    }
+
     const result = await pool.query(`DELETE FROM segments WHERE id = $1`, [id]);
     if (result.rowCount === 0) throw notFound("Segment not found");
 

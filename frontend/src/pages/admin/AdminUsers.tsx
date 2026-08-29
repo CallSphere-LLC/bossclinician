@@ -34,6 +34,7 @@ import {
   Field,
   Input,
   PageHeader,
+  selectStyles,
   Skeleton,
 } from "@/pages/admin/ui/primitives";
 import { Modal, useConfirm } from "@/pages/admin/ui/Dialog";
@@ -56,8 +57,16 @@ import type { ColumnDef } from "@tanstack/react-table";
  * nobody should switch two-step on, because there would be nowhere to type it.
  */
 
-const selectStyles =
-  "h-11 w-full rounded-xl border border-hairline bg-white/[0.04] px-3 text-sm text-ink outline-none transition-all hover:border-white/20 focus-visible:border-gold/60 focus-visible:bg-white/[0.07] focus-visible:ring-4 focus-visible:ring-gold/15";
+/**
+ * Whether an admin can switch two-step sign-in on for themselves yet.
+ *
+ * One flag rather than a disabled attribute buried in the markup, because the
+ * button and the label beside it have to agree: a control that says "Off" next
+ * to a button that does nothing reads as a broken screen, while "Coming soon"
+ * reads as a promise. Flipping this to `true` the day the sign-in screen has a
+ * box for the code puts both of them right at once.
+ */
+const MFA_SELF_ENROLMENT_READY: boolean = false;
 
 const STATUS_TONE: Record<string, "green" | "gold" | "slate"> = {
   active: "green",
@@ -168,24 +177,35 @@ function SecurityCard() {
                 Your password alone stops being enough. You'll type a six-digit code from an app on
                 your phone — so somebody who learns your password still can't get in.
               </p>
-              {security.mfaEnabled && (
+              {security.mfaEnabled ? (
                 <p className="mt-2 text-xs text-ink-soft">
                   {security.recoveryCodesLeft} backup{" "}
                   {security.recoveryCodesLeft === 1 ? "code" : "codes"} left for if you lose your
                   phone.
                 </p>
+              ) : (
+                <p className="mt-2 text-xs text-ink-soft">
+                  {MFA_SELF_ENROLMENT_READY
+                    ? "Not switched on yet."
+                    : "We're still building this one — there's nothing for you to do, and we'll let you know the moment you can switch it on."}
+                </p>
               )}
             </div>
             <div className="flex shrink-0 items-center gap-2.5">
               <Badge tone={security.mfaEnabled ? "green" : "slate"}>
-                {security.mfaEnabled ? "On" : "Off"}
+                {security.mfaEnabled ? "On" : MFA_SELF_ENROLMENT_READY ? "Off" : "Coming soon"}
               </Badge>
               {security.mfaEnabled ? (
                 <Button variant="secondary" size="sm" onClick={() => setTurningOff(true)}>
                   Turn it off
                 </Button>
               ) : (
-                <Button size="sm" onClick={startEnrolment}>
+                /* Disabled until the sign-in screen has a box for the code — see
+                   the note at the top of this file. Switching it on today locks
+                   the account out at the very next sign-in, because
+                   `adminApi.login` sends no code and the server answers 401. The
+                   handler stays wired for the day that box exists. */
+                <Button size="sm" disabled={!MFA_SELF_ENROLMENT_READY} onClick={startEnrolment}>
                   Turn it on
                 </Button>
               )}

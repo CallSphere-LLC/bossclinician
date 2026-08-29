@@ -26,6 +26,7 @@ import {
   Field,
   Input,
   PageHeader,
+  selectStyles,
   Textarea,
 } from "@/pages/admin/ui/primitives";
 import { DataTable } from "@/pages/admin/ui/DataTable";
@@ -249,8 +250,16 @@ export default function Contacts() {
 
   // Typing in the search box shouldn't fire a request per keystroke.
   useEffect(() => {
-    const timer = setTimeout(load, 250);
-    return () => clearTimeout(timer);
+    // The canceller `load` returns has to be kept, or a slow earlier search
+    // lands after a newer one and fills the table with the wrong people.
+    let cancel: (() => void) | undefined;
+    const timer = setTimeout(() => {
+      cancel = load();
+    }, 250);
+    return () => {
+      clearTimeout(timer);
+      cancel?.();
+    };
   }, [load]);
 
   const loadTags = useCallback(() => {
@@ -285,7 +294,7 @@ export default function Contacts() {
             onChange={() =>
               setSelected(allSelected ? new Set() : new Set((people ?? []).map((p) => p.id)))
             }
-            aria-label="Choose everyone on this page"
+            aria-label="Choose everyone in this list"
             className="size-4 rounded border-hairline text-plum focus-visible:ring-plum/30"
           />
         ),
@@ -490,7 +499,7 @@ export default function Contacts() {
               value={tagFilter}
               onChange={(e) => setTagFilter(e.target.value)}
               aria-label="Show only people with a tag"
-              className="h-11 rounded-xl border border-hairline bg-surface px-3 text-sm text-ink outline-none focus-visible:border-plum focus-visible:ring-4 focus-visible:ring-plum/12"
+              className={cn(selectStyles, "w-auto")}
             >
               <option value="">Any tag</option>
               {tags.map((tag) => (
@@ -503,7 +512,7 @@ export default function Contacts() {
               value={sort}
               onChange={(e) => setSort(e.target.value as NonNullable<ContactFilters["sort"]>)}
               aria-label="Order the list"
-              className="h-11 rounded-xl border border-hairline bg-surface px-3 text-sm text-ink outline-none focus-visible:border-plum focus-visible:ring-4 focus-visible:ring-plum/12"
+              className={cn(selectStyles, "w-auto")}
             >
               {SORT_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>

@@ -41,6 +41,19 @@ function kindForFile(file: File): string {
  * must not discard the four images that already succeeded, so each queue entry
  * owns its own AbortController and error state.
  */
+/**
+ * The one refusal the server words for itself, said her way.
+ *
+ * It answers "Unsupported file type: image/heic" — true, and half of it is a
+ * machine name she has never seen. What she needs is which files do work.
+ */
+function uploadProblem(err: unknown): string | null {
+  const said = err instanceof Error ? err.message : "";
+  return /unsupported file type/i.test(said)
+    ? "That kind of file can't be used here. Pictures work best as JPG or PNG, and videos as MP4."
+    : null;
+}
+
 export function UploadDropzone({
   onUploaded,
   accept,
@@ -104,7 +117,9 @@ export function UploadDropzone({
             // She pressed the stop button — that is not a failure, and it must
             // not shout at her in red.
             const stopped = controller.signal.aborted;
-            const message = stopped ? "You stopped this one." : friendlyError(err, "file");
+            const message = stopped
+              ? "You stopped this one."
+              : uploadProblem(err) ?? friendlyError(err, "file");
             setQueue((prev) =>
               prev.map((item) =>
                 item.id === id

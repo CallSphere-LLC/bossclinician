@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { pool } from "../../db/pool";
-import { rowToCamel, rowsToCamel } from "../../utils/case";
+import { rowToCamel, rowsToCamel, toSnake } from "../../utils/case";
 import { asyncHandler } from "../../utils/asyncHandler";
 import { badRequest, notFound } from "../../utils/httpError";
 import { buildUpdate } from "../../utils/sqlUpdate";
@@ -54,12 +54,17 @@ const LESSON_FIELDS = [
 /**
  * The two lesson columns that hold the thing somebody paid for.
  *
- * Keyed by the name the request uses; the label is what the sentence below calls
- * it, in the words the person filling in the form would use.
+ * Keyed by the COLUMN rather than by the camelCase spelling, because that is
+ * what decides whether a value gets written: `buildUpdate` runs every body key
+ * through `toSnake`, so `{"video_url": "/uploads/course.mp4"}` updates the same
+ * column `{"videoUrl": ...}` does. Matching only the camelCase name left the
+ * snake_case spelling writing a public URL straight past the check below.
+ * The label is what the sentence calls it, in the words the person filling in
+ * the form would use.
  */
-const LESSON_MEDIA: { key: string; label: string }[] = [
-  { key: "videoUrl", label: "video" },
-  { key: "attachmentUrl", label: "file" },
+const LESSON_MEDIA: { column: string; label: string }[] = [
+  { column: "video_url", label: "video" },
+  { column: "attachment_url", label: "file" },
 ];
 
 /**
@@ -73,9 +78,11 @@ const LESSON_MEDIA: { key: string; label: string }[] = [
  * unexpiring, forwardable address on the open web, which is the entire course
  * published by accident. Empty is fine; a lesson does not have to carry media.
  */
-function assertPaidMedia(body: Record<string, unknown>): void {
-  for (const field of LESSON_MEDIA) {
-    const value = body[field.key];
+export function assertPaidMedia(body: Record<string, unknown>): void {
+  for (const [key, value] of Object.entries(body)) {
+    const column = toSnake(key);
+    const field = LESSON_MEDIA.find((entry) => entry.column === column);
+    if (!field) continue;
     if (value === undefined || value === null) continue;
     const reference = String(value).trim();
     if (reference === "" || isProtectedRef(reference) || isExternalRef(reference)) continue;
@@ -84,6 +91,31 @@ function assertPaidMedia(body: Record<string, unknown>): void {
         `it without paying. Upload it again and choose 'only people who bought it'.`,
     );
   }
+}
+
+/**
+ * The address the member's player reaches a lesson at.
+ *
+ * `course_lessons.slug` is NOT NULL DEFAULT '' with a UNIQUE (module_id, slug)
+ * index over it, so a lesson inserted without one takes the empty string — the
+ * first lesson in a section works and the second one fails on the index. The
+ * member player addresses lessons by slug
+ * (/library/:productSlug/lessons/:lessonSlug) and its slug parameter has to
+ * match `^[A-Za-z0-9]`, so an empty slug is also a lesson nobody can open.
+ *
+ * Not exposed as an editable field: the slug is in the URL a member bookmarked
+ * and in the link a "your next lesson" email already sent.
+ */
+export function lessonSlug(title: string): string {
+  return (
+    title
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 80)
+      .replace(/-+$/, "") || "lesson"
+  );
 }
 
 /** GET /admin/curriculum/:courseId — modules with their lessons nested. */
@@ -174,11 +206,19 @@ adminCurriculumRouter.post(
     if (!title) throw badRequest("Lesson title is required");
     assertPaidMedia(body);
 
+    // Two lessons called "Introduction" in one section is the ordinary case, so
+    // the slug is disambiguated in the same statement that reads the sort.
     const result = await pool.query(
       `INSERT INTO course_lessons
-         (module_id, title, body_md, video_url, attachment_url, duration_minutes, preview, published, sort)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8,
-         (SELECT COALESCE(MAX(sort), -1) + 1 FROM course_lessons WHERE module_id = $1))
+         (module_id, slug, title, body_md, video_url, attachment_url, duration_minutes,
+          preview, published, sort)
+       SELECT $1,
+              CASE WHEN taken.n = 0 THEN $9::text ELSE $9::text || '-' || (taken.n + 1) END,
+              $2, $3, $4, $5, $6, $7, $8,
+              (SELECT COALESCE(MAX(sort), -1) + 1 FROM course_lessons WHERE module_id = $1)
+         FROM (SELECT COUNT(*)::int AS n FROM course_lessons
+                WHERE module_id = $1
+                  AND (slug = $9::text OR slug LIKE $9::text || '-%')) taken
        RETURNING *`,
       [
         req.params.moduleId,
@@ -189,6 +229,7 @@ adminCurriculumRouter.post(
         body.durationMinutes ?? 0,
         body.preview ?? false,
         body.published ?? true,
+        lessonSlug(title),
       ],
     );
     res.status(201).json(rowToCamel<CourseLesson>(result.rows[0]));

@@ -1,5 +1,6 @@
 import { Fragment } from "react";
-import { motion, useReducedMotion } from "motion/react";
+import { motion } from "motion/react";
+import { useEntranceMotion } from "@/hooks/useEntranceMotion";
 import { Section } from "@/components/luxe/Section";
 import { LuxeButton } from "@/components/luxe/LuxeButton";
 import { RevealGroup, RevealItem } from "@/components/ui/Reveal";
@@ -44,7 +45,7 @@ const VIEWPORT = { once: true, margin: "-12% 0px -8% 0px" } as const;
  * chips; anything with more visual weight would rival the foil button.
  */
 export function LuxeQuiz() {
-  const reduce = useReducedMotion();
+  const reduce = useEntranceMotion();
 
   return (
     <Section

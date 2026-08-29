@@ -85,6 +85,26 @@ const LOGIN_MAX_FAILURES = 5;
  */
 const LOGIN_DISTRIBUTED_MAX_FAILURES = 40;
 
+/**
+ * What crossing that ceiling costs: a minimum gap between the sign-in attempts
+ * this platform is willing to *evaluate* for one address, doubling per failure
+ * and capped.
+ *
+ * The cap is the load-bearing number. At one evaluated guess a minute an
+ * attacker can add at most fifteen failures inside the fifteen-minute window,
+ * which is below the ceiling — so the account cannot be held above it. The
+ * counter drains on its own even while the attack continues, the gap disappears
+ * with it, and the account returns to normal service without anybody having to
+ * do anything. That is the difference between this and a lockout: there is no
+ * state to clear, and no clearing path to be rate-limited out of.
+ *
+ * Nothing sleeps. The refusal is immediate and says come back later, because a
+ * gate that held a socket open for a minute would be a cheaper way to take the
+ * API down than the credential stuffing it exists to stop.
+ */
+const LOGIN_BACKOFF_BASE_SECONDS = 5;
+const LOGIN_BACKOFF_MAX_SECONDS = 60;
+
 /** A member can ask for this many password-reset emails per window before we stop sending. */
 const RESET_WINDOW_MINUTES = 15;
 const RESET_MAX_PER_WINDOW = 5;
@@ -173,29 +193,86 @@ async function trimLoginAttempts(): Promise<void> {
 }
 
 /**
- * Whether this sign-in attempt should be refused before the password is checked.
+ * Which ceiling, if any, this sign-in attempt has already crossed.
  *
- * The email-keyed counter is scoped to the SAME IP as the caller, which is the
- * whole point. Counting an address's failures across all IPs turns the throttle
- * into a weapon: five wrong guesses from anywhere would lock the real owner out
- * of their own account, and since the check runs before the password is
- * verified, a correct password would not clear it. An attacker only had to keep
- * one failure inside the window to make the lockout permanent.
+ *  - "ip"      — this address has spent its allowance, either overall or
+ *                against this one account. Answered before the password is
+ *                looked at: the caller has had their turns from here whoever
+ *                they claim to be, and nothing they type earns more.
+ *  - "account" — this email has been failing from IPs all over the world.
+ *  - "none"    — proceed normally.
  *
- * Credential stuffing from many IPs against one account is still bounded — by
- * the per-IP ceiling, and by the global ceiling below, which trips when one
- * address is under attack from a whole range at once but is set high enough
- * that ordinary forgetfulness cannot reach it.
+ * The distinction is the whole point of returning a kind rather than a boolean.
+ * The email-keyed counters are scoped to the SAME IP as the caller because
+ * counting an address's failures across all IPs turns a throttle into a weapon:
+ * five wrong guesses from anywhere would lock the real owner out, and a check
+ * that runs before the password is verified is one a correct password cannot
+ * clear.
+ *
+ * The account-wide ceiling is the answer to the other half of that: the same
+ * five-per-IP allowance bought from forty proxies is two hundred guesses, and
+ * no per-IP counter can see that. It is applied as a minimum gap between
+ * evaluated attempts rather than as a refusal, for the reasons on
+ * {@link LOGIN_BACKOFF_MAX_SECONDS} — a stranger can slow this account down,
+ * and that is all they can do with it.
  */
-async function isLoginThrottled(email: string, ip: string): Promise<boolean> {
+type LoginThrottle = "none" | "ip" | "account";
+
+/**
+ * How long one address has to wait between attempts the server will evaluate,
+ * given how many times it has already failed inside the window.
+ *
+ * Zero below the ceiling — the overwhelming majority of sign-ins, including
+ * every real person who has mistyped their own password a few times. Above it,
+ * doubling per further failure to a cap.
+ *
+ * Exported for its tests; it is the piece with the arithmetic in it.
+ */
+export function accountBackoffSeconds(failures: number): number {
+  if (failures < LOGIN_DISTRIBUTED_MAX_FAILURES) return 0;
+  const doublings = failures - LOGIN_DISTRIBUTED_MAX_FAILURES;
+  // 2 ** 31 is where the shift would stop meaning anything; the cap below bites
+  // long before that, but the exponent comes from a counter an attacker drives.
+  if (doublings > 30) return LOGIN_BACKOFF_MAX_SECONDS;
+  return Math.min(LOGIN_BACKOFF_BASE_SECONDS * 2 ** doublings, LOGIN_BACKOFF_MAX_SECONDS);
+}
+
+/**
+ * Seconds still to wait before this address's next attempt will be evaluated.
+ *
+ * Measured from the last failure that was actually evaluated. Refused attempts
+ * are deliberately not recorded (see the sign-in route), so hammering the
+ * endpoint cannot push this forward — otherwise the wait would renew itself and
+ * become the indefinite lockout this shape exists to avoid.
+ *
+ * Exported for its tests.
+ */
+export function accountCooldownRemaining(
+  failures: number,
+  lastFailureAt: Date | string | null,
+  now: Date = new Date()
+): number {
+  const backoff = accountBackoffSeconds(failures);
+  if (backoff === 0 || !lastFailureAt) return 0;
+  const last = lastFailureAt instanceof Date ? lastFailureAt : new Date(lastFailureAt);
+  if (Number.isNaN(last.getTime())) return 0;
+  const elapsed = (now.getTime() - last.getTime()) / 1000;
+  // Clamped at both ends. A database clock running ahead of this process would
+  // otherwise put a member behind a wait longer than the cap they were promised.
+  return Math.min(backoff, Math.max(0, Math.ceil(backoff - elapsed)));
+}
+
+async function loginThrottle(email: string, ip: string): Promise<LoginThrottle> {
   const result = await pool.query<{
     ip_failures: string;
     same_ip_email_failures: string;
     email_failures_all_ips: string;
+    last_email_failure: Date | string | null;
   }>(
     `SELECT count(*) FILTER (WHERE ip = $1)                     AS ip_failures,
             count(*) FILTER (WHERE ip = $1 AND email = $2)      AS same_ip_email_failures,
-            count(*) FILTER (WHERE email = $2)                  AS email_failures_all_ips
+            count(*) FILTER (WHERE email = $2)                  AS email_failures_all_ips,
+            max(created_at) FILTER (WHERE email = $2)           AS last_email_failure
        FROM member_login_attempts
       WHERE successful = false
         AND created_at > now() - make_interval(mins => $3)`,
@@ -203,13 +280,23 @@ async function isLoginThrottled(email: string, ip: string): Promise<boolean> {
   );
 
   const row = result.rows[0];
-  if (!row) return false;
+  if (!row) return "none";
 
-  return (
+  if (
     Number(row.ip_failures) >= LOGIN_MAX_FAILURES ||
-    Number(row.same_ip_email_failures) >= LOGIN_MAX_FAILURES ||
-    Number(row.email_failures_all_ips) >= LOGIN_DISTRIBUTED_MAX_FAILURES
-  );
+    Number(row.same_ip_email_failures) >= LOGIN_MAX_FAILURES
+  ) {
+    return "ip";
+  }
+  // The counters are keyed on the address as typed, and a failure is recorded
+  // for an address with no account exactly as it is for one with an account, so
+  // this branch is reached identically either way. It has to be: a wait that
+  // only happened for real members would answer "does this person bank here"
+  // for anybody willing to spend forty requests asking.
+  if (accountCooldownRemaining(Number(row.email_failures_all_ips), row.last_email_failure) > 0) {
+    return "account";
+  }
+  return "none";
 }
 
 interface LookupRow extends MemberProfileRow {
@@ -237,6 +324,21 @@ async function sendSetPasswordEmail(member: {
   email: string;
   first_name: string;
 }): Promise<void> {
+  // A link that is still live is left exactly where it is. The only caller is
+  // /register, which anybody can post any address to: burning and reissuing on
+  // a stranger's word would kill the link a guest-checkout buyer is holding
+  // while they read the email it arrived in, and spend the ceiling below doing
+  // it — so two minutes of that keeps a paying customer out of the account they
+  // just bought from. The member already has a working link; sending a second
+  // one is not what "check your email" needs to be true.
+  const live = await pool.query<{ id: number }>(
+    `SELECT id FROM member_password_resets
+      WHERE member_id = $1 AND used_at IS NULL AND expires_at > now()
+      LIMIT 1`,
+    [member.id]
+  );
+  if (live.rows[0]) return;
+
   const recent = await pool.query<{ count: string }>(
     `SELECT count(*) AS count
        FROM member_password_resets
@@ -450,11 +552,22 @@ memberAuthRoutes.post(
     const { email, password } = parsed.data;
     const meta = clientMeta(req);
 
-    // No attempt is recorded here. Counting a request that was refused without
-    // ever checking a password lets the window extend itself: one call every
-    // fourteen minutes would hold the counter above the limit indefinitely, and
-    // the account would never unlock. Only a real credential check counts.
-    if (await isLoginThrottled(email, meta.ip)) {
+    // No attempt is recorded on the refusal below. Counting a request that was
+    // refused without ever checking a password lets the window extend itself:
+    // one call every fourteen minutes would hold the counter above the limit
+    // indefinitely, and the account would never unlock. Only a real credential
+    // check counts.
+    const throttle = await loginThrottle(email, meta.ip);
+    if (throttle !== "none") {
+      // Both kinds refuse here, before a password is looked at, because a gate
+      // that still evaluates the guess bounds nothing — the only thing it
+      // changes is which number the attacker reads back.
+      //
+      // "account" is survivable in a way the old account-wide refusal was not:
+      // it lasts at most LOGIN_BACKOFF_MAX_SECONDS from the last evaluated
+      // failure, and because this refusal records nothing, an attacker cannot
+      // renew it. Their own throughput is what drains the window that put the
+      // account here.
       throw new HttpError(429, GENERIC_THROTTLED);
     }
 
@@ -465,6 +578,8 @@ memberAuthRoutes.post(
     const correct = await verifyPassword(password, member?.password_hash ?? null);
 
     if (!member || !correct || SIGN_IN_BLOCKED.has(member.status)) {
+      // Only attempts that were actually evaluated are counted, which is what
+      // makes the gap above self-limiting rather than self-renewing.
       await recordLoginAttempt(email, meta.ip, false);
       throw unauthorized(GENERIC_CREDENTIALS);
     }

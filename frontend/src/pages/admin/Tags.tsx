@@ -390,6 +390,11 @@ function TagPeople({ tag, onClose }: { tag: Tag | null; onClose: () => void }) {
           ))}
         </ul>
       )}
+      {people !== null && total > people.length && (
+        <p className="mt-3 text-xs text-ink-soft">
+          Showing the first {people.length}. Open Contacts and filter by this tag to see everyone.
+        </p>
+      )}
     </Modal>
   );
 }

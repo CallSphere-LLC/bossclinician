@@ -263,15 +263,6 @@ export default function ReportView() {
     return columns;
   }, [report]);
 
-  if (error) {
-    return (
-      <div className="space-y-6">
-        <BackLink />
-        <ErrorNotice message={error} />
-      </div>
-    );
-  }
-
   const totals = Object.entries(report?.totals ?? {});
 
   return (
@@ -303,6 +294,11 @@ export default function ReportView() {
           </Button>
         </div>
       </div>
+
+      {/* Shown above the pickers rather than instead of them: a date range the
+          server refuses used to replace the whole screen, taking with it the
+          very boxes she needed to correct it. */}
+      {error && <ErrorNotice message={error} />}
 
       {/* Controls */}
       <Card className="flex flex-wrap items-center gap-2 p-4">

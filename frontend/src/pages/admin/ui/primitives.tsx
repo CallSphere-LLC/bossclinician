@@ -8,6 +8,7 @@ import {
   type InputHTMLAttributes,
   type ReactElement,
   type ReactNode,
+  type SelectHTMLAttributes,
   type TextareaHTMLAttributes,
 } from "react";
 import { Slot } from "@radix-ui/react-slot";
@@ -196,6 +197,26 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaHTMLAttributes<H
   ),
 );
 Textarea.displayName = "Textarea";
+
+/**
+ * The one dropdown look, exported because plenty of screens build their options
+ * from a list and want a plain `<select>` rather than a component.
+ *
+ * It used to be declared once per screen — eleven copies, three of which had
+ * drifted off the shared field styling and left the chosen value hard to read.
+ * A control that appears on twenty screens cannot be a constant at the top of
+ * each of them. `.select-field` (index.css) is the part Tailwind cannot express:
+ * dropping the native appearance, drawing the arrow back, and colouring the
+ * option list the OS renders.
+ */
+export const selectStyles = cn(fieldStyles, "h-11 cursor-pointer select-field");
+
+export const Select = forwardRef<HTMLSelectElement, SelectHTMLAttributes<HTMLSelectElement>>(
+  ({ className, ...props }, ref) => (
+    <select ref={ref} className={cn(selectStyles, className)} {...props} />
+  ),
+);
+Select.displayName = "Select";
 
 /**
  * Label + hint + one input.

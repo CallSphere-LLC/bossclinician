@@ -1,5 +1,6 @@
 import { Fragment, useRef } from "react";
 import { motion, useReducedMotion, useScroll, useTransform } from "motion/react";
+import { useEntranceMotion } from "@/hooks/useEntranceMotion";
 import { Aurora } from "@/components/luxe/Aurora";
 import { GlassCard } from "@/components/luxe/GlassCard";
 import { KineticText } from "@/components/luxe/KineticText";
@@ -52,7 +53,12 @@ function Hallmark({ className }: { className?: string }) {
 
 export function LuxeHero() {
   const sectionRef = useRef<HTMLElement>(null);
-  const reduce = useReducedMotion();
+  // Two questions, two answers. The rises are entrances and belong to the first
+  // paint, which is served flat. The portrait parallax is a running response to
+  // the reader's own scrolling and lasts as long as the page does, so it has to
+  // keep asking what the reader actually asked for.
+  const staticEntrance = useEntranceMotion();
+  const prefersReducedMotion = useReducedMotion();
 
   const { scrollYProgress } = useScroll({
     target: sectionRef,
@@ -87,7 +93,7 @@ export function LuxeHero() {
               tier rail now lives in this column, and on a 1536×864 laptop the
               old value pushed it past the fold. */}
           <div className="relative z-10 pb-4 pt-14 sm:pt-16 lg:py-20 xl:pr-10">
-            <motion.div {...rise(reduce, 0.05)} className="flex items-center gap-4">
+            <motion.div {...rise(staticEntrance, 0.05)} className="flex items-center gap-4">
               <span aria-hidden className="rule-gold hidden w-10 shrink-0 sm:block" />
               {/* 0.6rem resolved to 9.6px on a phone — below the floor where a
                   wide-tracked uppercase label stays comfortably readable. */}
@@ -111,7 +117,7 @@ export function LuxeHero() {
             </h1>
 
             <motion.p
-              {...rise(reduce, 0.24)}
+              {...rise(staticEntrance, 0.24)}
               className="copy-luxe mt-7 max-w-[34rem] text-pretty sm:mt-8 sm:text-[1.04rem] lg:text-[1.08rem]"
             >
               The community, strategy, and structure therapists and clinicians need to build
@@ -120,7 +126,7 @@ export function LuxeHero() {
             </motion.p>
 
             <motion.div
-              {...rise(reduce, 0.34)}
+              {...rise(staticEntrance, 0.34)}
               className="mt-9 flex flex-wrap items-center gap-3 sm:mt-8 sm:gap-4"
             >
               <LuxeButton to="/work-with-me" variant="foil" size="lg">
@@ -147,7 +153,7 @@ export function LuxeHero() {
             </motion.div>
 
             <motion.p
-              {...rise(reduce, 0.44)}
+              {...rise(staticEntrance, 0.44)}
               className="mt-9 flex items-center gap-4 text-[0.66rem] font-bold uppercase tracking-[0.32em] text-gold sm:mt-8 sm:text-[0.7rem]"
             >
               LEAD. HEAL. ELEVATE.
@@ -161,7 +167,7 @@ export function LuxeHero() {
                 tiers move here instead and read as the closing line of the
                 pitch. One source of truth (TIERS) renders both; the inactive
                 one is display:none, so screen readers only ever meet one. */}
-            <motion.div {...rise(reduce, 0.54)} className="mt-6 hidden w-fit max-w-full lg:block">
+            <motion.div {...rise(staticEntrance, 0.54)} className="mt-6 hidden w-fit max-w-full lg:block">
               {/* Between lg and xl the column is too narrow for one line, and a
                   wrapped row orphans a separator at the end of line one — so the
                   brand head stacks above the tiers there and only sits inline
@@ -200,16 +206,16 @@ export function LuxeHero() {
           {/* ── Portrait ───────────────────────────────────────────────── */}
           <div className="relative -mx-5 mt-10 sm:-mx-8 lg:mx-0 lg:-mr-12 lg:mt-0 lg:self-stretch">
             <motion.div
-              initial={reduce ? false : { opacity: 0 }}
+              initial={staticEntrance ? false : { opacity: 0 }}
               animate={{ opacity: 1 }}
-              transition={{ duration: 1.4, delay: reduce ? 0 : 0.1, ease: EASE }}
+              transition={{ duration: 1.4, delay: staticEntrance ? 0 : 0.1, ease: EASE }}
               className="portrait-fade relative isolate h-[115vw] max-h-[540px] overflow-hidden sm:h-[80vw] sm:max-h-[600px] lg:h-full lg:max-h-none lg:min-h-[600px]"
             >
               {/* Layer is taller than its frame in both directions so the
                   parallax travel never exposes an edge, and so the image sits
                   low enough that the mask's top fade lands on hair, not face. */}
               <motion.div
-                style={reduce ? undefined : { y: portraitY }}
+                style={prefersReducedMotion ? undefined : { y: portraitY }}
                 className="absolute inset-x-0 top-[7%] h-[112%] will-change-transform"
               >
                 <img
@@ -252,9 +258,9 @@ export function LuxeHero() {
                 keeps its full edge. Phone/tablet only: from lg the same tiers
                 render as the rail under the headline copy. */}
             <motion.div
-              initial={reduce ? false : { opacity: 0, y: 18 }}
+              initial={staticEntrance ? false : { opacity: 0, y: 18 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.9, delay: reduce ? 0 : 0.7, ease: EASE }}
+              transition={{ duration: 0.9, delay: staticEntrance ? 0 : 0.7, ease: EASE }}
               className="absolute inset-x-4 bottom-5 z-20 sm:inset-x-auto sm:bottom-8 sm:left-8 sm:max-w-[21rem] lg:hidden"
             >
               <GlassCard accent="gold" spotlight={false} interactive={false} className="px-5 py-4">

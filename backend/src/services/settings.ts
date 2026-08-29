@@ -145,6 +145,44 @@ export const SETTING_DEFINITIONS: SettingDefinition[] = [
     ],
   },
   {
+    key: "business",
+    group: "general",
+    label: "What goes on your receipts",
+    description:
+      "The business details printed on every receipt and invoice your customers keep.",
+    defaults: { name: "", email: "", address: "", taxId: "" },
+    fields: [
+      {
+        name: "name",
+        label: "Business name",
+        help: "The name that heads the receipt. Leave blank and we'll use Boss Clinician.",
+        type: "text",
+        placeholder: "Boss Clinician LLC",
+      },
+      {
+        name: "email",
+        label: "Support address",
+        help: "Where a customer writes when something on a receipt looks wrong.",
+        type: "email",
+        placeholder: "support@bossclinician.com",
+      },
+      {
+        name: "address",
+        label: "Business address",
+        help: "One line per line, exactly as it should print.",
+        type: "longtext",
+        placeholder: "848 N Rainbow Blvd\n451\nLas Vegas, NV 89107",
+      },
+      {
+        name: "taxId",
+        label: "Tax ID",
+        help: "Your EIN or VAT number. Printed on receipts; leave blank to leave it off.",
+        type: "text",
+        placeholder: "88-1691637",
+      },
+    ],
+  },
+  {
     key: "checkout",
     group: "payments",
     label: "Your checkout page",
@@ -495,6 +533,20 @@ const BY_KEY = new Map(SETTING_DEFINITIONS.map((d) => [d.key, d]));
 
 export function settingDefinition(key: string): SettingDefinition | undefined {
   return BY_KEY.get(key);
+}
+
+/**
+ * The fields of a setting that hold a credential.
+ *
+ * The settings screen never sends one back — it shows a masked hint instead —
+ * so anything that reads or writes the raw `settings` table needs to know which
+ * fields those are. Empty for a key the registry does not describe, which is
+ * the safe answer only because the caller then has nothing to strip.
+ */
+export function secretFieldNames(key: string): string[] {
+  return (BY_KEY.get(key)?.fields ?? [])
+    .filter((field) => field.type === "secret")
+    .map((field) => field.name);
 }
 
 /* -------------------------------------------------------------- validation */

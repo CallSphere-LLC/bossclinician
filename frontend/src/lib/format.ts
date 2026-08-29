@@ -32,9 +32,26 @@ export function formatBytes(bytes: number): string {
   return `${value.toFixed(value >= 10 || i === 0 ? 0 : 1)} ${units[i]}`;
 }
 
+/** A bare calendar day — "2026-08-18" — with no time and no zone attached. */
+const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Turns a stored value into a `Date` without moving the day it names.
+ *
+ * `new Date("2026-08-18")` is defined to mean midnight *UTC*, and everything
+ * below then renders it in the reader's own zone — so anybody west of Greenwich
+ * is shown the 17th for a date that says the 18th. Appending a time makes the
+ * same string parse as local midnight, which is what a date with no time on it
+ * was always meant to be. A full timestamp already carries its offset and is
+ * passed through untouched.
+ */
+function parseStored(value: string): Date {
+  return new Date(DATE_ONLY.test(value) ? `${value}T00:00:00` : value);
+}
+
 export function formatDate(iso: string | null | undefined): string {
   if (!iso) return "—";
-  return new Date(iso).toLocaleDateString("en-US", {
+  return parseStored(iso).toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
     year: "numeric",
@@ -43,7 +60,7 @@ export function formatDate(iso: string | null | undefined): string {
 
 export function formatDateTime(iso: string | null | undefined): string {
   if (!iso) return "—";
-  return new Date(iso).toLocaleString("en-US", {
+  return parseStored(iso).toLocaleString("en-US", {
     month: "short",
     day: "numeric",
     hour: "numeric",
@@ -54,7 +71,7 @@ export function formatDateTime(iso: string | null | undefined): string {
 /** "3 days ago" / "in 2 hours" via Intl so it localises properly. */
 export function formatRelative(iso: string | null | undefined): string {
   if (!iso) return "—";
-  const diffMs = new Date(iso).getTime() - Date.now();
+  const diffMs = parseStored(iso).getTime() - Date.now();
   const rtf = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
   const divisions: [number, Intl.RelativeTimeFormatUnit][] = [
     [60_000, "second"],
@@ -97,8 +114,12 @@ export function percentDelta(current: number, previous: number): number | null {
   return Math.round(((current - previous) / previous) * 100);
 }
 
-/** Short axis label for a YYYY-MM-DD series point. */
+/**
+ * Short axis label for a YYYY-MM-DD series point.
+ *
+ * It used to append the time itself; that compensation now lives in
+ * `parseStored`, so the two do not have to be kept in step by hand.
+ */
 export function shortDay(date: string): string {
-  const d = new Date(`${date}T00:00:00`);
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  return parseStored(date).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }

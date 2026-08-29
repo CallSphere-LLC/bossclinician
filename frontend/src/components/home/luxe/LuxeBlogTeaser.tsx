@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { motion, useReducedMotion } from "motion/react";
+import { motion } from "motion/react";
+import { useEntranceMotion } from "@/hooks/useEntranceMotion";
 import { Section, SectionTitle } from "@/components/luxe/Section";
 import { GlassCard, type Accent } from "@/components/luxe/GlassCard";
 import { LuxeButton } from "@/components/luxe/LuxeButton";
@@ -116,7 +117,7 @@ function CoverPlate({ accent }: { accent: CardAccent }) {
 }
 
 export function LuxeBlogTeaser() {
-  const reduce = useReducedMotion();
+  const reduce = useEntranceMotion();
 
   return (
     <Section

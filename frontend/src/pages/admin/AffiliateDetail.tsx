@@ -14,6 +14,7 @@ import {
   Field,
   Input,
   PageHeader,
+  selectStyles,
   Skeleton,
   Textarea,
 } from "@/pages/admin/ui/primitives";
@@ -53,18 +54,30 @@ const STATUS_TONE: Record<string, "blue" | "green" | "gold" | "slate"> = {
 interface RuleDraft {
   offerId: number | null;
   kind: "percent" | "fixed" | "none";
-  percent: number;
-  amountCents: number;
+  /**
+   * Both numbers are held as the text she is typing, not as a number.
+   * Re-formatting a money box on every keystroke means "50" becomes "5.00"
+   * after the first digit and the second one lands after the decimal point —
+   * she could never type a rate above $9.99, or a half-percent at all.
+   */
+  percent: string;
+  amount: string;
   payOnEveryRenewal: boolean;
 }
 
 const EMPTY_RULE: RuleDraft = {
   offerId: null,
   kind: "percent",
-  percent: 30,
-  amountCents: 0,
+  percent: "30",
+  amount: "",
   payOnEveryRenewal: false,
 };
+
+/** Stored pennies → what she typed: 5000 → "50", 5050 → "50.50". */
+function centsToInput(cents: number): string {
+  if (!cents) return "";
+  return (cents / 100).toFixed(2).replace(/\.00$/, "");
+}
 
 export default function AffiliateDetail() {
   const { id } = useParams<{ id: string }>();
@@ -134,14 +147,21 @@ export default function AffiliateDetail() {
   async function saveRule(event: FormEvent) {
     event.preventDefault();
     if (!rule) return;
+    const percent = Number(rule.percent) || 0;
+    // The server caps a share at 100 and answers with a form error she cannot
+    // act on, because nothing on screen is highlighted. Said here instead.
+    if (rule.kind === "percent" && percent > 100) {
+      toast.error("A share can't be more than 100%.");
+      return;
+    }
     setSavingRule(true);
     try {
       await adminAffiliateApi.saveRule({
         affiliateId: partnerId,
         offerId: rule.offerId,
         kind: rule.kind,
-        percent: rule.percent,
-        amountCents: rule.amountCents,
+        percent,
+        amountCents: Math.round((Number(rule.amount) || 0) * 100),
         payOnEveryRenewal: rule.payOnEveryRenewal,
       });
       toast.success("Saved");
@@ -309,8 +329,8 @@ export default function AffiliateDetail() {
                       setRule({
                         offerId: row.offerId,
                         kind: row.commissionKind,
-                        percent: row.commissionPercent,
-                        amountCents: row.commissionAmountCents,
+                        percent: String(row.commissionPercent),
+                        amount: centsToInput(row.commissionAmountCents),
                         payOnEveryRenewal: row.payOnEveryRenewal,
                       })
                     }
@@ -339,7 +359,7 @@ export default function AffiliateDetail() {
                 onChange={(e) =>
                   setRule({ ...rule, offerId: e.target.value ? Number(e.target.value) : null })
                 }
-                className="h-11 w-full rounded-xl border border-hairline bg-white/[0.04] px-4 text-sm text-ink outline-none focus-visible:border-gold/60"
+                className={selectStyles}
               >
                 <option value="">Everything they sell</option>
                 {offers.map((offer) => (
@@ -356,7 +376,7 @@ export default function AffiliateDetail() {
                 onChange={(e) =>
                   setRule({ ...rule, kind: e.target.value as RuleDraft["kind"] })
                 }
-                className="h-11 w-full rounded-xl border border-hairline bg-white/[0.04] px-4 text-sm text-ink outline-none focus-visible:border-gold/60"
+                className={selectStyles}
               >
                 <option value="percent">A share of each sale</option>
                 <option value="fixed">A fixed amount per sale</option>
@@ -370,7 +390,9 @@ export default function AffiliateDetail() {
                   <Input
                     inputMode="decimal"
                     value={rule.percent}
-                    onChange={(e) => setRule({ ...rule, percent: Number(e.target.value) || 0 })}
+                    onChange={(e) =>
+                      setRule({ ...rule, percent: e.target.value.replace(/[^0-9.]/g, "") })
+                    }
                     className="pr-8"
                   />
                   <span
@@ -395,12 +417,9 @@ export default function AffiliateDetail() {
                   <Input
                     className="pl-8"
                     inputMode="decimal"
-                    value={(rule.amountCents / 100).toFixed(2)}
+                    value={rule.amount}
                     onChange={(e) =>
-                      setRule({
-                        ...rule,
-                        amountCents: Math.round((Number(e.target.value) || 0) * 100),
-                      })
+                      setRule({ ...rule, amount: e.target.value.replace(/[^0-9.]/g, "") })
                     }
                   />
                 </div>

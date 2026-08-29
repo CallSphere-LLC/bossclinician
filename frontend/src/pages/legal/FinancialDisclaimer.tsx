@@ -1,7 +1,8 @@
-import { motion, useReducedMotion } from "motion/react";
+import { motion } from "motion/react";
 import { Seo } from "@/components/Seo";
 import { LuxePageHero } from "@/components/luxe/LuxePageHero";
 import { Section } from "@/components/luxe/Section";
+import { useEntranceMotion } from "@/hooks/useEntranceMotion";
 import { cn } from "@/lib/cn";
 
 const EASE: [number, number, number, number] = [0.22, 1, 0.36, 1];
@@ -21,7 +22,7 @@ const PARAGRAPHS: string[] = [
 ];
 
 export default function FinancialDisclaimer() {
-  const reduce = useReducedMotion();
+  const reduce = useEntranceMotion();
 
   return (
     <>

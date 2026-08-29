@@ -7,7 +7,11 @@ import { GlassCard, type Accent } from "@/components/luxe/GlassCard";
 import { LuxeButton, LuxePill } from "@/components/luxe/LuxeButton";
 import { LuxePageHero } from "@/components/luxe/LuxePageHero";
 import { RevealGroup, RevealItem } from "@/components/ui/Reveal";
+import { useEntranceMotion } from "@/hooks/useEntranceMotion";
 import { cn } from "@/lib/cn";
+import { ORGANIZATION_ID, absoluteUrl, faqPageNode } from "@/seo/schema";
+import type { JsonLdNode } from "@/seo/types";
+import { useHeadContext } from "@/ssr/context";
 
 /**
  * Retreats — FlourisHealer Retreats, Bali, June 15–20 2027.
@@ -175,10 +179,23 @@ const VILLA_LABELS = ["VILLA", "POOL", "DINING", "WELLNESS"] as const;
 const VILLA_IMAGE =
   "/images/migrated-b30c1c7757ef.png";
 
+/**
+ * The captions are the page's own labels for these frames, so the alt text has
+ * to describe the photograph itself — a caption repeated into the alt tells a
+ * screen reader nothing it has not already been told.
+ */
 const MOMENTS: readonly { src: string; alt: string; caption: string }[] = [
   { src: "/images/retreat-luxury-rest.jpg", alt: "Luxury outdoor bath", caption: "LUXURY & REST" },
-  { src: "/images/retreat-sisterhood.jpg", alt: "Sisterhood", caption: "SISTERHOOD" },
-  { src: "/images/retreat-joy.jpg", alt: "Joy", caption: "PURE JOY" },
+  {
+    src: "/images/retreat-sisterhood.jpg",
+    alt: "Five retreat guests leaning in together for a photograph, all smiling",
+    caption: "SISTERHOOD",
+  },
+  {
+    src: "/images/retreat-joy.jpg",
+    alt: "Three women laughing together on a sunlit terrace above the ocean",
+    caption: "PURE JOY",
+  },
 ];
 
 const PATTERNS: readonly string[] = [
@@ -373,15 +390,75 @@ const FAQS: readonly { q: string; a: string }[] = [
 ];
 
 /* ══════════════════════════════════════════════════════════════════════════
+   Structured data
+   ══════════════════════════════════════════════════════════════════════════ */
+
+const RETREAT_PATH = "/retreats";
+
+/**
+ * The retreat as an Event.
+ *
+ * Every field is something the page already states in words: the dates in the
+ * hero eyebrow, the villa and its town in the hero strip, the twelve places in
+ * the stats band, and the Private King Suite's $4,500 in the reserve band. The
+ * early-bird rise to $5,500 is dated "September 1" with no year, so no
+ * `priceValidUntil` is claimed — a year guessed here would be a promise the
+ * published page never made. The offer points at the page's own reserve band
+ * rather than at one of the two Kajabi checkouts, because the choice between
+ * paying in full and starting a plan belongs to the visitor.
+ */
+function retreatEventNode(origin: string): JsonLdNode {
+  return {
+    "@type": "Event",
+    "@id": `${origin}${RETREAT_PATH}#event`,
+    name: "FlourisHealer Retreats",
+    description: HERO_LEDE_A,
+    url: `${origin}${RETREAT_PATH}`,
+    image: absoluteUrl(origin, VILLA_IMAGE),
+    startDate: "2027-06-15",
+    endDate: "2027-06-20",
+    eventStatus: "https://schema.org/EventScheduled",
+    eventAttendanceMode: "https://schema.org/OfflineEventAttendanceMode",
+    location: {
+      "@type": "Place",
+      name: "Private villa, Ubud",
+      address: {
+        "@type": "PostalAddress",
+        addressLocality: "Ubud",
+        addressRegion: "Bali",
+        addressCountry: "ID",
+      },
+    },
+    maximumAttendeeCapacity: 12,
+    organizer: { "@id": `${origin}/${ORGANIZATION_ID}` },
+    offers: {
+      "@type": "Offer",
+      name: "Private King Suite",
+      url: `${origin}${RETREAT_PATH}#reserve`,
+      price: "4500.00",
+      priceCurrency: "USD",
+      availability: "https://schema.org/InStock",
+    },
+  };
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
    Page
    ══════════════════════════════════════════════════════════════════════════ */
 
 export default function Retreats() {
+  const { origin } = useHeadContext();
+
   return (
     <>
+      {/* The hero is set in type, so the villa is the one photograph that can
+          stand for this page — it serves as the share card and as the Event's
+          image both. */}
       <Seo
         title="Release. Restore. Reconnect."
         description="Luxury retreats for healthcare and wellness providers "
+        image={VILLA_IMAGE}
+        jsonLd={[retreatEventNode(origin), faqPageNode(origin, RETREAT_PATH, FAQS)]}
       />
 
       <HeroBlock />
@@ -533,7 +610,7 @@ function StatsBand() {
 /* ── 3 · The retreat ──────────────────────────────────────────────────────── */
 
 function AboutSection() {
-  const reduce = useReducedMotion();
+  const reduce = useEntranceMotion();
 
   return (
     <Section
@@ -590,7 +667,7 @@ function VillaPlate() {
       <div className="relative overflow-hidden rounded-2xl border border-gold/25 shadow-[0_44px_100px_-36px_rgba(0,0,0,0.95)]">
         <img
           src={VILLA_IMAGE}
-          alt="Bali Villa"
+          alt="The private Ubud villa from above — a long pool and sun loungers under palms, below two storeys of glass"
           width={1500}
           height={1125}
           loading="lazy"
@@ -617,7 +694,7 @@ function VillaPlate() {
 }
 
 function ExperienceSection() {
-  const reduce = useReducedMotion();
+  const reduce = useEntranceMotion();
 
   return (
     <Section
@@ -740,7 +817,7 @@ function MomentsSection() {
 /* ── 6 · The pattern ──────────────────────────────────────────────────────── */
 
 function PatternSection() {
-  const reduce = useReducedMotion();
+  const reduce = useEntranceMotion();
 
   return (
     <Section
@@ -809,7 +886,7 @@ function PatternSection() {
 /* ── 7 · The woman who returns ────────────────────────────────────────────── */
 
 function ReturnsSection() {
-  const reduce = useReducedMotion();
+  const reduce = useEntranceMotion();
 
   return (
     <Section
@@ -858,7 +935,7 @@ function ReturnsSection() {
 /* ── 8 · Imagine ──────────────────────────────────────────────────────────── */
 
 function ImagineSection() {
-  const reduce = useReducedMotion();
+  const reduce = useEntranceMotion();
 
   return (
     <Section
@@ -906,7 +983,7 @@ function ImagineSection() {
 /* ── 9 · Reserve ──────────────────────────────────────────────────────────── */
 
 function ReserveSection() {
-  const reduce = useReducedMotion();
+  const reduce = useEntranceMotion();
 
   return (
     <Section
@@ -1091,7 +1168,7 @@ function HostChip(props: HostChipProps) {
 }
 
 function HostSection() {
-  const reduce = useReducedMotion();
+  const reduce = useEntranceMotion();
 
   return (
     <Section
@@ -1182,7 +1259,7 @@ function HostSection() {
 /* ── 11 · Not because Bali changes you ────────────────────────────────────── */
 
 function BaliBand() {
-  const reduce = useReducedMotion();
+  const reduce = useEntranceMotion();
 
   return (
     <Section

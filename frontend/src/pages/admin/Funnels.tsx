@@ -30,6 +30,7 @@ import {
   Field,
   Input,
   PageHeader,
+  selectStyles,
   Skeleton,
   Textarea,
 } from "@/pages/admin/ui/primitives";
@@ -191,7 +192,9 @@ export default function Funnels() {
       .growthList<Funnel>("funnels")
       .then((list) => {
         setFunnels(list);
-        setActive((prev) => prev ?? list[0] ?? null);
+        // Re-read by id: keeping the pre-save object left the share panel still
+        // saying the funnel wasn't live after she had just made it live.
+        setActive((prev) => (prev ? (list.find((f) => f.id === prev.id) ?? list[0]) : list[0]) ?? null);
       })
       .catch(() => setError("We couldn't load your funnels. Try refreshing the page."));
   }, []);
@@ -615,7 +618,7 @@ export default function Funnels() {
               <select
                 value={funnelDraft.kind ?? "opt_in"}
                 onChange={(e) => setFunnelDraft((d) => ({ ...d, kind: e.target.value }))}
-                className="h-11 w-full rounded-xl border border-hairline bg-surface px-3 text-sm outline-none focus-visible:border-plum"
+                className={selectStyles}
               >
                 {FUNNEL_KINDS.map((k) => (
                   <option key={k.value} value={k.value}>
@@ -678,7 +681,7 @@ export default function Funnels() {
               <select
                 value={stepDraft.stepType ?? "landing"}
                 onChange={(e) => setStepDraft((d) => ({ ...d, stepType: e.target.value }))}
-                className="h-11 w-full rounded-xl border border-hairline bg-surface px-3 text-sm outline-none focus-visible:border-plum"
+                className={selectStyles}
               >
                 {STAGE_TYPES.map((t) => (
                   <option key={t.value} value={t.value}>

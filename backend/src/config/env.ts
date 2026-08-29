@@ -72,6 +72,22 @@ export const env = {
   },
   notifyEmail: process.env.NOTIFY_EMAIL ?? "",
 
+  // Amazon SES, reached over its SMTP interface so both the fire-and-forget
+  // sender in email/mailer.ts and the recorded sender in email/provider.ts use
+  // one transport without an SDK between them.
+  //
+  // The two configuration sets are not a nicety. A set that subscribes to CLICK
+  // makes SES rewrite every link in the message through awstrack.me, which is
+  // right for a broadcast whose click rate is the point and wrong for a receipt,
+  // where a redirect through a domain the reader has never heard of is the
+  // difference between a document they trust and one they report.
+  ses: {
+    transactionalConfigSet: process.env.SES_CONFIG_SET_TRANSACTIONAL ?? "",
+    marketingConfigSet: process.env.SES_CONFIG_SET_MARKETING ?? "",
+    /** The SNS topic SES posts delivery events to. Verified per notification. */
+    snsTopicArn: process.env.SES_SNS_TOPIC_ARN ?? "",
+  },
+
   uploadDir,
   protectedUploadDir,
   // Course videos are the large case; images sit far below this. Keep in sync

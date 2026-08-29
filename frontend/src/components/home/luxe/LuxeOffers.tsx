@@ -1,4 +1,5 @@
-import { motion, useReducedMotion } from "motion/react";
+import { motion } from "motion/react";
+import { useEntranceMotion } from "@/hooks/useEntranceMotion";
 import { Section, SectionTitle } from "@/components/luxe/Section";
 import { GlassCard } from "@/components/luxe/GlassCard";
 import { LuxeButton } from "@/components/luxe/LuxeButton";
@@ -65,7 +66,7 @@ const ACCENT: Record<OfferAccent, { ribbon: string; label: string; rgb: string }
 };
 
 export function LuxeOffers() {
-  const reduce = useReducedMotion();
+  const reduce = useEntranceMotion();
 
   return (
     <Section

@@ -14,6 +14,7 @@ import {
   Field,
   Input,
   PageHeader,
+  selectStyles,
   Skeleton,
   Textarea,
 } from "@/pages/admin/ui/primitives";
@@ -27,9 +28,6 @@ import {
   slugify,
   uniqueKey,
 } from "@/pages/admin/ui/friendly";
-
-const selectStyles =
-  "h-11 w-full rounded-xl border border-hairline bg-surface px-3 text-sm text-ink outline-none transition-colors focus-visible:border-plum focus-visible:ring-4 focus-visible:ring-plum/12";
 
 /** "a testimonial" / "an offer" — so generated sentences read like sentences. */
 function withArticle(word: string): string {
@@ -222,6 +220,13 @@ export function CrudManager<T extends { id: string }>({
   async function handleSave(e: FormEvent) {
     e.preventDefault();
     if (!draft) return;
+    // The server requires the first field and refuses the save without it, in
+    // words that send her looking for a highlighted box that doesn't exist.
+    const named = fields[0];
+    if (named && !String(draft[named.key] ?? "").trim()) {
+      toast.error(`Fill in ${named.label.toLowerCase()} first.`);
+      return;
+    }
     setSaving(true);
     try {
       if (draft.id) await update(String(draft.id), draft);
@@ -570,9 +575,12 @@ export function PicturePickerModal({
   const [pictures, setPictures] = useState<MediaAsset[] | null>(null);
 
   const load = useCallback(() => {
+      // Buyers-only files are left out: they have no web address, so their
+      // tile is blank, and choosing one makes a save the server will always
+      // refuse — a picture nobody can see is never the picture she wanted.
     adminApi
       .mediaList("image")
-      .then(setPictures)
+      .then((all) => setPictures(all.filter((asset) => asset.visibility !== "protected")))
       .catch(() => setPictures([]));
   }, []);
 
@@ -618,7 +626,7 @@ export function PicturePickerModal({
               >
                 <span className="block aspect-square bg-ink/5">
                   <img
-                    src={asset.url}
+                    src={asset.previewUrl}
                     alt=""
                     loading="lazy"
                     className="size-full object-cover transition-transform duration-300 group-hover:scale-[1.04]"

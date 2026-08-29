@@ -42,7 +42,7 @@ import {
   Skeleton,
   Textarea,
 } from "@/pages/admin/ui/primitives";
-import { Modal } from "@/pages/admin/ui/Dialog";
+import { Modal, useConfirm } from "@/pages/admin/ui/Dialog";
 import { UploadDropzone } from "@/pages/admin/ui/Uploader";
 import {
   friendlyError,
@@ -201,6 +201,7 @@ export default function BlogEditor() {
   const [topic, setTopic] = useState("");
   const [preview, setPreview] = useState(false);
   const [picking, setPicking] = useState(false);
+  const [confirm, confirmDialog] = useConfirm();
   // Addresses already in use, so two posts called "Welcome" don't fight over one.
   const [takenAddresses, setTakenAddresses] = useState<string[]>([]);
   // True once the address is hers rather than ours: either she typed it, or the
@@ -318,11 +319,28 @@ export default function BlogEditor() {
 
   async function handleGenerate() {
     if (!topic.trim()) return;
+    // It replaces the title, the summary and the whole body. Doing that to an
+    // article she has already written, with nothing saved and nothing to undo,
+    // needs asking first.
+    if (
+      (form.bodyMd ?? "").trim() &&
+      !(await confirm({
+        title: "Replace what you've written?",
+        description: "The draft you have now will be written over.",
+        confirmLabel: "Yes, write a new draft",
+        destructive: true,
+      }))
+    ) {
+      return;
+    }
     setGenerating(true);
     try {
       const result = await adminApi.generateBlog(topic.trim());
+      // Read before the form is touched: a reply without tags used to throw
+      // here, after her article had already been replaced.
+      const tags = (result.tags ?? []).join(", ");
       setForm((prev) => ({ ...prev, ...result }));
-      setTagsInput(result.tags.join(", "));
+      setTagsInput(tags);
       toast.success("Here's a first draft — change anything you like.");
     } catch {
       toast.error("We couldn't write a draft just now. Please try again in a moment.");
@@ -718,6 +736,8 @@ export default function BlogEditor() {
           setPicking(false);
         }}
       />
+
+      {confirmDialog}
     </div>
   );
 }
@@ -740,9 +760,12 @@ function ImagePickerModal({
   const [assets, setAssets] = useState<MediaAsset[] | null>(null);
 
   const load = useCallback(() => {
+      // Buyers-only files are left out: they have no web address, so their
+      // tile is blank, and choosing one makes a save the server will always
+      // refuse — a picture nobody can see is never the picture she wanted.
     adminApi
       .mediaList("image")
-      .then(setAssets)
+      .then((all) => setAssets(all.filter((asset) => asset.visibility !== "protected")))
       .catch(() => setAssets([]));
   }, []);
 
@@ -787,7 +810,7 @@ function ImagePickerModal({
                 className="group overflow-hidden rounded-xl border border-hairline text-left transition-all hover:border-plum hover:shadow-[0_12px_28px_-14px_rgba(15,30,58,0.4)]"
               >
                 <img
-                  src={asset.url}
+                  src={asset.previewUrl}
                   alt={asset.title || asset.originalName}
                   loading="lazy"
                   className="aspect-[16/9] w-full bg-white/[0.04] object-cover"

@@ -104,6 +104,49 @@ export function humanizeKey(key: string): string {
 /** British spelling, same function — some screens already say `humaniseKey`. */
 export const humaniseKey = humanizeKey;
 
+/* ------------------------------------------------------------ date boxes */
+
+/**
+ * The two halves of a date box round trip.
+ *
+ * A `datetime-local` input speaks the wall clock of the computer she is sitting
+ * at, while the server stores an instant. Handing the raw stored text to the box
+ * (`iso.slice(0, 16)`) shows her the UTC clock — an appointment she made for 2pm
+ * reads back as 6pm — and handing back what she typed stores her 2pm as 2pm UTC,
+ * which is 10am to her client. Both directions have to convert, so both live
+ * here rather than being re-derived per screen.
+ */
+export function toDateTimeInput(iso: string | null | undefined): string {
+  if (!iso) return "";
+  const instant = new Date(iso);
+  if (Number.isNaN(instant.getTime())) return "";
+  return new Date(instant.getTime() - instant.getTimezoneOffset() * 60_000)
+    .toISOString()
+    .slice(0, 16);
+}
+
+/** What she typed into a `datetime-local` box → the moment it names. */
+export function fromDateTimeInput(local: string): string {
+  if (!local) return "";
+  const instant = new Date(local);
+  return Number.isNaN(instant.getTime()) ? "" : instant.toISOString();
+}
+
+/** The stored moment → the day a `date` box should show. */
+export function toDateInput(iso: string | null | undefined): string {
+  return toDateTimeInput(iso).slice(0, 10);
+}
+
+/**
+ * A day she picked → an instant. "Ends on the 28th" means the end of the 28th,
+ * not its first second: taking the start would shut the door a day early.
+ */
+export function fromDateInput(day: string, edge: "start" | "end" = "start"): string {
+  if (!day) return "";
+  const instant = new Date(`${day}T${edge === "end" ? "23:59:59" : "00:00:00"}`);
+  return Number.isNaN(instant.getTime()) ? "" : instant.toISOString();
+}
+
 /** Pulls a numeric HTTP status off an ApiError without importing the class. */
 function statusOf(err: unknown): number | undefined {
   if (typeof err === "object" && err !== null && "status" in err) {
@@ -130,13 +173,27 @@ export function friendlyError(err: unknown, context: string): string {
 
   // "Session" is the one bit of developer vocabulary that used to survive here;
   // what she experiences is simply being signed out.
-  if (status === 401 || status === 403) return "You've been signed out — please sign in again.";
+  if (status === 401) return "You've been signed out — please sign in again.";
+  // Not the same thing as being signed out: she is signed in, and this account
+  // is not allowed to do that. Telling her to sign in again sends her round a
+  // loop that cannot end.
+  if (status === 403) return "Your account isn't allowed to do that.";
   if (status === 404) return `We couldn't find that ${context}.`;
   if (status === 409) {
     return `That ${context} clashes with one you already have — try a different name.`;
   }
   if (status === 413) return "That file is too large.";
   if (status === 400 || status === 422) {
+    // Most of the admin routes answer a 400 with a sentence already written for
+    // her — "You already have a tag with that name", "Add a subject before
+    // sending", "Pause it first". Throwing those away left her reading about
+    // highlighted fields on screens with no form on them and nothing
+    // highlighted, so the server's own wording wins when it reads like English.
+    // Anything that begins "Invalid" is the parser talking, not the route.
+    const said = err instanceof Error ? err.message.trim() : "";
+    if (said && said.length <= 200 && !/^invalid\b/i.test(said) && !/^bad request$/i.test(said)) {
+      return said;
+    }
     return "Something in that form needs fixing — check the highlighted fields.";
   }
   if (status === 429) return "That was a lot at once — wait a moment and try again.";

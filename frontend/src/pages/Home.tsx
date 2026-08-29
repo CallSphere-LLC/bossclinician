@@ -1,5 +1,6 @@
 import { Seo } from "@/components/Seo";
 import { useCollection } from "@/hooks/useCollection";
+import { ssrKeys } from "@/ssr/keys";
 import { api } from "@/lib/api";
 import { testimonials as fallbackTestimonials } from "@/content/testimonials";
 
@@ -25,7 +26,7 @@ import { LuxeFinalCTA } from "@/components/home/luxe/LuxeFinalCTA";
  * what gives a single-hue dark page its rhythm.
  */
 export default function Home() {
-  const { data: testimonials } = useCollection(api.testimonials, fallbackTestimonials);
+  const { data: testimonials } = useCollection(api.testimonials, fallbackTestimonials, ssrKeys.testimonials());
 
   return (
     <>

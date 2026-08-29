@@ -7,7 +7,6 @@ import {
   ChevronDown,
   Clock,
   Film,
-  GripVertical,
   Italic,
   Layers,
   Link2,
@@ -51,6 +50,29 @@ function courseLength(minutes: number): string {
   return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
 }
 
+/**
+ * A lesson's length, in whole minutes, from the video itself.
+ *
+ * Nobody should be typing this in. She knows how long the file is only by
+ * watching it, the number is on the video already, and a wrong one shows on the
+ * sales page and in every "2h 30m in total" beside it. Rounded up from anything
+ * over zero, because a fifty-second welcome video is "1 min", not "0 min".
+ */
+function minutesFromSeconds(seconds: number): number {
+  if (!Number.isFinite(seconds) || seconds <= 0) return 0;
+  return Math.max(1, Math.round(seconds / 60));
+}
+
+/**
+ * Whether a stored video reference is already an address a player can load.
+ *
+ * A pasted Vimeo link and a public upload are; `protected:abc.mp4` is a storage
+ * reference and has to be traded for a signed link first.
+ */
+function isPlayableUrl(reference: string): boolean {
+  return /^(https?:\/\/|\/)/i.test(reference.trim());
+}
+
 export default function CourseBuilder() {
   const { id } = useParams();
   const courseId = Number(id);
@@ -69,6 +91,18 @@ export default function CourseBuilder() {
   // Pasting a link is the escape hatch for video hosted somewhere else; it stays
   // out of the way until she asks for it, so the normal path is "choose a file".
   const [pastingLink, setPastingLink] = useState(false);
+  /*
+   * The video the editor can actually play.
+   *
+   * `lesson.videoUrl` is what gets stored, and for a file only buyers can open
+   * that is `protected:abc.mp4` — a reference, not an address. Pointed at a
+   * <video> it draws an empty box, which is how a lesson ends up shipping with
+   * the wrong file in it. This holds the signed link that plays.
+   */
+  const [videoSrc, setVideoSrc] = useState<string | null>(null);
+  /* Only the newest request may set the src: opening two lessons quickly must
+     not leave the second one showing the first one's video. */
+  const videoRequest = useRef(0);
   const notesRef = useRef<HTMLTextAreaElement>(null);
   const [confirm, confirmDialog] = useConfirm();
 
@@ -185,6 +219,42 @@ export default function CourseBuilder() {
   function openLesson(moduleId: number, lesson: Partial<CourseLesson>) {
     setLessonDraft({ moduleId, lesson });
     setPastingLink(false);
+    showVideo(lesson.videoUrl ?? "");
+  }
+
+  /**
+   * Points the preview at whatever the lesson is holding.
+   *
+   * A file only buyers can open has no address of its own, so the admin asks the
+   * server to sign a short-lived one. Anything already an address — a pasted
+   * Vimeo link, a public upload — is used as it is, without a round trip.
+   */
+  function showVideo(reference: string, alreadyPlayable?: string) {
+    const ticket = (videoRequest.current += 1);
+    const trimmed = reference.trim();
+
+    if (alreadyPlayable !== undefined) {
+      setVideoSrc(alreadyPlayable);
+      return;
+    }
+    if (trimmed === "") {
+      setVideoSrc(null);
+      return;
+    }
+    if (isPlayableUrl(trimmed)) {
+      setVideoSrc(trimmed);
+      return;
+    }
+
+    setVideoSrc(null);
+    adminApi
+      .mediaPreview(trimmed)
+      .then((link) => {
+        if (videoRequest.current === ticket) setVideoSrc(link.url);
+      })
+      .catch(() => {
+        if (videoRequest.current === ticket) setVideoSrc(null);
+      });
   }
 
   function updateLesson(changes: Partial<CourseLesson>) {
@@ -305,7 +375,6 @@ export default function CourseBuilder() {
                               key={lesson.id}
                               className="flex items-center gap-3 px-5 py-3 transition-colors hover:bg-lilac-tint/25"
                             >
-                              <GripVertical className="size-4 shrink-0 text-ink-soft/40" />
                               <span
                                 className={cn(
                                   "grid size-8 shrink-0 place-items-center rounded-lg",
@@ -434,14 +503,29 @@ export default function CourseBuilder() {
             <Field label="Video" hint="students watch this at the top of the lesson">
               <div className="space-y-2.5">
                 {lessonDraft.lesson.videoUrl ? (
-                  <div className="overflow-hidden rounded-xl border border-hairline">
-                    <video
-                      src={lessonDraft.lesson.videoUrl}
-                      controls
-                      preload="metadata"
-                      className="max-h-56 w-full bg-ink/5"
-                    />
-                  </div>
+                  videoSrc ? (
+                    <div className="overflow-hidden rounded-xl border border-hairline">
+                      <video
+                        // Keyed on the source: React reuses one <video> element
+                        // across lessons otherwise, and it keeps playing the
+                        // last file while the new src loads.
+                        key={videoSrc}
+                        src={videoSrc}
+                        controls
+                        preload="metadata"
+                        onLoadedMetadata={(e) =>
+                          updateLesson({
+                            durationMinutes: minutesFromSeconds(e.currentTarget.duration),
+                          })
+                        }
+                        className="max-h-56 w-full bg-ink/5"
+                      />
+                    </div>
+                  ) : (
+                    <div className="grid h-24 place-items-center rounded-xl border border-hairline bg-cream text-sm text-ink-soft">
+                      Getting your video ready…
+                    </div>
+                  )
                 ) : null}
 
                 <div className="flex flex-wrap gap-2">
@@ -454,7 +538,10 @@ export default function CourseBuilder() {
                       type="button"
                       variant="ghost"
                       size="sm"
-                      onClick={() => updateLesson({ videoUrl: "" })}
+                      onClick={() => {
+                        updateLesson({ videoUrl: "", durationMinutes: 0 });
+                        showVideo("");
+                      }}
                     >
                       Remove it
                     </Button>
@@ -475,7 +562,10 @@ export default function CourseBuilder() {
                 {pastingLink && (
                   <Input
                     value={lessonDraft.lesson.videoUrl ?? ""}
-                    onChange={(e) => updateLesson({ videoUrl: e.target.value })}
+                    onChange={(e) => {
+                      updateLesson({ videoUrl: e.target.value });
+                      showVideo(e.target.value);
+                    }}
                     aria-label="Link to a video hosted somewhere else"
                     placeholder="Paste a link to your video, e.g. from Vimeo"
                   />
@@ -501,16 +591,21 @@ export default function CourseBuilder() {
             </Field>
 
             <div className="grid gap-4 sm:grid-cols-3">
-              <Field label="How long is it?" hint="in minutes">
-                <Input
-                  type="number"
-                  min={0}
-                  value={lessonDraft.lesson.durationMinutes ?? 0}
-                  onChange={(e) =>
-                    updateLesson({ durationMinutes: Number(e.target.value) || 0 })
-                  }
-                />
-              </Field>
+              {/*
+               * Read out, never typed in. The length is a fact about the file
+               * she just chose, and asking for it invites a number that is
+               * wrong on the sales page and in the course total beside it.
+               */}
+              <div>
+                <span className="mb-1.5 block text-[0.8rem] font-semibold text-ink">
+                  How long is it?
+                </span>
+                <p className="rounded-xl border border-hairline bg-cream px-3.5 py-2.5 text-sm text-ink-soft">
+                  {lessonDraft.lesson.durationMinutes
+                    ? `${lessonDraft.lesson.durationMinutes} min`
+                    : "We take this from the video"}
+                </p>
+              </div>
               <div className="flex items-end">
                 <label className="flex cursor-pointer items-center gap-2.5 text-sm font-medium text-ink">
                   <input
@@ -541,8 +636,14 @@ export default function CourseBuilder() {
       <VideoPickerModal
         open={picking}
         onOpenChange={setPicking}
-        onSelect={(asset) => {
-          updateLesson({ videoUrl: asset.url });
+        onSelect={(asset, seconds) => {
+          // The picker already loaded each video's metadata to draw the grid, so
+          // the length is known before anything else is fetched.
+          updateLesson({
+            videoUrl: asset.url,
+            ...(seconds === undefined ? {} : { durationMinutes: minutesFromSeconds(seconds) }),
+          });
+          showVideo(asset.url, asset.previewUrl);
           setPicking(false);
         }}
       />
@@ -642,9 +743,13 @@ function VideoPickerModal({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSelect: (asset: MediaAsset) => void;
+  /** `seconds` is the video's own length, once the browser has read it. */
+  onSelect: (asset: MediaAsset, seconds?: number) => void;
 }) {
   const [videos, setVideos] = useState<MediaAsset[] | null>(null);
+  /* Filled in as each thumbnail reports its metadata, so picking one can set
+     the lesson's length without a second look at the file. */
+  const [lengths, setLengths] = useState<Record<string, number>>({});
 
   const load = useCallback(() => {
     adminApi
@@ -693,11 +798,23 @@ function VideoPickerModal({
               <button
                 key={asset.id}
                 type="button"
-                onClick={() => onSelect(asset)}
+                onClick={() => onSelect(asset, lengths[String(asset.id)])}
                 className="group overflow-hidden rounded-xl border border-hairline text-left transition-all hover:border-plum hover:shadow-[0_12px_28px_-14px_rgba(15,30,58,0.4)]"
               >
                 <span className="relative block aspect-video bg-ink/5">
-                  <video src={asset.url} preload="metadata" muted className="size-full object-cover" />
+                  {/* previewUrl, not url: a course video has no public address,
+                      and `protected:abc.mp4` in a src draws an empty box. */}
+                  <video
+                    src={asset.previewUrl}
+                    preload="metadata"
+                    muted
+                    onLoadedMetadata={(e) => {
+                      const seconds = e.currentTarget.duration;
+                      if (!Number.isFinite(seconds) || seconds <= 0) return;
+                      setLengths((prev) => ({ ...prev, [String(asset.id)]: seconds }));
+                    }}
+                    className="size-full object-cover"
+                  />
                   <span className="absolute inset-0 grid place-items-center bg-ink/25 transition-colors group-hover:bg-ink/40">
                     <span className="grid size-9 place-items-center rounded-full bg-night-deep/85 text-gold ring-1 ring-white/15">
                       <Play className="size-4 translate-x-0.5 fill-current" />
@@ -709,6 +826,9 @@ function VideoPickerModal({
                     {asset.title || asset.originalName}
                   </span>
                   <span className="block text-[0.66rem] text-ink-soft">
+                    {lengths[String(asset.id)]
+                      ? `${minutesFromSeconds(lengths[String(asset.id)] as number)} min · `
+                      : ""}
                     {formatBytes(Number(asset.sizeBytes))}
                   </span>
                 </span>

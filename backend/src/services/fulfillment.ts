@@ -353,6 +353,16 @@ export async function createPaymentPlan(input: {
   installmentCount: number;
   /** Whether the opening invoice actually collected money. */
   firstInstallmentPaid: boolean;
+  /**
+   * The invoice that collected the opening charge.
+   *
+   * Recorded on installment one so `advancePaymentPlan` can recognise it. That
+   * guard refuses to credit an installment against an invoice already on the
+   * schedule, and without this the opening invoice was the one invoice it could
+   * not see — a redelivery of it then credited installment TWO, marking a
+   * payment paid that the customer never made.
+   */
+  firstStripeInvoiceId?: string | null;
   interval: BillingInterval;
   intervalCount?: number;
   currency?: string;
@@ -417,8 +427,9 @@ export async function createPaymentPlan(input: {
         isFirst ? (input.firstInstallmentCents ?? installment.amountCents) : installment.amountCents;
       await client.query(
         `INSERT INTO payment_plan_installments
-           (payment_plan_id, sequence, amount_cents, due_at, paid_at, transaction_id, status)
-         VALUES ($1,$2,$3,$4,$5,$6,$7)
+           (payment_plan_id, sequence, amount_cents, due_at, paid_at, transaction_id,
+            stripe_invoice_id, status)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
          ON CONFLICT (payment_plan_id, sequence) DO NOTHING`,
         [
           planId,
@@ -427,6 +438,7 @@ export async function createPaymentPlan(input: {
           installment.dueAt,
           settled ? startAt : null,
           settled ? (input.firstTransactionId ?? null) : null,
+          settled ? (input.firstStripeInvoiceId ?? null) : null,
           settled ? "paid" : "scheduled",
         ]
       );

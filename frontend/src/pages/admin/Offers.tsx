@@ -30,6 +30,7 @@ import {
   EmptyState,
   ErrorNotice,
   PageHeader,
+  selectStyles,
   type BadgeProps,
 } from "@/pages/admin/ui/primitives";
 import { DataTable, RowActions } from "@/pages/admin/ui/DataTable";
@@ -52,9 +53,6 @@ const STATUS_TONE: Record<CatalogStatus, NonNullable<BadgeProps["tone"]>> = {
 };
 
 /** Matches the Input primitive so the filter row reads as one set of controls. */
-const SELECT_CLASS =
-  "h-11 shrink-0 rounded-xl border border-hairline bg-surface px-3 text-sm text-ink outline-none transition-colors focus-visible:border-gold/60 focus-visible:ring-4 focus-visible:ring-gold/15";
-
 const STATUS_FILTERS: { value: "" | CatalogStatus; label: string }[] = [
   { value: "", label: "All offers" },
   { value: "published", label: "Live ones" },
@@ -378,7 +376,7 @@ export default function Offers() {
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value as "" | CatalogStatus)}
             aria-label="Which offers to show"
-            className={SELECT_CLASS}
+            className={selectStyles}
           >
             {STATUS_FILTERS.map((option) => (
               <option key={option.value} value={option.value}>

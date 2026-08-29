@@ -30,9 +30,21 @@ function greeting(firstName: string): string {
   return parts[0] || "there";
 }
 
-/** Absolute, and token-encoded: base64url is URL-safe, but the encode costs nothing and outlives the assumption. */
+/**
+ * Absolute, and with the token as the last path segment.
+ *
+ * A path segment rather than `?token=` because that is what the pages on the
+ * other end actually read: every one of them is routed as `/verify-email/:token`
+ * or `/reset-password/:token` and pulls the value with `useParams`. A query
+ * string arrives at the same page with no param to match, so it renders its
+ * "this link is missing its token" branch — which is what every confirmation and
+ * every password reset this platform sent used to do.
+ *
+ * Encoded even though these tokens are base64url and need no escaping: the
+ * encode costs nothing and outlives the assumption that they always will be.
+ */
 function link(path: string, token: string): string {
-  return `${env.publicSiteUrl}${path}?token=${encodeURIComponent(token)}`;
+  return `${env.publicSiteUrl}${path}/${encodeURIComponent(token)}`;
 }
 
 function humanDuration(minutes: number): string {

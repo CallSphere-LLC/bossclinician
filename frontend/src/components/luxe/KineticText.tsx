@@ -1,5 +1,6 @@
 import { Fragment } from "react";
-import { motion, useReducedMotion, type Transition } from "motion/react";
+import { motion, type Transition } from "motion/react";
+import { useEntranceMotion } from "@/hooks/useEntranceMotion";
 import { cn } from "@/lib/cn";
 
 const EASE: [number, number, number, number] = [0.22, 1, 0.36, 1];
@@ -38,7 +39,7 @@ export function KineticText({
   wordClassName,
   as = "span",
 }: KineticTextProps) {
-  const reduce = useReducedMotion();
+  const reduce = useEntranceMotion();
   const Tag = as === "div" ? motion.div : motion.span;
 
   if (reduce) {

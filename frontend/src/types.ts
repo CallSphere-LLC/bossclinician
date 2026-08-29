@@ -8,6 +8,8 @@ export interface BlogCard {
   author: string;
   readMinutes: number;
   publishedAt: string;
+  /** Absent from the bundled fallback copy, which has no edit history. */
+  updatedAt?: string;
 }
 
 export interface BlogPost extends BlogCard {

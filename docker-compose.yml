@@ -1,3 +1,14 @@
+# The json-file log driver does not rotate by default. On this box that is a
+# disk problem before it is a logging problem: / is 80% full and shared with
+# k3s, another app's Postgres and this stack's database, and one crash-looping
+# container or one bot walking the marketing site writes gigabytes of access
+# logs with nothing to stop it. 30MB per service, capped.
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   db:
     # Shared box: several other applications and a k3s cluster live here, so a
@@ -10,7 +21,36 @@ services:
           memory: 256M
     image: postgres:16-alpine
     restart: unless-stopped
+    logging: *logging
     security_opt: ["no-new-privileges:true"]
+    # Upstream defaults assume a machine several times this size. Inside the
+    # 768M cap above, 100 backends at a few megabytes each plus work_mem for a
+    # report query is enough to trip the cgroup OOM killer, and Postgres answers
+    # a killed child by disconnecting every session and entering crash recovery
+    # — the whole site 500s until it finishes. The API pool asks for at most 10
+    # connections, so 50 is generous and bounded.
+    command:
+      - postgres
+      - -c
+      - max_connections=50
+      - -c
+      - work_mem=4MB
+      - -c
+      - maintenance_work_mem=64MB
+      - -c
+      - effective_cache_size=512MB
+    # Parallel workers pass tuples through POSIX shared memory, which Docker
+    # caps at 64MB by default; past that they fail the query outright with
+    # "could not resize shared memory segment".
+    #
+    # 128MB, not more: this is a tmpfs, and its pages are charged to the same
+    # 768M cgroup as Postgres itself. The budget it has to fit inside is
+    # shared_buffers (128MB, the image default) + up to 50 backends + whatever
+    # of this is actually touched — raising it to 256MB would leave the sum
+    # close enough to the cap that a busy report could push the container into
+    # the OOM killer it is meant to be kept away from. Unused pages cost
+    # nothing, so this is a ceiling, not a reservation.
+    shm_size: 128mb
     environment:
       POSTGRES_USER: boss
       POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
@@ -34,6 +74,7 @@ services:
           memory: 128M
     build: ./ai
     restart: unless-stopped
+    logging: *logging
     security_opt: ["no-new-privileges:true"]
     env_file: ./ai/.env
     expose:
@@ -45,14 +86,28 @@ services:
   backend:
     # Shared box: several other applications and a k3s cluster live here, so a
     # runaway container must hit a wall rather than take the host with it.
+    # Wider than the other services because this process also renders the
+    # marketing pages: the React tree, its markdown renderer and the compiled
+    # server bundle all live in this heap alongside the API.
     deploy:
       resources:
         limits:
-          memory: 768M
+          memory: 1024M
         reservations:
-          memory: 192M
-    build: ./backend
+          memory: 256M
+    build:
+      # The repository root, because the image carries the server-rendering
+      # build of the React app as well as the API — see backend/Dockerfile.
+      context: .
+      dockerfile: backend/Dockerfile
+      # Explicit, because this Dockerfile has a second runtime stage after it
+      # (`web`, below) and the last stage is what an untargeted build produces.
+      target: api
+      args:
+        VITE_API_BASE: /api
+        VITE_STRIPE_PUBLISHABLE_KEY: ${VITE_STRIPE_PUBLISHABLE_KEY:-}
     restart: unless-stopped
+    logging: *logging
     security_opt: ["no-new-privileges:true"]
     env_file: ./backend/.env
     environment:
@@ -75,6 +130,24 @@ services:
       - protected_uploads_data:/app/uploads-protected
     expose:
       - "4000"
+    # Startup runs the migrations and the first-boot seed before it listens, so
+    # a deploy script (and nginx below) has to wait for this rather than for the
+    # container merely existing. start_period covers that work without counting
+    # its slowness as failures.
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:4000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      # Five minutes, sized for the worst case rather than the normal one. On a
+      # fresh volume this process applies schema.sql, then eighteen migrations,
+      # then the full first-boot seed, all before it binds the port — on two
+      # shared cores that is minutes, not seconds. Checks that fail inside
+      # start_period do not count as failures, so a generous value costs
+      # nothing on a normal boot; too small a value would mark the API failed
+      # and take the whole stack down with "dependency failed to start", on the
+      # one path where that matters most: rebuilding from an empty database.
+      start_period: 300s
     depends_on:
       db:
         condition: service_healthy
@@ -91,12 +164,26 @@ services:
         reservations:
           memory: 16M
     build:
-      context: ./frontend
+      # The same context, Dockerfile and args as the backend service on purpose:
+      # BuildKit then recognises the Vite build as one piece of work and runs it
+      # once. Built separately they were two ~2GB builds racing each other on an
+      # 8GB box that is also running k3s and the live database, and they could
+      # disagree about the browser bundle's content hashes — which the API's
+      # server-rendered HTML names directly.
+      context: .
+      dockerfile: backend/Dockerfile
+      target: web
       args:
         VITE_API_BASE: /api
         VITE_STRIPE_PUBLISHABLE_KEY: ${VITE_STRIPE_PUBLISHABLE_KEY:-}
     restart: unless-stopped
+    logging: *logging
     security_opt: ["no-new-privileges:true"]
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:80/index.html"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     expose:
       - "80"
 
@@ -111,18 +198,41 @@ services:
           memory: 16M
     image: nginx:1.27-alpine
     restart: unless-stopped
+    logging: *logging
     security_opt: ["no-new-privileges:true"]
     ports:
       - "172.18.0.1:8088:80"   # bound to the k3d bridge gateway; k3s Traefik ingress hairpins here (not public)
     volumes:
-      - ./nginx/site.conf:/etc/nginx/conf.d/default.conf:ro
-      # Generated from the `redirects` table by
-      # backend/scripts/generate-nginx-redirects.js. Regenerate and
-      # `nginx -s reload` after editing redirects in the admin.
-      - ./nginx/redirects.map:/etc/nginx/conf.d/redirects.map:ro
+      # The whole directory, not two single-file mounts. A single-file bind
+      # mount pins the *inode*: every editor and every script that writes by
+      # rename (write a temp file, rename it over the target — which is what
+      # sed -i, python's write_text and generate-nginx-redirects.js all do)
+      # leaves the container holding the old file forever. It looks like a
+      # deploy and is not one: `nginx -s reload` and `docker compose restart
+      # nginx` both re-read a file that has not changed, silently, with no
+      # error anywhere. Mounting the directory means the container resolves the
+      # name each time and sees the current file.
+      #
+      # site.conf lands at /etc/nginx/conf.d/site.conf and is picked up by the
+      # base image's `include /etc/nginx/conf.d/*.conf`; mounting over the
+      # whole directory also removes that image's stock default.conf, which
+      # would otherwise fight this one for port 80. redirects.map is included
+      # by site.conf by absolute path and is not a .conf, so it is not loaded
+      # twice. Anything else ending in .conf dropped in ./nginx WILL be loaded.
+      #
+      # redirects.map is generated from the `redirects` table by
+      # backend/scripts/generate-nginx-redirects.js. Regenerate and reload
+      # after editing redirects in the admin — see DEPLOY.md.
+      - ./nginx:/etc/nginx/conf.d:ro
+    # Conditions, not names: nginx resolves `backend` and `frontend` when it
+    # loads its config, and it proxies the site's first request the moment it is
+    # up. Waiting only for the containers to exist meant the first visitor after
+    # a deploy could land on a 502 while the API was still migrating.
     depends_on:
-      - frontend
-      - backend
+      frontend:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
 
 volumes:
   db_data:

@@ -455,3 +455,112 @@ export function paymentPlanOverchargeAlert(input: PaymentPlanOverchargeInput): E
 
   return { subject: `URGENT: payment plan overcharged (${amount})`, text, html };
 }
+
+export interface PurchaseWelcomeInput {
+  buyerName: string;
+  /** What they bought, named as it was at the time of sale. */
+  offerTitle: string;
+  /**
+   * The set-password link, for a buyer whose account was created by this
+   * purchase and has no password yet. Null for someone who was already signed
+   * in — telling an existing customer to "set your password first" is how a
+   * welcome email becomes a support ticket.
+   */
+  setPasswordUrl: string | null;
+  /** Where the thing they bought actually opens. */
+  startUrl: string;
+  /**
+   * Anything Yvette wrote on the offer for this moment: which module to start
+   * with, a planner to download, where the community lives. Rendered as its own
+   * step when present and skipped entirely when not.
+   */
+  nextSteps: string;
+}
+
+/**
+ * The email that turns a payment into somebody who has actually started.
+ *
+ * The receipt is a financial document and this is the opposite of one: it exists
+ * to get the buyer into the product on the day they were most motivated to be
+ * there — the day they paid. Numbered steps because that is what someone skims
+ * on a phone, and the first step is always the one that gets them in, because a
+ * welcome that opens with encouragement and buries the login link is a welcome
+ * nobody acts on.
+ *
+ * Deliberately separate from `purchaseReceipt`. Two emails rather than one long
+ * one: a receipt gets filed and forwarded to a bookkeeper, and this gets read
+ * once and acted on. Merging them means the person filing it forwards the login
+ * link to their accountant.
+ */
+export function purchaseWelcome(input: PurchaseWelcomeInput): EmailContent {
+  const name = greeting(input.buyerName);
+  const offer = input.offerTitle || "your new program";
+
+  // Steps are assembled rather than written out, so the numbering stays correct
+  // when the set-password step or Yvette's own step is absent.
+  const steps: { text: string[]; html: string[] }[] = [];
+
+  if (input.setPasswordUrl) {
+    steps.push({
+      text: [
+        `Set your password.`,
+        `Your account is already made and ${offer} is already in it — this is the one link that lets you in:`,
+        input.setPasswordUrl,
+      ],
+      html: [
+        `<strong>Set your password.</strong>`,
+        `Your account is already made and ${escapeHtml(offer)} is already in it — this is the one link that lets you in:`,
+        `<a href="${escapeHtml(input.setPasswordUrl)}">Set my password</a>`,
+      ],
+    });
+  }
+
+  steps.push({
+    text: [
+      `Open ${offer}.`,
+      `It's waiting in your library:`,
+      input.startUrl,
+    ],
+    html: [
+      `<strong>Open ${escapeHtml(offer)}.</strong>`,
+      `It's waiting in your library:`,
+      `<a href="${escapeHtml(input.startUrl)}">Open ${escapeHtml(offer)}</a>`,
+    ],
+  });
+
+  if (input.nextSteps.trim() !== "") {
+    steps.push({
+      text: [`Then start here.`, input.nextSteps.trim()],
+      html: [`<strong>Then start here.</strong>`, escapeHtml(input.nextSteps.trim())],
+    });
+  }
+
+  const text = [
+    `Hi ${name},`,
+    ``,
+    `Welcome to ${offer} — I'm so glad you're in.`,
+    ``,
+    `Here's what to do next:`,
+    ``,
+    ...steps.flatMap((step, index) => [`${index + 1}. ${step.text[0]}`, ...step.text.slice(1), ``]),
+    `Do the first step today if you can. The people who get the most out of this are the ones who open it the day they join, not the week they finally find time.`,
+    ``,
+    `If you get stuck anywhere at all, just reply to this email. It comes to me.`,
+    ``,
+    `— Yvette`,
+  ].join("\n");
+
+  const html = [
+    `<p>Hi ${escapeHtml(name)},</p>`,
+    `<p>Welcome to <strong>${escapeHtml(offer)}</strong> — I'm so glad you're in.</p>`,
+    `<p>Here's what to do next:</p>`,
+    `<ol>`,
+    ...steps.map((step) => `<li><p>${step.html.join("</p><p>")}</p></li>`),
+    `</ol>`,
+    `<p>Do the first step today if you can. The people who get the most out of this are the ones who open it the day they join, not the week they finally find time.</p>`,
+    `<p>If you get stuck anywhere at all, just reply to this email. It comes to me.</p>`,
+    `<p>— Yvette</p>`,
+  ].join("\n");
+
+  return { subject: `Welcome to ${offer}`, text, html };
+}

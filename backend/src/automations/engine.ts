@@ -1,5 +1,7 @@
 import { pool } from "../db/pool";
 import { sendMail } from "../email/mailer";
+import { renderMarkdown, sendEmail } from "../email/provider";
+import { upsertContact } from "../services/contacts";
 import { env } from "../config/env";
 
 /**
@@ -81,13 +83,43 @@ async function runAction(action: ActionRow, payload: TriggerPayload): Promise<st
   const config = action.config ?? {};
 
   switch (action.action_type) {
+    /**
+     * Sends through `email/provider`, not through `sendMail`.
+     *
+     * This is a marketing email to somebody on the list, so the suppression
+     * list, the contact's topic preferences and the CAN-SPAM block all have to
+     * apply — and `sendMail` knows about none of them. Going straight to the
+     * transport here meant an address that had unsubscribed or hard-bounced was
+     * mailed again the next time it came through a form, in a message with no
+     * opt-out link at all.
+     *
+     * `renderMarkdown` also escapes, which the hand-rolled `<p>` wrapper this
+     * replaced did not: a submitted name carrying markup was rendered as markup.
+     */
     case "send_email": {
-      const to = typeof payload.email === "string" ? payload.email : "";
+      const to = typeof payload.email === "string" ? payload.email.trim().toLowerCase() : "";
       if (!to) return "send_email: skipped (no email in payload)";
       const subject = render(String(config.subject ?? "Hello from Boss Clinician"), payload);
       const body = render(String(config.body ?? ""), payload);
-      await sendMail({ to, subject, text: body, html: `<p>${body.replace(/\n/g, "<br>")}</p>` });
-      return `send_email: sent to ${to}`;
+
+      const contactId = await upsertContact({
+        email: to,
+        name: typeof payload.name === "string" ? payload.name : undefined,
+        source: "automation",
+      });
+
+      const result = await sendEmail({
+        to,
+        subject,
+        text: body,
+        html: renderMarkdown(body),
+        contactId,
+        sourceType: "automation",
+        topic: "marketing",
+      });
+      return result.outcome === "suppressed"
+        ? `send_email: not sent to ${to} — ${result.suppressedReason}`
+        : `send_email: sent to ${to}`;
     }
 
     case "notify_admin": {
@@ -97,7 +129,9 @@ async function runAction(action: ActionRow, payload: TriggerPayload): Promise<st
         String(config.body ?? "An automation fired for {{email}}."),
         payload,
       );
-      await sendMail({ to: env.notifyEmail, subject, text: body });
+      // Escaped: the body carries a name and a message somebody typed into a
+      // public form, and this one lands in the owner's own inbox.
+      await sendMail({ to: env.notifyEmail, subject, text: body, html: renderMarkdown(body) });
       return `notify_admin: sent to ${env.notifyEmail}`;
     }
 

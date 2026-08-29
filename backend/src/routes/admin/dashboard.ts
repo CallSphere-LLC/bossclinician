@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { pool } from "../../db/pool";
 import { asyncHandler } from "../../utils/asyncHandler";
+import { badRequest } from "../../utils/httpError";
 import { stripeEnabled } from "../../config/env";
 import { stripe } from "../../stripe/client";
 import { daysBetween, lastRollupAt, reportDay, shiftDay } from "../../services/reports/rollup";
@@ -159,7 +160,11 @@ async function readBalance(): Promise<BalanceTile | null> {
 adminDashboardRouter.get(
   "/",
   asyncHandler(async (req, res) => {
-    const { days = 30 } = query.parse(req.query);
+    // safeParse: `?days=0` is a mistake in a link, and answering it with a 500
+    // and a stack in the log reads as the dashboard being broken.
+    const parsed = query.safeParse(req.query);
+    if (!parsed.success) throw badRequest("Check the date range.", parsed.error.flatten());
+    const { days = 30 } = parsed.data;
     const to = reportDay();
     const from = shiftDay(to, -(days - 1));
     const length = daysBetween(from, to);

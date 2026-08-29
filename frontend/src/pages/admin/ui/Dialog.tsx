@@ -46,18 +46,40 @@ export function Modal({
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: reduceMotion ? 0 : 0.18 }}
-                className="fixed inset-0 z-50 bg-night-deep/75 backdrop-blur-sm"
+                className="theme-console fixed inset-0 z-50 bg-night-deep/75 backdrop-blur-sm"
               />
             </RadixDialog.Overlay>
 
-            <RadixDialog.Content asChild forceMount>
+            <RadixDialog.Content
+              asChild
+              forceMount
+              /* A click that lands outside the panel is far more often a slip
+                 than a decision, and every editor in this console throws its
+                 draft away when the dialog closes: a 600-word email or a
+                 half-written testimonial used to vanish on one stray click.
+                 Escape and the close button still cancel — both are deliberate. */
+              onPointerDownOutside={(event) => event.preventDefault()}
+            >
               <motion.div
                 initial={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.96, y: 12 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.97, y: 8 }}
                 transition={{ type: "spring", stiffness: 380, damping: 30 }}
+                /* Motion writes the whole `transform` inline, which wipes the
+                   `-translate-*` centring classes below — it settles on
+                   `transform: none` and the panel drops to the bottom-right corner of
+                   the screen. Re-apply the centring in front of whatever Motion built. */
+                transformTemplate={(_, generated) => `translate(-50%, -50%) ${generated}`}
                 className={cn(
-                  "fixed left-1/2 top-1/2 z-50 flex max-h-[88vh] w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-hairline bg-surface-raised shadow-[0_32px_80px_-24px_rgba(0,0,0,0.9)]",
+                  /*
+                   * `theme-console` again, because the portal puts this on
+                   * <body> — outside the layout that carries it. Without it
+                   * every token here resolves to the light marketing palette and
+                   * the admin gets a white form floating over a dark console:
+                   * fields the wrong colour, and a <select> whose chosen value
+                   * she cannot read.
+                   */
+                  "theme-console fixed left-1/2 top-1/2 z-50 flex max-h-[88vh] w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-hairline bg-surface-raised shadow-[0_32px_80px_-24px_rgba(0,0,0,0.9)]",
                   widths[size],
                 )}
               >
@@ -134,7 +156,7 @@ export function useConfirm(): [
   const dialog = (
     <Modal
       open={options !== null}
-      // Covers Esc, overlay click and the close button — all mean "cancel".
+      // Covers Esc and the close button — both mean "cancel".
       onOpenChange={(open) => {
         if (!open) settle(false);
       }}

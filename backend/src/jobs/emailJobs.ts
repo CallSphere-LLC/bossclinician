@@ -35,6 +35,8 @@ const automationResumePayload = z.object({
   automationId: z.coerce.number().int().positive(),
   runId: z.coerce.number().int().positive(),
   fromIndex: z.coerce.number().int().min(0),
+  /** Absent on jobs queued before this field existed; those resume as they did. */
+  delayServed: z.coerce.boolean().optional(),
   context: z.object({
     trigger: z.string(),
     contactId: z.number().nullable(),
@@ -78,6 +80,7 @@ async function automationRunAction(payload: Record<string, unknown>): Promise<un
     automationId: parsed.automationId,
     runId: parsed.runId,
     fromIndex: parsed.fromIndex,
+    delayServed: parsed.delayServed ?? false,
     context,
   });
   return { status: result.status, steps: result.log.length };

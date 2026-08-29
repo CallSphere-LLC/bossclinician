@@ -6,6 +6,7 @@ import { badRequest, notFound, serviceUnavailable } from "../../utils/httpError"
 import { stripe } from "../../stripe/client";
 import { stripeEnabled, env } from "../../config/env";
 import { checkoutLimiter } from "../../middleware/rateLimit";
+import { denyImpersonation, requireMember } from "../../middleware/memberAuth";
 
 export const checkoutRouter = Router();
 
@@ -145,11 +146,27 @@ checkoutRouter.post(
 
     let discounts: { coupon: string }[] | undefined;
     if (couponCode) {
+      // A plan is not an offer, so `services/coupons.ts` — which scopes and
+      // counts a code against `offers` and claims a redemption row against the
+      // order it discounts — cannot be used here: this path creates no order at
+      // all until Stripe's webhook mirrors the subscription, so there is nothing
+      // to claim a redemption against.
+      //
+      // That is exactly why a usage cap may not be silently honoured here. The
+      // old test compared `max_redemptions` against `coupons.redeemed`, a
+      // counter this path never writes, so a code limited to one use worked for
+      // everybody who typed it — the same defect migration 006 was written to
+      // remove from offer checkout. A capped code is refused rather than
+      // half-enforced; the launch window (`starts_at`) and an offer-scoped code
+      // are checked for the same reason.
       const coupon = await pool.query(
         `SELECT stripe_coupon_id FROM coupons
           WHERE code = $1 AND active = true
+            AND scope = 'global'
+            AND (starts_at IS NULL OR starts_at <= now())
             AND (expires_at IS NULL OR expires_at > now())
-            AND (max_redemptions IS NULL OR redeemed < max_redemptions)`,
+            AND max_redemptions IS NULL
+            AND max_per_contact IS NULL`,
         [couponCode.trim().toUpperCase()]
       );
       const stripeCouponId = coupon.rows[0]?.stripe_coupon_id as string | undefined;
@@ -189,24 +206,35 @@ checkoutRouter.post(
 /**
  * Stripe-hosted billing portal so members can update cards, switch plans and
  * cancel without us building any of that UI.
+ *
+ * Behind `requireMember`, and keyed on the signed-in member rather than on an
+ * address in the body. A portal session is a fully authenticated view of
+ * somebody's billing: their invoices and PDFs, the card on file, and the buttons
+ * that cancel the subscription or replace that card. Taking the address from the
+ * request meant anyone who knew a customer's email — which is not a secret —
+ * could post it here and be handed that customer's portal link.
+ *
+ * `member_id` is the match, not `subscriptions.email`: that column is written
+ * from whatever Stripe reported and is not proof of ownership either.
  */
 checkoutRouter.post(
   "/billing/portal",
+  requireMember,
+  denyImpersonation,
   checkoutLimiter,
   asyncHandler(async (req, res) => {
     if (!stripeEnabled()) throw serviceUnavailable("Payments are not configured");
-
-    const parsed = z.object({ email: z.string().email().max(320) }).safeParse(req.body);
-    if (!parsed.success) throw badRequest("A valid email is required");
+    const member = req.member;
+    if (!member) throw notFound("No billing account found");
 
     const result = await pool.query(
       `SELECT stripe_customer_id FROM subscriptions
-        WHERE email = $1 AND stripe_customer_id IS NOT NULL
+        WHERE member_id = $1 AND stripe_customer_id IS NOT NULL
         ORDER BY created_at DESC LIMIT 1`,
-      [parsed.data.email.toLowerCase()]
+      [member.id]
     );
     const customerId = result.rows[0]?.stripe_customer_id as string | undefined;
-    if (!customerId) throw notFound("No billing account found for that email");
+    if (!customerId) throw notFound("No billing account found");
 
     const session = await stripe().billingPortal.sessions.create({
       customer: customerId,

@@ -36,6 +36,7 @@ import {
   Field,
   Input,
   PageHeader,
+  selectStyles,
   Skeleton,
   Textarea,
 } from "@/pages/admin/ui/primitives";
@@ -51,9 +52,6 @@ import { friendlyError } from "@/pages/admin/ui/friendly";
  * scheduler does — an email held until Monday morning is a surprise if the
  * screen said it would go out in three days.
  */
-
-const selectStyles =
-  "h-11 w-full rounded-xl border border-hairline bg-surface px-3 text-sm text-ink outline-none transition-colors focus-visible:border-plum focus-visible:ring-4 focus-visible:ring-plum/12";
 
 const TIMEZONES = [
   "America/New_York",

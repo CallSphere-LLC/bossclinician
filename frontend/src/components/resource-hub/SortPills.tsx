@@ -1,5 +1,6 @@
 import type { MouseEvent } from "react";
-import { motion, useReducedMotion } from "motion/react";
+import { motion } from "motion/react";
+import { useEntranceMotion } from "@/hooks/useEntranceMotion";
 import { Section, SectionTitle } from "@/components/luxe/Section";
 import { cn } from "@/lib/cn";
 import { sortPills } from "@/content/resourceHub";
@@ -16,7 +17,7 @@ const EASE: [number, number, number, number] = [0.22, 1, 0.36, 1];
  * under the handoff.
  */
 export function SortPills() {
-  const reduce = useReducedMotion();
+  const reduce = useEntranceMotion();
 
   const handleJump = (event: MouseEvent<HTMLAnchorElement>, id: string) => {
     // Let modified clicks (new tab, etc.) behave natively.

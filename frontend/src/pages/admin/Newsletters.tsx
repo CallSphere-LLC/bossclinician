@@ -36,6 +36,7 @@ import {
   Field,
   Input,
   PageHeader,
+  selectStyles,
   Skeleton,
   Textarea,
   type BadgeProps,
@@ -66,9 +67,6 @@ const STATUS_LABEL: Record<string, string> = {
   scheduled: "Scheduled",
   sent: "Sent",
 };
-
-const selectStyles =
-  "h-11 w-full rounded-xl border border-hairline bg-surface px-3 text-sm outline-none focus-visible:border-plum";
 
 /* --------------------------------------------------- Writing box + toolbar */
 
@@ -278,7 +276,9 @@ export default function Newsletters() {
       .growthList<Newsletter>("newsletters")
       .then((list) => {
         setNewsletters(list);
-        setActive((prev) => prev ?? list[0] ?? null);
+        // Matched by id, not kept wholesale: holding the pre-save object meant
+        // the send warning still described the audience she had just changed.
+        setActive((prev) => (prev ? (list.find((n) => n.id === prev.id) ?? list[0]) : list[0]) ?? null);
       })
       .catch(() => setError("We couldn't load your newsletters. Try refreshing the page."));
   }, []);
@@ -300,6 +300,13 @@ export default function Newsletters() {
   async function saveNewsletter(e: FormEvent) {
     e.preventDefault();
     if (!nlDraft?.name?.trim()) return;
+    // "Paying members only" with no plan behind it does not restrict anything:
+    // the send falls back to every subscriber on the list, while the send
+    // warning promises it only reaches the people paying.
+    if (nlDraft.access === "paid" && !nlDraft.planId) {
+      toast.error("Choose which paid plan unlocks this newsletter.");
+      return;
+    }
     // The web address is derived from the name and never shown; an existing
     // newsletter keeps the one it already has.
     const takenAddresses = (newsletters ?? [])

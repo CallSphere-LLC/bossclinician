@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { NextFunction, Request, Response, Router } from "express";
 import { z } from "zod";
 import type { PoolClient } from "pg";
 import { pool } from "../../db/pool";
@@ -17,9 +17,36 @@ import {
 } from "../../auth/memberSession";
 import { adminImpersonateLimiter } from "../../middleware/rateLimit";
 import { recordAdminAction, recordAdminActionStrict } from "../../services/adminAudit";
+import { requirePermission } from "../../services/permissions";
 
 /** Members (students), their enrollments, and the account actions an admin can take on them. Mounted at /admin/members. */
 export const adminMembersRouter = Router();
+
+/**
+ * The mount only asks for `contacts.view`, which is what lets Customer support
+ * look a customer up. Everything that changes an account asks for
+ * `contacts.manage` as well — without this, a support account could delete a
+ * customer outright, and the erasure branch takes their enrollments with it.
+ */
+const requireManage = requirePermission("contacts.manage");
+
+/**
+ * Impersonation is stricter still.
+ *
+ * It hands back a working key to a customer's account — their library, their
+ * community posts, their invoices — so it stays with the two roles that run the
+ * business rather than with everyone who can open the contact list. There is no
+ * permission for it in the matrix, and inventing one here would put the answer
+ * to "who may sign in as a customer" somewhere nobody would look for it.
+ */
+function requireBusinessAdmin(req: Request, _res: Response, next: NextFunction): void {
+  const role = req.user?.role;
+  if (role !== "owner" && role !== "admin") {
+    next(forbidden("Only the owner or a manager can view the site as a customer."));
+    return;
+  }
+  next();
+}
 
 export interface Member {
   id: number;
@@ -87,6 +114,9 @@ const ENROLLMENT_COUNT = `(SELECT COUNT(*)::int FROM enrollments e WHERE e.membe
 const EDITABLE_STATUSES = ["active", "invited", "cancelled", "suspended"] as const;
 /** Filtering is a read, so the erased rows are findable; the two lists differ only in `deleted`. */
 const FILTERABLE_STATUSES = ["active", "invited", "cancelled", "suspended", "deleted"] as const;
+
+/** How many rows the unqualified (array-shaped) list will hold in memory. */
+const LEGACY_LIST_CEILING = 1000;
 
 const idSchema = z.coerce.number().int().positive();
 
@@ -221,7 +251,12 @@ adminMembersRouter.get(
       ORDER BY m.created_at DESC`;
 
     if (Object.keys(req.query).length === 0) {
-      const all = await pool.query<MemberListRow>(listSql, params);
+      // Bounded even on the legacy path. The API process runs in a 1GB
+      // container that also renders the marketing pages, and an unqualified
+      // SELECT over the whole members table is the one read here that grows
+      // without limit. Anything past the ceiling is reached through the paged
+      // shape below, which is what the query string opts into.
+      const all = await pool.query<MemberListRow>(`${listSql} LIMIT ${LEGACY_LIST_CEILING}`, params);
       res.json(rowsToCamel<Member>(all.rows));
       return;
     }
@@ -253,6 +288,7 @@ const createSchema = z.object({
 
 adminMembersRouter.post(
   "/",
+  requireManage,
   asyncHandler(async (req, res) => {
     const parsed = createSchema.safeParse(req.body);
     if (!parsed.success) throw badRequest("Invalid payload", parsed.error.flatten());
@@ -303,6 +339,7 @@ const updateSchema = z.object({
 
 adminMembersRouter.put(
   "/:id",
+  requireManage,
   asyncHandler(async (req, res) => {
     const id = parseId(req.params.id);
     const parsed = updateSchema.safeParse(req.body);
@@ -388,6 +425,7 @@ async function purgeMemberCredentials(client: PoolClient, id: number): Promise<v
  */
 adminMembersRouter.delete(
   "/:id",
+  requireManage,
   asyncHandler(async (req, res) => {
     const id = parseId(req.params.id);
     const member = await loadMember(id);
@@ -492,6 +530,7 @@ adminMembersRouter.delete(
  */
 adminMembersRouter.post(
   "/:id/impersonate",
+  requireBusinessAdmin,
   adminImpersonateLimiter,
   asyncHandler(async (req, res) => {
     const id = parseId(req.params.id);
@@ -538,6 +577,7 @@ const ADMIN_RESET_TTL_SECONDS = 24 * 60 * 60;
  */
 adminMembersRouter.post(
   "/:id/reset-password",
+  requireManage,
   asyncHandler(async (req, res) => {
     const id = parseId(req.params.id);
     const member = await loadMember(id);
@@ -559,7 +599,14 @@ adminMembersRouter.post(
       [id, hashToken(raw), expiresIn(ADMIN_RESET_TTL_SECONDS)],
     );
 
-    const link = `${env.publicSiteUrl}/reset-password?token=${encodeURIComponent(raw)}`;
+    // The token is the last path segment, not a query parameter: the page on the
+    // other end is routed as `/reset-password/:token` and reads it with
+    // `useParams` (frontend/src/App.tsx). A `?token=` link arrives at a route
+    // that does not exist, so the member Yvette just sent a password link to
+    // lands on the not-found page. Every other builder in the platform — the
+    // member-initiated reset in email/memberTemplates.ts and the post-purchase
+    // link in services/setPasswordLink.ts — already spells it this way.
+    const link = `${env.publicSiteUrl}/reset-password/${encodeURIComponent(raw)}`;
     const greeting = member.first_name || displayName(member) || "there";
 
     await sendMail({
@@ -603,6 +650,7 @@ adminMembersRouter.post(
  */
 adminMembersRouter.post(
   "/:id/suspend",
+  requireManage,
   asyncHandler(async (req, res) => {
     const id = parseId(req.params.id);
     const before = await loadMember(id);
@@ -633,6 +681,7 @@ adminMembersRouter.post(
 
 adminMembersRouter.post(
   "/:id/reactivate",
+  requireManage,
   asyncHandler(async (req, res) => {
     const id = parseId(req.params.id);
     const before = await loadMember(id);
@@ -786,6 +835,7 @@ function firstIssue(error: z.ZodError): string {
  */
 adminMembersRouter.post(
   "/import",
+  requireManage,
   asyncHandler(async (req, res) => {
     const parsed = importSchema.safeParse(req.body);
     if (!parsed.success) throw badRequest("Invalid payload", parsed.error.flatten());
@@ -948,6 +998,7 @@ const enrollSchema = z.object({
 
 adminMembersRouter.post(
   "/:id/enrollments",
+  requireManage,
   asyncHandler(async (req, res) => {
     const id = parseId(req.params.id);
     const parsed = enrollSchema.safeParse(req.body);
@@ -985,6 +1036,7 @@ adminMembersRouter.post(
 
 adminMembersRouter.delete(
   "/:id/enrollments/:courseId",
+  requireManage,
   asyncHandler(async (req, res) => {
     const id = parseId(req.params.id);
     const courseId = parseId(req.params.courseId, "course");

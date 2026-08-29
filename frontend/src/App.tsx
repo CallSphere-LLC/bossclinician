@@ -1,37 +1,12 @@
 import { lazy, Suspense } from "react";
-import { Route, Routes } from "react-router-dom";
+import { Outlet, Route, Routes } from "react-router-dom";
 import { Layout } from "@/components/layout/Layout";
 import { AuthProvider } from "@/hooks/useAuth";
 import { MemberAuthProvider, RequireMember } from "@/hooks/useMember";
+import { lazyRoute, type RouteComponent } from "@/ssr/lazyRoute";
 
-import Home from "@/pages/Home";
 import NotFound from "@/pages/NotFound";
 
-const About = lazy(() => import("@/pages/About"));
-const WorkWithMe = lazy(() => import("@/pages/WorkWithMe"));
-const Courses = lazy(() => import("@/pages/Courses"));
-const CourseDetail = lazy(() => import("@/pages/CourseDetail"));
-const AffiliateSignup = lazy(() => import("@/pages/AffiliateSignup"));
-const Quiz = lazy(() => import("@/pages/Quiz"));
-const EventRegister = lazy(() => import("@/pages/EventRegister"));
-const EventRoom = lazy(() => import("@/pages/EventRoom"));
-const Resources = lazy(() => import("@/pages/Resources"));
-const ResourceHub = lazy(() => import("@/pages/ResourceHub"));
-const Blog = lazy(() => import("@/pages/Blog"));
-const BlogPost = lazy(() => import("@/pages/BlogPost"));
-const Apply = lazy(() => import("@/pages/Apply"));
-const CheckoutSuccess = lazy(() => import("@/pages/CheckoutSuccess"));
-const Contact = lazy(() => import("@/pages/Contact"));
-const Retreats = lazy(() => import("@/pages/Retreats"));
-const Store = lazy(() => import("@/pages/Store"));
-const PracticeQuiz = lazy(() => import("@/pages/PracticeQuiz"));
-const PracticeResetPlanner = lazy(() => import("@/pages/PracticeResetPlanner"));
-const FormPage = lazy(() => import("@/pages/FormPage"));
-const FunnelPage = lazy(() => import("@/pages/FunnelPage"));
-const PrivacyPolicy = lazy(() => import("@/pages/legal/PrivacyPolicy"));
-const Terms = lazy(() => import("@/pages/legal/Terms"));
-const Disclaimer = lazy(() => import("@/pages/legal/Disclaimer"));
-const FinancialDisclaimer = lazy(() => import("@/pages/legal/FinancialDisclaimer"));
 const AdminApp = lazy(() => import("@/pages/admin/AdminApp"));
 
 // Member surfaces. Split from the marketing bundle because a visitor who never
@@ -60,46 +35,76 @@ const MemberAffiliatePortal = lazy(() => import("@/pages/member/AffiliatePortal"
 const Checkout = lazy(() => import("@/pages/Checkout"));
 const CheckoutUpsell = lazy(() => import("@/pages/CheckoutUpsell"));
 
+/**
+ * The order confirmation, named rather than inlined into the table below.
+ *
+ * It has to be reachable two ways: as a public page, and from the outer router,
+ * where it needs a route of its own to keep `/checkout/:offerSlug` from reading
+ * "success" as an offer slug. One component behind both, so the two can never
+ * drift into loading different chunks.
+ */
+const CheckoutSuccessPage = lazyRoute(() => import("@/pages/CheckoutSuccess"));
+
+/**
+ * The public marketing surface, as data.
+ *
+ * A table rather than JSX because two other things read it: `entry-server`
+ * resolves the page component for a URL before rendering it to HTML, and
+ * `entry-client` resolves the same one before hydrating. A route missing from
+ * here would hydrate against a loading placeholder instead of the server's
+ * markup, so the routes and the preload list cannot be allowed to drift apart.
+ */
+export const PUBLIC_ROUTES: readonly { path: string; Component: RouteComponent }[] = [
+  { path: "/", Component: lazyRoute(() => import("@/pages/Home")) },
+  { path: "/about", Component: lazyRoute(() => import("@/pages/About")) },
+  { path: "/work-with-me", Component: lazyRoute(() => import("@/pages/WorkWithMe")) },
+  { path: "/courses", Component: lazyRoute(() => import("@/pages/Courses")) },
+  // Where 55 of the legacy bossclinician.com product URLs land.
+  { path: "/courses/:slug", Component: lazyRoute(() => import("@/pages/CourseDetail")) },
+  { path: "/partners", Component: lazyRoute(() => import("@/pages/AffiliateSignup")) },
+  // One route per builder-created thing, so a quiz or an event is shareable the
+  // moment it is published — no deploy to add one.
+  { path: "/quiz/:slug", Component: lazyRoute(() => import("@/pages/Quiz")) },
+  { path: "/events/:slug", Component: lazyRoute(() => import("@/pages/EventRegister")) },
+  { path: "/events/:slug/room", Component: lazyRoute(() => import("@/pages/EventRoom")) },
+  { path: "/resources", Component: lazyRoute(() => import("@/pages/Resources")) },
+  { path: "/resource-hub", Component: lazyRoute(() => import("@/pages/ResourceHub")) },
+  { path: "/blog", Component: lazyRoute(() => import("@/pages/Blog")) },
+  { path: "/blog/:slug", Component: lazyRoute(() => import("@/pages/BlogPost")) },
+  { path: "/apply", Component: lazyRoute(() => import("@/pages/Apply")) },
+  { path: "/checkout/success", Component: CheckoutSuccessPage },
+  { path: "/contact", Component: lazyRoute(() => import("@/pages/Contact")) },
+  { path: "/retreats", Component: lazyRoute(() => import("@/pages/Retreats")) },
+  { path: "/store", Component: lazyRoute(() => import("@/pages/Store")) },
+  { path: "/practice-quiz", Component: lazyRoute(() => import("@/pages/PracticeQuiz")) },
+  {
+    path: "/practice-reset-planner",
+    Component: lazyRoute(() => import("@/pages/PracticeResetPlanner")),
+  },
+  // Forms built in the admin live under one short prefix so a new one is
+  // shareable the moment it is published — no route to add here.
+  { path: "/f/:slug", Component: lazyRoute(() => import("@/pages/FormPage")) },
+  // Same arrangement for funnels: one route walks every step, so a step added
+  // in the builder is live without a deploy. The bare path opens the first step.
+  { path: "/funnel/:slug", Component: lazyRoute(() => import("@/pages/FunnelPage")) },
+  { path: "/funnel/:slug/:step", Component: lazyRoute(() => import("@/pages/FunnelPage")) },
+  { path: "/privacy-policy", Component: lazyRoute(() => import("@/pages/legal/PrivacyPolicy")) },
+  { path: "/terms", Component: lazyRoute(() => import("@/pages/legal/Terms")) },
+  { path: "/disclaimer", Component: lazyRoute(() => import("@/pages/legal/Disclaimer")) },
+  {
+    path: "/financial-disclaimer",
+    Component: lazyRoute(() => import("@/pages/legal/FinancialDisclaimer")),
+  },
+];
+
 function PublicRoutes() {
   return (
     <Layout>
       <Suspense fallback={<PageFallback />}>
         <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/about" element={<About />} />
-          <Route path="/work-with-me" element={<WorkWithMe />} />
-          <Route path="/courses" element={<Courses />} />
-          {/* Where 55 of the legacy bossclinician.com product URLs land. */}
-          <Route path="/courses/:slug" element={<CourseDetail />} />
-          <Route path="/partners" element={<AffiliateSignup />} />
-          {/* One route per builder-created thing, so a quiz or an event is
-              shareable the moment it is published — no deploy to add one. */}
-          <Route path="/quiz/:slug" element={<Quiz />} />
-          <Route path="/events/:slug" element={<EventRegister />} />
-          <Route path="/events/:slug/room" element={<EventRoom />} />
-          <Route path="/resources" element={<Resources />} />
-          <Route path="/resource-hub" element={<ResourceHub />} />
-          <Route path="/blog" element={<Blog />} />
-          <Route path="/blog/:slug" element={<BlogPost />} />
-          <Route path="/apply" element={<Apply />} />
-          <Route path="/checkout/success" element={<CheckoutSuccess />} />
-          <Route path="/contact" element={<Contact />} />
-          <Route path="/retreats" element={<Retreats />} />
-          <Route path="/store" element={<Store />} />
-          <Route path="/practice-quiz" element={<PracticeQuiz />} />
-          <Route path="/practice-reset-planner" element={<PracticeResetPlanner />} />
-          {/* Forms built in the admin live under one short prefix so a new one
-              is shareable the moment it is published — no route to add here. */}
-          <Route path="/f/:slug" element={<FormPage />} />
-          {/* Same arrangement for funnels: one route walks every step, so a
-              step added in the builder is live without a deploy. The bare
-              path opens the first step. */}
-          <Route path="/funnel/:slug" element={<FunnelPage />} />
-          <Route path="/funnel/:slug/:step" element={<FunnelPage />} />
-          <Route path="/privacy-policy" element={<PrivacyPolicy />} />
-          <Route path="/terms" element={<Terms />} />
-          <Route path="/disclaimer" element={<Disclaimer />} />
-          <Route path="/financial-disclaimer" element={<FinancialDisclaimer />} />
+          {PUBLIC_ROUTES.map(({ path, Component }) => (
+            <Route key={path} path={path} element={<Component />} />
+          ))}
           <Route path="*" element={<NotFound />} />
         </Routes>
       </Suspense>
@@ -115,155 +120,81 @@ function PublicRoutes() {
  * ones — because the marketing header, footer and sales chat widget belong to a
  * page that is trying to sell something, not to the product someone has already
  * bought.
+ *
+ * Returned as `<Route>` elements spliced into the app's one `<Routes>`, never as
+ * a nested `<Routes>` of its own. A descendant `<Routes>` matches what is left of
+ * the URL *after* its parent route consumed it, so `/account/profile` reaches it
+ * as `/profile` and a child declared at `/account/profile` never matches —
+ * every member screen renders as a blank page. The admin gets away with a nested
+ * `<Routes>` because its children are written relative to `/admin/*`; these are
+ * absolute site paths and so belong at the top level.
  */
-function MemberRoutes() {
+function memberRoutes() {
   return (
-    <Suspense fallback={<MemberFallback />}>
-      <Routes>
-        <Route path="/login" element={<MemberLogin />} />
-        <Route path="/signup" element={<MemberSignup />} />
-        <Route path="/forgot-password" element={<MemberForgotPassword />} />
-        <Route path="/reset-password/:token" element={<MemberResetPassword />} />
-        <Route path="/verify-email/:token" element={<MemberVerifyEmail />} />
+    <Route element={<MemberBoundary />}>
+      <Route path="/login" element={<MemberLogin />} />
+      <Route path="/signup" element={<MemberSignup />} />
+      <Route path="/forgot-password" element={<MemberForgotPassword />} />
+      <Route path="/reset-password/:token" element={<MemberResetPassword />} />
+      <Route path="/verify-email/:token" element={<MemberVerifyEmail />} />
 
-        <Route
-          path="/account"
-          element={
-            <RequireMember>
-              <MemberAccount />
-            </RequireMember>
-          }
-        />
-        <Route
-          path="/account/profile"
-          element={
-            <RequireMember>
-              <MemberProfile />
-            </RequireMember>
-          }
-        />
-        <Route
-          path="/account/security"
-          element={
-            <RequireMember>
-              <MemberSecurity />
-            </RequireMember>
-          }
-        />
-        <Route
-          path="/account/billing"
-          element={
-            <RequireMember>
-              <MemberBilling />
-            </RequireMember>
-          }
-        />
-        <Route
-          path="/account/purchases"
-          element={
-            <RequireMember>
-              <MemberPurchases />
-            </RequireMember>
-          }
-        />
+      {/* One guard for the whole signed-in half: `RequireMember` renders the
+          matched child through `<Outlet>`, so the check happens once rather
+          than being repeated — and forgotten — on each new screen. */}
+      <Route
+        element={
+          <RequireMember>
+            <Outlet />
+          </RequireMember>
+        }
+      >
+        <Route path="/account" element={<MemberAccount />} />
+        <Route path="/account/profile" element={<MemberProfile />} />
+        <Route path="/account/security" element={<MemberSecurity />} />
+        <Route path="/account/billing" element={<MemberBilling />} />
+        <Route path="/account/purchases" element={<MemberPurchases />} />
 
-        <Route
-          path="/library"
-          element={
-            <RequireMember>
-              <MemberLibrary />
-            </RequireMember>
-          }
-        />
-        <Route
-          path="/library/:productSlug"
-          element={
-            <RequireMember>
-              <MemberCoursePlayer />
-            </RequireMember>
-          }
-        />
+        <Route path="/library" element={<MemberLibrary />} />
+        <Route path="/library/:productSlug" element={<MemberCoursePlayer />} />
         <Route
           path="/library/:productSlug/lessons/:lessonSlug"
-          element={
-            <RequireMember>
-              <MemberCoursePlayer />
-            </RequireMember>
-          }
+          element={<MemberCoursePlayer />}
         />
-        <Route
-          path="/community"
-          element={
-            <RequireMember>
-              <MemberCommunity />
-            </RequireMember>
-          }
-        />
-        <Route
-          path="/community/:slug"
-          element={
-            <RequireMember>
-              <MemberCommunity />
-            </RequireMember>
-          }
-        />
-        <Route
-          path="/community/:slug/channels/:channelSlug"
-          element={
-            <RequireMember>
-              <MemberCommunityChannel />
-            </RequireMember>
-          }
-        />
+        <Route path="/community" element={<MemberCommunity />} />
+        <Route path="/community/:slug" element={<MemberCommunity />} />
+        {/* The people directory and one person's profile. Declared alongside
+            the channel wildcard below, which is two segments of the same
+            shape: React Router ranks a static segment above a dynamic one, so
+            `/community/x/members` reaches this and not the wildcard whatever
+            order they are written in. That ranking is what makes any future
+            `/community/:slug/<something>` page safe to add — it does not have
+            to be squeezed in above the wildcard by hand. The one thing it
+            cannot survive is a channel actually called "members", which the
+            directory would then shadow. */}
+        <Route path="/community/:slug/members" element={<MemberCommunityProfile />} />
         <Route
           path="/community/:slug/members/:memberId"
-          element={
-            <RequireMember>
-              <MemberCommunityProfile />
-            </RequireMember>
-          }
+          element={<MemberCommunityProfile />}
         />
-        <Route
-          path="/coaching"
-          element={
-            <RequireMember>
-              <MemberCoaching />
-            </RequireMember>
-          }
-        />
-        <Route
-          path="/coaching/sessions/:id"
-          element={
-            <RequireMember>
-              <MemberCoachingSession />
-            </RequireMember>
-          }
-        />
-        <Route
-          path="/podcasts"
-          element={
-            <RequireMember>
-              <MemberPodcasts />
-            </RequireMember>
-          }
-        />
-        <Route
-          path="/partners/dashboard"
-          element={
-            <RequireMember>
-              <MemberAffiliatePortal />
-            </RequireMember>
-          }
-        />
-        <Route
-          path="/newsletters"
-          element={
-            <RequireMember>
-              <MemberNewsletters />
-            </RequireMember>
-          }
-        />
-      </Routes>
+        {/* Two segments, no `channels` in the middle: that is the shape the
+            API builds into every channel's own `href`, and a route that
+            disagreed sent each one to the marketing 404. */}
+        <Route path="/community/:slug/:channelSlug" element={<MemberCommunityChannel />} />
+        <Route path="/coaching" element={<MemberCoaching />} />
+        <Route path="/coaching/sessions/:id" element={<MemberCoachingSession />} />
+        <Route path="/podcasts" element={<MemberPodcasts />} />
+        <Route path="/partners/dashboard" element={<MemberAffiliatePortal />} />
+        <Route path="/newsletters" element={<MemberNewsletters />} />
+      </Route>
+    </Route>
+  );
+}
+
+/** The member bundle's loading state, held open until the page's chunk lands. */
+function MemberBoundary() {
+  return (
+    <Suspense fallback={<MemberFallback />}>
+      <Outlet />
     </Suspense>
   );
 }
@@ -287,23 +218,24 @@ export default function App() {
           }
         />
 
-        <Route path="/login" element={<MemberRoutes />} />
-        <Route path="/signup" element={<MemberRoutes />} />
-        <Route path="/forgot-password" element={<MemberRoutes />} />
-        <Route path="/reset-password/*" element={<MemberRoutes />} />
-        <Route path="/verify-email/*" element={<MemberRoutes />} />
-        <Route path="/account/*" element={<MemberRoutes />} />
-        <Route path="/library/*" element={<MemberRoutes />} />
-        <Route path="/community/*" element={<MemberRoutes />} />
-        <Route path="/coaching/*" element={<MemberRoutes />} />
-        <Route path="/podcasts" element={<MemberRoutes />} />
-        <Route path="/newsletters" element={<MemberRoutes />} />
-        <Route path="/partners/dashboard" element={<MemberRoutes />} />
+        {memberRoutes()}
 
         {/* Ranked above /checkout/:offerSlug — React Router prefers a static
             segment to a dynamic one, so this keeps the success page from being
-            read as an offer whose slug happens to be "success". */}
-        <Route path="/checkout/success" element={<PublicRoutes />} />
+            read as an offer whose slug happens to be "success". The page is
+            rendered here rather than handed to <PublicRoutes>, whose own
+            <Routes> would be matching against what is left of the URL after
+            this route consumed all of it — and would answer with its 404. */}
+        <Route
+          path="/checkout/success"
+          element={
+            <Layout>
+              <Suspense fallback={<PageFallback />}>
+                <CheckoutSuccessPage />
+              </Suspense>
+            </Layout>
+          }
+        />
 
         {/* Checkout stays outside RequireMember: it is still a sales page, and a
             guest buying without an account must not meet a sign-in wall. It is

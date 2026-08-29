@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { motion, useReducedMotion } from "motion/react";
+import { motion } from "motion/react";
 import { CheckCircle2 } from "lucide-react";
 import { Seo } from "@/components/Seo";
 import { GlassCard } from "@/components/luxe/GlassCard";
@@ -9,6 +9,7 @@ import { LuxePageHero } from "@/components/luxe/LuxePageHero";
 import { GoldRule, Section, SectionTitle } from "@/components/luxe/Section";
 import { LuxeButton } from "@/components/luxe/LuxeButton";
 import { LuxeInput, LuxeTextarea } from "@/components/luxe/LuxeField";
+import { useEntranceMotion } from "@/hooks/useEntranceMotion";
 import { formatCurrency } from "@/lib/format";
 import { publicAffiliateApi, type ProgramSummary } from "@/lib/affiliateApi";
 
@@ -34,7 +35,7 @@ function commissionHeadline(program: ProgramSummary | null): string {
 }
 
 export default function AffiliateSignup() {
-  const reduce = useReducedMotion();
+  const reduce = useEntranceMotion();
 
   const [program, setProgram] = useState<ProgramSummary | null>(null);
   const [name, setName] = useState("");

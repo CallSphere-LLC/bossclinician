@@ -1,0 +1,27 @@
+# The API image's build context is the repository root, because it ships the
+# server-rendering bundle built from frontend/. Everything a build does not read
+# is excluded — the scrape archive alone is 90MB, and a context that large is
+# uploaded to the daemon on every build.
+.git
+node_modules
+**/node_modules
+**/dist
+# `**/dist` does not match this one, and it is 83MB of a previous local build
+# that would ride into the build context and into the frontend build stage.
+**/dist-dev
+# The incremental-build stamp from a local `tsc -b`. Copied in, it makes the
+# image's `tsc -b` believe the typecheck is already done and skip it, so a type
+# error that fails the build on a laptop passes inside the image.
+**/*.tsbuildinfo
+_scrape
+backups
+docs
+k8s
+ai
+**/.env
+**/.env.*
+*.log
+*.docx
+*.pdf
+*.png
+.claude

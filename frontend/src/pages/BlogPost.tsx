@@ -1,4 +1,3 @@
-import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -8,8 +7,13 @@ import { GlassCard } from "@/components/luxe/GlassCard";
 import { LuxePageHero } from "@/components/luxe/LuxePageHero";
 import { LuxeButton } from "@/components/luxe/LuxeButton";
 import { GoldRule, Section } from "@/components/luxe/Section";
+import { useEntranceMotion } from "@/hooks/useEntranceMotion";
+import { usePageData } from "@/hooks/usePageData";
 import { api } from "@/lib/api";
 import { findBlogPostBySlug } from "@/content/blog";
+import { articleNode, breadcrumbNode } from "@/seo/schema";
+import { ssrKeys } from "@/ssr/keys";
+import { useHeadContext } from "@/ssr/context";
 import type { BlogPost as BlogPostType } from "@/types";
 import NotFound from "@/pages/NotFound";
 import { cn } from "@/lib/cn";
@@ -70,9 +74,15 @@ function splitHeadline(title: string): { head: string; accent?: string } {
   return { head: title };
 }
 
+/** Rough, and only ever read as the `wordCount` of the article's schema node. */
+function countWords(markdown: string): number {
+  return markdown.split(/\s+/).filter(Boolean).length;
+}
+
 export default function BlogPost() {
   const { slug = "" } = useParams();
-  const [post, setPost] = useState<BlogPostType | null | undefined>(undefined);
+  const { origin } = useHeadContext();
+  const staticEntrance = useEntranceMotion();
   const reduce = useReducedMotion();
 
   // Reading progress. Tracked against the document rather than a ref'd element:
@@ -85,40 +95,41 @@ export default function BlogPost() {
     mass: 0.4,
   });
 
-  useEffect(() => {
-    let cancelled = false;
-    setPost(undefined);
-    api
-      .blogPost(slug)
-      .then((result) => {
-        if (!cancelled) setPost(result);
-      })
-      .catch(() => {
-        if (!cancelled) setPost(findBlogPostBySlug(slug) ?? null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [slug]);
+  const article = usePageData(ssrKeys.blogPost(slug), () => api.blogPost(slug));
 
-  if (post === undefined) {
+  if (article.status === "loading") {
     return (
-      <Section
-        surface="deep"
-        space="xl"
-        aurora="violet"
-        auroraIntensity={0.55}
-        seam={false}
-        aria-label="Loading article"
-        containerClassName="flex min-h-[40vh] flex-col items-center justify-center text-center"
-      >
-        <GoldRule className="mx-auto" />
-        <p role="status" className="copy-luxe mt-6">
-          Loading article…
-        </p>
-      </Section>
+      <>
+        {/* On the server this branch means only one thing: the loader could not
+            read the article. Answering 200 would publish the site's default
+            title and description under this URL, so the crawler is told the
+            page is temporarily unavailable and to come back — a placeholder
+            served as a success is how an article's own title is replaced in
+            the index by the home page's. */}
+        <Seo title="Loading… | Boss Clinician" noindex httpStatus={503} />
+        <Section
+          surface="deep"
+          space="xl"
+          aurora="violet"
+          auroraIntensity={0.55}
+          seam={false}
+          aria-label="Loading article"
+          containerClassName="flex min-h-[40vh] flex-col items-center justify-center text-center"
+        >
+          <GoldRule className="mx-auto" />
+          <p role="status" className="copy-luxe mt-6">
+            Loading article…
+          </p>
+        </Section>
+      </>
     );
   }
+
+  // An unreachable API is not the same as a retired post, but the reader cannot
+  // tell and does not care: the bundled copy of the archive is served either
+  // way, and only a slug that exists in neither place is a genuine 404.
+  const post: BlogPostType | null =
+    article.status === "ready" ? article.data : (findBlogPostBySlug(slug) ?? null);
 
   if (post === null) {
     return <NotFound />;
@@ -128,7 +139,33 @@ export default function BlogPost() {
 
   return (
     <>
-      <Seo title={`${post.title} | Boss Clinician`} description={post.excerpt} />
+      <Seo
+        title={`${post.title} | Boss Clinician`}
+        description={post.excerpt}
+        type="article"
+        image={post.coverImage}
+        author={post.author}
+        publishedTime={post.publishedAt}
+        modifiedTime={post.updatedAt ?? post.publishedAt}
+        tags={post.tags}
+        jsonLd={[
+          articleNode(origin, {
+            title: post.title,
+            description: post.excerpt,
+            slug: post.slug,
+            coverImage: post.coverImage,
+            author: post.author,
+            publishedAt: post.publishedAt,
+            updatedAt: post.updatedAt ?? post.publishedAt,
+            tags: post.tags,
+            wordCount: countWords(post.bodyMd),
+          }),
+          breadcrumbNode(origin, [
+            { name: "Blog", path: BLOG_ROUTE },
+            { name: post.title, path: `${BLOG_ROUTE}/${post.slug}` },
+          ]),
+        ]}
+      />
 
       {/* Reading rail. Sits above the sticky header (z-50) and below the grain
           overlay (z-60), so it reads as the top edge of the page itself. */}
@@ -158,7 +195,7 @@ export default function BlogPost() {
             and one entrance reveal for the whole body rather than one per
             paragraph, which would strobe a 9-minute read. */}
         <Section surface="base" space="md" aurora={false}>
-          <motion.div {...rise(reduce, 0)} className="mx-auto max-w-[68ch]">
+          <motion.div {...rise(staticEntrance, 0)} className="mx-auto max-w-[68ch]">
             {/* The body is author-supplied Markdown, so the column has to be
                 proof against whatever arrives: words break rather than push the
                 page sideways, and a GFM table scrolls inside itself instead of
@@ -187,7 +224,7 @@ export default function BlogPost() {
         auroraIntensity={0.6}
         aria-label="Ready for a real strategy?"
       >
-        <motion.div {...rise(reduce, 0.05)} className="mx-auto max-w-3xl">
+        <motion.div {...rise(staticEntrance, 0.05)} className="mx-auto max-w-3xl">
           <GlassCard
             accent="gold"
             interactive={false}

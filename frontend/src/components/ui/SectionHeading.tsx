@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
-import { motion, useReducedMotion } from "motion/react";
+import { motion } from "motion/react";
+import { useEntranceMotion } from "@/hooks/useEntranceMotion";
 import { cn } from "@/lib/cn";
 
 interface SectionHeadingProps {
@@ -19,7 +20,7 @@ export function SectionHeading({
   className,
   titleClassName,
 }: SectionHeadingProps) {
-  const reduce = useReducedMotion();
+  const reduce = useEntranceMotion();
 
   return (
     <motion.div

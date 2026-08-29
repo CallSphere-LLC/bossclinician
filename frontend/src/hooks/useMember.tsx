@@ -67,7 +67,7 @@ function detectTimezone(): string | undefined {
  * cannot see it. Without this hint every anonymous visitor to the marketing
  * site would spend a round trip discovering they are not signed in.
  */
-function hasSessionHint(): boolean {
+export function hasMemberSessionHint(): boolean {
   if (typeof document === "undefined") return false;
   return document.cookie.split("; ").some((c) => c.startsWith("bc_member_active="));
 }
@@ -95,7 +95,7 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let cancelled = false;
 
-    if (!hasSessionHint()) {
+    if (!hasMemberSessionHint()) {
       setLoading(false);
       return;
     }

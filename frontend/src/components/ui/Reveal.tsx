@@ -1,5 +1,6 @@
 import { Children, cloneElement, isValidElement, type ReactNode } from "react";
-import { motion, useReducedMotion } from "motion/react";
+import { motion } from "motion/react";
+import { useEntranceMotion } from "@/hooks/useEntranceMotion";
 import { cn } from "@/lib/cn";
 
 // Kept for backwards-compat with any imports elsewhere.
@@ -63,7 +64,7 @@ export function RevealItem({
   index = 0,
 }: RevealItemProps) {
   const MotionTag = motion[as];
-  const reduce = useReducedMotion();
+  const reduce = useEntranceMotion();
 
   return (
     <MotionTag

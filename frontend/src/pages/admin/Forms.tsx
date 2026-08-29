@@ -24,6 +24,7 @@ import {
   Field,
   Input,
   PageHeader,
+  selectStyles,
   Skeleton,
   Textarea,
 } from "@/pages/admin/ui/primitives";
@@ -386,7 +387,7 @@ export default function Forms() {
                             ) : f.type === "select" ? (
                               <select
                                 disabled
-                                className="h-11 w-full rounded-xl border border-hairline bg-surface px-3 text-sm"
+                                className={selectStyles}
                               >
                                 {(f.options ?? []).length === 0 ? (
                                   <option>No choices added yet</option>
@@ -583,7 +584,7 @@ export default function Forms() {
                       <select
                         value={field.type}
                         onChange={(e) => updateField(i, { type: e.target.value })}
-                        className="h-11 w-full rounded-xl border border-hairline bg-surface px-2 text-sm outline-none focus-visible:border-plum"
+                        className={selectStyles}
                       >
                         {ANSWER_TYPES.map((t) => (
                           <option key={t.value} value={t.value}>

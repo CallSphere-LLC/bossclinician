@@ -37,6 +37,7 @@ import {
   Field,
   Input,
   PageHeader,
+  selectStyles,
   Textarea,
   type BadgeProps,
 } from "@/pages/admin/ui/primitives";
@@ -319,10 +320,17 @@ export default function Campaigns() {
 
   const send = useCallback(
     async (campaign: Campaign) => {
+      // A failed lookup used to read as zero, which put "Send to 0 people" on
+       // the button of a send that goes to the whole list.
       const count = await adminApi
         .audienceCount(campaign.audience)
         .then((r) => r.count)
-        .catch(() => 0);
+        .catch(() => null);
+
+      if (count === null) {
+        toast.error("We couldn't work out who this would go to — try again in a moment.");
+        return;
+      }
 
       const ok = await confirm({
         title: `Send “${campaign.name}”?`,
@@ -529,7 +537,7 @@ export default function Campaigns() {
               <select
                 value={draft.audience ?? "all_subscribers"}
                 onChange={(e) => setDraft((d) => ({ ...d, audience: e.target.value }))}
-                className="h-11 w-full rounded-xl border border-hairline bg-surface px-3 text-sm outline-none focus-visible:border-plum"
+                className={selectStyles}
               >
                 {AUDIENCES.map((a) => (
                   <option key={a.key} value={a.key}>

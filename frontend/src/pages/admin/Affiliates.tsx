@@ -24,6 +24,7 @@ import {
   Field,
   Input,
   PageHeader,
+  selectStyles,
   Skeleton,
   Textarea,
 } from "@/pages/admin/ui/primitives";
@@ -594,7 +595,7 @@ function CreativeTab({ onError }: { onError: (message: string) => void }) {
               <select
                 value={editing.kind}
                 onChange={(e) => setEditing({ ...editing, kind: e.target.value })}
-                className="h-11 w-full rounded-xl border border-hairline bg-white/[0.04] px-4 text-sm text-ink outline-none focus-visible:border-gold/60"
+                className={selectStyles}
               >
                 {Object.entries(KIND_LABEL).map(([value, label]) => (
                   <option key={value} value={value}>
@@ -821,14 +822,30 @@ function NewsTab({ onError }: { onError: (message: string) => void }) {
 
 /* ----------------------------------------------------------- how it works */
 
+/** Stored pennies → what she typed: 5000 → "50", 5050 → "50.50". */
+function centsToInput(cents: number): string {
+  if (!cents) return "";
+  return (cents / 100).toFixed(2).replace(/\.00$/, "");
+}
+
 function HowItWorksTab({ onError }: { onError: (message: string) => void }) {
   const [settings, setSettings] = useState<ProgramSettings | null>(null);
   const [saving, setSaving] = useState(false);
+  /* Both numbers are held as the text she is typing. Re-formatting a money box
+     on every keystroke turned "50" into "5.00" after the first digit and put
+     the second one after the decimal point — there was no way to type a fixed
+     commission of $50, or a share of 30.5%. */
+  const [percentText, setPercentText] = useState("");
+  const [amountText, setAmountText] = useState("");
 
   useEffect(() => {
     adminAffiliateApi
       .settings()
-      .then(setSettings)
+      .then((loaded) => {
+        setSettings(loaded);
+        setPercentText(String(loaded.commissionPercent));
+        setAmountText(centsToInput(loaded.commissionAmountCents));
+      })
       .catch(() => onError("We couldn't load your program settings. Try refreshing the page."));
   }, [onError]);
 
@@ -837,8 +854,14 @@ function HowItWorksTab({ onError }: { onError: (message: string) => void }) {
     if (!settings) return;
     setSaving(true);
     try {
-      const saved = await adminAffiliateApi.saveSettings(settings);
+      const saved = await adminAffiliateApi.saveSettings({
+        ...settings,
+        commissionPercent: Number(percentText) || 0,
+        commissionAmountCents: Math.round((Number(amountText) || 0) * 100),
+      });
       setSettings(saved);
+      setPercentText(String(saved.commissionPercent));
+      setAmountText(centsToInput(saved.commissionAmountCents));
       toast.success("Saved");
     } catch (err) {
       toast.error(friendlyError(err, "setting"));
@@ -860,7 +883,7 @@ function HowItWorksTab({ onError }: { onError: (message: string) => void }) {
               onChange={(e) =>
                 setSettings({ ...settings, commissionKind: e.target.value as "percent" | "fixed" })
               }
-              className="h-11 w-full rounded-xl border border-hairline bg-white/[0.04] px-4 text-sm text-ink outline-none focus-visible:border-gold/60"
+              className={selectStyles}
             >
               <option value="percent">A share of each sale</option>
               <option value="fixed">A fixed amount per sale</option>
@@ -872,10 +895,8 @@ function HowItWorksTab({ onError }: { onError: (message: string) => void }) {
               <div className="relative">
                 <Input
                   inputMode="decimal"
-                  value={settings.commissionPercent}
-                  onChange={(e) =>
-                    setSettings({ ...settings, commissionPercent: Number(e.target.value) || 0 })
-                  }
+                  value={percentText}
+                  onChange={(e) => setPercentText(e.target.value.replace(/[^0-9.]/g, ""))}
                   className="pr-8"
                 />
                 <span
@@ -898,13 +919,8 @@ function HowItWorksTab({ onError }: { onError: (message: string) => void }) {
                 <Input
                   className="pl-8"
                   inputMode="decimal"
-                  value={(settings.commissionAmountCents / 100).toFixed(2)}
-                  onChange={(e) =>
-                    setSettings({
-                      ...settings,
-                      commissionAmountCents: Math.round((Number(e.target.value) || 0) * 100),
-                    })
-                  }
+                  value={amountText}
+                  onChange={(e) => setAmountText(e.target.value.replace(/[^0-9.]/g, ""))}
                 />
               </div>
             </Field>
@@ -934,7 +950,7 @@ function HowItWorksTab({ onError }: { onError: (message: string) => void }) {
                   whoGetsCredit: e.target.value as "last_click" | "first_click",
                 })
               }
-              className="h-11 w-full rounded-xl border border-hairline bg-white/[0.04] px-4 text-sm text-ink outline-none focus-visible:border-gold/60"
+              className={selectStyles}
             >
               <option value="last_click">The last link they clicked before buying</option>
               <option value="first_click">The first link that ever brought them here</option>

@@ -20,6 +20,7 @@ import {
   Flag,
   Image as ImageIcon,
   Link2,
+  Mail,
   Package,
   Pencil,
   Plus,
@@ -67,6 +68,7 @@ import {
   Field,
   Input,
   PageHeader,
+  selectStyles,
   Skeleton,
   Textarea,
 } from "@/pages/admin/ui/primitives";
@@ -123,6 +125,8 @@ function blankDraft(): OfferDraft {
     redirectUrl: "",
     thankYouPageId: null,
     accessExpiresAfterDays: null,
+    sendWelcomeEmail: true,
+    welcomeNextSteps: "",
   };
 }
 
@@ -148,6 +152,8 @@ function draftFrom(offer: OfferDetail): OfferDraft {
     redirectUrl: offer.redirectUrl,
     thankYouPageId: offer.thankYouPageId,
     accessExpiresAfterDays: offer.accessExpiresAfterDays,
+    sendWelcomeEmail: offer.sendWelcomeEmail,
+    welcomeNextSteps: offer.welcomeNextSteps,
   };
 }
 
@@ -190,14 +196,13 @@ const FIELD_TAB: Record<string, TabKey> = {
   redirectUrl: "after",
   thankYouPageId: "after",
   accessExpiresAfterDays: "after",
+  welcomeNextSteps: "after",
+  sendWelcomeEmail: "after",
 };
 
 /* ── Small shared controls ──────────────────────────────────────────────── */
 
 /** Matches the Input primitive so a row of controls reads as one set. */
-const SELECT_CLASS =
-  "h-11 w-full rounded-xl border border-hairline bg-surface px-3 text-sm text-ink outline-none transition-colors focus-visible:border-gold/60 focus-visible:ring-4 focus-visible:ring-gold/15";
-
 /** A price box that shows a "$" and takes dollars. The caller owns the text. */
 function MoneyInput({
   value,
@@ -329,7 +334,7 @@ function CadenceSelect({
           if (chosen) onChange(chosen.interval, chosen.count);
         }}
         aria-label={label}
-        className={SELECT_CLASS}
+        className={selectStyles}
       >
         {options.map((option) => (
           <option key={option.value} value={option.value}>
@@ -637,11 +642,26 @@ export default function OfferEditor() {
 
   return (
     <div className="space-y-6">
-      <Button asChild variant="ghost" size="sm" className="-ml-2">
-        <Link to="/admin/offers">
-          <ArrowLeft />
-          All offers
-        </Link>
+      <Button
+        variant="ghost"
+        size="sm"
+        className="-ml-2"
+        onClick={async () => {
+          // Six tabs of typing used to disappear on this one click.
+          if (dirty) {
+            const leave = await confirm({
+              title: "Leave without saving?",
+              description: "The changes you've made to this offer will be lost.",
+              confirmLabel: "Yes, leave it",
+              destructive: true,
+            });
+            if (!leave) return;
+          }
+          navigate("/admin/offers");
+        }}
+      >
+        <ArrowLeft />
+        All offers
       </Button>
 
       <PageHeader
@@ -953,7 +973,7 @@ function SellingTab({
                 if (id) onAdd(id);
               }}
               aria-label="Add something they get"
-              className={SELECT_CLASS}
+              className={selectStyles}
             >
               <option value="">Add something they get…</option>
               {available.map((product) => (
@@ -1081,7 +1101,12 @@ function PriceTab({
                     max={60}
                     value={draft.installmentCount ?? 3}
                     onChange={(e) =>
-                      update({ installmentCount: Math.max(2, Number(e.target.value) || 2) })
+                      // Capped at both ends: over 60 the server answers with the
+                      // parser's own words ("Number must be less than or equal
+                      // to 60") right under the box.
+                      update({
+                        installmentCount: Math.min(60, Math.max(2, Number(e.target.value) || 2)),
+                      })
                     }
                   />
                 </Field>
@@ -1115,7 +1140,9 @@ function PriceTab({
                     min={0}
                     max={365}
                     value={draft.trialDays}
-                    onChange={(e) => update({ trialDays: Math.max(0, Number(e.target.value) || 0) })}
+                    onChange={(e) =>
+                      update({ trialDays: Math.min(365, Math.max(0, Number(e.target.value) || 0)) })
+                    }
                   />
                 </Field>
               </>
@@ -1384,7 +1411,7 @@ function OrderFormTab({
                   )
                 }
                 aria-label="How should they answer?"
-                className={SELECT_CLASS}
+                className={selectStyles}
               >
                 {QUESTION_TYPES.map((type) => (
                   <option key={type.value} value={type.value}>
@@ -1651,7 +1678,7 @@ function BumpsTab({
                 value={productId}
                 onChange={(e) => setProductId(e.target.value)}
                 aria-label="What are you adding?"
-                className={SELECT_CLASS}
+                className={selectStyles}
                 required
               >
                 <option value="">Choose something…</option>
@@ -1946,7 +1973,7 @@ function UpsellsTab({
                 value={upsellOfferId}
                 onChange={(e) => setUpsellOfferId(e.target.value)}
                 aria-label="What are you offering them?"
-                className={SELECT_CLASS}
+                className={selectStyles}
                 required
               >
                 <option value="">Choose one of your offers…</option>
@@ -1965,7 +1992,7 @@ function UpsellsTab({
                 value={downsellOfferId}
                 onChange={(e) => setDownsellOfferId(e.target.value)}
                 aria-label="And if they say no?"
-                className={SELECT_CLASS}
+                className={selectStyles}
               >
                 <option value="">Nothing — move on</option>
                 {choices
@@ -2077,8 +2104,13 @@ function AfterTab({
                     value={draft.thankYouPageId ?? ""}
                     onChange={(e) => update({ thankYouPageId: e.target.value || null })}
                     aria-label="Which page?"
-                    className={SELECT_CLASS}
+                    className={selectStyles}
                   >
+                    {/* Without this, a draft holding nothing (or a page since
+                        deleted) matches no option and the browser paints the
+                        first page as chosen — she reads a page she never picked
+                        and buyers land somewhere else. */}
+                    <option value="">Choose a page…</option>
                     {pages.map((page) => (
                       <option key={page.slug} value={page.slug}>
                         {page.title}
@@ -2126,7 +2158,7 @@ function AfterTab({
                 update({ accessExpiresAfterDays: e.target.value ? Number(e.target.value) : null })
               }
               aria-label="Their access ends…"
-              className={SELECT_CLASS}
+              className={selectStyles}
             >
               {expiryOptions.map((choice) => (
                 <option key={choice.value} value={choice.value}>
@@ -2147,6 +2179,46 @@ function AfterTab({
             <p className="text-sm text-ink-soft">
               This is a subscription, so their access already stops when they cancel. You almost never
               need an end date as well.
+            </p>
+          )}
+        </div>
+      </Card>
+
+      <Card>
+        <CardHeader
+          icon={<Mail className="size-4" />}
+          title="Their welcome email"
+          subtitle="Sent the moment they buy, alongside their receipt"
+        />
+        <div className="space-y-4 p-5">
+          <Check
+            checked={draft.sendWelcomeEmail}
+            onChange={(sendWelcomeEmail) => update({ sendWelcomeEmail })}
+            label="Send a welcome email when someone buys this"
+            hint="Turn this off for small add-ons, where a second email on top of the receipt feels like a mistake."
+          />
+
+          {draft.sendWelcomeEmail && (
+            <Field
+              label="What should they do first?"
+              hint="optional"
+              error={errors.welcomeNextSteps}
+            >
+              <Textarea
+                rows={5}
+                value={draft.welcomeNextSteps}
+                onChange={(e) => update({ welcomeNextSteps: e.target.value })}
+                placeholder={
+                  "Start with the Welcome module — there's a short survey in it that tells me how to help you.\n\nThen come and say hello in the community."
+                }
+              />
+            </Field>
+          )}
+
+          {draft.sendWelcomeEmail && (
+            <p className="text-sm text-ink-soft">
+              They always get a link to sign in and open what they bought. Anything you write here is
+              added underneath that, in your words.
             </p>
           )}
         </div>

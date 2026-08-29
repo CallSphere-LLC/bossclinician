@@ -123,8 +123,12 @@ export function Footer() {
 
       <div className="relative z-[1] border-t border-white/[0.06]">
         <Container className="flex flex-col-reverse items-start justify-between gap-4 py-8 text-xs text-white/25 sm:flex-row sm:items-center">
+          {/* UTC on both sides of the handoff. The page is rendered on a server
+              running UTC and hydrated in the reader's own zone, so a local year
+              would disagree with itself for the few hours either side of New
+              Year when the two calendars have not yet met. */}
           <p>
-            &copy; {new Date().getFullYear()} Boss Clinician, LLC &middot; Yvette Howard, LCSW
+            &copy; {new Date().getUTCFullYear()} Boss Clinician, LLC &middot; Yvette Howard, LCSW
             &middot; All Rights Reserved
           </p>
           <div className="flex flex-wrap items-center gap-x-7 gap-y-2">

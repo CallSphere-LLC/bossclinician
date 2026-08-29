@@ -27,6 +27,14 @@ export interface MediaAsset {
   filename: string;
   originalName: string;
   url: string;
+  /**
+   * The address that actually loads in an <img>, <video> or <audio>.
+   *
+   * `url` is a storage reference: for a file only buyers can open it reads
+   * `protected:abc.mp4`, which is not a URL and shows nothing. Always render
+   * from this.
+   */
+  previewUrl: string;
   mime: string;
   kind: MediaKind;
   sizeBytes: number;

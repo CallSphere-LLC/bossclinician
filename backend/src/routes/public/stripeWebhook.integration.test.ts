@@ -506,4 +506,138 @@ describeDb("stripe webhook (integration)", () => {
     expect(bystander[0].subscription_id).toBeNull();
     expect(bystander[0].status).toBe("active");
   });
+
+  /* ------------------------------------------------------- payment plans */
+
+  /** A 2 x $1,250 plan, its order still pending, and its opening invoice. */
+  async function planFixture(label: string) {
+    const now = Math.floor(Date.now() / 1000);
+    const email = `${label}@example.test`;
+    const memberId = await insertMember(client, email);
+    const { productId } = await insertCourseProduct(client, label);
+    const offerId = await insertOffer(client, `offer-${label}`, [productId], {
+      amountCents: 125_000,
+    });
+    await client.query(
+      `UPDATE offers
+          SET pricing_type = 'payment_plan', interval = 'month', interval_count = 1,
+              installment_count = 2
+        WHERE id = $1`,
+      [offerId]
+    );
+    const orderId = await insertOrder(client, {
+      offerId,
+      email,
+      totalCents: 125_000,
+      memberId,
+    });
+
+    const metadata = { orderId: String(orderId), pricingType: "payment_plan" };
+    return {
+      orderId,
+      invoiceId: `in_${label}`,
+      openingInvoice: {
+        id: `in_${label}`,
+        object: "invoice",
+        customer: `cus_${label}`,
+        customer_email: email,
+        number: `INV-${label}`,
+        currency: "usd",
+        amount_due: 125_000,
+        amount_paid: 125_000,
+        attempt_count: 1,
+        status: "paid",
+        hosted_invoice_url: "",
+        invoice_pdf: "",
+        created: now,
+        period_start: now,
+        period_end: now + 2_592_000,
+        status_transitions: { paid_at: now },
+        total_taxes: [],
+        payments: { data: [] },
+        parent: {
+          subscription_details: { subscription: `sub_${label}`, metadata },
+        },
+      },
+    };
+  }
+
+  async function planState(orderId: number): Promise<{
+    installmentsPaid: number;
+    status: string;
+    installments: { sequence: number; status: string; stripe_invoice_id: string | null }[];
+  } | null> {
+    const plan = await client.query<{ id: number; installments_paid: number; status: string }>(
+      `SELECT id, installments_paid, status FROM payment_plans WHERE order_id = $1`,
+      [orderId]
+    );
+    const row = plan.rows[0];
+    if (!row) return null;
+    const installments = await client.query<{
+      sequence: number;
+      status: string;
+      stripe_invoice_id: string | null;
+    }>(
+      `SELECT sequence, status, stripe_invoice_id FROM payment_plan_installments
+        WHERE payment_plan_id = $1 ORDER BY sequence`,
+      [row.id]
+    );
+    return {
+      installmentsPaid: row.installments_paid,
+      status: row.status,
+      installments: installments.rows,
+    };
+  }
+
+  it("does not credit a second installment when the opening invoice is re-delivered", async () => {
+    const plan = await planFixture("planreplay");
+
+    expect(
+      (await deliver(envelope("evt_pr_1", "invoice.paid", plan.openingInvoice))).status
+    ).toBe(200);
+
+    const opened = await planState(plan.orderId);
+    expect(opened?.installmentsPaid).toBe(1);
+    // The opening invoice is stamped on installment one. Without it,
+    // `advancePaymentPlan` cannot tell a replay of the opening charge from the
+    // arrival of the second one, and credits a payment nobody made.
+    expect(opened?.installments[0].stripe_invoice_id).toBe(plan.invoiceId);
+    expect(opened?.installments[1].status).toBe("scheduled");
+
+    const settled = await client.query<{ settled_at: Date | null }>(
+      `SELECT settled_at FROM invoices WHERE stripe_invoice_id = $1`,
+      [plan.invoiceId]
+    );
+    expect(settled.rows[0].settled_at).not.toBeNull();
+
+    // Exactly what a handler that threw after opening the plan leaves behind:
+    // the event goes back to 'failed' and Stripe redelivers it.
+    await client.query(`UPDATE stripe_events SET status = 'failed' WHERE id = 'evt_pr_1'`);
+    expect(
+      (await deliver(envelope("evt_pr_1", "invoice.paid", plan.openingInvoice))).status
+    ).toBe(200);
+
+    const afterReplay = await planState(plan.orderId);
+    expect(afterReplay?.installmentsPaid).toBe(1);
+    expect(afterReplay?.status).toBe("active");
+    expect(afterReplay?.installments[1].status).toBe("scheduled");
+  });
+
+  it("opens the plan on a retry that finds the order already paid", async () => {
+    const plan = await planFixture("planretry");
+
+    // The state a first delivery leaves when it commits the fulfilment and then
+    // throws: the order is paid, and no plan was ever created.
+    await client.query(`UPDATE orders SET status = 'paid' WHERE id = $1`, [plan.orderId]);
+
+    expect(
+      (await deliver(envelope("evt_prt_1", "invoice.paid", plan.openingInvoice))).status
+    ).toBe(200);
+
+    const recovered = await planState(plan.orderId);
+    expect(recovered).not.toBeNull();
+    expect(recovered?.installmentsPaid).toBe(1);
+    expect(recovered?.installments).toHaveLength(2);
+    expect(recovered?.installments[1].status).toBe("scheduled");
+  });
 });

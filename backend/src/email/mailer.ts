@@ -24,6 +24,14 @@ export interface MailAttachment {
   filename: string;
   content: string;
   contentType: string;
+  /**
+   * How `content` is encoded. Omitted means the string is the document itself,
+   * which is right for a calendar invitation and wrong for anything binary — a
+   * PDF handed over as an unencoded string is mangled into an unopenable file
+   * by the time it reaches the reader, and it arrives looking like a real
+   * attachment, so nobody finds out until a customer says so.
+   */
+  encoding?: "base64";
 }
 
 export interface SendMailInput {
@@ -48,8 +56,33 @@ export interface SendMailInput {
  * `sendMail` below swallows errors, which is right for a fire-and-forget site
  * notification and wrong for anything the queue owns.
  */
+/**
+ * The id SES assigned, dug out of the SMTP acknowledgement.
+ *
+ * Every event SES will ever post about a message names it by this id, so a send
+ * that does not capture it is a send whose bounce has nowhere to land. It is
+ * deliberately not `info.messageId`: over SMTP that is the Message-ID header
+ * nodemailer generated locally, which SES never mentions again. The id SES chose
+ * comes back only in its 250 line — `250 Ok 0100019a1b2c3d4e-...`.
+ *
+ * Returns "" for any other transport, whose own id the caller should keep.
+ */
+function sesMessageId(response: unknown): string {
+  const match = /^250 Ok ([0-9a-f-]{16,})$/i.exec(String(response ?? "").trim());
+  return match?.[1] ?? "";
+}
+
 export async function sendMailStrict(input: SendMailInput): Promise<{ messageId: string }> {
   if (!input.to) throw new Error("No recipient address");
+
+  // SES emits nothing at all for a message sent without a configuration set, so
+  // the default is applied here rather than at each call site: a sender that
+  // forgets the header does not get an untracked send, it gets the transactional
+  // set. A caller that names its own — the marketing path does — keeps it.
+  const headers = { ...input.headers };
+  if (env.ses.transactionalConfigSet && !headers["X-SES-CONFIGURATION-SET"]) {
+    headers["X-SES-CONFIGURATION-SET"] = env.ses.transactionalConfigSet;
+  }
 
   const t = getTransporter();
   const info = await t.sendMail({
@@ -60,10 +93,10 @@ export async function sendMailStrict(input: SendMailInput): Promise<{ messageId:
     text: input.text,
     html: input.html ?? `<p>${input.text}</p>`,
     attachments: input.attachments,
-    headers: input.headers,
+    headers,
   });
 
-  return { messageId: String(info.messageId ?? "") };
+  return { messageId: sesMessageId(info.response) || String(info.messageId ?? "") };
 }
 
 /** Sends mail; on any failure (or unconfigured SMTP) logs instead of throwing. */

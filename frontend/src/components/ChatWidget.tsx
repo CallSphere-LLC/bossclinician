@@ -9,12 +9,29 @@ import { useVoiceAgent } from "@/hooks/useVoiceAgent";
 const HISTORY_KEY = "bc_chat_history";
 const TEASER_DISMISSED_KEY = "bc_chat_teaser_dismissed";
 
+/**
+ * Both readers are guarded rather than left to throw.
+ *
+ * The widget is part of every server-rendered marketing page, where there is no
+ * storage at all, and in a browser with storage blocked (private mode, an
+ * embedded context) a read is a security error. Either way a visitor gets a
+ * fresh conversation, which is the right answer — the alternative is a page
+ * that fails to render over a saved chat log.
+ */
 function loadHistory(): ChatMessage[] {
   try {
     const raw = localStorage.getItem(HISTORY_KEY);
     return raw ? (JSON.parse(raw) as ChatMessage[]) : [];
   } catch {
     return [];
+  }
+}
+
+function teaserDismissed(): boolean {
+  try {
+    return localStorage.getItem(TEASER_DISMISSED_KEY) === "1";
+  } catch {
+    return false;
   }
 }
 
@@ -53,9 +70,7 @@ const TEASER_VISIBLE_MS = 11000;
 
 function ChatTeaser({ onOpen }: { onOpen: () => void }) {
   const prefersReducedMotion = useReducedMotion();
-  const [dismissed, setDismissed] = useState(
-    () => localStorage.getItem(TEASER_DISMISSED_KEY) === "1",
-  );
+  const [dismissed, setDismissed] = useState(teaserDismissed);
   const [visible, setVisible] = useState(false);
   const [index, setIndex] = useState(0);
 
@@ -85,7 +100,11 @@ function ChatTeaser({ onOpen }: { onOpen: () => void }) {
   function dismiss(e: MouseEvent) {
     e.stopPropagation();
     setDismissed(true);
-    localStorage.setItem(TEASER_DISMISSED_KEY, "1");
+    try {
+      localStorage.setItem(TEASER_DISMISSED_KEY, "1");
+    } catch {
+      // The bubble stays gone for this visit either way.
+    }
   }
 
   return (
@@ -168,7 +187,11 @@ export function ChatWidget() {
   const prefersReducedMotion = useReducedMotion();
 
   useEffect(() => {
-    localStorage.setItem(HISTORY_KEY, JSON.stringify(messages));
+    try {
+      localStorage.setItem(HISTORY_KEY, JSON.stringify(messages));
+    } catch {
+      // A conversation that works matters more than one that survives a reload.
+    }
   }, [messages]);
 
   useEffect(() => {

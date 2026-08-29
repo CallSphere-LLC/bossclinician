@@ -18,6 +18,7 @@ import {
   type ValidatedCoupon,
 } from "../../services/coupons";
 import { fulfillPayment } from "../../services/fulfillment";
+import { deliverPurchase, notifyOwnerOfSale } from "../../services/purchaseDelivery";
 import { resolveAttribution } from "../../services/affiliates";
 import { VISITOR_COOKIE } from "./affiliateTracking";
 import { addInterval, computeOrderTotal, type OrderTotal } from "../../services/pricing";
@@ -724,12 +725,15 @@ checkoutOfferRouter.post(
     // A genuinely free enrolment has nothing to charge and so no webhook to
     // wait for. It still runs through the same fulfilment service a paid order
     // does, which is what keeps access, member creation and cart recovery
-    // identical either way.
+    // identical either way — and through the same delivery service, which is
+    // what keeps the receipt, the welcome and the set-password link identical
+    // too.
     //
-    // TODO: a guest whose account was created here needs the set-password link
-    // that routes/auth/memberAuth.ts sends on registration. The webhook owner
-    // needs the same hook for paid guest orders — it belongs in one place, not
-    // two, so `memberCreated` is reported rather than mailed from here.
+    // "Free" here is overwhelmingly a 100%-off coupon on a paid offer rather
+    // than an offer priced at nothing, so the buyer expects exactly what a
+    // paying buyer gets. Skipping the emails on this branch meant a coupon that
+    // covered the whole price bought silence: access granted, nothing said, and
+    // a guest account with no password and no link to claim it.
     if (total.totalCents === 0 && !isRecurring(offer)) {
       const result = await fulfillPayment({
         orderId,
@@ -737,6 +741,20 @@ checkoutOfferRouter.post(
         currency: total.currency,
         email,
       });
+
+      if (result.fulfilled) {
+        await deliverPurchase({
+          orderId,
+          memberId: result.memberId,
+          createdMember: result.createdMember,
+        });
+        notifyOwnerOfSale({
+          description: offer.title,
+          email,
+          amountCents: 0,
+          currency: total.currency,
+        });
+      }
       res.status(201).json({
         ...receipt,
         status: "paid",

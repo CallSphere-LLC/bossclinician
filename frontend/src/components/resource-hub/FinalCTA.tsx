@@ -1,4 +1,5 @@
-import { motion, useReducedMotion } from "motion/react";
+import { motion } from "motion/react";
+import { useEntranceMotion } from "@/hooks/useEntranceMotion";
 import { Section } from "@/components/luxe/Section";
 import { LuxeButton } from "@/components/luxe/LuxeButton";
 import { finalCtaLinks } from "@/content/resourceHub";
@@ -33,7 +34,7 @@ function rise(reduce: boolean | null, delay: number) {
  * horizon of light rather than on flat black.
  */
 export function FinalCTA() {
-  const reduce = useReducedMotion();
+  const reduce = useEntranceMotion();
 
   return (
     <Section

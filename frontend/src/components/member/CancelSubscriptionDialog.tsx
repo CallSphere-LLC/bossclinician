@@ -147,6 +147,11 @@ export function CancelSubscriptionDialog({
             initial={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.97, y: 10 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             transition={{ type: "spring", stiffness: 380, damping: 30 }}
+            /* Motion writes the whole `transform` inline, which wipes the
+               `-translate-*` centring classes below — it settles on
+               `transform: none` and the panel drops to the bottom-right corner of
+               the screen. Re-apply the centring in front of whatever Motion built. */
+            transformTemplate={(_, generated) => `translate(-50%, -50%) ${generated}`}
             className={cn(
               "fixed left-1/2 top-1/2 z-50 flex max-h-[90vh] w-[calc(100vw-1.5rem)] max-w-xl",
               "-translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl",

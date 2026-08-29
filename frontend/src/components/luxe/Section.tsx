@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
-import { motion, useReducedMotion } from "motion/react";
+import { motion } from "motion/react";
+import { useEntranceMotion } from "@/hooks/useEntranceMotion";
 import { Container } from "@/components/ui/Container";
 import { Aurora } from "@/components/luxe/Aurora";
 import { cn } from "@/lib/cn";
@@ -105,7 +106,7 @@ export function SectionTitle({
   className,
   titleClassName,
 }: SectionTitleProps) {
-  const reduce = useReducedMotion();
+  const reduce = useEntranceMotion();
 
   return (
     <motion.div

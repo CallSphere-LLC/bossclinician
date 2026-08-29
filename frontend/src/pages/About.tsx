@@ -1,11 +1,12 @@
 import type { ReactNode } from "react";
-import { motion, useReducedMotion } from "motion/react";
+import { motion } from "motion/react";
 import { Seo } from "@/components/Seo";
 import { GlassCard } from "@/components/luxe/GlassCard";
 import { LuxeButton, LuxePill } from "@/components/luxe/LuxeButton";
 import { LuxePageHero } from "@/components/luxe/LuxePageHero";
 import { GoldRule, Section, SectionTitle } from "@/components/luxe/Section";
 import { RevealGroup, RevealItem } from "@/components/ui/Reveal";
+import { useEntranceMotion } from "@/hooks/useEntranceMotion";
 import { cn } from "@/lib/cn";
 
 const EASE_LUXE: [number, number, number, number] = [0.22, 1, 0.36, 1];
@@ -197,9 +198,13 @@ function rise(reduce: boolean | null, delay: number) {
 export default function About() {
   return (
     <>
+      {/* The hero portrait is this page's share card. The sitewide Person node
+          already names /about as Yvette's URL, so the page has no structured
+          data left of its own to declare. */}
       <Seo
         title="About Yvette"
         description="Yvette Howard is an LCSW, group practice owner, doctoral candidate, and Private Practice Strategist helping therapists and clinicians build sustainable, profitable practices."
+        image="/images/af3deab11f02.jpg"
       />
 
       <LuxePageHero
@@ -569,7 +574,7 @@ function StoryAct({
   portrait,
   children,
 }: StoryActProps) {
-  const reduce = useReducedMotion();
+  const reduce = useEntranceMotion();
 
   return (
     <Section
@@ -706,7 +711,7 @@ function WinText({ win }: { win: Win }) {
  * soft-light over their whites seats them *in* the dark instead.
  *
  * Deliberately motionless: every caller already wraps it in an animated
- * container whose `initial` is guarded by `useReducedMotion`.
+ * container whose `initial` is guarded by `useEntranceMotion`.
  */
 function Portrait({
   src,
@@ -766,7 +771,7 @@ function Portrait({
 /* ── Closing CTA ──────────────────────────────────────────────────────── */
 
 function ClosingCta() {
-  const reduce = useReducedMotion();
+  const reduce = useEntranceMotion();
 
   return (
     <>

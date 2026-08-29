@@ -34,6 +34,7 @@ import {
   Field,
   Input,
   PageHeader,
+  selectStyles,
   Skeleton,
   Textarea,
   type BadgeProps,
@@ -688,6 +689,16 @@ export default function Automations() {
                                 size="iconSm"
                                 aria-label={`Remove “${describeAction(action)}”`}
                                 onClick={async () => {
+                                  // The step holds the whole message she wrote;
+                                  // one stray click used to take it with no
+                                  // dialog and nothing to undo.
+                                  const ok = await confirm({
+                                    title: "Remove this step?",
+                                    description: describeAction(action),
+                                    confirmLabel: "Yes, remove it",
+                                    destructive: true,
+                                  });
+                                  if (!ok) return;
                                   try {
                                     await adminApi.growthDelete("actions", action.id);
                                     loadDetail(active.id);
@@ -887,7 +898,7 @@ export default function Automations() {
                           onChange={(e) =>
                             updateConditionRow(i, { key: e.target.value, value: "", custom: false })
                           }
-                          className="h-11 min-w-[10rem] flex-1 rounded-xl border border-hairline bg-surface px-3 text-sm outline-none focus-visible:border-plum"
+                          className={cn(selectStyles, "min-w-[10rem] flex-1 w-auto")}
                         >
                           {conditionChoices.map((choice) => (
                             <option key={choice.key} value={choice.key}>
@@ -905,7 +916,7 @@ export default function Automations() {
                                 ? updateConditionRow(i, { value: "", custom: true })
                                 : updateConditionRow(i, { value: e.target.value })
                             }
-                            className="h-11 min-w-[10rem] flex-1 rounded-xl border border-hairline bg-surface px-3 text-sm outline-none focus-visible:border-plum"
+                            className={cn(selectStyles, "min-w-[10rem] flex-1 w-auto")}
                           >
                             <option value="">Choose one…</option>
                             {choices.map((choice) => (
@@ -1001,7 +1012,7 @@ export default function Automations() {
                 onChange={(e) =>
                   setActionDraft((d) => ({ ...d, actionType: e.target.value, config: {} }))
                 }
-                className="h-11 w-full rounded-xl border border-hairline bg-surface px-3 text-sm outline-none focus-visible:border-plum"
+                className={selectStyles}
               >
                 {ACTIONS.map((a) => (
                   <option key={a.value} value={a.value}>
@@ -1105,7 +1116,7 @@ export default function Automations() {
                       config: { ...d?.config, courseId: Number(e.target.value) },
                     }))
                   }
-                  className="h-11 w-full rounded-xl border border-hairline bg-surface px-3 text-sm outline-none focus-visible:border-plum"
+                  className={selectStyles}
                 >
                   <option value="">Choose a course…</option>
                   {courses.map((c) => (
@@ -1127,7 +1138,7 @@ export default function Automations() {
                       config: { ...d?.config, communityId: Number(e.target.value) },
                     }))
                   }
-                  className="h-11 w-full rounded-xl border border-hairline bg-surface px-3 text-sm outline-none focus-visible:border-plum"
+                  className={selectStyles}
                 >
                   <option value="">Choose a community…</option>
                   {communities.map((c) => (

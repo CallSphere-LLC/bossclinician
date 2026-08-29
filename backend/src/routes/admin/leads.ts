@@ -8,6 +8,18 @@ import { Lead } from "../../types";
 
 export const adminLeadsRouter = Router();
 
+/**
+ * How many rows this list will hold in memory.
+ *
+ * Same ceiling and same reason as the members list
+ * (routes/admin/members.ts): the API runs in a 1GB container that also renders
+ * the marketing pages, and `SELECT *` over a table every contact form on the
+ * public site writes to is a read that grows without bound. The enquiries
+ * screen shows newest first and nobody scrolls a thousand of them; the rows
+ * past this are still in the database and still in the exports.
+ */
+const LIST_CEILING = 1000;
+
 adminLeadsRouter.get(
   "/",
   asyncHandler(async (req, res) => {
@@ -19,7 +31,7 @@ adminLeadsRouter.get(
       where = "WHERE status = $1";
     }
     const result = await pool.query(
-      `SELECT * FROM leads ${where} ORDER BY created_at DESC`,
+      `SELECT * FROM leads ${where} ORDER BY created_at DESC LIMIT ${LIST_CEILING}`,
       params
     );
     res.json(rowsToCamel<Lead>(result.rows));

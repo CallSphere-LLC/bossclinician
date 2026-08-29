@@ -4,9 +4,11 @@ import crypto from "crypto";
 import { pool } from "../../db/pool";
 import { rowsToCamel, rowToCamel } from "../../utils/case";
 import { asyncHandler } from "../../utils/asyncHandler";
-import { badRequest, notFound } from "../../utils/httpError";
+import { HttpError, badRequest, notFound } from "../../utils/httpError";
 import { buildAdminCrudRouter } from "./crudFactory";
-import { sendMail } from "../../email/mailer";
+import { renderMarkdown, sendEmail } from "../../email/provider";
+import { BroadcastRefusal, startBroadcast } from "../../services/broadcasts";
+import { upsertContact } from "../../services/contacts";
 import { fireTriggerAsync, type TriggerType } from "../../automations/engine";
 import {
   automationActionsRepo,
@@ -174,14 +176,49 @@ adminGrowthRouter.post(
     );
 
     // Detached: a large list must not hold the request open.
+    //
+    // Every copy goes through `sendEmail` rather than `sendMail`. A newsletter
+    // is a commercial email, so it has to carry the postal address and the
+    // unsubscribe link, and it must not go to an address on the suppression
+    // list — none of which `sendMail` knows anything about. The contact is
+    // resolved first because the opt-out link is addressed to one.
     void (async () => {
+      const body = String(issue.body_md ?? "");
       for (const email of emails) {
-        await sendMail({
-          to: email,
-          subject: issue.subject,
-          text: issue.body_md,
-          html: `<div>${String(issue.body_md).replace(/\n/g, "<br>")}</div>`,
-        }).catch(() => undefined);
+        try {
+          const contactId = await upsertContact({ email, source: "newsletter" });
+          await sendEmail({
+            to: email,
+            subject: String(issue.subject ?? ""),
+            text: body,
+            html: renderMarkdown(body),
+            contactId,
+            // `sourceId` is deliberately null, and it is not an oversight.
+            //
+            // Everything downstream reads (`source_type`, `source_id`) as one
+            // key, and for `broadcast` that key means one row in
+            // `email_campaigns`: routes/public/emailWebhook.ts adds every open,
+            // click and bounce to the campaign with that id, and
+            // services/reports/rollup.ts dimensions it as `broadcast:<id>`. A
+            // newsletter id is drawn from a different sequence entirely, so
+            // sending the issue's newsletter id here credited whichever
+            // campaign happened to share the number — an email Yvette may never
+            // have sent — and there is no way to unpick the two afterwards.
+            // Anonymous is wrong but harmless; misattributed is neither.
+            //
+            // The proper fix is a `newsletter` source type carried end to end,
+            // which needs the CHECK on email_messages.source_type widened,
+            // EmailSourceType in email/provider.ts, the two source lists in
+            // services/reports/rollup.ts and the label map in
+            // services/reports/queries.ts — all outside this pass's remit. It is
+            // written up in docs/bugs/backend-growth.md.
+            sourceType: "broadcast",
+            sourceId: null,
+            topic: "marketing",
+          });
+        } catch {
+          // One bad address must not cost the rest of the list its issue.
+        }
       }
     })();
 
@@ -229,70 +266,58 @@ adminGrowthRouter.get(
   }),
 );
 
+/**
+ * Sends a campaign.
+ *
+ * Hands the whole job to `services/broadcasts.ts` rather than looping here.
+ * The loop this replaced resolved its audience from the legacy `audience`
+ * string alone — so a campaign pointed at a saved segment was sent to every
+ * subscriber instead — and posted each message through `sendMail`, which knows
+ * nothing about the suppression list, the contact's topic preferences or the
+ * unsubscribe footer that makes a commercial email legal. It also ran in a
+ * detached promise, so a deploy halfway through lost the rest of the list with
+ * the campaign still reading "sending".
+ */
 adminGrowthRouter.post(
   "/campaigns/:id/send",
   asyncHandler(async (req, res) => {
-    const campaignResult = await pool.query("SELECT * FROM email_campaigns WHERE id = $1", [
-      req.params.id,
-    ]);
+    const campaignId = Number(req.params.id);
+    if (!Number.isInteger(campaignId) || campaignId <= 0) throw notFound("Campaign not found");
+
+    // The same three refusals as before, answered here so they stay 400s with
+    // the wording the console already shows. `startBroadcast` re-checks them
+    // for the scheduled path, which has no request in front of it.
+    const campaignResult = await pool.query<{ status: string; subject: string }>(
+      "SELECT status, subject FROM email_campaigns WHERE id = $1",
+      [campaignId],
+    );
     const campaign = campaignResult.rows[0];
     if (!campaign) throw notFound("Campaign not found");
     if (campaign.status === "sending") throw badRequest("This campaign is already sending");
     if (campaign.status === "sent") throw badRequest("This campaign has already been sent");
-    if (!campaign.subject) throw badRequest("Add a subject before sending");
+    if (!campaign.subject.trim()) throw badRequest("Add a subject before sending");
 
-    const emails = await resolveAudience(campaign.audience);
-    if (emails.length === 0) throw badRequest("That audience has no recipients");
-
-    await pool.query(
-      `UPDATE email_campaigns SET status = 'sending', recipient_count = $2, updated_at = now()
-        WHERE id = $1`,
-      [campaign.id, emails.length],
-    );
-
-    // Queue rows first so a crash mid-send is visible and resumable.
-    for (const email of emails) {
-      await pool.query(
-        `INSERT INTO email_sends (campaign_id, email) VALUES ($1, $2)
-         ON CONFLICT (campaign_id, email) DO NOTHING`,
-        [campaign.id, email],
+    let result;
+    try {
+      result = await startBroadcast(campaignId);
+    } catch (err) {
+      // Only the sentences `startBroadcast` wrote for a person are shown to
+      // one. The console prints any short 400 verbatim, so passing every error
+      // through here put raw Postgres text — "duplicate key value violates
+      // unique constraint" — on screen as though the sender had filled a form
+      // in wrong. Anything else is a fault: it is logged in full for us and
+      // answered with a sentence that says what state the campaign is in, since
+      // `startBroadcast` has already put it back to one she can retry from.
+      if (err instanceof BroadcastRefusal) throw badRequest(err.message);
+      // eslint-disable-next-line no-console
+      console.error(`[campaigns] campaign ${campaignId} could not start:`, err);
+      throw new HttpError(
+        500,
+        "Something went wrong starting this email, so it has been stopped. Nothing more will go out — try sending it again in a moment."
       );
     }
 
-    void (async () => {
-      let delivered = 0;
-      let failed = 0;
-      for (const email of emails) {
-        try {
-          await sendMail({
-            to: email,
-            subject: campaign.subject,
-            text: campaign.body_md,
-            html: `<div>${String(campaign.body_md).replace(/\n/g, "<br>")}</div>`,
-          });
-          delivered += 1;
-          await pool.query(
-            "UPDATE email_sends SET status = 'sent', sent_at = now() WHERE campaign_id = $1 AND email = $2",
-            [campaign.id, email],
-          );
-        } catch (err) {
-          failed += 1;
-          await pool.query(
-            "UPDATE email_sends SET status = 'failed', error = $3 WHERE campaign_id = $1 AND email = $2",
-            [campaign.id, email, (err as Error).message.slice(0, 300)],
-          );
-        }
-      }
-      await pool.query(
-        `UPDATE email_campaigns
-            SET status = 'sent', sent_at = now(), delivered_count = $2, failed_count = $3,
-                updated_at = now()
-          WHERE id = $1`,
-        [campaign.id, delivered, failed],
-      );
-    })();
-
-    res.status(202).json({ ok: true, queued: emails.length });
+    res.status(202).json({ ok: true, queued: result.queued, recipients: result.recipients });
   }),
 );
 

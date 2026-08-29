@@ -1,5 +1,6 @@
 import { useEffect } from "react";
-import { motion, useReducedMotion } from "motion/react";
+import { motion } from "motion/react";
+import { useEntranceMotion } from "@/hooks/useEntranceMotion";
 import { Section, SectionTitle } from "@/components/luxe/Section";
 import { GlassCard } from "@/components/luxe/GlassCard";
 import { LuxeButton, LuxePill } from "@/components/luxe/LuxeButton";
@@ -117,7 +118,7 @@ function CameraGlyph({ className }: { className?: string }) {
 }
 
 export function LuxeInstagram() {
-  const reduce = useReducedMotion();
+  const reduce = useEntranceMotion();
 
   return (
     <Section

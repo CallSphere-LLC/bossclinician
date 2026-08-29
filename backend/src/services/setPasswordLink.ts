@@ -1,3 +1,4 @@
+import { env } from "../config/env";
 import { pool } from "../db/pool";
 import { expiresIn, generateToken, hashToken } from "../auth/tokens";
 import { sendMail } from "../email/mailer";
@@ -26,6 +27,68 @@ export const SET_PASSWORD_TTL_MINUTES = 24 * 60;
 const WINDOW_MINUTES = 15;
 const MAX_PER_WINDOW = 5;
 
+export interface IssuedSetPasswordLink {
+  url: string;
+  email: string;
+  firstName: string;
+  token: string;
+}
+
+/**
+ * Mints a set-password link and returns it, without sending anything.
+ *
+ * Split out from `sendSetPasswordLink` so the purchase path can put the link
+ * inside the welcome email it is already sending rather than sending a third
+ * message. Minting twice would be worse than untidy: the burn below invalidates
+ * every outstanding link, so a welcome email and a separate set-password email
+ * minted in sequence would leave the buyer holding one dead link and one live
+ * one, with no way to tell which is which.
+ *
+ * Returns null when the member cannot be mailed or has asked for too many links
+ * too quickly.
+ */
+export async function issueSetPasswordLink(
+  memberId: number
+): Promise<IssuedSetPasswordLink | null> {
+  const memberRes = await pool.query<{ email: string; first_name: string }>(
+    `SELECT email, first_name FROM members WHERE id = $1`,
+    [memberId]
+  );
+  const member = memberRes.rows[0];
+  if (!member || !member.email) return null;
+
+  const recent = await pool.query<{ count: string }>(
+    `SELECT count(*) AS count
+       FROM member_password_resets
+      WHERE member_id = $1
+        AND created_at > now() - make_interval(mins => $2)`,
+    [memberId, WINDOW_MINUTES]
+  );
+  if (Number(recent.rows[0]?.count ?? 0) >= MAX_PER_WINDOW) return null;
+
+  // Outstanding links are burned first, so a forwarded or intercepted earlier
+  // email stops working the moment a fresh one is minted.
+  await pool.query(
+    `UPDATE member_password_resets SET used_at = now()
+      WHERE member_id = $1 AND used_at IS NULL`,
+    [memberId]
+  );
+
+  const raw = generateToken();
+  await pool.query(
+    `INSERT INTO member_password_resets (member_id, token_hash, expires_at)
+     VALUES ($1, $2, $3)`,
+    [memberId, hashToken(raw), expiresIn(SET_PASSWORD_TTL_MINUTES * 60)]
+  );
+
+  return {
+    url: `${env.publicSiteUrl}/reset-password/${encodeURIComponent(raw)}`,
+    email: member.email,
+    firstName: member.first_name,
+    token: raw,
+  };
+}
+
 /**
  * Emails a set-password link to a member. Returns false when nothing was sent.
  *
@@ -35,42 +98,14 @@ const MAX_PER_WINDOW = 5;
  */
 export async function sendSetPasswordLink(memberId: number): Promise<boolean> {
   try {
-    const memberRes = await pool.query<{ email: string; first_name: string }>(
-      `SELECT email, first_name FROM members WHERE id = $1`,
-      [memberId]
-    );
-    const member = memberRes.rows[0];
-    if (!member || !member.email) return false;
-
-    const recent = await pool.query<{ count: string }>(
-      `SELECT count(*) AS count
-         FROM member_password_resets
-        WHERE member_id = $1
-          AND created_at > now() - make_interval(mins => $2)`,
-      [memberId, WINDOW_MINUTES]
-    );
-    if (Number(recent.rows[0]?.count ?? 0) >= MAX_PER_WINDOW) return false;
-
-    // Outstanding links are burned first, so a forwarded or intercepted earlier
-    // email stops working the moment a fresh one is sent.
-    await pool.query(
-      `UPDATE member_password_resets SET used_at = now()
-        WHERE member_id = $1 AND used_at IS NULL`,
-      [memberId]
-    );
-
-    const raw = generateToken();
-    await pool.query(
-      `INSERT INTO member_password_resets (member_id, token_hash, expires_at)
-       VALUES ($1, $2, $3)`,
-      [memberId, hashToken(raw), expiresIn(SET_PASSWORD_TTL_MINUTES * 60)]
-    );
+    const issued = await issueSetPasswordLink(memberId);
+    if (issued === null) return false;
 
     void sendMail({
-      to: member.email,
+      to: issued.email,
       ...setPassword({
-        firstName: member.first_name,
-        token: raw,
+        firstName: issued.firstName,
+        token: issued.token,
         expiresInMinutes: SET_PASSWORD_TTL_MINUTES,
       }),
     });

@@ -4,8 +4,12 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="icon" type="image/png" href="/images/755b9b49389d.webp" />
-    <title>Boss Clinician | Private Practice Strategist for Therapists</title>
+    <!-- Fallbacks only. A server-rendered page replaces both with its own; a
+         client-rendered one (the member app, the admin) keeps them until React
+         has mounted, so the tab is never nameless. -->
+    <title data-bc-default>Boss Clinician | Private Practice Strategist for Therapists</title>
     <meta
+      data-bc-default
       name="description"
       content="Yvette Howard, LCSW helps therapists and clinicians break free from Alma, Headway, Talkspace, and similar platforms to build a profitable, sustainable private practice that's actually theirs."
     />
@@ -16,13 +20,14 @@
       href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600;1,700&family=Montserrat:wght@300;400;500;600;700&display=swap"
       rel="stylesheet"
     />
+    <!--bc-head-->
   </head>
   <!-- The page floor is the dark theme's surface: it is what shows through an
        overscroll bounce and behind the first paint, so a cream body would flash
        white before the app mounts. Light-theme routes paint their own cream
        background over it in Layout. -->
   <body class="bg-night-deep font-body text-white antialiased">
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
+    <div id="root"><!--bc-app--></div>
+    <script type="module" src="/src/entry-client.tsx"></script>
   </body>
 </html>

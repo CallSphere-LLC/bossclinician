@@ -23,6 +23,9 @@ const QUESTIONS: readonly string[] = [
 /** Card accents cycle so a stack of five never reads as one flat block. */
 const ACCENTS: readonly Accent[] = ["green", "plum", "gold"];
 
+/** Held once: the hero plate renders it and the page's share card points at it. */
+const HERO_PORTRAIT = "/images/f5f2cec6b858.jpg";
+
 /**
  * Contact — the Obsidian Luxe rebuild.
  *
@@ -41,6 +44,7 @@ export default function Contact() {
       <Seo
         title="Contact Us"
         description="Have questions about working with Yvette Howard, LCSW? Reach out to Boss Clinician — private practice strategist for therapists, counselors, and healthcare clinicians."
+        image={HERO_PORTRAIT}
       />
 
       <LuxePageHero
@@ -63,7 +67,7 @@ export default function Contact() {
 
             <div className="relative overflow-hidden rounded-2xl border border-gold/25 shadow-[0_44px_100px_-36px_rgba(0,0,0,0.95)]">
               <img
-                src="/images/f5f2cec6b858.jpg"
+                src={HERO_PORTRAIT}
                 alt="Yvette Howard"
                 decoding="async"
                 className="aspect-[4/3] w-full max-w-full object-cover brightness-[0.8] contrast-[1.06] saturate-[0.8]"

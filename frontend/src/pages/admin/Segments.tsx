@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Filter, Pencil, Plus, Trash2, Users } from "lucide-react";
 import { toast } from "sonner";
 import { motion } from "motion/react";
 import { cn } from "@/lib/cn";
-import { formatRelative } from "@/lib/format";
+import { formatDate, formatRelative } from "@/lib/format";
 import {
   EMAIL_STATUS_LABEL,
   contactsApi,
@@ -27,6 +27,7 @@ import {
   Field,
   Input,
   PageHeader,
+  selectStyles,
   Skeleton,
 } from "@/pages/admin/ui/primitives";
 import { Modal, useConfirm } from "@/pages/admin/ui/Dialog";
@@ -214,7 +215,10 @@ function describeRule(rule: SegmentRule, options: SegmentOptions | null): string
       options?.sequences.find((sequence) => sequence.id === Number(rule.value))?.name ?? "a sequence";
   }
   if (spec.input === "status") value = emailStatusLabel(String(rule.value));
-  if (spec.input === "date" && value) value = new Date(value).toLocaleDateString("en-US");
+  // The date box writes a bare "YYYY-MM-DD", which `new Date` reads as UTC
+  // midnight and then renders in local time — a day early for anyone west of
+  // Greenwich. formatDate parses date-only values as local. See lib/format.ts.
+  if (spec.input === "date" && value) value = formatDate(String(value));
   if (!value) value = "…";
 
   return spec.phrase(rule.op, value);
@@ -549,7 +553,7 @@ function SegmentEditor({
                 }))
               }
               aria-label="How the rows below fit together"
-              className="h-9 rounded-lg border border-hairline bg-surface px-2.5 text-sm font-semibold text-ink outline-none focus-visible:border-plum focus-visible:ring-4 focus-visible:ring-plum/12"
+              className={cn(selectStyles, "h-9 rounded-lg font-semibold w-auto")}
             >
               <option value="all">every row below is true</option>
               <option value="any">any row below is true</option>
@@ -625,15 +629,25 @@ function RuleRow({
   onRemove: () => void;
 }) {
   const spec = specFor(rule.field);
-  const selectClass =
-    "h-10 min-w-0 rounded-lg border border-hairline bg-surface px-2.5 text-sm text-ink outline-none focus-visible:border-plum focus-visible:ring-4 focus-visible:ring-plum/12";
-
-  // Money is kept in the rule the way the server keeps it and shown the way she
+    // Money is kept in the rule the way the server keeps it and shown the way she
   // thinks about it, so an integer of cents never reaches the screen.
-  const moneyText = useMemo(
-    () => (spec.input === "money" ? String((Number(rule.value) || 0) / 100) : ""),
-    [rule.value, spec.input],
+  // Held as the text she is typing rather than re-derived from the rule on every
+  // keystroke: re-deriving erased the decimal point as she typed it, so "497.50"
+  // became 49750 dollars — a hundred times the number she meant.
+  const [moneyText, setMoneyText] = useState(() =>
+    spec.input === "money" ? String((Number(rule.value) || 0) / 100) : "",
   );
+
+  // Rows are keyed by position, so removing one hands this component a
+  // different rule. Re-seed the box whenever what it should show and what it is
+  // showing have parted company — which never happens mid-typing, because a
+  // half-typed "497." still converts to the value already stored.
+  useEffect(() => {
+    if (spec.input === "money" && (dollarsToCents(moneyText) ?? 0) !== rule.value) {
+      setMoneyText(String((Number(rule.value) || 0) / 100));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rule.value, spec.input]);
 
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-xl border border-hairline bg-surface px-3 py-2.5">
@@ -644,7 +658,7 @@ function RuleRow({
           onChange({ field: next.field, op: next.ops[0].op, value: next.defaultValue });
         }}
         aria-label="What to look at"
-        className={cn(selectClass, "flex-1 sm:flex-none sm:w-52")}
+        className={cn(selectStyles, "flex-1 sm:flex-none sm:w-52")}
       >
         {FIELDS.map((option) => (
           <option key={option.field} value={option.field}>
@@ -657,7 +671,7 @@ function RuleRow({
         value={rule.op}
         onChange={(e) => onChange({ op: e.target.value })}
         aria-label="How to compare it"
-        className={cn(selectClass, "flex-1 sm:flex-none sm:w-44")}
+        className={cn(selectStyles, "flex-1 sm:flex-none sm:w-44")}
       >
         {spec.ops.map((option) => (
           <option key={option.op} value={option.op}>
@@ -671,7 +685,7 @@ function RuleRow({
           value={String(rule.value)}
           onChange={(e) => onChange({ value: e.target.value })}
           aria-label="Which tag"
-          className={cn(selectClass, "flex-1")}
+          className={cn(selectStyles, "flex-1")}
         >
           <option value="">Choose a tag…</option>
           {(options?.tags ?? []).map((tag) => (
@@ -687,7 +701,7 @@ function RuleRow({
           value={String(rule.value)}
           onChange={(e) => onChange({ value: Number(e.target.value) })}
           aria-label="Which thing you sell"
-          className={cn(selectClass, "flex-1")}
+          className={cn(selectStyles, "flex-1")}
         >
           <option value="0">Choose one…</option>
           {(options?.offers ?? []).map((offer) => (
@@ -703,7 +717,7 @@ function RuleRow({
           value={String(rule.value)}
           onChange={(e) => onChange({ value: Number(e.target.value) })}
           aria-label="Which sequence"
-          className={cn(selectClass, "flex-1")}
+          className={cn(selectStyles, "flex-1")}
         >
           <option value="0">Choose one…</option>
           {(options?.sequences ?? []).map((sequence) => (
@@ -719,7 +733,7 @@ function RuleRow({
           value={String(rule.value)}
           onChange={(e) => onChange({ value: e.target.value })}
           aria-label="Which email state"
-          className={cn(selectClass, "flex-1")}
+          className={cn(selectStyles, "flex-1")}
         >
           {(Object.keys(EMAIL_STATUS_LABEL) as EmailStatus[]).map((status) => (
             <option key={status} value={status}>
@@ -742,7 +756,10 @@ function RuleRow({
             inputMode="decimal"
             value={moneyText}
             aria-label="How much"
-            onChange={(e) => onChange({ value: dollarsToCents(e.target.value) ?? 0 })}
+            onChange={(e) => {
+              setMoneyText(e.target.value);
+              onChange({ value: dollarsToCents(e.target.value) ?? 0 });
+            }}
             placeholder="497"
           />
         </div>
@@ -854,6 +871,13 @@ function SegmentPeople({ segment, onClose }: { segment: Segment | null; onClose:
             </li>
           ))}
         </ul>
+      )}
+      {/* The list arrives capped; without this the count above reads as people
+          who have gone missing. */}
+      {people !== null && total > people.length && (
+        <p className="mt-3 text-xs text-ink-soft">
+          Showing the first {people.length}. Open Contacts to work through the whole group.
+        </p>
       )}
     </Modal>
   );

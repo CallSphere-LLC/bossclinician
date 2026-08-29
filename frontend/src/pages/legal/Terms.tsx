@@ -1,10 +1,11 @@
 import type { ReactNode } from "react";
-import { motion, useReducedMotion } from "motion/react";
+import { motion } from "motion/react";
 import { Seo } from "@/components/Seo";
 import { GlassCard } from "@/components/luxe/GlassCard";
 import { LuxePageHero } from "@/components/luxe/LuxePageHero";
 import { LuxePill } from "@/components/luxe/LuxeButton";
 import { GoldRule, Section } from "@/components/luxe/Section";
+import { useEntranceMotion } from "@/hooks/useEntranceMotion";
 import { cn } from "@/lib/cn";
 
 /* The agreement is reproduced verbatim from bossclinician.com/terms-of-use,
@@ -128,7 +129,7 @@ const CLAUSES: Clause[] = [
 const INDEX = CLAUSES.filter((clause) => clause.heading !== null);
 
 export default function Terms() {
-  const reduce = useReducedMotion();
+  const reduce = useEntranceMotion();
 
   return (
     <>

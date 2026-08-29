@@ -82,7 +82,7 @@ function isPaidFile(asset: MediaAsset): boolean {
 }
 
 const PAID_FILE_NOTE =
-  "Only people who bought it can open this, so there's no web address to copy. Add it from inside the course, product or session it belongs to.";
+  "You're the only one who can see it here. There's no web address to copy — add it from inside the course, product or session it belongs to.";
 
 export default function MediaLibrary() {
   const [assets, setAssets] = useState<MediaAsset[] | null>(null);
@@ -313,16 +313,12 @@ export default function MediaLibrary() {
                       aria-label={`Take a closer look at ${name}`}
                       className="relative block aspect-[4/3] w-full overflow-hidden bg-cream"
                     >
-                      {/* A file only buyers can open has no web address, so an
-                          <img> or <video> pointed at it draws a broken frame.
-                          The icon is the honest picture of it. */}
-                      {paid ? (
-                        <span className="grid size-full place-items-center text-plum/45">
-                          <Icon className="size-9" />
-                        </span>
-                      ) : asset.kind === "image" ? (
+                      {/* previewUrl, not url: `protected:abc.mp4` is a storage
+                          reference and draws a broken frame. The icon stays for
+                          the kinds that have no picture to show. */}
+                      {asset.kind === "image" ? (
                         <img
-                          src={asset.url}
+                          src={asset.previewUrl}
                           alt={name}
                           loading="lazy"
                           className="size-full object-cover transition-transform duration-300 group-hover:scale-[1.04]"
@@ -331,7 +327,7 @@ export default function MediaLibrary() {
                         <>
                           {/* Metadata-only preload: never pull whole videos into a grid. */}
                           <video
-                            src={asset.url}
+                            src={asset.previewUrl}
                             preload="metadata"
                             muted
                             playsInline
@@ -422,34 +418,28 @@ export default function MediaLibrary() {
       >
         {preview && (
           <div className="space-y-4">
+            {/* previewUrl throughout: a file only buyers can open has no public
+                address, but she still has to be able to check the video she
+                uploaded is the right one. The signed link plays here and
+                nowhere else — it is not the link she can copy and hand out. */}
             <div className="overflow-hidden rounded-xl bg-ink/5">
-              {isPaidFile(preview) ? (
-                <div className="p-10 text-center">
-                  <span className="mx-auto grid size-14 place-items-center rounded-2xl bg-lilac-tint text-plum">
-                    {(() => {
-                      const Icon = iconForKind(preview.kind);
-                      return <Icon className="size-7" />;
-                    })()}
-                  </span>
-                  <p className="mx-auto mt-4 max-w-md text-sm text-ink-soft">{PAID_FILE_NOTE}</p>
-                </div>
-              ) : preview.kind === "image" ? (
+              {preview.kind === "image" ? (
                 <img
-                  src={preview.url}
+                  src={preview.previewUrl}
                   alt={preview.title || preview.originalName}
                   className="mx-auto max-h-[60vh] w-auto"
                 />
               ) : preview.kind === "video" ? (
-                <video src={preview.url} controls className="mx-auto max-h-[60vh] w-full" />
+                <video src={preview.previewUrl} controls className="mx-auto max-h-[60vh] w-full" />
               ) : preview.kind === "audio" ? (
-                <audio src={preview.url} controls className="w-full p-6" />
+                <audio src={preview.previewUrl} controls className="w-full p-6" />
               ) : (
                 <div className="p-10 text-center">
                   <p className="text-sm text-ink-soft">
                     We can't show this one here — open it to take a look.
                   </p>
                   <Button asChild variant="secondary" size="sm" className="mt-4">
-                    <a href={preview.url} target="_blank" rel="noreferrer">
+                    <a href={preview.previewUrl} target="_blank" rel="noreferrer">
                       Open this file
                     </a>
                   </Button>
@@ -459,8 +449,12 @@ export default function MediaLibrary() {
 
             {/* The link itself is machinery — she needs to be able to hand it
                 to something, not to read it. A file only buyers can open has no
-                link at all, so there is nothing to offer her here. */}
-            {!isPaidFile(preview) && (
+                link at all, so she gets the reason instead. */}
+            {isPaidFile(preview) ? (
+              <p className="rounded-xl border border-hairline bg-cream/60 px-3 py-2.5 text-xs leading-relaxed text-ink-soft">
+                {PAID_FILE_NOTE}
+              </p>
+            ) : (
               <div className="flex flex-wrap items-center gap-2 rounded-xl border border-hairline bg-cream/60 px-3 py-2">
                 <p className="min-w-0 flex-1 text-xs text-ink-soft">
                   Copy the link to use this anywhere on your site.

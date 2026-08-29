@@ -193,6 +193,26 @@ describe("earnedCeuCredit", () => {
     ).toBe(true);
   });
 
+  it("holds a lesson that carries video to the watch figure, whatever the label says", () => {
+    // Nothing in the admin writes `content_type`, so every lesson built through
+    // the curriculum screen reads as 'text' however much video hangs off it.
+    // Judging by the label alone let a CE course of forty-minute videos be
+    // earned by opening each lesson, waiting, and ticking it — no playback.
+    const labelledText = {
+      contentType: "text",
+      durationMinutes: 40,
+      hasMedia: true,
+      firstViewedAt: AT("2026-03-01T10:00:00Z"),
+      completedAt: AT("2026-03-01T11:00:00Z"),
+    };
+    expect(earnedCeuCredit([{ ...labelledText, watchedPercent: 0 }])).toBe(false);
+    expect(earnedCeuCredit([{ ...labelledText, watchedPercent: 90 }])).toBe(true);
+  });
+
+  it("leaves a lesson with nothing to play on the dwell rule", () => {
+    expect(earnedCeuCredit([textLesson({ hasMedia: false })])).toBe(true);
+  });
+
   it("treats a course with no published lessons as nothing to prove", () => {
     // The rollup cannot reach 100% on an empty course, so this is only ever
     // reached with lessons; vacuously true is the honest answer for the rule.

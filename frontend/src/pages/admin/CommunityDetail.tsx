@@ -43,11 +43,17 @@ import {
   Field,
   Input,
   PageHeader,
+  selectStyles,
   Skeleton,
   Textarea,
 } from "@/pages/admin/ui/primitives";
 import { Modal, useConfirm } from "@/pages/admin/ui/Dialog";
-import { friendlyError, pluralize } from "@/pages/admin/ui/friendly";
+import {
+  friendlyError,
+  fromDateInput,
+  fromDateTimeInput,
+  pluralize,
+} from "@/pages/admin/ui/friendly";
 
 const TAB_LIST = [
   { value: "channels", label: "Channels", icon: Hash },
@@ -519,6 +525,8 @@ function MembersTab({ communityId }: { communityId: number }) {
     adminApi.membersList().then(setAllMembers).catch(() => undefined);
   }, []);
 
+  const [confirm, confirmDialog] = useConfirm();
+
   async function add(e: FormEvent) {
     e.preventDefault();
     if (!selected) return;
@@ -534,6 +542,13 @@ function MembersTab({ communityId }: { communityId: number }) {
   }
 
   async function remove(membership: CommunityMembership) {
+    const ok = await confirm({
+      title: `Remove ${membership.name || membership.email}?`,
+      description: "They lose access to this community, and their points go with them.",
+      confirmLabel: "Yes, remove them",
+      destructive: true,
+    });
+    if (!ok) return;
     try {
       await adminApi.membershipDelete(membership.id);
       setMemberships((prev) => prev?.filter((m) => m.id !== membership.id) ?? prev);
@@ -670,7 +685,7 @@ function MembersTab({ communityId }: { communityId: number }) {
               id="add-member-who"
               value={selected}
               onChange={(e) => setSelected(e.target.value)}
-              className="h-11 w-full rounded-xl border border-hairline bg-surface px-3 text-sm outline-none focus-visible:border-plum focus-visible:ring-4 focus-visible:ring-plum/12"
+              className={selectStyles}
             >
               <option value="">Choose someone…</option>
               {allMembers.map((m) => (
@@ -682,6 +697,8 @@ function MembersTab({ communityId }: { communityId: number }) {
           </Field>
         </form>
       </Modal>
+
+      {confirmDialog}
     </div>
   );
 }
@@ -728,7 +745,14 @@ function ChallengesTab({ communityId }: { communityId: number }) {
     e.preventDefault();
     if (!form.title.trim()) return;
     try {
-      await adminApi.challengeCreate(communityId, form);
+      await adminApi.challengeCreate(communityId, {
+        ...form,
+        // A day she picked is a day where she is, and "ends on the 28th" means
+        // the end of the 28th. Sent raw, both dates became midnight UTC — the
+        // card read a day early and members were locked out on the last day.
+        startsAt: fromDateInput(form.startsAt),
+        endsAt: fromDateInput(form.endsAt, "end"),
+      });
       toast.success("Challenge created");
       setCreating(false);
       setForm({ title: "", description: "", points: 10, startsAt: "", endsAt: "" });
@@ -952,11 +976,19 @@ function EventsTab({ communityId }: { communityId: number }) {
 
   useEffect(load, [load]);
 
+  const [confirm, confirmDialog] = useConfirm();
+
   async function create(e: FormEvent) {
     e.preventDefault();
     if (!form.title.trim()) return;
     try {
-      await adminApi.eventCreate(communityId, form);
+      await adminApi.eventCreate(communityId, {
+        ...form,
+        // The box speaks her wall clock; the column stores an instant. Sent raw
+        // it was read as UTC, and the event she set for 7pm was advertised to
+        // her members at 3pm.
+        startsAt: fromDateTimeInput(form.startsAt),
+      });
       toast.success("Event scheduled — your members can see it now");
       setCreating(false);
       setForm({ title: "", description: "", startsAt: "", durationMinutes: 60, locationUrl: "" });
@@ -967,6 +999,13 @@ function EventsTab({ communityId }: { communityId: number }) {
   }
 
   async function remove(id: number) {
+    const ok = await confirm({
+      title: "Delete this event?",
+      description: "It disappears from your members' calendars straight away.",
+      confirmLabel: "Yes, delete it",
+      destructive: true,
+    });
+    if (!ok) return;
     try {
       await adminApi.eventDelete(id);
       setEvents((prev) => prev?.filter((e) => e.id !== id) ?? prev);
@@ -1101,6 +1140,8 @@ function EventsTab({ communityId }: { communityId: number }) {
           </Field>
         </form>
       </Modal>
+
+      {confirmDialog}
     </div>
   );
 }
@@ -1117,6 +1158,8 @@ function BadgesTab({ communityId }: { communityId: number }) {
 
   useEffect(load, [load]);
 
+  const [confirm, confirmDialog] = useConfirm();
+
   async function create(e: FormEvent) {
     e.preventDefault();
     if (!form.name.trim()) return;
@@ -1131,6 +1174,13 @@ function BadgesTab({ communityId }: { communityId: number }) {
   }
 
   async function remove(id: number) {
+    const ok = await confirm({
+      title: "Delete this badge?",
+      description: "Members who have already earned it keep it; nobody new can earn it.",
+      confirmLabel: "Yes, delete it",
+      destructive: true,
+    });
+    if (!ok) return;
     try {
       await adminApi.badgeDelete(id);
       setBadges((prev) => prev?.filter((b) => b.id !== id) ?? prev);
@@ -1220,6 +1270,8 @@ function BadgesTab({ communityId }: { communityId: number }) {
           </Button>
         </form>
       </Card>
+
+      {confirmDialog}
     </div>
   );
 }

@@ -479,6 +479,15 @@ export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult>
   let text = input.text;
   let html = input.html ?? renderMarkdown(input.text);
 
+  // Open and click figures exist because a configuration set subscribes to
+  // those events; measuring a click also means SES rewriting every link in the
+  // body. Both are wanted for a broadcast and neither is wanted on a receipt,
+  // so the marketing set is named here and mailer.ts applies the plain
+  // transactional one to everything that does not.
+  if (isMarketing && env.ses.marketingConfigSet) {
+    headers["X-SES-CONFIGURATION-SET"] = env.ses.marketingConfigSet;
+  }
+
   // The compliance block needs a contact to address the opt-out to. A marketing
   // send with no contact row cannot honour an unsubscribe and so must not go —
   // every caller in this phase resolves a contact first.

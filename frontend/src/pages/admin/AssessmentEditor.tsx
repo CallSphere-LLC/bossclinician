@@ -44,6 +44,7 @@ import {
   Field,
   Input,
   PageHeader,
+  selectStyles,
   Skeleton,
   Textarea,
 } from "@/pages/admin/ui/primitives";
@@ -62,9 +63,6 @@ import { friendlyError, pluralize, publishLabel, webAddress } from "@/pages/admi
  * the Steady Grower page and tag them Steady Grower" — with the boxes that
  * change it underneath.
  */
-
-const selectStyles =
-  "h-11 w-full rounded-xl border border-hairline bg-surface px-3 text-sm text-ink outline-none transition-colors focus-visible:border-plum focus-visible:ring-4 focus-visible:ring-plum/12";
 
 const checkboxStyles =
   "size-4 rounded border-hairline text-plum focus-visible:ring-plum/30";

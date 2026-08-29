@@ -27,3 +27,11 @@ _scrape/.venv/
 .DS_Store
 *.log
 backups/
+
+# build artifacts / local dev output
+frontend/dist-dev/
+backend/tsconfig.tsbuildinfo
+*.tsbuildinfo
+
+# stray downloads (receipts, invoices) — not source
+/2026-*-*.pdf

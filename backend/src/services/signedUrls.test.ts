@@ -10,8 +10,11 @@ import {
   isStreamKind,
   protectedRef,
   resolveStoredFile,
+  adminPreviewUrl,
+  ADMIN_PREVIEW_TTL_SECONDS,
   signDownload,
   signedFileUrl,
+  verifyAdminPreview,
   STREAM_TTL_SECONDS,
   uploadPath,
   verifyDownload,
@@ -303,5 +306,65 @@ describe("isExternalRef", () => {
     expect(isExternalRef("a.mp4")).toBe(false);
     expect(isExternalRef(protectedRef("a.mp4"))).toBe(false);
     expect(isExternalRef("")).toBe(false);
+  });
+});
+
+/**
+ * The admin's preview link.
+ *
+ * It exists so course video can be played back on the screen it was uploaded
+ * from, and it is the one link in the system that is not bound to a paying
+ * member. That makes two things worth holding still: it must not be reachable
+ * by anything a member is handed, and a member's link must not be redeemable
+ * here. Both directions, because "they use different keys" is a sentence that
+ * survives a refactor exactly as long as nothing checks it.
+ */
+describe("admin preview links", () => {
+  const forAdmin = { assetId: 12, adminUserId: 3 };
+
+  it("round-trips the asset and the administrator it names", () => {
+    const { url } = adminPreviewUrl(forAdmin);
+    expect(url.startsWith("/api/admin-files/")).toBe(true);
+
+    const payload = verifyAdminPreview(url.slice("/api/admin-files/".length));
+    expect(payload?.assetId).toBe(12);
+    expect(payload?.adminUserId).toBe(3);
+  });
+
+  it("dies on its own clock", () => {
+    const now = new Date("2026-01-01T00:00:00Z");
+    const { url, expiresAt } = adminPreviewUrl({ ...forAdmin, now });
+    const token = url.slice("/api/admin-files/".length);
+
+    expect(Math.round((expiresAt.getTime() - now.getTime()) / 1000)).toBe(
+      ADMIN_PREVIEW_TTL_SECONDS
+    );
+    expect(verifyAdminPreview(token, new Date(expiresAt.getTime() - 1000))).not.toBeNull();
+    expect(verifyAdminPreview(token, new Date(expiresAt.getTime() + 1000))).toBeNull();
+  });
+
+  it("refuses a token whose body was edited", () => {
+    const { url } = adminPreviewUrl(forAdmin);
+    const [body, signature] = url.slice("/api/admin-files/".length).split(".");
+
+    // Same signature, a different asset named underneath it.
+    const forged = Buffer.from(
+      Buffer.from(String(body), "base64url").toString("utf8").replace(".12.", ".99."),
+      "utf8"
+    ).toString("base64url");
+
+    expect(verifyAdminPreview(`${forged}.${signature}`)).toBeNull();
+  });
+
+  it("is not interchangeable with a member's download token", () => {
+    const memberToken = signDownload({
+      kind: "lesson-video",
+      fileId: 12,
+      memberId: 3,
+    }).token;
+    const adminToken = adminPreviewUrl(forAdmin).url.slice("/api/admin-files/".length);
+
+    expect(verifyAdminPreview(memberToken)).toBeNull();
+    expect(verifyDownload(adminToken)).toBeNull();
   });
 });

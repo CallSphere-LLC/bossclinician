@@ -5,6 +5,9 @@ import { Section, SectionTitle } from "@/components/luxe/Section";
 import { RevealGroup, RevealItem } from "@/components/ui/Reveal";
 import { Seo } from "@/components/Seo";
 import { cn } from "@/lib/cn";
+import { ORGANIZATION_ID, absoluteUrl } from "@/seo/schema";
+import type { JsonLdNode } from "@/seo/types";
+import { useHeadContext } from "@/ssr/context";
 
 /**
  * Store — the Obsidian Luxe rebuild of the .com's consulting storefront.
@@ -83,6 +86,49 @@ const SERVICES: readonly Service[] = [
   },
 ];
 
+/* ── Structured data ─────────────────────────────────────────────────────── */
+
+/**
+ * The three services as priced products.
+ *
+ * A storefront that shows a price and a way to pay is a shopping result waiting
+ * to happen, so each card is declared as a Product with the offer it carries.
+ * The price is read out of the same string the card prints rather than restated
+ * beside it, which is what stops the page and the markup quoting different
+ * money; a line that does not parse contributes no Offer at all, because an
+ * offer without a price is worse to a crawler than no offer.
+ */
+function offerNode(origin: string, service: Service): JsonLdNode | null {
+  const match = /([\d,]+(?:\.\d{2})?)\s*([A-Z]{3})/.exec(service.price);
+  if (!match) return null;
+
+  return {
+    "@type": "Offer",
+    url: service.href,
+    price: match[1].replace(/,/g, ""),
+    priceCurrency: match[2],
+    availability: "https://schema.org/InStock",
+    seller: { "@id": `${origin}/${ORGANIZATION_ID}` },
+  };
+}
+
+function serviceNodes(origin: string): JsonLdNode[] {
+  return SERVICES.map((service) => {
+    const offer = offerNode(origin, service);
+
+    return {
+      "@type": "Product",
+      name: service.name,
+      // Checkout is still hosted on the .com, so the offer page is where this
+      // product actually lives.
+      url: service.href,
+      image: absoluteUrl(origin, service.image),
+      brand: { "@id": `${origin}/${ORGANIZATION_ID}` },
+      ...(offer ? { offers: offer } : {}),
+    };
+  });
+}
+
 /**
  * The cover has to stop being a rectangle pasted onto the panel. Two passes do
  * that: a violet multiply that pulls bright brand whites into the page's
@@ -93,11 +139,17 @@ const COVER_SCRIM =
   "linear-gradient(to top, rgba(9,6,17,0.96) 0%, rgba(9,6,17,0.72) 18%, rgba(9,6,17,0.26) 46%, rgba(9,6,17,0) 76%)";
 
 export default function Store() {
+  const { origin } = useHeadContext();
+
   return (
     <>
+      {/* No `image`: the hero is set in type, and the three covers below it are
+          deliberately equal siblings, so promoting one of them to the share
+          card would rank a set the page refuses to rank. */}
       <Seo
         title="Start Your Journey to a Profitable Private Practice"
         description="Discover how to launch and grow your profitable private therapy practice with expert guidance from Yvette. Get started today!"
+        jsonLd={serviceNodes(origin)}
       />
 
       <LuxePageHero
@@ -151,11 +203,13 @@ function ServiceCard({ service }: { service: Service }) {
       className="group flex h-full flex-col overflow-hidden"
     >
       {/* Cover, graded down before it is composited so a bright brand plate
-          sits *in* the near-black page instead of glowing on top of it. */}
+          sits *in* the near-black page instead of glowing on top of it. The
+          plate's only words are the service's name, which the heading beneath
+          it already states, so it is decorative to a screen reader. */}
       <div className="relative aspect-[16/9] w-full overflow-hidden bg-night-deep">
         <img
           src={service.image}
-          alt={service.name}
+          alt=""
           width={1280}
           height={720}
           loading="lazy"

@@ -408,6 +408,13 @@ const offerFields = {
   thankYouPageId: optionalRef(200).default(null),
   accessExpiresAfterDays: z.number().int().min(1).max(36_500).nullable().default(null),
 
+  // The welcome email that goes out beside the receipt. Capped generously
+  // rather than tightly: this is the one place Yvette writes onboarding in her
+  // own words, and a limit she can hit while writing a genuine first lesson
+  // would push her back to sending it by hand.
+  sendWelcomeEmail: z.boolean().default(true),
+  welcomeNextSteps: z.string().trim().max(4000).default(""),
+
   stripePriceId: optionalRef(255).default(null),
   stripeProductId: optionalRef(255).default(null),
 };

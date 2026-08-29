@@ -81,16 +81,27 @@ export default function Dashboard() {
   useEffect(() => {
     let cancelled = false;
 
-    Promise.all([reportsApi.dashboard(30), adminApi.overview(), adminApi.revenue()])
+    // Taken one at a time: an account without permission for the money figures
+    // used to fail all three and land on an error screen it could never leave.
+    Promise.all([
+      reportsApi.dashboard(30).catch(() => null),
+      adminApi.overview().catch(() => null),
+      adminApi.revenue().catch(() => null),
+    ])
       .then(([f, o, r]) => {
         if (cancelled) return;
-        setFigures(f);
-        setOverview(o);
-        setRevenue(r);
+        if (f) setFigures(f);
+        if (o) setOverview(o);
+        if (r) setRevenue(r);
+        // Only nothing at all is worth an error: the rest of the screen still
+        // has something true to show.
+        if (!f && !o && !r) {
+          // Whatever went wrong is ours to fix, so she gets the one thing she
+          // can usefully do rather than a diagnosis of our servers.
+          setError("We couldn't load your dashboard. Try refreshing the page.");
+        }
       })
       .catch(() => {
-        // Whatever went wrong is ours to fix, so she gets the one thing she can
-        // usefully do rather than a diagnosis of our servers.
         if (!cancelled) setError("We couldn't load your dashboard. Try refreshing the page.");
       });
 
@@ -381,8 +392,14 @@ export default function Dashboard() {
                 )}
               </p>
             )}
-            {chartData.length === 0 ? (
+            {figures === null ? (
               <Skeleton className="h-[260px] w-full" />
+            ) : chartData.length === 0 ? (
+              /* An all-time total has no day-by-day line. A skeleton here reads
+                 as "still loading" and never resolves. */
+              <p className="px-2 py-16 text-center text-sm text-ink-soft">
+                This one is an all-time total, so there's no day-by-day line to draw.
+              </p>
             ) : (
               <TrendAreaChart
                 data={chartData}
@@ -510,7 +527,8 @@ export default function Dashboard() {
           icon={<BookOpen className="size-4" />}
           to="/admin/courses"
           series={activitySeries}
-          seriesKey="revenueCents"
+          /* No lessons-per-day figure is collected, and the line under this
+             number used to be daily takings — a money curve under a count. */
           color={CHART_COLORS.gold}
         />
         {/* Points at the inbox that actually holds these conversations, rather
@@ -522,7 +540,7 @@ export default function Dashboard() {
           icon={<MessageSquare className="size-4" />}
           to="/admin/conversations"
           series={activitySeries}
-          seriesKey="subscribers"
+          /* Likewise: this drew email sign-ups under a count of chats. */
           color={CHART_COLORS.lilac}
         />
       </div>
@@ -705,7 +723,8 @@ function StatTile({
   icon: React.ReactNode;
   to: string;
   series: Record<string, unknown>[];
-  seriesKey: string;
+  /** Omitted where nothing collected matches the number above. */
+  seriesKey?: string;
   color: string;
 }) {
   return (
@@ -732,7 +751,7 @@ function StatTile({
             {icon}
           </span>
         </div>
-        {series.length > 0 && (
+        {seriesKey && series.length > 0 && (
           <div className="-mx-1 mt-3">
             <Sparkline data={series} dataKey={seriesKey} color={color} />
           </div>

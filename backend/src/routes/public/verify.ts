@@ -11,7 +11,12 @@ import { loadOwnedSessionFile } from "../member/coaching";
 import { loadEntitledPostMedia } from "../member/community";
 import { loadEntitledEpisodeAudio } from "../member/publishing";
 import { formatCreditHours, normalizeVerificationCode } from "../../services/certificates";
-import { isStreamKind, resolveStoredFile, verifyDownload } from "../../services/signedUrls";
+import {
+  isStreamKind,
+  resolveStoredFile,
+  verifyAdminPreview,
+  verifyDownload,
+} from "../../services/signedUrls";
 
 /**
  * The two endpoints that are public because the credential is in the URL.
@@ -250,6 +255,63 @@ verifyRouter.get(
       else next(err);
     });
     stream.pipe(res);
+  })
+);
+
+/* ------------------------------------------------------- admin file preview */
+
+const PREVIEW_DEAD = "This preview has expired. Close this and open it again.";
+
+/**
+ * GET /api/admin-files/:token — the admin's view of a file only buyers can open.
+ *
+ * Public for the same reason `/api/files` is: the thing fetching it is a <video>
+ * element, and a <video> cannot carry a Bearer header. The token is the
+ * credential, it is signed under its own key, and it names one row in the media
+ * library and the administrator who asked for it.
+ *
+ * Without this, the admin screens can upload a course video and never play it
+ * back — `protected:abc.mp4` is a reference, not an address, and a player handed
+ * it draws an empty box. That is how a lesson ships with the wrong file in it.
+ *
+ * The account is re-checked here rather than trusted from the token, exactly as
+ * the member route re-checks entitlement: an administrator suspended or deleted
+ * after the link was minted stops being able to pull files immediately.
+ */
+verifyRouter.get(
+  "/admin-files/:token",
+  fileLimiter,
+  asyncHandler(async (req, res, next) => {
+    const payload = verifyAdminPreview(String(req.params.token ?? ""));
+    if (payload === null) throw notFound(PREVIEW_DEAD);
+
+    const account = await pool.query<{ status: string }>(
+      `SELECT status FROM admin_users WHERE id = $1`,
+      [payload.adminUserId]
+    );
+    if (account.rows[0]?.status !== "active") throw notFound(PREVIEW_DEAD);
+
+    const asset = await pool.query<{ url: string; mime: string; filename: string }>(
+      `SELECT url, mime, filename FROM media_assets WHERE id = $1`,
+      [payload.assetId]
+    );
+    const row = asset.rows[0];
+    if (row === undefined) throw notFound(FILE_GONE);
+
+    const filePath = await resolveStoredFile(row.url);
+    if (filePath === null) throw notFound(FILE_GONE);
+
+    if (row.mime !== "") res.setHeader("Content-Type", safeMime(row.mime));
+    res.setHeader("Content-Disposition", `inline; filename="${safeFilename(row)}"`);
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("Cache-Control", "private, no-store");
+    res.setHeader("Referrer-Policy", "no-referrer");
+
+    // sendFile, not a bare stream: she scrubs through the video to check it, and
+    // seeking is Range requests an ordinary stream answers with the whole file.
+    res.sendFile(filePath, (err) => {
+      if (err && !res.headersSent) next(err);
+    });
   })
 );
 

@@ -1,4 +1,5 @@
-import { motion, useReducedMotion } from "motion/react";
+import { motion } from "motion/react";
+import { useEntranceMotion } from "@/hooks/useEntranceMotion";
 import { Seo } from "@/components/Seo";
 import { BuyButton } from "@/components/BuyButton";
 import { GlassCard, type Accent } from "@/components/luxe/GlassCard";
@@ -7,6 +8,7 @@ import { LuxePageHero } from "@/components/luxe/LuxePageHero";
 import { GoldRule, Section, SectionTitle } from "@/components/luxe/Section";
 import { RevealGroup, RevealItem } from "@/components/ui/Reveal";
 import { useCollection } from "@/hooks/useCollection";
+import { ssrKeys } from "@/ssr/keys";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import {
@@ -90,12 +92,15 @@ const GRID =
 const CTA_CLASS = "min-h-[44px] w-full px-5 py-3.5 text-center leading-[1.45] tracking-[0.1em]";
 
 export default function Courses() {
-  const { data: courses, loading } = useCollection(api.courses, fallbackCourses);
+  const { data: courses, loading } = useCollection(api.courses, fallbackCourses, ssrKeys.courses());
   const published = courses.filter((c) => c.published).sort((a, b) => a.sort - b.sort);
 
   return (
     <>
-      <Seo title="COURSES - Boss Clinician" />
+      <Seo
+        title="COURSES - Boss Clinician"
+        description="Self-paced training for therapists and clinicians building private practices — credentialing, documentation, marketing, rates and systems."
+      />
 
       <LuxePageHero
         eyebrow="Courses"
@@ -162,7 +167,7 @@ export default function Courses() {
  * have cost a full screen of scroll on a phone for no extra meaning.
  */
 function MissionBand() {
-  const reduce = useReducedMotion();
+  const reduce = useEntranceMotion();
 
   return (
     <Section

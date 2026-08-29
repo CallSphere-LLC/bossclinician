@@ -1,5 +1,6 @@
 import { useId, useState, type FormEvent } from "react";
 import { motion, useReducedMotion } from "motion/react";
+import { useEntranceMotion } from "@/hooks/useEntranceMotion";
 import { Section, SectionTitle, GoldRule } from "@/components/luxe/Section";
 import { GlassCard } from "@/components/luxe/GlassCard";
 import { LuxeButton } from "@/components/luxe/LuxeButton";
@@ -129,6 +130,9 @@ interface ResultsCaptureProps {
  * is a band inside a card that already owns its own panel and headings.
  */
 function ResultsCapture({ rate, clients, weeks, annual, clientWord }: ResultsCaptureProps) {
+  // The confirmation card and the error region are both consequences of a
+  // submission, so they appear long after the page settled and answer to the
+  // reader's live preference rather than to the first paint.
   const reduce = useReducedMotion();
   const errorId = useId();
   const [honeypot, honeypotField] = useHoneypot();
@@ -352,7 +356,7 @@ function ResultsCapture({ rate, clients, weeks, annual, clientWord }: ResultsCap
  */
 export function IncomeCalculator() {
   const baseId = useId();
-  const reduce = useReducedMotion();
+  const staticEntrance = useEntranceMotion();
   const [rate, setRate] = useState(175);
   const [clients, setClients] = useState(15);
   const [weeks, setWeeks] = useState(48);
@@ -378,10 +382,10 @@ export function IncomeCalculator() {
       />
 
       <motion.p
-        initial={reduce ? false : { opacity: 0, y: 20 }}
+        initial={staticEntrance ? false : { opacity: 0, y: 20 }}
         whileInView={{ opacity: 1, y: 0 }}
         viewport={VIEWPORT}
-        transition={{ duration: 0.8, delay: reduce ? 0 : 0.1, ease: EASE }}
+        transition={{ duration: 0.8, delay: staticEntrance ? 0 : 0.1, ease: EASE }}
         className="copy-luxe mx-auto mt-8 max-w-[56ch] text-balance text-center text-sm"
       >
         For example — a therapist seeing{" "}
@@ -392,10 +396,10 @@ export function IncomeCalculator() {
       </motion.p>
 
       <motion.div
-        initial={reduce ? false : { opacity: 0, y: 24 }}
+        initial={staticEntrance ? false : { opacity: 0, y: 24 }}
         whileInView={{ opacity: 1, y: 0 }}
         viewport={VIEWPORT}
-        transition={{ duration: 0.85, delay: reduce ? 0 : 0.18, ease: EASE }}
+        transition={{ duration: 0.85, delay: staticEntrance ? 0 : 0.18, ease: EASE }}
         className="mt-10"
       >
         <GlassCard accent="gold" interactive={false} spotlight={false} className="overflow-hidden">

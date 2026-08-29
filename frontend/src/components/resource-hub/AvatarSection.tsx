@@ -1,4 +1,5 @@
-import { motion, useReducedMotion } from "motion/react";
+import { motion } from "motion/react";
+import { useEntranceMotion } from "@/hooks/useEntranceMotion";
 import { Section, GoldRule } from "@/components/luxe/Section";
 import { GlassCard } from "@/components/luxe/GlassCard";
 import { LuxeButton } from "@/components/luxe/LuxeButton";
@@ -41,7 +42,7 @@ function rise(reduce: boolean | null, delay: number) {
  * colour interrupting the page's depth.
  */
 export function AvatarSection({ section, surface, aurora }: AvatarSectionProps) {
-  const reduce = useReducedMotion();
+  const reduce = useEntranceMotion();
   const { accent, cards, cta, id } = section;
   const cardAccent = glassAccent[accent];
   const tone = TONE[cardAccent];

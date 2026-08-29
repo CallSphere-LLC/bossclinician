@@ -1,4 +1,5 @@
-import { motion, useReducedMotion } from "motion/react";
+import { motion } from "motion/react";
+import { useEntranceMotion } from "@/hooks/useEntranceMotion";
 import { Section, GoldRule } from "@/components/luxe/Section";
 import { cn } from "@/lib/cn";
 
@@ -48,7 +49,7 @@ function rise(reduce: boolean | null, delay: number) {
  * the reader is meant to sit in the question, not be sold to inside it.
  */
 export function LuxeKeepItReal() {
-  const reduce = useReducedMotion();
+  const reduce = useEntranceMotion();
 
   return (
     <Section

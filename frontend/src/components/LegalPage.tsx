@@ -1,10 +1,11 @@
 import { Fragment, useMemo, type ReactNode } from "react";
-import { motion, useReducedMotion } from "motion/react";
+import { motion } from "motion/react";
 import { Seo } from "@/components/Seo";
 import { GoldRule, Section } from "@/components/luxe/Section";
 import { LuxePageHero } from "@/components/luxe/LuxePageHero";
 import { LuxePill } from "@/components/luxe/LuxeButton";
 import { GlassCard } from "@/components/luxe/GlassCard";
+import { useEntranceMotion } from "@/hooks/useEntranceMotion";
 import { cn } from "@/lib/cn";
 
 const EASE: [number, number, number, number] = [0.22, 1, 0.36, 1];
@@ -148,7 +149,7 @@ export function LegalPage({
   paragraphs,
   tone = "violet",
 }: LegalPageProps) {
-  const reduce = useReducedMotion();
+  const reduce = useEntranceMotion();
   const clauses = useMemo(() => toClauses(paragraphs), [paragraphs]);
 
   const index = clauses.filter((clause) => clause.heading !== null);

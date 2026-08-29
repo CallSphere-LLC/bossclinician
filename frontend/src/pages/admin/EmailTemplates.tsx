@@ -201,7 +201,8 @@ export default function EmailTemplates() {
               <span>
                 Send this email
                 <span className="block text-xs text-ink-soft">
-                  Turning it off means people stop getting it altogether.
+                  Turning it off puts this email back to the wording we ship with — it still
+                  goes out.
                 </span>
               </span>
             </label>

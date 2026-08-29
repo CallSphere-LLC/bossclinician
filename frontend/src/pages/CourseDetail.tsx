@@ -1,6 +1,5 @@
-import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { motion, useReducedMotion } from "motion/react";
+import { motion } from "motion/react";
 import { Check, Clock, Lock, PlayCircle, ShieldCheck } from "lucide-react";
 import { Seo } from "@/components/Seo";
 import { BuyButton } from "@/components/BuyButton";
@@ -9,8 +8,13 @@ import { LuxeButton, LuxePill } from "@/components/luxe/LuxeButton";
 import { GoldRule, Section } from "@/components/luxe/Section";
 import { Container } from "@/components/ui/Container";
 import { RevealGroup, RevealItem } from "@/components/ui/Reveal";
+import { useEntranceMotion } from "@/hooks/useEntranceMotion";
+import { usePageData } from "@/hooks/usePageData";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/cn";
+import { courseNode, productNode } from "@/seo/schema";
+import { useHeadContext } from "@/ssr/context";
+import { ssrKeys } from "@/ssr/keys";
 import { isPurchasable, type Course } from "@/types";
 
 /**
@@ -112,48 +116,63 @@ function lessonCount(modules: CurriculumModule[]): number {
 
 export default function CourseDetail() {
   const { slug = "" } = useParams();
-  const reduceMotion = useReducedMotion();
+  const { origin } = useHeadContext();
+  const reduceMotion = useEntranceMotion();
 
-  const [course, setCourse] = useState<CourseDetailResponse | null>(null);
-  const [state, setState] = useState<"loading" | "ready" | "missing" | "error">("loading");
+  // `owned` is the one field an anonymous server render cannot know, so a
+  // signed-in reader — and only a signed-in reader — re-reads the course.
+  const request = usePageData<CourseDetailResponse>(
+    ssrKeys.courseDetail(slug),
+    () => api.courseDetail(slug) as Promise<CourseDetailResponse>,
+    { revalidateForMembers: true },
+  );
 
-  useEffect(() => {
-    let cancelled = false;
-    setState("loading");
-
-    api
-      .courseDetail(slug)
-      .then((data) => {
-        if (cancelled) return;
-        setCourse(data as CourseDetailResponse);
-        setState("ready");
-      })
-      .catch((err: { status?: number }) => {
-        if (cancelled) return;
-        setState(err?.status === 404 ? "missing" : "error");
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [slug]);
-
-  if (state === "loading") {
+  if (request.status === "loading") {
     return (
-      <div className="flex min-h-[60vh] items-center justify-center">
-        <span
-          className="size-9 animate-spin rounded-full border-2 border-lilac border-t-plum"
-          role="status"
-          aria-label="Loading"
-        />
-      </div>
+      <>
+        {/* On the server this branch means only one thing: the loader could not
+            read the course. This is where 55 legacy product URLs land, and
+            answering 200 would file every one of them in the index under the
+            site's default title and description, so the crawler is told the
+            page is temporarily unavailable and to come back. */}
+        <Seo title="Loading… | Boss Clinician" noindex httpStatus={503} />
+        <div className="flex min-h-[60vh] items-center justify-center">
+          <span
+            className="size-9 animate-spin rounded-full border-2 border-lilac border-t-plum"
+            role="status"
+            aria-label="Loading"
+          />
+        </div>
+      </>
     );
   }
 
-  if (state === "missing" || !course) {
+  // Checked ahead of the missing branch: an API that is merely unreachable must
+  // not answer a live product URL with "retired" — and, since this page is
+  // server-rendered, must not answer it with HTTP 404 either. That would drop
+  // the page out of the index over an outage that lasted a minute.
+  if (request.status === "error") {
+    return (
+      <Section className="py-24">
+        <Container className="max-w-2xl text-center">
+          <h1 className="font-display text-3xl text-ink">Something went wrong</h1>
+          <p className="mt-4 text-orchid">
+            Please refresh the page — this is on us, not you.
+          </p>
+        </Container>
+      </Section>
+    );
+  }
+
+  if (request.status === "missing") {
     return (
       <>
-        <Seo title="Course not found · Boss Clinician" description="This course is no longer available." />
+        <Seo
+          title="Course not found · Boss Clinician"
+          description="This course is no longer available."
+          httpStatus={404}
+          noindex
+        />
         <Section className="py-24">
           <Container className="max-w-2xl text-center">
             <h1 className="font-display text-4xl text-ink">We couldn't find that one</h1>
@@ -175,29 +194,35 @@ export default function CourseDetail() {
     );
   }
 
-  if (state === "error") {
-    return (
-      <Section className="py-24">
-        <Container className="max-w-2xl text-center">
-          <h1 className="font-display text-3xl text-ink">Something went wrong</h1>
-          <p className="mt-4 text-orchid">
-            Please refresh the page — this is on us, not you.
-          </p>
-        </Container>
-      </Section>
-    );
-  }
+  const course = request.data;
 
   const minutes = totalMinutes(course.modules);
   const lessons = lessonCount(course.modules);
   const hasCurriculum = lessons > 0;
   const features = Array.isArray(course.features) ? (course.features as string[]) : [];
 
+  const schemaInput = {
+    title: course.title,
+    description: course.description || course.subtitle,
+    slug: course.slug,
+    image: course.image,
+    offers: course.offers,
+    totalMinutes: minutes,
+  };
+
   return (
     <>
       <Seo
         title={`${course.title} · Boss Clinician`}
         description={course.description || course.subtitle}
+        image={course.image}
+        jsonLd={[
+          courseNode(origin, schemaInput),
+          // A sales page is a course and a thing with a price at the same time,
+          // and merchant results are built from Product/Offer rather than
+          // Course/Offer. Both describe the one URL.
+          productNode(origin, schemaInput),
+        ]}
       />
 
       <Section className="pt-16 sm:pt-24">

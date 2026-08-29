@@ -369,3 +369,132 @@ export async function resolveStoredFile(storagePath: string): Promise<string | n
     return null;
   }
 }
+
+/* ------------------------------------------------- admin preview of a file */
+
+/**
+ * Why an administrator needs her own kind of link.
+ *
+ * Course video lives in the protected directory and has no address of its own,
+ * which is the whole point — but it also means the admin screens cannot play it
+ * back. Yvette uploads a lesson video and then has no way to check it is the
+ * right file, the right way up, or even a file that plays at all, and she finds
+ * out from a customer. A member's link is no help: `signDownload` binds a member
+ * id, and the delivery route re-checks that member's entitlement, which an
+ * administrator does not have and should not be given one of.
+ *
+ * So: a second token family, derived from the same base secret under a different
+ * `info` string, naming a row in the media library and the administrator who
+ * asked for it. It is not interchangeable with a download token in either
+ * direction — a member link presented to the admin route fails its signature,
+ * and this one presented to `/api/files` fails its own.
+ *
+ * The account behind it is re-checked on delivery exactly as a member's is, so
+ * an administrator suspended a minute ago stops being able to pull files now
+ * rather than in two hours.
+ */
+const ADMIN_PREVIEW_INFO = "bossclinician/admin-preview-link/v1";
+
+/** Bumped if the payload layout changes, so old tokens fail closed. */
+const ADMIN_PREVIEW_VERSION = "p1";
+
+/**
+ * Two hours, for the same reason `STREAM_TTL_SECONDS` is: she is watching the
+ * video back to check it, and the player re-requests the same URL for every
+ * seek until she is done.
+ */
+export const ADMIN_PREVIEW_TTL_SECONDS = STREAM_TTL_SECONDS;
+
+export interface AdminPreviewPayload {
+  /** `media_assets.id` — the only table this token can ever name. */
+  assetId: number;
+  /** `admin_users.id`, re-checked on delivery. */
+  adminUserId: number;
+  /** Unix seconds. */
+  expiresAt: number;
+}
+
+let adminPreviewKey: Buffer | null = null;
+
+function previewKey(): Buffer {
+  if (adminPreviewKey === null) {
+    adminPreviewKey = Buffer.from(
+      crypto.hkdfSync(
+        "sha256",
+        Buffer.from(env.jwtSecret, "utf8"),
+        Buffer.alloc(0),
+        Buffer.from(ADMIN_PREVIEW_INFO, "utf8"),
+        32
+      )
+    );
+  }
+  return adminPreviewKey;
+}
+
+function signPreview(body: string): string {
+  return crypto.createHmac("sha256", previewKey()).update(body).digest("base64url");
+}
+
+/** The route an admin preview token is redeemed at. */
+const ADMIN_FILE_ROUTE = "/api/admin-files";
+
+/** A ready-to-use preview link for one library file and one administrator. */
+export function adminPreviewUrl(input: {
+  assetId: number;
+  adminUserId: number;
+  now?: Date;
+}): { url: string; expiresAt: Date } {
+  const issuedAt = input.now ?? new Date();
+  const expiresAt = Math.floor(issuedAt.getTime() / 1000) + ADMIN_PREVIEW_TTL_SECONDS;
+
+  const body = Buffer.from(
+    [ADMIN_PREVIEW_VERSION, input.assetId, input.adminUserId, expiresAt].join("."),
+    "utf8"
+  ).toString("base64url");
+
+  return {
+    url: `${ADMIN_FILE_ROUTE}/${body}.${signPreview(body)}`,
+    expiresAt: new Date(expiresAt * 1000),
+  };
+}
+
+/** The payload of a preview token whose signature and expiry both hold, or null. */
+export function verifyAdminPreview(
+  token: string,
+  now: Date = new Date()
+): AdminPreviewPayload | null {
+  const parts = token.split(".");
+  if (parts.length !== 2) return null;
+  const [body, provided] = parts;
+  if (!body || !provided) return null;
+
+  const expected = signPreview(body);
+  if (provided.length !== expected.length) return null;
+  if (!crypto.timingSafeEqual(Buffer.from(provided, "utf8"), Buffer.from(expected, "utf8"))) {
+    return null;
+  }
+
+  const fields = Buffer.from(body, "base64url").toString("utf8").split(".");
+  if (fields.length !== 4) return null;
+  const [version, assetId, adminUserId, expiresAt] = fields;
+  if (version !== ADMIN_PREVIEW_VERSION) return null;
+
+  const payload: AdminPreviewPayload = {
+    assetId: Number(assetId),
+    adminUserId: Number(adminUserId),
+    expiresAt: Number(expiresAt),
+  };
+  if (
+    !Number.isSafeInteger(payload.assetId) ||
+    !Number.isSafeInteger(payload.adminUserId) ||
+    !Number.isSafeInteger(payload.expiresAt) ||
+    payload.assetId <= 0 ||
+    payload.adminUserId <= 0
+  ) {
+    return null;
+  }
+
+  if (payload.expiresAt * 1000 <= now.getTime()) return null;
+
+  return payload;
+}

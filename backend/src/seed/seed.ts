@@ -18,10 +18,32 @@ async function ensureAdminUser(): Promise<void> {
 
   const password = env.adminPassword || crypto.randomBytes(9).toString("base64url");
   const hash = await bcrypt.hash(password, 12);
+
+  /**
+   * The first account on an empty database is the owner, spelled out here
+   * rather than inherited.
+   *
+   * Migration 016 promotes "the existing single admin" to `owner`, which is the
+   * right thing on the live database and does nothing at all on a fresh one:
+   * `applySchema()` runs before `runSeedIfEmpty()` (server.ts), so the UPDATE
+   * has already swept an empty table by the time this row is written. Seeding
+   * `admin` therefore produced a Yvette who — on any rebuilt or wiped database
+   * — held no `admins.manage` and was refused by every `requireOwner` route,
+   * i.e. could not add or remove the people on her own team.
+   *
+   * Anything other than an empty table is somebody else's install with its own
+   * owner already in it, so a newly seeded address there gets the manager role
+   * instead of a second unconditional account.
+   */
+  const existingAdmins = await pool.query<{ count: string }>(
+    "SELECT count(*) AS count FROM admin_users"
+  );
+  const role = Number(existingAdmins.rows[0]?.count ?? 0) === 0 ? "owner" : "admin";
+
   await pool.query(
-    `INSERT INTO admin_users (email, password_hash, name, role) VALUES ($1, $2, $3, 'admin')
+    `INSERT INTO admin_users (email, password_hash, name, role) VALUES ($1, $2, $3, $4)
      ON CONFLICT (email) DO NOTHING`,
-    [email, hash, "Yvette Howard"]
+    [email, hash, "Yvette Howard", role]
   );
 
   if (!env.adminPassword) {

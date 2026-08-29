@@ -9,7 +9,7 @@ import { rowToCamel } from "../../utils/case";
 import { asyncHandler } from "../../utils/asyncHandler";
 import { env } from "../../config/env";
 import { badRequest, notFound } from "../../utils/httpError";
-import { isProtectedRef, protectedRef } from "../../services/signedUrls";
+import { adminPreviewUrl, isProtectedRef, protectedRef } from "../../services/signedUrls";
 
 export const adminMediaRouter = Router();
 
@@ -62,12 +62,34 @@ export interface MediaAsset {
   createdAt: string;
 }
 
-/** What the library shows, plus which of the two directories the file is in. */
-type MediaAssetJson = MediaAsset & { visibility: Visibility };
+/**
+ * What the library shows: the row, which directory it is in, and an address the
+ * admin screens can point an <img>, <video> or <audio> at.
+ *
+ * `url` is a storage reference, and for a protected file it is not a URL at all
+ * — `protected:abc.mp4` in a src attribute draws an empty box, which is how a
+ * video Yvette uploaded turns out to be unplayable on the one screen where she
+ * could have caught it. `previewUrl` is the playable form: a signed link for a
+ * protected file, the same path for a public one. It is minted here so a grid of
+ * twelve videos costs one request rather than thirteen.
+ */
+type MediaAssetJson = MediaAsset & { visibility: Visibility; previewUrl: string };
 
-function toMediaJson(row: Record<string, unknown>): MediaAssetJson {
+function toMediaJson(row: Record<string, unknown>, adminUserId: number): MediaAssetJson {
   const asset = rowToCamel<MediaAsset>(row);
-  return { ...asset, visibility: isProtectedRef(asset.url) ? "protected" : "public" };
+  const isProtected = isProtectedRef(asset.url);
+  return {
+    ...asset,
+    visibility: isProtected ? "protected" : "public",
+    previewUrl: isProtected
+      ? adminPreviewUrl({ assetId: asset.id, adminUserId }).url
+      : asset.url,
+  };
+}
+
+/** The signed-in administrator. Non-null: every route here is behind requireAuth. */
+function adminId(req: Request): number {
+  return Number(req.user?.sub);
 }
 
 /**
@@ -141,6 +163,12 @@ const EXT_TO_MIME = new Map<string, string>([
   [".xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"],
 ]);
 
+/** The extension each allowed type is stored under, first entry winning. */
+const MIME_TO_EXT = new Map<string, string>();
+for (const [ext, mime] of EXT_TO_MIME) {
+  if (!MIME_TO_EXT.has(mime)) MIME_TO_EXT.set(mime, ext);
+}
+
 /** Resolves the effective MIME type, or null if the upload isn't allowed. */
 export function resolveMime(declared: string, originalName: string): string | null {
   if (ALLOWED_MIME.has(declared)) return declared;
@@ -152,6 +180,27 @@ export function resolveMime(declared: string, originalName: string): string | nu
     return EXT_TO_MIME.get(ext) ?? null;
   }
   return null;
+}
+
+/**
+ * The suffix the stored file is written under.
+ *
+ * Never the uploader's own: /uploads is handed to express.static, which reads
+ * the Content-Type off the extension and not off the `mime` column, so a file
+ * called "notes.html" — or "logo.svg" — declared as text/plain lands as live
+ * markup on the site's own origin however inert its declared type was. That is
+ * the stored-XSS the SVG exclusion above exists to prevent, reached by a
+ * filename instead of a MIME type.
+ *
+ * An extension the whitelist already knows is kept, so an .m4a stays an .m4a;
+ * anything else is replaced by the one its resolved type is served under. The
+ * name the uploader chose survives untouched in `original_name`.
+ */
+export function storedExtension(declared: string, originalName: string): string {
+  const ext = path.extname(originalName).toLowerCase();
+  if (EXT_TO_MIME.has(ext)) return ext;
+  const mime = resolveMime(declared, originalName);
+  return mime === null ? "" : (MIME_TO_EXT.get(mime) ?? "");
 }
 
 /** Coarse bucket used by the library's filter chips. */
@@ -166,8 +215,8 @@ function kindFromMime(mime: string): string {
 const storage = multer.diskStorage({
   destination: (req, _file, cb) => cb(null, storageDir(requestedVisibility(req))),
   filename: (_req, file, cb) => {
-    const ext = path.extname(file.originalname) || "";
-    const name = `${crypto.randomBytes(8).toString("hex")}${ext.toLowerCase()}`;
+    const ext = storedExtension(file.mimetype, file.originalname);
+    const name = `${crypto.randomBytes(8).toString("hex")}${ext}`;
     cb(null, name);
   },
 });
@@ -196,7 +245,7 @@ adminMediaRouter.get(
             [kind],
           )
         : await pool.query("SELECT * FROM media_assets ORDER BY created_at DESC");
-    res.json(result.rows.map(toMediaJson));
+    res.json(result.rows.map((row) => toMediaJson(row, adminId(req))));
   }),
 );
 
@@ -251,7 +300,7 @@ adminMediaRouter.post("/", (req, res, next) => {
         [file.filename, file.originalname, url, mime, kind, file.size, file.originalname],
       )
       .then((result) => {
-        res.status(201).json(toMediaJson(result.rows[0]));
+        res.status(201).json(toMediaJson(result.rows[0], adminId(req)));
       })
       .catch((dbErr: unknown) => {
         // The bytes are already on disk; don't leave an orphan if the row fails.
@@ -262,6 +311,46 @@ adminMediaRouter.post("/", (req, res, next) => {
       });
   });
 });
+
+/**
+ * POST /admin/media/preview — a link the admin screens can actually play.
+ *
+ * Takes the stored reference rather than an id, because that is what the rest of
+ * the admin holds: a lesson row says `protected:abc.mp4`, not "media asset 41".
+ * The reference is looked up in the library, so the only files this can ever
+ * mint a link for are ones already in it — a path typed into the request body
+ * addresses nothing.
+ *
+ * A public file needs no link and gets its own path straight back, so callers
+ * can put every reference through here without asking which sort it is.
+ */
+adminMediaRouter.post(
+  "/preview",
+  asyncHandler(async (req, res) => {
+    const parsed = z
+      .object({ reference: z.string().trim().min(1).max(500) })
+      .safeParse(req.body);
+    if (!parsed.success) throw badRequest("Tell us which file you want to look at.");
+    const { reference } = parsed.data;
+
+    if (!isProtectedRef(reference)) {
+      res.json({ url: reference, expiresAt: null });
+      return;
+    }
+
+    const found = await pool.query<{ id: number }>(
+      "SELECT id FROM media_assets WHERE url = $1 ORDER BY id DESC LIMIT 1",
+      [reference],
+    );
+    const asset = found.rows[0];
+    if (asset === undefined) throw notFound("We couldn't find that file any more.");
+
+    // Non-null: every admin route is mounted behind requireAuth.
+    const adminUserId = Number(req.user?.sub);
+    const link = adminPreviewUrl({ assetId: asset.id, adminUserId });
+    res.json({ url: link.url, expiresAt: link.expiresAt.toISOString() });
+  }),
+);
 
 /** PATCH /admin/media/:id — rename (title only; the stored file is immutable). */
 adminMediaRouter.patch(
@@ -274,7 +363,7 @@ adminMediaRouter.patch(
       [title, req.params.id],
     );
     if (result.rowCount === 0) throw notFound("Media asset not found");
-    res.json(toMediaJson(result.rows[0]));
+    res.json(toMediaJson(result.rows[0], adminId(req)));
   }),
 );
 

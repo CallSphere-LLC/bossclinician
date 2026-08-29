@@ -13,8 +13,9 @@ import {
   EmptyState,
   ErrorNotice,
   LEAD_STATUS_TONE,
-  PageHeader,
   leadStatusLabel,
+  PageHeader,
+  selectStyles,
 } from "@/pages/admin/ui/primitives";
 import { friendlyError, humaniseKey } from "@/pages/admin/ui/friendly";
 import { DataTable } from "@/pages/admin/ui/DataTable";
@@ -245,7 +246,7 @@ export default function Leads() {
             value={row.original.status}
             onChange={(e) => changeStatus(row.original.id, e.target.value)}
             aria-label={`Where things stand with ${row.original.name}`}
-            className="rounded-lg border border-hairline bg-surface px-2.5 py-1.5 text-xs font-semibold text-ink outline-none transition-colors focus-visible:border-plum focus-visible:ring-4 focus-visible:ring-plum/12"
+            className={cn(selectStyles, "rounded-lg py-1.5 text-xs font-semibold w-auto")}
           >
             {STATUSES.map((s) => (
               <option key={s} value={s}>

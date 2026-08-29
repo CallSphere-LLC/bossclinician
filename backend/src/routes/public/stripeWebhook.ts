@@ -28,6 +28,7 @@ import {
 import { releaseRedemption } from "../../services/coupons";
 import { grantOfferAccess, revokeOfferAccess } from "../../services/access";
 import { sendSetPasswordLink } from "../../services/setPasswordLink";
+import { deliverPurchase, notifyOwnerOfSale } from "../../services/purchaseDelivery";
 import { addInterval, type BillingInterval } from "../../services/pricing";
 
 /**
@@ -350,64 +351,21 @@ interface PaymentFacts {
 }
 
 /**
- * The buyer's copy of the transaction, plus the way into the account if the
- * purchase just created one.
+ * The buyer's copy of the transaction, the welcome, and the way into the account
+ * if the purchase just created one.
  *
- * Both are fire-and-forget: the money has moved and the access has been granted
- * by the time this runs, so an SMTP outage must not turn a completed purchase
- * into a retried webhook that tries to fulfil it all over again.
+ * Delegated to `services/purchaseDelivery.ts` rather than written here, because
+ * the $0 checkout and the admin's manual grant complete a purchase without ever
+ * reaching this file and owe the buyer exactly the same things. Fire-and-forget:
+ * the money has moved and the access has been granted by the time this runs, so
+ * a mail outage must not turn a completed purchase into a retried webhook that
+ * tries to fulfil it all over again.
  */
 async function sendPurchaseEmails(order: OrderRow, result: FulfillResult): Promise<void> {
-  const items = await pool.query<{ title: string; quantity: number; amount_cents: number }>(
-    `SELECT title, quantity, amount_cents FROM order_items WHERE order_id = $1 ORDER BY id`,
-    [order.id]
-  );
-
-  const lines: ReceiptLine[] =
-    items.rows.length > 0
-      ? items.rows.map((row) => ({
-          title: row.title,
-          quantity: row.quantity,
-          amountCents: row.amount_cents,
-        }))
-      : // The legacy course path writes no order_items, so the order itself is
-        // the only line there is.
-        [{ title: describe(order), quantity: 1, amountCents: order.total_cents }];
-
-  if (order.email) {
-    void sendMail({
-      to: order.email,
-      ...purchaseReceipt({
-        buyerName: order.billing_name,
-        orderId: order.id,
-        lines,
-        subtotalCents: order.subtotal_cents,
-        discountCents: order.discount_cents,
-        couponCode: order.coupon_code,
-        taxCents: order.tax_cents,
-        totalCents: order.total_cents,
-        currency: order.currency,
-      }),
-    });
-  }
-
-  // A guest checkout creates an account with no password. This link is the only
-  // way to claim it, and the library it opens already contains a paid purchase.
-  if (result.createdMember && result.memberId !== null) {
-    void sendSetPasswordLink(result.memberId);
-  }
-}
-
-function notifyAdminOfSale(order: OrderRow): void {
-  if (!env.notifyEmail) return;
-  void sendMail({
-    to: env.notifyEmail,
-    ...orderPaidNotification({
-      courseTitle: describe(order),
-      email: order.email,
-      amountCents: order.total_cents,
-      currency: order.currency,
-    }),
+  await deliverPurchase({
+    orderId: order.id,
+    memberId: result.memberId,
+    createdMember: result.createdMember,
   });
 }
 
@@ -443,7 +401,12 @@ async function settleOrderPayment(
 
   log(`order ${order.id} paid — granted products [${result.grantedProductIds.join(", ")}]`);
   await sendPurchaseEmails(order, result);
-  notifyAdminOfSale(order);
+  notifyOwnerOfSale({
+    description: describe(order),
+    email: order.email,
+    amountCents: order.total_cents,
+    currency: order.currency,
+  });
   fireTriggerAsync("order_paid", {
     email: order.email,
     courseTitle: describe(order),
@@ -1090,6 +1053,8 @@ async function startPaymentPlan(input: {
   stripeCustomerId: string | null;
   /** What the opening invoice collected. Zero means no installment was paid. */
   collectedCents: number;
+  /** The opening invoice, stamped on installment one so a replay of it cannot advance the plan. */
+  stripeInvoiceId: string;
   startAt: Date;
 }): Promise<number | null> {
   const offerId = input.order.offer_id ?? input.meta.offerId ?? null;
@@ -1127,6 +1092,7 @@ async function startPaymentPlan(input: {
     firstInstallmentCents: pricing.firstCents,
     installmentCount,
     firstInstallmentPaid: input.collectedCents > 0,
+    firstStripeInvoiceId: input.stripeInvoiceId,
     interval: offer?.interval ?? "month",
     intervalCount: offer?.interval_count ?? 1,
     currency: offer?.currency ?? input.order.currency,
@@ -1420,6 +1386,8 @@ async function handleInvoicePaid(invoice: Stripe.Invoice): Promise<void> {
   // product IS what the customer signed up for.
   const opensTheOrder = order !== null && order.status !== "paid";
 
+  let fulfilledMemberId: number | null = null;
+
   if (opensTheOrder && order !== null) {
     const result = await settleOrderPayment(order, {
       paymentIntentId,
@@ -1439,30 +1407,106 @@ async function handleInvoicePaid(invoice: Stripe.Invoice): Promise<void> {
       await linkGrantsToSubscription(order.id, subscriptionId);
     }
 
-    if (isPlan && stripeSubscriptionId && plan === null) {
-      const planId = await startPaymentPlan({
-        order,
-        meta,
-        memberId: result.memberId,
-        stripeSubscriptionId,
-        stripeCustomerId: idOf(invoice.customer),
-        collectedCents,
-        startAt: paidAt,
-      });
-      if (planId !== null) {
-        await pool.query(`UPDATE invoices SET payment_plan_id = $2 WHERE stripe_invoice_id = $1`, [
-          invoice.id,
-          planId,
-        ]);
-        log(
-          `plan ${planId} opened for order ${order.id}${
-            collectedCents > 0
-              ? ": installment 1 of the schedule paid"
-              : " with nothing collected: the schedule starts at installment 1, unpaid"
-          }`
-        );
-      }
+    fulfilledMemberId = result.memberId;
+  }
+
+  // Opening the plan is keyed on the plan not existing yet, NOT on this delivery
+  // having been the one that settled the order. The two came apart whenever the
+  // first delivery threw after `fulfillPayment` committed: the retry found the
+  // order already paid, skipped this block for good, and the plan was never
+  // created at all — no schedule for the member to see, nothing for a later
+  // installment to advance, and no plan for `endPaymentPlanAccess` to find, so a
+  // customer who stopped paying after the opening charge kept the whole product.
+  // ...but only on the invoice that actually opened the order. `plan === null`
+  // is true on every later installment too whenever the plan was never created
+  // — `startPaymentPlan` answers null when the offer has been deleted or its
+  // `installment_count` cleared — and without this guard installment two walked
+  // in here, opened a brand new plan dated from itself with "installment 1
+  // paid", and returned before `recordRecurringPayment`. The customer's money
+  // was collected and appeared in no transaction row: missing from every revenue
+  // report and from the affiliate's commission. An earlier settled invoice
+  // against the same order is proof this is not the opening one.
+  const opensThePlan =
+    isPlan && stripeSubscriptionId && plan === null && order !== null
+      ? (
+          await pool.query(
+            `SELECT 1 FROM invoices
+              WHERE order_id = $1 AND stripe_invoice_id <> $2 AND settled_at IS NOT NULL
+              LIMIT 1`,
+            [order.id, invoice.id]
+          )
+        ).rowCount === 0
+      : false;
+
+  if (opensThePlan && order !== null && stripeSubscriptionId) {
+    const planId = await startPaymentPlan({
+      order,
+      meta,
+      memberId: fulfilledMemberId,
+      stripeSubscriptionId,
+      stripeCustomerId: idOf(invoice.customer),
+      collectedCents,
+      stripeInvoiceId: invoice.id,
+      startAt: paidAt,
+    });
+    if (planId !== null) {
+      await pool.query(`UPDATE invoices SET payment_plan_id = $2 WHERE stripe_invoice_id = $1`, [
+        invoice.id,
+        planId,
+      ]);
+      log(
+        `plan ${planId} opened for order ${order.id}${
+          collectedCents > 0
+            ? ": installment 1 of the schedule paid"
+            : " with nothing collected: the schedule starts at installment 1, unpaid"
+        }`
+      );
+      await markInvoiceSettled(invoice.id);
+      return;
     }
+
+    // No plan, and the invoice is deliberately left unsettled.
+    //
+    // Settling it here was the quiet version of this failure: the invoice was
+    // closed as fully handled, so no redelivery and no manual replay could ever
+    // build the schedule, and a customer who had paid the first of three
+    // installments had no plan behind them — nothing to advance, nothing for
+    // `endPaymentPlanAccess` to cancel if they stopped paying. The money itself
+    // is safe either way (the order's own transaction was written by
+    // `settleOrderPayment` above); it is the schedule that is missing, and the
+    // cause is always something a person has to put back — an offer deleted, or
+    // its installment count cleared — after which replaying the invoice from
+    // Stripe finishes the job.
+    log(
+      `order ${order.id}: payment plan could NOT be opened (offer missing or has no installment count) — invoice ${invoice.id} left unsettled so it can be replayed`
+    );
+    if (env.notifyEmail) {
+      void sendMail({
+        to: env.notifyEmail,
+        subject: "A payment plan could not be set up",
+        text: [
+          `A payment plan purchase was paid for but the instalment schedule could not be created.`,
+          ``,
+          `Customer: ${invoice.customer_email ?? order.email}`,
+          `Order: ${order.id}`,
+          `Stripe invoice: ${invoice.id}`,
+          ``,
+          `This happens when the offer behind the purchase has been deleted, or its`,
+          `number of instalments has been cleared. Put that back, then resend the`,
+          `invoice event from the Stripe dashboard and the schedule will be built.`,
+        ].join("\n"),
+      });
+    }
+    return;
+  }
+
+  if (opensTheOrder) {
+    // Written here as it is on every other path out of this handler. Leaving it
+    // unset meant a redelivery re-claimed the opening invoice, found the order
+    // already paid, fell through to the renewal branch below and credited the
+    // plan an installment nobody had paid — see migration 008, which added
+    // `settled_at` for exactly this and never had it set on this branch.
+    await markInvoiceSettled(invoice.id);
     return;
   }
 

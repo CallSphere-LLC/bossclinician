@@ -41,6 +41,7 @@ import {
   Field,
   Input,
   PageHeader,
+  selectStyles,
   Skeleton,
   Textarea,
   type BadgeProps,
@@ -89,9 +90,6 @@ function memberName(member: Member): string {
 }
 
 /** Matches the Input primitive so the filter row reads as one set of controls. */
-const SELECT_CLASS =
-  "h-11 shrink-0 rounded-xl border border-hairline bg-surface px-3 text-sm text-ink outline-none transition-colors focus-visible:border-gold/60 focus-visible:ring-4 focus-visible:ring-gold/15";
-
 /**
  * How many people we hold on screen at once. Everything below the toolbar —
  * sorting, paging — happens in the browser over this slice, so it needs to be
@@ -647,6 +645,16 @@ export default function Members() {
         enableSorting: false,
         cell: ({ row }) => {
           const member = row.original;
+          // A removed member is an anonymised shell: the server refuses every
+          // one of these actions, and the refusal reached her as a message about
+          // highlighted fields on a screen with no form.
+          if (member.status === "deleted") {
+            return (
+              <RowActions>
+                <span className="text-xs text-ink-soft">Nothing left to do</span>
+              </RowActions>
+            );
+          }
           const paused = member.status === "suspended";
           return (
             <RowActions>
@@ -760,7 +768,7 @@ export default function Members() {
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
               aria-label="Who to show"
-              className={SELECT_CLASS}
+              className={selectStyles}
             >
               <option value="">Everyone</option>
               {STATUS_FILTERS.map((status) => (
@@ -773,7 +781,7 @@ export default function Members() {
               value={courseFilter}
               onChange={(e) => setCourseFilter(e.target.value)}
               aria-label="Enrolled in…"
-              className={SELECT_CLASS}
+              className={selectStyles}
             >
               <option value="">In any course</option>
               {courses.map((course) => (
@@ -906,7 +914,7 @@ export default function Members() {
               <select
                 value={courseToAdd}
                 onChange={(e) => setCourseToAdd(e.target.value)}
-                className="h-11 w-full rounded-xl border border-hairline bg-surface px-3 text-sm outline-none focus-visible:border-plum focus-visible:ring-4 focus-visible:ring-plum/12"
+                className={selectStyles}
               >
                 <option value="">
                   {availableCourses.length === 0

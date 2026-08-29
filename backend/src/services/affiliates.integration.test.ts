@@ -155,6 +155,40 @@ describeDb("affiliate commission ledger (integration)", () => {
     expect(result.accrued).toBe(false);
   });
 
+  it("pays nothing to a partner who bought it themselves", async () => {
+    const sale = await seedSale({ label: "selfref", amountCents: 199_700 });
+
+    // The partner clicked their own share link and checked out with the address
+    // they applied under. Nothing upstream refuses that — the click is ordinary
+    // and the attribution is frozen onto the order like any other.
+    await client.query(`UPDATE orders SET email = $2 WHERE id = $1`, [
+      sale.orderId,
+      "selfref@partner.invalid",
+    ]);
+
+    const result = await affiliates.accrueForTransaction(sale.transactionId);
+    expect(result.accrued).toBe(false);
+
+    const rows = await client.query<{ count: number }>(
+      `SELECT COUNT(*)::int AS count FROM affiliate_commissions WHERE affiliate_id = $1`,
+      [sale.affiliateId]
+    );
+    expect(rows.rows[0].count).toBe(0);
+  });
+
+  it("pays nothing to a partner whose member account placed the order", async () => {
+    const sale = await seedSale({ label: "selfmember", amountCents: 50_000 });
+    const memberId = await insertMember(client, "selfmember-buyer@example.test");
+    await client.query(`UPDATE orders SET member_id = $2 WHERE id = $1`, [sale.orderId, memberId]);
+    await client.query(`UPDATE affiliates SET member_id = $2 WHERE id = $1`, [
+      sale.affiliateId,
+      memberId,
+    ]);
+
+    const result = await affiliates.accrueForTransaction(sale.transactionId);
+    expect(result.accrued).toBe(false);
+  });
+
   it("pays nothing to a partner who has been suspended", async () => {
     const sale = await seedSale({ label: "suspended", amountCents: 5000 });
     await client.query(`UPDATE affiliates SET status = 'suspended' WHERE id = $1`, [

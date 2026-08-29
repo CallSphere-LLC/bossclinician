@@ -7,8 +7,11 @@ import { GlassCard } from "@/components/luxe/GlassCard";
 import { LuxeButton, LuxePill } from "@/components/luxe/LuxeButton";
 import { LuxePageHero } from "@/components/luxe/LuxePageHero";
 import { RevealGroup, RevealItem } from "@/components/ui/Reveal";
+import { useEntranceMotion } from "@/hooks/useEntranceMotion";
 import { workWithMe } from "@/content/site";
 import { cn } from "@/lib/cn";
+import { faqPageNode } from "@/seo/schema";
+import { useHeadContext } from "@/ssr/context";
 
 /**
  * Work With Me — the Obsidian Luxe rebuild.
@@ -26,11 +29,20 @@ import { cn } from "@/lib/cn";
  * visitor who was one question short of applying had nowhere to put it.
  */
 export default function WorkWithMe() {
+  const { origin } = useHeadContext();
+
   return (
     <>
+      {/* The six objections in the FAQ band are the page's own answers, so they
+          are declared as an FAQPage: a clinician searching for "is this
+          coaching or consulting" can be shown the answer this page already
+          gives. The nodes are built from the same `workWithMe.faqs` the band
+          renders, which is what stops the markup and the page disagreeing. */}
       <Seo
         title="Work With Me | Practice Reset Intensive & Boss Boardroom"
         description="Three strategic partnerships for clinicians ready to grow — The Practice Reset Intensive, Scale and Reclaim Suite, and Boss Boardroom. Apply to work with Boss Clinician."
+        image={HERO_PORTRAIT}
+        jsonLd={[faqPageNode(origin, "/work-with-me", workWithMe.faqs)]}
       />
 
       <HeroBlock />
@@ -147,6 +159,9 @@ function Mark({ variant, className }: { variant: "check" | "cross"; className?: 
    1 · Hero
    ══════════════════════════════════════════════════════════════════════════ */
 
+/** Held once: the frame renders it and the page's share card points at it. */
+const HERO_PORTRAIT = "/images/758479b0818b.png";
+
 /**
  * Graded to the same recipe as the home page portraits: a daylight photograph
  * dropped straight onto near-black reads as a lit rectangle pasted on the page,
@@ -166,7 +181,7 @@ function HeroPortrait() {
 
       <div className="relative overflow-hidden rounded-2xl border border-gold/25 shadow-[0_44px_100px_-36px_rgba(0,0,0,0.95)]">
         <img
-          src="/images/758479b0818b.png"
+          src={HERO_PORTRAIT}
           alt="Yvette Howard, private practice strategist for therapists and clinicians"
           width={882}
           height={1440}
@@ -220,7 +235,7 @@ function HeroBlock() {
  * entrance per movement rather than one per paragraph.
  */
 function StorySection() {
-  const reduce = useReducedMotion();
+  const reduce = useEntranceMotion();
 
   return (
     <Section
@@ -312,7 +327,7 @@ function PainSection() {
    ══════════════════════════════════════════════════════════════════════════ */
 
 function ReadySection() {
-  const reduce = useReducedMotion();
+  const reduce = useEntranceMotion();
 
   return (
     <Section
@@ -379,7 +394,7 @@ function ReadySection() {
  * sideways — and the winning column carries the only foil in the section.
  */
 function PartnershipSection() {
-  const reduce = useReducedMotion();
+  const reduce = useEntranceMotion();
 
   return (
     <Section
@@ -467,8 +482,60 @@ function PartnershipSection() {
    6 · Pathways
    ══════════════════════════════════════════════════════════════════════════ */
 
+type Pathway = (typeof workWithMe.pathways)[number];
+
+/**
+ * The chosen pathway, as its own keyed component.
+ *
+ * The panel is the one place on this page where the same animation serves two
+ * purposes: the pathway the page opens on is part of the server-rendered first
+ * screen, and every pathway after it is a reply to a tap. Keying the component
+ * by label is what lets one hook answer both — the mount that hydrates against
+ * static markup is painted in its final state, and each later mount, which no
+ * markup is waiting on, fades in.
+ */
+function PathwayPanel({ pathway, panelId }: { pathway: Pathway; panelId: string }) {
+  const reduce = useEntranceMotion();
+
+  return (
+    <motion.div
+      id={panelId}
+      role="region"
+      aria-label={pathway.label}
+      initial={reduce ? false : { opacity: 0, y: 16 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: reduce ? 0 : 0.45, ease: EASE }}
+      className="mt-10"
+    >
+      <div className="mx-auto max-w-3xl text-center">
+        <h3 className="text-balance font-display text-[1.7rem] font-medium leading-[1.16] text-white sm:text-[2.2rem]">
+          {pathway.title}
+        </h3>
+        <p className="copy-luxe mx-auto mt-6 max-w-2xl text-pretty">{pathway.body}</p>
+      </div>
+
+      <ol className="mt-8 grid list-none grid-cols-1 items-stretch gap-5 sm:grid-cols-2 lg:grid-cols-3">
+        {pathway.milestones.map((m, i) => (
+          <li key={m.title} className="h-full">
+            <GlassCard
+              accent={toneAt(i)}
+              className="flex h-full flex-col overflow-hidden p-6 sm:p-7"
+            >
+              <Numeral value={`0${i + 1}`} className="text-[2.1rem] sm:text-[2.4rem]" />
+              <h4 className="mt-4 text-pretty font-display text-[1.1rem] font-medium leading-snug text-white">
+                {m.title}
+              </h4>
+              <p className="copy-luxe mt-2.5 text-pretty text-sm">{m.body}</p>
+            </GlassCard>
+          </li>
+        ))}
+      </ol>
+    </motion.div>
+  );
+}
+
 function PathwaysSection() {
-  const reduce = useReducedMotion();
+  const reduce = useEntranceMotion();
   const uid = useId();
   const [active, setActive] = useState(1);
   const pathway = workWithMe.pathways[active];
@@ -527,40 +594,7 @@ function PathwaysSection() {
         ))}
       </div>
 
-      <motion.div
-        key={pathway.label}
-        id={panelId}
-        role="region"
-        aria-label={pathway.label}
-        initial={reduce ? false : { opacity: 0, y: 16 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: reduce ? 0 : 0.45, ease: EASE }}
-        className="mt-10"
-      >
-        <div className="mx-auto max-w-3xl text-center">
-          <h3 className="text-balance font-display text-[1.7rem] font-medium leading-[1.16] text-white sm:text-[2.2rem]">
-            {pathway.title}
-          </h3>
-          <p className="copy-luxe mx-auto mt-6 max-w-2xl text-pretty">{pathway.body}</p>
-        </div>
-
-        <ol className="mt-8 grid list-none grid-cols-1 items-stretch gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {pathway.milestones.map((m, i) => (
-            <li key={m.title} className="h-full">
-              <GlassCard
-                accent={toneAt(i)}
-                className="flex h-full flex-col overflow-hidden p-6 sm:p-7"
-              >
-                <Numeral value={`0${i + 1}`} className="text-[2.1rem] sm:text-[2.4rem]" />
-                <h4 className="mt-4 text-pretty font-display text-[1.1rem] font-medium leading-snug text-white">
-                  {m.title}
-                </h4>
-                <p className="copy-luxe mt-2.5 text-pretty text-sm">{m.body}</p>
-              </GlassCard>
-            </li>
-          ))}
-        </ol>
-      </motion.div>
+      <PathwayPanel key={pathway.label} pathway={pathway} panelId={panelId} />
 
       <motion.div {...rise(reduce, 0.08)} className="mt-10 text-center">
         <p className="copy-luxe">Not sure which pathway is yours?</p>
@@ -585,7 +619,7 @@ function PathwaysSection() {
  * siblings rather than as a good/better/best upsell ladder.
  */
 function OffersSection() {
-  const reduce = useReducedMotion();
+  const reduce = useEntranceMotion();
 
   return (
     <Section
@@ -908,7 +942,7 @@ function FaqSection() {
  * /work-with-me#enquire is linkable from anywhere on the site.
  */
 function EnquirySection() {
-  const reduce = useReducedMotion();
+  const reduce = useEntranceMotion();
 
   return (
     <Section
@@ -951,7 +985,7 @@ function EnquirySection() {
  * horizon of light rather than on flat black.
  */
 function ClosingSection() {
-  const reduce = useReducedMotion();
+  const reduce = useEntranceMotion();
 
   return (
     <Section

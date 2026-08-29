@@ -1,4 +1,5 @@
-import { motion, useReducedMotion } from "motion/react";
+import { motion } from "motion/react";
+import { useEntranceMotion } from "@/hooks/useEntranceMotion";
 import { Section } from "@/components/luxe/Section";
 import { LuxeButton } from "@/components/luxe/LuxeButton";
 
@@ -38,7 +39,7 @@ function rise(reduce: boolean | null, delay: number) {
  * instead of leaking glow under it.
  */
 export function LuxeFinalCTA() {
-  const reduce = useReducedMotion();
+  const reduce = useEntranceMotion();
 
   return (
     <Section

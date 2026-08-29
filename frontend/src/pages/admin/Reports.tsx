@@ -20,6 +20,7 @@ import {
   Skeleton,
 } from "@/pages/admin/ui/primitives";
 import { humanizeKey, pluralize } from "@/pages/admin/ui/friendly";
+import { saveCsv } from "@/lib/formsApi";
 import { CHART_COLORS, MiniBarChart, TrendAreaChart } from "@/pages/admin/ui/Charts";
 
 /**
@@ -105,13 +106,11 @@ export default function Reports() {
     ];
 
     const csv = `"Your numbers","Amount"\n${rows.map(([k, v]) => `"${k}","${v}"`).join("\n")}`;
+    // Through the shared helper: this used to click a link that was never in
+    // the document and revoke the file before Safari had read it, which is a
+    // Download button that quietly does nothing.
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `your-numbers-${new Date().toISOString().slice(0, 10)}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
+    saveCsv(blob, `your-numbers-${new Date().toISOString().slice(0, 10)}.csv`);
   }
 
   if (error) {

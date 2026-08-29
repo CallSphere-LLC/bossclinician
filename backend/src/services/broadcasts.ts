@@ -69,6 +69,23 @@ const AUDIENCE_PREDICATES: Record<string, string> = {
 };
 
 /**
+ * The predicate for an audience key, or null when nobody recognises it.
+ *
+ * `null` rather than a default, because the default it used to carry was
+ * `all_subscribers` — so a campaign whose `audience` column held anything this
+ * map does not name went to the whole list rather than failing. The column is
+ * written through a permissive CRUD route, which is exactly where an unexpected
+ * value comes from. Own-property lookup for the same reason: `audience` set to
+ * `"toString"` would otherwise resolve to a function and be interpolated into
+ * the WHERE clause.
+ */
+export function audiencePredicate(audience: string): string | null {
+  return Object.prototype.hasOwnProperty.call(AUDIENCE_PREDICATES, audience)
+    ? AUDIENCE_PREDICATES[audience]
+    : null;
+}
+
+/**
  * The mailability filter every audience is narrowed by.
  *
  * Duplicated deliberately with the check inside `sendEmail`: that one is the
@@ -120,7 +137,9 @@ export async function resolveAudience(campaign: {
     return res.rows.map(toRecipient);
   }
 
-  const predicate = AUDIENCE_PREDICATES[campaign.audience] ?? AUDIENCE_PREDICATES.all_subscribers;
+  const predicate = audiencePredicate(campaign.audience);
+  if (predicate === null) return [];
+
   const res = await pool.query<{ id: number; email: string; name: string; first_name: string }>(
     `SELECT c.id, c.email, c.name, c.first_name
        FROM contacts c
@@ -158,7 +177,9 @@ export async function audienceSize(campaign: {
     return countSegment(definition);
   }
 
-  const predicate = AUDIENCE_PREDICATES[campaign.audience] ?? AUDIENCE_PREDICATES.all_subscribers;
+  const predicate = audiencePredicate(campaign.audience);
+  if (predicate === null) return 0;
+
   const res = await pool.query<{ count: string }>(
     `SELECT COUNT(*)::text AS count FROM contacts c WHERE ${MAILABLE} AND (${predicate})`
   );
@@ -189,11 +210,36 @@ export interface StartResult {
 }
 
 /**
+ * A refusal the person sending can act on, as opposed to a fault.
+ *
+ * The distinction exists because the admin console shows any short 400 verbatim
+ * (frontend/src/pages/admin/ui/friendly.ts), which was turning a raw Postgres
+ * message — "duplicate key value violates unique constraint …" — into a
+ * sentence presented to Yvette as though she had filled a form in wrong. Only
+ * the four sentences below are hers to fix; anything else is ours.
+ */
+export class BroadcastRefusal extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "BroadcastRefusal";
+  }
+}
+
+/**
  * Turns a campaign into one queued job per recipient.
  *
  * Recipient rows are written before any job is queued, so a crash between the
  * two leaves a visible, resumable list rather than a campaign that says
  * "sending" with nothing behind it.
+ *
+ * `sending` is claimed first because it is also the lock: it is what stops a
+ * second click, or the scheduled tick arriving on top of a manual send, from
+ * fanning the same campaign out twice. Everything after that claim is wrapped,
+ * because a failure past that point used to leave the campaign reading "Sending
+ * now" forever — `/send` refuses a campaign in that state, and the finish sweep
+ * only closes one whose sends have all left, so there was no way back to it from
+ * any screen. On a failure it goes to `failed`, which is a state the Send button
+ * is offered from again.
  */
 export async function startBroadcast(campaignId: number): Promise<StartResult> {
   const campaignRes = await pool.query<CampaignRow>(
@@ -201,13 +247,17 @@ export async function startBroadcast(campaignId: number): Promise<StartResult> {
     [campaignId]
   );
   const campaign = campaignRes.rows[0];
-  if (!campaign) throw new Error("No such campaign");
-  if (campaign.status === "sending") throw new Error("This email is already going out");
-  if (campaign.status === "sent") throw new Error("This email has already been sent");
-  if (!campaign.subject.trim()) throw new Error("Add a subject line before sending");
+  if (!campaign) throw new BroadcastRefusal("No such campaign");
+  if (campaign.status === "sending") throw new BroadcastRefusal("This email is already going out");
+  if (campaign.status === "sent") throw new BroadcastRefusal("This email has already been sent");
+  if (!campaign.subject.trim()) {
+    throw new BroadcastRefusal("Add a subject line before sending");
+  }
 
   const recipients = await resolveAudience(campaign);
-  if (recipients.length === 0) throw new Error("Nobody in that audience can be emailed right now");
+  if (recipients.length === 0) {
+    throw new BroadcastRefusal("Nobody in that audience can be emailed right now");
+  }
 
   await pool.query(
     `UPDATE email_campaigns
@@ -216,42 +266,63 @@ export async function startBroadcast(campaignId: number): Promise<StartResult> {
     [campaignId, recipients.length]
   );
 
-  const sendIds: number[] = [];
-  const BATCH = 500;
-  for (let i = 0; i < recipients.length; i += BATCH) {
-    const slice = recipients.slice(i, i + BATCH);
-    const values: unknown[] = [];
-    const tuples = slice.map((recipient, index) => {
-      const base = index * 4;
-      values.push(
-        campaignId,
-        recipient.email,
-        recipient.contactId,
-        variantFor(recipient.email, campaign.ab_split_percent)
+  try {
+    const BATCH = 500;
+    for (let i = 0; i < recipients.length; i += BATCH) {
+      const slice = recipients.slice(i, i + BATCH);
+      const values: unknown[] = [];
+      const tuples = slice.map((recipient, index) => {
+        const base = index * 4;
+        values.push(
+          campaignId,
+          recipient.email,
+          recipient.contactId,
+          variantFor(recipient.email, campaign.ab_split_percent)
+        );
+        return `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4})`;
+      });
+
+      await pool.query(
+        `INSERT INTO email_sends (campaign_id, email, contact_id, variant)
+         VALUES ${tuples.join(", ")}
+         ON CONFLICT (campaign_id, email) DO NOTHING`,
+        values
       );
-      return `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4})`;
-    });
+    }
 
-    const inserted = await pool.query<{ id: number }>(
-      `INSERT INTO email_sends (campaign_id, email, contact_id, variant)
-       VALUES ${tuples.join(", ")}
-       ON CONFLICT (campaign_id, email) DO NOTHING
-       RETURNING id`,
-      values
+    // Read back rather than collect the ids the INSERTs returned. A campaign
+    // that failed part-way through and is being sent again already has rows
+    // from the first attempt, and `ON CONFLICT DO NOTHING` returns nothing for
+    // those — so the people it reached on paper but never queued a job for
+    // would be skipped for good. Anyone already sent to is no longer `queued`,
+    // and the per-send dedupe key collapses a job that is still pending.
+    const pending = await pool.query<{ id: number }>(
+      `SELECT id FROM email_sends WHERE campaign_id = $1 AND status = 'queued' ORDER BY id`,
+      [campaignId]
     );
-    for (const row of inserted.rows) sendIds.push(row.id);
+    const sendIds = pending.rows.map((row) => row.id);
+
+    const queued = await enqueueMany(
+      sendIds.map((sendId) => ({
+        kind: "broadcast.sendOne",
+        payload: { campaignId, sendId },
+        priority: PRIORITY.bulk,
+        dedupeKey: `broadcast-send:${sendId}`,
+      }))
+    );
+
+    return { recipients: recipients.length, queued };
+  } catch (err) {
+    // Back to a state she can press Send from. The recipient rows that did land
+    // keep their `broadcast-send:<id>` dedupe keys, so a retry re-queues the
+    // ones that were missed and cannot double-send the ones that were not.
+    await pool
+      .query(`UPDATE email_campaigns SET status = 'failed', updated_at = now() WHERE id = $1`, [
+        campaignId,
+      ])
+      .catch(() => undefined);
+    throw err;
   }
-
-  const queued = await enqueueMany(
-    sendIds.map((sendId) => ({
-      kind: "broadcast.sendOne",
-      payload: { campaignId, sendId },
-      priority: PRIORITY.bulk,
-      dedupeKey: `broadcast-send:${sendId}`,
-    }))
-  );
-
-  return { recipients: recipients.length, queued };
 }
 
 export type BroadcastSendOutcome = "sent" | "suppressed" | "skipped";

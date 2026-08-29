@@ -4,6 +4,7 @@ import { pool } from "../../db/pool";
 import { rowToCamel, rowsToCamel } from "../../utils/case";
 import { asyncHandler } from "../../utils/asyncHandler";
 import { badRequest, notFound } from "../../utils/httpError";
+import { deliverManualGrant } from "../../services/purchaseDelivery";
 import { recordAdminAction } from "../../services/adminAudit";
 import { grantOfferAccess, revokeOfferAccess } from "../../services/access";
 import type { BillingInterval, PricingType } from "../../services/pricing";
@@ -63,6 +64,8 @@ type OfferRow = {
   redirect_url: string;
   thank_you_page_id: string | null;
   access_expires_after_days: number | null;
+  send_welcome_email: boolean;
+  welcome_next_steps: string;
   stripe_price_id: string | null;
   stripe_product_id: string | null;
   created_at: string;
@@ -74,6 +77,7 @@ const OFFER_COLUMNS = `o.id, o.title, o.slug, o.status, o.description, o.checkou
        o.interval, o.interval_count, o.installment_count, o.trial_days, o.collect_tax,
        o.collect_address, o.collect_phone, o.custom_fields, o.terms_url, o.require_terms,
        o.redirect_url, o.thank_you_page_id, o.access_expires_after_days,
+       o.send_welcome_email, o.welcome_next_steps,
        o.stripe_price_id, o.stripe_product_id, o.created_at, o.updated_at`;
 
 /**
@@ -330,9 +334,10 @@ adminOffersRouter.post(
             pricing_type, amount_cents, min_amount_cents, interval, interval_count,
             installment_count, trial_days, collect_tax, collect_address, collect_phone,
             custom_fields, terms_url, require_terms, redirect_url, thank_you_page_id,
-            access_expires_after_days, stripe_price_id, stripe_product_id)
+            access_expires_after_days, stripe_price_id, stripe_product_id,
+            send_welcome_email, welcome_next_steps)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
-                 $17, $18::jsonb, $19, $20, $21, $22, $23, $24, $25)
+                 $17, $18::jsonb, $19, $20, $21, $22, $23, $24, $25, $26, $27)
          RETURNING ${OFFER_COLUMNS}`,
         [
           data.title,
@@ -360,6 +365,8 @@ adminOffersRouter.post(
           data.accessExpiresAfterDays,
           data.stripePriceId,
           data.stripeProductId,
+          data.sendWelcomeEmail,
+          data.welcomeNextSteps,
         ],
       );
       created = result.rows[0];
@@ -490,8 +497,10 @@ adminOffersRouter.put(
                 access_expires_after_days = $23,
                 stripe_price_id           = $24,
                 stripe_product_id         = $25,
+                send_welcome_email        = $26,
+                welcome_next_steps        = $27,
                 updated_at                = now()
-          WHERE o.id = $26
+          WHERE o.id = $28
          RETURNING ${OFFER_COLUMNS}`,
         [
           patched(patch.title, before.title),
@@ -519,6 +528,8 @@ adminOffersRouter.put(
           patched(patch.accessExpiresAfterDays, before.access_expires_after_days),
           stripePriceId,
           patched(patch.stripeProductId, before.stripe_product_id),
+          patched(patch.sendWelcomeEmail, before.send_welcome_email),
+          patched(patch.welcomeNextSteps, before.welcome_next_steps),
           id,
         ],
       );
@@ -591,12 +602,13 @@ adminOffersRouter.post(
             pricing_type, amount_cents, min_amount_cents, interval, interval_count,
             installment_count, trial_days, collect_tax, collect_address, collect_phone,
             custom_fields, terms_url, require_terms, redirect_url, thank_you_page_id,
-            access_expires_after_days)
+            access_expires_after_days, send_welcome_email, welcome_next_steps)
          SELECT left(s.title || ' (copy)', 300), $2, 'draft', s.description, s.checkout_headline,
                 s.thumbnail_url, s.currency, s.pricing_type, s.amount_cents, s.min_amount_cents,
                 s.interval, s.interval_count, s.installment_count, s.trial_days, s.collect_tax,
                 s.collect_address, s.collect_phone, s.custom_fields, s.terms_url, s.require_terms,
-                s.redirect_url, s.thank_you_page_id, s.access_expires_after_days
+                s.redirect_url, s.thank_you_page_id, s.access_expires_after_days,
+                s.send_welcome_email, s.welcome_next_steps
            FROM offers s WHERE s.id = $1
          RETURNING ${OFFER_COLUMNS}`,
         [id, slug],
@@ -1353,12 +1365,23 @@ adminOffersRouter.post(
       },
     });
 
+    // Telling them. A grant that lands in silence is a course nobody opens, and
+    // a grant to a new address used to create an account with no password and no
+    // link to claim it — so the most common manual grant produced a customer who
+    // could not sign in and had not been told there was anything to sign in to.
+    const delivered = await deliverManualGrant({
+      memberId: member.id,
+      offerId: id,
+      createdMember: member.created,
+    });
+
     res.status(201).json({
       memberId: member.id,
       email: member.email,
       memberCreated: member.created,
       productIds,
       productCount: productIds.length,
+      welcomeSent: delivered.welcomeSent,
     });
   }),
 );

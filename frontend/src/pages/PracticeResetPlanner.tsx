@@ -1,4 +1,4 @@
-import { motion, useReducedMotion } from "motion/react";
+import { motion } from "motion/react";
 import { Seo } from "@/components/Seo";
 import { SubscribeForm } from "@/components/forms/SubscribeForm";
 import { GlassCard, type Accent } from "@/components/luxe/GlassCard";
@@ -6,6 +6,7 @@ import { LuxeButton } from "@/components/luxe/LuxeButton";
 import { LuxePageHero } from "@/components/luxe/LuxePageHero";
 import { GoldRule, Section, SectionTitle } from "@/components/luxe/Section";
 import { RevealGroup, RevealItem } from "@/components/ui/Reveal";
+import { useEntranceMotion } from "@/hooks/useEntranceMotion";
 import { cn } from "@/lib/cn";
 
 /**
@@ -348,7 +349,7 @@ function PathSection() {
    ══════════════════════════════════════════════════════════════════════════ */
 
 function WhoSection() {
-  const reduce = useReducedMotion();
+  const reduce = useEntranceMotion();
 
   return (
     <Section
@@ -395,7 +396,7 @@ function WhoSection() {
  * heading standing over it and nothing in the copy has to be reworded.
  */
 function OptInSection() {
-  const reduce = useReducedMotion();
+  const reduce = useEntranceMotion();
 
   return (
     <Section

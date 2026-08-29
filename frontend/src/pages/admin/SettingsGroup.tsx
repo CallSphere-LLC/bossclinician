@@ -16,6 +16,7 @@ import {
   Field,
   Input,
   PageHeader,
+  selectStyles,
   Skeleton,
   Textarea,
 } from "@/pages/admin/ui/primitives";
@@ -56,9 +57,6 @@ function zoneLabel(zone: string): string {
   const city = zone.split("/").pop() ?? zone;
   return city.replace(/_/g, " ");
 }
-
-const selectStyles =
-  "h-11 w-full rounded-xl border border-hairline bg-white/[0.04] px-3 text-sm text-ink outline-none transition-all hover:border-white/20 focus-visible:border-gold/60 focus-visible:bg-white/[0.07] focus-visible:ring-4 focus-visible:ring-gold/15";
 
 type Draft = Record<string, unknown>;
 

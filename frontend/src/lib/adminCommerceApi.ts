@@ -306,6 +306,8 @@ export interface Offer {
   redirectUrl: string;
   thankYouPageId: string | null;
   accessExpiresAfterDays: number | null;
+  sendWelcomeEmail: boolean;
+  welcomeNextSteps: string;
   createdAt: string;
   updatedAt: string;
   /** Settled orders only — a started checkout is not a sale. */
@@ -341,6 +343,8 @@ export interface OfferInput {
   redirectUrl: string;
   thankYouPageId: string | null;
   accessExpiresAfterDays: number | null;
+  sendWelcomeEmail: boolean;
+  welcomeNextSteps: string;
 }
 
 export interface BumpInput {

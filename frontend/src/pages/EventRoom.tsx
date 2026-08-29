@@ -222,7 +222,7 @@ export default function EventRoom() {
   if (!ticket) {
     return (
       <>
-        <Seo title="Join the session | Boss Clinician" />
+        <Seo title="Join the session | Boss Clinician" noindex />
         <RoomNotice
           eyebrow="The room"
           heading="This link is missing its ticket."
@@ -259,7 +259,7 @@ export default function EventRoom() {
   if (refusal?.state === "early") {
     return (
       <>
-        <Seo title="You're a little early | Boss Clinician" />
+        <Seo title="You're a little early | Boss Clinician" noindex />
         <RoomNotice
           eyebrow="Not long now"
           heading="You're a little early."
@@ -299,7 +299,7 @@ export default function EventRoom() {
   if (refusal?.state === "expired") {
     return (
       <>
-        <Seo title="The replay has closed | Boss Clinician" />
+        <Seo title="The replay has closed | Boss Clinician" noindex />
         <RoomNotice
           eyebrow="The replay"
           heading="This replay has closed."
@@ -320,7 +320,7 @@ export default function EventRoom() {
   if (refusal?.state === "ended") {
     return (
       <>
-        <Seo title="This session has finished | Boss Clinician" />
+        <Seo title="This session has finished | Boss Clinician" noindex />
         <RoomNotice eyebrow="The room" heading="This session has finished." actions={backToRegistration}>
           <p className="copy-luxe max-w-[46ch] text-pretty">
             {refusal.sessionLabel} has been and gone, and there's no recording of this one. Email{" "}
@@ -334,7 +334,7 @@ export default function EventRoom() {
   if (access === null) {
     return (
       <>
-        <Seo title="Join the session | Boss Clinician" />
+        <Seo title="Join the session | Boss Clinician" noindex />
         <RoomNotice
           eyebrow="The room"
           heading="This link didn't open the room."
@@ -354,7 +354,7 @@ export default function EventRoom() {
 
   return (
     <>
-      <Seo title={`${access.title} | Boss Clinician`} />
+      <Seo title={`${access.title} | Boss Clinician`} noindex />
 
       <Section
         surface="deep"

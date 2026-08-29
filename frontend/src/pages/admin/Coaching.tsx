@@ -16,6 +16,7 @@ import {
   Field,
   Input,
   PageHeader,
+  selectStyles,
   Skeleton,
   Textarea,
   type BadgeProps,
@@ -24,11 +25,13 @@ import { DataTable, RowActions } from "@/pages/admin/ui/DataTable";
 import { Modal, useConfirm } from "@/pages/admin/ui/Dialog";
 import {
   friendlyError,
+  fromDateTimeInput,
   humanizeKey,
   orNone,
   pluralize,
   publishLabel,
   slugify,
+  toDateTimeInput,
   uniqueKey,
 } from "@/pages/admin/ui/friendly";
 
@@ -65,9 +68,6 @@ const EMPTY_OFFER = {
   bookingUrl: "",
   published: true,
 };
-
-const selectStyles =
-  "h-11 w-full rounded-xl border border-hairline bg-surface px-3 text-sm outline-none focus-visible:border-plum focus-visible:ring-4 focus-visible:ring-plum/12";
 
 /**
  * What she types in the price box → the cents the database stores.
@@ -571,8 +571,14 @@ function SessionsTab() {
             <Field label="When is it?">
               <Input
                 type="datetime-local"
-                value={draft.scheduledAt ? String(draft.scheduledAt).slice(0, 16) : ""}
-                onChange={(e) => setDraft((d) => ({ ...d, scheduledAt: e.target.value }))}
+                /* Converted both ways: the stored moment is UTC, and the box
+                   speaks the clock on her wall. Slicing the raw text showed her
+                   a 2pm session as 6pm, and saving what she typed booked her
+                   client four hours out. */
+                value={toDateTimeInput(draft.scheduledAt ?? null)}
+                onChange={(e) =>
+                  setDraft((d) => ({ ...d, scheduledAt: fromDateTimeInput(e.target.value) }))
+                }
               />
             </Field>
             <Field label="Status">

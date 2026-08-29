@@ -17,10 +17,16 @@ import {
   Field,
   Input,
   PageHeader,
+  selectStyles,
   Skeleton,
   Textarea,
 } from "@/pages/admin/ui/primitives";
-import { friendlyError, pluralize } from "@/pages/admin/ui/friendly";
+import {
+  friendlyError,
+  fromDateTimeInput,
+  pluralize,
+  toDateTimeInput,
+} from "@/pages/admin/ui/friendly";
 import { Modal, useConfirm } from "@/pages/admin/ui/Dialog";
 
 interface EventWithCommunity extends CommunityEvent {
@@ -92,7 +98,12 @@ export default function Events() {
     e.preventDefault();
     if (!draft?.title?.trim() || !draft.communityId) return;
     try {
-      await adminApi.eventCreate(draft.communityId, draft);
+      await adminApi.eventCreate(draft.communityId, {
+        ...draft,
+        // Sent raw, "7:00 PM" in the box was stored as 7pm UTC and advertised to
+        // her members four hours early.
+        startsAt: fromDateTimeInput(draft.startsAt ?? ""),
+      });
       toast.success("Event added to your calendar");
       setDraft(null);
       void load();
@@ -246,7 +257,7 @@ export default function Events() {
               <select
                 value={String(draft.communityId ?? "")}
                 onChange={(e) => setDraft((d) => ({ ...d, communityId: Number(e.target.value) }))}
-                className="h-11 w-full rounded-xl border border-hairline bg-surface px-3 text-sm outline-none focus-visible:border-plum"
+                className={selectStyles}
                 required
               >
                 {(communities ?? []).map((c) => (
@@ -277,7 +288,7 @@ export default function Events() {
               <Field label="When does it start?" hint="leave blank if you're still deciding">
                 <Input
                   type="datetime-local"
-                  value={draft.startsAt ?? ""}
+                  value={toDateTimeInput(draft.startsAt ?? null)}
                   onChange={(e) => setDraft((d) => ({ ...d, startsAt: e.target.value }))}
                 />
               </Field>

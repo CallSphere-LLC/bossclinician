@@ -1,4 +1,5 @@
-import { motion, useReducedMotion } from "motion/react";
+import { motion } from "motion/react";
+import { useEntranceMotion } from "@/hooks/useEntranceMotion";
 import { Section, GoldRule } from "@/components/luxe/Section";
 import { LuxeButton, LuxePill } from "@/components/luxe/LuxeButton";
 
@@ -46,7 +47,7 @@ function rise(reduce: boolean | null, delay: number) {
  * person telling it stays in frame.
  */
 export function LuxeMeetYvette() {
-  const reduce = useReducedMotion();
+  const reduce = useEntranceMotion();
 
   return (
     <Section

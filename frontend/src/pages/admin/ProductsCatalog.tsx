@@ -41,6 +41,7 @@ import {
   Field,
   Input,
   PageHeader,
+  selectStyles,
   Skeleton,
   Textarea,
   type BadgeProps,
@@ -93,9 +94,6 @@ const STATUS_TONE: Record<CatalogStatus, NonNullable<BadgeProps["tone"]>> = {
 };
 
 /** Matches the Input primitive so a row of controls reads as one set. */
-const SELECT_CLASS =
-  "h-11 w-full rounded-xl border border-hairline bg-surface px-3 text-sm text-ink outline-none transition-colors focus-visible:border-gold/60 focus-visible:ring-4 focus-visible:ring-gold/15";
-
 /** What the picker for each linked kind is called, and what it asks for. */
 const RESOURCE_PROMPT: Record<LinkedKind, { label: string; empty: string }> = {
   course: { label: "Which course does this unlock?", empty: "You haven't built a course yet." },
@@ -296,9 +294,12 @@ export default function ProductsCatalog() {
       setDraft(null);
       load();
     } catch (err) {
+      // Every correction used to be re-filed under the resource picker, which
+      // most kinds don't even show — a complaint about the picture ended up
+      // invisible, or under "which course does this unlock".
       const fields = fieldErrorsOf(err);
-      const first = Object.values(fields)[0];
-      setDraftErrors(first ? { resource: first } : {});
+      const linked = isLinkedKind(kind) ? fields[RESOURCE_FIELD[kind]] : undefined;
+      setDraftErrors({ ...fields, ...(linked ? { resource: linked } : {}) });
       toast.error(commerceMessage(err, "item"));
     } finally {
       setSaving(false);
@@ -564,7 +565,11 @@ export default function ProductsCatalog() {
       >
         {draft && (
           <form id="product-form" onSubmit={save} className="grid gap-4">
-            <Field label="What is it called?" hint="what people see in their library">
+            <Field
+              label="What is it called?"
+              hint="what people see in their library"
+              error={draftErrors.title}
+            >
               <Input
                 value={draft.title}
                 onChange={(e) => setDraft((d) => (d ? { ...d, title: e.target.value } : d))}
@@ -590,7 +595,7 @@ export default function ProductsCatalog() {
                       )
                     }
                     aria-label={RESOURCE_PROMPT[draft.kind].label}
-                    className={SELECT_CLASS}
+                    className={selectStyles}
                   >
                     <option value="">Choose one…</option>
                     {draftOptions.map((option) => (
@@ -620,7 +625,7 @@ export default function ProductsCatalog() {
               />
             </Field>
 
-            <Field label="Picture">
+            <Field label="Picture" error={draftErrors.thumbnailUrl}>
               {draft.thumbnailUrl ? (
                 <div className="flex flex-wrap items-center gap-3 rounded-xl border border-hairline bg-white/[0.03] p-2.5">
                   <img
@@ -757,11 +762,16 @@ function FilesModal({
         title: asset.title || asset.originalName,
         description: "",
         // What the delivery route reads to find the file on disk. It is never
-        // handed to a browser — each download is a fresh, expiring link.
-        storagePath: asset.filename,
+        // handed to a browser — each download is a fresh, expiring link. It has
+        // to be the stored reference ("protected:abc.pdf"), not the bare key:
+        // the prefix is what names the storage root, and the server refuses a
+        // file that does not carry it.
+        storagePath: asset.url,
         filename: asset.originalName,
         mime: asset.mime,
-        sizeBytes: asset.sizeBytes,
+        // The column is a BIGINT, so it arrives as text however the type here
+        // is written, and the server's schema only accepts a number.
+        sizeBytes: Number(asset.sizeBytes),
         sort: files?.length ?? 0,
       });
       load();
@@ -883,6 +893,9 @@ function BundleModal({
   const productId = product?.id ?? null;
 
   useEffect(() => {
+    // Cleared first: opening a second bundle before its contents arrive used to
+    // show the previous one's ticks, and saving then wrote those into it.
+    setChosen([]);
     if (productId === null) return;
     adminCommerceApi
       .productGet(productId)

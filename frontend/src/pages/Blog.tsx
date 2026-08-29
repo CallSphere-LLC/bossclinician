@@ -1,13 +1,15 @@
 import { Fragment, useMemo } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { motion, useReducedMotion } from "motion/react";
+import { motion } from "motion/react";
+import { useEntranceMotion } from "@/hooks/useEntranceMotion";
 import { Seo } from "@/components/Seo";
 import { GlassCard } from "@/components/luxe/GlassCard";
 import { LuxePageHero } from "@/components/luxe/LuxePageHero";
 import { LuxeButton } from "@/components/luxe/LuxeButton";
 import { GoldRule, Section, SectionTitle } from "@/components/luxe/Section";
 import { RevealGroup, RevealItem } from "@/components/ui/Reveal";
-import { useCollection } from "@/hooks/useCollection";
+import { usePageData } from "@/hooks/usePageData";
+import { ssrKeys } from "@/ssr/keys";
 import { api } from "@/lib/api";
 import { blogCards as fallbackBlogCards, allBlogTags } from "@/content/blog";
 import type { BlogCard } from "@/types";
@@ -106,15 +108,20 @@ export default function Blog() {
   const [searchParams, setSearchParams] = useSearchParams();
   const tag = searchParams.get("tag") ?? undefined;
 
-  const { data, loading } = useCollection(
-    () => api.blogList({ tag }),
-    { items: fallbackBlogCards(), total: fallbackBlogCards().length, page: 1, pageSize: 50 },
-  );
+  // Keyed on the tag rather than fetched once: a visitor who arrives on one of
+  // the indexed `?tag=` archives is seeded with that topic's posts only, and
+  // picking a different topic has to fetch that topic rather than filter the
+  // seeded subset down to nothing.
+  const list = usePageData(ssrKeys.blogList(tag), () => api.blogList({ tag }));
+  const loading = list.status === "loading";
 
   const items = useMemo(() => {
-    if (!tag) return data.items;
-    return data.items.filter((post) => post.tags.includes(tag));
-  }, [data.items, tag]);
+    // The bundled archive stands in whenever the API is unreachable, so the
+    // page still lists articles rather than reading as empty.
+    const all = list.status === "ready" ? list.data.items : fallbackBlogCards();
+    if (!tag) return all;
+    return all.filter((post) => post.tags.includes(tag));
+  }, [list, tag]);
 
   const featured = items[0];
   const rest = items.slice(1);
@@ -130,8 +137,20 @@ export default function Blog() {
   return (
     <>
       <Seo
-        title="Boss Clinician Blog | Business & Growth for Clinicians"
-        description="Practical strategies, tools, and insights to help clinicians grow profitable, sustainable practices without burnout."
+        title={
+          tag
+            ? `${tag} | Boss Clinician Blog`
+            : "Boss Clinician Blog | Business & Growth for Clinicians"
+        }
+        description={
+          tag
+            ? `Articles on ${tag} for therapists and clinicians building profitable, sustainable private practices.`
+            : "Practical strategies, tools, and insights to help clinicians grow profitable, sustainable practices without burnout."
+        }
+        // A tag archive is its own indexed URL — 21 of them carry traffic on the
+        // live site — so the filter belongs in the canonical rather than being
+        // folded back into the unfiltered index.
+        canonicalPath={tag ? `/blog?tag=${encodeURIComponent(tag)}` : "/blog"}
       />
 
       {/* The source index opens straight onto its "BEST OF" collection with no
@@ -234,7 +253,7 @@ function TagFilterRow({
   active?: string;
   onSelect: (next?: string) => void;
 }) {
-  const reduce = useReducedMotion();
+  const reduce = useEntranceMotion();
 
   return (
     <motion.div
@@ -304,7 +323,7 @@ function TagButton({
 /* ── Lead article ─────────────────────────────────────────────────────── */
 
 function FeaturedArticle({ post }: { post: BlogCard }) {
-  const reduce = useReducedMotion();
+  const reduce = useEntranceMotion();
 
   return (
     <motion.div {...rise(reduce, 0.05)} className="mt-8 sm:mt-10">
@@ -409,7 +428,7 @@ function TopicLine({ tags }: { tags: string[] }) {
  * at desktop so the person telling the story stays in frame while it scrolls.
  */
 function MeetYvette() {
-  const reduce = useReducedMotion();
+  const reduce = useEntranceMotion();
 
   return (
     <Section

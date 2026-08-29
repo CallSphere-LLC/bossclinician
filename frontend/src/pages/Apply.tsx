@@ -1,9 +1,10 @@
-import { motion, useReducedMotion } from "motion/react";
+import { motion } from "motion/react";
 import { Seo } from "@/components/Seo";
 import { LeadForm } from "@/components/forms/LeadForm";
 import { GlassCard } from "@/components/luxe/GlassCard";
 import { LuxePageHero } from "@/components/luxe/LuxePageHero";
 import { GoldRule, Section, SectionTitle } from "@/components/luxe/Section";
+import { useEntranceMotion } from "@/hooks/useEntranceMotion";
 import { applyPage } from "@/content/site";
 
 const EASE: [number, number, number, number] = [0.22, 1, 0.36, 1];
@@ -33,7 +34,7 @@ const [HERO_TITLE, HERO_ACCENT] = splitOnce(applyPage.heading, " and start build
  * form gets the raised surface and the page's single foil action.
  */
 export default function Apply() {
-  const reduce = useReducedMotion();
+  const reduce = useEntranceMotion();
 
   return (
     <>

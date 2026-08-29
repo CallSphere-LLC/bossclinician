@@ -1,6 +1,6 @@
-import { Router } from "express";
+import { NextFunction, Request, Response, Router } from "express";
 import { requireAuth } from "../../middleware/auth";
-import { requirePermission } from "../../services/permissions";
+import { requirePermission, type Module } from "../../services/permissions";
 import { authRouter } from "./auth";
 import { statsRouter } from "./stats";
 import { adminBlogRouter } from "./blog";
@@ -54,46 +54,99 @@ export const adminRouter = Router();
  * mount point.
  */
 
+/**
+ * A module gate that tells a read from a write.
+ *
+ * Most of the routers below predate the roles matrix and carry no permission of
+ * their own, so mounting them on `view` alone was enough to let a Support
+ * account — which holds `products.view` and `offers.view` so it can answer
+ * "what did they actually buy" — edit a course's price, and to let anyone who
+ * could open the contact list delete every row in it. Reads keep the view
+ * permission; anything that is not a read is held to `manage`.
+ *
+ * Routers that draw the line more finely than "read or write" — orders,
+ * members, settings-v2, admins — keep their own per-route guards and are
+ * mounted on `view` as before.
+ *
+ * The one mount where this gate changes what somebody can do today is
+ * `/reports`. Marketing holds `reports.view` so a campaign can be measured, and
+ * not `reports.manage`; on a bare `reports.view` mount that account could also
+ * create, rename and delete saved views and queue a full rebuild of the
+ * warehouse. Reading the numbers is the capability the role is described as
+ * having ("Seeing how it all performed"), so the writes go behind `manage`.
+ * Everywhere else the gate is belt and braces: every role that can currently
+ * reach those screens holds the matching `manage` too, so the change is a
+ * closed door for a role added later rather than a capability taken away now.
+ *
+ * `/stats`, `/dashboard` and `/subscribers` are left on the plain `view`
+ * permission deliberately — they expose no route that is not a GET, so a gate
+ * there would be a comment pretending to be a control.
+ */
+function moduleGate(module: Module) {
+  const view = requirePermission(`${module}.view`);
+  const manage = requirePermission(`${module}.manage`);
+  return (req: Request, res: Response, next: NextFunction): void => {
+    (req.method === "GET" || req.method === "HEAD" ? view : manage)(req, res, next);
+  };
+}
+
+/**
+ * `admins.view` is the permission to administer *other people's* accounts, and
+ * only the owner and a manager hold it. The `/me/...` routes under the same
+ * router are the opposite of that: they are how an admin turns on their own
+ * two-step sign-in, reads their own sessions and ends one from a lost laptop,
+ * and every one of them is scoped to `actorId(req)` rather than to an id in the
+ * path. Gating them on `admins.view` meant a Marketing, Support or Coach
+ * account could never enable 2FA on itself — the security screen answered 403.
+ */
+function adminsGate(req: Request, res: Response, next: NextFunction): void {
+  if (req.path.startsWith("/me/")) {
+    next();
+    return;
+  }
+  requirePermission("admins.view")(req, res, next);
+}
+
 // Login is unauthenticated; /me and everything else requires a valid JWT.
 adminRouter.use("/", authRouter);
 
 adminRouter.use("/stats", requireAuth, requirePermission("reports.view"), statsRouter);
-adminRouter.use("/blog", requireAuth, requirePermission("website.view"), adminBlogRouter);
-adminRouter.use("/courses", requireAuth, requirePermission("products.view"), adminCoursesRouter);
-adminRouter.use("/testimonials", requireAuth, requirePermission("website.view"), adminTestimonialsRouter);
-adminRouter.use("/resources", requireAuth, requirePermission("website.view"), adminResourcesRouter);
-adminRouter.use("/pages", requireAuth, requirePermission("website.view"), adminPagesRouter);
-adminRouter.use("/leads", requireAuth, requirePermission("contacts.view"), adminLeadsRouter);
+adminRouter.use("/blog", requireAuth, moduleGate("website"), adminBlogRouter);
+adminRouter.use("/courses", requireAuth, moduleGate("products"), adminCoursesRouter);
+adminRouter.use("/testimonials", requireAuth, moduleGate("website"), adminTestimonialsRouter);
+adminRouter.use("/resources", requireAuth, moduleGate("website"), adminResourcesRouter);
+adminRouter.use("/pages", requireAuth, moduleGate("website"), adminPagesRouter);
+adminRouter.use("/leads", requireAuth, moduleGate("contacts"), adminLeadsRouter);
 adminRouter.use("/subscribers", requireAuth, requirePermission("contacts.view"), adminSubscribersRouter);
-adminRouter.use("/settings", requireAuth, requirePermission("settings.view"), adminSettingsRouter);
-adminRouter.use("/ai", requireAuth, requirePermission("website.view"), adminAiRouter);
-adminRouter.use("/media", requireAuth, requirePermission("website.view"), adminMediaRouter);
-adminRouter.use("/curriculum", requireAuth, requirePermission("products.view"), adminCurriculumRouter);
+adminRouter.use("/settings", requireAuth, moduleGate("settings"), adminSettingsRouter);
+adminRouter.use("/ai", requireAuth, moduleGate("website"), adminAiRouter);
+adminRouter.use("/media", requireAuth, moduleGate("website"), adminMediaRouter);
+adminRouter.use("/curriculum", requireAuth, moduleGate("products"), adminCurriculumRouter);
 adminRouter.use("/members", requireAuth, requirePermission("contacts.view"), adminMembersRouter);
-adminRouter.use("/community", requireAuth, requirePermission("community.view"), adminCommunityRouter);
+adminRouter.use("/community", requireAuth, moduleGate("community"), adminCommunityRouter);
 adminRouter.use("/sales", requireAuth, requirePermission("orders.view"), adminSalesRouter);
-adminRouter.use("/growth", requireAuth, requirePermission("marketing.view"), adminGrowthRouter);
-adminRouter.use("/chats", requireAuth, requirePermission("contacts.view"), adminChatsRouter);
-adminRouter.use("/products", requireAuth, requirePermission("products.view"), adminProductsRouter);
-adminRouter.use("/offers", requireAuth, requirePermission("offers.view"), adminOffersRouter);
-adminRouter.use("/redirects", requireAuth, requirePermission("website.view"), adminRedirectsRouter);
-adminRouter.use("/contacts", requireAuth, requirePermission("contacts.view"), adminContactsRouter);
-adminRouter.use("/tags", requireAuth, requirePermission("contacts.view"), adminTagsRouter);
-adminRouter.use("/segments", requireAuth, requirePermission("contacts.view"), adminSegmentsRouter);
-adminRouter.use("/sequences", requireAuth, requirePermission("marketing.view"), adminSequencesRouter);
-adminRouter.use("/email-templates", requireAuth, requirePermission("marketing.view"), adminEmailTemplatesRouter);
+adminRouter.use("/growth", requireAuth, moduleGate("marketing"), adminGrowthRouter);
+adminRouter.use("/chats", requireAuth, moduleGate("contacts"), adminChatsRouter);
+adminRouter.use("/products", requireAuth, moduleGate("products"), adminProductsRouter);
+adminRouter.use("/offers", requireAuth, moduleGate("offers"), adminOffersRouter);
+adminRouter.use("/redirects", requireAuth, moduleGate("website"), adminRedirectsRouter);
+adminRouter.use("/contacts", requireAuth, moduleGate("contacts"), adminContactsRouter);
+adminRouter.use("/tags", requireAuth, moduleGate("contacts"), adminTagsRouter);
+adminRouter.use("/segments", requireAuth, moduleGate("contacts"), adminSegmentsRouter);
+adminRouter.use("/sequences", requireAuth, moduleGate("marketing"), adminSequencesRouter);
+adminRouter.use("/email-templates", requireAuth, moduleGate("marketing"), adminEmailTemplatesRouter);
 // The original engine stays reachable at /growth/automations until its call
 // sites are repointed; these two are different paths, not a replacement in place.
-adminRouter.use("/automations", requireAuth, requirePermission("marketing.view"), adminAutomationsV2Router);
-adminRouter.use("/affiliates", requireAuth, requirePermission("orders.view"), adminAffiliatesRouter);
+adminRouter.use("/automations", requireAuth, moduleGate("marketing"), adminAutomationsV2Router);
+adminRouter.use("/affiliates", requireAuth, moduleGate("orders"), adminAffiliatesRouter);
 adminRouter.use("/settings-v2", requireAuth, requirePermission("settings.view"), adminSettingsV2Router);
-adminRouter.use("/admins", requireAuth, requirePermission("admins.view"), adminUsersRouter);
-adminRouter.use("/integrations", requireAuth, requirePermission("settings.view"), adminIntegrationsRouter);
-adminRouter.use("/reports", requireAuth, requirePermission("reports.view"), adminReportsRouter);
+adminRouter.use("/admins", requireAuth, adminsGate, adminUsersRouter);
+adminRouter.use("/integrations", requireAuth, moduleGate("settings"), adminIntegrationsRouter);
+adminRouter.use("/reports", requireAuth, moduleGate("reports"), adminReportsRouter);
 adminRouter.use("/dashboard", requireAuth, requirePermission("reports.view"), adminDashboardRouter);
-adminRouter.use("/assessments", requireAuth, requirePermission("marketing.view"), adminAssessmentsRouter);
-adminRouter.use("/events", requireAuth, requirePermission("marketing.view"), adminEventsRouter);
-adminRouter.use("/forms-v2", requireAuth, requirePermission("marketing.view"), adminFormsV2Router);
+adminRouter.use("/assessments", requireAuth, moduleGate("marketing"), adminAssessmentsRouter);
+adminRouter.use("/events", requireAuth, moduleGate("marketing"), adminEventsRouter);
+adminRouter.use("/forms-v2", requireAuth, moduleGate("marketing"), adminFormsV2Router);
 // Accepting an invite happens BEFORE the invitee has an account, so this one
 // router deliberately sits outside requireAuth. Its own token is the credential.
 adminRouter.use("/", adminInviteRouter);

@@ -40,6 +40,7 @@ import {
   Field,
   Input,
   PageHeader,
+  selectStyles,
   Skeleton,
   Textarea,
 } from "@/pages/admin/ui/primitives";
@@ -62,9 +63,6 @@ import {
  * — so this screen edits a working copy and writes it back on Save, rather than
  * firing a request per keystroke and leaving half a form behind if one fails.
  */
-
-const selectStyles =
-  "h-11 w-full rounded-xl border border-hairline bg-surface px-3 text-sm text-ink outline-none transition-colors focus-visible:border-plum focus-visible:ring-4 focus-visible:ring-plum/12";
 
 const checkboxStyles = "size-4 rounded border-hairline text-plum focus-visible:ring-plum/30";
 
@@ -519,6 +517,14 @@ export default function FormBuilder() {
         descriptionMd: draft.descriptionMd,
         fields: draft.fields.map((field) => ({
           ...field,
+          // "Save this answer to → a detail of your own" prefills with the
+          // question's own wording, which the server refuses: a stored detail is
+          // a single word. Turned into one here rather than making her guess.
+          contactField:
+            !field.contactField ||
+            CONTACT_FIELD_CHOICES.some((choice) => choice.value === field.contactField)
+              ? field.contactField
+              : fieldKey(field.contactField),
           options: field.options?.map((option) => option.trim()).filter(Boolean),
         })),
         submitLabel: draft.submitLabel,
@@ -832,7 +838,24 @@ export default function FormBuilder() {
         actions={
           <>
             <Badge tone={draft.published ? "green" : "slate"}>{publishLabel(draft.published)}</Badge>
-            <Button size="sm" variant="ghost" onClick={closeForm}>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={async () => {
+                if (
+                  dirty &&
+                  !(await confirm({
+                    title: "Leave without saving?",
+                    description: "The changes you've made to this form will be lost.",
+                    confirmLabel: "Yes, leave it",
+                    destructive: true,
+                  }))
+                ) {
+                  return;
+                }
+                closeForm();
+              }}
+            >
               <ArrowLeft />
               All forms
             </Button>

@@ -640,6 +640,17 @@ export function requiredDwellSeconds(durationMinutes: number): number {
 export interface CeuLessonRecord {
   contentType: string;
   durationMinutes: number;
+  /**
+   * Whether the lesson actually holds a video or an audio file.
+   *
+   * Asked as well as `contentType` because that column is a label and this is a
+   * fact. Nothing in the admin sets `content_type` — it defaults to 'text' — so
+   * a course of forty-minute videos built through the curriculum screen reads as
+   * forty text lessons, and judging by the label alone would hold none of them
+   * to the watch figure. A lesson with something to play is a lesson that has to
+   * be played, whatever the row says it is.
+   */
+  hasMedia?: boolean;
   /** The credited watch figure. 0 for a lesson with nothing to play. */
   watchedPercent: number;
   /** When the lesson was first opened, or null if it never was. */
@@ -670,7 +681,11 @@ export interface CeuLessonRecord {
  */
 export function earnedCeuCredit(lessons: CeuLessonRecord[]): boolean {
   return lessons.every((lesson) => {
-    if (lesson.contentType === "video" || lesson.contentType === "audio") {
+    if (
+      lesson.hasMedia === true ||
+      lesson.contentType === "video" ||
+      lesson.contentType === "audio"
+    ) {
       return lesson.watchedPercent >= AUTO_COMPLETE_PERCENT;
     }
     if (lesson.completedAt === null || lesson.firstViewedAt === null) return false;
@@ -686,11 +701,13 @@ async function loadCeuLessonRecords(
   const found = await pool.query<{
     content_type: string | null;
     duration_minutes: number | null;
+    has_media: boolean;
     watched_percent: number | null;
     first_viewed_at: Date | null;
     completed_at: Date | null;
   }>(
     `SELECT l.content_type, l.duration_minutes,
+            (COALESCE(l.video_url, '') <> '' OR COALESCE(l.audio_url, '') <> '') AS has_media,
             lp.watched_percent, lp.first_viewed_at, lp.completed_at
        FROM course_lessons l
        JOIN course_modules m ON m.id = l.module_id
@@ -702,6 +719,7 @@ async function loadCeuLessonRecords(
   return found.rows.map((row) => ({
     contentType: row.content_type ?? "text",
     durationMinutes: row.duration_minutes ?? 0,
+    hasMedia: row.has_media === true,
     watchedPercent: row.watched_percent ?? 0,
     firstViewedAt: row.first_viewed_at,
     completedAt: row.completed_at,

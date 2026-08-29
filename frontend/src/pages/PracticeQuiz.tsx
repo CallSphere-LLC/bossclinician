@@ -1,10 +1,11 @@
-import { motion, useReducedMotion } from "motion/react";
+import { motion } from "motion/react";
 import { Seo } from "@/components/Seo";
 import { GlassCard, type Accent } from "@/components/luxe/GlassCard";
 import { LuxeButton } from "@/components/luxe/LuxeButton";
 import { LuxePageHero } from "@/components/luxe/LuxePageHero";
 import { GoldRule, Section } from "@/components/luxe/Section";
 import { RevealGroup, RevealItem } from "@/components/ui/Reveal";
+import { useEntranceMotion } from "@/hooks/useEntranceMotion";
 import { cn } from "@/lib/cn";
 
 /**
@@ -51,6 +52,21 @@ const CTA_NOTE = "No email required to start";
 /**
  * The quiz engine (six questions, four results) still lives on the Kajabi site,
  * so this is deliberately an absolute .com URL rather than a local route.
+ *
+ * CUTOVER BLOCKER: the moment bossclinician.com points at this app, this URL
+ * resolves to the page the visitor is already standing on — the button becomes
+ * a no-op loop and the quiz is simply gone. It cannot be fixed with a redirect
+ * (/practice-quiz is a real route here, so 004's self-row is inert), and it is
+ * not one dead button: 004 funnels six legacy quiz URLs (/offer-quiz,
+ * /hiring-quiz, /boss-assessment, /start-your-own-private-practice-quiz,
+ * /practice-set-up-quiz, /practice-set-up-quiz-ty) plus /ready-quiz into this
+ * page, so every quiz entry point in the redirect map ends here.
+ *
+ * Resolving it is a content decision, not a code one: either rebuild the quiz
+ * as an assessment on this app (the machinery exists — see
+ * backend/src/services/assessments.ts and the /quiz/:slug route) and point
+ * QUIZ_URL at it, or keep the engine on a host that survives the cutover and
+ * name that host here. Do not leave it pointing at the apex domain.
  */
 const QUIZ_URL = "https://www.bossclinician.com/practice-quiz";
 
@@ -175,7 +191,7 @@ function HeroBlock() {
    ══════════════════════════════════════════════════════════════════════════ */
 
 function QuizSection() {
-  const reduce = useReducedMotion();
+  const reduce = useEntranceMotion();
 
   return (
     <Section

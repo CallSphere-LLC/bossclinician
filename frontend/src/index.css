@@ -33,6 +33,12 @@
      a near-black field is ~1.6:1 — the same token has to keep its role, not
      its hue. */
   .theme-luxe {
+    /* Native controls follow the page, not the machine. Without this a visitor
+       whose OS is in light mode gets a white <select> popup and a browser-drawn
+       control in the middle of a near-black form; one whose OS is dark gets the
+       opposite everywhere the theme is light. `color-scheme` is the only thing
+       that reaches the parts of a form control the page cannot paint. */
+    color-scheme: dark;
     --c-ink: 255 255 255;
     --c-ink-soft: 139 121 168; /* orchid-dim */
     --c-cream: 10 7 19; /* night */
@@ -51,6 +57,9 @@
      cooler hairline: a data grid needs its row separators to survive at 1px
      under a bright screen, where the marketing theme can afford to whisper. */
   .theme-console {
+    /* See .theme-luxe: this is what stops a <select> painting itself in the
+       machine's colours and hiding the value she just chose. */
+    color-scheme: dark;
     --c-ink: 237 233 245;
     --c-ink-soft: 152 141 176;
     --c-cream: 11 8 20;
@@ -103,6 +112,35 @@
 }
 
 @layer components {
+  /*
+   * A <select> that matches the text boxes beside it.
+   *
+   * Left alone, a select is painted by the browser: a grey gradient and a native
+   * arrow next to fields that have neither, and — on a machine whose colour
+   * scheme disagrees with the page — a dark box under dark inherited text, which
+   * is how the chosen value becomes invisible. `appearance: none` takes the
+   * painting back, so the arrow has to be drawn here too.
+   *
+   * The option list is drawn by the operating system and takes almost nothing
+   * from this element, so the two colours it does honour are stated outright
+   * rather than left to composite whatever is behind them.
+   */
+  .select-field {
+    appearance: none;
+    -webkit-appearance: none;
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23988DB0' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.9rem center;
+    background-size: 1rem 1rem;
+    padding-right: 2.5rem;
+  }
+
+  .select-field option {
+    background-color: rgb(var(--c-surface-raised));
+    color: rgb(var(--c-ink));
+  }
+
+
   .eyebrow {
     @apply mb-4 inline-block text-[0.72rem] font-semibold uppercase tracking-[0.18em] text-plum;
   }

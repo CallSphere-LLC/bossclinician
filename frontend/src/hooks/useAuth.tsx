@@ -51,6 +51,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(() => {
+    // Tell the server first, but do not wait for it and do not let it fail the
+    // sign-out. Forgetting the token locally is the part the person in front of
+    // the screen asked for; revoking the session is the part that stops a copy
+    // of that token still working, and an offline laptop must not be able to
+    // stay signed in just because the call didn't get through. It has to be
+    // started before `clearToken`, because that is where the request picks up
+    // the bearer token it is asking the server to revoke.
+    void adminApi.logout().catch(() => undefined);
     clearToken();
     setUser(null);
   }, []);

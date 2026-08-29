@@ -585,12 +585,107 @@ async function appendLog(runId: number, lines: string[]): Promise<void> {
   );
 }
 
+/**
+ * Writes one line to the run log as it happens, and keeps the in-memory copy.
+ *
+ * Batched at the end is what it used to be, and the batch was lost whenever the
+ * job died between the last action and the write — so a run that had actually
+ * sent an email showed an empty log. Logging must never be the thing that fails
+ * a job either, so a write that throws is swallowed: the line is a record of
+ * work that has already happened, not the work itself.
+ */
+async function noteLog(runId: number, lines: string[], line: string): Promise<void> {
+  lines.push(line);
+  try {
+    await appendLog(runId, [line]);
+  } catch {
+    // Deliberately ignored — see above.
+  }
+}
+
+/**
+ * Takes the one and only permit to perform this action for this run.
+ *
+ * The reason this exists is the resume job. A delayed `send_email` runs inside a
+ * job whose payload is fixed at the moment the delay was scheduled, so anything
+ * that fails the job *after* the provider has accepted the message — a database
+ * blip on the next statement, a SIGKILL, a lease that lapsed while the send was
+ * in flight — puts the identical job back on the queue with `delayServed` still
+ * true. It then walks the same action again and emails the same person a second
+ * time, up to `maxAttempts` times. There is no un-sending a mailshot, so the
+ * guard cannot be "make the job not fail"; it has to be a mark that outlives the
+ * job and is taken before the send, not after it.
+ *
+ * `UPDATE … WHERE NOT (marker @> id) RETURNING` is one statement, so the row
+ * lock makes it a real claim: two workers racing on the same run leave exactly
+ * one with a row returned. The mark lives in `automation_runs.trigger_payload`
+ * under a reserved key because that column is written once and read nowhere —
+ * no screen shows it and no query filters on it — which makes it the one place
+ * a marker can go in this pass without a schema change. A dedicated
+ * `automation_action_receipts` table is the better home and is noted in
+ * docs/bugs/backend-growth.md as the follow-up.
+ *
+ * The trade this makes is deliberate: a crash in the window between claiming and
+ * sending loses that one email. At-most-once is the right side to fail on for a
+ * marketing send.
+ */
+const CLAIM_KEY = "_performedActionIds";
+
+async function claimAction(runId: number, actionId: number): Promise<boolean> {
+  const res = await pool.query(
+    `UPDATE automation_runs
+        SET trigger_payload = jsonb_set(
+              COALESCE(trigger_payload, '{}'::jsonb),
+              $3::text[],
+              COALESCE(trigger_payload -> $2::text, '[]'::jsonb) || to_jsonb($4::int)
+            )
+      WHERE id = $1
+        AND NOT (COALESCE(trigger_payload -> $2::text, '[]'::jsonb) @> to_jsonb($4::int))
+      RETURNING id`,
+    [runId, CLAIM_KEY, [CLAIM_KEY], actionId]
+  );
+  return (res.rowCount ?? 0) > 0;
+}
+
+/**
+ * The dedupe key a resumption is queued under.
+ *
+ * The `delayServed` half is load-bearing, and its absence is what stopped a
+ * whole shape of automation dead. A `wait` step resumes at the *next* action and
+ * queues itself as `…:<i+1>:step`; if the action at `i + 1` carries a
+ * `delay_minutes` of its own — which the builder allows on every step type — the
+ * job that resumes at `i + 1` has to queue a second resumption for that same
+ * index. Under the old key that second enqueue collided with the key the running
+ * job was still holding, `enqueue` answered "already going to happen", and the
+ * run parked on `waiting` for good: no error, nothing in the dead-letter list,
+ * the email simply never sent. The two resumptions are different pieces of work —
+ * "arrive at step i+1" and "step i+1's own delay has now been served" — so they
+ * are keyed differently, while a genuine duplicate of either still collapses.
+ */
+export function resumeDedupeKey(
+  runId: number,
+  resumeIndex: number,
+  delayServed: boolean
+): string {
+  return `automation-resume:${runId}:${resumeIndex}:${delayServed ? "action" : "step"}`;
+}
+
 export interface RunAutomationInput {
   automationId: number;
   context: RunContext;
   /** Set when resuming a run that was waiting on a delay. */
   runId?: number;
   fromIndex?: number;
+  /**
+   * True when the delay on the action at `fromIndex` has already been served.
+   *
+   * Without it a resumption lands back on the same action, reads its
+   * `delay_minutes` again and tries to schedule the same wait a second time —
+   * and because the resume job is still running with that dedupe key, the
+   * enqueue collapses into nothing and the run sits at `waiting` forever with
+   * the action never performed.
+   */
+  delayServed?: boolean;
   isTest?: boolean;
 }
 
@@ -649,47 +744,74 @@ export async function runAutomation(input: RunAutomationInput): Promise<RunResul
           })()
         : action.delay_minutes;
 
-    if (waitMinutes > 0 && !isTest) {
+    // A `wait` resumes at the *next* action, so its delay is behind it either
+    // way. A per-action delay resumes at the same index, and only the flag the
+    // resumption carries can tell "three days have passed" from "three days
+    // have yet to pass".
+    const delayAlreadyServed = index === fromIndex && (input.delayServed ?? false);
+
+    if (waitMinutes > 0 && !isTest && !delayAlreadyServed) {
       const resumeIndex = action.action_type === "wait" ? index + 1 : index;
+      const resumeDelayServed = action.action_type !== "wait";
       await enqueue({
         kind: "automation.runAction",
-        payload: { automationId, runId, fromIndex: resumeIndex, context: { ...context } },
+        payload: {
+          automationId,
+          runId,
+          fromIndex: resumeIndex,
+          delayServed: resumeDelayServed,
+          context: { ...context },
+        },
         priority: PRIORITY.normal,
         runAt: new Date(Date.now() + waitMinutes * 60_000),
-        dedupeKey: `automation-resume:${runId}:${resumeIndex}`,
+        dedupeKey: resumeDedupeKey(runId, resumeIndex, resumeDelayServed),
       });
-      log.push(`Waiting ${waitMinutes} minute(s) before carrying on`);
-      await appendLog(runId, log);
+      await noteLog(runId, log, `Waiting ${waitMinutes} minute(s) before carrying on`);
       await pool.query(`UPDATE automation_runs SET status = 'waiting' WHERE id = $1`, [runId]);
       return { runId, status: "waiting", log };
     }
 
     if (action.action_type === "wait") {
-      log.push("No wait set — carrying straight on");
-      continue;
-    }
-
-    const conditionsHold = await evaluateConditions(action.conditions ?? {}, context);
-    if (!conditionsHold) {
-      log.push(`Skipped one step — its condition no longer held`);
+      await noteLog(runId, log, "No wait set — carrying straight on");
       continue;
     }
 
     attempted += 1;
     try {
+      // Inside the try, because a condition is read from the database: a blip
+      // evaluating one used to fail the whole job — and, on a resumed run, put
+      // it back on the queue to re-perform actions it had already performed.
+      const conditionsHold = await evaluateConditions(action.conditions ?? {}, context);
+      if (!conditionsHold) {
+        attempted -= 1;
+        await noteLog(runId, log, `Skipped one step — its condition no longer held`);
+        continue;
+      }
+
+      // The claim is taken before the action runs and is never released. See
+      // `claimAction`: a resumed job that fails after a send would otherwise
+      // email the same person again on every retry.
+      if (!isTest && !(await claimAction(runId, action.id))) {
+        attempted -= 1;
+        continue;
+      }
+
       const outcome = await performAction(action, context, automationId, isTest);
-      log.push(outcome.log);
+      await noteLog(runId, log, outcome.log);
       if (outcome.stop) break;
     } catch (err) {
       failures += 1;
-      log.push(`Something went wrong: ${(err as Error).message}`.slice(0, 300));
+      await noteLog(
+        runId,
+        log,
+        `Something went wrong: ${(err as Error).message}`.slice(0, 300)
+      );
     }
   }
 
   const status: RunResult["status"] =
     failures === 0 ? "success" : attempted > 0 && failures === attempted ? "failed" : "partial";
 
-  await appendLog(runId, log);
   await pool.query(`UPDATE automation_runs SET status = $2 WHERE id = $1`, [runId, status]);
 
   if (!isTest) {

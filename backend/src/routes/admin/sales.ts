@@ -6,6 +6,7 @@ import { badRequest, notFound, serviceUnavailable } from "../../utils/httpError"
 import { buildUpdate } from "../../utils/sqlUpdate";
 import { stripe } from "../../stripe/client";
 import { stripeEnabled } from "../../config/env";
+import { requirePermission } from "../../services/permissions";
 
 /**
  * Sales admin API — mounted at /admin/sales.
@@ -13,8 +14,16 @@ import { stripeEnabled } from "../../config/env";
  * Plans and coupons are mirrored into Stripe on create so the recurring-billing
  * objects actually exist there; the local row keeps the id Stripe hands back.
  * Payments/subscriptions/invoices are read models fed by the webhook.
+ *
+ * The router is mounted on `orders.view`, which Customer support holds so it can
+ * look an order up. Every write here goes further than that — creating a plan or
+ * a coupon creates the matching object in the live Stripe account — so each one
+ * asks for `orders.manage` as well.
  */
 export const adminSalesRouter = Router();
+
+/** Changing what is sold, or what it costs, is not a support action. */
+const requireManage = requirePermission("orders.manage");
 
 const PLAN_FIELDS = [
   "slug",
@@ -48,6 +57,7 @@ adminSalesRouter.get(
 
 adminSalesRouter.post(
   "/plans",
+  requireManage,
   asyncHandler(async (req, res) => {
     const b = req.body as Record<string, unknown>;
     const name = typeof b.name === "string" ? b.name.trim() : "";
@@ -98,6 +108,7 @@ adminSalesRouter.post(
 
 adminSalesRouter.put(
   "/plans/:id",
+  requireManage,
   asyncHandler(async (req, res) => {
     const body = { ...(req.body as Record<string, unknown>) };
     if (body.features !== undefined) body.features = JSON.stringify(body.features);
@@ -117,6 +128,7 @@ adminSalesRouter.put(
 
 adminSalesRouter.delete(
   "/plans/:id",
+  requireManage,
   asyncHandler(async (req, res) => {
     const result = await pool.query("DELETE FROM plans WHERE id = $1", [req.params.id]);
     if (result.rowCount === 0) throw notFound("Plan not found");
@@ -235,6 +247,7 @@ adminSalesRouter.get(
 
 adminSalesRouter.post(
   "/coupons",
+  requireManage,
   asyncHandler(async (req, res) => {
     const b = req.body as Record<string, unknown>;
     const code = typeof b.code === "string" ? b.code.trim().toUpperCase() : "";
@@ -283,6 +296,7 @@ adminSalesRouter.post(
 
 adminSalesRouter.put(
   "/coupons/:id",
+  requireManage,
   asyncHandler(async (req, res) => {
     const { active } = req.body as { active?: boolean };
     if (typeof active !== "boolean") throw badRequest("active (boolean) is required");
@@ -298,6 +312,7 @@ adminSalesRouter.put(
 
 adminSalesRouter.delete(
   "/coupons/:id",
+  requireManage,
   asyncHandler(async (req, res) => {
     const result = await pool.query(
       "DELETE FROM coupons WHERE id = $1 RETURNING stripe_coupon_id",

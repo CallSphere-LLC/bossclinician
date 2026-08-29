@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
-import { motion, useReducedMotion } from "motion/react";
+import { motion } from "motion/react";
+import { useEntranceMotion } from "@/hooks/useEntranceMotion";
 import { Container } from "@/components/ui/Container";
 import { Aurora } from "@/components/luxe/Aurora";
 import { GoldRule } from "@/components/luxe/Section";
@@ -43,7 +44,7 @@ export function LuxePageHero({
   align = "left",
   className,
 }: LuxePageHeroProps) {
-  const reduce = useReducedMotion();
+  const reduce = useEntranceMotion();
   const centered = align === "center" && !aside;
 
   return (

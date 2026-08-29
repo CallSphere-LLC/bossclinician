@@ -35,6 +35,7 @@ import {
   Field,
   Input,
   PageHeader,
+  selectStyles,
   Skeleton,
   Textarea,
   type BadgeProps,
@@ -54,9 +55,6 @@ import { friendlyError } from "@/pages/admin/ui/friendly";
  * Every name on this screen comes from `/options` in one request, so nothing
  * here ever has to show an id while it waits for a second lookup.
  */
-
-const selectStyles =
-  "h-11 w-full rounded-xl border border-hairline bg-surface px-3 text-sm text-ink outline-none transition-colors focus-visible:border-plum focus-visible:ring-4 focus-visible:ring-plum/12";
 
 const RUN_TONE: Record<string, NonNullable<BadgeProps["tone"]>> = {
   success: "green",
@@ -821,11 +819,17 @@ function AddStepMenu({
         aria-label="Choose a step to add"
       >
         <option value="">Add a step…</option>
-        {actions.map((action) => (
-          <option key={action.type} value={action.type}>
-            {action.label}
-          </option>
-        ))}
+        {/* "only carry on if" has nothing to fill in on this screen, so a step
+            added from it holds no conditions and lets everybody through — a gate
+            she believes she set and that never closes. Hidden until it has an
+            editor. */}
+        {actions
+          .filter((action) => action.type !== "branch")
+          .map((action) => (
+            <option key={action.type} value={action.type}>
+              {action.label}
+            </option>
+          ))}
       </select>
       <Button
         size="sm"

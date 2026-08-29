@@ -22,6 +22,7 @@ import {
   Field,
   Input,
   PageHeader,
+  selectStyles,
   Skeleton,
   Textarea,
 } from "@/pages/admin/ui/primitives";
@@ -211,7 +212,11 @@ function buildPayload(
   form: SettingsForm,
   editable: Editable,
 ): Record<string, unknown> {
-  const payload: Record<string, unknown> = { ...loaded };
+  // Only what this screen owns. Starting from everything the server sent meant
+  // saving her website details wrote back a whole snapshot of the settings
+  // table — quietly undoing anything changed on another settings screen since
+  // this one was opened.
+  const payload: Record<string, unknown> = {};
 
   const navRows = writeLinkRows(form.nav);
   if (editable.nav && (wasStored(loaded.nav) || navRows.length > 0)) payload.nav = navRows;
@@ -249,9 +254,6 @@ function buildPayload(
 }
 
 /** Matches the Input primitive's shell — the kit has no select of its own. */
-const selectClass =
-  "h-11 w-full rounded-xl border border-hairline bg-surface px-3 text-sm text-ink outline-none transition-all hover:border-white/20 focus-visible:border-gold/60 focus-visible:ring-4 focus-visible:ring-gold/15";
-
 /* ----------------------------------------------------------- Link list rows */
 
 /** What's missing from a row she's started filling in. Blank rows aren't nagged. */
@@ -348,7 +350,7 @@ function LinkRowEditor({
                   if (value === SOMEWHERE_ELSE) update(i, { custom: true });
                   else update(i, { custom: false, href: value });
                 }}
-                className={selectClass}
+                className={selectStyles}
               >
                 <option value="">Choose a page…</option>
                 {SITE_PAGES.map((page) => (

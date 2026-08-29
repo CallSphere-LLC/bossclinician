@@ -9,7 +9,6 @@ import {
   Menu,
   PanelLeftClose,
   PanelLeftOpen,
-  Search,
   X,
 } from "lucide-react";
 import { Toaster } from "sonner";
@@ -40,7 +39,14 @@ export function AdminLayout({ children }: { children: ReactNode }) {
   // just costs an extra click every time.
   const [openGroups, setOpenGroups] = useState<Set<string>>(() => {
     const stored = localStorage.getItem("bc_admin_groups");
-    if (stored) return new Set(JSON.parse(stored) as string[]);
+    // Guarded: a value this browser cannot parse would throw during render and
+    // leave her with a blank admin on every load, with nowhere to click to
+    // recover it.
+    try {
+      if (stored) return new Set(JSON.parse(stored) as string[]);
+    } catch {
+      // fall through to the default below
+    }
     const active = groupForPath(location.pathname);
     return new Set(active ? [active] : ["products"]);
   });
@@ -284,15 +290,10 @@ export function AdminLayout({ children }: { children: ReactNode }) {
             )}
           </button>
 
-          <div className="relative hidden min-w-0 flex-1 sm:block sm:max-w-sm">
-            <Search className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-ink-soft/55" />
-            <input
-              type="search"
-              placeholder="Search your dashboard…"
-              aria-label="Search your dashboard"
-              className="h-11 w-full rounded-xl border border-hairline bg-white/[0.04] py-2 pl-10 pr-3 text-sm text-ink outline-none transition-all placeholder:text-ink-soft/55 focus-visible:border-gold/60 focus-visible:bg-white/[0.07] focus-visible:ring-4 focus-visible:ring-gold/15"
-            />
-          </div>
+          {/* A dashboard-wide search box lived here, wired to nothing: it took
+              what she typed, and pressing Enter did nothing at all. Each list
+              screen has its own working search, so the honest thing is not to
+              offer a second one until there is something behind it. */}
 
           <div className="ml-auto flex items-center gap-2.5">
             <Link

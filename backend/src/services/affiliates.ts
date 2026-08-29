@@ -503,9 +503,15 @@ export async function accrueForTransaction(transactionId: number): Promise<Accru
       offer_id: number | null;
       tax_cents: number;
       affiliate_status: string | null;
+      self_referral: boolean;
     }>(
       `SELECT t.id, t.order_id, t.kind, t.status, t.amount_cents, t.currency, t.occurred_at,
-              o.affiliate_id, o.offer_id, o.tax_cents, a.status AS affiliate_status
+              o.affiliate_id, o.offer_id, o.tax_cents, a.status AS affiliate_status,
+              COALESCE(
+                (a.member_id IS NOT NULL AND a.member_id = o.member_id)
+                  OR a.email = o.email::citext,
+                false
+              ) AS self_referral
          FROM transactions t
          JOIN orders o     ON o.id = t.order_id
          LEFT JOIN affiliates a ON a.id = o.affiliate_id
@@ -533,6 +539,17 @@ export async function accrueForTransaction(transactionId: number): Promise<Accru
     if (tx.affiliate_status !== "approved") {
       await client.query("ROLLBACK");
       return NOT_ACCRUED("partner is not approved");
+    }
+    // A partner buying through their own link is not a referral, it is a
+    // discount they wrote themselves. Nothing upstream stops it: the click is
+    // recorded like any other, `resolveAttribution` freezes it onto the order,
+    // and a partner on the default 30% then takes $599 back on their own $1,997
+    // purchase — repeatable for every offer, and on every renewal where the rule
+    // pays recurring. Refused here rather than at attribution so the click and
+    // the order keep their honest history; only the money stops.
+    if (tx.self_referral) {
+      await client.query("ROLLBACK");
+      return NOT_ACCRUED("the buyer is the partner");
     }
 
     // The first cleared payment on an order is the sale; everything after it is

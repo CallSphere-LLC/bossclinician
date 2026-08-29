@@ -6,6 +6,7 @@ import { GlassCard } from "@/components/luxe/GlassCard";
 import { LuxeButton } from "@/components/luxe/LuxeButton";
 import { GoldRule, Section } from "@/components/luxe/Section";
 import { api } from "@/lib/api";
+import { commerceApi, type OrderReceipt } from "@/lib/commerceApi";
 import { cn } from "@/lib/cn";
 import type { CheckoutOrder } from "@/types";
 
@@ -13,6 +14,44 @@ const POLL_INTERVAL_MS = 1500;
 const MAX_POLLS = 12; // ~18s, then stop and tell the buyer it's still settling
 
 const EASE_LUXE: [number, number, number, number] = [0.22, 1, 0.36, 1];
+
+/**
+ * What the panel needs, whichever checkout the buyer arrived from.
+ *
+ * Two of them reach this page. Every offer goes through the Payment Element on
+ * `/checkout/:offerSlug`, which sends the buyer here with the order id and the
+ * receipt token it was issued at checkout. The hosted Stripe Checkout behind the
+ * legacy buy buttons comes back with a session id instead. Both are looked up
+ * server-side, and neither browser can talk this page into saying "paid".
+ */
+interface Confirmation {
+  status: string;
+  title: string;
+  email: string;
+  amountCents: number;
+  currency: string;
+}
+
+function fromSession(order: CheckoutOrder): Confirmation {
+  return {
+    status: order.status,
+    title: order.courseTitle,
+    email: order.email,
+    amountCents: order.amountCents,
+    currency: order.currency,
+  };
+}
+
+function fromReceipt(receipt: OrderReceipt): Confirmation {
+  return {
+    status: receipt.status,
+    // An order can carry several things; the offer is what was bought.
+    title: receipt.offerTitle ?? receipt.items[0]?.title ?? "your order",
+    email: receipt.email,
+    amountCents: receipt.totalCents,
+    currency: receipt.currency,
+  };
+}
 
 function formatAmount(cents: number, currency: string): string {
   return new Intl.NumberFormat("en-US", {
@@ -91,26 +130,39 @@ function Medallion({
 export default function CheckoutSuccess() {
   const [params] = useSearchParams();
   const sessionId = params.get("session_id");
+  const orderParam = params.get("order");
+  const orderToken = params.get("token");
+  const orderId = Number(orderParam);
 
-  const [order, setOrder] = useState<CheckoutOrder | null>(null);
+  const [order, setOrder] = useState<Confirmation | null>(null);
   const [settling, setSettling] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const polls = useRef(0);
   const reduce = useReducedMotion();
 
   useEffect(() => {
-    if (!sessionId) {
-      setError("No checkout session was provided.");
+    const read: (() => Promise<Confirmation>) | null =
+      orderToken !== null && Number.isInteger(orderId) && orderId > 0
+        ? () => commerceApi.getOrder(orderId, orderToken).then(fromReceipt)
+        : sessionId !== null
+          ? () => api.checkoutOrder(sessionId).then(fromSession)
+          : null;
+
+    if (!read) {
+      setError("We could not tell which order this is.");
       setSettling(false);
       return;
     }
+    // Bound to a non-null local: `poll` is hoisted, so the narrowing above does
+    // not reach inside it.
+    const load = read;
 
     let cancelled = false;
     let timer: number | undefined;
 
     async function poll() {
       try {
-        const result = await api.checkoutOrder(sessionId as string);
+        const result = await load();
         if (cancelled) return;
         setOrder(result);
         if (result.status === "paid" || result.status === "failed") {
@@ -128,7 +180,7 @@ export default function CheckoutSuccess() {
         setSettling(false);
         return;
       }
-      timer = window.setTimeout(poll, POLL_INTERVAL_MS);
+      timer = window.setTimeout(() => void poll(), POLL_INTERVAL_MS);
     }
 
     void poll();
@@ -136,14 +188,21 @@ export default function CheckoutSuccess() {
       cancelled = true;
       if (timer) window.clearTimeout(timer);
     };
-  }, [sessionId]);
+  }, [sessionId, orderId, orderToken]);
 
   const paid = order?.status === "paid";
   const celebratory = !settling && paid && order !== null;
 
   return (
     <>
-      <Seo title="Order Confirmation - Boss Clinician" description="Your Boss Clinician order." />
+      {/* One person's receipt, reachable only with their own order token — and
+          eight already-indexed legacy thank-you URLs redirect here, so without
+          this the confirmation page is what a search for the course finds. */}
+      <Seo
+        title="Order Confirmation - Boss Clinician"
+        description="Your Boss Clinician order."
+        noindex
+      />
 
       <Section
         surface="deep"
@@ -251,7 +310,7 @@ export default function CheckoutSuccess() {
                 >
                   You're in.{" "}
                   <span className="text-foil block font-display italic [overflow-wrap:anywhere]">
-                    Welcome to {order.courseTitle}.
+                    Welcome to {order.title}.
                   </span>
                 </motion.h1>
 

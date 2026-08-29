@@ -1,4 +1,5 @@
-import { motion, useReducedMotion } from "motion/react";
+import { motion } from "motion/react";
+import { useEntranceMotion } from "@/hooks/useEntranceMotion";
 import { Seo } from "@/components/Seo";
 import { SubscribeForm } from "@/components/forms/SubscribeForm";
 import { GlassCard, type Accent } from "@/components/luxe/GlassCard";
@@ -8,6 +9,7 @@ import { GoldRule, Section, SectionTitle } from "@/components/luxe/Section";
 import { RevealGroup, RevealItem } from "@/components/ui/Reveal";
 import { resources as fallbackResources } from "@/content/resources";
 import { useCollection } from "@/hooks/useCollection";
+import { ssrKeys } from "@/ssr/keys";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import type { Resource } from "@/types";
@@ -68,7 +70,7 @@ function rise(reduce: boolean | null, delay: number) {
 }
 
 export default function Resources() {
-  const { data: resources, loading } = useCollection(api.resources, fallbackResources);
+  const { data: resources, loading } = useCollection(api.resources, fallbackResources, ssrKeys.resources());
   const published = resources.filter((r) => r.published).sort((a, b) => a.sort - b.sort);
   const [masterclass, ...rest] = published;
 
@@ -140,7 +142,7 @@ export default function Resources() {
 /* ── Lead magnet ──────────────────────────────────────────────────────── */
 
 function MasterclassFeature({ resource }: { resource: Resource }) {
-  const reduce = useReducedMotion();
+  const reduce = useEntranceMotion();
 
   return (
     <motion.div {...rise(reduce, 0)}>
@@ -244,7 +246,7 @@ function ResourceCard({ resource }: { resource: Resource }) {
 /* ── Newsletter capture ───────────────────────────────────────────────── */
 
 function SubscribePanel() {
-  const reduce = useReducedMotion();
+  const reduce = useEntranceMotion();
 
   return (
     <>

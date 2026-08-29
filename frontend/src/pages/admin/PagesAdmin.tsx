@@ -19,6 +19,7 @@ import {
   Textarea,
 } from "@/pages/admin/ui/primitives";
 import { friendlyError, humanizeKey, webAddressLabel } from "@/pages/admin/ui/friendly";
+import { useConfirm } from "@/pages/admin/ui/Dialog";
 
 interface PageSummary {
   slug: string;
@@ -233,6 +234,8 @@ export default function PagesAdmin() {
       .catch((err) => setError(friendlyError(err, "page")));
   }, [activeSlug]);
 
+  const [confirm, confirmDialog] = useConfirm();
+
   const dirty = useMemo(
     () => page !== null && snapshot(page.title, page.description, content) !== baseline,
     [page, content, baseline],
@@ -256,7 +259,7 @@ export default function PagesAdmin() {
         sections: content,
       });
       setBaseline(snapshot(page.title, page.description, content));
-      toast.success("Saved.");
+      toast.success("Saved as a draft — not on your live website yet.");
       loadList();
     } catch (err) {
       toast.error(friendlyError(err, "page"));
@@ -270,7 +273,7 @@ export default function PagesAdmin() {
       <PageHeader
         eyebrow="Website"
         title="Pages"
-        description="Change the words on each page of your website. Your site picks up what you save here the next time it's published."
+        description="Draft the words for each page here. They aren't on your live website yet — your developer has to switch these pages over first."
         actions={
           <>
             {dirty && <Badge tone="gold">Unsaved changes</Badge>}
@@ -303,7 +306,21 @@ export default function PagesAdmin() {
                 <li key={p.slug}>
                   <button
                     type="button"
-                    onClick={() => setActiveSlug(p.slug)}
+                    onClick={async () => {
+                      if (p.slug === activeSlug) return;
+                      if (
+                        dirty &&
+                        !(await confirm({
+                          title: "Leave without saving?",
+                          description: "The changes you've made to this page will be lost.",
+                          confirmLabel: "Yes, leave it",
+                          destructive: true,
+                        }))
+                      ) {
+                        return;
+                      }
+                      setActiveSlug(p.slug);
+                    }}
                     className={cn(
                       "w-full rounded-lg px-3 py-2.5 text-left transition-colors",
                       activeSlug === p.slug ? "bg-lilac-tint" : "hover:bg-cream",
@@ -409,6 +426,8 @@ export default function PagesAdmin() {
           </Card>
         </div>
       )}
+
+      {confirmDialog}
     </div>
   );
 }

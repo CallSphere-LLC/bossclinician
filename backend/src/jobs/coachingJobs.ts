@@ -74,7 +74,12 @@ interface DueSession {
  */
 async function claimDue(step: ReminderStep): Promise<DueSession[]> {
   const copy = REMINDERS[step];
-  const res = await pool.query<DueSession>(
+  // RETURNING can only name the table the UPDATE touched and whatever is in its
+  // own FROM. `members` and `coaching_offers` are in neither, so naming them
+  // here is not a slower query — it is `missing FROM-clause entry for table
+  // "m"`, which fails the whole job and takes every reminder with it. The id is
+  // all the claim has to return; the second read below joins the rest.
+  const res = await pool.query<{ id: number }>(
     `WITH due AS (
        SELECT s.id
          FROM coaching_sessions s
@@ -90,11 +95,7 @@ async function claimDue(step: ReminderStep): Promise<DueSession[]> {
         SET ${copy.column} = now(), updated_at = now()
        FROM due
       WHERE s.id = due.id
-      RETURNING s.id, s.member_id, s.scheduled_at, s.duration_minutes, s.timezone,
-                s.meeting_url, s.agenda,
-                COALESCE(m.email::text, '')      AS email,
-                COALESCE(m.first_name, '')       AS first_name,
-                COALESCE(o.title, 'coaching')    AS offer_title`,
+      RETURNING s.id`,
     [BATCH]
   );
 

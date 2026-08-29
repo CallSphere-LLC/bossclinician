@@ -1,7 +1,8 @@
-import { motion, useReducedMotion } from "motion/react";
+import { motion } from "motion/react";
 import { Seo } from "@/components/Seo";
 import { LuxeButton } from "@/components/luxe/LuxeButton";
 import { GoldRule, Section } from "@/components/luxe/Section";
+import { useEntranceMotion } from "@/hooks/useEntranceMotion";
 
 const EASE_LUXE: [number, number, number, number] = [0.22, 1, 0.36, 1];
 
@@ -32,11 +33,15 @@ function rise(reduce: boolean | null, delay: number) {
  * halfway up it on a desktop monitor.
  */
 export default function NotFound() {
-  const reduce = useReducedMotion();
+  const reduce = useEntranceMotion();
 
   return (
     <>
-      <Seo title="Page Not Found | Boss Clinician" />
+      {/* The status is the point: a dead URL that answers 200 stays in the
+          index forever, and BlogPost renders this panel inline for a slug that
+          exists nowhere, so the page is the only thing that knows. `noindex`
+          covers the crawler that reaches it anyway. */}
+      <Seo title="Page Not Found | Boss Clinician" httpStatus={404} noindex />
 
       <Section
         surface="deep"
