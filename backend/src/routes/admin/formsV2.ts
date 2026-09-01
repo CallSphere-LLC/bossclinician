@@ -83,6 +83,28 @@ const formSchema = z.object({
   published: z.boolean().optional(),
 });
 
+/**
+ * The questions a brand-new form starts with.
+ *
+ * Created empty, a form is a page with a heading and a Send button under it,
+ * and every reply it collects is an empty object — which is exactly what the
+ * builder produced, because the create call sends nothing but a name and this
+ * route defaulted the list to `[]`. The legacy screen seeded the same two
+ * (frontend/src/pages/admin/Forms.tsx), and they are the two everything
+ * downstream needs: a contact is keyed on its address, so a form with no email
+ * question cannot make a lead, apply a tag or start a sequence no matter what
+ * else is configured on it.
+ *
+ * `email` is pointed at the contact's address column so the mapping is right
+ * from the first save; "Your name" is left off the menu deliberately — it is a
+ * whole name and there is no whole-name column, and the submit path reads a
+ * field keyed `name` as the display name anyway.
+ */
+export const STARTER_FIELDS: FormField[] = [
+  { key: "name", label: "Your name", type: "text", required: true },
+  { key: "email", label: "Email address", type: "email", required: true, contactField: "email" },
+];
+
 function slugify(value: string): string {
   return value
     .normalize("NFD")
@@ -178,7 +200,10 @@ adminFormsRouter.post(
   "/",
   asyncHandler(async (req, res) => {
     const input = formSchema.parse(req.body);
-    const fields = input.fields ?? [];
+    // Only when the caller said nothing about questions. An explicit empty list
+    // is somebody deliberately building the field list themselves, and seeding
+    // over the top of that would be a form that grows two questions back.
+    const fields = input.fields ?? STARTER_FIELDS;
     const problem = fieldsError(fields);
     if (problem) throw badRequest(problem);
 

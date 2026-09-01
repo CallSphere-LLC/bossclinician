@@ -7,6 +7,14 @@ import { buildUpdate } from "../../utils/sqlUpdate";
 import { stripe } from "../../stripe/client";
 import { stripeEnabled } from "../../config/env";
 import { requirePermission } from "../../services/permissions";
+import {
+  idParamSchema,
+  planCreateSchema,
+  planRepriceIssue,
+  planUpdateSchema,
+  type CommerceIssue,
+  type PlanInterval,
+} from "../../validation/commerceSchemas";
 
 /**
  * Sales admin API — mounted at /admin/sales.
@@ -24,6 +32,20 @@ export const adminSalesRouter = Router();
 
 /** Changing what is sold, or what it costs, is not a support action. */
 const requireManage = requirePermission("orders.manage");
+
+/**
+ * Answers a cross-field problem in the shape zod's own `flatten()` produces, so
+ * the admin form can print the sentence under the box it names instead of
+ * dropping it into a toast that does not say which field is wrong.
+ */
+function issueError(issue: CommerceIssue) {
+  return badRequest(issue.message, { formErrors: [], fieldErrors: { [issue.field]: [issue.message] } });
+}
+
+/** Postgres' unique_violation — here, two plans claiming one web address. */
+function isUniqueViolation(err: unknown): boolean {
+  return (err as { code?: string } | null)?.code === "23505";
+}
 
 const PLAN_FIELDS = [
   "slug",
@@ -59,50 +81,74 @@ adminSalesRouter.post(
   "/plans",
   requireManage,
   asyncHandler(async (req, res) => {
-    const b = req.body as Record<string, unknown>;
-    const name = typeof b.name === "string" ? b.name.trim() : "";
-    if (!name) throw badRequest("Plan name is required");
+    const parsed = planCreateSchema.safeParse(req.body);
+    if (!parsed.success) throw badRequest("Invalid payload", parsed.error.flatten());
+    const data = parsed.data;
 
-    const priceCents = Number(b.priceCents ?? 0);
-    const currency = typeof b.currency === "string" && b.currency ? b.currency : "usd";
-    const interval = b.interval === "year" ? "year" : "month";
-    let stripePriceId = typeof b.stripePriceId === "string" ? b.stripePriceId : "";
+    const slug = data.slug ?? data.name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+
+    // Asked before Stripe is touched, not after. The Price has to exist before
+    // the insert because the row stores its id, so a name that collides on the
+    // way in would leave a live Price in the account with nothing pointing at
+    // it. The catch below is still the backstop for a genuine race.
+    const taken = await pool.query("SELECT 1 FROM plans WHERE slug = $1", [slug]);
+    if (taken.rowCount) {
+      throw issueError({
+        field: "name",
+        message: "You already have a plan with that name. Give this one a different name.",
+      });
+    }
+
+    let stripePriceId = data.stripePriceId ?? "";
 
     // Create the recurring Price in Stripe so the plan is immediately sellable.
     // Without this a plan row exists but subscription checkout has nothing to
     // charge against.
-    if (!stripePriceId && priceCents > 0 && stripeEnabled()) {
+    if (!stripePriceId && data.priceCents > 0 && stripeEnabled()) {
       const price = await stripe().prices.create({
-        currency,
-        unit_amount: priceCents,
-        recurring: { interval },
-        product_data: { name },
+        currency: data.currency,
+        unit_amount: data.priceCents,
+        recurring: { interval: data.interval },
+        product_data: { name: data.name },
       });
       stripePriceId = price.id;
     }
 
-    const result = await pool.query(
-      `INSERT INTO plans
-         (slug, name, description, price_cents, currency, interval, stripe_price_id,
-          features, community_id, trial_days, published, sort)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,
-         (SELECT COALESCE(MAX(sort), -1) + 1 FROM plans))
-       RETURNING *`,
-      [
-        (typeof b.slug === "string" && b.slug) || name.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
-        name,
-        b.description ?? "",
-        priceCents,
-        currency,
-        interval,
-        stripePriceId || null,
-        JSON.stringify(b.features ?? []),
-        b.communityId ?? null,
-        b.trialDays ?? 0,
-        b.published ?? true,
-      ],
-    );
-    res.status(201).json(rowToCamel(result.rows[0]));
+    try {
+      const result = await pool.query(
+        `INSERT INTO plans
+           (slug, name, description, price_cents, currency, interval, stripe_price_id,
+            features, community_id, trial_days, published, sort)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,
+           (SELECT COALESCE(MAX(sort), -1) + 1 FROM plans))
+         RETURNING *`,
+        [
+          slug,
+          data.name,
+          data.description,
+          data.priceCents,
+          data.currency,
+          data.interval,
+          stripePriceId || null,
+          JSON.stringify(data.features),
+          data.communityId,
+          data.trialDays,
+          data.published,
+        ],
+      );
+      res.status(201).json(rowToCamel(result.rows[0]));
+    } catch (err) {
+      // The slug is derived from the name when none is typed, so a second plan
+      // called "Membership" collides on a column the admin never sees. Without
+      // this the console answers 500 and she retypes the same name.
+      if (isUniqueViolation(err)) {
+        throw issueError({
+          field: "name",
+          message: "You already have a plan with that name. Give this one a different name.",
+        });
+      }
+      throw err;
+    }
   }),
 );
 
@@ -110,19 +156,62 @@ adminSalesRouter.put(
   "/plans/:id",
   requireManage,
   asyncHandler(async (req, res) => {
-    const body = { ...(req.body as Record<string, unknown>) };
-    if (body.features !== undefined) body.features = JSON.stringify(body.features);
+    const id = idParamSchema.safeParse(req.params.id);
+    if (!id.success) throw badRequest("Invalid plan id");
+
+    const parsed = planUpdateSchema.safeParse(req.body);
+    if (!parsed.success) throw badRequest("Invalid payload", parsed.error.flatten());
+    const patch = parsed.data;
+
+    const before = await pool.query<{
+      price_cents: number;
+      currency: string;
+      interval: PlanInterval;
+      stripe_price_id: string | null;
+    }>(
+      "SELECT price_cents, currency, interval, stripe_price_id FROM plans WHERE id = $1",
+      [id.data],
+    );
+    const current = before.rows[0];
+    if (!current) throw notFound("Plan not found");
+
+    // Checked against the row the edit produces rather than the fields it
+    // carries: an edit that only touches the price still has to be judged
+    // against the Stripe Price already attached to the plan.
+    const issue = planRepriceIssue(
+      {
+        priceCents: current.price_cents,
+        currency: current.currency,
+        interval: current.interval,
+        stripePriceId: current.stripe_price_id,
+      },
+      patch,
+    );
+    if (issue) throw issueError(issue);
+
+    const body: Record<string, unknown> = { ...patch };
+    if (patch.features !== undefined) body.features = JSON.stringify(patch.features);
 
     const update = buildUpdate(body, PLAN_FIELDS);
     if (!update) throw badRequest("No updatable fields supplied");
 
-    const result = await pool.query(
-      `UPDATE plans SET ${update.clause}, updated_at = now()
-       WHERE id = $${update.values.length + 1} RETURNING *`,
-      [...update.values, req.params.id],
-    );
-    if (result.rowCount === 0) throw notFound("Plan not found");
-    res.json(rowToCamel(result.rows[0]));
+    try {
+      const result = await pool.query(
+        `UPDATE plans SET ${update.clause}, updated_at = now()
+         WHERE id = $${update.values.length + 1} RETURNING *`,
+        [...update.values, id.data],
+      );
+      if (result.rowCount === 0) throw notFound("Plan not found");
+      res.json(rowToCamel(result.rows[0]));
+    } catch (err) {
+      if (isUniqueViolation(err)) {
+        throw issueError({
+          field: "slug",
+          message: "Another plan already uses that web address.",
+        });
+      }
+      throw err;
+    }
   }),
 );
 

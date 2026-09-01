@@ -2,7 +2,9 @@ import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNod
 import { Link, useParams } from "react-router-dom";
 import { AnimatePresence, motion } from "motion/react";
 import {
+  ArrowDown,
   ArrowLeft,
+  ArrowUp,
   Bold,
   ChevronDown,
   Clock,
@@ -11,6 +13,7 @@ import {
   Layers,
   Link2,
   List,
+  Pencil,
   Play,
   Plus,
   Trash2,
@@ -32,6 +35,7 @@ import {
   PageHeader,
   Skeleton,
   Textarea,
+  selectStyles,
 } from "@/pages/admin/ui/primitives";
 import { Modal, useConfirm } from "@/pages/admin/ui/Dialog";
 import { UploadDropzone } from "@/pages/admin/ui/Uploader";
@@ -43,6 +47,105 @@ import { PUBLISH_LABEL, friendlyError, pluralize } from "@/pages/admin/ui/friend
  * software vocabulary. The API and the types still say module, so the two
  * spellings meet here and nowhere else.
  */
+
+/**
+ * The release schedule, as the API hands it over.
+ *
+ * `dripDate` is a UTC instant and `dripDateLocal` is the day that instant means
+ * in the release time zone from Settings → Delivery. The date box reads the
+ * second one: taking the day out of the instant here would show 28 February for
+ * a launch the owner set to 1 March, because the browser is not in her zone.
+ *
+ * Kept local to this screen because the shared row types in `@/types/admin`
+ * still describe the course builder as it was before it could set any of this.
+ */
+interface Drip {
+  dripDays?: number | null;
+  dripDate?: string | null;
+  dripDateLocal?: string | null;
+}
+
+/**
+ * The lesson columns the member player already reads and the shared row type
+ * has never carried — because until the admin allowlist was widened, nothing
+ * could write them and there was nothing for the screen to hold.
+ */
+interface LessonExtras {
+  contentType?: string;
+  commentsEnabled?: boolean;
+}
+
+type BuilderLesson = CourseLesson & Drip & LessonExtras;
+type BuilderModule = Omit<CourseModule, "lessons"> & Drip & { lessons: BuilderLesson[] };
+
+/** The three shapes a schedule can take, as the dropdown offers them. */
+type DripMode = "immediately" | "days" | "date";
+
+interface DripChoice {
+  mode: DripMode;
+  /** Only read in "days" mode; kept while she flips between modes. */
+  days: string;
+  /** "YYYY-MM-DD". Only read in "date" mode. */
+  date: string;
+}
+
+function dripChoice(item: Drip): DripChoice {
+  // A date beats a day count, the same way the server resolves a row that
+  // somehow holds both, so the screen can never disagree with the unlock the
+  // member actually gets.
+  if (item.dripDateLocal) return { mode: "date", days: "", date: item.dripDateLocal };
+  if (item.dripDays && item.dripDays > 0) {
+    return { mode: "days", days: String(item.dripDays), date: "" };
+  }
+  return { mode: "immediately", days: "", date: "" };
+}
+
+/**
+ * The schedule half of a save.
+ *
+ * Both keys go on every request, including the nulls: leaving one out would let
+ * a section keep a stale launch date after being switched to "7 days after they
+ * buy", and the date is the one the engine would honour.
+ */
+function dripBody(choice: DripChoice): { dripDays: number | null; dripDate: string | null } {
+  if (choice.mode === "days") {
+    const days = Number(choice.days);
+    return { dripDays: Number.isFinite(days) && days > 0 ? days : null, dripDate: null };
+  }
+  if (choice.mode === "date") return { dripDays: null, dripDate: choice.date || null };
+  return { dripDays: null, dripDate: null };
+}
+
+/** "Opens 7 days after they buy" — the line under a section or lesson name. */
+function dripSummary(item: Drip): string | null {
+  if (item.dripDateLocal) {
+    const [year, month, day] = item.dripDateLocal.split("-").map(Number);
+    // Built from the parts at midday: `new Date("2026-03-01")` is midnight UTC
+    // and prints as 28 February for anybody west of Greenwich.
+    const at = new Date(Date.UTC(year, month - 1, day, 12));
+    return `Opens ${at.toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric" })}`;
+  }
+  if (item.dripDays && item.dripDays > 0) {
+    return `Opens ${pluralize(item.dripDays, "day")} after they buy`;
+  }
+  return null;
+}
+
+/**
+ * What a lesson is, in the words the outline and the player already use.
+ *
+ * The column is CHECK-constrained to exactly these six and the member player
+ * switches on it to decide what to draw, so a video lesson left at the "text"
+ * default shows students the notes and no player at all.
+ */
+const LESSON_KINDS: { value: string; label: string }[] = [
+  { value: "video", label: "Video" },
+  { value: "audio", label: "Audio" },
+  { value: "text", label: "Reading" },
+  { value: "pdf", label: "PDF" },
+  { value: "embed", label: "Something embedded" },
+  { value: "assessment", label: "Quiz" },
+];
 
 /** "45m" / "2h 30m" — a length she'd say out loud. */
 function courseLength(minutes: number): string {
@@ -78,14 +181,21 @@ export default function CourseBuilder() {
   const courseId = Number(id);
 
   const [course, setCourse] = useState<Course | null>(null);
-  const [modules, setModules] = useState<CourseModule[] | null>(null);
+  const [modules, setModules] = useState<BuilderModule[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [openModules, setOpenModules] = useState<Set<number>>(new Set());
   const [addingModule, setAddingModule] = useState(false);
   const [moduleTitle, setModuleTitle] = useState("");
+  /** The section being renamed or rescheduled; null when nothing is open. */
+  const [moduleDraft, setModuleDraft] = useState<{
+    id: number;
+    title: string;
+    drip: DripChoice;
+  } | null>(null);
   const [lessonDraft, setLessonDraft] = useState<{
     moduleId: number;
-    lesson: Partial<CourseLesson>;
+    lesson: Partial<BuilderLesson>;
+    drip: DripChoice;
   } | null>(null);
   const [picking, setPicking] = useState(false);
   // Pasting a link is the escape hatch for video hosted somewhere else; it stays
@@ -148,7 +258,58 @@ export default function CourseBuilder() {
     }
   }
 
-  async function removeModule(mod: CourseModule) {
+  async function saveModule(e: FormEvent) {
+    e.preventDefault();
+    if (!moduleDraft?.title.trim()) return;
+    try {
+      await adminApi.moduleUpdate(moduleDraft.id, {
+        title: moduleDraft.title.trim(),
+        ...dripBody(moduleDraft.drip),
+      });
+      toast.success("Section saved");
+      setModuleDraft(null);
+      load();
+    } catch (err) {
+      toast.error(friendlyError(err, "section"));
+    }
+  }
+
+  /**
+   * Moves a section one place up or down the course.
+   *
+   * Every row whose position changed is written, not only the pair that swapped.
+   * `sort` defaults to 0 and nothing has ever been able to reorder a course, so
+   * a live course has runs of sections all sitting on the same number — swapping
+   * two identical values there moves nothing, and the arrow looks broken.
+   *
+   * The list is reordered on screen before the writes land, because an arrow
+   * that takes two round trips to move the row gets clicked again.
+   */
+  async function moveModule(index: number, direction: -1 | 1) {
+    if (!modules) return;
+    const target = index + direction;
+    if (target < 0 || target >= modules.length) return;
+
+    const reordered = [...modules];
+    [reordered[index], reordered[target]] = [reordered[target], reordered[index]];
+    setModules(reordered);
+
+    try {
+      await Promise.all(
+        reordered
+          .map((mod, position) => ({ mod, position }))
+          .filter(({ mod, position }) => mod.sort !== position)
+          .map(({ mod, position }) => adminApi.moduleUpdate(Number(mod.id), { sort: position })),
+      );
+    } catch (err) {
+      toast.error(friendlyError(err, "section"));
+    }
+    // Reloaded either way: on success to pick up the stored sort, and on failure
+    // so the screen stops showing an order the server never accepted.
+    load();
+  }
+
+  async function removeModule(mod: BuilderModule) {
     const ok = await confirm({
       title: `Delete “${mod.title}”?`,
       description: `${pluralize(mod.lessons.length, "lesson")} inside will go with it, and you can't undo this.`,
@@ -178,6 +339,9 @@ export default function CourseBuilder() {
       durationMinutes: lesson.durationMinutes ?? 0,
       preview: lesson.preview ?? false,
       published: lesson.published ?? true,
+      contentType: lesson.contentType || "text",
+      commentsEnabled: lesson.commentsEnabled !== false,
+      ...dripBody(lessonDraft.drip),
     };
 
     try {
@@ -191,7 +355,7 @@ export default function CourseBuilder() {
     }
   }
 
-  async function removeLesson(lesson: CourseLesson) {
+  async function removeLesson(lesson: BuilderLesson) {
     const ok = await confirm({
       title: `Delete “${lesson.title}”?`,
       confirmLabel: "Yes, delete it",
@@ -216,10 +380,14 @@ export default function CourseBuilder() {
     });
   }
 
-  function openLesson(moduleId: number, lesson: Partial<CourseLesson>) {
-    setLessonDraft({ moduleId, lesson });
+  function openLesson(moduleId: number, lesson: Partial<BuilderLesson>) {
+    setLessonDraft({ moduleId, lesson, drip: dripChoice(lesson) });
     setPastingLink(false);
     showVideo(lesson.videoUrl ?? "");
+  }
+
+  function updateDrip(drip: DripChoice) {
+    setLessonDraft((d) => (d ? { ...d, drip } : d));
   }
 
   /**
@@ -257,7 +425,7 @@ export default function CourseBuilder() {
       });
   }
 
-  function updateLesson(changes: Partial<CourseLesson>) {
+  function updateLesson(changes: Partial<BuilderLesson>) {
     setLessonDraft((d) => (d ? { ...d, lesson: { ...d.lesson, ...changes } } : d));
   }
 
@@ -339,12 +507,48 @@ export default function CourseBuilder() {
                         {mod.lessons.length === 0
                           ? "No lessons yet"
                           : pluralize(mod.lessons.length, "lesson")}
+                        {dripSummary(mod) ? ` · ${dripSummary(mod)}` : ""}
                       </span>
                     </span>
                     <motion.span animate={{ rotate: open ? 180 : 0 }} className="ml-auto shrink-0">
                       <ChevronDown className="size-4 text-ink-soft" />
                     </motion.span>
                   </button>
+                  {/* Order is the order students meet the course in, so it is
+                      changed here rather than being an implicit fact about when
+                      each section happened to be created. */}
+                  <Button
+                    variant="ghost"
+                    size="iconSm"
+                    aria-label={`Move ${mod.title} up`}
+                    disabled={index === 0}
+                    onClick={() => moveModule(index, -1)}
+                  >
+                    <ArrowUp />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="iconSm"
+                    aria-label={`Move ${mod.title} down`}
+                    disabled={index === modules.length - 1}
+                    onClick={() => moveModule(index, 1)}
+                  >
+                    <ArrowDown />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="iconSm"
+                    aria-label={`Rename ${mod.title}`}
+                    onClick={() =>
+                      setModuleDraft({
+                        id: Number(mod.id),
+                        title: mod.title,
+                        drip: dripChoice(mod),
+                      })
+                    }
+                  >
+                    <Pencil />
+                  </Button>
                   <Button
                     variant="dangerGhost"
                     size="iconSm"
@@ -402,6 +606,7 @@ export default function CourseBuilder() {
                                     ? `${lesson.durationMinutes} min`
                                     : "Length not set"}
                                   {lesson.videoUrl ? " · has a video" : " · no video yet"}
+                                  {dripSummary(lesson) ? ` · ${dripSummary(lesson)}` : ""}
                                 </span>
                               </button>
                               {lesson.preview && <Badge tone="gold">Free taster</Badge>}
@@ -471,6 +676,43 @@ export default function CourseBuilder() {
         </form>
       </Modal>
 
+      {/* Rename a section, and say when it opens */}
+      <Modal
+        open={moduleDraft !== null}
+        onOpenChange={(open) => !open && setModuleDraft(null)}
+        title="Edit this section"
+        footer={
+          <>
+            <Button variant="secondary" size="sm" onClick={() => setModuleDraft(null)}>
+              Cancel
+            </Button>
+            <Button size="sm" type="submit" form="edit-module">
+              Save section
+            </Button>
+          </>
+        }
+      >
+        {moduleDraft && (
+          <form id="edit-module" onSubmit={saveModule} className="space-y-4">
+            <Field label="Section name">
+              <Input
+                value={moduleDraft.title}
+                onChange={(e) => setModuleDraft({ ...moduleDraft, title: e.target.value })}
+                placeholder="Part one — Foundations"
+                required
+                autoFocus
+              />
+            </Field>
+
+            <DripFields
+              value={moduleDraft.drip}
+              onChange={(drip) => setModuleDraft({ ...moduleDraft, drip })}
+              noun="section"
+            />
+          </form>
+        )}
+      </Modal>
+
       {/* Lesson editor */}
       <Modal
         open={lessonDraft !== null}
@@ -498,6 +740,23 @@ export default function CourseBuilder() {
                 required
                 autoFocus
               />
+            </Field>
+
+            <Field
+              label="What is this lesson?"
+              hint="decides what students get shown — a player, a reading, a quiz"
+            >
+              <select
+                className={selectStyles}
+                value={lessonDraft.lesson.contentType || "text"}
+                onChange={(e) => updateLesson({ contentType: e.target.value })}
+              >
+                {LESSON_KINDS.map((kind) => (
+                  <option key={kind.value} value={kind.value}>
+                    {kind.label}
+                  </option>
+                ))}
+              </select>
             </Field>
 
             <Field label="Video" hint="students watch this at the top of the lesson">
@@ -563,7 +822,12 @@ export default function CourseBuilder() {
                   <Input
                     value={lessonDraft.lesson.videoUrl ?? ""}
                     onChange={(e) => {
-                      updateLesson({ videoUrl: e.target.value });
+                      updateLesson({
+                        videoUrl: e.target.value,
+                        ...(e.target.value.trim()
+                          ? kindForChosenVideo(lessonDraft.lesson.contentType)
+                          : {}),
+                      });
                       showVideo(e.target.value);
                     }}
                     aria-label="Link to a video hosted somewhere else"
@@ -589,6 +853,8 @@ export default function CourseBuilder() {
                 placeholder="A short recap, the homework, anything they should have to hand."
               />
             </Field>
+
+            <DripFields value={lessonDraft.drip} onChange={updateDrip} noun="lesson" />
 
             <div className="grid gap-4 sm:grid-cols-3">
               {/*
@@ -628,6 +894,17 @@ export default function CourseBuilder() {
                   Students can see this
                 </label>
               </div>
+              <div className="flex items-end">
+                <label className="flex cursor-pointer items-center gap-2.5 text-sm font-medium text-ink">
+                  <input
+                    type="checkbox"
+                    checked={lessonDraft.lesson.commentsEnabled !== false}
+                    onChange={(e) => updateLesson({ commentsEnabled: e.target.checked })}
+                    className="size-4 rounded border-hairline text-plum"
+                  />
+                  Let students comment
+                </label>
+              </div>
             </div>
           </form>
         )}
@@ -642,6 +919,7 @@ export default function CourseBuilder() {
           updateLesson({
             videoUrl: asset.url,
             ...(seconds === undefined ? {} : { durationMinutes: minutesFromSeconds(seconds) }),
+            ...kindForChosenVideo(lessonDraft?.lesson.contentType),
           });
           showVideo(asset.url, asset.previewUrl);
           setPicking(false);
@@ -650,6 +928,80 @@ export default function CourseBuilder() {
 
       {confirmDialog}
     </div>
+  );
+}
+
+/* --------------------------------------------------------- Release schedule */
+
+/**
+ * Picking a video makes it a video lesson.
+ *
+ * `content_type` defaults to "text" and the player switches on it, so a lesson
+ * built the ordinary way here — add a lesson, choose a video, save — showed
+ * students the notes and no player at all. Only a lesson still sitting on that
+ * default is moved; anything she set herself is left alone.
+ */
+function kindForChosenVideo(current: string | undefined): { contentType?: string } {
+  return current && current !== "text" ? {} : { contentType: "video" };
+}
+
+/**
+ * When a section or a lesson opens up.
+ *
+ * Three shapes, because that is all the engine can express: open now, open N
+ * days after they bought it, or open on a fixed date. The hour is deliberately
+ * missing — it is one site-wide setting rather than one per lesson, which is
+ * the whole reason "unlocks on the 3rd" means the same thing to every student,
+ * so the copy says where it lives instead of offering a box that would lie.
+ */
+function DripFields({
+  value,
+  onChange,
+  noun,
+}: {
+  value: DripChoice;
+  onChange: (value: DripChoice) => void;
+  noun: "section" | "lesson";
+}) {
+  return (
+    <Field
+      label="When does this open?"
+      hint="The time of day comes from Settings → Delivery, and covers your whole site."
+    >
+      <div className="space-y-2.5">
+        <select
+          className={selectStyles}
+          aria-label={`When this ${noun} opens`}
+          value={value.mode}
+          onChange={(e) => onChange({ ...value, mode: e.target.value as DripMode })}
+        >
+          <option value="immediately">As soon as they buy</option>
+          <option value="days">A set number of days after they buy</option>
+          <option value="date">On a date</option>
+        </select>
+
+        {value.mode === "days" && (
+          <Input
+            type="number"
+            min={1}
+            step={1}
+            value={value.days}
+            onChange={(e) => onChange({ ...value, days: e.target.value })}
+            aria-label={`Days after buying before this ${noun} opens`}
+            placeholder="7"
+          />
+        )}
+
+        {value.mode === "date" && (
+          <Input
+            type="date"
+            value={value.date}
+            onChange={(e) => onChange({ ...value, date: e.target.value })}
+            aria-label={`The date this ${noun} opens`}
+          />
+        )}
+      </div>
+    </Field>
   );
 }
 

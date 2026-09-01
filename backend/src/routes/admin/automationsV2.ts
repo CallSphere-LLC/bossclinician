@@ -5,7 +5,12 @@ import {
   ACTION_TYPES,
   TRIGGER_DESCRIPTORS,
   TRIGGER_TYPES,
+  conditionsSchema,
+  describeActionProblem,
+  describeConditionProblem,
+  evaluateConditions,
   isTriggerV2,
+  recordSkip,
   runAutomation,
   type RunContext,
 } from "../../automations/engineV2";
@@ -28,12 +33,25 @@ export const adminAutomationsV2Router = Router();
 
 /* ----------------------------------------------------------------- schemas */
 
+/**
+ * Conditions are held to the engine's own shape, and no further.
+ *
+ * Shape only, because the builder saves a condition the moment it is added and
+ * she chooses the tag on the next click; refusing that would make a condition
+ * impossible to add. Whether a condition is *finished* is the turn-it-on gate
+ * below, which is the point at which an unfinished one can do harm.
+ *
+ * `passthrough` keeps the flat legacy map that older automations still store,
+ * which `evaluateConditions` reads and which stripping would erase on any save.
+ */
+const savedConditionsSchema = conditionsSchema.passthrough();
+
 const automationSchema = z.object({
   name: z.string().trim().min(1, "Give this automation a name").max(200),
   description: z.string().max(2000).optional(),
   triggerType: z.enum(TRIGGER_TYPES),
   triggerConfig: z.record(z.union([z.string(), z.number(), z.boolean(), z.null()])).optional(),
-  conditions: z.unknown().optional(),
+  conditions: savedConditionsSchema.optional(),
   status: z.enum(["active", "paused"]).optional(),
   maxRunsPerContactPerDay: z.number().int().min(0).max(500).optional(),
 });
@@ -42,9 +60,76 @@ const actionSchema = z.object({
   actionType: z.enum(ACTION_TYPES),
   config: z.record(z.unknown()).optional(),
   delayMinutes: z.number().int().min(0).max(525_600).optional(),
-  conditions: z.unknown().optional(),
+  conditions: savedConditionsSchema.optional(),
   sort: z.number().int().min(0).optional(),
 });
+
+/* --------------------------------------------------------------- readiness */
+
+/**
+ * Whether an automation can do what its sentence says, and what is stopping it.
+ *
+ * One reading of "ready", shared by the places that need it: the save endpoints
+ * refuse a step that could never work, the turn-it-on check refuses the whole
+ * automation, and the two GETs hand the answer to the builder so an unfinished
+ * step is visible before she trusts it. All of them defer to the engine's own
+ * schemas, so a step this file calls ready and the runner treats as empty
+ * cannot happen again.
+ */
+
+/** The columns any of that needs, however the row was fetched. */
+interface StoredAction {
+  action_type: string;
+  config: Record<string, unknown> | null;
+  conditions: Record<string, unknown> | null;
+}
+
+const ACTION_LABEL = new Map<string, string>(
+  ACTION_DESCRIPTORS.map((descriptor) => [descriptor.type as string, descriptor.label])
+);
+
+/** `null` when this step is finished, otherwise what it is still missing. */
+function stepProblem(action: StoredAction): string | null {
+  return (
+    describeActionProblem(action.action_type, action.config ?? {}) ??
+    describeConditionProblem(action.conditions ?? {})
+  );
+}
+
+function readinessProblems(conditions: unknown, actions: StoredAction[]): string[] {
+  const problems: string[] = [];
+
+  const conditionProblem = describeConditionProblem(conditions ?? {});
+  if (conditionProblem) problems.push(conditionProblem);
+
+  // An automation with nothing to do still writes a run for every trigger, and
+  // every one of those runs says it went fine.
+  if (actions.length === 0) problems.push("it has no steps yet");
+
+  actions.forEach((action, index) => {
+    const problem = stepProblem(action);
+    if (!problem) return;
+    const label = ACTION_LABEL.get(action.action_type) ?? action.action_type;
+    problems.push(`step ${index + 1} (${label}) ${problem}`);
+  });
+
+  return problems;
+}
+
+/**
+ * The refusal, written to survive the trip to the screen.
+ *
+ * `friendlyError` in the admin passes a 400's own wording through to her only
+ * while it stays under 200 characters and does not read like a parser message;
+ * past that she gets "check the highlighted fields" on a screen with nothing
+ * highlighted. So the list is trimmed here rather than in the browser.
+ */
+function notReadyMessage(problems: string[]): string {
+  const shown = problems.slice(0, 2).join(", and ");
+  const rest = problems.length - 2;
+  const more = rest > 0 ? ` (and ${rest} more thing${rest === 1 ? "" : "s"})` : "";
+  return `Not ready to turn on yet: ${shown}${more}. Finish that and it will start.`.slice(0, 200);
+}
 
 /* ----------------------------------------------------------------- options */
 
@@ -206,6 +291,7 @@ adminAutomationsV2Router.get(
       id: number;
       trigger_type: string;
       trigger_config: Record<string, unknown>;
+      conditions: Record<string, unknown>;
     }>(
       `SELECT a.*,
               (SELECT COUNT(*)::int FROM automation_actions x WHERE x.automation_id = a.id) AS action_count
@@ -213,21 +299,24 @@ adminAutomationsV2Router.get(
         ORDER BY a.name`
     );
 
-    const actions = await pool.query<{
+    const actions = await pool.query<StoredAction & {
       automation_id: number;
-      action_type: string;
-      config: Record<string, unknown>;
       delay_minutes: number;
     }>(
-      `SELECT automation_id, action_type, config, delay_minutes
+      `SELECT automation_id, action_type, config, conditions, delay_minutes
          FROM automation_actions ORDER BY automation_id, sort, id`
     );
 
     const byAutomation = new Map<number, string[]>();
+    const stepsOf = new Map<number, StoredAction[]>();
     for (const action of actions.rows) {
       const list = byAutomation.get(action.automation_id) ?? [];
       list.push(actionSentence(lookup, action.action_type, action.config ?? {}, action.delay_minutes));
       byAutomation.set(action.automation_id, list);
+
+      const steps = stepsOf.get(action.automation_id) ?? [];
+      steps.push(action);
+      stepsOf.set(action.automation_id, steps);
     }
 
     res.json(
@@ -235,6 +324,10 @@ adminAutomationsV2Router.get(
         ...rowToCamel(row),
         triggerSentence: triggerSentence(lookup, row.trigger_type, row.trigger_config ?? {}),
         actionSentences: byAutomation.get(row.id) ?? [],
+        // The list is where she decides which automation to trust, so an
+        // unfinished one has to say so here rather than only once she opens it.
+        needsAttention:
+          readinessProblems(row.conditions, stepsOf.get(row.id) ?? []).length > 0,
       }))
     );
   })
@@ -277,6 +370,7 @@ adminAutomationsV2Router.get(
 
     const lookup = await buildLookup();
     const row = automation.rows[0];
+    const problems = readinessProblems(row.conditions, actions.rows);
 
     res.json({
       ...rowToCamel(row),
@@ -284,15 +378,56 @@ adminAutomationsV2Router.get(
       actions: actions.rows.map((action) => ({
         ...rowToCamel(action),
         sentence: actionSentence(lookup, action.action_type, action.config ?? {}, action.delay_minutes),
+        // Per step as well as for the whole automation: "something is unfinished"
+        // is not actionable on a screen with six steps on it.
+        problem: stepProblem(action),
       })),
+      problems,
+      needsAttention: problems.length > 0,
     });
   })
 );
 
+/**
+ * PATCH /api/admin/automations/:id
+ *
+ * Turning one on is the one edit that is refused rather than saved. Until this
+ * check existed, `status` flipped to active without anybody reading the steps,
+ * so an automation whose only step had nothing chosen went live and reported
+ * every run as a success.
+ *
+ * An automation that is *already* active and unfinished is left alone here — it
+ * is not silently paused behind her back — but its runs now report the problem
+ * instead of a green tick, the builder marks it as needing attention, and it
+ * cannot be turned on again once paused until it is finished.
+ */
 adminAutomationsV2Router.patch(
   "/:id",
   asyncHandler(async (req, res) => {
     const input = automationSchema.partial().parse(req.body);
+
+    if (input.status === "active") {
+      const current = await pool.query<{ conditions: Record<string, unknown> }>(
+        `SELECT conditions FROM automations WHERE id = $1`,
+        [req.params.id]
+      );
+      if (current.rowCount === 0) throw notFound("Automation not found");
+
+      const steps = await pool.query<StoredAction>(
+        `SELECT action_type, config, conditions FROM automation_actions
+          WHERE automation_id = $1 ORDER BY sort, id`,
+        [req.params.id]
+      );
+
+      // The conditions in this same request win: she may be fixing the last
+      // problem and turning it on in one go.
+      const problems = readinessProblems(
+        input.conditions ?? current.rows[0].conditions,
+        steps.rows
+      );
+      if (problems.length > 0) throw badRequest(notReadyMessage(problems));
+    }
+
     const result = await pool.query(
       `UPDATE automations SET
           name         = COALESCE($2, name),
@@ -339,6 +474,12 @@ adminAutomationsV2Router.post(
   asyncHandler(async (req, res) => {
     const input = actionSchema.parse(req.body);
 
+    // A step is saved finished or not at all. The builder used to create one
+    // from the Add menu with no configuration at all and never open the editor,
+    // which is where every "add the tag (none chosen)" came from.
+    const problem = describeActionProblem(input.actionType, input.config ?? {});
+    if (problem) throw badRequest(`This step ${problem}.`);
+
     const next = await pool.query<{ sort: number }>(
       `SELECT COALESCE(MAX(sort), -1) + 1 AS sort FROM automation_actions WHERE automation_id = $1`,
       [req.params.id]
@@ -366,6 +507,22 @@ adminAutomationsV2Router.patch(
   "/:id/actions/:actionId",
   asyncHandler(async (req, res) => {
     const input = actionSchema.partial().parse(req.body);
+
+    if (input.config !== undefined || input.actionType !== undefined) {
+      // The type comes from the row when the edit does not change it: a config
+      // is only meaningful against the kind of step it belongs to.
+      const existing = await pool.query<{ action_type: string; config: Record<string, unknown> }>(
+        `SELECT action_type, config FROM automation_actions WHERE id = $2 AND automation_id = $1`,
+        [req.params.id, req.params.actionId]
+      );
+      if (existing.rowCount === 0) throw notFound("Step not found");
+
+      const actionType = input.actionType ?? existing.rows[0].action_type;
+      const config = input.config ?? existing.rows[0].config ?? {};
+      const problem = describeActionProblem(actionType, config);
+      if (problem) throw badRequest(`This step ${problem}.`);
+    }
+
     const result = await pool.query(
       `UPDATE automation_actions SET
           action_type   = COALESCE($3, action_type),
@@ -453,6 +610,12 @@ adminAutomationsV2Router.get(
  * Runs every step against a real person without doing anything to them: each
  * action reports what it would have done. A dry run is the only way to answer
  * "will this send the wrong email to four hundred people" before it does.
+ *
+ * It goes through the automation's own "only if" first, exactly as `fireTrigger`
+ * does. Calling `runAutomation` straight off skipped that check, so the one
+ * automation on this site — whose condition matches nobody — practised green
+ * while every real purchase was being skipped. A dry run that cannot reproduce
+ * a skip is worse than no dry run: it is a green tick over the failure.
  */
 adminAutomationsV2Router.post(
   "/:id/test",
@@ -465,10 +628,10 @@ adminAutomationsV2Router.post(
       })
       .parse(req.body);
 
-    const automation = await pool.query<{ trigger_type: string }>(
-      `SELECT trigger_type FROM automations WHERE id = $1`,
-      [req.params.id]
-    );
+    const automation = await pool.query<{
+      trigger_type: string;
+      conditions: Record<string, unknown>;
+    }>(`SELECT trigger_type, conditions FROM automations WHERE id = $1`, [req.params.id]);
     if (automation.rowCount === 0) throw notFound("Automation not found");
 
     const triggerType = automation.rows[0].trigger_type;
@@ -491,12 +654,28 @@ adminAutomationsV2Router.post(
       facts: { email: input.email.toLowerCase(), name: input.name ?? "" },
     };
 
+    const automationId = Number(req.params.id);
+    const isTest = input.live !== true;
+    const conditions = automation.rows[0].conditions ?? {};
+
+    // Reported as a skip, and written to the history as one, because that is
+    // what a real trigger would do with this person.
+    const conditionProblem = describeConditionProblem(conditions);
+    if (conditionProblem || !(await evaluateConditions(conditions, context))) {
+      const reason = conditionProblem
+        ? `Nothing would happen — ${conditionProblem}`
+        : "Nothing would happen — this person does not meet the conditions";
+      const runId = await recordSkip(automationId, context, reason, isTest);
+      res.status(202).json({ runId, status: "skipped", log: [reason] });
+      return;
+    }
+
     const result = await runAutomation({
-      automationId: Number(req.params.id),
+      automationId,
       context,
       // `live` really does everything, for the case where the owner wants to
       // see the email land in her own inbox. Off by default.
-      isTest: input.live !== true,
+      isTest,
     });
 
     res.status(202).json(result);

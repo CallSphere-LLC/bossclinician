@@ -4,6 +4,7 @@ import {
   CreditCard,
   ExternalLink,
   FileText,
+  Pencil,
   Plus,
   Receipt,
   RefreshCw,
@@ -12,7 +13,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { adminApi } from "@/lib/api";
-import type { Coupon, Invoice, Payment, Plan, Subscription } from "@/types/admin";
+import type { Community, Coupon, Invoice, Payment, Plan, Subscription } from "@/types/admin";
 import { formatCurrency, formatDate } from "@/lib/format";
 import {
   Badge,
@@ -30,7 +31,14 @@ import {
 import { DataTable, RowActions } from "@/pages/admin/ui/DataTable";
 import { Modal, useConfirm } from "@/pages/admin/ui/Dialog";
 import { StripeBanner } from "@/pages/admin/ui/StripeBanner";
-import { friendlyError, humanizeKey, orNone, pluralize, PUBLISH_LABEL } from "@/pages/admin/ui/friendly";
+import {
+  friendlyError,
+  humanizeKey,
+  orNone,
+  pluralize,
+  publishLabel,
+  PUBLISH_LABEL,
+} from "@/pages/admin/ui/friendly";
 
 /**
  * Every machine status that can reach these screens — a one-off order, a
@@ -183,20 +191,82 @@ export function PaymentsPage() {
 
 /* ------------------------------------------------------------------- Plans */
 
+/**
+ * The plan form's own shape.
+ *
+ * Held the way she types it rather than the way the API stores it: `price`
+ * keeps "49" and "49.00" apart from 4900 cents, `communityId` is a select's
+ * string value, and `features` is the raw text of a textarea. Converting only
+ * on save is what lets one set of boxes both create a plan and edit one.
+ */
+interface PlanDraft {
+  name: string;
+  description: string;
+  price: string;
+  interval: string;
+  trialDays: number;
+  communityId: string;
+  features: string;
+  published: boolean;
+}
+
+const EMPTY_PLAN: PlanDraft = {
+  name: "",
+  description: "",
+  price: "49",
+  interval: "month",
+  trialDays: 0,
+  communityId: "",
+  features: "",
+  published: true,
+};
+
+/** `features` is a jsonb column, so an old or hand-edited row can hold anything. */
+function featuresOf(plan: Plan): string[] {
+  return Array.isArray(plan.features) ? plan.features.filter((f) => typeof f === "string") : [];
+}
+
+function draftOf(plan: Plan): PlanDraft {
+  return {
+    name: plan.name,
+    description: plan.description,
+    price: (plan.priceCents / 100).toFixed(2),
+    interval: plan.interval === "year" ? "year" : "month",
+    trialDays: plan.trialDays,
+    communityId: plan.communityId === null ? "" : String(plan.communityId),
+    features: featuresOf(plan).join("\n"),
+    published: plan.published,
+  };
+}
+
+/** Textarea → the bullet list the API takes; a blank line is not a bullet. */
+function featureList(text: string): string[] {
+  return text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .slice(0, 25);
+}
+
+/**
+ * Clamped rather than checked. A number box hands back "4000" or "" just as
+ * readily as "14", and either one comes back from the API as a parser
+ * complaint this form has nowhere to put.
+ */
+function trialDaysFrom(raw: string): number {
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed)) return 0;
+  return Math.min(365, Math.max(0, parsed));
+}
+
 export function PlansPage() {
   const [plans, setPlans] = useState<Plan[] | null>(null);
+  const [communities, setCommunities] = useState<Community[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const [editing, setEditing] = useState<Plan | null>(null);
   const [saving, setSaving] = useState(false);
-  // `price` is held as she typed it ("49", "49.00") and converted to cents on
-  // save, so the number she reads back is always the number she meant.
-  const [form, setForm] = useState({
-    name: "",
-    description: "",
-    price: "49",
-    interval: "month",
-    trialDays: 0,
-  });
+  const [form, setForm] = useState<PlanDraft>(EMPTY_PLAN);
   const [confirm, confirmDialog] = useConfirm();
 
   const load = useCallback(() => {
@@ -208,26 +278,94 @@ export function PlansPage() {
 
   useEffect(load, [load]);
 
+  // The communities a plan can unlock. This screen only needs `orders.view`,
+  // while the community list sits behind `community.view`, so a Support or
+  // Marketing account can reach Plans and not this — an empty list rather than
+  // a broken page, and the picker hides itself below.
+  useEffect(() => {
+    adminApi
+      .communities()
+      .then(setCommunities)
+      .catch(() => setCommunities([]));
+  }, []);
+
+  const communityName = useMemo(() => {
+    const byId = new Map<number, string>();
+    for (const community of communities ?? []) byId.set(community.id, community.name);
+    return byId;
+  }, [communities]);
+
+  const canPickCommunity = communities !== null && communities.length > 0;
+
   const priceCents = dollarsToCents(form.price);
   // Only complain when there's no number in there at all — a blank box and a
   // typed 0 both mean "free for now", which was always allowed.
   const priceLooksWrong = form.price.trim() !== "" && !/\d/.test(form.price);
+  // The API caps a price at $999,999.99. Caught here so a stray zero comes back
+  // under the box rather than as "Invalid payload" in a toast.
+  const priceTooHigh = priceCents > 99_999_999;
+  const priceError = priceLooksWrong
+    ? "Type a price like 49 or 49.00."
+    : priceTooHigh
+      ? "That's above the most this can charge — keep it under $1,000,000."
+      : undefined;
 
-  async function create(e: FormEvent) {
+  // Stripe holds the price of a plan that is on sale, and only the local row is
+  // editable here. Changing the amount would print one figure on the card and
+  // charge another at the checkout, so the boxes are closed and the API refuses
+  // it too — a new price is a new plan.
+  const priceLocked = editing !== null && Boolean(editing.stripePriceId);
+
+  function openCreate() {
+    setForm(EMPTY_PLAN);
+    setEditing(null);
+    setCreating(true);
+  }
+
+  function openEdit(plan: Plan) {
+    setForm(draftOf(plan));
+    setCreating(false);
+    setEditing(plan);
+  }
+
+  function closeForm() {
+    setCreating(false);
+    setEditing(null);
+  }
+
+  async function save(e: FormEvent) {
     e.preventDefault();
-    if (!form.name.trim() || priceLooksWrong) return;
+    if (!form.name.trim() || priceError) return;
     setSaving(true);
+
+    // Everything the server can refuse is either checked here or made
+    // unpickable in the form. A rejected parse comes back as "Invalid payload",
+    // which `friendlyError` can only turn into "check the highlighted fields" —
+    // useless on a screen that has nothing highlighted.
+    const payload: Record<string, unknown> = {
+      name: form.name.trim(),
+      description: form.description,
+      trialDays: form.trialDays,
+      features: featureList(form.features),
+      published: form.published,
+    };
+    if (canPickCommunity) {
+      payload.communityId = form.communityId === "" ? null : Number(form.communityId);
+    }
+    if (!priceLocked) {
+      payload.priceCents = priceCents;
+      payload.interval = form.interval;
+    }
+
     try {
-      await adminApi.planCreate({
-        name: form.name,
-        description: form.description,
-        priceCents,
-        interval: form.interval,
-        trialDays: form.trialDays,
-      });
-      toast.success("Plan created — people can subscribe to it now");
-      setCreating(false);
-      setForm({ name: "", description: "", price: "49", interval: "month", trialDays: 0 });
+      if (editing) {
+        await adminApi.planUpdate(editing.id, payload);
+        toast.success("Plan updated");
+      } else {
+        await adminApi.planCreate(payload);
+        toast.success("Plan created — people can subscribe to it now");
+      }
+      closeForm();
       load();
     } catch (err) {
       toast.error(friendlyError(err, "plan"));
@@ -261,7 +399,7 @@ export function PlansPage() {
         title="Plans & Pricing"
         description="What people pay you every month or every year — for memberships and paid communities."
         actions={
-          <Button size="sm" onClick={() => setCreating(true)}>
+          <Button size="sm" onClick={openCreate}>
             <Plus />
             New plan
           </Button>
@@ -283,7 +421,7 @@ export function PlansPage() {
             title="No plans yet"
             description="Set up a monthly or yearly plan and people can start paying you regularly."
             action={
-              <Button size="sm" onClick={() => setCreating(true)}>
+              <Button size="sm" onClick={openCreate}>
                 Create plan
               </Button>
             }
@@ -291,7 +429,9 @@ export function PlansPage() {
         </Card>
       ) : (
         <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-          {plans.map((plan) => (
+          {plans.map((plan) => {
+            const features = featuresOf(plan);
+            return (
             <Card key={plan.id} className="flex flex-col p-5">
               <div className="flex items-start justify-between gap-3">
                 <h3 className="font-display text-lg text-ink">{plan.name}</h3>
@@ -313,6 +453,33 @@ export function PlansPage() {
                 </p>
               )}
 
+              {/* What subscribing actually unlocks. Named on the card because a
+                  plan that grants nothing looks identical to one that grants a
+                  community until you open it. */}
+              <p className="mt-2 text-xs text-ink-soft">
+                {plan.communityId === null ? (
+                  "Doesn't unlock a community"
+                ) : (
+                  <>
+                    Unlocks{" "}
+                    <strong className="text-ink">
+                      {communityName.get(plan.communityId) ?? "a community"}
+                    </strong>
+                  </>
+                )}
+              </p>
+
+              {features.length > 0 && (
+                <ul className="mt-2.5 space-y-1 text-xs text-ink-soft">
+                  {features.slice(0, 3).map((feature) => (
+                    <li key={feature} className="truncate">
+                      · {feature}
+                    </li>
+                  ))}
+                  {features.length > 3 && <li>· and {features.length - 3} more</li>}
+                </ul>
+              )}
+
               <div className="mt-4 flex items-center justify-between border-t border-hairline/70 pt-3">
                 <span className="text-xs text-ink-soft">
                   <strong className="text-ink">{plan.activeSubscribers}</strong>{" "}
@@ -327,43 +494,60 @@ export function PlansPage() {
                 )}
               </div>
 
-              <Button
-                variant="dangerGhost"
-                size="sm"
-                className="mt-3 w-full"
-                onClick={() => remove(plan)}
-              >
-                <Trash2 />
-                Delete plan
-              </Button>
+              <div className="mt-3 flex gap-2">
+                <Button variant="secondary" size="sm" className="flex-1" onClick={() => openEdit(plan)}>
+                  <Pencil />
+                  Edit plan
+                </Button>
+                <Button
+                  variant="dangerGhost"
+                  size="iconSm"
+                  aria-label={`Delete ${plan.name}`}
+                  onClick={() => remove(plan)}
+                >
+                  <Trash2 />
+                </Button>
+              </div>
             </Card>
-          ))}
+            );
+          })}
         </div>
       )}
 
+      {/* One form for both jobs: a plan created without the community it was
+          meant to unlock is fixed by editing the same boxes that got it wrong,
+          and a second form would be the next thing to drift out of step with
+          what the API accepts. */}
       <Modal
-        open={creating}
-        onOpenChange={setCreating}
-        title="New plan"
-        description="Once it's saved, people can start paying for it from your site."
+        open={creating || editing !== null}
+        onOpenChange={(next) => {
+          if (!next) closeForm();
+        }}
+        title={editing ? `Edit ${editing.name}` : "New plan"}
+        description={
+          editing
+            ? "Changes show on your pricing straight away, for new and existing members."
+            : "Once it's saved, people can start paying for it from your site."
+        }
         footer={
           <>
-            <Button variant="secondary" size="sm" onClick={() => setCreating(false)}>
+            <Button variant="secondary" size="sm" onClick={closeForm}>
               Cancel
             </Button>
-            <Button size="sm" type="submit" form="new-plan" disabled={saving || priceLooksWrong}>
-              {saving ? "Creating…" : "Create plan"}
+            <Button size="sm" type="submit" form="plan-form" disabled={saving || Boolean(priceError)}>
+              {saving ? "Saving…" : editing ? "Save changes" : "Create plan"}
             </Button>
           </>
         }
       >
-        <form id="new-plan" onSubmit={create} className="space-y-4">
+        <form id="plan-form" onSubmit={save} className="space-y-4">
           <Field label="What's this plan called?" htmlFor="plan-name">
             <Input
               id="plan-name"
               value={form.name}
               onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
               placeholder="Collective Membership"
+              maxLength={200}
               required
               autoFocus
             />
@@ -386,7 +570,7 @@ export function PlansPage() {
               label="Price"
               hint="in dollars"
               htmlFor="plan-price"
-              error={priceLooksWrong ? "Type a price like 49 or 49.00." : undefined}
+              error={priceError}
             >
               <div className="relative">
                 <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm text-ink-soft">
@@ -397,6 +581,7 @@ export function PlansPage() {
                   inputMode="decimal"
                   className="pl-7"
                   value={form.price}
+                  disabled={priceLocked}
                   onChange={(e) => setForm((f) => ({ ...f, price: e.target.value }))}
                   placeholder="49"
                 />
@@ -406,6 +591,7 @@ export function PlansPage() {
               <select
                 id="plan-interval"
                 value={form.interval}
+                disabled={priceLocked}
                 onChange={(e) => setForm((f) => ({ ...f, interval: e.target.value }))}
                 className={selectStyles}
               >
@@ -418,13 +604,74 @@ export function PlansPage() {
                 id="plan-trial"
                 type="number"
                 min={0}
+                max={365}
                 value={form.trialDays}
-                onChange={(e) => setForm((f) => ({ ...f, trialDays: Number(e.target.value) }))}
+                onChange={(e) => setForm((f) => ({ ...f, trialDays: trialDaysFrom(e.target.value) }))}
               />
             </Field>
           </div>
+          {priceLocked && (
+            <p className="rounded-xl bg-cream px-3.5 py-2.5 text-xs text-ink-soft">
+              The price is locked because people can already buy this plan — it lives with your card
+              processor now. To charge something different, create a new plan and stop selling this one.
+            </p>
+          )}
+
+          {/* The plan's one entitlement. Everything else a subscriber should
+              get is sold as an offer over products; this is the only thing a
+              plan unlocks by itself, and until it was on this form no plan
+              could unlock anything at all. */}
+          {canPickCommunity && (
+            <Field
+              label="Which community does this unlock?"
+              hint="optional"
+              htmlFor="plan-community"
+            >
+              <select
+                id="plan-community"
+                value={form.communityId}
+                onChange={(e) => setForm((f) => ({ ...f, communityId: e.target.value }))}
+                className={selectStyles}
+              >
+                <option value="">No community — this plan is just a payment</option>
+                {communities?.map((community) => (
+                  <option key={community.id} value={String(community.id)}>
+                    {community.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          )}
+
+          <Field
+            label="What's included?"
+            hint="one per line — the ticks on your pricing table"
+            htmlFor="plan-features"
+          >
+            <Textarea
+              id="plan-features"
+              rows={4}
+              value={form.features}
+              onChange={(e) => setForm((f) => ({ ...f, features: e.target.value }))}
+              placeholder={"Weekly group call\nThe private community\nEvery masterclass"}
+            />
+          </Field>
+
+          <label className="flex cursor-pointer items-center gap-2.5 text-sm font-medium text-ink">
+            <input
+              type="checkbox"
+              checked={form.published}
+              onChange={(e) => setForm((f) => ({ ...f, published: e.target.checked }))}
+              className="size-4 rounded border-hairline text-plum"
+            />
+            {publishLabel(form.published)}
+          </label>
+
           <p className="rounded-xl bg-cream px-3.5 py-2.5 text-xs text-ink-soft">
-            They'll pay <strong className="text-ink">{formatCurrency(priceCents)}</strong>{" "}
+            They'll pay{" "}
+            <strong className="text-ink">
+              {formatCurrency(priceLocked ? (editing?.priceCents ?? 0) : priceCents)}
+            </strong>{" "}
             {form.interval === "year" ? "every year" : "every month"}
             {form.trialDays > 0
               ? `, starting after ${form.trialDays} free ${form.trialDays === 1 ? "day" : "days"}.`

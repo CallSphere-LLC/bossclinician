@@ -144,6 +144,10 @@ export const ACTION_DESCRIPTORS: ActionDescriptor[] = [
  * accepted, because every automation created before this phase is stored that
  * way and silently ignoring their conditions would make each of them fire for
  * everybody.
+ *
+ * Exported so the save endpoint can hold conditions to the shape the engine
+ * reads them in: a `rules` key holding anything else parsed here as "no rules",
+ * and the automation ran for everybody.
  */
 const conditionRuleSchema = z.object({
   field: z.string(),
@@ -151,12 +155,52 @@ const conditionRuleSchema = z.object({
   value: z.union([z.string(), z.number(), z.boolean(), z.null()]).optional(),
 });
 
-const conditionsSchema = z.object({
+export const conditionsSchema = z.object({
   match: z.enum(["all", "any"]).default("all"),
   rules: z.array(conditionRuleSchema).default([]),
 });
 
 export type ConditionRule = z.infer<typeof conditionRuleSchema>;
+
+/**
+ * Condition fields that mean nothing until she picks the thing to check.
+ *
+ * "they already have the tag —" is not a narrower rule than no rule at all; it
+ * is a rule about tag id 0. Whether that reads as always-false or always-true
+ * depends on the operator, which is why a half-built rule cannot be left to
+ * evaluate: one of the two operators quietly opens the automation to everybody.
+ */
+const CONDITION_SUBJECT_FIELDS = new Set(["tag", "in_sequence", "owns_offer", "lifetime_value"]);
+
+function ruleIsComplete(rule: ConditionRule): boolean {
+  if (!rule.field.trim() || !rule.op.trim()) return false;
+  // "is set" is the one operator that asks about presence rather than a value.
+  if (rule.op === "is_set") return true;
+  if (rule.value === null || rule.value === undefined || rule.value === "") return false;
+  if (CONDITION_SUBJECT_FIELDS.has(rule.field)) return Number(rule.value) > 0;
+  return true;
+}
+
+/**
+ * `null` when an "only if" is safe to act on, otherwise why it is not.
+ *
+ * A shape this cannot read at all is reported too: the legacy flat map is
+ * handled by `evaluateConditions` and stays acceptable here, but a `rules` key
+ * holding something that is not a list of rules would be silently ignored and
+ * the automation would run for everybody.
+ */
+export function describeConditionProblem(raw: unknown): string | null {
+  if (raw === null || raw === undefined || typeof raw !== "object") return null;
+
+  const parsed = conditionsSchema.safeParse(raw);
+  if (!parsed.success) return "one of the conditions is not something the builder can read";
+
+  const incomplete = parsed.data.rules.filter((rule) => !ruleIsComplete(rule)).length;
+  if (incomplete === 0) return null;
+  return incomplete === 1
+    ? "one condition has nothing chosen to check against"
+    : `${incomplete} conditions have nothing chosen to check against`;
+}
 
 export interface RunContext {
   trigger: TriggerV2;
@@ -272,9 +316,22 @@ export async function evaluateConditions(
 
 /* ------------------------------------------------------------ action configs */
 
+/**
+ * What each kind of step must have before it can do the thing it says.
+ *
+ * These are the only description of a complete step, and every gate reads them:
+ * the save endpoint, the turn-it-on check, the dry run and the runner itself.
+ * They used to be read only by the runner, and only to decide which sentence to
+ * write in the log — which is how "add a tag" with no tag chosen saved, went
+ * active, and reported RAN FINE.
+ *
+ * Nothing here has a forgiving default for the field that *is* the step. A
+ * default subject or a default title turns "she has not filled this in yet"
+ * into a valid step that sends a blank email.
+ */
 const sendEmailConfig = z.object({
-  subject: z.string().default(""),
-  bodyMd: z.string().default(""),
+  subject: z.string().trim().min(1),
+  bodyMd: z.string().trim().min(1),
   fromName: z.string().default(""),
   fromEmail: z.string().default(""),
   topic: z.string().default("marketing"),
@@ -285,17 +342,89 @@ const tagConfig = z.object({ tagId: z.coerce.number().int().positive() });
 const offerConfig = z.object({ offerId: z.coerce.number().int().positive() });
 const eventConfig = z.object({ eventId: z.coerce.number().int().positive() });
 const taskConfig = z.object({
-  title: z.string().default("Follow up"),
+  title: z.string().trim().min(1),
   note: z.string().default(""),
 });
 const webhookConfig = z.object({
   url: z.string().url(),
   secret: z.string().default(""),
 });
-const waitConfig = z.object({
-  minutes: z.coerce.number().int().min(0).default(0),
-  days: z.coerce.number().int().min(0).default(0),
+const waitConfig = z
+  .object({
+    minutes: z.coerce.number().int().min(0).default(0),
+    days: z.coerce.number().int().min(0).default(0),
+  })
+  // A wait of no time is not a wait. Left valid, it reads as "wait a while" on
+  // the screen and carries straight on at run time, which is the one difference
+  // she cannot see in the sentence.
+  .refine((value) => value.minutes + value.days > 0);
+
+/**
+ * A branch is only a gate if it has something to check.
+ *
+ * An empty one held nothing back and logged "Condition held — carrying on",
+ * so a step added to stop the run let everybody through instead.
+ */
+const branchConfig = z.object({
+  conditions: conditionsSchema.refine(
+    (value) => value.rules.length > 0 && value.rules.every(ruleIsComplete)
+  ),
 });
+
+/** Every action type's requirements, keyed the way the rows are stored. */
+export const ACTION_CONFIG_SCHEMAS: Record<ActionV2, z.ZodTypeAny> = {
+  send_email: sendEmailConfig,
+  subscribe_sequence: sequenceConfig,
+  unsubscribe_sequence: sequenceConfig,
+  add_tag: tagConfig,
+  remove_tag: tagConfig,
+  grant_offer: offerConfig,
+  revoke_offer: offerConfig,
+  register_event: eventConfig,
+  create_task: taskConfig,
+  fire_webhook: webhookConfig,
+  wait: waitConfig,
+  branch: branchConfig,
+};
+
+/**
+ * What is missing, in her words, ready to be read after "this step".
+ *
+ * The reason for a hand-written line per type rather than zod's own message is
+ * that these are shown on the builder and written into the run log; "Required
+ * at config.tagId" is not something the owner of the business can act on.
+ */
+const ACTION_CONFIG_PROBLEM: Record<ActionV2, string> = {
+  send_email: "needs both a subject and something to say",
+  subscribe_sequence: "has no sequence chosen",
+  unsubscribe_sequence: "has no sequence chosen",
+  add_tag: "has no tag chosen",
+  remove_tag: "has no tag chosen",
+  grant_offer: "has no offer chosen",
+  revoke_offer: "has no offer chosen",
+  register_event: "has no event chosen",
+  create_task: "has nothing to remind you about",
+  fire_webhook: "has no web address to notify",
+  wait: "waits no time at all",
+  branch: "has nothing to check",
+};
+
+const UNKNOWN_ACTION_PROBLEM = "is a kind of step this platform cannot do";
+
+/**
+ * `null` when a step is ready to run, otherwise why it is not.
+ *
+ * Shared deliberately: the API, the activation check and the runner have to
+ * agree about what "configured" means, or a step refused by one is reported as
+ * fine by another.
+ */
+export function describeActionProblem(actionType: string, config: unknown): string | null {
+  const schema = ACTION_CONFIG_SCHEMAS[actionType as ActionV2];
+  if (!schema) return UNKNOWN_ACTION_PROBLEM;
+  return schema.safeParse(config ?? {}).success
+    ? null
+    : ACTION_CONFIG_PROBLEM[actionType as ActionV2];
+}
 
 /* ------------------------------------------------------------------- running */
 
@@ -332,26 +461,46 @@ async function tagSlug(tagId: number): Promise<string | null> {
 /** How long a webhook is given before the automation gives up on it. */
 const WEBHOOK_TIMEOUT_MS = 10_000;
 
+interface ActionOutcome {
+  log: string;
+  stop: boolean;
+  /**
+   * The step could not do its job because it was never finished.
+   *
+   * Separate from a thrown error on purpose: the run carries on, but the run
+   * cannot be called a success. Reporting these as ordinary outcomes is what let
+   * an automation whose only step did nothing show up as RAN FINE.
+   */
+  misconfigured?: boolean;
+}
+
+/** The outcome for a step that was never filled in, in the log's own voice. */
+function unfinished(actionType: string): ActionOutcome {
+  const problem = describeActionProblem(actionType, {}) ?? "is not finished";
+  return { log: `Nothing done — this step ${problem}`, stop: false, misconfigured: true };
+}
+
 /**
  * Performs one action and returns the line it writes in the run log.
  *
  * Every branch returns a sentence rather than throwing on a missing bit of
  * configuration: a half-configured action is a thing to see in the run log, not
- * a reason to abandon the four actions after it.
+ * a reason to abandon the four actions after it. It is still counted against the
+ * run — see `ActionOutcome.misconfigured`.
  */
 async function performAction(
   action: ActionRow,
   context: RunContext,
   automationId: number,
   isTest: boolean
-): Promise<{ log: string; stop: boolean }> {
+): Promise<ActionOutcome> {
   const config = action.config ?? {};
   const contactId = context.contactId;
 
   switch (action.action_type) {
     case "send_email": {
       const parsed = sendEmailConfig.safeParse(config);
-      if (!parsed.success) return { log: "Email: not set up yet", stop: false };
+      if (!parsed.success) return unfinished(action.action_type);
       if (contactId === null || !context.email) {
         return { log: "Email: skipped, no contact to send to", stop: false };
       }
@@ -388,7 +537,7 @@ async function performAction(
 
     case "subscribe_sequence": {
       const parsed = sequenceConfig.safeParse(config);
-      if (!parsed.success) return { log: "Sequence: none chosen", stop: false };
+      if (!parsed.success) return unfinished(action.action_type);
       if (contactId === null) return { log: "Sequence: skipped, no contact", stop: false };
       if (isTest) return { log: "Sequence: would start them on it", stop: false };
 
@@ -400,7 +549,7 @@ async function performAction(
 
     case "unsubscribe_sequence": {
       const parsed = sequenceConfig.safeParse(config);
-      if (!parsed.success) return { log: "Sequence: none chosen", stop: false };
+      if (!parsed.success) return unfinished(action.action_type);
       if (contactId === null) return { log: "Sequence: skipped, no contact", stop: false };
       if (isTest) return { log: "Sequence: would take them off it", stop: false };
 
@@ -412,7 +561,7 @@ async function performAction(
 
     case "add_tag": {
       const parsed = tagConfig.safeParse(config);
-      if (!parsed.success) return { log: "Tag: none chosen", stop: false };
+      if (!parsed.success) return unfinished(action.action_type);
       if (contactId === null) return { log: "Tag: skipped, no contact", stop: false };
 
       const slug = await tagSlug(parsed.data.tagId);
@@ -425,7 +574,7 @@ async function performAction(
 
     case "remove_tag": {
       const parsed = tagConfig.safeParse(config);
-      if (!parsed.success) return { log: "Tag: none chosen", stop: false };
+      if (!parsed.success) return unfinished(action.action_type);
       if (contactId === null) return { log: "Tag: skipped, no contact", stop: false };
       if (isTest) return { log: "Tag: would remove it", stop: false };
 
@@ -438,7 +587,7 @@ async function performAction(
 
     case "grant_offer": {
       const parsed = offerConfig.safeParse(config);
-      if (!parsed.success) return { log: "Offer: none chosen", stop: false };
+      if (!parsed.success) return unfinished(action.action_type);
       const memberId = await memberIdFor(contactId);
       if (memberId === null) {
         return { log: "Offer: skipped, they have no account yet", stop: false };
@@ -455,7 +604,7 @@ async function performAction(
 
     case "revoke_offer": {
       const parsed = offerConfig.safeParse(config);
-      if (!parsed.success) return { log: "Offer: none chosen", stop: false };
+      if (!parsed.success) return unfinished(action.action_type);
       const memberId = await memberIdFor(contactId);
       if (memberId === null) return { log: "Offer: skipped, they have no account", stop: false };
       if (isTest) return { log: "Offer: would take access away", stop: false };
@@ -470,7 +619,7 @@ async function performAction(
 
     case "register_event": {
       const parsed = eventConfig.safeParse(config);
-      if (!parsed.success) return { log: "Event: none chosen", stop: false };
+      if (!parsed.success) return unfinished(action.action_type);
       if (contactId === null || !context.email) {
         return { log: "Event: skipped, no contact", stop: false };
       }
@@ -502,8 +651,8 @@ async function performAction(
 
     case "create_task": {
       const parsed = taskConfig.safeParse(config);
-      const title = parsed.success ? parsed.data.title : "Follow up";
-      const note = parsed.success ? parsed.data.note : "";
+      if (!parsed.success) return unfinished(action.action_type);
+      const { title, note } = parsed.data;
       if (isTest) return { log: `Note: would remind you to "${title}"`, stop: false };
 
       // There is no task table on this platform, so the follow-up lands in the
@@ -531,7 +680,7 @@ async function performAction(
 
     case "fire_webhook": {
       const parsed = webhookConfig.safeParse(config);
-      if (!parsed.success) return { log: "Notify: no web address set", stop: false };
+      if (!parsed.success) return unfinished(action.action_type);
       if (isTest) return { log: `Notify: would call ${parsed.data.url}`, stop: false };
 
       const body = JSON.stringify({
@@ -561,6 +710,12 @@ async function performAction(
     }
 
     case "branch": {
+      // An unfinished gate stops the run rather than letting it through. The
+      // step was added to hold something back, and carrying on would do the one
+      // thing she added it to prevent.
+      if (!branchConfig.safeParse(config).success) {
+        return { ...unfinished(action.action_type), stop: true };
+      }
       const holds = await evaluateConditions(config.conditions ?? {}, context);
       return {
         log: holds ? "Condition held — carrying on" : "Condition did not hold — stopped here",
@@ -574,7 +729,13 @@ async function performAction(
       return { log: "Waiting", stop: true };
 
     default:
-      return { log: `${action.action_type}: not something this platform can do`, stop: false };
+      // A row left behind by an older engine. Nothing to run, and nothing about
+      // it is a success.
+      return {
+        log: `${action.action_type}: not something this platform can do`,
+        stop: false,
+        misconfigured: true,
+      };
   }
 }
 
@@ -772,7 +933,16 @@ export async function runAutomation(input: RunAutomationInput): Promise<RunResul
     }
 
     if (action.action_type === "wait") {
-      await noteLog(runId, log, "No wait set — carrying straight on");
+      if (waitMinutes > 0) {
+        // A dry run reaches a real wait here, because it does not schedule one.
+        await noteLog(runId, log, `Would wait ${waitMinutes} minute(s) before carrying on`);
+        continue;
+      }
+      // A wait with no time on it is a step she added and never filled in. It
+      // is handled by this loop rather than by `performAction`, so it needs its
+      // own count or a run whose only pause was never set reports success.
+      failures += 1;
+      await noteLog(runId, log, "Nothing done — this step waits no time at all");
       continue;
     }
 
@@ -797,6 +967,10 @@ export async function runAutomation(input: RunAutomationInput): Promise<RunResul
       }
 
       const outcome = await performAction(action, context, automationId, isTest);
+      // A step that was never filled in is counted with the errors rather than
+      // with the work. It is the whole of P0-6: the run log said "Tag: none
+      // chosen" and the run said "success", so the screen said RAN FINE.
+      if (outcome.misconfigured) failures += 1;
       await noteLog(runId, log, outcome.log);
       if (outcome.stop) break;
     } catch (err) {
@@ -852,23 +1026,34 @@ async function overRunLimit(
   return Number(res.rows[0]?.count ?? 0) >= limit;
 }
 
-async function recordSkip(
+/**
+ * Writes the run that did not happen, and says why.
+ *
+ * Exported because the dry run needs it too: a practice run that quietly skips
+ * the condition check reports green for an automation that skips every real
+ * trigger, which is how an automation nobody could make fire looked fine.
+ */
+export async function recordSkip(
   automationId: number,
   context: RunContext,
-  reason: string
-): Promise<void> {
-  await pool.query(
+  reason: string,
+  isTest = false
+): Promise<number> {
+  const res = await pool.query<{ id: number }>(
     `INSERT INTO automation_runs
-       (automation_id, status, subject_email, log, contact_id, trigger_payload)
-     VALUES ($1, 'skipped', $2, $3::jsonb, $4, $5)`,
+       (automation_id, status, subject_email, log, contact_id, trigger_payload, is_test)
+     VALUES ($1, 'skipped', $2, $3::jsonb, $4, $5, $6)
+     RETURNING id`,
     [
       automationId,
       context.email,
       JSON.stringify([reason]),
       context.contactId,
       JSON.stringify({ trigger: context.trigger, subjectId: context.subjectId }),
+      isTest,
     ]
   );
+  return res.rows[0].id;
 }
 
 /* ------------------------------------------------------------------ firing */
@@ -940,6 +1125,17 @@ export async function fireTrigger(trigger: TriggerV2, input: TriggerInput): Prom
         if (wanted !== undefined && wanted !== null && wanted !== "" && wanted !== 0) {
           if (context.subjectId === null || Number(wanted) !== context.subjectId) continue;
         }
+      }
+
+      // A half-built "only if" is not evaluated at all. Depending on the
+      // operator an empty rule reads as always-false or as always-true, and the
+      // always-true half is the dangerous one: a gate she believes she set,
+      // opening the automation to everybody. Skipping instead is recorded under
+      // her nose in the run history rather than being a silent change.
+      const conditionProblem = describeConditionProblem(automation.conditions ?? {});
+      if (conditionProblem) {
+        await recordSkip(automation.id, context, `Not run — ${conditionProblem}`);
+        continue;
       }
 
       if (!(await evaluateConditions(automation.conditions ?? {}, context))) {
