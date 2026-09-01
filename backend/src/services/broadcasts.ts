@@ -2,6 +2,7 @@ import crypto from "crypto";
 import { pool } from "../db/pool";
 import { renderMarkdown, renderTokens, sendEmail } from "../email/provider";
 import { PRIORITY, enqueueMany } from "../jobs/queue";
+import { MAILABLE_CONTACT_SQL } from "./audience";
 import { countSegment, listSegmentContactIds } from "./segments";
 
 /**
@@ -58,7 +59,18 @@ const CAMPAIGN_COLUMNS = `id, name, subject, subject_b, ab_split_percent, body_m
  */
 const AUDIENCE_PREDICATES: Record<string, string> = {
   all_contacts: "TRUE",
-  all_subscribers: "EXISTS (SELECT 1 FROM subscribers s WHERE s.contact_id = c.id)",
+  // "Everyone on my email list" is the MAILABLE test and nothing more.
+  //
+  // It used to additionally require a row in `subscribers`, a table written
+  // only by the public newsletter form and one legacy automation action. A
+  // contact who arrived through a purchase, an import, an enquiry or the
+  // admin's own "add someone" was therefore not on the email list as far as
+  // this predicate was concerned — and since every audience is already
+  // narrowed by MAILABLE, the join could only ever remove people who had
+  // consented. On this site it removed all of them: `subscribers` is empty,
+  // so the send refused with "Nobody in that audience can be emailed right
+  // now" and the composer promised "0 people will get this".
+  all_subscribers: "TRUE",
   all_members:
     "EXISTS (SELECT 1 FROM members m WHERE m.contact_id = c.id AND m.status = 'active')",
   leads: "EXISTS (SELECT 1 FROM leads l WHERE l.contact_id = c.id)",
@@ -93,10 +105,12 @@ export function audiencePredicate(audience: string): string | null {
  * queue four thousand jobs in order to suppress most of them, and so the
  * recipient count the admin sees is the number of people who will actually get
  * it.
+ *
+ * It lives in `services/audience.ts` now because the dashboard, the analytics
+ * tile, the audience report and the Subscribers screen have to answer the same
+ * question and used to answer it four other ways.
  */
-const MAILABLE = `c.email <> ''
-  AND c.email_marketing_status IN ('subscribed', 'unconfirmed')
-  AND NOT EXISTS (SELECT 1 FROM email_suppressions x WHERE x.email = c.email)`;
+const MAILABLE = MAILABLE_CONTACT_SQL;
 
 /**
  * Everybody a campaign would be sent to right now.

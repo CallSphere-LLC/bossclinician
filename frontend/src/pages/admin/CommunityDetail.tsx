@@ -97,11 +97,22 @@ export default function CommunityDetail() {
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
-    if (!communityId) return;
+    // A malformed id (`/admin/community/abc` → NaN, or `/0`) used to return
+    // here without firing a request, leaving the page on "Loading…" for ever.
+    // There is nothing to fetch, so say so rather than hanging.
+    if (!Number.isInteger(communityId) || communityId <= 0) {
+      setError("We couldn't find that community. It may have been deleted.");
+      return;
+    }
     adminApi
       .community(communityId)
       .then(setCommunity)
-      .catch(() => setError("We couldn't load this community. Try refreshing the page."));
+      // The error argument matters. This catch used to take no parameter and
+      // print "Try refreshing the page" for every failure — including the 404
+      // the server correctly returns for a community that no longer exists,
+      // where refreshing can never help. `friendlyError` reads the status off
+      // the ApiError and says "We couldn't find that community" instead.
+      .catch((err: unknown) => setError(friendlyError(err, "community")));
   }, [communityId]);
 
   useEffect(load, [load]);

@@ -3,7 +3,7 @@ import { z } from "zod";
 import { asyncHandler } from "../../utils/asyncHandler";
 import { badRequest, notFound } from "../../utils/httpError";
 import { env } from "../../config/env";
-import { sendMail } from "../../email/mailer";
+import { sendMailStrict } from "../../email/mailer";
 import { escapeHtml } from "../../email/templates";
 import { recordAdminAction } from "../../services/adminAudit";
 import { requirePermission } from "../../services/permissions";
@@ -97,11 +97,14 @@ const testEmailSchema = z.object({
 /**
  * Sends one message so the owner can see for herself that email works.
  *
- * The honest part of this endpoint is `configured`. `sendMail` deliberately
- * never throws — a failed notification must not fail the thing that triggered
- * it — and with no SMTP host set it writes the message to the log instead of
- * sending it. A "sent!" toast in that state would be a lie, so the response
- * says which of the two happened and the screen prints it.
+ * Three outcomes, not two, because "we have a mail server configured" and "the
+ * mail server took the message" are different facts and this screen exists to
+ * tell them apart: `configured` false (nothing set up), `sent` true (the server
+ * accepted it), or `failure` carrying the server's own refusal.
+ *
+ * With no SMTP host the transport writes to the log rather than sending, and
+ * that counts as sent — locally it is the only thing that can happen, and the
+ * `configured` flag is what tells the screen to say so.
  */
 adminSettingsV2Router.post(
   "/test-email",
@@ -125,28 +128,46 @@ adminSettingsV2Router.post(
       .filter(Boolean)
       .join("\n");
 
-    await sendMail({
-      to,
-      subject: "Your email settings are working",
-      text,
-      html: `<p>${escapeHtml(text).replace(/\n/g, "<br>")}</p>`,
-    });
+    // `sendMailStrict`, not `sendMail`: the whole point of this button is to
+    // find out whether the mail server accepts our credentials, and `sendMail`
+    // swallows every failure into a console line and returns normally. Paired
+    // with `sent: env.smtp.host.length > 0` below, that meant the screen said
+    // "Sent — check your inbox" for a host that had rejected the message, or
+    // refused the password, or was not listening. The one button whose entire
+    // job is to tell you the truth about SMTP could only ever say yes.
+    const configured = env.smtp.host.length > 0;
+    let sent = false;
+    let failure = "";
+    try {
+      await sendMailStrict({
+        to,
+        subject: "Your email settings are working",
+        text,
+        html: `<p>${escapeHtml(text).replace(/\n/g, "<br>")}</p>`,
+      });
+      sent = true;
+    } catch (err) {
+      // Reported, not thrown: a refused test is an answer, not a fault, and the
+      // screen needs the reason to be useful. The message is the mail server's
+      // own words ("535 Authentication Credentials Invalid"), which is exactly
+      // what makes this button worth pressing.
+      failure = err instanceof Error ? err.message : String(err);
+    }
 
     await recordAdminAction({
       req,
       action: "settings.testEmail",
       entityType: "setting",
       entityId: "email",
-      after: { to },
+      after: { to, sent, failure },
     });
 
     res.json({
       to,
-      configured: env.smtp.host.length > 0,
-      // Everything upstream of the mail server went fine; whether it lands is
-      // the mail server's business, and the screen says so rather than
-      // promising delivery it cannot see.
-      sent: env.smtp.host.length > 0,
+      configured,
+      sent,
+      // Empty when it worked, so the client can branch on truthiness.
+      failure,
     });
   })
 );

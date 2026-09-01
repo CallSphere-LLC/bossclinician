@@ -6,6 +6,7 @@ import { asyncHandler } from "../../utils/asyncHandler";
 import { badRequest, notFound } from "../../utils/httpError";
 import { recordAdminAction } from "../../services/adminAudit";
 import { applyTags, normaliseSlugs, recordActivity, removeTags } from "../../services/contacts";
+import { MAILABLE_CONTACT_SQL } from "../../services/audience";
 
 /**
  * Contacts — the one list of people, mounted at /admin/contacts.
@@ -671,7 +672,15 @@ adminContactsRouter.get(
       pool.query<{ member_id: number | null; lead_count: number; subscribed: boolean }>(
         `SELECT (SELECT m.id FROM members m WHERE m.contact_id = $1 ORDER BY m.id LIMIT 1) AS member_id,
                 (SELECT COUNT(*)::int FROM leads l WHERE l.contact_id = $1) AS lead_count,
-                EXISTS (SELECT 1 FROM subscribers s WHERE s.contact_id = $1) AS subscribed`,
+                -- "Is this person on the email list?" is the same question the
+                -- Subscribers screen, the analytics tile and the campaign
+                -- estimator ask, so it gets the same answer. It used to test
+                -- for a row in the legacy subscribers table, which is written
+                -- only by the public newsletter box — so a contact who had
+                -- consented at checkout showed as not subscribed.
+                EXISTS (
+                  SELECT 1 FROM contacts c WHERE c.id = $1 AND ${MAILABLE_CONTACT_SQL}
+                ) AS subscribed`,
         [id]
       ),
     ]);
