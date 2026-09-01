@@ -1,5 +1,5 @@
 # Routes bossclinician.callsphere.site (via k3s Traefik + cert-manager TLS)
-# to the isolated Docker Compose stack bound on the host bridge 172.18.0.1:8088.
+# to the isolated Docker Compose stack bound on the host bridge 10.42.0.1:8088.
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -25,7 +25,11 @@ metadata:
   namespace: bossclinician
 subsets:
   - addresses:
-      - ip: 172.18.0.1      # host, as seen from the k3d node's docker bridge
+      # The cni0 gateway: k3s here runs as a host service (not k3d-in-docker), so
+      # pods reach the host at the pod-network gateway, not at a docker bridge.
+      # Was 172.18.0.1 on the old 8GB box, where k3d's nodes were containers on a
+      # docker bridge. Keep in sync with the nginx port binding in docker-compose.yml.
+      - ip: 10.42.0.1
     ports:
       - name: http
         port: 8088

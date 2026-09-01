@@ -6,9 +6,11 @@
 - Docker + Compose v5 available.
 
 ## Plan: isolated compose stack + k3s ingress route
-1. Run this repo's `docker-compose.yml` → nginx published on **`172.18.0.1:8088`** (isolated; own DB volume). Non-HIPAA, so local Postgres is fine (no PHI — B2B coaching only).
+1. Run this repo's `docker-compose.yml` → nginx published on **`10.42.0.1:8088`** (isolated; own DB volume). Non-HIPAA, so local Postgres is fine (no PHI — B2B coaching only).
 
-   Not `127.0.0.1`. The k3d nodes (`k3d-bt-serverlb`, `k3d-bt-server-0`) are containers on the `postgres_db_default` bridge, whose gateway is `172.18.0.1`; loopback on the host is not an address they can reach, and pointing the binding there makes every Traefik route to this stack a 502. `k8s/ingress.yaml` hard-codes the same address in its `Endpoints`, so the two move together. Verify with `docker network inspect postgres_db_default` before changing either.
+   Not `127.0.0.1`. k3s on this box runs as a host service, so a pod reaches the host at the **cni0 gateway, `10.42.0.1`** — the same address the cluster's own host-Postgres route already uses. Loopback is not an address a pod can reach, and pointing the binding there makes every Traefik route to this stack a 502. `k8s/ingress.yaml` hard-codes the same address in its `Endpoints`, so **the two must move together — either one alone is a silent 502.** Verify with `ip -4 addr show cni0` before changing either.
+
+   On the previous 8GB box this was `172.18.0.1`, because k3s ran under k3d and its nodes were *containers* on a docker bridge. If you ever see this stack 502 after a host move, this pair of values is the first thing to check.
 2. In the k3s cluster, add for host `bossclinician.callsphere.site`:
    - a headless `Service` + `Endpoints` (or `ExternalName`) pointing at the host bridge IP `:8088`, and
    - an `Ingress` (Traefik) with TLS for that host (reuse cluster cert-manager / Let's Encrypt).
