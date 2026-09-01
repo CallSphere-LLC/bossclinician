@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
   ArrowDown,
@@ -311,6 +311,7 @@ function FieldBlock({
 
 export default function FormBuilder() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
   const openParam = searchParams.get("form");
   const openId = openParam !== null && /^\d+$/.test(openParam) ? Number(openParam) : null;
 
@@ -375,6 +376,89 @@ export default function FormBuilder() {
       .catch((err) => setError(friendlyError(err, "form")));
     loadReplies(openId);
   }, [openId, loadReplies]);
+
+  /* Not losing the draft ------------------------------------------------- */
+
+  /**
+   * The tab itself closing, reloading, or going somewhere off this app.
+   *
+   * A form saves as one piece, so an unsaved draft is the whole afternoon's
+   * work — every question, every choice on every question — held in this
+   * component and nowhere else. The "All forms" button asks before it discards
+   * that; Cmd-R, the close box and the browser's own Back did not, and there is
+   * no route back from either. Registered only while there is something to
+   * lose, because a page that always warns is a page nobody reads the warning
+   * on.
+   */
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (event: BeforeUnloadEvent) => {
+      // Both halves: `preventDefault` is the spec, `returnValue` is what Chrome
+      // and Safari actually act on. The browser prints its own wording either
+      // way — the copy below is only reachable from the in-app guard.
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty]);
+
+  /**
+   * A click on any link inside the admin — the sidebar, a breadcrumb, a card.
+   *
+   * `beforeunload` cannot see these: the router swaps the screen without the
+   * document ever unloading, so a stray click on "Contacts" took the draft with
+   * it in silence. React Router's own `useBlocker` is not available here —
+   * entry-client mounts a `BrowserRouter`, not a data router, and the hook
+   * throws outside one — so the navigation is caught where it starts, at the
+   * anchor, in the capture phase before the router's own handler runs.
+   */
+  useEffect(() => {
+    if (!dirty) return;
+
+    const intercept = (event: MouseEvent) => {
+      // Everything a browser treats as "open this somewhere else" is left
+      // alone: a new tab does not discard the draft, so it is not a question
+      // worth asking.
+      if (event.defaultPrevented || event.button !== 0) return;
+      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+
+      const anchor = (event.target as Element | null)?.closest?.("a[href]");
+      if (!(anchor instanceof HTMLAnchorElement)) return;
+      if (anchor.target && anchor.target !== "_self") return;
+      if (anchor.hasAttribute("download")) return;
+
+      const destination = new URL(anchor.href, window.location.href);
+      // Another origin is a real page load, which `beforeunload` above already
+      // covers; the same URL is not a navigation at all.
+      if (destination.origin !== window.location.origin) return;
+      const here = window.location.pathname + window.location.search;
+      if (destination.pathname + destination.search === here) return;
+
+      // Stopped rather than merely defaulted-away: the router listens on the
+      // same click, and letting it through would navigate underneath the
+      // dialog.
+      event.preventDefault();
+      event.stopPropagation();
+
+      void (async () => {
+        const ok = await confirm({
+          title: "Leave without saving?",
+          description: "The changes you've made to this form will be lost.",
+          confirmLabel: "Yes, leave it",
+          destructive: true,
+        });
+        if (!ok) return;
+        // Cleared first, so the effect unregisters before the navigation and
+        // the same click is not intercepted a second time.
+        setDirty(false);
+        navigate(destination.pathname + destination.search + destination.hash);
+      })();
+    };
+
+    document.addEventListener("click", intercept, true);
+    return () => document.removeEventListener("click", intercept, true);
+  }, [dirty, confirm, navigate]);
 
   function openForm(id: number) {
     setSearchParams({ form: String(id) });

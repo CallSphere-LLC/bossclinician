@@ -226,7 +226,11 @@ adminDashboardRouter.get(
       ),
       tile(
         "optins",
-        "People who joined your list",
+        // Not "People who joined your list": this is a flow over the window,
+        // not the size of the list, and reading it as a total made the
+        // dashboard look like it disagreed with Contacts and Subscribers when
+        // all three were measuring different things.
+        "New sign-ups",
         `New sign-ups to hear from you over the last ${length} days.`,
         "count",
         optins,

@@ -2,6 +2,10 @@ import { Router } from "express";
 import { pool } from "../../db/pool";
 import { rowsToCamel } from "../../utils/case";
 import { asyncHandler } from "../../utils/asyncHandler";
+import {
+  MAILABLE_CONTACT_COUNT_SQL,
+  MAILABLE_CONTACT_SERIES_SQL,
+} from "../../services/audience";
 
 export const statsRouter = Router();
 
@@ -10,7 +14,7 @@ statsRouter.get(
   asyncHandler(async (_req, res) => {
     const [leads, subscribers, posts, chats] = await Promise.all([
       pool.query("SELECT COUNT(*)::int AS count FROM leads"),
-      pool.query("SELECT COUNT(*)::int AS count FROM subscribers"),
+      pool.query(`SELECT ${MAILABLE_CONTACT_COUNT_SQL} AS count`),
       pool.query("SELECT COUNT(*)::int AS count FROM blog_posts WHERE published = true"),
       pool.query("SELECT COUNT(*)::int AS count FROM chat_sessions"),
     ]);
@@ -50,7 +54,7 @@ statsRouter.get(
         `SELECT
            (SELECT COUNT(*)::int FROM leads)                             AS leads,
            (SELECT COUNT(*)::int FROM leads WHERE status = 'new')        AS new_leads,
-           (SELECT COUNT(*)::int FROM subscribers)                       AS subscribers,
+           ${MAILABLE_CONTACT_COUNT_SQL}                                 AS subscribers,
            (SELECT COUNT(*)::int FROM blog_posts WHERE published = true) AS posts,
            (SELECT COUNT(*)::int FROM chat_sessions)                     AS chats,
            (SELECT COUNT(*)::int FROM courses WHERE published = true)    AS courses,
@@ -69,8 +73,7 @@ statsRouter.get(
            WHERE created_at >= CURRENT_DATE - INTERVAL '29 days' GROUP BY 1
          ),
          s AS (
-           SELECT created_at::date AS day, COUNT(*)::int AS c FROM subscribers
-           WHERE created_at >= CURRENT_DATE - INTERVAL '29 days' GROUP BY 1
+           ${MAILABLE_CONTACT_SERIES_SQL}
          ),
          o AS (
            SELECT created_at::date AS day, COALESCE(SUM(amount_cents), 0)::int AS cents FROM orders

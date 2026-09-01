@@ -102,10 +102,13 @@ export const settingsApi = {
     }),
 
   sendTestEmail: (to?: string) =>
-    request<{ to: string; configured: boolean; sent: boolean }>("/admin/settings-v2/test-email", {
-      method: "POST",
-      ...body(to ? { to } : {}),
-    }),
+    request<{ to: string; configured: boolean; sent: boolean; failure: string }>(
+      "/admin/settings-v2/test-email",
+      {
+        method: "POST",
+        ...body(to ? { to } : {}),
+      },
+    ),
 };
 
 /* ── People ─────────────────────────────────────────────────────────────── */

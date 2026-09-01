@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useId, useState, type FormEvent } from "react";
 import { useParams } from "react-router-dom";
 import { motion, useReducedMotion } from "motion/react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { Seo } from "@/components/Seo";
 import { GlassCard } from "@/components/luxe/GlassCard";
 import { LuxeButton } from "@/components/luxe/LuxeButton";
@@ -21,6 +23,43 @@ const EASE: [number, number, number, number] = [0.22, 1, 0.36, 1];
  * known even though the keys are not.
  */
 type FormValues = Record<string, string | boolean>;
+
+/**
+ * The three columns the public endpoint now serves that `PublicForm` does not
+ * yet name: the admin's intro, and what she chose to happen after a send.
+ *
+ * Optional to a fault. The page has to render against a server that has not
+ * been deployed yet — an SSR build and an API build are two artefacts and one
+ * of them lands first — and a missing `postAction` has to mean "show the
+ * message", which is what every form did before the choice was honoured at all.
+ */
+type PublicFormDelivery = PublicForm & {
+  descriptionMd?: string;
+  postAction?: "message" | "redirect" | "download";
+  redirectUrl?: string;
+};
+
+/**
+ * Where a form is allowed to send somebody.
+ *
+ * `redirectUrl` is a string an admin typed, and this page assigns it to
+ * `location.href`. `javascript:` and `data:` URLs are both accepted there by
+ * every browser, so an admin account — or anything that ever gets to write one
+ * form row — would otherwise be a stored-XSS hole on the public site. Only an
+ * absolute http(s) address or a path on this site survives; anything else falls
+ * back to the thank-you message, which is a worse redirect and not a hole.
+ */
+export function safeRedirect(raw: string | undefined): string | null {
+  const target = (raw ?? "").trim();
+  if (!target) return null;
+  if (target.startsWith("/") && !target.startsWith("//")) return target;
+  try {
+    const url = new URL(target);
+    return url.protocol === "https:" || url.protocol === "http:" ? url.href : null;
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Browsers can only autofill what they can name, and the builder has no
@@ -49,7 +88,7 @@ export default function FormPage() {
   const reduce = useReducedMotion();
   const errorId = useId();
   // `undefined` while the fetch is in flight, `null` once it has failed.
-  const [form, setForm] = useState<PublicForm | null | undefined>(undefined);
+  const [form, setForm] = useState<PublicFormDelivery | null | undefined>(undefined);
   const [values, setValues] = useState<FormValues>({});
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
@@ -152,6 +191,19 @@ export default function FormPage() {
     setStatus("loading");
     try {
       const result = await api.submitForm(form.slug, data, email || undefined);
+
+      // What the admin chose should happen next. A form built to send people to
+      // a booking page, a checkout or a download used to end on the thank-you
+      // message regardless — the setting was stored, served and ignored, and
+      // the whole point of that kind of form is the page after it.
+      const destination = form.postAction === "redirect" ? safeRedirect(form.redirectUrl) : null;
+      if (destination) {
+        // `replace`, not `assign`: Back from the destination should return to
+        // whatever brought them here, not to a filled-in form that resubmits.
+        window.location.replace(destination);
+        return;
+      }
+
       setSuccessMessage(result.message || form.successMessage);
       setStatus("success");
     } catch {
@@ -311,19 +363,17 @@ export default function FormPage() {
     }
   }
 
+  // What the admin wrote above the questions. The builder writes `descriptionMd`
+  // and only ever wrote that; `description` is the older plain column, still
+  // filled in by forms created through the API, and reading it second means the
+  // intro appears either way rather than — as it did — never.
+  const intro = form.descriptionMd || form.description;
+
   return (
     <>
-      <Seo
-        title={`${form.name} | Boss Clinician`}
-        description={form.description || undefined}
-      />
+      <Seo title={`${form.name} | Boss Clinician`} description={intro || undefined} />
 
-      <LuxePageHero
-        title={form.name}
-        lede={form.description || undefined}
-        tone="violet"
-        align="center"
-      />
+      <LuxePageHero title={form.name} tone="violet" align="center" />
 
       <Section surface="base" space="md" aria-label={form.name} containerClassName="max-w-2xl">
         {status === "success" ? (
@@ -365,6 +415,15 @@ export default function FormPage() {
           </GlassCard>
         ) : (
           <GlassCard accent="gold" interactive={false} className="p-6 sm:p-8">
+            {intro && (
+              // Admin-authored Markdown, proofed the way the funnel body is: it
+              // sits in the card rather than in the hero's lede, because that
+              // lede is a <p> and a paragraph of Markdown inside it is invalid
+              // markup the SSR pass and the browser would disagree about.
+              <div className="prose-boss mb-7 break-words [&_table]:block [&_table]:overflow-x-auto">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{intro}</ReactMarkdown>
+              </div>
+            )}
             <form
               onSubmit={handleSubmit}
               noValidate

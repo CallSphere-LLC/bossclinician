@@ -201,7 +201,7 @@ services:
     logging: *logging
     security_opt: ["no-new-privileges:true"]
     ports:
-      - "172.18.0.1:8088:80"   # bound to the k3d bridge gateway; k3s Traefik ingress hairpins here (not public)
+      - "10.42.0.1:8088:80"   # bound to the cni0 gateway on this host; k3s Traefik reaches it here (not public)
     volumes:
       # The whole directory, not two single-file mounts. A single-file bind
       # mount pins the *inode*: every editor and every script that writes by

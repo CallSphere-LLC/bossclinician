@@ -61,10 +61,35 @@ export function clearToken(): void {
 
 class ApiError extends Error {
   status: number;
-  constructor(message: string, status: number) {
+  /**
+   * The server's per-field corrections, when the refusal named any.
+   *
+   * Flattened to one sentence per field, matching `CommerceError` — a form puts
+   * a single line under the offending box, and zod's array is only ever read
+   * for its first entry.
+   *
+   * Discarding this is what forced a second HTTP client into existence:
+   * `adminCommerceApi` carries its own `commerceRequest` purely so the offer
+   * editor can name the field it is complaining about. Every other screen on
+   * this client could manage only a toast, so "a plan needs a name" arrived as
+   * a banner with no indication of which box was wrong.
+   */
+  readonly fieldErrors: Record<string, string>;
+  constructor(message: string, status: number, fieldErrors: Record<string, string> = {}) {
     super(message);
     this.status = status;
+    this.fieldErrors = fieldErrors;
   }
+}
+
+/**
+ * The per-field messages on a refusal, or an empty object.
+ *
+ * Lets a screen read them without first working out whether the failure was a
+ * validation refusal, a network fault, or something fetch threw.
+ */
+export function fieldErrorsOf(err: unknown): Record<string, string> {
+  return err instanceof ApiError ? err.fieldErrors : {};
 }
 
 async function request<T>(
@@ -87,13 +112,22 @@ async function request<T>(
     // business owner can act on (see pages/admin/ui/friendly.ts). This default
     // is the last resort, so it says what to do rather than what broke.
     let message = "Something went wrong. Please try again in a moment.";
+    const fieldErrors: Record<string, string> = {};
     try {
-      const body = (await res.json()) as { error?: string; message?: string };
+      const body = (await res.json()) as {
+        error?: string;
+        message?: string;
+        details?: { fieldErrors?: Record<string, string[]> };
+      };
       message = body.error ?? body.message ?? message;
+      for (const [field, messages] of Object.entries(body.details?.fieldErrors ?? {})) {
+        const first = messages?.[0];
+        if (first) fieldErrors[field] = first;
+      }
     } catch {
       // ignore parse errors
     }
-    throw new ApiError(message, res.status);
+    throw new ApiError(message, res.status, fieldErrors);
   }
 
   if (res.status === 204) {

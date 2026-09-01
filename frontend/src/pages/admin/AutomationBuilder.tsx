@@ -125,6 +125,37 @@ function choiceFor(rule: ConditionRule): string {
   );
 }
 
+/**
+ * Whether the API says an automation cannot do what its sentence says, and why.
+ *
+ * The verdict is worked out on the server from the same schemas the engine runs
+ * on, and read back here rather than re-derived. A builder with its own idea of
+ * "configured" is how a step with nothing chosen came to look finished on this
+ * screen while the runner treated it as nothing at all. Read defensively so an
+ * older API that does not send them leaves the screen as it was.
+ */
+function needsAttention(row: unknown): boolean {
+  return (row as { needsAttention?: unknown } | null)?.needsAttention === true;
+}
+
+function problemsOf(row: unknown): string[] {
+  const value = (row as { problems?: unknown } | null)?.problems;
+  return Array.isArray(value)
+    ? value.filter((line): line is string => typeof line === "string")
+    : [];
+}
+
+/** What one step is still missing, or null when it is ready to run. */
+function problemOf(action: AutomationAction): string | null {
+  const value = (action as { problem?: unknown }).problem;
+  return typeof value === "string" ? value : null;
+}
+
+/** A rule she has added but not finished — the picker still on "Choose one…". */
+function ruleIsUnfinished(rule: ConditionRule): boolean {
+  return rule.value === null || rule.value === "";
+}
+
 function readRules(conditions: unknown): ConditionRule[] {
   if (conditions === null || typeof conditions !== "object") return [];
   const rules = (conditions as { rules?: unknown }).rules;
@@ -270,6 +301,7 @@ export default function AutomationBuilder() {
                   </div>
 
                   <div className="flex shrink-0 items-center gap-2">
+                    {needsAttention(automation) && <Badge tone="gold">Needs attention</Badge>}
                     <Badge tone={automation.status === "active" ? "green" : "slate"}>
                       {automation.status === "active" ? "Running" : "Paused"}
                     </Badge>
@@ -397,7 +429,7 @@ function AutomationDetail({
 }) {
   const [automation, setAutomation] = useState<Automation | null>(null);
   const [runs, setRuns] = useState<AutomationRun[]>([]);
-  const [editing, setEditing] = useState<AutomationAction | null>(null);
+  const [editing, setEditing] = useState<StepDraft | null>(null);
   const [testing, setTesting] = useState(false);
   const [testAddress, setTestAddress] = useState("");
   const [confirm, confirmDialog] = useConfirm();
@@ -425,13 +457,16 @@ function AutomationDetail({
     }
   }
 
-  async function addAction(actionType: string) {
-    try {
-      await marketingApi.addAction(automationId, { actionType });
-      load();
-    } catch (err) {
-      toast.error(friendlyError(err, "step"));
-    }
+  /**
+   * Opens the editor rather than saving anything.
+   *
+   * Picking from the Add menu used to create the step immediately with no
+   * configuration at all and never open the editor, which is where every "add
+   * the tag (none chosen)" came from. The server refuses an empty step now, so
+   * this is also the only way one can be created.
+   */
+  function addStep(actionType: string) {
+    setEditing({ mode: "new", actionType });
   }
 
   async function removeAction(action: AutomationAction) {
@@ -468,10 +503,19 @@ function AutomationDetail({
     event.preventDefault();
     try {
       const result = await marketingApi.testAutomation(automationId, testAddress.trim());
-      toast.success("Tried it — see what it would have done below.");
       setTesting(false);
       setTestAddress("");
-      void result;
+      // The dry run's own verdict, not "we tried it". A practice run that would
+      // skip this person, or that found a step with nothing chosen, is not good
+      // news, and reporting it as good news is how an automation that does
+      // nothing at all looked healthy.
+      if (result.status === "skipped") {
+        toast.warning("Nothing would happen for that person — see why below.");
+      } else if (result.status === "success" || result.status === "waiting") {
+        toast.success("Tried it — see what it would have done below.");
+      } else {
+        toast.error("It would not do everything it says — see the run below.");
+      }
       load();
     } catch (err) {
       toast.error(friendlyError(err, "automation"));
@@ -485,6 +529,7 @@ function AutomationDetail({
   if (!automation) return <Skeleton className="h-96 rounded-2xl" />;
 
   const isOn = automation.status === "active";
+  const problems = problemsOf(automation);
   const subjectList = trigger?.subjectSource ? (options.lists[trigger.subjectSource] ?? []) : [];
 
   return (
@@ -506,6 +551,15 @@ function AutomationDetail({
             <Button
               size="sm"
               variant={isOn ? "secondary" : "primary"}
+              // Pausing is never blocked; starting is. The server refuses an
+              // unfinished automation anyway — this stops her finding that out
+              // by clicking a button that looked available.
+              disabled={!isOn && problems.length > 0}
+              title={
+                !isOn && problems.length > 0
+                  ? "Finish the steps marked below before turning this on"
+                  : undefined
+              }
               onClick={() => void patch({ status: isOn ? "paused" : "active" })}
             >
               {isOn ? <Pause /> : <Play />}
@@ -514,6 +568,24 @@ function AutomationDetail({
           </div>
         }
       />
+
+      {problems.length > 0 && (
+        <Card className="p-5">
+          <div className="flex flex-wrap items-center gap-3">
+            <Badge tone="gold">Needs attention</Badge>
+            <p className="text-sm text-ink">
+              {isOn
+                ? "This is running, but it cannot do everything it says. Its runs will report the problem."
+                : "Finish these and you can turn it on."}
+            </p>
+          </div>
+          <ul className="mt-2 space-y-0.5 text-sm text-ink-soft">
+            {problems.map((line, index) => (
+              <li key={index}>· {line}</li>
+            ))}
+          </ul>
+        </Card>
+      )}
 
       {/* ---------------------------------------------------------- when */}
 
@@ -588,49 +660,62 @@ function AutomationDetail({
               return (
                 <li key={index} className="flex flex-wrap items-end gap-3 px-5 py-4">
                   <div className="min-w-[16rem] flex-1">
-                    <select
-                      className={selectStyles}
-                      value={choiceFor(rule)}
-                      onChange={(event) => {
-                        const picked = CONDITION_CHOICES.find(
-                          (row) => row.id === event.target.value,
-                        );
-                        if (!picked) return;
-                        const next = [...rules];
-                        next[index] = {
-                          field: picked.field,
-                          op: picked.op,
-                          value: picked.list ? null : true,
-                        } as ConditionRule;
-                        setRules(next);
-                      }}
-                    >
-                      {CONDITION_CHOICES.map((row) => (
-                        <option key={row.id} value={row.id}>
-                          {row.label}
-                        </option>
-                      ))}
-                    </select>
+                    <Field label="Only if">
+                      <select
+                        className={selectStyles}
+                        value={choiceFor(rule)}
+                        onChange={(event) => {
+                          const picked = CONDITION_CHOICES.find(
+                            (row) => row.id === event.target.value,
+                          );
+                          if (!picked) return;
+                          const next = [...rules];
+                          next[index] = {
+                            field: picked.field,
+                            op: picked.op,
+                            value: picked.list ? null : true,
+                          } as ConditionRule;
+                          setRules(next);
+                        }}
+                      >
+                        {CONDITION_CHOICES.map((row) => (
+                          <option key={row.id} value={row.id}>
+                            {row.label}
+                          </option>
+                        ))}
+                      </select>
+                    </Field>
                   </div>
 
                   {choice?.list && (
                     <div className="min-w-[14rem] flex-1">
-                      <select
-                        className={selectStyles}
-                        value={String(rule.value ?? "")}
-                        onChange={(event) => {
-                          const next = [...rules];
-                          next[index] = { ...rule, value: Number(event.target.value) || null };
-                          setRules(next);
-                        }}
+                      <Field
+                        label="Which one"
+                        // A rule with nothing chosen is not a narrower rule than
+                        // no rule at all: depending on the wording beside it, it
+                        // matches nobody or everybody. The automation will not
+                        // start until this is filled in.
+                        error={
+                          ruleIsUnfinished(rule) ? "Choose one, or remove this condition" : undefined
+                        }
                       >
-                        <option value="">Choose one…</option>
-                        {list.map((item: NamedOption) => (
-                          <option key={item.id} value={item.id}>
-                            {item.name}
-                          </option>
-                        ))}
-                      </select>
+                        <select
+                          className={selectStyles}
+                          value={String(rule.value ?? "")}
+                          onChange={(event) => {
+                            const next = [...rules];
+                            next[index] = { ...rule, value: Number(event.target.value) || null };
+                            setRules(next);
+                          }}
+                        >
+                          <option value="">Choose one…</option>
+                          {list.map((item: NamedOption) => (
+                            <option key={item.id} value={item.id}>
+                              {item.name}
+                            </option>
+                          ))}
+                        </select>
+                      </Field>
                     </div>
                   )}
 
@@ -655,7 +740,7 @@ function AutomationDetail({
         <CardHeader
           title="Then do this"
           subtitle="Steps run in order, top to bottom."
-          action={<AddStepMenu actions={options.actions} onPick={addAction} />}
+          action={<AddStepMenu actions={options.actions} onPick={addStep} />}
         />
 
         {automation.actions.length === 0 ? (
@@ -697,10 +782,20 @@ function AutomationDetail({
                       Held back {describeWait(action.delayMinutes)}
                     </p>
                   )}
+                  {problemOf(action) && (
+                    <p className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-ink-soft">
+                      <Badge tone="gold">Unfinished</Badge>
+                      This step {problemOf(action)} — it will do nothing until you fill it in.
+                    </p>
+                  )}
                 </div>
 
                 <div className="flex shrink-0 items-center gap-1">
-                  <Button size="sm" variant="secondary" onClick={() => setEditing(action)}>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => setEditing({ mode: "edit", action })}
+                  >
                     Edit
                   </Button>
                   <Button
@@ -753,7 +848,8 @@ function AutomationDetail({
 
       {editing && (
         <ActionModal
-          action={editing}
+          automationId={automationId}
+          draft={editing}
           options={options}
           onClose={() => setEditing(null)}
           onSaved={() => {
@@ -806,7 +902,7 @@ function AddStepMenu({
   onPick,
 }: {
   actions: ActionDescriptor[];
-  onPick: (actionType: string) => Promise<void>;
+  onPick: (actionType: string) => void;
 }) {
   const [value, setValue] = useState("");
 
@@ -819,10 +915,11 @@ function AddStepMenu({
         aria-label="Choose a step to add"
       >
         <option value="">Add a step…</option>
-        {/* "only carry on if" has nothing to fill in on this screen, so a step
-            added from it holds no conditions and lets everybody through — a gate
-            she believes she set and that never closes. Hidden until it has an
-            editor. */}
+        {/* "only carry on if" still has nothing to fill in on this screen, so
+            one added here could never be finished: the server refuses a branch
+            with no conditions, and the runner now stops the run rather than
+            letting everybody through. Hidden until it has an editor of its
+            own. */}
         {actions
           .filter((action) => action.type !== "branch")
           .map((action) => (
@@ -837,7 +934,7 @@ function AddStepMenu({
         onClick={() => {
           const picked = value;
           setValue("");
-          void onPick(picked);
+          onPick(picked);
         }}
       >
         <Plus />
@@ -849,35 +946,65 @@ function AddStepMenu({
 
 /* -------------------------------------------------------------- step editor */
 
+/**
+ * A step being filled in: one that exists, or one that does not exist yet.
+ *
+ * A new step is held here rather than created on the server the moment it is
+ * picked from the menu. That is the whole of the "(none chosen)" bug on this
+ * screen: the row appeared in the list, read as a real instruction, and had
+ * nothing in it.
+ */
+type StepDraft = { mode: "edit"; action: AutomationAction } | { mode: "new"; actionType: string };
+
 function ActionModal({
-  action,
+  automationId,
+  draft,
   options,
   onClose,
   onSaved,
 }: {
-  action: AutomationAction;
+  automationId: number;
+  draft: StepDraft;
   options: BuilderOptions;
   onClose: () => void;
   onSaved: () => void;
 }) {
-  const [config, setConfig] = useState<Record<string, unknown>>(action.config ?? {});
-  const [delayMinutes, setDelayMinutes] = useState(action.delayMinutes);
+  const actionType = draft.mode === "edit" ? draft.action.actionType : draft.actionType;
+  const [config, setConfig] = useState<Record<string, unknown>>(
+    draft.mode === "edit" ? (draft.action.config ?? {}) : {},
+  );
+  const [delayMinutes, setDelayMinutes] = useState(
+    draft.mode === "edit" ? draft.action.delayMinutes : 0,
+  );
   const [saving, setSaving] = useState(false);
+  // Opens showing what the server already said was missing, so an unfinished
+  // step explains itself as soon as she opens it rather than on save.
+  const [problem, setProblem] = useState<string | null>(
+    draft.mode === "edit" ? problemOf(draft.action) : null,
+  );
 
-  const target = ACTION_TARGET[action.actionType];
+  const target = ACTION_TARGET[actionType];
   const list = target ? (options.lists[target.list] ?? []) : [];
-  const label =
-    options.actions.find((row) => row.type === action.actionType)?.label ?? action.actionType;
+  const label = options.actions.find((row) => row.type === actionType)?.label ?? actionType;
 
   async function save(event: FormEvent) {
     event.preventDefault();
     setSaving(true);
     try {
-      await marketingApi.updateAction(action.automationId, action.id, { config, delayMinutes });
-      toast.success("Step saved");
+      if (draft.mode === "new") {
+        await marketingApi.addAction(automationId, { actionType, config, delayMinutes });
+      } else {
+        await marketingApi.updateAction(automationId, draft.action.id, { config, delayMinutes });
+      }
+      toast.success(draft.mode === "new" ? "Step added" : "Step saved");
       onSaved();
     } catch (err) {
-      toast.error(friendlyError(err, "step"));
+      // The server decides whether a step is finished, and its refusal is
+      // already written for her ("This step has no tag chosen."). Kept on the
+      // field as well as in the toast, because the toast goes away.
+      const message = friendlyError(err, "step");
+      setProblem(message);
+      toast.error(message);
     } finally {
       setSaving(false);
     }
@@ -890,7 +1017,7 @@ function ActionModal({
     <Modal
       open
       onOpenChange={(open) => !open && onClose()}
-      title={`Step: ${label}`}
+      title={draft.mode === "new" ? `Add a step: ${label}` : `Step: ${label}`}
       size="lg"
       footer={
         <>
@@ -898,14 +1025,14 @@ function ActionModal({
             Cancel
           </Button>
           <Button size="sm" type="submit" form="action-form" disabled={saving}>
-            {saving ? "Saving…" : "Save step"}
+            {saving ? "Saving…" : draft.mode === "new" ? "Add the step" : "Save step"}
           </Button>
         </>
       }
     >
       <form id="action-form" onSubmit={save} className="grid gap-4">
         {target && (
-          <Field label={target.label}>
+          <Field label={target.label} error={problem ?? undefined}>
             <select
               className={selectStyles}
               value={String(config[target.key] ?? "")}
@@ -922,9 +1049,9 @@ function ActionModal({
           </Field>
         )}
 
-        {action.actionType === "send_email" && (
+        {actionType === "send_email" && (
           <>
-            <Field label="Subject line">
+            <Field label="Subject line" error={problem ?? undefined}>
               <Input
                 value={String(config.subject ?? "")}
                 onChange={(event) => set("subject", event.target.value)}
@@ -936,14 +1063,15 @@ function ActionModal({
                 rows={10}
                 value={String(config.bodyMd ?? "")}
                 onChange={(event) => set("bodyMd", event.target.value)}
+                required
               />
             </Field>
           </>
         )}
 
-        {action.actionType === "create_task" && (
+        {actionType === "create_task" && (
           <>
-            <Field label="Remind me to…">
+            <Field label="Remind me to…" error={problem ?? undefined}>
               <Input
                 value={String(config.title ?? "")}
                 onChange={(event) => set("title", event.target.value)}
@@ -961,8 +1089,12 @@ function ActionModal({
           </>
         )}
 
-        {action.actionType === "fire_webhook" && (
-          <Field label="Web address to notify" hint="The other app gives you this">
+        {actionType === "fire_webhook" && (
+          <Field
+            label="Web address to notify"
+            hint="The other app gives you this"
+            error={problem ?? undefined}
+          >
             <Input
               type="url"
               value={String(config.url ?? "")}
@@ -973,9 +1105,9 @@ function ActionModal({
           </Field>
         )}
 
-        {action.actionType === "wait" && (
+        {actionType === "wait" && (
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Wait this many days">
+            <Field label="Wait this many days" error={problem ?? undefined}>
               <Input
                 type="number"
                 min={0}
@@ -994,7 +1126,7 @@ function ActionModal({
           </div>
         )}
 
-        {action.actionType !== "wait" && (
+        {actionType !== "wait" && (
           <Field
             label="Hold this step back"
             hint="In minutes. Leave at 0 to do it straight away."

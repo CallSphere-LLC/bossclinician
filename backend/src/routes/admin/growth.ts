@@ -7,7 +7,12 @@ import { asyncHandler } from "../../utils/asyncHandler";
 import { HttpError, badRequest, notFound } from "../../utils/httpError";
 import { buildAdminCrudRouter } from "./crudFactory";
 import { renderMarkdown, sendEmail } from "../../email/provider";
-import { BroadcastRefusal, startBroadcast } from "../../services/broadcasts";
+import { BroadcastRefusal, audienceSize, startBroadcast } from "../../services/broadcasts";
+import {
+  MAILABLE_CONTACT_COUNT_SQL,
+  MAILABLE_CONTACT_SERIES_SQL,
+  MAILABLE_CONTACT_SQL,
+} from "../../services/audience";
 import { upsertContact } from "../../services/contacts";
 import { fireTriggerAsync, type TriggerType } from "../../automations/engine";
 import {
@@ -164,7 +169,12 @@ adminGrowthRouter.post(
               WHERE s.plan_id = $1 AND s.status IN ('active','trialing') AND s.email <> ''`,
             [issue.plan_id],
           )
-        : await pool.query("SELECT email FROM subscribers WHERE email <> ''");
+        : // A free issue goes to the email list, which is the same set of people
+          // a broadcast reaches. Reading `subscribers` here sent it to whoever
+          // had used the public newsletter form and nobody else.
+          await pool.query(
+            `SELECT c.email FROM contacts c WHERE ${MAILABLE_CONTACT_SQL}`
+          );
 
     const emails = recipients.rows.map((r) => String(r.email));
 
@@ -231,27 +241,26 @@ adminGrowthRouter.use("/newsletters", buildAdminCrudRouter(newslettersRepo, anyS
 
 /* --------------------------------------------------------------- Campaigns */
 
-/** Resolves an audience key to a de-duplicated recipient list. */
-async function resolveAudience(audience: string): Promise<string[]> {
-  const queries: Record<string, string> = {
-    all_subscribers: "SELECT email FROM subscribers WHERE email <> ''",
-    all_members: "SELECT email FROM members WHERE email <> '' AND status = 'active'",
-    leads: "SELECT DISTINCT email FROM leads WHERE email <> ''",
-    community:
-      `SELECT DISTINCT m.email FROM members m
-         JOIN community_memberships cm ON cm.member_id = m.id
-        WHERE m.email <> ''`,
-  };
-  const sql = queries[audience] ?? queries.all_subscribers;
-  const result = await pool.query(sql);
-  return [...new Set(result.rows.map((r) => String(r.email).toLowerCase()))];
-}
-
+/**
+ * GET /campaigns/audience/:audience — how many people that audience reaches.
+ *
+ * Delegates to `audienceSize`, the same resolver `startBroadcast` uses, so the
+ * number on the confirm button is the number of people who will actually be
+ * emailed. This endpoint used to run its own queries against the `subscribers`,
+ * `members` and `leads` tables with no suppression test and no marketing-status
+ * test, and fell back to the whole list for any key it did not recognise. It
+ * disagreed with the send in both directions: it counted people who would be
+ * suppressed, and — because `subscribers` is empty — it reported 0 for the
+ * default audience while refusing to send to anybody.
+ *
+ * An unknown key now yields 0 rather than everybody, matching
+ * `audiencePredicate`'s deliberate refusal to default.
+ */
 adminGrowthRouter.get(
   "/campaigns/audience/:audience",
   asyncHandler(async (req, res) => {
-    const emails = await resolveAudience(req.params.audience);
-    res.json({ audience: req.params.audience, count: emails.length });
+    const count = await audienceSize({ audience: req.params.audience, segment_id: null });
+    res.json({ audience: req.params.audience, count });
   }),
 );
 
@@ -457,7 +466,7 @@ adminGrowthRouter.get(
     const [totals, series] = await Promise.all([
       pool.query(
         `SELECT
-           (SELECT COUNT(*)::int FROM subscribers)                        AS subscribers,
+           ${MAILABLE_CONTACT_COUNT_SQL}                                  AS subscribers,
            (SELECT COUNT(*)::int FROM members)                            AS members,
            (SELECT COUNT(*)::int FROM leads)                              AS leads,
            (SELECT COUNT(*)::int FROM form_submissions)                   AS form_submissions,
@@ -467,8 +476,7 @@ adminGrowthRouter.get(
         `WITH days AS (
            SELECT generate_series(CURRENT_DATE - INTERVAL '29 days', CURRENT_DATE, INTERVAL '1 day')::date AS day
          ),
-         s AS (SELECT created_at::date AS day, COUNT(*)::int AS c FROM subscribers
-                WHERE created_at >= CURRENT_DATE - INTERVAL '29 days' GROUP BY 1),
+         s AS (${MAILABLE_CONTACT_SERIES_SQL}),
          m AS (SELECT created_at::date AS day, COUNT(*)::int AS c FROM members
                 WHERE created_at >= CURRENT_DATE - INTERVAL '29 days' GROUP BY 1)
          SELECT to_char(d.day,'YYYY-MM-DD') AS date,

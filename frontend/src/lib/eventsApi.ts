@@ -274,3 +274,53 @@ export function describeCadence(minutes: number | null): string {
 
 /** The cadences the screen offers, so nobody has to type a number of minutes. */
 export const CADENCE_CHOICES = [15, 30, 60, 120, 240, 1440] as const;
+
+/** The zone a new event is created in when nobody picks one. */
+export const EVENT_DEFAULT_TIMEZONE = "America/New_York";
+
+/**
+ * The date of a live event written out in its own zone, with the zone named.
+ *
+ * The component options are spelled out rather than using `dateStyle` and
+ * `timeStyle`. ECMA-402 forbids combining either of those with a component
+ * option such as `timeZoneName`, and the constructor rejects the combination at
+ * runtime while TypeScript accepts it — `Intl.DateTimeFormatOptions` permits it
+ * statically. This function used to ask for all three, so the `try` threw on
+ * every render, for every event, in every browser, and the `catch` reformatted
+ * with no `timeZone` at all. An 18:00 Eastern event read as "3:00 PM" on a
+ * Pacific laptop and "10:00 PM" on a UTC one: not a stored-data problem, and
+ * not a shift anyone could reproduce consistently, because the answer depended
+ * on who was looking.
+ *
+ * These are the same options `describeSession` uses on the server, so the list
+ * now agrees with the dialog, the public page, the reminder emails and the
+ * registrant table.
+ */
+export function describeStart(iso: string | null, timeZone: string): string {
+  if (!iso) return "No date yet";
+  const instant = new Date(iso);
+  if (Number.isNaN(instant.getTime())) return "No date yet";
+  try {
+    return new Intl.DateTimeFormat("en-US", {
+      timeZone: timeZone || EVENT_DEFAULT_TIMEZONE,
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      timeZoneName: "short",
+    }).format(instant);
+  } catch {
+    // Only reachable if the stored zone is not a zone the browser knows. Say so
+    // in the label: a time shown in the wrong zone without a marker is worse
+    // than one that admits which zone it is in.
+    return `${new Intl.DateTimeFormat("en-US", {
+      timeZone: "UTC",
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    }).format(instant)} UTC`;
+  }
+}

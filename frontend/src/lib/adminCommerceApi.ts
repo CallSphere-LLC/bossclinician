@@ -27,10 +27,10 @@ const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? "/api"
 /**
  * A failure that also carries the server's per-field corrections.
  *
- * `lib/api.ts` throws the message away with the body; the offer editor needs it
- * kept, because "a payment plan needs at least 2 payments" belongs under the
- * box she has to fix and nowhere else. Extends ApiError so `friendlyError` and
- * every other `.status` reader keeps working unchanged.
+ * `lib/api.ts` now keeps these too, in the same flattened shape, so this class
+ * survives mainly for its name and for the offer editor's tab-switching. New
+ * screens can read `fieldErrorsOf(err)` from `lib/api` instead of routing
+ * through a second client.
  */
 export class CommerceError extends ApiError {
   /** Field name → the one sentence to print under that field. */

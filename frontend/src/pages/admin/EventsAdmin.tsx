@@ -4,9 +4,11 @@ import { CalendarClock, Copy, Pencil, Plus, Tags, Trash2, Users } from "lucide-r
 import { toast } from "sonner";
 import {
   CADENCE_CHOICES,
+  EVENT_DEFAULT_TIMEZONE,
   EVENT_KIND_HINT,
   EVENT_KIND_LABEL,
   describeCadence,
+  describeStart,
   eventsAdminApi,
   type EventDetail,
   type EventDraft,
@@ -58,7 +60,7 @@ const TIMEZONES = [
   "Australia/Sydney",
 ];
 
-const DEFAULT_TIMEZONE = "America/New_York";
+const DEFAULT_TIMEZONE = EVENT_DEFAULT_TIMEZONE;
 
 /* ── Times in the event's own zone ──────────────────────────────────────── */
 
@@ -126,25 +128,6 @@ function isoToWallClock(iso: string | null, timeZone: string): string {
   const instant = new Date(iso);
   if (Number.isNaN(instant.getTime())) return "";
   return new Date(instant.getTime() + zoneOffsetMs(instant, timeZone)).toISOString().slice(0, 16);
-}
-
-/** The date of a live event written out in its own zone, with the zone named. */
-function describeStart(iso: string | null, timeZone: string): string {
-  if (!iso) return "No date yet";
-  const instant = new Date(iso);
-  if (Number.isNaN(instant.getTime())) return "No date yet";
-  try {
-    return new Intl.DateTimeFormat("en-US", {
-      timeZone: timeZone || DEFAULT_TIMEZONE,
-      dateStyle: "medium",
-      timeStyle: "short",
-      timeZoneName: "short",
-    }).format(instant);
-  } catch {
-    return new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" }).format(
-      instant,
-    );
-  }
 }
 
 /** When this event happens, whichever kind it is. */

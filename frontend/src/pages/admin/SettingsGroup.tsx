@@ -330,10 +330,16 @@ function TestEmailCard() {
       const result = await settingsApi.sendTestEmail();
       if (result.sent) {
         toast.success(`Sent — check ${result.to}`);
-      } else {
+      } else if (!result.configured) {
         toast.error(
           "Nothing was sent: no mail server is set up yet. Ask whoever set this site up to connect one.",
         );
+      } else {
+        // The third case, and the one this button exists for: a mail server is
+        // configured and it refused us. Its own words are shown, because
+        // "535 Authentication Credentials Invalid" is the whole answer and
+        // paraphrasing it into "something went wrong" throws it away.
+        toast.error(`Your mail server refused it: ${result.failure}`, { duration: 12000 });
       }
     } catch (err) {
       toast.error(friendlyError(err, "email"));

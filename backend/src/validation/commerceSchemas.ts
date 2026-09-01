@@ -459,6 +459,98 @@ const upsellFields = {
 export const upsellCreateSchema = z.object(upsellFields);
 export const upsellUpdateSchema = z.object(upsellFields).partial();
 
+/* --------------------------------------------------------------------- plans */
+
+/**
+ * A plan bills monthly or yearly, and nothing else.
+ *
+ * Deliberately narrower than `BILLING_INTERVALS`: everything downstream of
+ * `plans.interval` reads it as a two-way switch. The MRR figure divides by 12
+ * when it is 'year' and counts the full amount otherwise, and the plan card
+ * prints "a month" for anything that is not 'year'. A weekly plan would be
+ * charged weekly by Stripe, booked as monthly revenue, and described to the
+ * customer as monthly.
+ */
+export const PLAN_INTERVALS = ["month", "year"] as const;
+export type PlanInterval = (typeof PLAN_INTERVALS)[number];
+
+export interface PlanPricing {
+  priceCents: number;
+  currency: string;
+  interval: PlanInterval;
+}
+
+/**
+ * Whether an edit is allowed to change what a subscriber is charged.
+ *
+ * A plan's price lives in two places: this row, and the Stripe Price the row
+ * names. Only the row is editable from the admin, so re-pricing a plan that is
+ * already on sale changes the figure on the pricing card and leaves both the
+ * checkout and every renewal already running against that Price on the old
+ * amount — the one divergence a "$79/mo" card cannot show. Refused rather than
+ * silently wrong: a different price is a different plan.
+ *
+ * A plan with no Stripe Price yet cannot be bought, so nothing is out of step
+ * and every field is still free to change.
+ */
+export function planRepriceIssue(
+  before: PlanPricing & { stripePriceId: string | null },
+  patch: Partial<PlanPricing>,
+): CommerceIssue | null {
+  if (!before.stripePriceId) return null;
+
+  const changes: { field: keyof PlanPricing; changed: boolean }[] = [
+    { field: "priceCents", changed: patch.priceCents !== undefined && patch.priceCents !== before.priceCents },
+    { field: "currency", changed: patch.currency !== undefined && patch.currency !== before.currency },
+    { field: "interval", changed: patch.interval !== undefined && patch.interval !== before.interval },
+  ];
+
+  const hit = changes.find((entry) => entry.changed);
+  if (!hit) return null;
+
+  return {
+    field: hit.field,
+    message:
+      "This plan is already on sale, and its price is held by Stripe — changing it here would show one " +
+      "figure and charge another. Create a new plan at the new price instead.",
+  };
+}
+
+const planFields = {
+  // Absent on create: the route derives one from the name, the way it always
+  // has. Supplying one is still allowed, and is held to the same shape as
+  // every other web address on the site.
+  slug: slugSchema.optional(),
+  name: z.string().trim().min(1).max(200),
+  description: z.string().trim().max(10_000).default(""),
+  priceCents: moneyCents.default(0),
+  currency: currencySchema.default("usd"),
+  interval: z.enum(PLAN_INTERVALS).default("month"),
+  stripePriceId: optionalRef(255).default(null),
+  /** The bullet list printed under the price. Text only — no link, no markup. */
+  features: z.array(z.string().trim().min(1).max(200)).max(25).default([]),
+  /**
+   * The one thing a plan grants on its own: the Stripe webhook writes a
+   * `community_memberships` row with source 'plan' for whatever is named here,
+   * and the door reads that row for as long as the subscription is paying.
+   * Everything else a plan should unlock is sold as an offer over products.
+   */
+  communityId: nullableIdRef.default(null),
+  trialDays: z.number().int().min(0).max(365).default(0),
+  published: z.boolean().default(true),
+};
+
+export const planCreateSchema = z.object(planFields);
+
+/**
+ * Every field optional: an absent key means "leave it alone", not "clear it".
+ *
+ * `sort` appears only here — a new plan is appended to the end of the pricing
+ * table by the insert itself, so accepting a position on create would be a
+ * number the route then ignores.
+ */
+export const planUpdateSchema = z.object({ ...planFields, sort: sortOrder }).partial();
+
 /* ------------------------------------------------------------ manual access */
 
 const memberRefFields = {
