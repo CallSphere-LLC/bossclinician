@@ -50,7 +50,10 @@ tells you that work finished — `docker compose up -d --wait`.
 
 ## Deploying a change (read this before typing a command)
 
-- **Code or image change:** `COMPOSE_PARALLEL_LIMIT=1 docker compose build && docker compose up -d --wait`.
+- **Code or image change:** `./scripts/deploy.sh`. It builds serially, waits
+  for every changed service to become healthy, then removes only superseded
+  images and excess build cache. To deploy a subset, pass service names, for
+  example `./scripts/deploy.sh backend frontend`.
 - **A migration that adds redirects:** the above is *not enough*. Migrations write
   the `redirects` table, but nginx serves 301s from the generated
   `nginx/redirects.map`, which nothing regenerates on deploy. The rows go live in
@@ -96,7 +99,7 @@ tells you that work finished — `docker compose up -d --wait`.
       Root `./.env` also needs `DB_PASSWORD` and `VITE_STRIPE_PUBLISHABLE_KEY`
       — compose reads it at **build** time, and a bundle built without the
       publishable key cannot open a payment form.
-- [ ] `COMPOSE_PARALLEL_LIMIT=1 docker compose build && docker compose up -d --wait`, verify `/api/health`, AI `/health`, frontend loads.
+- [ ] `./scripts/deploy.sh`, verify `/api/health`, AI `/health`, frontend loads.
 - [ ] Seed ran (blog/courses/testimonials/resources/admin user present).
 - [ ] k3s ingress + DNS + TLS for the subdomain.
 - [ ] `./scripts/smoke-test.sh https://bossclinician.callsphere.site` passes.

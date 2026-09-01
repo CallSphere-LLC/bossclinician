@@ -195,8 +195,7 @@ cp backend/.env.example backend/.env      # then fill in the values
 cp frontend/.env.example frontend/.env
 cp ai/.env.example ai/.env                # OPENAI_API_KEY
 
-COMPOSE_PARALLEL_LIMIT=1 docker compose build
-docker compose up -d --wait
+./scripts/deploy.sh
 ```
 
 `--wait` matters: migrations and the first-boot seed run *inside* the API process before it
