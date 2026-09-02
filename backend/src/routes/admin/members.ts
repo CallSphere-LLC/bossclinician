@@ -18,6 +18,9 @@ import {
 import { adminImpersonateLimiter } from "../../middleware/rateLimit";
 import { recordAdminAction, recordAdminActionStrict } from "../../services/adminAudit";
 import { requirePermission } from "../../services/permissions";
+import { upsertContactWithStatus } from "../../services/contacts";
+import { dispatchEvent } from "../../services/webhooksOut";
+import { publishDomainEvent } from "../../services/domainEvents";
 
 /** Members (students), their enrollments, and the account actions an admin can take on them. Mounted at /admin/members. */
 export const adminMembersRouter = Router();
@@ -302,7 +305,7 @@ adminMembersRouter.post(
     // Re-adding an existing member updates them rather than erroring, which is
     // the behaviour the members screen has always relied on — but a field the
     // form left empty must not blank one that already has a value.
-    const result = await pool.query<MemberListRow>(
+    const result = await pool.query<MemberListRow & { was_created: boolean }>(
       `INSERT INTO members AS m (email, name, first_name, last_name, status)
        VALUES ($1, $2, $3, $4, $5)
        ON CONFLICT (email) DO UPDATE
@@ -310,12 +313,44 @@ adminMembersRouter.post(
               first_name = CASE WHEN EXCLUDED.first_name <> '' THEN EXCLUDED.first_name ELSE m.first_name END,
               last_name  = CASE WHEN EXCLUDED.last_name <> '' THEN EXCLUDED.last_name ELSE m.last_name END,
               updated_at = now()
-       RETURNING ${MEMBER_COLUMNS}, ${ENROLLMENT_COUNT}`,
+       RETURNING ${MEMBER_COLUMNS}, ${ENROLLMENT_COUNT}, (xmax = 0) AS was_created`,
       [email, name, firstName, lastName, status ?? "active"],
     );
 
-    const member = result.rows[0];
-    if (!member) throw badRequest("Member could not be saved");
+    const saved = result.rows[0];
+    if (!saved) throw badRequest("Member could not be saved");
+    const { was_created: wasCreated, ...member } = saved;
+
+    const contact = await upsertContactWithStatus({
+      email,
+      name,
+      firstName,
+      lastName,
+      source: "admin",
+    });
+    const contactId = contact.id;
+    await pool.query(
+      `UPDATE members SET contact_id = COALESCE(contact_id, $2), updated_at = now() WHERE id = $1`,
+      [member.id, contactId],
+    );
+    if (contact.created) {
+      await publishDomainEvent("contact_created", {
+        eventKey: `contact-created:${contactId}`,
+        contactId,
+        email,
+        name,
+        source: "admin",
+      });
+    }
+    if (wasCreated) {
+      await dispatchEvent("member.created", {
+        id: `member:${member.id}`,
+        memberId: member.id,
+        contactId,
+        email,
+        source: "admin",
+      });
+    }
 
     await recordAdminAction({
       req,
@@ -928,6 +963,7 @@ adminMembersRouter.post(
  */
 adminMembersRouter.get(
   "/:id/export",
+  requireManage,
   asyncHandler(async (req, res) => {
     const id = parseId(req.params.id);
     const member = await loadMember(id);

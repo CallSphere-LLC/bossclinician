@@ -4,7 +4,8 @@ import { z } from "zod";
 import { pool } from "../../db/pool";
 import { asyncHandler } from "../../utils/asyncHandler";
 import { badRequest } from "../../utils/httpError";
-import { recordActivity, upsertContact } from "../../services/contacts";
+import { recordActivity, upsertContactWithStatus } from "../../services/contacts";
+import { publishDomainEvent } from "../../services/domainEvents";
 import { affiliateSettings, generateAffiliateCode } from "../../services/affiliates";
 
 /**
@@ -98,13 +99,14 @@ affiliateSignupRouter.post(
     const settings = await affiliateSettings();
     const email = body.email.toLowerCase();
 
-    const contactId = await upsertContact({
+    const contact = await upsertContactWithStatus({
       email,
       name: body.name,
       source: "affiliate_application",
       consentSource: "affiliate application form",
       consentIp: req.ip ?? "",
     });
+    const contactId = contact.id;
 
     const notes = [
       body.audience ? `Audience: ${body.audience}` : "",
@@ -148,6 +150,15 @@ affiliateSignupRouter.post(
         body: notes,
         subjectType: "affiliate",
         subjectId: inserted.rows[0].id,
+      });
+    }
+    if (contact.created) {
+      await publishDomainEvent("contact_created", {
+        eventKey: `contact-created:${contactId}`,
+        contactId,
+        email,
+        name: body.name,
+        source: "affiliate_application",
       });
     }
 

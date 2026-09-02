@@ -5,6 +5,7 @@ import { pool } from "../../db/pool";
 import { asyncHandler } from "../../utils/asyncHandler";
 import { badRequest, forbidden, unauthorized } from "../../utils/httpError";
 import { hashToken } from "../../auth/tokens";
+import { publishDomainEvent } from "../../services/domainEvents";
 import { dispatchEvent } from "../../services/webhooksOut";
 
 /**
@@ -315,7 +316,24 @@ apiV1Router.post(
     if (!row) throw badRequest("We couldn't save that contact.");
 
     const contact = contactOut(row);
-    if (upserted.inserted) await dispatchEvent("contact.created", { contact });
+    if (upserted.inserted) {
+      // Preserve the v1 webhook payload contract first. The later durable
+      // domain-event dispatcher uses the same occurrence id, so its delivery
+      // conflicts with this richer, backwards-compatible body even if the
+      // worker is exceptionally fast.
+      await dispatchEvent("contact.created", {
+        id: `contact-created:${upserted.id}`,
+        contact,
+      });
+      await publishDomainEvent("contact_created", {
+        eventKey: `contact-created:${upserted.id}`,
+        contactId: upserted.id,
+        email,
+        name,
+        source,
+        facts: { apiKeyId: req.apiKey?.id ?? 0 },
+      });
+    }
 
     res.status(upserted.inserted ? 201 : 200).json({ data: contact });
   })

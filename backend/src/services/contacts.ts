@@ -61,7 +61,9 @@ export interface UpsertContactInput {
  * neither; re-subscribing somebody who opted out, because they filled in a
  * contact form, is the bug that costs a sending domain its reputation.
  */
-export async function upsertContact(input: UpsertContactInput): Promise<number> {
+export async function upsertContactWithStatus(
+  input: UpsertContactInput
+): Promise<{ id: number; created: boolean }> {
   const db = input.client ?? pool;
   const email = input.email.trim().toLowerCase();
   if (!email) throw new Error("upsertContact requires an email address");
@@ -70,7 +72,7 @@ export async function upsertContact(input: UpsertContactInput): Promise<number> 
   const last = (input.lastName ?? "").trim();
   const name = (input.name ?? `${first} ${last}`).trim();
 
-  const result = await db.query<{ id: number }>(
+  const result = await db.query<{ id: number; created: boolean }>(
     `INSERT INTO contacts AS c
        (email, name, first_name, last_name, phone, timezone, source,
         consent_source, consent_ip, custom_fields, last_activity_at)
@@ -97,7 +99,7 @@ export async function upsertContact(input: UpsertContactInput): Promise<number> 
             custom_fields    = c.custom_fields || EXCLUDED.custom_fields,
             last_activity_at = now(),
             updated_at       = now()
-     RETURNING c.id`,
+     RETURNING c.id, (xmax = 0) AS created`,
     [
       email,
       name,
@@ -112,7 +114,27 @@ export async function upsertContact(input: UpsertContactInput): Promise<number> 
     ]
   );
 
-  return result.rows[0].id;
+  const row = result.rows[0];
+
+  return row;
+}
+
+export async function upsertContact(input: UpsertContactInput): Promise<number> {
+  const row = await upsertContactWithStatus(input);
+  // Workflows that must link a member, apply tags or enrol a sequence before
+  // the event is visible use upsertContactWithStatus and publish after their
+  // final mutation. This convenience path is for standalone contact upserts.
+  if (row.created && input.client === undefined) {
+    const { publishDomainEvent } = await import("./domainEvents");
+    await publishDomainEvent("contact_created", {
+      eventKey: `contact-created:${row.id}`,
+      contactId: row.id,
+      email: input.email.trim().toLowerCase(),
+      name: (input.name ?? `${input.firstName ?? ""} ${input.lastName ?? ""}`).trim(),
+      source: input.source ?? "",
+    });
+  }
+  return row.id;
 }
 
 /**
@@ -136,6 +158,17 @@ export async function linkContact(
     `UPDATE ${table} SET contact_id = $2 WHERE id = $1 AND contact_id IS NULL`,
     [id, contactId]
   );
+  if (kind === "member") {
+    // A contact may have booked coaching before they created an account. Once
+    // the identities meet, make those sessions visible in the member portal
+    // without changing their stable CRM ownership.
+    await db.query(
+      `UPDATE coaching_sessions
+          SET member_id = $1, updated_at = now()
+        WHERE contact_id = $2 AND member_id IS NULL`,
+      [id, contactId]
+    );
+  }
 }
 
 export interface ActivityInput {
@@ -214,12 +247,33 @@ export async function applyTags(
     [slugs]
   );
 
-  const applied = await db.query(
+  const applied = await db.query<{ tag_id: number }>(
     `INSERT INTO contact_tags (contact_id, tag_id, applied_by)
      SELECT $1, t.id, $3 FROM tags t WHERE t.slug = ANY($2::citext[])
-     ON CONFLICT (contact_id, tag_id) DO NOTHING`,
+     ON CONFLICT (contact_id, tag_id) DO NOTHING
+     RETURNING tag_id`,
     [contactId, slugs, appliedBy.slice(0, 120)]
   );
+
+  if (applied.rows.length > 0 && client === undefined) {
+    const [person, { publishDomainEvent }] = await Promise.all([
+      pool.query<{ email: string; name: string }>(
+        `SELECT email::text AS email, name FROM contacts WHERE id = $1`,
+        [contactId],
+      ),
+      import("./domainEvents"),
+    ]);
+    for (const tag of applied.rows) {
+      await publishDomainEvent("tag_added", {
+        contactId,
+        email: person.rows[0]?.email ?? "",
+        name: person.rows[0]?.name ?? "",
+        subjectId: tag.tag_id,
+        source: appliedBy,
+        facts: { tagId: tag.tag_id },
+      });
+    }
+  }
 
   return applied.rowCount ?? 0;
 }
@@ -234,12 +288,32 @@ export async function removeTags(
   const slugs = normaliseSlugs(tagSlugs);
   if (slugs.length === 0) return 0;
 
-  const removed = await db.query(
+  const removed = await db.query<{ tag_id: number }>(
     `DELETE FROM contact_tags ct
       USING tags t
-      WHERE ct.tag_id = t.id AND ct.contact_id = $1 AND t.slug = ANY($2::citext[])`,
+      WHERE ct.tag_id = t.id AND ct.contact_id = $1 AND t.slug = ANY($2::citext[])
+      RETURNING ct.tag_id`,
     [contactId, slugs]
   );
+
+  if (removed.rows.length > 0 && client === undefined) {
+    const [person, { publishDomainEvent }] = await Promise.all([
+      pool.query<{ email: string; name: string }>(
+        `SELECT email::text AS email, name FROM contacts WHERE id = $1`,
+        [contactId],
+      ),
+      import("./domainEvents"),
+    ]);
+    for (const tag of removed.rows) {
+      await publishDomainEvent("tag_removed", {
+        contactId,
+        email: person.rows[0]?.email ?? "",
+        name: person.rows[0]?.name ?? "",
+        subjectId: tag.tag_id,
+        facts: { tagId: tag.tag_id },
+      });
+    }
+  }
 
   return removed.rowCount ?? 0;
 }

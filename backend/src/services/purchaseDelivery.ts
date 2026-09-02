@@ -1,6 +1,6 @@
 import { env } from "../config/env";
 import { pool } from "../db/pool";
-import { fireTriggerAsync } from "../automations/engineV2";
+import { publishDomainEvent } from "./domainEvents";
 import { purchaseReceipt, purchaseWelcome, type ReceiptLine } from "../email/commerceTemplates";
 import { sendMail, type MailAttachment } from "../email/mailer";
 import { withStoredTemplate } from "../email/templateStore";
@@ -348,7 +348,8 @@ export async function deliverPurchase(
     // and nothing has ever fired it, so every automation built on it has sat
     // idle since the day it was saved.
     if (order.offer_id !== null) {
-      fireTriggerAsync("offer_purchased", {
+      await publishDomainEvent("offer_purchased", {
+        eventKey: `offer-purchased:order:${order.id}`,
         contactId: order.contact_id,
         email: order.email,
         name: order.billing_name,

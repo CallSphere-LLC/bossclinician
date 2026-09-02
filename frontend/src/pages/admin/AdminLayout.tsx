@@ -94,7 +94,7 @@ export function AdminLayout({ children }: { children: ReactNode }) {
   const rail = (
     <nav
       aria-label="Main menu"
-      className="flex h-full flex-col bg-[linear-gradient(176deg,#1B1430_0%,#130E24_52%,#08050F_100%)] text-white/85"
+      className="flex h-full flex-col border-r border-[var(--border-subtle)] bg-[var(--bg-base)] text-white/85"
     >
       {/* Brand */}
       <div
@@ -212,7 +212,9 @@ export function AdminLayout({ children }: { children: ReactNode }) {
         toastOptions={{
           style: {
             borderRadius: "0.85rem",
-            border: "1px solid #E4DCED",
+            border: "1px solid var(--border-strong)",
+            background: "var(--bg-elevated)",
+            color: "var(--text-primary)",
             fontFamily: "Montserrat, Arial, sans-serif",
           },
         }}
@@ -221,7 +223,7 @@ export function AdminLayout({ children }: { children: ReactNode }) {
       {/* Desktop rail */}
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-30 hidden transition-[width] duration-300 ease-out lg:block",
+          "fixed inset-y-0 left-0 z-30 hidden transition-[width] duration-150 ease-out lg:block",
           collapsed ? "w-[4.75rem]" : "w-[16.5rem]",
         )}
       >
@@ -262,7 +264,7 @@ export function AdminLayout({ children }: { children: ReactNode }) {
 
       <div
         className={cn(
-          "flex min-h-screen flex-col transition-[padding] duration-300 ease-out",
+          "flex min-h-screen flex-col transition-[padding] duration-150 ease-out",
           collapsed ? "lg:pl-[4.75rem]" : "lg:pl-[16.5rem]",
         )}
       >
@@ -332,7 +334,7 @@ export function AdminLayout({ children }: { children: ReactNode }) {
             key={location.pathname}
             initial={reduceMotion ? false : { opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+            transition={{ duration: 0.15, ease: [0.22, 1, 0.36, 1] }}
             className="mx-auto max-w-[86rem]"
           >
             {children}
@@ -376,7 +378,7 @@ function NavGroupItem({
         className={cn(
           "relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors",
           collapsed && "justify-center px-0",
-          active ? "bg-white/12 text-white" : "text-white/70 hover:bg-white/8 hover:text-white",
+          active ? "bg-surface text-ink" : "text-white/70 hover:bg-white/8 hover:text-white",
         )}
       >
         {active && (
@@ -405,7 +407,7 @@ function NavGroupItem({
             title={group.label}
             className={cn(
               "flex w-full items-center justify-center rounded-xl py-2.5 transition-colors",
-              groupActive ? "bg-white/12 text-white" : "text-white/70 hover:bg-white/8",
+              groupActive ? "bg-surface text-ink" : "text-white/70 hover:bg-white/8",
             )}
           >
             <Icon className="size-[1.15rem]" />
@@ -482,7 +484,7 @@ function NavGroupItem({
                       cn(
                         "flex items-center justify-between gap-2 rounded-lg px-3 py-2 text-[0.82rem] transition-colors",
                         isActive
-                          ? "bg-white/12 font-semibold text-white"
+                          ? "bg-surface font-semibold text-ink before:-ml-3 before:h-5 before:w-0.5 before:rounded-full before:bg-gold"
                           : "text-white/60 hover:bg-white/8 hover:text-white",
                       )
                     }

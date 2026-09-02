@@ -4,7 +4,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { CalendarClock, Headphones, NotebookPen, Plus, Trash2, Users, Video } from "lucide-react";
 import { toast } from "sonner";
 import { adminApi } from "@/lib/api";
-import type { CoachingOffer, CoachingSession, Member } from "@/types/admin";
+import type { CoachingOffer, CoachingSession } from "@/types/admin";
 import { cn } from "@/lib/cn";
 import { formatCurrency, formatDateTime } from "@/lib/format";
 import {
@@ -51,6 +51,13 @@ const SESSION_LABEL: Record<string, string> = {
 };
 
 const SESSION_STATUSES = ["scheduled", "completed", "cancelled", "no_show"];
+
+interface CoachingClient {
+  kind: "member" | "contact";
+  id: number;
+  name: string;
+  email: string;
+}
 
 /** How the coaching is run, said plainly rather than as the stored word. */
 const FORMAT_LABEL: Record<string, string> = {
@@ -387,7 +394,9 @@ function OffersTab() {
 function SessionsTab() {
   const [sessions, setSessions] = useState<CoachingSession[] | null>(null);
   const [offers, setOffers] = useState<CoachingOffer[]>([]);
-  const [members, setMembers] = useState<Member[]>([]);
+  const [clients, setClients] = useState<CoachingClient[]>([]);
+  const [contactSearch, setContactSearch] = useState("");
+  const [clientChoice, setClientChoice] = useState("");
   const [draft, setDraft] = useState<Partial<CoachingSession> | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -401,15 +410,35 @@ function SessionsTab() {
   useEffect(load, [load]);
   useEffect(() => {
     adminApi.growthList<CoachingOffer>("coaching/offers").then(setOffers).catch(() => undefined);
-    adminApi.membersList().then(setMembers).catch(() => undefined);
+    adminApi.coachingClients().then((page) => setClients(page.clients)).catch(() => undefined);
   }, []);
+  useEffect(() => {
+    if (contactSearch.trim().length === 1) return;
+    const timer = window.setTimeout(() => {
+      adminApi
+        .coachingClients(contactSearch.trim())
+        .then((page) => setClients(page.clients))
+        .catch(() => undefined);
+    }, 200);
+    return () => window.clearTimeout(timer);
+  }, [contactSearch]);
 
   async function save(e: FormEvent) {
     e.preventDefault();
     if (!draft) return;
     try {
-      if (draft.id) await adminApi.growthUpdate("coaching/sessions", draft.id, draft);
-      else await adminApi.growthCreate("coaching/sessions", draft);
+      let memberId = draft.memberId ?? null;
+      let contactId = draft.contactId ?? null;
+      if (clientChoice.startsWith("member:")) {
+        memberId = Number(clientChoice.slice("member:".length));
+        contactId = null;
+      } else if (clientChoice.startsWith("contact:")) {
+        contactId = Number(clientChoice.slice("contact:".length));
+        memberId = null;
+      }
+      const payload = { ...draft, memberId, contactId };
+      if (draft.id) await adminApi.growthUpdate("coaching/sessions", draft.id, payload);
+      else await adminApi.growthCreate("coaching/sessions", payload);
       toast.success(draft.id ? "Session saved" : "Session booked");
       setDraft(null);
       load();
@@ -424,7 +453,7 @@ function SessionsTab() {
         accessorKey: "memberName",
         header: "Client",
         cell: ({ row }) => (
-          <button type="button" onClick={() => setDraft(row.original)} className="min-w-0 text-left">
+          <button type="button" onClick={() => { setDraft(row.original); setClientChoice(row.original.memberId ? `member:${row.original.memberId}` : row.original.contactId ? `contact:${row.original.contactId}` : ""); }} className="min-w-0 text-left">
             <span className="block truncate font-semibold text-ink">
               {row.original.memberName || row.original.memberEmail || "No client chosen"}
             </span>
@@ -496,7 +525,7 @@ function SessionsTab() {
       <div className="flex justify-end">
         <Button
           size="sm"
-          onClick={() => setDraft({ status: "scheduled", durationMinutes: 60 })}
+          onClick={() => { setDraft({ status: "scheduled", durationMinutes: 60 }); setClientChoice(""); }}
         >
           <Plus />
           Book a session
@@ -536,21 +565,27 @@ function SessionsTab() {
       >
         {draft && (
           <form id="session-form" onSubmit={save} className="grid gap-4 sm:grid-cols-2">
-            <Field label="Client" hint="one of your members">
+            <Field label="Client" hint="any person in your contacts or members">
+              <div className="space-y-2">
+              <Input
+                value={contactSearch}
+                onChange={(event) => setContactSearch(event.target.value)}
+                placeholder="Search all contacts by name or email…"
+                aria-label="Search contacts"
+              />
               <select
-                value={String(draft.memberId ?? "")}
-                onChange={(e) =>
-                  setDraft((d) => ({ ...d, memberId: e.target.value ? Number(e.target.value) : null }))
-                }
+                value={clientChoice || (draft.memberId ? `member:${draft.memberId}` : draft.contactId ? `contact:${draft.contactId}` : "")}
+                onChange={(e) => setClientChoice(e.target.value)}
                 className={selectStyles}
               >
-                <option value="">Choose a member…</option>
-                {members.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.name ? `${m.name} — ${m.email}` : m.email}
+                <option value="">Choose a client…</option>
+                {clients.map((client) => (
+                  <option key={`${client.kind}:${client.id}`} value={`${client.kind}:${client.id}`}>
+                    {client.name ? `${client.name} — ${client.email}` : client.email}
                   </option>
                 ))}
               </select>
+              </div>
             </Field>
             <Field label="Which offer is this part of?">
               <select

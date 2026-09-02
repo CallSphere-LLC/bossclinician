@@ -10,8 +10,13 @@ import { fireTriggerAsync } from "../../automations/engine";
 // The v2 engine is where the automation builder writes its rules; the legacy
 // engine above still owns `lead_created` until that mount is switched, so a form
 // submission has to reach both. Aliased because the two export the same name.
-import { fireTriggerAsync as fireTriggerV2Async } from "../../automations/engineV2";
-import { applyTags, linkContact, recordActivity, upsertContact } from "../../services/contacts";
+import { publishDomainEvent } from "../../services/domainEvents";
+import {
+  applyTags,
+  linkContact,
+  recordActivity,
+  upsertContactWithStatus,
+} from "../../services/contacts";
 import { enrollContact } from "../../services/sequences";
 import { isProtectedRef, signDownload } from "../../services/signedUrls";
 
@@ -429,9 +434,9 @@ growthPublicRouter.post(
       pool.query(`UPDATE forms SET submit_count = submit_count + 1 WHERE id = $1`, [form.id]),
     );
 
-    const contactId = email
+    const contactRecord = email
       ? await afterSubmission(`the contact record for ${form.slug}`, () =>
-          upsertContact({
+          upsertContactWithStatus({
             email,
             // Blank rather than an empty string, so `upsertContact` falls back
             // to assembling the name out of the two halves it was given.
@@ -447,6 +452,7 @@ growthPublicRouter.post(
           }),
         )
       : null;
+    const contactId = contactRecord?.id ?? null;
 
     if (contactId !== null) {
       await afterSubmission(`attaching submission ${submissionId} to its contact`, async () => {
@@ -507,10 +513,21 @@ growthPublicRouter.post(
       });
     }
 
+    if (contactRecord?.created) {
+      await publishDomainEvent("contact_created", {
+        eventKey: `contact-created:${contactRecord.id}`,
+        contactId: contactRecord.id,
+        email,
+        name,
+        source: origin,
+      });
+    }
+
     // Fire-and-forget, and after the response is decided: `fireTrigger` never
     // throws, and an automation that sends an email must not hold a visitor on
     // a spinner while it does.
-    fireTriggerV2Async("form_submitted", {
+    await publishDomainEvent("form_submitted", {
+      eventKey: `form-submitted:${submissionId}`,
       contactId,
       email,
       name,

@@ -61,6 +61,7 @@ import Forms from "@/pages/admin/Forms";
 import Events from "@/pages/admin/Events";
 import PagesAdmin from "@/pages/admin/PagesAdmin";
 import Reports from "@/pages/admin/Reports";
+import Availability from "@/pages/admin/Availability";
 
 function LoadingScreen() {
   return (
@@ -153,6 +154,7 @@ function ProtectedRoutes() {
         <Route path="/settings" element={<SettingsHub />} />
         <Route path="/settings/team" element={<AdminUsers />} />
         <Route path="/settings/connections" element={<Integrations />} />
+        <Route path="/settings/availability" element={<Availability />} />
         <Route path="/settings/advanced" element={<SettingsPage />} />
         <Route path="/settings/:group" element={<SettingsGroup />} />
         <Route path="*" element={<Navigate to="/admin" replace />} />

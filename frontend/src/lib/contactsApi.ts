@@ -204,6 +204,7 @@ export const contactsApi = {
   list: (filters: ContactFilters = {}) =>
     request<ContactPage>(`/admin/contacts${toQuery(filters)}`),
   get: (id: number) => request<ContactDetail>(`/admin/contacts/${id}`),
+  export: (id: number) => request<Record<string, unknown>>(`/admin/contacts/${id}/export`),
   create: (data: {
     email: string;
     firstName?: string;

@@ -3,10 +3,22 @@ import {
   ACTION_CONFIG_SCHEMAS,
   ACTION_TYPES,
   TRIGGER_DESCRIPTORS,
+  actionCanRetry,
   describeActionProblem,
   describeConditionProblem,
   resumeDedupeKey,
 } from "./engineV2";
+
+describe("automation retry policy", () => {
+  it("retries idempotent mutations but not ambiguous external sends", () => {
+    for (const action of ["add_tag", "remove_tag", "subscribe_sequence", "grant_offer", "register_event"]) {
+      expect(actionCanRetry(action)).toBe(true);
+    }
+    for (const action of ["send_email", "fire_webhook", "create_task"]) {
+      expect(actionCanRetry(action)).toBe(false);
+    }
+  });
+});
 
 /**
  * The engine itself is a database and a queue and is exercised against both.

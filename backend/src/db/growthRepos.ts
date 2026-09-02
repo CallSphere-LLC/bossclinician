@@ -31,6 +31,7 @@ export const coachingOffersRepo = createCrudRepo<Row>("coaching_offers", [
 export const coachingSessionsRepo = createCrudRepo<Row>("coaching_sessions", [
   "offerId",
   "memberId",
+  "contactId",
   "scheduledAt",
   "durationMinutes",
   "status",

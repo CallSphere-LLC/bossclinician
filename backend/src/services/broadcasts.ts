@@ -255,7 +255,10 @@ export class BroadcastRefusal extends Error {
  * any screen. On a failure it goes to `failed`, which is a state the Send button
  * is offered from again.
  */
-export async function startBroadcast(campaignId: number): Promise<StartResult> {
+export async function startBroadcast(
+  campaignId: number,
+  options: { expectedStatus?: string } = {},
+): Promise<StartResult> {
   const campaignRes = await pool.query<CampaignRow>(
     `SELECT ${CAMPAIGN_COLUMNS} FROM email_campaigns WHERE id = $1`,
     [campaignId]
@@ -273,12 +276,17 @@ export async function startBroadcast(campaignId: number): Promise<StartResult> {
     throw new BroadcastRefusal("Nobody in that audience can be emailed right now");
   }
 
-  await pool.query(
+  const claimed = await pool.query(
     `UPDATE email_campaigns
         SET status = 'sending', recipient_count = $2, updated_at = now()
-      WHERE id = $1`,
-    [campaignId, recipients.length]
+      WHERE id = $1
+        AND ($3::text IS NULL OR status = $3)
+        AND status NOT IN ('sending', 'sent')`,
+    [campaignId, recipients.length, options.expectedStatus ?? null]
   );
+  if ((claimed.rowCount ?? 0) === 0) {
+    throw new BroadcastRefusal("This email's sending state changed; refresh before trying again");
+  }
 
   try {
     const BATCH = 500;
@@ -458,14 +466,15 @@ export async function tickBroadcasts(now: Date = new Date()): Promise<{
   let started = 0;
   for (const row of due.rows) {
     try {
-      await startBroadcast(row.id);
+      await startBroadcast(row.id, { expectedStatus: "scheduled" });
       started += 1;
     } catch (err) {
       const detail = (err instanceof Error ? err.message : String(err)).slice(0, 300);
       // A scheduled campaign that cannot go out is marked failed rather than
       // retried forever: the reasons are all things a person has to fix.
       await pool.query(
-        `UPDATE email_campaigns SET status = 'failed', updated_at = now() WHERE id = $1`,
+        `UPDATE email_campaigns SET status = 'failed', updated_at = now()
+          WHERE id = $1 AND status = 'scheduled'`,
         [row.id]
       );
       // eslint-disable-next-line no-console

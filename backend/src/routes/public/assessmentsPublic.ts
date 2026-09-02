@@ -2,7 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { pool } from "../../db/pool";
 import { leadsLimiter } from "../../middleware/rateLimit";
-import { applyTags, recordActivity, upsertContact } from "../../services/contacts";
+import { applyTags, recordActivity, upsertContactWithStatus } from "../../services/contacts";
 import { enrollContact } from "../../services/sequences";
 import {
   loadPublicAssessment,
@@ -14,6 +14,7 @@ import {
 import { asyncHandler } from "../../utils/asyncHandler";
 import { badRequest, notFound } from "../../utils/httpError";
 import { plainText } from "../../utils/plainText";
+import { publishDomainEvent } from "../../services/domainEvents";
 
 /**
  * The public quiz.
@@ -112,8 +113,10 @@ assessmentsPublicRouter.post(
       (input.elapsedMs !== undefined && input.elapsedMs < MIN_FILL_MS);
 
     let contactId: number | null = null;
+    let contactWasCreated = false;
+    let attemptId: number | null = null;
     if (email && !isBot) {
-      contactId = await upsertContact({
+      const contact = await upsertContactWithStatus({
         email,
         name: input.name ?? "",
         timezone: input.timezone ?? "",
@@ -121,8 +124,10 @@ assessmentsPublicRouter.post(
         consentSource: `quiz: ${req.params.slug}`,
         consentIp: req.ip ?? "",
       });
+      contactId = contact.id;
+      contactWasCreated = contact.created;
 
-      await saveAttempt({
+      attemptId = await saveAttempt({
         assessmentId: assessment.id,
         contactId,
         memberId: null,
@@ -162,10 +167,19 @@ assessmentsPublicRouter.post(
           );
         });
       }
+      if (contactWasCreated) {
+        await publishDomainEvent("contact_created", {
+          eventKey: `contact-created:${contactId}`,
+          contactId,
+          email,
+          name: input.name ?? "",
+          source: `quiz:${req.params.slug}`,
+        });
+      }
     } else if (!isBot) {
       // An anonymous quiz still records the attempt: the completion rate and
       // the archetype split are the numbers that say whether it is working.
-      await saveAttempt({
+      attemptId = await saveAttempt({
         assessmentId: assessment.id,
         contactId: null,
         memberId: null,
@@ -173,6 +187,37 @@ assessmentsPublicRouter.post(
         responses,
         scored,
       });
+    }
+
+    if (!isBot && attemptId !== null) {
+      const eventFacts = {
+        attemptId,
+        score: scored.score,
+        maxScore: scored.maxScore,
+        percent: scored.percent,
+        passed: scored.passed ?? false,
+        resultId: scored.resultId ?? 0,
+      };
+      await publishDomainEvent("assessment_completed", {
+        eventKey: `assessment-completed:attempt:${attemptId}`,
+        contactId,
+        email,
+        name: input.name ?? "",
+        subjectId: assessment.id,
+        source: `quiz:${req.params.slug}`,
+        facts: eventFacts,
+      });
+      if (scored.passed === true) {
+        await publishDomainEvent("assessment_passed", {
+          eventKey: `assessment-passed:attempt:${attemptId}`,
+          contactId,
+          email,
+          name: input.name ?? "",
+          subjectId: assessment.id,
+          source: `quiz:${req.params.slug}`,
+          facts: eventFacts,
+        });
+      }
     }
 
     res.status(201).json({

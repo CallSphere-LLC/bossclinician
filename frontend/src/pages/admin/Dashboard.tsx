@@ -145,7 +145,7 @@ export default function Dashboard() {
 
   const leadDonut = useMemo(() => {
     const palette: Record<string, string> = {
-      new: "#3B82F6",
+      new: "var(--info)",
       contacted: CHART_COLORS.gold,
       qualified: CHART_COLORS.green,
       closed: CHART_COLORS.plum,
@@ -418,7 +418,7 @@ export default function Dashboard() {
 
         {/* Income rail */}
         <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-1">
-          <Card className="relative overflow-hidden bg-[linear-gradient(150deg,#3D2D5C_0%,#0F1E3A_100%)] p-5 text-white">
+          <Card className="relative overflow-hidden bg-surface-raised p-5 text-ink">
             <div className="pointer-events-none absolute -right-10 -top-12 size-36 rounded-full bg-gold/20 blur-2xl" />
             <p className="text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-white/65">
               Money you've made
@@ -729,7 +729,7 @@ function StatTile({
 }) {
   return (
     <Link to={to} className="group">
-      <Card className="h-full overflow-hidden p-5 transition-all duration-200 group-hover:-translate-y-0.5 group-hover:border-plum/30 group-hover:shadow-[0_18px_40px_-20px_rgba(15,30,58,0.35)]">
+      <Card className="h-full overflow-hidden p-5 transition-all duration-150 group-hover:-translate-y-0.5 group-hover:border-plum/30 group-hover:shadow-[0_18px_40px_-20px_rgba(0,0,0,0.55)]">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <p className="text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-ink-soft">

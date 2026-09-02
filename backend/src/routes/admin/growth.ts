@@ -8,6 +8,9 @@ import { HttpError, badRequest, notFound } from "../../utils/httpError";
 import { buildAdminCrudRouter } from "./crudFactory";
 import { renderMarkdown, sendEmail } from "../../email/provider";
 import { BroadcastRefusal, audienceSize, startBroadcast } from "../../services/broadcasts";
+import { isValidTimeZone } from "../../services/availability";
+import { adminTestEmailLimiter } from "../../middleware/rateLimit";
+import { recordAdminAction } from "../../services/adminAudit";
 import {
   MAILABLE_CONTACT_COUNT_SQL,
   MAILABLE_CONTACT_SERIES_SQL,
@@ -15,6 +18,7 @@ import {
 } from "../../services/audience";
 import { upsertContact } from "../../services/contacts";
 import { fireTriggerAsync, type TriggerType } from "../../automations/engine";
+import { dispatchEvent } from "../../services/webhooksOut";
 import {
   automationActionsRepo,
   automationsRepo,
@@ -29,6 +33,7 @@ import {
   podcastEpisodesRepo,
   podcastsRepo,
   savedReportsRepo,
+  type Row,
 } from "../../db/growthRepos";
 
 /**
@@ -47,23 +52,187 @@ const loose = z.record(z.unknown());
 /** Most resources accept a permissive body — the repo's column whitelist is
  *  the real gate, so a second hand-maintained schema would only drift. */
 const anySchema: z.ZodType<Record<string, unknown>> = loose;
+const campaignScheduleSchema = z.object({
+  scheduledAt: z.string().datetime(),
+  timezone: z.string().trim().min(1).max(64).refine(isValidTimeZone),
+});
+const campaignTestSchema = z.object({
+  subject: z.string().trim().min(1).max(500),
+  bodyMd: z.string().max(100_000).default(""),
+});
 
 /* ---------------------------------------------------------------- Coaching */
+
+adminGrowthRouter.get(
+  "/coaching/clients",
+  asyncHandler(async (req, res) => {
+    const q = typeof req.query.q === "string" ? req.query.q.trim().slice(0, 200) : "";
+    const like = `%${q.replace(/[\\%_]/g, (char) => `\\${char}`)}%`;
+    const result = await pool.query(
+      `SELECT * FROM (
+         SELECT CASE WHEN m.id IS NULL THEN 'contact' ELSE 'member' END AS kind,
+                COALESCE(m.id, c.id) AS id,
+                COALESCE(NULLIF(m.name, ''), c.name, '') AS name,
+                COALESCE(m.email::text, c.email::text) AS email
+           FROM contacts c
+           LEFT JOIN LATERAL (
+             SELECT id, name, email FROM members
+              WHERE contact_id = c.id AND status <> 'deleted'
+              ORDER BY id LIMIT 1
+           ) m ON true
+         UNION ALL
+         SELECT 'member' AS kind, m.id, m.name, m.email::text AS email
+           FROM members m
+          WHERE m.contact_id IS NULL AND m.status <> 'deleted'
+       ) people
+       WHERE ($1 = '' OR name ILIKE $2 ESCAPE '\\' OR email ILIKE $2 ESCAPE '\\')
+       ORDER BY name, email
+       LIMIT 100`,
+      [q, like],
+    );
+    res.json({ clients: rowsToCamel(result.rows) });
+  }),
+);
 
 adminGrowthRouter.get(
   "/coaching/sessions",
   asyncHandler(async (req, res) => {
     const offerId = req.query.offerId ? Number(req.query.offerId) : null;
     const result = await pool.query(
-      `SELECT s.*, m.name AS member_name, m.email AS member_email, o.title AS offer_title
+      `SELECT s.*,
+              COALESCE(NULLIF(m.name, ''), c.name, '') AS member_name,
+              COALESCE(m.email::text, c.email::text, '') AS member_email,
+              o.title AS offer_title
          FROM coaching_sessions s
          LEFT JOIN members m ON m.id = s.member_id
+         LEFT JOIN contacts c ON c.id = s.contact_id
          LEFT JOIN coaching_offers o ON o.id = s.offer_id
         WHERE ($1::int IS NULL OR s.offer_id = $1)
         ORDER BY s.scheduled_at DESC NULLS LAST, s.id DESC`,
       [offerId],
     );
     res.json(rowsToCamel(result.rows));
+  }),
+);
+
+adminGrowthRouter.post(
+  "/coaching/sessions",
+  asyncHandler(async (req, res) => {
+    const parsed = anySchema.safeParse(req.body);
+    if (!parsed.success) throw badRequest("Invalid payload", parsed.error.flatten());
+    const item = await coachingSessionsRepo.create(parsed.data);
+    const detail = item as Row & Record<string, unknown>;
+    await dispatchEvent("coaching.booked", {
+      id: `coaching-session:${item.id}`,
+      sessionId: item.id,
+      memberId: detail.memberId ?? null,
+      contactId: detail.contactId ?? null,
+      offerId: detail.offerId ?? null,
+      scheduledAt: detail.scheduledAt ?? null,
+      source: "admin",
+    });
+    res.status(201).json(item);
+  }),
+);
+
+adminGrowthRouter.put(
+  "/coaching/sessions/:id",
+  asyncHandler(async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) throw badRequest("Invalid id");
+    const parsed = anySchema.safeParse(req.body);
+    if (!parsed.success) throw badRequest("Invalid payload", parsed.error.flatten());
+    const before = await coachingSessionsRepo.getById(id);
+    if (!before) throw notFound("Not found");
+    const item = await coachingSessionsRepo.update(id, parsed.data);
+    if (!item) throw notFound("Not found");
+    const oldStatus = (before as Row & Record<string, unknown>).status;
+    const detail = item as Row & Record<string, unknown>;
+    if (oldStatus !== "cancelled" && detail.status === "cancelled") {
+      await dispatchEvent("coaching.cancelled", {
+        id: `coaching-session-cancelled:${id}`,
+        sessionId: id,
+        memberId: detail.memberId ?? null,
+        contactId: detail.contactId ?? null,
+        offerId: detail.offerId ?? null,
+        scheduledAt: detail.scheduledAt ?? null,
+        source: "admin",
+      });
+    }
+    res.json(item);
+  }),
+);
+
+adminGrowthRouter.post(
+  "/campaigns/:id/schedule",
+  asyncHandler(async (req, res) => {
+    const campaignId = Number(req.params.id);
+    if (!Number.isInteger(campaignId) || campaignId <= 0) throw notFound("Campaign not found");
+    const parsed = campaignScheduleSchema.safeParse(req.body);
+    if (!parsed.success) throw badRequest("Choose a valid date and time.");
+
+    const scheduledAt = new Date(parsed.data.scheduledAt);
+    if (scheduledAt.getTime() <= Date.now() + 60_000) {
+      throw badRequest("Choose a time at least one minute from now.");
+    }
+
+    const updated = await pool.query(
+      `UPDATE email_campaigns
+          SET status = 'scheduled', scheduled_at = $2, timezone = $3, updated_at = now()
+        WHERE id = $1 AND status IN ('draft', 'scheduled', 'failed')
+          AND btrim(subject) <> ''
+        RETURNING *`,
+      [campaignId, scheduledAt, parsed.data.timezone],
+    );
+    if (!updated.rows[0]) {
+      const found = await pool.query<{ id: number }>("SELECT id FROM email_campaigns WHERE id = $1", [campaignId]);
+      if (!found.rows[0]) throw notFound("Campaign not found");
+      throw badRequest("Add a subject first, or wait for the current send to finish.");
+    }
+    res.json(rowToCamel(updated.rows[0]));
+  }),
+);
+
+adminGrowthRouter.post(
+  "/campaigns/:id/cancel-schedule",
+  asyncHandler(async (req, res) => {
+    const campaignId = Number(req.params.id);
+    if (!Number.isInteger(campaignId) || campaignId <= 0) throw notFound("Campaign not found");
+    const updated = await pool.query(
+      `UPDATE email_campaigns
+          SET status = 'draft', scheduled_at = NULL, updated_at = now()
+        WHERE id = $1 AND status = 'scheduled'
+        RETURNING *`,
+      [campaignId],
+    );
+    if (!updated.rows[0]) throw badRequest("This email is not scheduled.");
+    res.json(rowToCamel(updated.rows[0]));
+  }),
+);
+
+adminGrowthRouter.post(
+  "/campaigns/test",
+  adminTestEmailLimiter,
+  asyncHandler(async (req, res) => {
+    const parsed = campaignTestSchema.safeParse(req.body);
+    if (!parsed.success) throw badRequest("Add a subject before sending a test.");
+    const to = req.user?.email ?? "";
+    if (!to) throw badRequest("Your admin account needs an email address for the test.");
+    await sendEmail({
+      to,
+      subject: `[Test] ${parsed.data.subject}`,
+      text: parsed.data.bodyMd,
+      html: renderMarkdown(parsed.data.bodyMd),
+      sourceType: "transactional",
+    });
+    await recordAdminAction({
+      req,
+      action: "campaign.test_send",
+      entityType: "email_campaign",
+      entityId: "draft",
+      after: { to, subject: parsed.data.subject },
+    });
+    res.json({ sent: true, to });
   }),
 );
 

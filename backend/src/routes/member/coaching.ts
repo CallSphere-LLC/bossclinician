@@ -29,6 +29,7 @@ import {
 } from "../../services/coachingCalendar";
 import { isProtectedRef, signedFileUrl } from "../../services/signedUrls";
 import type { EntitledMedia } from "./downloads";
+import { dispatchEvent } from "../../services/webhooksOut";
 
 /**
  * `/api/member/coaching` — booking, rescheduling and cancelling sessions.
@@ -1110,6 +1111,16 @@ memberCoachingRouter.post(
       closing: "Need to move it?",
     });
 
+    await dispatchEvent("coaching.booked", {
+      id: `coaching-session:${booked.id}`,
+      sessionId: booked.id,
+      memberId: member.id,
+      email: member.email,
+      offerId: booked.offer_id,
+      scheduledAt: booked.scheduled_at?.toISOString() ?? null,
+      timezone: zone,
+    });
+
     const credits = await pool.query<CreditRow>(`${CREDIT_SELECT} WHERE c.member_id = $1`, [
       member.id,
     ]);
@@ -1395,6 +1406,16 @@ memberCoachingRouter.post(
       heading: `Cancelled: ${cancelled.offer_title ?? "your coaching session"}`,
       intro: message,
       closing: "Ready to rebook?",
+    });
+
+    await dispatchEvent("coaching.cancelled", {
+      id: `coaching-session-cancelled:${cancelled.id}`,
+      sessionId: cancelled.id,
+      memberId: member.id,
+      email: member.email,
+      offerId: cancelled.offer_id,
+      scheduledAt: cancelled.scheduled_at?.toISOString() ?? null,
+      reason: parsed.data.reason ?? "",
     });
 
     const credits = await pool.query<CreditRow>(`${CREDIT_SELECT} WHERE c.member_id = $1`, [

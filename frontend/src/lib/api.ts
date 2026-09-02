@@ -61,6 +61,7 @@ export function clearToken(): void {
 
 class ApiError extends Error {
   status: number;
+  readonly mfaRequired: boolean;
   /**
    * The server's per-field corrections, when the refusal named any.
    *
@@ -75,10 +76,16 @@ class ApiError extends Error {
    * a banner with no indication of which box was wrong.
    */
   readonly fieldErrors: Record<string, string>;
-  constructor(message: string, status: number, fieldErrors: Record<string, string> = {}) {
+  constructor(
+    message: string,
+    status: number,
+    fieldErrors: Record<string, string> = {},
+    mfaRequired = false,
+  ) {
     super(message);
     this.status = status;
     this.fieldErrors = fieldErrors;
+    this.mfaRequired = mfaRequired;
   }
 }
 
@@ -90,6 +97,11 @@ class ApiError extends Error {
  */
 export function fieldErrorsOf(err: unknown): Record<string, string> {
   return err instanceof ApiError ? err.fieldErrors : {};
+}
+
+/** Whether the password was accepted and the account now needs its second factor. */
+export function isMfaRequiredError(err: unknown): boolean {
+  return err instanceof ApiError && err.mfaRequired;
 }
 
 async function request<T>(
@@ -112,14 +124,17 @@ async function request<T>(
     // business owner can act on (see pages/admin/ui/friendly.ts). This default
     // is the last resort, so it says what to do rather than what broke.
     let message = "Something went wrong. Please try again in a moment.";
+    let mfaRequired = false;
     const fieldErrors: Record<string, string> = {};
     try {
       const body = (await res.json()) as {
         error?: string;
         message?: string;
+        mfaRequired?: boolean;
         details?: { fieldErrors?: Record<string, string[]> };
       };
       message = body.error ?? body.message ?? message;
+      mfaRequired = body.mfaRequired === true;
       for (const [field, messages] of Object.entries(body.details?.fieldErrors ?? {})) {
         const first = messages?.[0];
         if (first) fieldErrors[field] = first;
@@ -127,7 +142,7 @@ async function request<T>(
     } catch {
       // ignore parse errors
     }
-    throw new ApiError(message, res.status, fieldErrors);
+    throw new ApiError(message, res.status, fieldErrors, mfaRequired);
   }
 
   if (res.status === 204) {
@@ -246,10 +261,10 @@ function withSplitName<T extends { name?: string; firstName?: string; lastName?:
 }
 
 export const adminApi = {
-  login: (email: string, password: string) =>
+  login: (email: string, password: string, code?: string) =>
     request<{ token: string; user: AdminUser }>("/admin/login", {
       method: "POST",
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ email, password, ...(code ? { code } : {}) }),
     }),
   /**
    * Ends the session on the server as well as in this browser.
@@ -669,6 +684,47 @@ export const adminApi = {
     request<{ ok: true; queued: number }>(`/admin/growth/campaigns/${id}/send`, {
       method: "POST",
     }),
+  campaignSchedule: (id: number, scheduledAt: string, timezone: string) =>
+    request<import("@/types/admin").Campaign>(`/admin/growth/campaigns/${id}/schedule`, {
+      method: "POST",
+      body: JSON.stringify({ scheduledAt, timezone }),
+    }),
+  campaignCancelSchedule: (id: number) =>
+    request<import("@/types/admin").Campaign>(
+      `/admin/growth/campaigns/${id}/cancel-schedule`,
+      { method: "POST" },
+    ),
+  campaignTest: (data: { subject: string; bodyMd: string }) =>
+    request<{ sent: true; to: string }>("/admin/growth/campaigns/test", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  availabilityRules: () =>
+    request<{ rules: import("@/types/admin").AvailabilityRule[] }>("/admin/availability/rules"),
+  availabilityRuleCreate: (data: Record<string, unknown>) =>
+    request<{ rule: import("@/types/admin").AvailabilityRule }>("/admin/availability/rules", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  availabilityRuleDelete: (id: number) =>
+    request<{ deleted: true }>(`/admin/availability/rules/${id}`, { method: "DELETE" }),
+  availabilityOverrides: () =>
+    request<{
+      timezone: string;
+      overrides: import("@/types/admin").AvailabilityOverride[];
+    }>("/admin/availability/overrides"),
+  availabilityOverrideCreate: (data: Record<string, unknown>) =>
+    request<{ override: import("@/types/admin").AvailabilityOverride }>(
+      "/admin/availability/overrides",
+      { method: "POST", body: JSON.stringify(data) },
+    ),
+  availabilityOverrideDelete: (id: number) =>
+    request<{ deleted: true }>(`/admin/availability/overrides/${id}`, { method: "DELETE" }),
+  availabilityPreview: (durationMinutes = 60) =>
+    request<import("@/types/admin").AvailabilityPreview>(
+      `/admin/availability/preview?durationMinutes=${durationMinutes}`,
+    ),
 
   funnelSteps: (funnelId: number) =>
     request<import("@/types/admin").FunnelStep[]>(`/admin/growth/funnels/${funnelId}/steps`),
@@ -688,6 +744,10 @@ export const adminApi = {
   coachingSessions: (offerId?: number) =>
     request<import("@/types/admin").CoachingSession[]>(
       `/admin/growth/coaching/sessions${offerId ? `?offerId=${offerId}` : ""}`,
+    ),
+  coachingClients: (q = "") =>
+    request<{ clients: Array<{ kind: "member" | "contact"; id: number; name: string; email: string }> }>(
+      `/admin/growth/coaching/clients${q ? `?q=${encodeURIComponent(q)}` : ""}`,
     ),
 
   formSubmissions: (formId: number) =>

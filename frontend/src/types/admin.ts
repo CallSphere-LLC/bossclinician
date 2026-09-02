@@ -359,6 +359,7 @@ export interface CoachingSession {
   id: Id;
   offerId: Id | null;
   memberId: Id | null;
+  contactId: Id | null;
   scheduledAt: string | null;
   durationMinutes: number;
   status: "scheduled" | "completed" | "cancelled" | "no_show" | string;
@@ -442,6 +443,7 @@ export interface Campaign {
   audience: string;
   status: "draft" | "scheduled" | "sending" | "sent" | "failed" | string;
   scheduledAt: string | null;
+  timezone: string;
   sentAt: string | null;
   recipientCount: number;
   deliveredCount: number;
@@ -449,6 +451,55 @@ export interface Campaign {
   openedCount: number;
   clickedCount: number;
   createdAt: string;
+}
+
+export interface AvailabilityRule {
+  id: Id;
+  timezone: string;
+  weekday: number;
+  weekdayLabel: string;
+  startMinute: number;
+  endMinute: number;
+  label: string;
+  active: boolean;
+  createdAt: string;
+}
+
+export interface AvailabilityOverride {
+  id: Id;
+  startsAt: string;
+  endsAt: string;
+  available: boolean;
+  note: string;
+  label: string;
+  kind: "extra" | "blocked";
+}
+
+export interface AvailabilityPreview {
+  timezone: string;
+  from: string;
+  to: string;
+  durationMinutes: number;
+  policy: {
+    minimumNoticeHours: number;
+    cancellationWindowHours: number;
+    slotIntervalMinutes: number;
+    bookingHorizonDays: number;
+  };
+  slots: Array<{
+    startsAt: string;
+    endsAt: string;
+    day: string;
+    dayLabel: string;
+    timeLabel: string;
+    label: string;
+  }>;
+  booked: Array<{
+    sessionId: number;
+    startsAt: string;
+    durationMinutes: number;
+    label: string;
+  }>;
 }
 
 export interface Funnel {

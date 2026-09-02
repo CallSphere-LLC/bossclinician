@@ -110,7 +110,7 @@ export function DataTable<TData>({
 
       <div className="overflow-x-auto">
         <table className="w-full text-left text-sm" style={{ minWidth }}>
-          <thead className="bg-cream/70">
+          <thead className="sticky top-0 z-[1] bg-sand">
             {table.getHeaderGroups().map((headerGroup) => (
               <tr key={headerGroup.id}>
                 {headerGroup.headers.map((header) => {
@@ -162,7 +162,7 @@ export function DataTable<TData>({
               Array.from({ length: 5 }, (_, i) => (
                 <tr key={i}>
                   {columns.map((_col, ci) => (
-                    <td key={ci} className="px-5 py-4">
+                    <td key={ci} className="h-11 px-5 py-2">
                       <Skeleton className={cn("h-4", ci === 0 ? "w-3/5" : "w-20")} />
                     </td>
                   ))}
@@ -183,9 +183,9 @@ export function DataTable<TData>({
               </tr>
             ) : (
               rows.map((row) => (
-                <tr key={row.id} className="group transition-colors hover:bg-lilac-tint/30">
+                <tr key={row.id} className="group h-11 transition-colors hover:bg-surface-raised">
                   {row.getVisibleCells().map((cell) => (
-                    <td key={cell.id} className="px-5 py-3.5 align-middle text-ink">
+                    <td key={cell.id} className="px-5 py-2 align-middle text-ink">
                       {flexRender(cell.column.columnDef.cell, cell.getContext())}
                     </td>
                   ))}

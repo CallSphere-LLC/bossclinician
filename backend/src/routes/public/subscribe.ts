@@ -7,7 +7,8 @@ import { sendMail } from "../../email/mailer";
 import { subscriberWelcome } from "../../email/templates";
 import { subscribeLimiter } from "../../middleware/rateLimit";
 import { fireTriggerAsync } from "../../automations/engine";
-import { linkContact, recordActivity, upsertContact } from "../../services/contacts";
+import { linkContact, recordActivity, upsertContactWithStatus } from "../../services/contacts";
+import { publishDomainEvent } from "../../services/domainEvents";
 
 export const subscribeRouter = Router();
 
@@ -28,12 +29,13 @@ subscribeRouter.post(
 
     // Where they signed up and from which address is the record that has to
     // exist if anybody ever asks why they were mailed.
-    const contactId = await upsertContact({
+    const contact = await upsertContactWithStatus({
       email,
       source: `newsletter: ${source}`,
       consentSource: source,
       consentIp: req.ip ?? "",
     });
+    const contactId = contact.id;
     await linkContact("subscriber", subscriber.rows[0].id, contactId);
     await recordActivity({
       contactId,
@@ -41,6 +43,14 @@ subscribeRouter.post(
       title: "Joined the mailing list",
       meta: { source },
     });
+    if (contact.created) {
+      await publishDomainEvent("contact_created", {
+        eventKey: `contact-created:${contactId}`,
+        contactId,
+        email,
+        source: `newsletter:${source}`,
+      });
+    }
 
     const { subject, text, html } = subscriberWelcome(email);
     void sendMail({ to: email, subject, text, html });

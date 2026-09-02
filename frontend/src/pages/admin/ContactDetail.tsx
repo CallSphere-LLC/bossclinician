@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   Clock,
   Combine,
+  Download,
   Mail,
   Pencil,
   Phone,
@@ -74,6 +75,7 @@ export default function ContactDetail() {
   const [merging, setMerging] = useState(false);
   const [note, setNote] = useState("");
   const [addingTag, setAddingTag] = useState("");
+  const [tagBusy, setTagBusy] = useState<string | null>(null);
   const [confirm, confirmDialog] = useConfirm();
 
   const load = useCallback(() => {
@@ -121,22 +123,30 @@ export default function ContactDetail() {
 
   async function addTag(slug: string) {
     if (!person || !slug.trim()) return;
+    setTagBusy(slug.trim());
     try {
       await contactsApi.addTags(person.id, [slug.trim()]);
       setAddingTag("");
+      toast.success("Tag added");
       load();
     } catch (err) {
       toast.error(friendlyError(err, "tag"));
+    } finally {
+      setTagBusy(null);
     }
   }
 
   async function dropTag(slug: string) {
     if (!person) return;
+    setTagBusy(slug);
     try {
       await contactsApi.removeTag(person.id, slug);
+      toast.success("Tag removed");
       load();
     } catch (err) {
       toast.error(friendlyError(err, "tag"));
+    } finally {
+      setTagBusy(null);
     }
   }
 
@@ -169,6 +179,26 @@ export default function ContactDetail() {
       navigate("/admin/contacts");
     } catch (err) {
       toast.error(friendlyError(err, "person"));
+    }
+  }
+
+  async function exportPerson() {
+    if (!person) return;
+    try {
+      const payload = await contactsApi.export(person.id);
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `${(person.name || person.email || "person")
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-|-$/g, "")}-data.json`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+      toast.success("Person data downloaded");
+    } catch (err) {
+      toast.error(friendlyError(err, "download"));
     }
   }
 
@@ -215,6 +245,10 @@ export default function ContactDetail() {
             <Button variant="secondary" size="sm" onClick={() => setMerging(true)}>
               <Combine />
               Same as someone else
+            </Button>
+            <Button variant="secondary" size="sm" onClick={() => void exportPerson()}>
+              <Download />
+              Export their data
             </Button>
             <Button variant="dangerGhost" size="sm" onClick={remove}>
               <Trash2 />
@@ -398,6 +432,7 @@ export default function ContactDetail() {
                     {tag.name}
                     <button
                       type="button"
+                      disabled={tagBusy !== null}
                       onClick={() => dropTag(tag.slug)}
                       aria-label={`Take the ${tag.name} tag off ${displayName}`}
                       className="rounded-full hover:text-white"
@@ -416,10 +451,11 @@ export default function ContactDetail() {
                     <button
                       key={tag.slug}
                       type="button"
+                      disabled={tagBusy !== null}
                       onClick={() => addTag(tag.slug)}
-                      className="rounded-full border border-hairline bg-surface px-3 py-1.5 text-xs font-semibold text-ink-soft transition-colors hover:border-plum/40 hover:text-plum"
+                      className="min-h-9 rounded-full border border-hairline bg-surface px-4 py-2 text-xs font-semibold text-ink-soft transition-colors hover:border-plum/40 hover:text-plum disabled:cursor-wait disabled:opacity-60"
                     >
-                      + {tag.name}
+                      {tagBusy === tag.slug ? "Adding…" : `+ ${tag.name}`}
                     </button>
                   ))}
               </div>
@@ -440,7 +476,7 @@ export default function ContactDetail() {
                   type="button"
                   variant="secondary"
                   size="sm"
-                  disabled={!addingTag.trim()}
+                  disabled={!addingTag.trim() || tagBusy !== null}
                   onClick={() => addTag(addingTag)}
                 >
                   Add

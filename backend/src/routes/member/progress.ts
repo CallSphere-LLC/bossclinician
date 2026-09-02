@@ -22,6 +22,7 @@ import {
 import { issueCertificateIfEarned } from "../../services/certificates";
 import { resolveDripState, describeUnlock } from "../../services/drip";
 import { plainText } from "../../utils/plainText";
+import { publishDomainEvent } from "../../services/domainEvents";
 
 /**
  * `/api/member` — what a member writes while working through a course: how far
@@ -316,8 +317,23 @@ async function writeProgress(
   const client: PoolClient = await pool.connect();
   let rollup: CourseRollup;
   let progress: ProgressRow | null;
+  let lessonWasComplete = false;
+  let courseWasComplete = false;
   try {
     await client.query("BEGIN");
+    const before = await client.query<{ lesson_complete: boolean; course_complete: boolean }>(
+      `SELECT EXISTS (
+                SELECT 1 FROM lesson_progress
+                 WHERE member_id = $1 AND lesson_id = $2 AND completed_at IS NOT NULL
+              ) AS lesson_complete,
+              EXISTS (
+                SELECT 1 FROM course_progress
+                 WHERE member_id = $1 AND course_id = $3 AND completed_at IS NOT NULL
+              ) AS course_complete`,
+      [memberId, Number(params[1]), courseId],
+    );
+    lessonWasComplete = before.rows[0]?.lesson_complete ?? false;
+    courseWasComplete = before.rows[0]?.course_complete ?? false;
     const written = await client.query<ProgressRow>(statement, params);
     rollup = await recomputeCourseProgress(memberId, courseId, client);
     await client.query("COMMIT");
@@ -327,6 +343,39 @@ async function writeProgress(
     throw err;
   } finally {
     client.release();
+  }
+
+  const lessonId = Number(params[1]);
+  if ((!lessonWasComplete && progress?.completed_at) || (!courseWasComplete && rollup.percent >= 100)) {
+    const person = await pool.query<{ contact_id: number | null; email: string; name: string }>(
+      `SELECT contact_id, email::text AS email,
+              COALESCE(NULLIF(TRIM(first_name || ' ' || last_name), ''), name, '') AS name
+         FROM members WHERE id = $1`,
+      [memberId],
+    );
+    const identity = person.rows[0];
+    if (!lessonWasComplete && progress?.completed_at) {
+      await publishDomainEvent("lesson_completed", {
+        eventKey: `lesson-completed:${memberId}:${lessonId}`,
+        contactId: identity?.contact_id ?? null,
+        email: identity?.email ?? "",
+        name: identity?.name ?? "",
+        subjectId: courseId,
+        source: "course-player",
+        facts: { lessonId, courseId, memberId },
+      });
+    }
+    if (!courseWasComplete && rollup.percent >= 100) {
+      await publishDomainEvent("course_completed", {
+        eventKey: `course-completed:${memberId}:${courseId}`,
+        contactId: identity?.contact_id ?? null,
+        email: identity?.email ?? "",
+        name: identity?.name ?? "",
+        subjectId: courseId,
+        source: "course-player",
+        facts: { courseId, memberId },
+      });
+    }
   }
 
   if (rollup.percent >= 100) {

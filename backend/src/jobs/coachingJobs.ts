@@ -107,11 +107,12 @@ async function claimDue(step: ReminderStep): Promise<DueSession[]> {
   const detail = await pool.query<DueSession>(
     `SELECT s.id, s.member_id, s.scheduled_at, s.duration_minutes, s.timezone,
             s.meeting_url, s.agenda,
-            COALESCE(m.email::text, '')   AS email,
-            COALESCE(m.first_name, '')    AS first_name,
+            COALESCE(m.email::text, c.email::text, '') AS email,
+            COALESCE(NULLIF(m.first_name, ''), c.first_name, c.name, '') AS first_name,
             COALESCE(o.title, 'coaching') AS offer_title
        FROM coaching_sessions s
        LEFT JOIN members m         ON m.id = s.member_id
+       LEFT JOIN contacts c        ON c.id = s.contact_id
        LEFT JOIN coaching_offers o ON o.id = s.offer_id
       WHERE s.id = ANY($1::int[])`,
     [ids]

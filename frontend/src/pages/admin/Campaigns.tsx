@@ -43,7 +43,12 @@ import {
 } from "@/pages/admin/ui/primitives";
 import { DataTable, RowActions } from "@/pages/admin/ui/DataTable";
 import { Modal, useConfirm } from "@/pages/admin/ui/Dialog";
-import { friendlyError, humanizeKey, pluralize } from "@/pages/admin/ui/friendly";
+import { isoToWallClock, wallClockToIso } from "@/lib/zonedDateTime";
+import {
+  friendlyError,
+  humanizeKey,
+  pluralize,
+} from "@/pages/admin/ui/friendly";
 
 const STATUS_TONE: Record<string, NonNullable<BadgeProps["tone"]>> = {
   draft: "slate",
@@ -72,6 +77,33 @@ const AUDIENCES = [
   { key: "leads", label: "Everyone who's enquired" },
   { key: "community", label: "Everyone in my community" },
 ];
+
+const TIMEZONES = [
+  "America/New_York",
+  "America/Chicago",
+  "America/Denver",
+  "America/Los_Angeles",
+  "Europe/London",
+  "Australia/Sydney",
+];
+
+const DEFAULT_TIMEZONE = Intl.DateTimeFormat().resolvedOptions().timeZone || "America/New_York";
+
+function scheduledLabel(iso: string, timeZone: string): string {
+  try {
+    return new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      timeZoneName: "short",
+    }).format(new Date(iso));
+  } catch {
+    return formatDateTime(iso);
+  }
+}
 
 /** Falls back to a readable version of a group this list doesn't cover. */
 function audienceLabel(key: string): string {
@@ -307,14 +339,55 @@ export default function Campaigns() {
   async function save(e: FormEvent) {
     e.preventDefault();
     if (!draft?.name?.trim()) return;
+    if (
+      draft.scheduledAt &&
+      (!Number.isFinite(Date.parse(draft.scheduledAt)) ||
+        Date.parse(draft.scheduledAt) <= Date.now() + 60_000)
+    ) {
+      toast.error("Choose a send time at least one minute from now.");
+      return;
+    }
     try {
-      if (draft.id) await adminApi.growthUpdate("campaigns", draft.id, draft);
-      else await adminApi.growthCreate("campaigns", draft);
-      toast.success("Email saved");
+      const { scheduledAt, status: _status, ...content } = draft;
+      let campaign: Campaign;
+      if (draft.id) campaign = await adminApi.growthUpdate<Campaign>("campaigns", draft.id, content);
+      else {
+        campaign = await adminApi.growthCreate<Campaign>("campaigns", { ...content, status: "draft" });
+        // If the scheduling request fails after creation, a retry updates this
+        // draft instead of creating a second email with the same content.
+        setDraft((current) => current ? { ...current, id: campaign.id, status: "draft" } : current);
+      }
+
+      if (scheduledAt) {
+        const timezone = draft.timezone || DEFAULT_TIMEZONE;
+        await adminApi.campaignSchedule(campaign.id, scheduledAt, timezone);
+        toast.success(`Email scheduled for ${scheduledLabel(scheduledAt, timezone)}`);
+      } else if (draft.id && draft.status === "scheduled") {
+        await adminApi.campaignCancelSchedule(draft.id);
+        toast.success("Scheduled send cancelled; the email is a draft again");
+      } else {
+        toast.success("Email saved");
+      }
       setDraft(null);
       load();
     } catch (err) {
       toast.error(friendlyError(err, "email"));
+    }
+  }
+
+  async function sendTest() {
+    if (!draft?.subject?.trim()) {
+      toast.error("Add a subject before sending a test.");
+      return;
+    }
+    try {
+      const result = await adminApi.campaignTest({
+        subject: draft.subject,
+        bodyMd: draft.bodyMd ?? "",
+      });
+      toast.success(`Test sent to ${result.to}`);
+    } catch (err) {
+      toast.error(friendlyError(err, "test email"));
     }
   }
 
@@ -423,6 +496,10 @@ export default function Campaigns() {
                 </span>
               )}
             </span>
+          ) : row.original.status === "scheduled" && row.original.scheduledAt ? (
+            <span className="text-sm text-gold">
+              Sends {scheduledLabel(row.original.scheduledAt, row.original.timezone || DEFAULT_TIMEZONE)}
+            </span>
           ) : (
             <span className="text-xs text-ink-soft/70">Not sent yet</span>
           ),
@@ -448,6 +525,23 @@ export default function Campaigns() {
                 Send
               </Button>
             )}
+            {row.original.status === "scheduled" && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={async () => {
+                  try {
+                    await adminApi.campaignCancelSchedule(row.original.id);
+                    toast.success("Scheduled send cancelled");
+                    load();
+                  } catch (err) {
+                    toast.error(friendlyError(err, "email"));
+                  }
+                }}
+              >
+                Cancel schedule
+              </Button>
+            )}
             <Button
               variant="dangerGhost"
               size="iconSm"
@@ -470,7 +564,7 @@ export default function Campaigns() {
         title="Email Campaigns"
         description="Write one email and send it to your subscribers, members or enquiries."
         actions={
-          <Button size="sm" onClick={() => setDraft({ audience: "all_subscribers", status: "draft" })}>
+          <Button size="sm" onClick={() => setDraft({ audience: "all_subscribers", status: "draft", timezone: DEFAULT_TIMEZONE })}>
             <Plus />
             Write an email
           </Button>
@@ -493,7 +587,7 @@ export default function Campaigns() {
             action={
               <Button
                 size="sm"
-                onClick={() => setDraft({ audience: "all_subscribers", status: "draft" })}
+                onClick={() => setDraft({ audience: "all_subscribers", status: "draft", timezone: DEFAULT_TIMEZONE })}
               >
                 Write an email
               </Button>
@@ -587,6 +681,66 @@ export default function Campaigns() {
                 placeholder={"Hi there,\n\nI wanted to tell you about…"}
               />
             </Field>
+
+            <Field
+              label="Send later"
+              hint="optional"
+            >
+              <Input
+                type="datetime-local"
+                min={isoToWallClock(
+                  new Date(Date.now() + 60_000).toISOString(),
+                  draft.timezone || DEFAULT_TIMEZONE,
+                )}
+                value={isoToWallClock(draft.scheduledAt, draft.timezone || DEFAULT_TIMEZONE)}
+                onChange={(e) =>
+                  setDraft((d) => {
+                    if (!e.target.value) return { ...d, scheduledAt: null };
+                    const scheduledAt = wallClockToIso(
+                      e.target.value,
+                      d?.timezone || DEFAULT_TIMEZONE,
+                    );
+                    if (!scheduledAt) {
+                      toast.error("That local time does not exist because the clock changes then.");
+                      return d;
+                    }
+                    return { ...d, scheduledAt };
+                  })
+                }
+              />
+            </Field>
+
+            <Field label="Send timezone">
+              <select
+                className={selectStyles}
+                value={draft.timezone || DEFAULT_TIMEZONE}
+                onChange={(event) => {
+                  const oldZone = draft.timezone || DEFAULT_TIMEZONE;
+                  const wallClock = isoToWallClock(draft.scheduledAt, oldZone);
+                  const timezone = event.target.value;
+                  setDraft((current) => ({
+                    ...current,
+                    timezone,
+                    scheduledAt: wallClock ? wallClockToIso(wallClock, timezone) : null,
+                  }));
+                }}
+              >
+                {(TIMEZONES.includes(draft.timezone || DEFAULT_TIMEZONE)
+                  ? TIMEZONES
+                  : [draft.timezone || DEFAULT_TIMEZONE, ...TIMEZONES]
+                ).map((timezone) => <option key={timezone} value={timezone}>{timezone}</option>)}
+              </select>
+            </Field>
+
+            <div className="flex items-center justify-between gap-3 rounded-xl border border-hairline bg-white/[0.03] p-3">
+              <span className="text-sm text-ink-soft">
+                Check the subject and formatting in your own inbox before sending.
+              </span>
+              <Button type="button" variant="secondary" size="sm" onClick={() => void sendTest()}>
+                <Send />
+                Send me a test
+              </Button>
+            </div>
           </form>
         )}
       </Modal>

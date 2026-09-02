@@ -3,7 +3,7 @@ import { z } from "zod";
 import { env } from "../../config/env";
 import { pool } from "../../db/pool";
 import { leadsLimiter } from "../../middleware/rateLimit";
-import { applyTags, recordActivity, upsertContact } from "../../services/contacts";
+import { applyTags, recordActivity, upsertContactWithStatus } from "../../services/contacts";
 import {
   buildIcs,
   describeSession,
@@ -17,6 +17,7 @@ import {
 } from "../../services/events";
 import { asyncHandler } from "../../utils/asyncHandler";
 import { HttpError, badRequest, forbidden, notFound } from "../../utils/httpError";
+import { publishDomainEvent } from "../../services/domainEvents";
 
 /**
  * Public events: the registration page, the room, and the calendar file.
@@ -214,7 +215,7 @@ eventsPublicRouter.post(
     const registrationId = Number(row.id);
     const confirmedAt = row.session_at;
 
-    const contactId = await upsertContact({
+    const contact = await upsertContactWithStatus({
       email,
       name: input.name ?? "",
       timezone: input.timezone ?? "",
@@ -222,6 +223,7 @@ eventsPublicRouter.post(
       consentSource: `event: ${event.slug}`,
       consentIp: req.ip ?? "",
     });
+    const contactId = contact.id;
 
     await pool.query(
       `UPDATE event_registrations SET contact_id = $2 WHERE id = $1 AND contact_id IS NULL`,
@@ -248,6 +250,26 @@ eventsPublicRouter.post(
         `event:${event.slug}`
       );
     }
+
+    if (contact.created) {
+      await publishDomainEvent("contact_created", {
+        eventKey: `contact-created:${contactId}`,
+        contactId,
+        email,
+        name: input.name ?? "",
+        source: `event:${event.slug}`,
+      });
+    }
+
+    await publishDomainEvent("event_registered", {
+      eventKey: `event-registered:${registrationId}:${confirmedAt.toISOString()}`,
+      contactId,
+      email,
+      name: input.name ?? "",
+      subjectId: event.id,
+      source: `event:${event.slug}`,
+      facts: { registrationId, sessionAt: confirmedAt.toISOString(), eventTitle: event.title },
+    });
 
     const token = signRegistration(registrationId);
     res.status(201).json({
@@ -356,6 +378,15 @@ eventsPublicRouter.get(
           title: `Joined ${event.title}`,
           subjectType: "event",
           subjectId: event.id,
+        });
+        await publishDomainEvent("event_attended", {
+          eventKey: `event-attended:${registration.id}:${registration.session_at.toISOString()}`,
+          contactId: registration.contact_id,
+          email: registration.email,
+          name: registration.name,
+          subjectId: event.id,
+          source: `event:${event.slug}`,
+          facts: { registrationId: Number(registration.id), eventTitle: event.title },
         });
       }
     }

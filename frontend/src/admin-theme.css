@@ -1,0 +1,67 @@
+/*
+ * Boss Clinician admin theme.
+ *
+ * This is the one source of truth for console colour. Legacy utility names
+ * remain as compatibility aliases, but in the admin they all resolve to the
+ * neutral ramp or the single gold accent below.
+ */
+.theme-console {
+  color-scheme: dark;
+  --bg-base: #08070a;
+  --bg-surface: #101014;
+  --bg-surface-2: #16161b;
+  --bg-elevated: #1d1d23;
+  --border-subtle: #23232b;
+  --border-strong: #33333d;
+  --text-primary: #f2efe9;
+  --text-secondary: #a8a49c;
+  --text-muted: #6f6b64;
+  --accent: #d4af6e;
+  --accent-hover: #e4c486;
+  --accent-ink: #0b0a08;
+  --success: #6fbf8b;
+  --warning: #e0a94b;
+  --danger: #e06c6c;
+  --info: #7fa8d9;
+
+  --c-ink: 242 239 233;
+  --c-ink-soft: 168 164 156;
+  --c-cream: 8 7 10;
+  --c-sand: 22 22 27;
+  --c-surface: 16 16 20;
+  --c-surface-raised: 29 29 35;
+  --c-hairline: 35 35 43;
+  --c-lilac-soft: 168 164 156;
+  --c-lilac-tint: 22 22 27;
+  --c-lilac: 168 164 156;
+  --c-dark: 11 10 13;
+  --c-plum: 212 175 110;
+  --c-plum-deep: 228 196 134;
+  --c-plum-bright: 212 175 110;
+
+  font-family: Inter, Söhne, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.theme-console h2:not(.font-display),
+.theme-console h3:not(.font-display),
+.theme-console h4:not(.font-display) {
+  font-family: inherit;
+}
+
+.theme-console .bg-brand-gradient,
+.theme-console .bg-gold-foil {
+  background-image: none;
+  background-color: var(--accent);
+  color: var(--accent-ink);
+}
+
+.theme-console ::selection {
+  background: color-mix(in srgb, var(--accent) 28%, transparent);
+  color: var(--text-primary);
+}
+
+.theme-console :focus-visible {
+  outline-color: var(--accent);
+}

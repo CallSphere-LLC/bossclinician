@@ -242,7 +242,7 @@ export default function ReportsHub() {
                   to={`/admin/analytics/reports/${report.id}`}
                   className="group"
                 >
-                  <Card className="flex h-full flex-col p-5 transition-all duration-200 group-hover:-translate-y-0.5 group-hover:border-gold/35">
+                  <Card className="flex h-full flex-col p-5 transition-all duration-150 group-hover:-translate-y-0.5 group-hover:border-gold/35">
                     <div className="flex items-start justify-between gap-3">
                       <h3 className="font-display text-base leading-snug text-ink">
                         {report.name}

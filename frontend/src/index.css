@@ -1,3 +1,5 @@
+@import "./admin-theme.css";
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -26,6 +28,8 @@
     --c-dark: 15 30 58;
     --c-plum: 92 69 125;
     --c-plum-deep: 61 45 92;
+    --c-plum-bright: 123 94 167;
+    --c-lilac: 167 139 196;
   }
 
   /* Public dark theme. `ink` inverts to near-white because it means "body
@@ -51,27 +55,8 @@
     --c-dark: 6 4 11;
     --c-plum: 185 162 214; /* orchid — readable on night */
     --c-plum-deep: 216 202 235;
-  }
-
-  /* Admin console. Slightly lighter surfaces than the public theme and a
-     cooler hairline: a data grid needs its row separators to survive at 1px
-     under a bright screen, where the marketing theme can afford to whisper. */
-  .theme-console {
-    /* See .theme-luxe: this is what stops a <select> painting itself in the
-       machine's colours and hiding the value she just chose. */
-    color-scheme: dark;
-    --c-ink: 237 233 245;
-    --c-ink-soft: 152 141 176;
-    --c-cream: 11 8 20;
-    --c-sand: 20 15 34;
-    --c-surface: 20 15 34;
-    --c-surface-raised: 27 20 44;
-    --c-hairline: 62 51 86;
-    --c-lilac-soft: 167 139 196;
-    --c-lilac-tint: 35 25 56;
-    --c-dark: 8 5 15;
-    --c-plum: 185 162 214;
-    --c-plum-deep: 216 202 235;
+    --c-plum-bright: 123 94 167;
+    --c-lilac: 167 139 196;
   }
 
   html {
@@ -100,7 +85,7 @@
   }
 
   :focus-visible {
-    outline: 2px solid #c9a46a;
+    outline: 2px solid #d4af6e;
     outline-offset: 3px;
     border-radius: 2px;
   }
@@ -128,7 +113,7 @@
   .select-field {
     appearance: none;
     -webkit-appearance: none;
-    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23988DB0' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23A8A49C' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
     background-position: right 0.9rem center;
     background-size: 1rem 1rem;

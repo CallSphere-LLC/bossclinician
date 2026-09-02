@@ -629,7 +629,7 @@ export function PicturePickerModal({
                     src={asset.previewUrl}
                     alt=""
                     loading="lazy"
-                    className="size-full object-cover transition-transform duration-300 group-hover:scale-[1.04]"
+                    className="size-full object-cover transition-transform duration-150 group-hover:scale-[1.04]"
                   />
                 </span>
                 <span className="block p-2.5">

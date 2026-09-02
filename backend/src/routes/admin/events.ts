@@ -4,6 +4,7 @@ import { pool } from "../../db/pool";
 import { PRIORITY, enqueue } from "../../jobs/queue";
 import { describeSession, signRegistration } from "../../services/events";
 import { asyncHandler } from "../../utils/asyncHandler";
+import { publishDomainEvent } from "../../services/domainEvents";
 import { rowToCamel, rowsToCamel } from "../../utils/case";
 import { badRequest, notFound } from "../../utils/httpError";
 import { buildUpdate } from "../../utils/sqlUpdate";
@@ -300,13 +301,28 @@ adminEventsRouter.post(
   "/:id/attendance",
   asyncHandler(async (req, res) => {
     const input = attendanceSchema.parse(req.body);
-    const result = await pool.query(
+    const result = await pool.query<{ id: string; contact_id: number | null; email: string; name: string; session_at: Date }>(
       `UPDATE event_registrations
           SET attended = $3,
               attended_at = CASE WHEN $3 THEN COALESCE(attended_at, now()) ELSE NULL END
-        WHERE event_id = $1 AND id = ANY($2::bigint[])`,
+        WHERE event_id = $1 AND id = ANY($2::bigint[])
+        RETURNING id, contact_id, email::text AS email, name, session_at`,
       [req.params.id, input.ids, input.attended]
     );
+    if (input.attended) {
+      for (const row of result.rows) {
+        if (row.contact_id === null) continue;
+        await publishDomainEvent("event_attended", {
+          eventKey: `event-attended:${row.id}:${row.session_at.toISOString()}`,
+          contactId: row.contact_id,
+          email: row.email,
+          name: row.name,
+          subjectId: Number(req.params.id),
+          source: "admin-attendance",
+          facts: { registrationId: Number(row.id) },
+        });
+      }
+    }
     res.json({ updated: result.rowCount ?? 0 });
   })
 );

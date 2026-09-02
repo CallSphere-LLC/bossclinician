@@ -23,7 +23,9 @@ import {
 } from "../../middleware/rateLimit";
 import { sendMail } from "../../email/mailer";
 import * as emails from "../../email/memberTemplates";
-import { linkContact, recordActivity, upsertContact } from "../../services/contacts";
+import { linkContact, recordActivity, upsertContactWithStatus } from "../../services/contacts";
+import { dispatchEvent } from "../../services/webhooksOut";
+import { publishDomainEvent } from "../../services/domainEvents";
 import {
   DEFAULT_TIMEZONE,
   MEMBER_PROFILE_COLUMNS,
@@ -516,7 +518,7 @@ memberAuthRoutes.post(
     // nothing on the word of an unauthenticated request, and writing a contact
     // there would be the one thing they did change — and would let this endpoint
     // be used to stamp an activity entry on any address a stranger names.
-    const contactId = await upsertContact({
+    const contact = await upsertContactWithStatus({
       email: row.email,
       firstName: row.first_name,
       lastName: row.last_name,
@@ -524,6 +526,7 @@ memberAuthRoutes.post(
       source: "member",
       consentIp: req.ip ?? "",
     });
+    const contactId = contact.id;
     await linkContact("member", row.id, contactId);
     await recordActivity({
       contactId,
@@ -531,6 +534,23 @@ memberAuthRoutes.post(
       title: "Created an account",
       subjectType: "member",
       subjectId: row.id,
+    });
+    if (contact.created) {
+      await publishDomainEvent("contact_created", {
+        eventKey: `contact-created:${contactId}`,
+        contactId,
+        email: row.email,
+        name: displayName,
+        source: "member",
+      });
+    }
+    await dispatchEvent("member.created", {
+      id: `member:${row.id}`,
+      memberId: row.id,
+      contactId,
+      email: row.email,
+      name: displayName,
+      source: "signup",
     });
 
     await sendVerificationEmail(row);

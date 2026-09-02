@@ -38,7 +38,7 @@ import { friendlyError, orNone, pluralize } from "@/pages/admin/ui/friendly";
 const COLOURS: { value: string; label: string }[] = [
   { value: "", label: "None" },
   { value: "#c9a46a", label: "Gold" },
-  { value: "#8b6db8", label: "Purple" },
+  { value: "#6f6b64", label: "Grey" },
   { value: "#4f9d76", label: "Green" },
   { value: "#c4736a", label: "Red" },
   { value: "#5b86b5", label: "Blue" },
@@ -140,7 +140,7 @@ export default function Tags() {
                   <span
                     aria-hidden="true"
                     className="mt-1.5 size-3 shrink-0 rounded-full"
-                    style={{ background: tag.colour || "#8b6db8" }}
+                    style={{ background: tag.colour || "#d4af6e" }}
                   />
                   <div className="min-w-0 flex-1">
                     <h3 className="truncate font-display text-lg leading-snug text-ink">
@@ -296,7 +296,7 @@ function TagEditor({
                 aria-pressed={colour === option.value}
                 className="flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors"
                 style={{
-                  borderColor: colour === option.value ? option.value || "#8b6db8" : undefined,
+                  borderColor: colour === option.value ? option.value || "#d4af6e" : undefined,
                 }}
               >
                 <span

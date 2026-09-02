@@ -104,6 +104,14 @@ export default function SettingsHub() {
 
   const peopleDestinations: Destination[] = [
     {
+      to: "/admin/settings/availability",
+      label: "Coaching availability",
+      description:
+        "Choose the weekly hours clients can book, block dates off, and preview the slots they will see.",
+      icon: CalendarClock,
+      meta: "Weekly hours, exceptions and live slot preview",
+    },
+    {
       to: "/admin/settings/team",
       label: "Who can get in",
       description:

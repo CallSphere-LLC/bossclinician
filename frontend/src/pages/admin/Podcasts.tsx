@@ -369,6 +369,10 @@ export default function Podcasts() {
   async function saveEpisode(e: FormEvent) {
     e.preventDefault();
     if (!episodeDraft?.title?.trim() || !active) return;
+    if (episodeDraft.published && !episodeDraft.audioUrl?.trim()) {
+      toast.error("Add the audio before making this episode live.");
+      return;
+    }
     const payload = {
       ...episodeDraft,
       podcastId: active.id,
@@ -541,7 +545,7 @@ export default function Podcasts() {
                 action={
                   <Button
                     size="sm"
-                    onClick={() => setEpisodeDraft({ season: 1, published: true })}
+                    onClick={() => setEpisodeDraft({ season: 1, published: false })}
                     disabled={!active}
                   >
                     <Plus />
@@ -966,13 +970,16 @@ export default function Podcasts() {
             <label className="flex cursor-pointer items-center gap-2.5 text-sm font-medium text-ink">
               <input
                 type="checkbox"
-                checked={episodeDraft.published !== false}
+                checked={episodeDraft.published === true}
+                disabled={!episodeDraft.audioUrl}
                 onChange={(e) => setEpisodeDraft((d) => ({ ...d, published: e.target.checked }))}
                 className="size-4 rounded border-hairline text-plum"
               />
-              {episodeDraft.published !== false
+              {episodeDraft.published === true
                 ? "Live — listeners can play it"
-                : "Not visible yet"}
+                : episodeDraft.audioUrl
+                  ? "Not visible yet"
+                  : "Add audio before making it live"}
             </label>
           </form>
         )}

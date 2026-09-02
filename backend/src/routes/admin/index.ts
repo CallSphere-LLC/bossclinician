@@ -36,6 +36,7 @@ import { adminDashboardRouter } from "./dashboard";
 import { adminAssessmentsRouter } from "./assessments";
 import { adminEventsRouter } from "./events";
 import { adminFormsRouter as adminFormsV2Router } from "./formsV2";
+import { adminAvailabilityRouter } from "./availability";
 
 export const adminRouter = Router();
 
@@ -90,6 +91,12 @@ function moduleGate(module: Module) {
   };
 }
 
+const marketingGrowthGate = moduleGate("marketing");
+const coachingGrowthGate = moduleGate("coaching");
+function growthGate(req: Request, res: Response, next: NextFunction): void {
+  (req.path.startsWith("/coaching/") ? coachingGrowthGate : marketingGrowthGate)(req, res, next);
+}
+
 /**
  * `admins.view` is the permission to administer *other people's* accounts, and
  * only the owner and a manager hold it. The `/me/...` routes under the same
@@ -125,7 +132,7 @@ adminRouter.use("/curriculum", requireAuth, moduleGate("products"), adminCurricu
 adminRouter.use("/members", requireAuth, requirePermission("contacts.view"), adminMembersRouter);
 adminRouter.use("/community", requireAuth, moduleGate("community"), adminCommunityRouter);
 adminRouter.use("/sales", requireAuth, requirePermission("orders.view"), adminSalesRouter);
-adminRouter.use("/growth", requireAuth, moduleGate("marketing"), adminGrowthRouter);
+adminRouter.use("/growth", requireAuth, growthGate, adminGrowthRouter);
 adminRouter.use("/chats", requireAuth, moduleGate("contacts"), adminChatsRouter);
 adminRouter.use("/products", requireAuth, moduleGate("products"), adminProductsRouter);
 adminRouter.use("/offers", requireAuth, moduleGate("offers"), adminOffersRouter);
@@ -147,6 +154,7 @@ adminRouter.use("/dashboard", requireAuth, requirePermission("reports.view"), ad
 adminRouter.use("/assessments", requireAuth, moduleGate("marketing"), adminAssessmentsRouter);
 adminRouter.use("/events", requireAuth, moduleGate("marketing"), adminEventsRouter);
 adminRouter.use("/forms-v2", requireAuth, moduleGate("marketing"), adminFormsV2Router);
+adminRouter.use("/availability", requireAuth, moduleGate("settings"), adminAvailabilityRouter);
 // Accepting an invite happens BEFORE the invitee has an account, so this one
 // router deliberately sits outside requireAuth. Its own token is the credential.
 adminRouter.use("/", adminInviteRouter);

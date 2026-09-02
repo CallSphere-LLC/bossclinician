@@ -30,6 +30,9 @@ import { grantOfferAccess, revokeOfferAccess } from "../../services/access";
 import { sendSetPasswordLink } from "../../services/setPasswordLink";
 import { deliverPurchase, notifyOwnerOfSale } from "../../services/purchaseDelivery";
 import { addInterval, type BillingInterval } from "../../services/pricing";
+import { publishDomainEvent } from "../../services/domainEvents";
+import { dispatchEvent } from "../../services/webhooksOut";
+import { upsertContactWithStatus } from "../../services/contacts";
 
 /**
  * Stripe webhook receiver — the only place money becomes access.
@@ -163,6 +166,23 @@ function truncate(value: string, max: number): string {
 function log(message: string): void {
   // eslint-disable-next-line no-console
   console.log(`[stripe:webhook] ${message}`);
+}
+
+async function automationIdentity(memberId: number | null, fallbackEmail = "", fallbackName = "") {
+  if (memberId === null) {
+    return { contactId: null as number | null, email: fallbackEmail, name: fallbackName };
+  }
+  const found = await pool.query<{ contact_id: number | null; email: string; name: string }>(
+    `SELECT contact_id, email::text AS email,
+            COALESCE(NULLIF(TRIM(first_name || ' ' || last_name), ''), name, '') AS name
+       FROM members WHERE id = $1`,
+    [memberId],
+  );
+  return {
+    contactId: found.rows[0]?.contact_id ?? null,
+    email: found.rows[0]?.email ?? fallbackEmail,
+    name: found.rows[0]?.name ?? fallbackName,
+  };
 }
 
 /* ----------------------------------------------------------- the event log */
@@ -525,17 +545,30 @@ async function mirrorLegacyPlanSubscription(session: Stripe.Checkout.Session): P
     : null;
 
   let memberId: number | null = null;
+  let memberWasCreated = false;
+  let contactId: number | null = null;
+  let contactWasCreated = false;
   if (email) {
-    const member = await pool.query<{ id: number }>(
+    const member = await pool.query<{ id: number; created: boolean }>(
       `INSERT INTO members (email, name, status) VALUES ($1, '', 'active')
        ON CONFLICT (email) DO UPDATE SET updated_at = now()
-       RETURNING id`,
+       RETURNING id, (xmax = 0) AS created`,
       [email]
     );
     memberId = member.rows[0]?.id ?? null;
+    memberWasCreated = member.rows[0]?.created ?? false;
+    const contact = await upsertContactWithStatus({ email, source: "customer" });
+    contactId = contact.id;
+    contactWasCreated = contact.created;
+    if (memberId !== null) {
+      await pool.query(
+        `UPDATE members SET contact_id = COALESCE(contact_id, $2), updated_at = now() WHERE id = $1`,
+        [memberId, contactId],
+      );
+    }
   }
 
-  await pool.query(
+  const subscription = await pool.query<{ id: number; created: boolean }>(
     `INSERT INTO subscriptions
        (member_id, plan_id, email, stripe_customer_id, stripe_subscription_id,
         status, amount_cents, currency)
@@ -544,7 +577,8 @@ async function mirrorLegacyPlanSubscription(session: Stripe.Checkout.Session): P
        SET member_id = COALESCE(EXCLUDED.member_id, subscriptions.member_id),
            plan_id   = COALESCE(EXCLUDED.plan_id, subscriptions.plan_id),
            status    = 'active',
-           updated_at = now()`,
+           updated_at = now()
+     RETURNING id, (xmax = 0) AS created`,
     [
       memberId,
       planId,
@@ -572,6 +606,35 @@ async function mirrorLegacyPlanSubscription(session: Stripe.Checkout.Session): P
              subscription_id = COALESCE(EXCLUDED.subscription_id, community_memberships.subscription_id)`,
       [planId, memberId, subscriptionId]
     );
+  }
+
+  if (contactWasCreated && contactId !== null) {
+    await publishDomainEvent("contact_created", {
+      eventKey: `contact-created:${contactId}`,
+      contactId,
+      email,
+      source: "customer",
+    });
+  }
+  if (memberWasCreated && memberId !== null) {
+    await dispatchEvent("member.created", {
+      id: `member:${memberId}`,
+      memberId,
+      contactId,
+      email,
+      source: "legacy-plan-checkout",
+    });
+  }
+  if (subscription.rows[0]?.created) {
+    await dispatchEvent("subscription.started", {
+      id: `subscription:${subscription.rows[0].id}`,
+      subscriptionId: subscription.rows[0].id,
+      planId,
+      memberId,
+      contactId,
+      email,
+      status: "active",
+    });
   }
 }
 
@@ -774,6 +837,33 @@ async function handlePaymentIntentFailed(intent: Stripe.PaymentIntent): Promise<
     reason,
     occurredAt: toDate(intent.created) ?? new Date(),
   });
+
+  // Subscription declines also emit invoice.payment_failed. Let that richer,
+  // attempt-numbered event be the sole automation occurrence so one card
+  // decline cannot start the same dunning automation twice.
+  const invoiceRef = (intent as unknown as { invoice?: string | { id?: string } | null }).invoice;
+  const relatedInvoice = typeof invoiceRef === "string" ? invoiceRef : invoiceRef?.id ?? null;
+  if (!relatedInvoice) {
+    const identity = await automationIdentity(
+      order?.member_id ?? null,
+      order?.email ?? intent.receipt_email ?? "",
+      order?.billing_name ?? "",
+    );
+    await publishDomainEvent("payment_failed", {
+      eventKey: `payment-failed:intent:${intent.id}:${idOf(intent.latest_charge) ?? intent.created}`,
+      contactId: identity.contactId,
+      email: identity.email,
+      name: identity.name,
+      subjectId: order?.offer_id ?? null,
+      source: "stripe",
+      facts: {
+        orderId: order?.id ?? 0,
+        amountCents: intent.amount,
+        currency: intent.currency,
+        reason,
+      },
+    });
+  }
 
   log(`payment_intent ${intent.id} failed: ${reason}`);
 }
@@ -1666,6 +1756,27 @@ async function handleInvoicePaymentFailed(invoice: Stripe.Invoice): Promise<void
     });
   }
 
+  const identity = await automationIdentity(
+    order?.member_id ?? plan?.member_id ?? null,
+    buyerEmail,
+    order?.billing_name ?? "",
+  );
+  await publishDomainEvent("payment_failed", {
+    eventKey: `payment-failed:invoice:${invoice.id}:attempt:${attempt}`,
+    contactId: identity.contactId,
+    email: identity.email,
+    name: identity.name,
+    subjectId: order?.offer_id ?? plan?.offer_id ?? null,
+    source: "stripe",
+    facts: {
+      invoiceId: invoice.id,
+      orderId: order?.id ?? plan?.order_id ?? 0,
+      amountCents: invoice.amount_due,
+      currency: invoice.currency,
+      attempt,
+    },
+  });
+
   log(
     `invoice ${invoice.id} failed (attempt ${attempt}); dunning sent to ${buyerEmail || "nobody"}`
   );
@@ -1945,7 +2056,7 @@ async function handleSubscriptionChange(
 
   const order = meta.orderId !== undefined ? await loadOrderById(meta.orderId) : null;
 
-  const upserted = await pool.query<{ id: number }>(
+  const upserted = await pool.query<{ id: number; created: boolean }>(
     `INSERT INTO subscriptions
        (member_id, offer_id, email, stripe_customer_id, stripe_subscription_id, status,
         current_period_start, current_period_end, cancel_at_period_end, trial_ends_at,
@@ -1977,7 +2088,7 @@ async function handleSubscriptionChange(
        interval             = EXCLUDED.interval,
        interval_count       = EXCLUDED.interval_count,
        updated_at           = now()
-     RETURNING id`,
+     RETURNING id, (xmax = 0) AS created`,
     [
       order?.member_id ?? null,
       order?.offer_id ?? meta.offerId ?? null,
@@ -2012,6 +2123,24 @@ async function handleSubscriptionChange(
     await linkGrantsToSubscription(order.id, subscriptionId);
   }
 
+
+  if (
+    subscriptionId !== null &&
+    upserted.rows[0]?.created &&
+    !deleted &&
+    !ACCESS_ENDING_STATUSES.has(status)
+  ) {
+    const identity = await automationIdentity(order?.member_id ?? null, order?.email ?? "");
+    await dispatchEvent("subscription.started", {
+      id: `subscription:${subscriptionId}`,
+      subscriptionId,
+      offerId: order?.offer_id ?? meta.offerId ?? null,
+      contactId: identity.contactId,
+      email: identity.email,
+      status,
+    });
+  }
+
   // cancel_at_period_end is not an ending: the customer keeps everything until
   // the period actually runs out, and Stripe sends deleted when it does.
   if (deleted || ACCESS_ENDING_STATUSES.has(status)) {
@@ -2022,6 +2151,22 @@ async function handleSubscriptionChange(
       periodEnd,
       reason: deleted ? "subscription canceled" : `subscription ${status}`,
     });
+    if (subscriptionId !== null) {
+      const identity = await automationIdentity(order?.member_id ?? null, order?.email ?? "");
+      await publishDomainEvent("subscription_cancelled", {
+        eventKey: `subscription-cancelled:${subscriptionId}`,
+        contactId: identity.contactId,
+        email: identity.email,
+        name: identity.name,
+        subjectId: null,
+        source: "stripe",
+        facts: {
+          subscriptionId,
+          offerId: order?.offer_id ?? meta.offerId ?? 0,
+          status,
+        },
+      });
+    }
   }
 }
 
@@ -2128,6 +2273,16 @@ async function handleChargeRefunded(charge: Stripe.Charge): Promise<void> {
       transaction.id,
     ]);
   }
+
+  await dispatchEvent("order.refunded", {
+    id: `refund:${charge.id}:${charge.amount_refunded}`,
+    orderId: transaction.order_id,
+    email: transaction.email,
+    chargeId: charge.id,
+    amountRefundedCents: charge.amount_refunded,
+    currency: charge.currency,
+    fullyRefunded: orderFullyRefunded,
+  });
 
   log(
     `charge ${charge.id} refunded ${charge.amount_refunded} of ${charge.amount}${

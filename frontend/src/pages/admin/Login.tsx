@@ -1,8 +1,9 @@
 import { useState, type FormEvent } from "react";
 import { Navigate } from "react-router-dom";
 import { motion } from "motion/react";
-import { ArrowRight, Eye, EyeOff, Loader2, ShieldCheck } from "lucide-react";
+import { ArrowLeft, ArrowRight, Eye, EyeOff, Loader2, ShieldCheck } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { isMfaRequiredError } from "@/lib/api";
 import { Button, ErrorNotice, Field, Input } from "@/pages/admin/ui/primitives";
 
 const HIGHLIGHTS = [
@@ -16,6 +17,8 @@ export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [mfaRequired, setMfaRequired] = useState(false);
+  const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -28,9 +31,14 @@ export default function Login() {
     setError(null);
     setSubmitting(true);
     try {
-      await login(email, password);
-    } catch {
-      setError("That email or password doesn't match. Check them and try again.");
+      await login(email, password, mfaRequired ? code : undefined);
+    } catch (err) {
+      if (isMfaRequiredError(err)) {
+        setMfaRequired(true);
+        setError(code ? "That code didn't match. Try the current code or a backup code." : null);
+      } else {
+        setError("That email or password doesn't match. Check them and try again.");
+      }
     } finally {
       setSubmitting(false);
     }
@@ -39,8 +47,7 @@ export default function Login() {
   return (
     <div className="theme-console grid min-h-screen bg-cream lg:grid-cols-2">
       {/* Brand panel */}
-      <div className="relative hidden overflow-hidden bg-[linear-gradient(160deg,#1B1430_0%,#130E24_50%,#08050F_100%)] p-12 lg:flex lg:flex-col">
-        <div className="pointer-events-none absolute -left-24 top-1/4 size-80 rounded-full bg-plum/40 blur-3xl" />
+      <div className="relative hidden overflow-hidden border-r border-hairline bg-[var(--bg-base)] p-12 lg:flex lg:flex-col">
         <div className="pointer-events-none absolute -bottom-24 -right-16 size-96 rounded-full bg-gold/15 blur-3xl" />
 
         <div className="relative flex items-center gap-3">
@@ -54,7 +61,7 @@ export default function Login() {
           <motion.h1
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+            transition={{ duration: 0.15, ease: [0.22, 1, 0.36, 1] }}
             className="max-w-md font-display text-[2.6rem] leading-[1.1] text-white"
           >
             Your whole practice, one dashboard.
@@ -66,7 +73,7 @@ export default function Login() {
                 key={item}
                 initial={{ opacity: 0, x: -12 }}
                 animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.15 + i * 0.09, duration: 0.4 }}
+                transition={{ delay: 0.15 + i * 0.09, duration: 0.15 }}
                 className="flex items-center gap-3 text-sm text-white/75"
               >
                 <span className="grid size-6 shrink-0 place-items-center rounded-full bg-gold/20 text-gold">
@@ -88,7 +95,7 @@ export default function Login() {
         <motion.div
           initial={{ opacity: 0, y: 14 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+          transition={{ duration: 0.15, ease: [0.22, 1, 0.36, 1] }}
           className="w-full max-w-sm"
         >
           <div className="mb-8 flex items-center gap-3 lg:hidden">
@@ -98,13 +105,15 @@ export default function Login() {
             <span className="font-display text-lg text-ink">Boss Clinician</span>
           </div>
 
-          <h2 className="font-display text-[1.75rem] text-white">Sign in</h2>
+          <h2 className="font-display text-[1.75rem] text-ink">Sign in</h2>
           <p className="mt-1.5 text-sm text-ink-soft">
-            Welcome back. Enter your details to continue.
+            {mfaRequired
+              ? "Your password is right. Enter the code from your authenticator app."
+              : "Welcome back. Enter your details to continue."}
           </p>
 
           <form onSubmit={handleSubmit} className="mt-8 space-y-4">
-            <Field label="Email" htmlFor="admin-email">
+            {!mfaRequired && <Field label="Email" htmlFor="admin-email">
               <Input
                 id="admin-email"
                 type="email"
@@ -114,9 +123,9 @@ export default function Login() {
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="you@bossclinician.com"
               />
-            </Field>
+            </Field>}
 
-            <Field label="Password" htmlFor="admin-password">
+            {!mfaRequired && <Field label="Password" htmlFor="admin-password">
               <div className="relative">
                 <Input
                   id="admin-password"
@@ -136,23 +145,62 @@ export default function Login() {
                   {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
                 </button>
               </div>
-            </Field>
+            </Field>}
+
+            {mfaRequired && (
+              <Field label="Authentication or backup code" htmlFor="admin-code">
+                <Input
+                  id="admin-code"
+                  inputMode="text"
+                  autoComplete="one-time-code"
+                  maxLength={16}
+                  value={code}
+                  onChange={(e) => setCode(e.target.value.trim().toUpperCase())}
+                  placeholder="123456 or ABCD-EFGH"
+                  className="text-center font-mono tracking-[0.3em]"
+                  autoFocus
+                  required
+                />
+              </Field>
+            )}
 
             {error && <ErrorNotice message={error} />}
 
-            <Button type="submit" size="lg" className="w-full" disabled={submitting}>
+            <Button
+              type="submit"
+              size="lg"
+              className="w-full"
+              disabled={submitting || (mfaRequired && code.length < 6)}
+            >
               {submitting ? (
                 <>
                   <Loader2 className="animate-spin" />
-                  Signing in…
+                  {mfaRequired ? "Checking code…" : "Signing in…"}
                 </>
               ) : (
                 <>
-                  Sign in
+                  {mfaRequired ? "Verify and sign in" : "Sign in"}
                   <ArrowRight />
                 </>
               )}
             </Button>
+
+            {mfaRequired && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="w-full"
+                onClick={() => {
+                  setMfaRequired(false);
+                  setCode("");
+                  setError(null);
+                }}
+              >
+                <ArrowLeft />
+                Use a different account
+              </Button>
+            )}
           </form>
 
           <p className="mt-6 text-center text-xs text-ink-soft">

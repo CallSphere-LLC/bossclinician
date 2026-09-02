@@ -56,7 +56,7 @@ export default function Analytics() {
 
   const leadDonut = useMemo(() => {
     const palette: Record<string, string> = {
-      new: "#3B82F6",
+      new: "var(--info)",
       contacted: CHART_COLORS.gold,
       qualified: CHART_COLORS.green,
       closed: CHART_COLORS.plum,

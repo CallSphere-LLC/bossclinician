@@ -169,7 +169,7 @@ export function deliveryJobKey(deliveryId: string, attempts: number): string {
 export async function dispatchEvent(
   eventType: string,
   payload: Record<string, unknown>,
-  options: { endpointId?: number } = {}
+  options: { endpointId?: number; rethrow?: boolean } = {}
 ): Promise<number> {
   try {
     const endpoints = await pool.query<{ id: number }>(
@@ -185,17 +185,40 @@ export async function dispatchEvent(
     if (endpoints.rows.length === 0) return 0;
 
     const body = JSON.stringify(payload);
+    const rawEventKey = payload.id;
+    const eventKey =
+      typeof rawEventKey === "string" || typeof rawEventKey === "number"
+        ? String(rawEventKey).slice(0, 300)
+        : null;
 
     for (const endpoint of endpoints.rows) {
       const inserted = await pool.query<{ id: string }>(
-        `INSERT INTO webhook_deliveries (endpoint_id, event_type, payload, next_attempt_at)
-         VALUES ($1, $2, $3::jsonb, now())
+        `INSERT INTO webhook_deliveries
+           (endpoint_id, event_type, payload, next_attempt_at, event_key)
+         VALUES ($1, $2, $3::jsonb, now(), $4)
+         ON CONFLICT (endpoint_id, event_type, event_key)
+           WHERE event_key IS NOT NULL
+           DO NOTHING
          RETURNING id`,
-        [endpoint.id, eventType, body]
+        [endpoint.id, eventType, body, eventKey]
       );
 
-      const deliveryId = inserted.rows[0]?.id;
-      if (!deliveryId) continue;
+      let deliveryId = inserted.rows[0]?.id;
+      let shouldQueue = Boolean(deliveryId);
+      if (!deliveryId && eventKey !== null) {
+        const existing = await pool.query<{ id: string; attempts: number; status: string }>(
+          `SELECT id, attempts, status FROM webhook_deliveries
+            WHERE endpoint_id = $1 AND event_type = $2 AND event_key = $3`,
+          [endpoint.id, eventType, eventKey],
+        );
+        deliveryId = existing.rows[0]?.id;
+        // Only repair the insert-before-enqueue crash window. Once an attempt
+        // has happened, its own backoff (and the webhook sweeper) owns timing;
+        // queueing attempt zero here would bypass that delay.
+        shouldQueue =
+          existing.rows[0]?.status === "pending" && existing.rows[0]?.attempts === 0;
+      }
+      if (!deliveryId || !shouldQueue) continue;
 
       await enqueue({
         kind: "webhooks.deliver",
@@ -212,6 +235,7 @@ export async function dispatchEvent(
   } catch (err) {
     // eslint-disable-next-line no-console
     console.error(`[webhooks] failed to dispatch ${eventType} (continuing):`, err);
+    if (options.rethrow) throw err;
     return 0;
   }
 }

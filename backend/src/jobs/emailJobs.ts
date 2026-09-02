@@ -2,11 +2,12 @@ import { z } from "zod";
 import { env } from "../config/env";
 import { pool } from "../db/pool";
 import { renderMarkdown, sendEmail } from "../email/provider";
-import { fireTrigger, runAutomation, type RunContext } from "../automations/engineV2";
+import { runAutomation, type RunContext } from "../automations/engineV2";
 import { sendBroadcastOne, tickBroadcasts } from "../services/broadcasts";
 import { upsertContact } from "../services/contacts";
 import { sendDueEmail, tickDueSubscriptions } from "../services/sequences";
 import { registerHandler } from "./worker";
+import { publishDomainEvent } from "../services/domainEvents";
 
 /**
  * Every queued job that ends in an email.
@@ -62,7 +63,8 @@ async function sequenceSendEmail(payload: Record<string, unknown>): Promise<unkn
   const result = await sendDueEmail(subscriptionId);
 
   if (result.outcome === "completed" && result.contactId !== null && result.sequenceId !== null) {
-    await fireTrigger("sequence_completed", {
+    await publishDomainEvent("sequence_completed", {
+      eventKey: `sequence-completed:subscription:${subscriptionId}`,
       contactId: result.contactId,
       subjectId: result.sequenceId,
     });
@@ -181,7 +183,8 @@ async function checkoutRecoveryEmail(payload: Record<string, unknown>): Promise<
   // Only the first one fires the trigger: an automation on "someone left
   // without paying" wants to run once, not three times over three days.
   if (step === 0) {
-    await fireTrigger("abandoned_checkout", {
+    await publishDomainEvent("abandoned_checkout", {
+      eventKey: `abandoned-checkout:${cart.id}`,
       contactId,
       email: cart.email,
       name: cart.first_name,

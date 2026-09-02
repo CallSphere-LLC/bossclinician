@@ -26,12 +26,12 @@ import { humanizeKey } from "@/pages/admin/ui/friendly";
 /* ------------------------------------------------------------------ Button */
 
 const buttonVariants = cva(
-  "inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-xl font-semibold transition-all duration-200 disabled:pointer-events-none disabled:opacity-55 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+  "inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-xl font-semibold transition-all duration-150 disabled:pointer-events-none disabled:opacity-55 [&_svg]:pointer-events-none [&_svg]:shrink-0",
   {
     variants: {
       variant: {
         primary:
-          "bg-gold-foil font-bold text-night-deep shadow-[0_8px_22px_-10px_rgba(201,164,106,0.7)] hover:shadow-[0_12px_28px_-10px_rgba(201,164,106,0.9)] active:brightness-95",
+          "bg-gold-foil font-bold text-night-deep hover:bg-[var(--accent-hover)] active:brightness-95",
         secondary:
           "border border-hairline bg-white/[0.04] text-ink hover:border-gold/45 hover:bg-white/[0.08]",
         ghost: "text-ink-soft hover:bg-white/[0.06] hover:text-ink",
@@ -317,7 +317,7 @@ export function PageHeader({
             {eyebrow}
           </p>
         )}
-        <h1 className="font-display text-[1.75rem] leading-tight text-white">{title}</h1>
+        <h1 className="font-display text-[1.75rem] leading-tight text-ink">{title}</h1>
         {description && <p className="mt-1.5 max-w-2xl text-sm text-ink-soft">{description}</p>}
       </div>
       {actions && <div className="flex flex-wrap items-center gap-2.5">{actions}</div>}

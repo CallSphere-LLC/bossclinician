@@ -17,6 +17,7 @@ import {
   type EventSummary,
   type Registrant,
 } from "@/lib/eventsApi";
+import { isoToWallClock, wallClockToIso } from "@/lib/zonedDateTime";
 import { contactsApi, money, type Tag } from "@/lib/contactsApi";
 import {
   Badge,
@@ -61,74 +62,6 @@ const TIMEZONES = [
 ];
 
 const DEFAULT_TIMEZONE = EVENT_DEFAULT_TIMEZONE;
-
-/* ── Times in the event's own zone ──────────────────────────────────────── */
-
-/** How far a zone is from UTC at that instant, in milliseconds. */
-function zoneOffsetMs(instant: Date, timeZone: string): number {
-  try {
-    const parts = new Intl.DateTimeFormat("en-US", {
-      timeZone,
-      hour12: false,
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-    }).formatToParts(instant);
-
-    const read = (type: string): number =>
-      Number(parts.find((part) => part.type === type)?.value ?? "0");
-
-    const asUtc = Date.UTC(
-      read("year"),
-      read("month") - 1,
-      read("day"),
-      // Midnight comes back as hour 24 in this format.
-      read("hour") % 24,
-      read("minute"),
-      read("second"),
-    );
-    return asUtc - instant.getTime();
-  } catch {
-    // An unrecognised zone name would otherwise throw and blank the date box.
-    return 0;
-  }
-}
-
-/**
- * "2026-06-12T14:00" typed into the box → the moment that is 2pm in the event's
- * own zone.
- *
- * Read plainly, a date box gives back the time on the computer she is sitting
- * at, which is how an event advertised for 2pm Eastern goes out at 11am for
- * everyone. The second pass covers the clocks going forward, where the offset
- * on either side of the entered time is not the same.
- */
-function wallClockToIso(local: string, timeZone: string): string | null {
-  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(local);
-  if (!match) return null;
-
-  const naive = Date.UTC(
-    Number(match[1]),
-    Number(match[2]) - 1,
-    Number(match[3]),
-    Number(match[4]),
-    Number(match[5]),
-  );
-  const firstPass = naive - zoneOffsetMs(new Date(naive), timeZone);
-  const instant = naive - zoneOffsetMs(new Date(firstPass), timeZone);
-  return new Date(instant).toISOString();
-}
-
-/** The stored moment → what the date box shows, in the event's own zone. */
-function isoToWallClock(iso: string | null, timeZone: string): string {
-  if (!iso) return "";
-  const instant = new Date(iso);
-  if (Number.isNaN(instant.getTime())) return "";
-  return new Date(instant.getTime() + zoneOffsetMs(instant, timeZone)).toISOString().slice(0, 16);
-}
 
 /** When this event happens, whichever kind it is. */
 function whenLabel(event: EventSummary): string {

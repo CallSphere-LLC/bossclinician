@@ -13,6 +13,10 @@ export const loginIpLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: GENERIC_LOGIN_RATE_LIMIT_MESSAGE,
+  // A successful MFA login is two requests (password challenge, then code).
+  // Remove the final 200 from the counter so each login consumes one attempt,
+  // while wrong passwords and wrong second factors remain fully counted.
+  skipSuccessfulRequests: true,
 });
 
 /**
@@ -27,6 +31,7 @@ export const loginEmailLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: GENERIC_LOGIN_RATE_LIMIT_MESSAGE,
+  skipSuccessfulRequests: true,
   keyGenerator: (req: Request): string => {
     const email =
       typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
@@ -175,4 +180,13 @@ export const adminImpersonateLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: GENERIC_RATE_LIMIT_MESSAGE,
+});
+
+/** Test-email buttons are diagnostics, not an alternate bulk sender. */
+export const adminTestEmailLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many test emails. Please try again later." },
 });

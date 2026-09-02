@@ -7,6 +7,9 @@ import { badRequest, notFound } from "../../utils/httpError";
 import { recordAdminAction } from "../../services/adminAudit";
 import { applyTags, normaliseSlugs, recordActivity, removeTags } from "../../services/contacts";
 import { MAILABLE_CONTACT_SQL } from "../../services/audience";
+import { dispatchEvent } from "../../services/webhooksOut";
+import { publishDomainEvent } from "../../services/domainEvents";
+import { requirePermission } from "../../services/permissions";
 
 /**
  * Contacts — the one list of people, mounted at /admin/contacts.
@@ -16,6 +19,7 @@ import { MAILABLE_CONTACT_SQL } from "../../services/audience";
  * and merge the two rows that turn out to be the same person.
  */
 export const adminContactsRouter = Router();
+const requireManage = requirePermission("contacts.manage");
 
 const EMAIL_STATUSES = [
   "subscribed",
@@ -357,6 +361,13 @@ adminContactsRouter.post(
             kind: "imported",
             title: "Added from a spreadsheet",
           });
+          await publishDomainEvent("contact_created", {
+            eventKey: `contact-created:${contact.id}`,
+            contactId: contact.id,
+            email,
+            name,
+            source: "import",
+          });
         } else {
           updated += 1;
         }
@@ -612,6 +623,13 @@ adminContactsRouter.post(
     if (slugs.length) await applyTags(contact.id, slugs, req.user?.email ?? "admin");
     if (contact.inserted) {
       await recordActivity({ contactId: contact.id, kind: "created", title: "Added by hand" });
+      await publishDomainEvent("contact_created", {
+        eventKey: `contact-created:${contact.id}`,
+        contactId: contact.id,
+        email: email.toLowerCase(),
+        name,
+        source: source || "added by hand",
+      });
     }
 
     await recordAdminAction({
@@ -635,6 +653,109 @@ async function loadContact(id: number): Promise<Record<string, unknown>> {
   if (!row) throw notFound("Contact not found");
   return row;
 }
+
+/** Untruncated, server-side portability export for one CRM person. */
+adminContactsRouter.get(
+  "/:id/export",
+  requireManage,
+  asyncHandler(async (req, res) => {
+    const id = parseId(req.params.id);
+    const contact = rowToCamel(await loadContact(id));
+    const contactEmail = String((contact as Record<string, unknown>).email ?? "");
+    const memberLink = await pool.query<{ id: number }>(
+      `SELECT id FROM members WHERE contact_id = $1 ORDER BY id LIMIT 1`,
+      [id],
+    );
+    const memberId = memberLink.rows[0]?.id ?? null;
+
+    const [activity, orders, leads, forms, sequences, assessments, events, messages, subscriber, coaching] =
+      await Promise.all([
+        pool.query(`SELECT * FROM contact_activity WHERE contact_id = $1 ORDER BY occurred_at, id`, [id]),
+        pool.query(`SELECT * FROM orders WHERE contact_id = $1 ORDER BY created_at, id`, [id]),
+        pool.query(`SELECT * FROM leads WHERE contact_id = $1 ORDER BY created_at, id`, [id]),
+        pool.query(`SELECT * FROM form_submissions WHERE contact_id = $1 ORDER BY created_at, id`, [id]),
+        pool.query(`SELECT * FROM sequence_subscriptions WHERE contact_id = $1 ORDER BY entered_at, id`, [id]),
+        pool.query(`SELECT * FROM assessment_attempts WHERE contact_id = $1 ORDER BY started_at, id`, [id]),
+        pool.query(`SELECT * FROM event_registrations WHERE contact_id = $1 ORDER BY created_at, id`, [id]),
+        pool.query(`SELECT * FROM email_messages WHERE contact_id = $1 ORDER BY created_at, id`, [id]),
+        pool.query(`SELECT * FROM subscribers WHERE email::citext = $1::citext`, [contactEmail]),
+        pool.query(`SELECT * FROM coaching_sessions WHERE contact_id = $1 ORDER BY created_at, id`, [id]),
+      ]);
+
+    let member: Record<string, unknown> | null = null;
+    if (memberId !== null) {
+      const [profile, sessions, enrollments, lessonProgress, courseProgress, memberships,
+        posts, comments, reactions, grants, subscriptions, invoices, certificates] =
+        await Promise.all([
+          pool.query(
+            `SELECT id, email::text AS email, name, first_name, last_name, avatar_url,
+                    timezone, locale, status, email_verified_at, last_login_at, created_at, updated_at
+               FROM members WHERE id = $1`,
+            [memberId],
+          ),
+          pool.query(
+            `SELECT id, user_agent, ip, created_at, last_used_at, expires_at, revoked_at
+               FROM member_sessions WHERE member_id = $1 ORDER BY created_at, id`,
+            [memberId],
+          ),
+          pool.query(`SELECT * FROM enrollments WHERE member_id = $1 ORDER BY created_at, id`, [memberId]),
+          pool.query(`SELECT * FROM lesson_progress WHERE member_id = $1 ORDER BY first_viewed_at, id`, [memberId]),
+          pool.query(`SELECT * FROM course_progress WHERE member_id = $1 ORDER BY started_at, id`, [memberId]),
+          pool.query(`SELECT * FROM community_memberships WHERE member_id = $1 ORDER BY joined_at, id`, [memberId]),
+          pool.query(`SELECT * FROM community_posts WHERE member_id = $1 ORDER BY created_at, id`, [memberId]),
+          pool.query(`SELECT * FROM community_comments WHERE member_id = $1 ORDER BY created_at, id`, [memberId]),
+          pool.query(`SELECT * FROM community_reactions WHERE member_id = $1 ORDER BY created_at, id`, [memberId]),
+          pool.query(`SELECT * FROM access_grants WHERE member_id = $1 ORDER BY created_at, id`, [memberId]),
+          pool.query(`SELECT * FROM subscriptions WHERE member_id = $1 ORDER BY created_at, id`, [memberId]),
+          pool.query(
+            `SELECT i.* FROM invoices i
+              JOIN subscriptions s ON s.id = i.subscription_id
+             WHERE s.member_id = $1 ORDER BY i.created_at, i.id`,
+            [memberId],
+          ),
+          pool.query(`SELECT * FROM certificates WHERE member_id = $1 ORDER BY issued_at, id`, [memberId]),
+        ]);
+      member = {
+        profile: rowToCamel(profile.rows[0] ?? {}),
+        sessions: rowsToCamel(sessions.rows),
+        enrollments: rowsToCamel(enrollments.rows),
+        lessonProgress: rowsToCamel(lessonProgress.rows),
+        courseProgress: rowsToCamel(courseProgress.rows),
+        communityMemberships: rowsToCamel(memberships.rows),
+        communityPosts: rowsToCamel(posts.rows),
+        communityComments: rowsToCamel(comments.rows),
+        communityReactions: rowsToCamel(reactions.rows),
+        accessGrants: rowsToCamel(grants.rows),
+        subscriptions: rowsToCamel(subscriptions.rows),
+        invoices: rowsToCamel(invoices.rows),
+        certificates: rowsToCamel(certificates.rows),
+      };
+    }
+
+    await recordAdminAction({
+      req,
+      action: "contact.export",
+      entityType: "contact",
+      entityId: id,
+    });
+
+    res.json({
+      exportedAt: new Date().toISOString(),
+      contact,
+      activity: rowsToCamel(activity.rows),
+      orders: rowsToCamel(orders.rows),
+      leads: rowsToCamel(leads.rows),
+      formSubmissions: rowsToCamel(forms.rows),
+      sequenceSubscriptions: rowsToCamel(sequences.rows),
+      assessmentAttempts: rowsToCamel(assessments.rows),
+      eventRegistrations: rowsToCamel(events.rows),
+      emailMessages: rowsToCamel(messages.rows),
+      subscriber: rowToCamel(subscriber.rows[0] ?? {}),
+      coachingSessions: rowsToCamel(coaching.rows),
+      member,
+    });
+  }),
+);
 
 /**
  * GET /:id — the person, and everything they have ever done.
@@ -760,7 +881,13 @@ adminContactsRouter.put(
       after: { emailMarketingStatus: emailMarketingStatus ?? before.email_marketing_status },
     });
 
-    res.json(rowToCamel(await loadContact(id)));
+    const updated = rowToCamel(await loadContact(id));
+    await dispatchEvent("contact.updated", {
+      id: `contact-update:${id}:${Date.now()}`,
+      contact: updated,
+      changedBy: req.user?.email ?? "admin",
+    });
+    res.json(updated);
   })
 );
 
@@ -776,6 +903,15 @@ adminContactsRouter.delete(
   "/:id",
   asyncHandler(async (req, res) => {
     const id = parseId(req.params.id);
+    await loadContact(id);
+    // Webhook payloads are denormalised JSON and therefore cannot follow the
+    // contact FK cascade. Remove those copies before erasing the person.
+    await pool.query(
+      `DELETE FROM webhook_deliveries
+        WHERE payload->>'contactId' = $1
+           OR payload->'contact'->>'id' = $1`,
+      [String(id)],
+    );
     const result = await pool.query(`DELETE FROM contacts WHERE id = $1`, [id]);
     if (result.rowCount === 0) throw notFound("Contact not found");
 

@@ -134,7 +134,7 @@ export default function CommunityList() {
               transition={{ delay: Math.min(i * 0.05, 0.3) }}
             >
               <Card className="group relative h-full overflow-hidden transition-all hover:-translate-y-0.5 hover:border-plum/30 hover:shadow-[0_20px_44px_-22px_rgba(15,30,58,0.4)]">
-                <div className="relative h-24 bg-[linear-gradient(135deg,#5C457D_0%,#0F1E3A_100%)]">
+                <div className="relative h-24 bg-surface-raised">
                   {community.coverImage && (
                     <img
                       src={community.coverImage}

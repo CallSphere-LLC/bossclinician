@@ -150,7 +150,7 @@ export function UploadDropzone({
         onDragLeave={() => setDragging(false)}
         onDrop={handleDrop}
         className={cn(
-          "relative rounded-2xl border-2 border-dashed transition-all duration-200",
+          "relative rounded-2xl border-2 border-dashed transition-all duration-150",
           compact ? "p-5" : "p-9",
           dragging
             ? "border-plum bg-lilac-tint/60 shadow-[0_0_0_6px_rgba(92,69,125,0.08)]"
@@ -249,7 +249,7 @@ export function UploadDropzone({
                         )}
                         initial={{ width: 0 }}
                         animate={{ width: `${item.status === "error" ? 100 : item.progress}%` }}
-                        transition={{ ease: "easeOut", duration: 0.25 }}
+                        transition={{ ease: "easeOut", duration: 0.15 }}
                       />
                     </div>
                     {item.error && (

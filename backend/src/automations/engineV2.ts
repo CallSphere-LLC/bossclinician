@@ -6,7 +6,7 @@ import { sendMail } from "../email/mailer";
 import { renderMarkdown, renderTokens, sendEmail } from "../email/provider";
 import { PRIORITY, enqueue } from "../jobs/queue";
 import { grantOfferAccess, revokeOfferAccess } from "../services/access";
-import { applyTags, recordActivity, upsertContact } from "../services/contacts";
+import { applyTags, recordActivity, removeTags, upsertContact } from "../services/contacts";
 import { enrollContact, exitContact } from "../services/sequences";
 
 /**
@@ -87,7 +87,7 @@ export const TRIGGER_DESCRIPTORS: TriggerDescriptor[] = [
   { type: "event_attended", label: "someone attends an event", subjectKey: "eventId", subjectSource: "events", subjectLabel: "Which event" },
   { type: "assessment_completed", label: "someone finishes a quiz", subjectKey: "assessmentId", subjectSource: "assessments", subjectLabel: "Which quiz" },
   { type: "assessment_passed", label: "someone passes a quiz", subjectKey: "assessmentId", subjectSource: "assessments", subjectLabel: "Which quiz" },
-  { type: "lesson_completed", label: "someone completes a lesson", subjectKey: "lessonId", subjectSource: "courses", subjectLabel: "Which course" },
+  { type: "lesson_completed", label: "someone completes a lesson", subjectKey: "courseId", subjectSource: "courses", subjectLabel: "Which course" },
   { type: "course_completed", label: "someone completes a course", subjectKey: "courseId", subjectSource: "courses", subjectLabel: "Which course" },
   { type: "community_post_created", label: "someone posts in the community", subjectKey: "communityId", subjectSource: "communities", subjectLabel: "Which community" },
   { type: "contact_created", label: "a new person joins your list", subjectKey: "", subjectSource: "", subjectLabel: "" },
@@ -211,6 +211,8 @@ export interface RunContext {
   subjectId: number | null;
   /** Everything else the trigger knew, for templating and for field conditions. */
   facts: Record<string, string | number | boolean | null>;
+  /** Durable occurrence id. Present for real domain events, absent for practice runs. */
+  eventKey?: string;
 }
 
 /** Evaluates one rule. Anything it does not recognise is false, never true. */
@@ -578,11 +580,10 @@ async function performAction(
       if (contactId === null) return { log: "Tag: skipped, no contact", stop: false };
       if (isTest) return { log: "Tag: would remove it", stop: false };
 
-      const res = await pool.query(
-        `DELETE FROM contact_tags WHERE contact_id = $1 AND tag_id = $2`,
-        [contactId, parsed.data.tagId]
-      );
-      return { log: (res.rowCount ?? 0) > 0 ? "Tag removed" : "They did not have that tag", stop: false };
+      const slug = await tagSlug(parsed.data.tagId);
+      if (!slug) return { log: "Tag: that tag no longer exists", stop: false };
+      const removed = await removeTags(contactId, [slug]);
+      return { log: removed > 0 ? "Tag removed" : "They did not have that tag", stop: false };
     }
 
     case "grant_offer": {
@@ -792,6 +793,27 @@ async function noteLog(runId: number, lines: string[], line: string): Promise<vo
  */
 const CLAIM_KEY = "_performedActionIds";
 
+/**
+ * Steps whose writes are naturally idempotent and can therefore be attempted
+ * again after a definite failure. Provider calls stay at-most-once: a timeout
+ * after an email or arbitrary webhook was accepted is indistinguishable from
+ * a timeout before acceptance, and retrying it can contact the customer twice.
+ */
+const RETRY_SAFE_ACTIONS = new Set<string>([
+  "subscribe_sequence",
+  "unsubscribe_sequence",
+  "add_tag",
+  "remove_tag",
+  "grant_offer",
+  "revoke_offer",
+  "register_event",
+  "branch",
+]);
+
+export function actionCanRetry(actionType: string): boolean {
+  return RETRY_SAFE_ACTIONS.has(actionType);
+}
+
 async function claimAction(runId: number, actionId: number): Promise<boolean> {
   const res = await pool.query(
     `UPDATE automation_runs
@@ -806,6 +828,24 @@ async function claimAction(runId: number, actionId: number): Promise<boolean> {
     [runId, CLAIM_KEY, [CLAIM_KEY], actionId]
   );
   return (res.rowCount ?? 0) > 0;
+}
+
+/** Releases only a definitely failed, idempotent action for the queue retry. */
+async function releaseActionClaim(runId: number, actionId: number): Promise<void> {
+  await pool.query(
+    `UPDATE automation_runs
+        SET trigger_payload = jsonb_set(
+              COALESCE(trigger_payload, '{}'::jsonb),
+              $3::text[],
+              COALESCE((
+                SELECT jsonb_agg(value)
+                  FROM jsonb_array_elements(COALESCE(trigger_payload -> $2::text, '[]'::jsonb)) value
+                 WHERE value <> to_jsonb($4::int)
+              ), '[]'::jsonb)
+            )
+      WHERE id = $1`,
+    [runId, CLAIM_KEY, [CLAIM_KEY], actionId]
+  );
 }
 
 /**
@@ -866,8 +906,11 @@ export async function runAutomation(input: RunAutomationInput): Promise<RunResul
   if (!runId) {
     const created = await pool.query<{ id: number }>(
       `INSERT INTO automation_runs
-         (automation_id, status, subject_email, log, contact_id, trigger_payload, is_test)
-       VALUES ($1, 'running', $2, '[]'::jsonb, $3, $4, $5)
+         (automation_id, status, subject_email, log, contact_id, trigger_payload, is_test, event_key)
+       VALUES ($1, 'running', $2, '[]'::jsonb, $3, $4, $5, $6)
+       ON CONFLICT (automation_id, event_key)
+         WHERE event_key IS NOT NULL AND NOT is_test
+         DO NOTHING
        RETURNING id`,
       [
         automationId,
@@ -875,9 +918,21 @@ export async function runAutomation(input: RunAutomationInput): Promise<RunResul
         context.contactId,
         JSON.stringify({ trigger: context.trigger, subjectId: context.subjectId, ...context.facts }),
         isTest,
+        context.eventKey ?? null,
       ]
     );
-    runId = created.rows[0].id;
+    runId = created.rows[0]?.id ?? 0;
+    if (!runId) {
+      const existing = await pool.query<{ id: number }>(
+        `SELECT id FROM automation_runs WHERE automation_id = $1 AND event_key = $2`,
+        [automationId, context.eventKey],
+      );
+      return {
+        runId: existing.rows[0]?.id ?? 0,
+        status: "skipped",
+        log: ["Already handled this event"],
+      };
+    }
   }
 
   const actionsRes = await pool.query<ActionRow>(
@@ -975,11 +1030,23 @@ export async function runAutomation(input: RunAutomationInput): Promise<RunResul
       if (outcome.stop) break;
     } catch (err) {
       failures += 1;
+      const detail = (err instanceof Error ? err.message : String(err)).slice(0, 300);
       await noteLog(
         runId,
         log,
-        `Something went wrong: ${(err as Error).message}`.slice(0, 300)
+        `Something went wrong: ${detail}`
       );
+      if (!isTest && actionCanRetry(action.action_type)) {
+        await releaseActionClaim(runId, action.id);
+        await pool.query(`UPDATE automation_runs SET status = 'failed' WHERE id = $1`, [runId]);
+        await pool.query(
+          `UPDATE automations SET last_error = $2 WHERE id = $1`,
+          [automationId, detail]
+        );
+        // The domain-event job owns bounded exponential retry and dead-letter
+        // handling. Throwing here leaves the durable event unprocessed.
+        throw err;
+      }
     }
   }
 
@@ -1041,8 +1108,11 @@ export async function recordSkip(
 ): Promise<number> {
   const res = await pool.query<{ id: number }>(
     `INSERT INTO automation_runs
-       (automation_id, status, subject_email, log, contact_id, trigger_payload, is_test)
-     VALUES ($1, 'skipped', $2, $3::jsonb, $4, $5, $6)
+       (automation_id, status, subject_email, log, contact_id, trigger_payload, is_test, event_key)
+     VALUES ($1, 'skipped', $2, $3::jsonb, $4, $5, $6, $7)
+     ON CONFLICT (automation_id, event_key)
+       WHERE event_key IS NOT NULL AND NOT is_test
+       DO NOTHING
      RETURNING id`,
     [
       automationId,
@@ -1051,9 +1121,27 @@ export async function recordSkip(
       context.contactId,
       JSON.stringify({ trigger: context.trigger, subjectId: context.subjectId }),
       isTest,
+      context.eventKey ?? null,
     ]
   );
-  return res.rows[0].id;
+  if (res.rows[0]?.id) return res.rows[0].id;
+  const existing = await pool.query<{ id: number }>(
+    `SELECT id FROM automation_runs WHERE automation_id = $1 AND event_key = $2`,
+    [automationId, context.eventKey],
+  );
+  return existing.rows[0]?.id ?? 0;
+}
+
+async function eventRun(
+  automationId: number,
+  eventKey?: string,
+): Promise<{ id: number; status: string } | null> {
+  if (!eventKey) return null;
+  const found = await pool.query<{ id: number; status: string }>(
+    `SELECT id, status FROM automation_runs WHERE automation_id = $1 AND event_key = $2 LIMIT 1`,
+    [automationId, eventKey],
+  );
+  return found.rows[0] ?? null;
 }
 
 /* ------------------------------------------------------------------ firing */
@@ -1066,6 +1154,8 @@ export interface TriggerInput {
   subjectId?: number | null;
   facts?: Record<string, string | number | boolean | null>;
   source?: string;
+  /** Stable key for this exact occurrence; used to prevent replayed runs. */
+  eventKey?: string;
 }
 
 const SUBJECT_KEY: Record<TriggerV2, string> = TRIGGER_DESCRIPTORS.reduce(
@@ -1083,7 +1173,11 @@ const SUBJECT_KEY: Record<TriggerV2, string> = TRIGGER_DESCRIPTORS.reduce(
  * already succeeded by the time this is called, and an automation failing must
  * not turn a saved lead into a 500.
  */
-export async function fireTrigger(trigger: TriggerV2, input: TriggerInput): Promise<void> {
+export async function fireTrigger(
+  trigger: TriggerV2,
+  input: TriggerInput,
+  options: { rethrow?: boolean } = {},
+): Promise<void> {
   try {
     let contactId = input.contactId ?? null;
     const email = (input.email ?? "").trim().toLowerCase();
@@ -1103,6 +1197,7 @@ export async function fireTrigger(trigger: TriggerV2, input: TriggerInput): Prom
       name: input.name ?? "",
       subjectId: input.subjectId ?? null,
       facts: { ...(input.facts ?? {}), email, name: input.name ?? "" },
+      eventKey: input.eventKey,
     };
 
     const automationsRes = await pool.query<{
@@ -1117,6 +1212,18 @@ export async function fireTrigger(trigger: TriggerV2, input: TriggerInput): Prom
     );
 
     for (const automation of automationsRes.rows) {
+      // Check before conditions and the per-person ceiling: a replay of an
+      // already successful occurrence must not create a later, misleading
+      // "maximum runs" skip. The insert-side unique key remains the race-safe
+      // authority when two workers arrive together.
+      const previous = await eventRun(automation.id, context.eventKey);
+      if (previous) {
+        if (["failed", "partial", "running"].includes(previous.status)) {
+          await runAutomation({ automationId: automation.id, context, runId: previous.id });
+        }
+        continue;
+      }
+
       const subjectKey = SUBJECT_KEY[trigger];
       if (subjectKey) {
         const wanted = automation.trigger_config?.[subjectKey];
@@ -1164,6 +1271,7 @@ export async function fireTrigger(trigger: TriggerV2, input: TriggerInput): Prom
   } catch (err) {
     // eslint-disable-next-line no-console
     console.error(`[automations/v2] ${trigger} failed:`, (err as Error).message);
+    if (options.rethrow) throw err;
   }
 }
 

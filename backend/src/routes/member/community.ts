@@ -7,6 +7,7 @@ import { pool } from "../../db/pool";
 import { asyncHandler } from "../../utils/asyncHandler";
 import { badRequest, forbidden, notFound, unauthorized } from "../../utils/httpError";
 import { plainText } from "../../utils/plainText";
+import { publishDomainEvent } from "../../services/domainEvents";
 import {
   denyImpersonation,
   requireVerifiedEmail,
@@ -953,6 +954,20 @@ memberCommunityRouter.post(
       });
 
       return id;
+    });
+
+    const identity = await pool.query<{ contact_id: number | null; email: string }>(
+      `SELECT contact_id, email::text AS email FROM members WHERE id = $1`,
+      [member.id],
+    );
+    await publishDomainEvent("community_post_created", {
+      eventKey: `community-post:${postId}`,
+      contactId: identity.rows[0]?.contact_id ?? null,
+      email: identity.rows[0]?.email ?? "",
+      name: authorName,
+      subjectId: ctx.id,
+      source: `community:${ctx.slug}`,
+      facts: { postId, channelId: channel.id, communityId: ctx.id },
     });
 
     res.status(201).json(await readPostJson(postId, ctx.id, member.id));

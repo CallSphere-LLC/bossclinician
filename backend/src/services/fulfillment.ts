@@ -1,9 +1,10 @@
 import type { PoolClient } from "pg";
 import { pool } from "../db/pool";
 import { enqueue, PRIORITY } from "../jobs/queue";
-import { grantOfferAccess } from "./access";
-import { recordActivity, upsertContact } from "./contacts";
+import { grantAccess, grantOfferAccess } from "./access";
+import { recordActivity, upsertContactWithStatus } from "./contacts";
 import { buildInstallmentSchedule, type BillingInterval } from "./pricing";
+import { dispatchEvent } from "./webhooksOut";
 
 /**
  * Turning a successful payment into everything the customer bought.
@@ -155,14 +156,15 @@ export async function fulfillPayment(input: FulfillPaymentInput): Promise<Fulfil
     // The contact is resolved inside the transaction, so an order can never be
     // marked paid against a person who does not exist because a later statement
     // rolled back.
-    const contactId = email
-      ? await upsertContact({
+    const contact = email
+      ? await upsertContactWithStatus({
           email,
           name: order.billing_name || "",
           source: "customer",
           client,
         })
       : null;
+    const contactId = contact?.id ?? null;
 
     await client.query(
       `UPDATE orders
@@ -243,6 +245,7 @@ export async function fulfillPayment(input: FulfillPaymentInput): Promise<Fulfil
     }
 
     let grantedProductIds: number[] = [];
+    const activatedProductIds: number[] = [];
     if (memberId && order.offer_id) {
       grantedProductIds = await grantOfferAccess({
         memberId,
@@ -250,6 +253,7 @@ export async function fulfillPayment(input: FulfillPaymentInput): Promise<Fulfil
         orderId: order.id,
         source: "purchase",
         client,
+        activatedProductIds,
       });
     }
 
@@ -262,14 +266,15 @@ export async function fulfillPayment(input: FulfillPaymentInput): Promise<Fulfil
         [order.id]
       );
       for (const item of bumpItems.rows) {
-        await client.query(
-          `INSERT INTO access_grants (member_id, product_id, order_id, source, status)
-           VALUES ($1, $2, $3, 'purchase', 'active')
-           ON CONFLICT (member_id, product_id) DO UPDATE
-             SET status = 'active', revoked_at = NULL, updated_at = now()`,
-          [memberId, item.product_id, order.id]
-        );
+        const grant = await grantAccess({
+          memberId,
+          productId: item.product_id,
+          orderId: order.id,
+          source: "purchase",
+          client,
+        });
         grantedProductIds.push(item.product_id);
+        if (grant.transitionedToActive) activatedProductIds.push(item.product_id);
       }
     }
 
@@ -306,7 +311,42 @@ export async function fulfillPayment(input: FulfillPaymentInput): Promise<Fulfil
       });
     }
 
+    if (contact?.created) {
+      const { publishDomainEvent } = await import("./domainEvents");
+      await publishDomainEvent("contact_created", {
+        eventKey: `contact-created:${contact.id}`,
+        contactId: contact.id,
+        email,
+        name: order.billing_name || "",
+        source: "customer",
+        client,
+      });
+    }
+
     await client.query("COMMIT");
+
+    if (createdMember && memberId !== null) {
+      await dispatchEvent("member.created", {
+        id: `member:${memberId}`,
+        memberId,
+        contactId,
+        email,
+        source: "purchase",
+      });
+    }
+    if (memberId !== null) {
+      for (const productId of activatedProductIds) {
+        await dispatchEvent("member.granted_access", {
+          id: `grant:order:${order.id}:product:${productId}`,
+          memberId,
+          contactId,
+          productId,
+          offerId: order.offer_id,
+          orderId: order.id,
+          source: "purchase",
+        });
+      }
+    }
 
     return {
       fulfilled: true,

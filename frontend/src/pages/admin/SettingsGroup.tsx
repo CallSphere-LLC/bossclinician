@@ -168,7 +168,7 @@ function FieldInput({
             <input
               id={id}
               type="color"
-              value={typeof value === "string" && value ? value : "#5C457D"}
+              value={typeof value === "string" && value ? value : "#D4AF6E"}
               onChange={(e) => onChange(e.target.value)}
               className="size-11 shrink-0 cursor-pointer rounded-xl border border-hairline bg-transparent p-1"
             />

@@ -48,7 +48,7 @@ export default {
         plum: {
           DEFAULT: "rgb(var(--c-plum) / <alpha-value>)",
           deep: "rgb(var(--c-plum-deep) / <alpha-value>)",
-          bright: "#7B5EA7",
+          bright: "rgb(var(--c-plum-bright) / <alpha-value>)",
         },
         ink: {
           DEFAULT: "rgb(var(--c-ink) / <alpha-value>)",
@@ -63,7 +63,7 @@ export default {
           raised: "rgb(var(--c-surface-raised) / <alpha-value>)",
         },
         lilac: {
-          DEFAULT: "#A78BC4",
+          DEFAULT: "rgb(var(--c-lilac) / <alpha-value>)",
           soft: "rgb(var(--c-lilac-soft) / <alpha-value>)",
           tint: "rgb(var(--c-lilac-tint) / <alpha-value>)",
         },

@@ -9,6 +9,11 @@ import { registerWebhookJobs } from "./webhookJobs";
 import { registerReportJobs } from "./reportJobs";
 import { registerEventJobs } from "./eventJobs";
 import { registerCoachingJobs } from "./coachingJobs";
+import {
+  dispatchDomainEvent,
+  publishContactAnniversaries,
+  sweepDomainEvents,
+} from "../services/domainEvents";
 
 /**
  * The job handlers that belong to no single feature.
@@ -200,14 +205,29 @@ async function sweepAbandonedCheckouts(): Promise<{ queued: number }> {
 
 /** Keeps the jobs table from growing without bound. */
 async function jobRetention(): Promise<{ removed: number }> {
-  const res = await pool.query(
+  const [jobs, events, deliveries] = await Promise.all([
+    pool.query(
     `DELETE FROM jobs
       WHERE status IN ('succeeded', 'cancelled')
-        AND finished_at < now() - interval '14 days'`
-  );
+        AND finished_at < now() - interval '14 days'`,
+    ),
+    pool.query(
+      `DELETE FROM domain_events
+        WHERE (processed_at IS NOT NULL AND processed_at < now() - interval '30 days')
+           OR (processed_at IS NULL AND created_at < now() - interval '90 days')`,
+    ),
+    pool.query(
+      `DELETE FROM webhook_deliveries
+        WHERE status IN ('delivered', 'dead')
+          AND created_at < now() - interval '90 days'`,
+    ),
+  ]);
   // Dead jobs are kept: the dead-letter list is the only place anyone finds out
   // that work never happened, and pruning it silently is how that gets lost.
-  return { removed: res.rowCount ?? 0 };
+  return {
+    removed:
+      (jobs.rowCount ?? 0) + (events.rowCount ?? 0) + (deliveries.rowCount ?? 0),
+  };
 }
 
 /**
@@ -223,6 +243,9 @@ export function registerCoreHandlers(): void {
   registerHandler("checkout.abandoned", () => sweepAbandonedCheckouts());
   registerHandler("jobs.retention", () => jobRetention());
   registerHandler("access.sweepExpired", async () => ({ expired: await sweepExpiredGrants() }));
+  registerHandler("domainEvents.dispatch", (payload) => dispatchDomainEvent(payload));
+  registerHandler("domainEvents.sweep", () => sweepDomainEvents());
+  registerHandler("domainEvents.anniversaries", () => publishContactAnniversaries());
 
   // Feature modules register their own handlers. Imported and called here so a
   // handler cannot be missing merely because nothing happened to reference its

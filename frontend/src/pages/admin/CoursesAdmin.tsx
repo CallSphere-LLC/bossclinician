@@ -218,13 +218,13 @@ export default function CoursesAdmin() {
               transition={{ delay: Math.min(i * 0.05, 0.3) }}
             >
               <Card className="group flex h-full flex-col overflow-hidden transition-all hover:-translate-y-0.5 hover:border-plum/30 hover:shadow-[0_20px_44px_-22px_rgba(15,30,58,0.4)]">
-                <div className="relative h-32 overflow-hidden bg-[linear-gradient(135deg,#5C457D_0%,#0F1E3A_100%)]">
+                <div className="relative h-32 overflow-hidden bg-surface-raised">
                   {course.image && (
                     <img
                       src={course.image}
                       alt=""
                       loading="lazy"
-                      className="size-full object-cover transition-transform duration-300 group-hover:scale-[1.04]"
+                      className="size-full object-cover transition-transform duration-150 group-hover:scale-[1.04]"
                     />
                   )}
                   <div className="absolute left-3 top-3 flex gap-1.5">

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { motion } from "motion/react";
-import { Check, Copy, ExternalLink, FolderOpen, Play, Trash2 } from "lucide-react";
+import { Check, Copy, ExternalLink, FolderOpen, Pencil, Play, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { adminApi } from "@/lib/api";
 import type { MediaAsset, MediaKind, MediaVisibility } from "@/types/admin";
@@ -90,6 +90,8 @@ export default function MediaLibrary() {
   const [search, setSearch] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<MediaAsset | null>(null);
+  const [renaming, setRenaming] = useState<MediaAsset | null>(null);
+  const [newTitle, setNewTitle] = useState("");
   const [copiedId, setCopiedId] = useState<number | null>(null);
   const [audience, setAudience] = useState<MediaVisibility>("public");
   const [confirm, confirmDialog] = useConfirm();
@@ -161,6 +163,24 @@ export default function MediaLibrary() {
       setAssets(snapshot ?? null);
       toast.error(friendlyError(err, "file"));
     }
+  }
+
+  async function rename() {
+    if (!renaming || !newTitle.trim()) return;
+    try {
+      const updated = await adminApi.mediaRename(renaming.id, newTitle.trim());
+      setAssets((current) => current?.map((asset) => asset.id === updated.id ? updated : asset) ?? current);
+      setPreview((current) => current?.id === updated.id ? updated : current);
+      setRenaming(null);
+      toast.success("File renamed");
+    } catch (err) {
+      toast.error(friendlyError(err, "file"));
+    }
+  }
+
+  function openRename(asset: MediaAsset) {
+    setRenaming(asset);
+    setNewTitle(asset.title || asset.originalName);
   }
 
   /** What to say when the grid comes back empty — it depends on why it did. */
@@ -321,7 +341,7 @@ export default function MediaLibrary() {
                           src={asset.previewUrl}
                           alt={name}
                           loading="lazy"
-                          className="size-full object-cover transition-transform duration-300 group-hover:scale-[1.04]"
+                          className="size-full object-cover transition-transform duration-150 group-hover:scale-[1.04]"
                         />
                       ) : asset.kind === "video" ? (
                         <>
@@ -384,6 +404,15 @@ export default function MediaLibrary() {
                             {copiedId === asset.id ? "Copied" : copyLabel(asset.kind)}
                           </Button>
                         )}
+                        <Button
+                          variant="ghost"
+                          size="iconSm"
+                          className="h-8 w-8"
+                          aria-label={`Rename ${name}`}
+                          onClick={() => openRename(asset)}
+                        >
+                          <Pencil />
+                        </Button>
                         <Button
                           variant="dangerGhost"
                           size="iconSm"
@@ -473,6 +502,34 @@ export default function MediaLibrary() {
             )}
           </div>
         )}
+      </Modal>
+
+      <Modal
+        open={renaming !== null}
+        onOpenChange={(open) => !open && setRenaming(null)}
+        title="Rename file"
+        description="This changes the name in your library; links and anything already using the file keep working."
+        size="sm"
+        footer={
+          <>
+            <Button variant="secondary" size="sm" onClick={() => setRenaming(null)}>
+              Cancel
+            </Button>
+            <Button size="sm" disabled={!newTitle.trim()} onClick={() => void rename()}>
+              Save name
+            </Button>
+          </>
+        }
+      >
+        <Input
+          value={newTitle}
+          onChange={(event) => setNewTitle(event.target.value)}
+          aria-label="File name"
+          autoFocus
+          onKeyDown={(event) => {
+            if (event.key === "Enter") void rename();
+          }}
+        />
       </Modal>
 
       {confirmDialog}

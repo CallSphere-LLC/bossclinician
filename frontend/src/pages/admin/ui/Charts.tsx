@@ -26,17 +26,17 @@ import { formatCurrency, shortDay } from "@/lib/format";
  */
 
 export const CHART_COLORS = {
-  plum: "#9B7DD4",
-  plumDeep: "#7B5EA7",
-  gold: "#D8B676",
-  green: "#6BA891",
-  lilac: "#C3AEE0",
-  ink: "#E9E4F2",
-  slate: "#7E7391",
+  plum: "var(--accent)",
+  plumDeep: "var(--accent-hover)",
+  gold: "var(--accent)",
+  green: "var(--success)",
+  lilac: "var(--info)",
+  ink: "var(--text-primary)",
+  slate: "var(--text-secondary)",
 } as const;
 
 const axisProps = {
-  stroke: "#8B7FA0",
+  stroke: "var(--text-secondary)",
   fontSize: 11,
   tickLine: false,
   axisLine: false,
@@ -155,7 +155,7 @@ export function TrendAreaChart({
             strokeWidth={2.25}
             fill={`url(#${gradientId}-${s.key})`}
             dot={false}
-            activeDot={{ r: 4, strokeWidth: 2, stroke: "#0A0713" }}
+            activeDot={{ r: 4, strokeWidth: 2, stroke: "var(--bg-base)" }}
           />
         ))}
       </AreaChart>
@@ -233,7 +233,7 @@ export function ComparisonLineChart({
           stroke={CHART_COLORS.plum}
           strokeWidth={2.5}
           dot={false}
-          activeDot={{ r: 4, strokeWidth: 2, stroke: "#0A0713" }}
+          activeDot={{ r: 4, strokeWidth: 2, stroke: "var(--bg-base)" }}
         />
       </LineChart>
     </ResponsiveContainer>

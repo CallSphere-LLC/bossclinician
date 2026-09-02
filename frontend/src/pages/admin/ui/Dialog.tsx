@@ -46,7 +46,7 @@ export function Modal({
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: reduceMotion ? 0 : 0.18 }}
-                className="theme-console fixed inset-0 z-50 bg-night-deep/75 backdrop-blur-sm"
+                className="theme-console fixed inset-0 z-50 bg-black/60"
               />
             </RadixDialog.Overlay>
 
@@ -79,7 +79,7 @@ export function Modal({
                    * fields the wrong colour, and a <select> whose chosen value
                    * she cannot read.
                    */
-                  "theme-console fixed left-1/2 top-1/2 z-50 flex max-h-[88vh] w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-hairline bg-surface-raised shadow-[0_32px_80px_-24px_rgba(0,0,0,0.9)]",
+                  "theme-console fixed left-1/2 top-1/2 z-50 flex max-h-[88vh] w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-[var(--border-strong)] bg-surface-raised shadow-[0_24px_60px_rgba(0,0,0,0.55)]",
                   widths[size],
                 )}
               >

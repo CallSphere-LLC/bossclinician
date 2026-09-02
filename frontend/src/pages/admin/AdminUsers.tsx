@@ -50,11 +50,9 @@ import type { ColumnDef } from "@tanstack/react-table";
  * permission matrix is a thing you read to a developer, not a thing you choose
  * from.
  *
- * NOTE for whoever wires this phase up: turning two-step sign-in on requires the
- * sign-in screen to have a box for the code. The API is ready (POST
- * /api/admin/login accepts `code` and answers `{ mfaRequired: true }` when it
- * needs one); until `lib/api.ts`, `useAuth` and `Login.tsx` pass it through,
- * nobody should switch two-step on, because there would be nowhere to type it.
+ * Enrolment and sign-in are wired end to end: the first password request moves
+ * the sign-in form to a second-factor step, and the second request may carry a
+ * live authenticator code or a one-use recovery code.
  */
 
 /**
@@ -66,7 +64,7 @@ import type { ColumnDef } from "@tanstack/react-table";
  * reads as a promise. Flipping this to `true` the day the sign-in screen has a
  * box for the code puts both of them right at once.
  */
-const MFA_SELF_ENROLMENT_READY: boolean = false;
+const MFA_SELF_ENROLMENT_READY: boolean = true;
 
 const STATUS_TONE: Record<string, "green" | "gold" | "slate"> = {
   active: "green",
@@ -200,11 +198,6 @@ function SecurityCard() {
                   Turn it off
                 </Button>
               ) : (
-                /* Disabled until the sign-in screen has a box for the code — see
-                   the note at the top of this file. Switching it on today locks
-                   the account out at the very next sign-in, because
-                   `adminApi.login` sends no code and the server answers 401. The
-                   handler stays wired for the day that box exists. */
                 <Button size="sm" disabled={!MFA_SELF_ENROLMENT_READY} onClick={startEnrolment}>
                   Turn it on
                 </Button>

@@ -9,7 +9,9 @@ import {
   Image as ImageIcon,
   Megaphone,
   Plus,
+  ReceiptText,
   Trash2,
+  Trophy,
   Wallet,
   X,
 } from "lucide-react";
@@ -33,6 +35,7 @@ import { Modal, useConfirm } from "@/pages/admin/ui/Dialog";
 import { friendlyError, pluralize } from "@/pages/admin/ui/friendly";
 import {
   adminAffiliateApi,
+  type AdminCommissionRow,
   type AdminPartner,
   type PayoutDue,
   type ProgramSettings,
@@ -48,15 +51,26 @@ import {
  * alongside it and this file renders that rather than inventing its own.
  */
 
-type Tab = "partners" | "payments" | "creative" | "news" | "howitworks";
+type Tab = "overview" | "partners" | "payments" | "creative" | "news" | "howitworks";
 
 const TABS: { id: Tab; label: string }[] = [
+  { id: "overview", label: "Overview" },
   { id: "partners", label: "Your partners" },
   { id: "payments", label: "Paying them" },
   { id: "creative", label: "Things they can use" },
   { id: "news", label: "News for partners" },
   { id: "howitworks", label: "How it works" },
 ];
+
+interface LeaderboardPartner {
+  id: number;
+  name: string;
+  email: string;
+  clicks: number;
+  sales: number;
+  earnedCents: number;
+  revenueCents: number;
+}
 
 /** The lifecycle in her words. The stored values are one-word machine states. */
 const STATUS_LABEL: Record<string, string> = {
@@ -91,6 +105,83 @@ function TabBar({ active, onChange }: { active: Tab; onChange: (tab: Tab) => voi
           {tab.label}
         </button>
       ))}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------- partners */
+
+function OverviewTab({ onError }: { onError: (message: string) => void }) {
+  const [leaders, setLeaders] = useState<LeaderboardPartner[] | null>(null);
+  const [transactions, setTransactions] = useState<AdminCommissionRow[] | null>(null);
+
+  useEffect(() => {
+    Promise.all([adminAffiliateApi.leaderboard(), adminAffiliateApi.transactions({ limit: 12 })])
+      .then(([leaderboard, ledger]) => {
+        setLeaders(leaderboard.partners);
+        setTransactions(ledger.transactions);
+      })
+      .catch(() => onError("We couldn't load the partner overview. Try refreshing the page."));
+  }, [onError]);
+
+  return (
+    <div className="grid gap-5 xl:grid-cols-2">
+      <Card>
+        <CardHeader
+          icon={<Trophy />}
+          title="Leaderboard"
+          subtitle="Approved partners ranked by what they have earned."
+        />
+        {leaders === null ? (
+          <div className="p-5"><Skeleton className="h-56 w-full" /></div>
+        ) : leaders.length === 0 ? (
+          <EmptyState icon={<Trophy />} title="No partner sales yet" description="Partners appear here after their first attributed sale." />
+        ) : (
+          <ol className="divide-y divide-hairline/60">
+            {leaders.slice(0, 10).map((partner, index) => (
+              <li key={partner.id} className="grid grid-cols-[2rem_minmax(0,1fr)_auto] items-center gap-3 px-5 py-3">
+                <span className="grid size-7 place-items-center rounded-full bg-gold/[0.12] text-xs font-bold text-gold">{index + 1}</span>
+                <span className="min-w-0">
+                  <Link to={`/admin/partners/${partner.id}`} className="block truncate text-sm font-semibold text-ink hover:text-gold">{partner.name}</Link>
+                  <span className="text-xs text-ink-soft">{pluralize(partner.sales, "sale")} · {pluralize(partner.clicks, "click")}</span>
+                </span>
+                <span className="text-right">
+                  <span className="block text-sm font-semibold text-ink">{formatCurrency(partner.earnedCents, "usd")}</span>
+                  <span className="text-xs text-ink-soft">earned</span>
+                </span>
+              </li>
+            ))}
+          </ol>
+        )}
+      </Card>
+
+      <Card>
+        <CardHeader
+          icon={<ReceiptText />}
+          title="Latest transactions"
+          subtitle="The newest commissions across every partner."
+        />
+        {transactions === null ? (
+          <div className="p-5"><Skeleton className="h-56 w-full" /></div>
+        ) : transactions.length === 0 ? (
+          <EmptyState icon={<ReceiptText />} title="No commissions yet" description="Attributed orders and reversals will appear here." />
+        ) : (
+          <ul className="divide-y divide-hairline/60">
+            {transactions.map((transaction) => (
+              <li key={transaction.id} className="flex items-center justify-between gap-3 px-5 py-3">
+                <span className="min-w-0">
+                  <Link to={`/admin/partners/${transaction.affiliateId}`} className="block truncate text-sm font-semibold text-ink hover:text-gold">{transaction.partnerName}</Link>
+                  <span className="block truncate text-xs text-ink-soft">{transaction.offerTitle || "Order"} · {formatDate(transaction.createdAt)}</span>
+                </span>
+                <span className="text-right">
+                  <span className="block text-sm font-semibold text-ink">{formatCurrency(transaction.amountCents, transaction.currency)}</span>
+                  <Badge tone={transaction.status === "paid" ? "green" : transaction.status === "reversed" ? "red" : "gold"}>{transaction.status}</Badge>
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
     </div>
   );
 }
@@ -1058,12 +1149,13 @@ function HowItWorksTab({ onError }: { onError: (message: string) => void }) {
 /* ------------------------------------------------------------------ page */
 
 export default function Affiliates() {
-  const [tab, setTab] = useState<Tab>("partners");
+  const [tab, setTab] = useState<Tab>("overview");
   const [error, setError] = useState<string | null>(null);
 
   const onError = useCallback((message: string) => setError(message), []);
 
   const body: Record<Tab, ReactNode> = {
+    overview: <OverviewTab onError={onError} />,
     partners: <PartnersTab onError={onError} />,
     payments: <PaymentsTab onError={onError} />,
     creative: <CreativeTab onError={onError} />,

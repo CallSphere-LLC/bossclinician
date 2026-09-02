@@ -1,6 +1,7 @@
 import type { PoolClient } from "pg";
 import { pool } from "../db/pool";
 import { accessExpiresAt } from "./pricing";
+import { dispatchEvent } from "./webhooksOut";
 
 /**
  * Access grants — the only answer to "may this member open this product".
@@ -38,6 +39,9 @@ export interface AccessGrant {
   status: "active" | "revoked" | "expired";
   grantedAt: string;
   expiresAt: string | null;
+  updatedAt: string;
+  /** True only when this call created access or reactivated a revoked/expired grant. */
+  transitionedToActive: boolean;
 }
 
 /**
@@ -54,12 +58,24 @@ export interface AccessGrant {
  * grant keeps lifetime. Hence NULL wins, and otherwise the later date wins.
  */
 export async function grantAccess(input: GrantAccessInput): Promise<AccessGrant> {
-  const db = input.client ?? pool;
+  const ownedClient = input.client ? null : await pool.connect();
+  const db = input.client ?? ownedClient!;
   const grantedAt = input.grantedAt ?? new Date();
   const expiresAt = accessExpiresAt(grantedAt, input.expiresAfterDays ?? null);
+  try {
+    if (ownedClient) await ownedClient.query("BEGIN");
+    // Row locks cannot lock a row that does not exist. This transaction-scoped
+    // pair lock serializes both the first insert and later reactivation for one
+    // member/product without blocking unrelated grants.
+    await db.query(`SELECT pg_advisory_xact_lock($1, $2)`, [input.memberId, input.productId]);
+    const before = await db.query<{ status: string }>(
+      `SELECT status FROM access_grants WHERE member_id = $1 AND product_id = $2 FOR UPDATE`,
+      [input.memberId, input.productId],
+    );
+    const transitionedToActive = before.rows[0]?.status !== "active";
 
-  const res = await db.query(
-    `INSERT INTO access_grants
+    const res = await db.query(
+      `INSERT INTO access_grants
        (member_id, product_id, offer_id, order_id, subscription_id, source,
         status, granted_at, expires_at)
      VALUES ($1, $2, $3, $4, $5, $6, 'active', $7, $8)
@@ -77,28 +93,37 @@ export async function grantAccess(input: GrantAccessInput): Promise<AccessGrant>
                            ELSE GREATEST(access_grants.expires_at, EXCLUDED.expires_at)
                          END,
        updated_at      = now()
-     RETURNING id, member_id, product_id, status, granted_at, expires_at`,
-    [
-      input.memberId,
-      input.productId,
-      input.offerId ?? null,
-      input.orderId ?? null,
-      input.subscriptionId ?? null,
-      input.source ?? "purchase",
-      grantedAt,
-      expiresAt,
-    ]
-  );
+     RETURNING id, member_id, product_id, status, granted_at, expires_at, updated_at`,
+      [
+        input.memberId,
+        input.productId,
+        input.offerId ?? null,
+        input.orderId ?? null,
+        input.subscriptionId ?? null,
+        input.source ?? "purchase",
+        grantedAt,
+        expiresAt,
+      ]
+    );
 
-  const row = res.rows[0];
-  return {
-    id: row.id,
-    memberId: row.member_id,
-    productId: row.product_id,
-    status: row.status,
-    grantedAt: row.granted_at,
-    expiresAt: row.expires_at,
-  };
+    const row = res.rows[0];
+    if (ownedClient) await ownedClient.query("COMMIT");
+    return {
+      id: row.id,
+      memberId: row.member_id,
+      productId: row.product_id,
+      status: row.status,
+      grantedAt: row.granted_at,
+      expiresAt: row.expires_at,
+      updatedAt: row.updated_at,
+      transitionedToActive,
+    };
+  } catch (err) {
+    if (ownedClient) await ownedClient.query("ROLLBACK").catch(() => undefined);
+    throw err;
+  } finally {
+    ownedClient?.release();
+  }
 }
 
 /**
@@ -117,6 +142,8 @@ export async function grantOfferAccess(input: {
   source?: GrantSource;
   grantedAt?: Date;
   client?: Queryable;
+  /** Optional caller-owned collector for events that must wait until commit. */
+  activatedProductIds?: number[];
 }): Promise<number[]> {
   const db = input.client ?? pool;
 
@@ -130,14 +157,20 @@ export async function grantOfferAccess(input: {
      SELECT DISTINCT bi.product_id, o.access_expires_after_days
        FROM offers o
        JOIN offer_products op       ON op.offer_id = o.id
-       JOIN product_bundle_items bi ON bi.bundle_product_id = op.product_id
+      JOIN product_bundle_items bi ON bi.bundle_product_id = op.product_id
       WHERE o.id = $1`,
     [input.offerId]
   );
 
+  // grantAccess takes one advisory lock per product. A stable order prevents
+  // two overlapping bundles from acquiring those locks in opposite order.
+  res.rows.sort((a, b) => a.product_id - b.product_id);
+
   const granted: number[] = [];
+  const activated = input.activatedProductIds ?? [];
+  const activatedOccurrences: AccessGrant[] = [];
   for (const row of res.rows) {
-    await grantAccess({
+    const grant = await grantAccess({
       memberId: input.memberId,
       productId: row.product_id,
       offerId: input.offerId,
@@ -149,6 +182,21 @@ export async function grantOfferAccess(input: {
       client: input.client,
     });
     granted.push(row.product_id);
+    if (grant.transitionedToActive) {
+      activated.push(row.product_id);
+      activatedOccurrences.push(grant);
+    }
+  }
+  if (input.client === undefined) {
+    for (const grant of activatedOccurrences) {
+      await dispatchEvent("member.granted_access", {
+        id: `grant:${grant.id}:activated:${new Date(grant.updatedAt).toISOString()}`,
+        memberId: input.memberId,
+        productId: grant.productId,
+        offerId: input.offerId,
+        source: input.source ?? "purchase",
+      });
+    }
   }
   return granted;
 }
