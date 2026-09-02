@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
@@ -325,6 +325,8 @@ export default function FormBuilder() {
   const [dirty, setDirty] = useState(false);
   const [saveProblem, setSaveProblem] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const revision = useRef(0);
+  const saveQueue = useRef<Promise<unknown>>(Promise.resolve());
   const [replies, setReplies] = useState<FormSubmission[] | null>(null);
   const [downloading, setDownloading] = useState(false);
 
@@ -469,10 +471,24 @@ export default function FormBuilder() {
   }
 
   function change(changes: Partial<FormDetail>) {
+    revision.current += 1;
     setDraft((current) => (current ? { ...current, ...changes } : current));
     setDirty(true);
     setSaveProblem(null);
   }
+
+  // The form is one JSON document on the server, so edits are queued in order.
+  // After a short pause the latest whole draft is stored; the Save-now button
+  // is only an escape hatch, not a required second step after every question.
+  useEffect(() => {
+    if (!dirty || !draft) return;
+    const snapshot = draft;
+    const atRevision = revision.current;
+    const timer = window.setTimeout(() => {
+      void persist(snapshot, atRevision, false);
+    }, 650);
+    return () => window.clearTimeout(timer);
+  }, [draft, dirty]);
 
   /* Creating ------------------------------------------------------------- */
 
@@ -577,33 +593,32 @@ export default function FormBuilder() {
 
   /* Saving --------------------------------------------------------------- */
 
-  async function save() {
-    if (!draft) return;
-
-    const blank = draft.fields.findIndex((field) => !field.label.trim());
+  async function persist(snapshot: FormDetail, atRevision: number, announce: boolean) {
+    const blank = snapshot.fields.findIndex((field) => !field.label.trim());
     if (blank >= 0) {
-      setSaveProblem(`Question ${blank + 1} has no wording yet — fill it in before saving.`);
+      if (atRevision === revision.current) {
+        setSaveProblem(`Question ${blank + 1} has no wording yet — fill it in before saving.`);
+      }
       return;
     }
-    const emptyChoices = draft.fields.find(
+    const emptyChoices = snapshot.fields.find(
       (field) => needsOptions(field.type) && (field.options ?? []).filter(Boolean).length === 0,
     );
     if (emptyChoices) {
-      setSaveProblem(`“${emptyChoices.label}” needs at least one choice to pick from.`);
+      if (atRevision === revision.current) {
+        setSaveProblem(`“${emptyChoices.label}” needs at least one choice to pick from.`);
+      }
       return;
     }
     setSaveProblem(null);
-
     setSaving(true);
-    try {
-      await formsApi.update(draft.id, {
-        name: draft.name,
-        descriptionMd: draft.descriptionMd,
-        fields: draft.fields.map((field) => ({
+
+    const request = saveQueue.current.then(() =>
+      formsApi.update(snapshot.id, {
+        name: snapshot.name,
+        descriptionMd: snapshot.descriptionMd,
+        fields: snapshot.fields.map((field) => ({
           ...field,
-          // "Save this answer to → a detail of your own" prefills with the
-          // question's own wording, which the server refuses: a stored detail is
-          // a single word. Turned into one here rather than making her guess.
           contactField:
             !field.contactField ||
             CONTACT_FIELD_CHOICES.some((choice) => choice.value === field.contactField)
@@ -611,26 +626,36 @@ export default function FormBuilder() {
               : fieldKey(field.contactField),
           options: field.options?.map((option) => option.trim()).filter(Boolean),
         })),
-        submitLabel: draft.submitLabel,
-        successMessage: draft.successMessage,
-        postAction: draft.postAction,
-        redirectUrl: draft.redirectUrl,
-        applyTagIds: draft.applyTagIds,
-        subscribeSequenceId: draft.subscribeSequenceId,
-        published: draft.published,
-      });
-      toast.success("Form saved");
-      setDirty(false);
-      // Read back rather than trusting the reply: the tag and sequence names the
-      // screen prints come from the full record, not from the save.
-      const fresh = await formsApi.get(draft.id);
-      setDraft(fresh);
+        submitLabel: snapshot.submitLabel,
+        successMessage: snapshot.successMessage,
+        postAction: snapshot.postAction,
+        redirectUrl: snapshot.redirectUrl,
+        applyTagIds: snapshot.applyTagIds,
+        subscribeSequenceId: snapshot.subscribeSequenceId,
+        published: snapshot.published,
+      }),
+    );
+    saveQueue.current = request.catch(() => undefined);
+
+    try {
+      await request;
+      if (atRevision === revision.current) {
+        setDirty(false);
+        if (announce) toast.success("Form saved");
+      }
       loadList();
     } catch (err) {
-      toast.error(friendlyError(err, "form"));
+      if (atRevision === revision.current) {
+        toast.error(friendlyError(err, "form"));
+      }
     } finally {
-      setSaving(false);
+      if (atRevision === revision.current) setSaving(false);
     }
+  }
+
+  async function save() {
+    if (!draft) return;
+    await persist(draft, revision.current, true);
   }
 
   /* Replies -------------------------------------------------------------- */
@@ -944,7 +969,7 @@ export default function FormBuilder() {
               All forms
             </Button>
             <Button size="sm" disabled={saving || !dirty} onClick={() => void save()}>
-              {saving ? "Saving…" : dirty ? "Save form" : "Saved"}
+              {saving ? "Saving automatically…" : dirty ? "Save now" : "Saved automatically"}
             </Button>
           </>
         }

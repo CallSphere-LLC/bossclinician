@@ -474,6 +474,8 @@ interface ActionOutcome {
    * an automation whose only step did nothing show up as RAN FINE.
    */
   misconfigured?: boolean;
+  /** A configured step could not act on this particular person. */
+  blocked?: boolean;
 }
 
 /** The outcome for a step that was never filled in, in the log's own voice. */
@@ -504,7 +506,7 @@ async function performAction(
       const parsed = sendEmailConfig.safeParse(config);
       if (!parsed.success) return unfinished(action.action_type);
       if (contactId === null || !context.email) {
-        return { log: "Email: skipped, no contact to send to", stop: false };
+        return { log: "Email: blocked — no contact to send to", stop: false, blocked: true };
       }
 
       const values = {
@@ -534,13 +536,14 @@ async function performAction(
             ? `Email: not sent — ${result.suppressedReason}`
             : `Email sent to ${context.email}`,
         stop: false,
+        blocked: result.outcome === "suppressed",
       };
     }
 
     case "subscribe_sequence": {
       const parsed = sequenceConfig.safeParse(config);
       if (!parsed.success) return unfinished(action.action_type);
-      if (contactId === null) return { log: "Sequence: skipped, no contact", stop: false };
+      if (contactId === null) return { log: "Sequence: blocked — no contact", stop: false, blocked: true };
       if (isTest) return { log: "Sequence: would start them on it", stop: false };
 
       const result = await enrollContact(parsed.data.sequenceId, contactId, {
@@ -552,7 +555,7 @@ async function performAction(
     case "unsubscribe_sequence": {
       const parsed = sequenceConfig.safeParse(config);
       if (!parsed.success) return unfinished(action.action_type);
-      if (contactId === null) return { log: "Sequence: skipped, no contact", stop: false };
+      if (contactId === null) return { log: "Sequence: blocked — no contact", stop: false, blocked: true };
       if (isTest) return { log: "Sequence: would take them off it", stop: false };
 
       const removed = await exitContact(parsed.data.sequenceId, contactId, {
@@ -564,10 +567,10 @@ async function performAction(
     case "add_tag": {
       const parsed = tagConfig.safeParse(config);
       if (!parsed.success) return unfinished(action.action_type);
-      if (contactId === null) return { log: "Tag: skipped, no contact", stop: false };
+      if (contactId === null) return { log: "Tag: blocked — no contact", stop: false, blocked: true };
 
       const slug = await tagSlug(parsed.data.tagId);
-      if (!slug) return { log: "Tag: that tag no longer exists", stop: false };
+      if (!slug) return { log: "Tag: blocked — that tag no longer exists", stop: false, blocked: true };
       if (isTest) return { log: `Tag: would add "${slug}"`, stop: false };
 
       await applyTags(contactId, [slug], `automation:${automationId}`);
@@ -577,11 +580,11 @@ async function performAction(
     case "remove_tag": {
       const parsed = tagConfig.safeParse(config);
       if (!parsed.success) return unfinished(action.action_type);
-      if (contactId === null) return { log: "Tag: skipped, no contact", stop: false };
+      if (contactId === null) return { log: "Tag: blocked — no contact", stop: false, blocked: true };
       if (isTest) return { log: "Tag: would remove it", stop: false };
 
       const slug = await tagSlug(parsed.data.tagId);
-      if (!slug) return { log: "Tag: that tag no longer exists", stop: false };
+      if (!slug) return { log: "Tag: blocked — that tag no longer exists", stop: false, blocked: true };
       const removed = await removeTags(contactId, [slug]);
       return { log: removed > 0 ? "Tag removed" : "They did not have that tag", stop: false };
     }
@@ -591,7 +594,7 @@ async function performAction(
       if (!parsed.success) return unfinished(action.action_type);
       const memberId = await memberIdFor(contactId);
       if (memberId === null) {
-        return { log: "Offer: skipped, they have no account yet", stop: false };
+        return { log: "Offer: blocked — they have no account yet", stop: false, blocked: true };
       }
       if (isTest) return { log: "Offer: would give them access", stop: false };
 
@@ -600,14 +603,18 @@ async function performAction(
         offerId: parsed.data.offerId,
         source: "automation",
       });
-      return { log: `Access given to ${products.length} item(s)`, stop: false };
+      return {
+        log: products.length > 0 ? `Access given to ${products.length} item(s)` : "Offer: blocked — it contains no products",
+        stop: false,
+        blocked: products.length === 0,
+      };
     }
 
     case "revoke_offer": {
       const parsed = offerConfig.safeParse(config);
       if (!parsed.success) return unfinished(action.action_type);
       const memberId = await memberIdFor(contactId);
-      if (memberId === null) return { log: "Offer: skipped, they have no account", stop: false };
+      if (memberId === null) return { log: "Offer: blocked — they have no account", stop: false, blocked: true };
       if (isTest) return { log: "Offer: would take access away", stop: false };
 
       const revoked = await revokeOfferAccess({
@@ -622,7 +629,7 @@ async function performAction(
       const parsed = eventConfig.safeParse(config);
       if (!parsed.success) return unfinished(action.action_type);
       if (contactId === null || !context.email) {
-        return { log: "Event: skipped, no contact", stop: false };
+        return { log: "Event: blocked — no contact", stop: false, blocked: true };
       }
       if (isTest) return { log: "Event: would register them", stop: false };
 
@@ -633,7 +640,7 @@ async function performAction(
         parsed.data.eventId,
       ]);
       const event = eventRes.rows[0];
-      if (!event) return { log: "Event: that event no longer exists", stop: false };
+      if (!event) return { log: "Event: blocked — that event no longer exists", stop: false, blocked: true };
 
       // An evergreen event has no fixed start; the registrant's own session
       // begins at the next interval boundary after they registered.
@@ -1025,7 +1032,7 @@ export async function runAutomation(input: RunAutomationInput): Promise<RunResul
       // A step that was never filled in is counted with the errors rather than
       // with the work. It is the whole of P0-6: the run log said "Tag: none
       // chosen" and the run said "success", so the screen said RAN FINE.
-      if (outcome.misconfigured) failures += 1;
+      if (outcome.misconfigured || outcome.blocked) failures += 1;
       await noteLog(runId, log, outcome.log);
       if (outcome.stop) break;
     } catch (err) {

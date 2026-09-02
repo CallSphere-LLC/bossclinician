@@ -120,6 +120,17 @@ describe("how a run reports a step nobody finished", () => {
     });
   });
 
+  it("does not call a configured step successful when it was blocked", async () => {
+    const blockedContext = { ...CONTEXT, contactId: null, email: "" };
+    const { statuses, lines } = databaseHolding([step("add_tag", { tagId: 3 })]);
+
+    const result = await runAutomation({ automationId: 2, context: blockedContext, isTest: true });
+
+    expect(result.status).toBe("failed");
+    expect(statuses).toEqual(["failed"]);
+    expect(lines.join(" ")).toContain("blocked");
+  });
+
   it("does not count a real wait a practice run cannot serve", () => {
     // A dry run reaches a configured wait in the same place as an empty one,
     // and calling that a failure would report every automation with a delay in

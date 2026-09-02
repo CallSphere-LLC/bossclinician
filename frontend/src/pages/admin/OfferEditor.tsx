@@ -157,6 +157,24 @@ function draftFrom(offer: OfferDetail): OfferDraft {
   };
 }
 
+/** Client-side refusal for price mistakes the API will reject as well. */
+export function offerPricingErrors(
+  draft: Pick<OfferDraft, "pricingType" | "amountCents" | "minAmountCents" | "installmentCount">,
+): Record<string, string> {
+  if (["one_time", "subscription", "payment_plan"].includes(draft.pricingType)) {
+    if (!Number.isFinite(draft.amountCents) || draft.amountCents <= 0) {
+      return { amountCents: "Enter a price greater than $0 before saving this offer." };
+    }
+  }
+  if (draft.pricingType === "payment_plan" && (draft.installmentCount ?? 0) < 2) {
+    return { installmentCount: "Choose at least two payments." };
+  }
+  if (draft.pricingType === "pwyw" && draft.minAmountCents < 0) {
+    return { minAmountCents: "The minimum price cannot be below $0." };
+  }
+  return {};
+}
+
 /* ── Tabs ───────────────────────────────────────────────────────────────── */
 
 type TabKey = "selling" | "price" | "form" | "bumps" | "upsells" | "after";
@@ -487,6 +505,14 @@ export default function OfferEditor() {
     if (!draft.title.trim()) {
       setErrors({ title: "Give this offer a name — customers see it at checkout." });
       setTab("selling");
+      toast.error("Give this offer a name before saving.");
+      return false;
+    }
+    const pricingErrors = offerPricingErrors(draft);
+    if (Object.keys(pricingErrors).length > 0) {
+      setErrors(pricingErrors);
+      setTab("price");
+      toast.error(Object.values(pricingErrors)[0]);
       return false;
     }
 

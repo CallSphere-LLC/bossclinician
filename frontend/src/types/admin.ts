@@ -441,6 +441,10 @@ export interface Campaign {
   previewText: string;
   bodyMd: string;
   audience: string;
+  segmentId: number | null;
+  includeTagIds: number[];
+  excludeSegmentIds: number[];
+  excludeTagIds: number[];
   status: "draft" | "scheduled" | "sending" | "sent" | "failed" | string;
   scheduledAt: string | null;
   timezone: string;

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import { Link, useParams } from "react-router-dom";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
@@ -99,6 +99,68 @@ function highestPossibleScore(questions: EditableQuestion[]): number {
 /* ── Boxes that save themselves ─────────────────────────────────────────── */
 
 /**
+ * Keeps an inline editor durable while it is being typed.
+ *
+ * Blur is still flushed immediately, but it is no longer the only save path:
+ * browsers, password managers and composed controls do not promise a blur
+ * before navigation. A short idle save makes the text reach the API even when
+ * focus never leaves the box.
+ */
+function useInlineAutosave<T>(value: T, onCommit: (next: T) => void) {
+  const [draft, setDraft] = useState(value);
+  const draftRef = useRef(value);
+  const savedRef = useRef(value);
+  const commitRef = useRef(onCommit);
+  const timerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    commitRef.current = onCommit;
+  }, [onCommit]);
+
+  useEffect(() => {
+    // A reply to our own save must not overwrite newer text already waiting in
+    // the editor. A genuinely external value can still resynchronise it.
+    if (Object.is(value, savedRef.current)) return;
+    savedRef.current = value;
+    if (timerRef.current === null) {
+      draftRef.current = value;
+      setDraft(value);
+    }
+  }, [value]);
+
+  const flush = useCallback((next = draftRef.current) => {
+    if (timerRef.current !== null) window.clearTimeout(timerRef.current);
+    timerRef.current = null;
+    if (Object.is(next, savedRef.current)) return;
+    savedRef.current = next;
+    commitRef.current(next);
+  }, []);
+
+  const change = useCallback(
+    (next: T) => {
+      draftRef.current = next;
+      setDraft(next);
+      if (timerRef.current !== null) window.clearTimeout(timerRef.current);
+      timerRef.current = window.setTimeout(() => flush(next), 500);
+    },
+    [flush],
+  );
+
+  useEffect(
+    () => () => {
+      if (timerRef.current !== null) window.clearTimeout(timerRef.current);
+      if (!Object.is(draftRef.current, savedRef.current)) {
+        savedRef.current = draftRef.current;
+        commitRef.current(draftRef.current);
+      }
+    },
+    [],
+  );
+
+  return { draft, change, flush };
+}
+
+/**
  * Everything on this screen saves when she moves on to the next box, so there
  * is no Save button per question to hunt for and nothing lost by navigating
  * away mid-edit. The draft is local until then so typing never fights a
@@ -117,8 +179,7 @@ function InlineText({
   placeholder?: string;
   className?: string;
 }) {
-  const [draft, setDraft] = useState(value);
-  useEffect(() => setDraft(value), [value]);
+  const { draft, change, flush } = useInlineAutosave(value, onCommit);
 
   return (
     <Input
@@ -126,10 +187,8 @@ function InlineText({
       className={className}
       value={draft}
       placeholder={placeholder}
-      onChange={(event) => setDraft(event.target.value)}
-      onBlur={() => {
-        if (draft !== value) onCommit(draft);
-      }}
+      onChange={(event) => change(event.target.value)}
+      onBlur={() => flush()}
       onKeyDown={(event) => {
         if (event.key === "Enter") event.currentTarget.blur();
       }}
@@ -150,8 +209,7 @@ function InlineArea({
   placeholder?: string;
   rows?: number;
 }) {
-  const [draft, setDraft] = useState(value);
-  useEffect(() => setDraft(value), [value]);
+  const { draft, change, flush } = useInlineAutosave(value, onCommit);
 
   return (
     <Textarea
@@ -159,10 +217,8 @@ function InlineArea({
       rows={rows}
       value={draft}
       placeholder={placeholder}
-      onChange={(event) => setDraft(event.target.value)}
-      onBlur={() => {
-        if (draft !== value) onCommit(draft);
-      }}
+      onChange={(event) => change(event.target.value)}
+      onBlur={() => flush()}
     />
   );
 }
@@ -178,18 +234,26 @@ function InlineNumber({
   label: string;
   className?: string;
 }) {
-  const [draft, setDraft] = useState(String(value));
-  useEffect(() => setDraft(String(value)), [value]);
+  const saveNumber = useCallback(
+    (raw: string) => {
+      const next = Number(raw);
+      if (raw.trim() !== "" && Number.isFinite(next) && Math.round(next) !== value) {
+        onCommit(Math.round(next));
+      }
+    },
+    [onCommit, value],
+  );
+  const { draft, change, flush } = useInlineAutosave(String(value), saveNumber);
 
   function commit() {
     const next = Number(draft);
     // Half-typed or nonsense goes back to what was stored: saving it as a zero
     // would quietly change the score without her noticing.
     if (draft.trim() === "" || !Number.isFinite(next)) {
-      setDraft(String(value));
+      change(String(value));
       return;
     }
-    if (Math.round(next) !== value) onCommit(Math.round(next));
+    flush();
   }
 
   return (
@@ -198,7 +262,7 @@ function InlineNumber({
       className={className}
       inputMode="numeric"
       value={draft}
-      onChange={(event) => setDraft(event.target.value)}
+      onChange={(event) => change(event.target.value)}
       onBlur={commit}
       onKeyDown={(event) => {
         if (event.key === "Enter") event.currentTarget.blur();
@@ -613,6 +677,8 @@ export default function AssessmentEditor() {
   const [error, setError] = useState<string | null>(null);
   const [settings, setSettings] = useState<AssessmentDraft | null>(null);
   const [savingSettings, setSavingSettings] = useState(false);
+  const [inlineSaveState, setInlineSaveState] = useState<"saved" | "saving" | "error">("saved");
+  const pendingInlineSaves = useRef(0);
   const [confirm, confirmDialog] = useConfirm();
 
   const load = useCallback(() => {
@@ -638,10 +704,22 @@ export default function AssessmentEditor() {
     marketingApi.sequences().then(setSequences).catch(() => setSequences([]));
   }, []);
 
+  const beginInlineSave = useCallback(() => {
+    pendingInlineSaves.current += 1;
+    setInlineSaveState("saving");
+  }, []);
+
+  const finishInlineSave = useCallback((ok: boolean) => {
+    pendingInlineSaves.current = Math.max(0, pendingInlineSaves.current - 1);
+    if (!ok) setInlineSaveState("error");
+    else if (pendingInlineSaves.current === 0) setInlineSaveState("saved");
+  }, []);
+
   /* Questions ------------------------------------------------------------ */
 
   const patchQuestion = useCallback(
     async (questionId: number, draft: QuestionDraft) => {
+      beginInlineSave();
       try {
         await assessmentsApi.updateQuestion(questionId, draft);
         // Applied from the draft rather than the answer: the update replies with
@@ -657,12 +735,14 @@ export default function AssessmentEditor() {
               }
             : current,
         );
+        finishInlineSave(true);
       } catch (err) {
+        finishInlineSave(false);
         toast.error(friendlyError(err, "quiz"));
         load();
       }
     },
-    [load],
+    [beginInlineSave, finishInlineSave, load],
   );
 
   const addQuestion = useCallback(async () => {
@@ -717,6 +797,7 @@ export default function AssessmentEditor() {
 
   const patchAnswer = useCallback(
     async (answerId: number, draft: AnswerDraft) => {
+      beginInlineSave();
       try {
         await assessmentsApi.updateAnswer(answerId, draft);
         setDetail((current) =>
@@ -732,12 +813,14 @@ export default function AssessmentEditor() {
               }
             : current,
         );
+        finishInlineSave(true);
       } catch (err) {
+        finishInlineSave(false);
         toast.error(friendlyError(err, "quiz"));
         load();
       }
     },
-    [load],
+    [beginInlineSave, finishInlineSave, load],
   );
 
   const addAnswer = useCallback(
@@ -776,16 +859,19 @@ export default function AssessmentEditor() {
 
   const patchResult = useCallback(
     async (resultId: number, draft: ResultDraft) => {
+      beginInlineSave();
       try {
         await assessmentsApi.updateResult(resultId, draft);
         // Reloaded rather than merged: a tag or sequence change has to come back
         // with its name, which is what the sentence above the boxes reads from.
         load();
+        finishInlineSave(true);
       } catch (err) {
+        finishInlineSave(false);
         toast.error(friendlyError(err, "quiz"));
       }
     },
-    [load],
+    [beginInlineSave, finishInlineSave, load],
   );
 
   const addResult = useCallback(async () => {
@@ -963,12 +1049,21 @@ export default function AssessmentEditor() {
         }
       />
 
-      <Card className="border-gold/25 p-4">
-        <p className="text-sm leading-relaxed text-ink-soft">
+      <Card className="flex flex-wrap items-center gap-3 border-gold/25 p-4">
+        <p className="min-w-0 flex-1 text-sm leading-relaxed text-ink-soft">
           Every answer is worth some points. Add up the points from everything somebody picks and
           that total is their score — and their score is what decides which result they are shown.
-          Changes here save themselves as soon as you move on to the next box.
+          Text saves after you pause typing and immediately when you move to the next box.
         </p>
+        <Badge
+          tone={inlineSaveState === "error" ? "red" : inlineSaveState === "saving" ? "blue" : "green"}
+        >
+          {inlineSaveState === "error"
+            ? "Couldn't save"
+            : inlineSaveState === "saving"
+              ? "Saving…"
+              : "All text saved"}
+        </Badge>
       </Card>
 
       {/* ------------------------------------------------------- questions */}

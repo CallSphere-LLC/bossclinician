@@ -3,7 +3,7 @@ import { pool } from "../db/pool";
 import { renderMarkdown, renderTokens, sendEmail } from "../email/provider";
 import { PRIORITY, enqueueMany } from "../jobs/queue";
 import { MAILABLE_CONTACT_SQL } from "./audience";
-import { countSegment, listSegmentContactIds } from "./segments";
+import { listSegmentContactIds } from "./segments";
 
 /**
  * Broadcasts: one email, one audience, sent once.
@@ -38,6 +38,9 @@ interface CampaignRow {
   plain_text: string;
   audience: string;
   segment_id: number | null;
+  include_tag_ids: number[];
+  exclude_segment_ids: number[];
+  exclude_tag_ids: number[];
   status: string;
   topic: string;
   from_name: string;
@@ -46,7 +49,8 @@ interface CampaignRow {
 }
 
 const CAMPAIGN_COLUMNS = `id, name, subject, subject_b, ab_split_percent, body_md, plain_text,
-  audience, segment_id, status, topic, from_name, from_email, scheduled_at`;
+  audience, segment_id, include_tag_ids, exclude_segment_ids, exclude_tag_ids,
+  status, topic, from_name, from_email, scheduled_at`;
 
 /* ------------------------------------------------------------- the audience */
 
@@ -119,10 +123,16 @@ const MAILABLE = MAILABLE_CONTACT_SQL;
  * that has been pointed at a segment has been edited more recently than the
  * default it was created with.
  */
-export async function resolveAudience(campaign: {
+export interface CampaignAudienceConfig {
   audience: string;
   segment_id: number | null;
-}): Promise<Recipient[]> {
+  include_tag_ids?: number[];
+  exclude_segment_ids?: number[];
+  exclude_tag_ids?: number[];
+}
+
+export async function resolveAudience(campaign: CampaignAudienceConfig): Promise<Recipient[]> {
+  let recipients: Recipient[];
   if (campaign.segment_id !== null) {
     const segment = await pool.query<{ definition: unknown }>(
       `SELECT definition FROM segments WHERE id = $1`,
@@ -148,18 +158,51 @@ export async function resolveAudience(campaign: {
         WHERE c.id = ANY($1::int[]) AND ${MAILABLE}`,
       [ids]
     );
-    return res.rows.map(toRecipient);
+    recipients = res.rows.map(toRecipient);
+  } else if ((campaign.include_tag_ids ?? []).length > 0) {
+    const res = await pool.query<{ id: number; email: string; name: string; first_name: string }>(
+      `SELECT c.id, c.email, c.name, c.first_name
+         FROM contacts c
+        WHERE ${MAILABLE}
+          AND EXISTS (
+            SELECT 1 FROM contact_tags ct
+             WHERE ct.contact_id = c.id AND ct.tag_id = ANY($1::int[])
+          )`,
+      [campaign.include_tag_ids],
+    );
+    recipients = res.rows.map(toRecipient);
+  } else {
+    const predicate = audiencePredicate(campaign.audience);
+    if (predicate === null) return [];
+    const res = await pool.query<{ id: number; email: string; name: string; first_name: string }>(
+      `SELECT c.id, c.email, c.name, c.first_name
+         FROM contacts c
+        WHERE ${MAILABLE} AND (${predicate})`,
+    );
+    recipients = res.rows.map(toRecipient);
   }
 
-  const predicate = audiencePredicate(campaign.audience);
-  if (predicate === null) return [];
+  const excluded = new Set<number>();
+  const excludedTags = campaign.exclude_tag_ids ?? [];
+  if (excludedTags.length > 0) {
+    const tagged = await pool.query<{ contact_id: number }>(
+      `SELECT DISTINCT contact_id FROM contact_tags WHERE tag_id = ANY($1::int[])`,
+      [excludedTags],
+    );
+    for (const row of tagged.rows) excluded.add(row.contact_id);
+  }
+  const excludedSegments = campaign.exclude_segment_ids ?? [];
+  if (excludedSegments.length > 0) {
+    const segments = await pool.query<{ definition: unknown }>(
+      `SELECT definition FROM segments WHERE id = ANY($1::int[])`,
+      [excludedSegments],
+    );
+    for (const segment of segments.rows) {
+      for (const id of await listSegmentContactIds(segment.definition)) excluded.add(id);
+    }
+  }
 
-  const res = await pool.query<{ id: number; email: string; name: string; first_name: string }>(
-    `SELECT c.id, c.email, c.name, c.first_name
-       FROM contacts c
-      WHERE ${MAILABLE} AND (${predicate})`
-  );
-  return res.rows.map(toRecipient);
+  return recipients.filter((recipient) => !excluded.has(recipient.contactId));
 }
 
 function toRecipient(row: {
@@ -177,27 +220,8 @@ function toRecipient(row: {
 }
 
 /** How many people a campaign would reach, without building the list. */
-export async function audienceSize(campaign: {
-  audience: string;
-  segment_id: number | null;
-}): Promise<number> {
-  if (campaign.segment_id !== null) {
-    const segment = await pool.query<{ definition: unknown }>(
-      `SELECT definition FROM segments WHERE id = $1`,
-      [campaign.segment_id]
-    );
-    const definition = segment.rows[0]?.definition;
-    if (definition === undefined) return 0;
-    return countSegment(definition);
-  }
-
-  const predicate = audiencePredicate(campaign.audience);
-  if (predicate === null) return 0;
-
-  const res = await pool.query<{ count: string }>(
-    `SELECT COUNT(*)::text AS count FROM contacts c WHERE ${MAILABLE} AND (${predicate})`
-  );
-  return Number(res.rows[0]?.count ?? 0);
+export async function audienceSize(campaign: CampaignAudienceConfig): Promise<number> {
+  return (await resolveAudience(campaign)).length;
 }
 
 /* -------------------------------------------------------------- the A/B split */

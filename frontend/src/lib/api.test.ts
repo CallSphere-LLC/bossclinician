@@ -47,3 +47,29 @@ describe("admin MFA login transport", () => {
     });
   });
 });
+
+describe("campaign audience transport", () => {
+  it("sends segment, tag and exclusion rules to the count endpoint", async () => {
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL) =>
+      new Response(JSON.stringify({ audience: "all_subscribers", count: 3 }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await adminApi.audienceCount({
+      audience: "all_subscribers",
+      segmentId: 4,
+      includeTagIds: [7],
+      excludeSegmentIds: [8, 9],
+      excludeTagIds: [10],
+    });
+
+    const url = new URL(String(fetchMock.mock.calls[0]?.[0]), "https://example.test");
+    expect(url.searchParams.get("segmentId")).toBe("4");
+    expect(url.searchParams.get("includeTagIds")).toBe("7");
+    expect(url.searchParams.get("excludeSegmentIds")).toBe("8,9");
+    expect(url.searchParams.get("excludeTagIds")).toBe("10");
+  });
+});

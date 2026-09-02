@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { adminApi } from "@/lib/api";
+import { contactsApi, type Segment, type Tag } from "@/lib/contactsApi";
 import type { Campaign } from "@/types/admin";
 import { formatDateTime, formatNumber } from "@/lib/format";
 import {
@@ -108,6 +109,25 @@ function scheduledLabel(iso: string, timeZone: string): string {
 /** Falls back to a readable version of a group this list doesn't cover. */
 function audienceLabel(key: string): string {
   return AUDIENCES.find((a) => a.key === key)?.label ?? humanizeKey(key);
+}
+
+function chosenAudience(campaign: Partial<Campaign>): string {
+  if (campaign.segmentId) return `segment:${campaign.segmentId}`;
+  if (campaign.includeTagIds?.length) return `tag:${campaign.includeTagIds[0]}`;
+  return campaign.audience ?? "all_subscribers";
+}
+
+function campaignAudienceLabel(campaign: Partial<Campaign>, segments: Segment[], tags: Tag[]): string {
+  if (campaign.segmentId) {
+    return segments.find((segment) => segment.id === campaign.segmentId)?.name ?? "Saved group";
+  }
+  if (campaign.includeTagIds?.length) {
+    const names = campaign.includeTagIds
+      .map((id) => tags.find((tag) => tag.id === id)?.name)
+      .filter(Boolean);
+    return names.length > 0 ? `Tagged ${names.join(" or ")}` : "Tagged contacts";
+  }
+  return audienceLabel(campaign.audience ?? "all_subscribers");
 }
 
 /* --------------------------------------------------- Writing box + toolbar */
@@ -308,6 +328,8 @@ export default function Campaigns() {
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState<Partial<Campaign> | null>(null);
   const [audienceCount, setAudienceCount] = useState<number | null>(null);
+  const [segments, setSegments] = useState<Segment[]>([]);
+  const [tags, setTags] = useState<Tag[]>([]);
   const [confirm, confirmDialog] = useConfirm();
 
   const load = useCallback(() => {
@@ -319,6 +341,11 @@ export default function Campaigns() {
 
   useEffect(load, [load]);
 
+  useEffect(() => {
+    contactsApi.segments().then(setSegments).catch(() => setSegments([]));
+    contactsApi.tags().then(setTags).catch(() => setTags([]));
+  }, []);
+
   // Live count of how many people the draft would reach.
   useEffect(() => {
     if (!draft?.audience) {
@@ -328,13 +355,25 @@ export default function Campaigns() {
     let cancelled = false;
     setAudienceCount(null);
     adminApi
-      .audienceCount(draft.audience)
+      .audienceCount({
+        audience: draft.audience,
+        segmentId: draft.segmentId,
+        includeTagIds: draft.includeTagIds,
+        excludeSegmentIds: draft.excludeSegmentIds,
+        excludeTagIds: draft.excludeTagIds,
+      })
       .then((r) => !cancelled && setAudienceCount(r.count))
       .catch(() => !cancelled && setAudienceCount(null));
     return () => {
       cancelled = true;
     };
-  }, [draft?.audience]);
+  }, [
+    draft?.audience,
+    draft?.segmentId,
+    draft?.includeTagIds?.join(","),
+    draft?.excludeSegmentIds?.join(","),
+    draft?.excludeTagIds?.join(","),
+  ]);
 
   async function save(e: FormEvent) {
     e.preventDefault();
@@ -396,7 +435,7 @@ export default function Campaigns() {
       // A failed lookup used to read as zero, which put "Send to 0 people" on
        // the button of a send that goes to the whole list.
       const count = await adminApi
-        .audienceCount(campaign.audience)
+        .audienceCount(campaign)
         .then((r) => r.count)
         .catch(() => null);
 
@@ -408,7 +447,7 @@ export default function Campaigns() {
       const ok = await confirm({
         title: `Send “${campaign.name}”?`,
         description: `This goes to ${pluralize(count, "person", "people")} — ${audienceLabel(
-          campaign.audience,
+          campaignAudienceLabel(campaign, segments, tags),
         ).toLowerCase()}. Once it's gone you can't take it back.`,
         confirmLabel: `Send to ${pluralize(count, "person", "people")}`,
       });
@@ -426,7 +465,7 @@ export default function Campaigns() {
         toast.error(friendlyError(err, "email"));
       }
     },
-    [confirm, load],
+    [confirm, load, segments, tags],
   );
 
   const remove = useCallback(
@@ -468,7 +507,7 @@ export default function Campaigns() {
         cell: ({ row }) => (
           <Badge tone="plum">
             <Users className="size-3" />
-            {audienceLabel(row.original.audience)}
+            {campaignAudienceLabel(row.original, segments, tags)}
           </Badge>
         ),
       },
@@ -554,7 +593,7 @@ export default function Campaigns() {
         ),
       },
     ],
-    [send, remove],
+    [send, remove, segments, tags],
   );
 
   return (
@@ -629,17 +668,99 @@ export default function Campaigns() {
 
             <Field label="Who should get this?">
               <select
-                value={draft.audience ?? "all_subscribers"}
-                onChange={(e) => setDraft((d) => ({ ...d, audience: e.target.value }))}
+                value={chosenAudience(draft)}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setDraft((current) => {
+                    if (value.startsWith("segment:")) {
+                      return {
+                        ...current,
+                        segmentId: Number(value.slice(8)),
+                        includeTagIds: [],
+                      };
+                    }
+                    if (value.startsWith("tag:")) {
+                      return {
+                        ...current,
+                        segmentId: null,
+                        includeTagIds: [Number(value.slice(4))],
+                      };
+                    }
+                    return { ...current, audience: value, segmentId: null, includeTagIds: [] };
+                  });
+                }}
                 className={selectStyles}
               >
-                {AUDIENCES.map((a) => (
-                  <option key={a.key} value={a.key}>
-                    {a.label}
-                  </option>
-                ))}
+                <optgroup label="Built-in audiences">
+                  {AUDIENCES.map((a) => (
+                    <option key={a.key} value={a.key}>{a.label}</option>
+                  ))}
+                </optgroup>
+                {segments.length > 0 && (
+                  <optgroup label="Saved groups">
+                    {segments.map((segment) => (
+                      <option key={segment.id} value={`segment:${segment.id}`}>{segment.name}</option>
+                    ))}
+                  </optgroup>
+                )}
+                {tags.length > 0 && (
+                  <optgroup label="People with a tag">
+                    {tags.map((tag) => (
+                      <option key={tag.id} value={`tag:${tag.id}`}>{tag.name}</option>
+                    ))}
+                  </optgroup>
+                )}
               </select>
             </Field>
+
+            {(segments.length > 0 || tags.length > 0) && (
+              <div className="rounded-xl border border-hairline bg-white/[0.03] p-4">
+                <p className="text-sm font-semibold text-ink">Leave these people out</p>
+                <p className="mt-1 text-xs text-ink-soft">
+                  Exclusions are applied after the audience above, to both the count and the send.
+                </p>
+                {segments.length > 0 && (
+                  <div className="mt-3 flex flex-wrap gap-3">
+                    {segments.map((segment) => (
+                      <label key={segment.id} className="flex cursor-pointer items-center gap-2 text-sm text-ink">
+                        <input
+                          type="checkbox"
+                          className="size-4 rounded border-hairline text-plum"
+                          checked={(draft.excludeSegmentIds ?? []).includes(segment.id)}
+                          onChange={(event) => setDraft((current) => ({
+                            ...current,
+                            excludeSegmentIds: event.target.checked
+                              ? [...(current?.excludeSegmentIds ?? []), segment.id]
+                              : (current?.excludeSegmentIds ?? []).filter((id) => id !== segment.id),
+                          }))}
+                        />
+                        Group: {segment.name}
+                      </label>
+                    ))}
+                  </div>
+                )}
+                {tags.length > 0 && (
+                  <div className="mt-3 flex flex-wrap gap-3">
+                    {tags.map((tag) => (
+                      <label key={tag.id} className="flex cursor-pointer items-center gap-2 text-sm text-ink">
+                        <input
+                          type="checkbox"
+                          className="size-4 rounded border-hairline text-plum"
+                          checked={(draft.excludeTagIds ?? []).includes(tag.id)}
+                          onChange={(event) => setDraft((current) => ({
+                            ...current,
+                            excludeTagIds: event.target.checked
+                              ? [...(current?.excludeTagIds ?? []), tag.id]
+                              : (current?.excludeTagIds ?? []).filter((id) => id !== tag.id),
+                          }))}
+                        />
+                        Tag: {tag.name}
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="rounded-xl border border-hairline bg-cream/60 px-4 py-3 text-sm">
               {audienceCount === null ? (

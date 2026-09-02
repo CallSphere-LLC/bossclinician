@@ -92,6 +92,10 @@ export const campaignsRepo = createCrudRepo<Row>("email_campaigns", [
   "previewText",
   "bodyMd",
   "audience",
+  "segmentId",
+  "includeTagIds",
+  "excludeSegmentIds",
+  "excludeTagIds",
   "status",
   "scheduledAt",
 ]);

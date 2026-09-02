@@ -371,6 +371,30 @@ export default function CourseBuilder() {
     }
   }
 
+  async function moveLesson(moduleId: number, index: number, direction: -1 | 1) {
+    if (!modules) return;
+    const moduleIndex = modules.findIndex((mod) => mod.id === moduleId);
+    if (moduleIndex < 0) return;
+    const lessons = [...modules[moduleIndex].lessons];
+    const target = index + direction;
+    if (target < 0 || target >= lessons.length) return;
+    [lessons[index], lessons[target]] = [lessons[target], lessons[index]];
+    const optimistic = modules.map((mod, at) => (at === moduleIndex ? { ...mod, lessons } : mod));
+    setModules(optimistic);
+
+    try {
+      await Promise.all(
+        lessons
+          .map((lesson, position) => ({ lesson, position }))
+          .filter(({ lesson, position }) => lesson.sort !== position)
+          .map(({ lesson, position }) => adminApi.lessonUpdate(lesson.id, { sort: position })),
+      );
+    } catch (err) {
+      toast.error(friendlyError(err, "lesson"));
+    }
+    load();
+  }
+
   function toggleModule(moduleId: number) {
     setOpenModules((prev) => {
       const next = new Set(prev);
@@ -536,9 +560,9 @@ export default function CourseBuilder() {
                     <ArrowDown />
                   </Button>
                   <Button
-                    variant="ghost"
-                    size="iconSm"
-                    aria-label={`Rename ${mod.title}`}
+                    variant="secondary"
+                    size="sm"
+                    aria-label={`Edit ${mod.title} and its release schedule`}
                     onClick={() =>
                       setModuleDraft({
                         id: Number(mod.id),
@@ -548,6 +572,7 @@ export default function CourseBuilder() {
                     }
                   >
                     <Pencil />
+                    Edit section
                   </Button>
                   <Button
                     variant="dangerGhost"
@@ -574,7 +599,7 @@ export default function CourseBuilder() {
                         </p>
                       ) : (
                         <ul className="divide-y divide-hairline/60">
-                          {mod.lessons.map((lesson) => (
+                          {mod.lessons.map((lesson, lessonIndex) => (
                             <li
                               key={lesson.id}
                               className="flex items-center gap-3 px-5 py-3 transition-colors hover:bg-lilac-tint/25"
@@ -611,6 +636,32 @@ export default function CourseBuilder() {
                               </button>
                               {lesson.preview && <Badge tone="gold">Free taster</Badge>}
                               {!lesson.published && <Badge tone="slate">{PUBLISH_LABEL.draft}</Badge>}
+                              <Button
+                                variant="ghost"
+                                size="iconSm"
+                                aria-label={`Move ${lesson.title} up`}
+                                disabled={lessonIndex === 0}
+                                onClick={() => moveLesson(mod.id, lessonIndex, -1)}
+                              >
+                                <ArrowUp />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="iconSm"
+                                aria-label={`Move ${lesson.title} down`}
+                                disabled={lessonIndex === mod.lessons.length - 1}
+                                onClick={() => moveLesson(mod.id, lessonIndex, 1)}
+                              >
+                                <ArrowDown />
+                              </Button>
+                              <Button
+                                variant="secondary"
+                                size="sm"
+                                onClick={() => openLesson(mod.id, lesson)}
+                              >
+                                <Pencil />
+                                Edit &amp; schedule
+                              </Button>
                               <Button
                                 variant="dangerGhost"
                                 size="iconSm"

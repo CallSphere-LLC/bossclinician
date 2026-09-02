@@ -678,8 +678,23 @@ export const adminApi = {
       method: "POST",
     }),
 
-  audienceCount: (audience: string) =>
-    request<{ audience: string; count: number }>(`/admin/growth/campaigns/audience/${audience}`),
+  audienceCount: (campaign: {
+    audience: string;
+    segmentId?: number | null;
+    includeTagIds?: number[];
+    excludeSegmentIds?: number[];
+    excludeTagIds?: number[];
+  }) => {
+    const query = new URLSearchParams();
+    if (campaign.segmentId) query.set("segmentId", String(campaign.segmentId));
+    if (campaign.includeTagIds?.length) query.set("includeTagIds", campaign.includeTagIds.join(","));
+    if (campaign.excludeSegmentIds?.length) query.set("excludeSegmentIds", campaign.excludeSegmentIds.join(","));
+    if (campaign.excludeTagIds?.length) query.set("excludeTagIds", campaign.excludeTagIds.join(","));
+    const suffix = query.size > 0 ? `?${query.toString()}` : "";
+    return request<{ audience: string; count: number }>(
+      `/admin/growth/campaigns/audience/${campaign.audience}${suffix}`,
+    );
+  },
   campaignSend: (id: number) =>
     request<{ ok: true; queued: number }>(`/admin/growth/campaigns/${id}/send`, {
       method: "POST",

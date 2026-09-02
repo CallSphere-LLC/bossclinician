@@ -413,6 +413,12 @@ growthPublicRouter.post(
     const name = displayName(contact);
     const origin = `form: ${form.slug}`;
 
+    // A form reply has to identify the person. Without both values there is no
+    // contact to receive the form's tags or sequence, and the reply is filed as
+    // "No name given" even though the visitor was told their send succeeded.
+    if (!email) throw badRequest("Please enter a valid email address.");
+    if (!name) throw badRequest("Please enter your name.");
+
     // First, and on its own. Whatever else goes wrong below, the answers a
     // stranger just typed are on disk.
     const inserted = await pool.query<{ id: number }>(

@@ -67,12 +67,21 @@ const RUN_TONE: Record<string, NonNullable<BadgeProps["tone"]>> = {
 
 const RUN_LABEL: Record<string, string> = {
   success: "Ran fine",
-  partial: "Ran, with a problem",
+  partial: "Ran with problems",
   failed: "Didn't run",
   skipped: "Skipped",
   waiting: "Waiting",
   running: "Running now",
 };
+
+/** Repairs the verdict of runs written by the older runner in the UI as well. */
+export function displayedRunStatus(run: Pick<AutomationRun, "status" | "log">): string {
+  if (run.status !== "success") return run.status;
+  const hasBlockedStep = run.log.some((line) =>
+    /\bblocked\b|none chosen|skipped,? no contact|no account|no longer exists|nothing done/i.test(line),
+  );
+  return hasBlockedStep ? "partial" : run.status;
+}
 
 /** Which list of names an action picks from, and under which key it stores it. */
 const ACTION_TARGET: Record<string, { key: string; list: string; label: string }> = {
@@ -821,11 +830,13 @@ function AutomationDetail({
           <p className="px-5 pb-5 text-sm text-ink-soft">It has not run yet.</p>
         ) : (
           <ul className="divide-y divide-hairline/60">
-            {runs.slice(0, 20).map((run) => (
+            {runs.slice(0, 20).map((run) => {
+              const verdict = displayedRunStatus(run);
+              return (
               <li key={run.id} className="px-5 py-4">
                 <div className="flex flex-wrap items-center gap-2">
-                  <Badge tone={RUN_TONE[run.status] ?? "neutral"}>
-                    {RUN_LABEL[run.status] ?? run.status}
+                  <Badge tone={RUN_TONE[verdict] ?? "neutral"}>
+                    {RUN_LABEL[verdict] ?? verdict}
                   </Badge>
                   {run.isTest && <Badge tone="plum">Practice run</Badge>}
                   <span className="text-sm text-ink">
@@ -841,7 +852,8 @@ function AutomationDetail({
                   </ul>
                 )}
               </li>
-            ))}
+              );
+            })}
           </ul>
         )}
       </Card>

@@ -16,6 +16,8 @@ import NotFound from "@/pages/NotFound";
 import type { PublicForm, PublicFormField } from "@/types";
 
 const EASE: [number, number, number, number] = [0.22, 1, 0.36, 1];
+const IDENTITY_NAME = "__contact_name";
+const IDENTITY_EMAIL = "__contact_email";
 
 /**
  * The answers, keyed by the admin's own field keys. Only the checkbox holds a
@@ -160,7 +162,9 @@ export default function FormPage() {
     // Required-ness is the only rule the builder can express, so one message
     // covers the whole set and the offending controls are flagged individually
     // for assistive tech below.
-    if (form.fields.some((field) => isMissing(field))) {
+    const name = String(values[IDENTITY_NAME] ?? "").trim();
+    const email = String(values[IDENTITY_EMAIL] ?? "").trim().toLowerCase();
+    if (!name || !email || form.fields.some((field) => isMissing(field))) {
       setError("Please fill in the fields marked with a star before submitting.");
       return;
     }
@@ -170,9 +174,6 @@ export default function FormPage() {
     // `email`, and the builder seeds new fields as `field_2`. An admin who
     // adds an email field without renaming its key would otherwise get a blank
     // address on the submission and — the point of the whole feature — no lead.
-    const emailField = form.fields.find((f) => f.type === "email" || f.key === "email");
-    const email = emailField ? textOf(emailField).trim() : "";
-
     // The server validates the address it is sent, and its 400 would reach the
     // reader as the generic failure below. A typo deserves better than that.
     if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -187,10 +188,12 @@ export default function FormPage() {
     for (const field of form.fields) {
       data[field.key] = field.type === "checkbox" ? checkedOf(field) : textOf(field).trim();
     }
+    data.name = name;
+    data.email = email;
 
     setStatus("loading");
     try {
-      const result = await api.submitForm(form.slug, data, email || undefined);
+      const result = await api.submitForm(form.slug, data, email);
 
       // What the admin chose should happen next. A form built to send people to
       // a booking page, a checkout or a download used to end on the thank-you
@@ -266,6 +269,8 @@ export default function FormPage() {
   // Mirrors the lead form: the flag is derived at render rather than stored, so
   // a field stops being marked invalid the moment it is filled in.
   const invalidSubmit = error !== null && status !== "error";
+  const name = String(values[IDENTITY_NAME] ?? "");
+  const email = String(values[IDENTITY_EMAIL] ?? "");
 
   function renderField(field: PublicFormField) {
     const invalid = invalidSubmit && isMissing(field);
@@ -430,6 +435,27 @@ export default function FormPage() {
               aria-busy={status === "loading"}
               className="space-y-5"
             >
+              <LuxeInput
+                label="Your name"
+                name="name"
+                autoComplete="name"
+                required
+                value={name}
+                onChange={(event) => setValue(IDENTITY_NAME, event.target.value)}
+                aria-invalid={invalidSubmit && !name.trim() ? true : undefined}
+                aria-describedby={invalidSubmit && !name.trim() ? errorId : undefined}
+              />
+              <LuxeInput
+                label="Email address"
+                name="email"
+                type="email"
+                autoComplete="email"
+                required
+                value={email}
+                onChange={(event) => setValue(IDENTITY_EMAIL, event.target.value)}
+                aria-invalid={invalidSubmit && !email.trim() ? true : undefined}
+                aria-describedby={invalidSubmit && !email.trim() ? errorId : undefined}
+              />
               {form.fields.map(renderField)}
 
               {error && (

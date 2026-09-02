@@ -428,7 +428,18 @@ adminGrowthRouter.use("/newsletters", buildAdminCrudRouter(newslettersRepo, anyS
 adminGrowthRouter.get(
   "/campaigns/audience/:audience",
   asyncHandler(async (req, res) => {
-    const count = await audienceSize({ audience: req.params.audience, segment_id: null });
+    const integers = (value: unknown): number[] =>
+      typeof value === "string" && value.trim()
+        ? value.split(",").map(Number).filter((id) => Number.isInteger(id) && id > 0)
+        : [];
+    const segmentId = Number(req.query.segmentId);
+    const count = await audienceSize({
+      audience: req.params.audience,
+      segment_id: Number.isInteger(segmentId) && segmentId > 0 ? segmentId : null,
+      include_tag_ids: integers(req.query.includeTagIds),
+      exclude_segment_ids: integers(req.query.excludeSegmentIds),
+      exclude_tag_ids: integers(req.query.excludeTagIds),
+    });
     res.json({ audience: req.params.audience, count });
   }),
 );
