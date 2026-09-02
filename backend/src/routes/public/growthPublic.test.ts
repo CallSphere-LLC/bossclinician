@@ -1,5 +1,17 @@
 import { describe, it, expect } from "vitest";
-import { contactFromSubmission } from "./growthPublic";
+import { contactFromSubmission, publicFormFields } from "./growthPublic";
+
+describe("public form identity fields", () => {
+  it("adds name and email to an old form without duplicating newer starter fields", () => {
+    expect(publicFormFields([{ key: "state", label: "State", type: "text" }]).map((f) => f.key))
+      .toEqual(["name", "email", "state"]);
+    expect(publicFormFields([
+      { key: "name", label: "Name", type: "text" },
+      { key: "email", label: "Email", type: "email" },
+      { key: "state", label: "State", type: "text" },
+    ])).toHaveLength(3);
+  });
+});
 
 /**
  * P0-1 regression: a form submission that captured nothing.

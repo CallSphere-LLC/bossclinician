@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { safeRedirect } from "@/pages/FormPage";
+import { isIdentityField, safeRedirect } from "@/pages/FormPage";
 
 /**
  * P0-1, the public half: a form's "send them to another page" was stored,
@@ -40,5 +40,13 @@ describe("safeRedirect", () => {
     expect(safeRedirect("")).toBeNull();
     expect(safeRedirect("   ")).toBeNull();
     expect(safeRedirect(undefined)).toBeNull();
+  });
+});
+
+describe("universal form identity fields", () => {
+  it("hides legacy starter identity questions so the public form asks only once", () => {
+    expect(isIdentityField({ key: "name", label: "Your name", type: "text" })).toBe(true);
+    expect(isIdentityField({ key: "email", label: "Email address", type: "email" })).toBe(true);
+    expect(isIdentityField({ key: "work_email", label: "Manager email", type: "email" })).toBe(false);
   });
 });

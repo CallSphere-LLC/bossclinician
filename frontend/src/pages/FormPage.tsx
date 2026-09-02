@@ -76,6 +76,11 @@ function autoCompleteFor(field: PublicFormField): string | undefined {
   return undefined;
 }
 
+/** Older/newer builders may already store the two now-universal fields. */
+export function isIdentityField(field: PublicFormField): boolean {
+  return field.key === "name" || field.key === "email";
+}
+
 /**
  * A form built in the admin, rendered on the public site.
  *
@@ -164,7 +169,7 @@ export default function FormPage() {
     // for assistive tech below.
     const name = String(values[IDENTITY_NAME] ?? "").trim();
     const email = String(values[IDENTITY_EMAIL] ?? "").trim().toLowerCase();
-    if (!name || !email || form.fields.some((field) => isMissing(field))) {
+    if (!name || !email || form.fields.some((field) => !isIdentityField(field) && isMissing(field))) {
       setError("Please fill in the fields marked with a star before submitting.");
       return;
     }
@@ -186,6 +191,7 @@ export default function FormPage() {
     // change from row to row is unreadable there.
     const data: Record<string, unknown> = {};
     for (const field of form.fields) {
+      if (isIdentityField(field)) continue;
       data[field.key] = field.type === "checkbox" ? checkedOf(field) : textOf(field).trim();
     }
     data.name = name;
@@ -456,7 +462,7 @@ export default function FormPage() {
                 aria-invalid={invalidSubmit && !email.trim() ? true : undefined}
                 aria-describedby={invalidSubmit && !email.trim() ? errorId : undefined}
               />
-              {form.fields.map(renderField)}
+              {form.fields.filter((field) => !isIdentityField(field)).map(renderField)}
 
               {error && (
                 <motion.p

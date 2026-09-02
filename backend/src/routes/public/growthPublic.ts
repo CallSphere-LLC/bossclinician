@@ -197,6 +197,22 @@ ${items}
 
 /* ------------------------------------------------------------------- Forms */
 
+/** The public contract always names the identity fields, including old forms. */
+export function publicFormFields(fields: unknown): Record<string, unknown>[] {
+  const custom = Array.isArray(fields)
+    ? fields.filter((field) => {
+        if (!field || typeof field !== "object") return false;
+        const key = (field as Record<string, unknown>).key;
+        return key !== "name" && key !== "email";
+      })
+    : [];
+  return [
+    { key: "name", label: "Your name", type: "text", required: true },
+    { key: "email", label: "Email address", type: "email", required: true },
+    ...custom,
+  ];
+}
+
 growthPublicRouter.get(
   "/forms/:slug",
   asyncHandler(async (req, res) => {
@@ -216,7 +232,8 @@ growthPublicRouter.get(
 
     // Views drive the opt-in conversion rate on the Forms screen.
     await pool.query("UPDATE forms SET views = views + 1 WHERE id = $1", [result.rows[0].id]);
-    res.json(rowsToCamel(result.rows)[0]);
+    const form = rowsToCamel<Record<string, unknown>>(result.rows)[0];
+    res.json({ ...form, fields: publicFormFields(form.fields) });
   }),
 );
 
