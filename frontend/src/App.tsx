@@ -29,6 +29,7 @@ const MemberCommunityChannel = lazy(() => import("@/pages/member/CommunityChanne
 const MemberCommunityProfile = lazy(() => import("@/pages/member/CommunityProfile"));
 const MemberCommunityLive = lazy(() => import("@/pages/member/CommunityLive"));
 const MemberEvents = lazy(() => import("@/pages/member/Events"));
+const MemberCommunityMessages = lazy(() => import("@/pages/member/CommunityMessages"));
 const MemberCoaching = lazy(() => import("@/pages/member/Coaching"));
 const MemberCoachingSession = lazy(() => import("@/pages/member/CoachingSession"));
 const MemberPodcasts = lazy(() => import("@/pages/member/Podcasts"));
@@ -185,6 +186,11 @@ function memberRoutes() {
         {/* Before the channel wildcard below, which would otherwise treat
             "live" as the slug of a channel that does not exist. */}
         <Route path="/community/:slug/live" element={<MemberCommunityLive />} />
+        <Route path="/community/:slug/messages" element={<MemberCommunityMessages />} />
+        <Route
+          path="/community/:slug/messages/:memberId"
+          element={<MemberCommunityMessages />}
+        />
         <Route path="/community/:slug/:channelSlug" element={<MemberCommunityChannel />} />
         <Route path="/coaching" element={<MemberCoaching />} />
         <Route path="/coaching/sessions/:id" element={<MemberCoachingSession />} />

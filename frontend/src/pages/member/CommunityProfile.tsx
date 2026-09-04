@@ -1,6 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, Navigate, useParams } from "react-router-dom";
-import { ArrowLeft, Award, Loader2, MessageCircle, PenLine, Search, Users } from "lucide-react";
+import {
+  ArrowLeft,
+  Award,
+  Loader2,
+  MessageCircle,
+  MessageSquare,
+  PenLine,
+  Search,
+  Users,
+} from "lucide-react";
 import { GlassCard } from "@/components/luxe/GlassCard";
 import { LuxeButton } from "@/components/luxe/LuxeButton";
 import { luxeControlClass } from "@/components/luxe/LuxeField";
@@ -301,6 +310,23 @@ function ProfileView({
                   >
                     <PenLine aria-hidden className="size-3" />
                     Edit your details
+                  </Link>
+                )}
+                {/* Not on your own profile, where it would offer to message
+                    yourself — which the server refuses anyway. */}
+                {!profile.mine && (
+                  <Link
+                    to={`/community/${communitySlug}/messages/${memberId}`}
+                    className={cn(
+                      "inline-flex min-h-[2.75rem] items-center gap-1.5 rounded-full",
+                      "border border-white/12 px-3 text-[0.6rem] font-bold uppercase",
+                      "tracking-[0.12em] text-orchid transition-colors duration-300",
+                      "hover:border-gold/40 hover:text-gold",
+                      "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold",
+                    )}
+                  >
+                    <MessageSquare aria-hidden className="size-3" />
+                    Message
                   </Link>
                 )}
               </div>

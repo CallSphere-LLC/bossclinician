@@ -27,6 +27,8 @@ const COMMUNITY_FIELDS = [
   "live_room_access",
   "live_room_alias",
   "live_room_capacity",
+  // Long-form markdown, shown in a modal a member must accept before posting.
+  "guidelines_md",
 ] as const;
 const CHANNEL_FIELDS = ["slug", "name", "description", "format", "visibility", "sort"] as const;
 const POST_FIELDS = ["title", "body", "media_url", "pinned", "status"] as const;
@@ -199,6 +201,220 @@ adminCommunityRouter.get(
       [req.params.id],
     );
     res.json(rowsToCamel(visits.rows));
+  }),
+);
+
+/**
+ * PUT /:id/guidelines
+ *
+ * Its own endpoint rather than another field on the community update, because
+ * saving the text has a side effect the generic update must not perform
+ * silently: changing the rules re-opens the gate for everybody who accepted
+ * the old ones. Rules somebody agreed to in March are not the rules they are
+ * being held to now.
+ */
+adminCommunityRouter.put(
+  "/:id/guidelines",
+  asyncHandler(async (req, res) => {
+    const body = req.body as Record<string, unknown>;
+    const text = typeof body.guidelinesMd === "string" ? body.guidelinesMd : "";
+    if (text.length > 40_000) throw badRequest("Those guidelines are too long to store.");
+
+    const before = await pool.query<{ guidelines_md: string }>(
+      `SELECT guidelines_md FROM communities WHERE id = $1`,
+      [req.params.id],
+    );
+    if (before.rowCount === 0) throw notFound("Community not found");
+
+    const changed = (before.rows[0].guidelines_md ?? "") !== text;
+    const result = await pool.query(
+      `UPDATE communities
+          SET guidelines_md = $2,
+              -- Only moved when the words actually changed, so re-saving the
+              -- same text does not make every member accept again.
+              guidelines_updated_at = CASE WHEN $3::bool THEN now() ELSE guidelines_updated_at END,
+              updated_at = now()
+        WHERE id = $1
+      RETURNING *`,
+      [req.params.id, text, changed],
+    );
+
+    res.json({ ...rowToCamel(result.rows[0]), reAccceptanceRequired: changed });
+  }),
+);
+
+/* -------------------------------------------------------- scheduled posts */
+
+/**
+ * GET /:id/scheduled-posts
+ *
+ * What is waiting to go out, per the brief's own /scheduled-posts page. A
+ * scheduled post is invisible everywhere else by design, so without this
+ * screen it can only be found in the database.
+ */
+adminCommunityRouter.get(
+  "/:id/scheduled-posts",
+  asyncHandler(async (req, res) => {
+    const rows = await pool.query(
+      `SELECT p.id, p.title, p.body, p.kind, p.media_url, p.media_label,
+              p.publish_at, p.created_at, p.author_name,
+              ch.name AS channel_name, ch.slug::text AS channel_slug
+         FROM community_posts p
+         JOIN community_channels ch ON ch.id = p.channel_id
+        WHERE ch.community_id = $1 AND p.status = 'scheduled'
+        ORDER BY p.publish_at
+        LIMIT 200`,
+      [req.params.id],
+    );
+    res.json(rowsToCamel(rows.rows));
+  }),
+);
+
+/**
+ * PUT /:id/scheduled-posts/:postId
+ *
+ * Move it, or send it now. Both are the same edit to a moderator — "actually,
+ * publish that" is the commonest thing to want from this screen, and making it
+ * a different endpoint would mean two ways to change one field.
+ */
+adminCommunityRouter.put(
+  "/:id/scheduled-posts/:postId",
+  asyncHandler(async (req, res) => {
+    const body = req.body as Record<string, unknown>;
+
+    if (body.publishNow === true) {
+      const now = await pool.query(
+        `UPDATE community_posts
+            SET status = 'visible', publish_at = NULL,
+                created_at = now(), last_activity_at = now(), updated_at = now()
+          WHERE id = $1 AND status = 'scheduled'
+        RETURNING id`,
+        [req.params.postId],
+      );
+      if (now.rowCount === 0) throw notFound("That post is not waiting to go out.");
+      res.json({ id: Number(req.params.postId), published: true });
+      return;
+    }
+
+    const when = typeof body.publishAt === "string" ? new Date(body.publishAt) : null;
+    if (when === null || !Number.isFinite(when.getTime())) {
+      throw badRequest("Choose when this should go out, or publish it now.");
+    }
+    if (when.getTime() <= Date.now()) {
+      // Silently publishing a past time would hide what is almost always a
+      // timezone mistake.
+      throw badRequest("Choose a time in the future, or publish it now.");
+    }
+
+    const moved = await pool.query(
+      `UPDATE community_posts SET publish_at = $2, updated_at = now()
+        WHERE id = $1 AND status = 'scheduled' RETURNING id, publish_at`,
+      [req.params.postId, when],
+    );
+    if (moved.rowCount === 0) throw notFound("That post is not waiting to go out.");
+    res.json(rowToCamel(moved.rows[0]));
+  }),
+);
+
+/* ------------------------------------------------------------ review feed */
+
+/**
+ * GET /:id/reports
+ *
+ * The moderation queue. Members have been able to report a post or a comment
+ * for some time and nothing could read the reports — they went into a table
+ * with an index on `status` and no way to see them, which is worse than having
+ * no report button at all: it invites somebody to raise a concern into a void.
+ */
+adminCommunityRouter.get(
+  "/:id/reports",
+  asyncHandler(async (req, res) => {
+    const status = typeof req.query.status === "string" ? req.query.status : "open";
+    if (!["open", "actioned", "dismissed", "all"].includes(status)) {
+      throw badRequest("Filter by open, actioned, dismissed or all.");
+    }
+
+    const rows = await pool.query(
+      `SELECT r.id, r.reason, r.status, r.created_at, r.resolved_at,
+              r.post_id, r.comment_id,
+              COALESCE(NULLIF(TRIM(rep.first_name || ' ' || rep.last_name), ''),
+                       NULLIF(rep.name, ''), rep.email::text) AS reporter_name,
+              -- Whichever of the two the report is against; a report always has
+              -- exactly one, and the queue wants the words either way.
+              COALESCE(p.body, cm.body, '') AS content,
+              COALESCE(p.status, cm.status, '') AS content_status,
+              COALESCE(NULLIF(TRIM(auth.first_name || ' ' || auth.last_name), ''),
+                       NULLIF(auth.name, ''), auth.email::text) AS author_name,
+              ch.name AS channel_name
+         FROM community_reports r
+         LEFT JOIN members rep ON rep.id = r.reporter_id
+         LEFT JOIN community_posts p ON p.id = r.post_id
+         LEFT JOIN community_comments cm ON cm.id = r.comment_id
+         LEFT JOIN community_posts cp ON cp.id = cm.post_id
+         LEFT JOIN community_channels ch ON ch.id = COALESCE(p.channel_id, cp.channel_id)
+         LEFT JOIN members auth ON auth.id = COALESCE(p.member_id, cm.member_id)
+        WHERE ch.community_id = $1
+          AND ($2 = 'all' OR r.status = $2)
+        ORDER BY r.created_at DESC
+        LIMIT 200`,
+      [req.params.id, status],
+    );
+    res.json(rowsToCamel(rows.rows));
+  }),
+);
+
+/**
+ * POST /:id/reports/:reportId/resolve
+ *
+ * Two outcomes, and the destructive one names what it does: "hide" takes the
+ * content down as well as closing the report, "dismiss" only closes it. They
+ * are one endpoint because a moderator is making one decision, and splitting
+ * it invites a queue where content is hidden but the report stays open.
+ */
+adminCommunityRouter.post(
+  "/:id/reports/:reportId/resolve",
+  asyncHandler(async (req, res) => {
+    const action = (req.body as Record<string, unknown>).action;
+    if (action !== "hide" && action !== "dismiss") {
+      throw badRequest("Choose whether to hide the content or dismiss the report.");
+    }
+
+    const found = await pool.query<{ post_id: number | null; comment_id: number | null }>(
+      `SELECT post_id, comment_id FROM community_reports WHERE id = $1`,
+      [req.params.reportId],
+    );
+    const report = found.rows[0];
+    if (!report) throw notFound("Report not found");
+
+    if (action === "hide") {
+      if (report.post_id !== null) {
+        await pool.query(`UPDATE community_posts SET status = 'hidden' WHERE id = $1`, [
+          report.post_id,
+        ]);
+      }
+      if (report.comment_id !== null) {
+        await pool.query(`UPDATE community_comments SET status = 'hidden' WHERE id = $1`, [
+          report.comment_id,
+        ]);
+      }
+      // Every open report against the same content, not just this one: two
+      // members reporting the same post is one thing to deal with.
+      await pool.query(
+        `UPDATE community_reports
+            SET status = 'actioned', resolved_at = now()
+          WHERE status = 'open'
+            AND ((post_id IS NOT NULL AND post_id = $1)
+              OR (comment_id IS NOT NULL AND comment_id = $2))`,
+        [report.post_id, report.comment_id],
+      );
+    } else {
+      await pool.query(
+        `UPDATE community_reports SET status = 'dismissed', resolved_at = now() WHERE id = $1`,
+        [req.params.reportId],
+      );
+    }
+
+    res.json({ ok: true, action });
   }),
 );
 

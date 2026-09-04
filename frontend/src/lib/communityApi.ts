@@ -119,6 +119,12 @@ export interface CommunityOverview {
   unreadNotifications: number;
   /** Null when the community has no live room, so the chip is simply absent. */
   liveRoom: { enabled: true; label: string; href: string } | null;
+  /**
+   * Null when there are no guidelines. `pending` raises the modal; reading the
+   * room stays open either way, so somebody deciding whether to accept can see
+   * what they are agreeing to.
+   */
+  guidelines: { text: string; pending: boolean } | null;
 }
 
 /* ------------------------------------------------------------------ feed */
@@ -433,6 +439,34 @@ export interface LiveRoomPeer {
   role: string;
 }
 
+export interface DmMessage {
+  id: number;
+  mine: boolean;
+  body: string;
+  at: string;
+}
+
+export interface DmThreadSummary {
+  id: number;
+  otherMemberId: number;
+  otherName: string;
+  otherAvatarUrl: string;
+  lastMessageAt: string | null;
+  preview: string;
+  unread: number;
+}
+
+export interface DmThreadList {
+  threads: DmThreadSummary[];
+  unreadTotal: number;
+}
+
+export interface DmThread {
+  threadId: number;
+  other: { memberId: number; name: string; avatarUrl: string };
+  messages: DmMessage[];
+}
+
 export interface LiveRoomStatus {
   /** Yvette calls hers Office Hours; this is Kajabi's "feature alias". */
   label: string;
@@ -453,6 +487,25 @@ export const communityApi = {
 
   liveStatus: (slug: string) =>
     memberRequest<LiveRoomStatus>(`/member/community/${seg(slug)}/live`),
+
+  acceptGuidelines: (slug: string) =>
+    memberRequest<{ accepted: true }>(`/member/community/${seg(slug)}/guidelines/accept`, {
+      method: "POST",
+    }),
+
+  // ---- direct messages ----
+
+  dmThreads: (slug: string) =>
+    memberRequest<DmThreadList>(`/member/community/${seg(slug)}/dm`),
+
+  dmThread: (slug: string, memberId: number) =>
+    memberRequest<DmThread>(`/member/community/${seg(slug)}/dm/${memberId}`),
+
+  sendDm: (slug: string, memberId: number, body: string) =>
+    memberRequest<DmMessage>(`/member/community/${seg(slug)}/dm/${memberId}`, {
+      method: "POST",
+      body: JSON.stringify({ body }),
+    }),
 
   overview: (slug: string) => memberRequest<CommunityOverview>(`/member/community/${seg(slug)}`),
 

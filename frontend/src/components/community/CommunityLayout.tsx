@@ -1,10 +1,11 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { Hash, Loader2, Lock, Radio, Users } from "lucide-react";
+import { Hash, Loader2, Lock, MessageSquare, Radio, Users } from "lucide-react";
 import { Seo } from "@/components/Seo";
 import { MemberShell } from "@/components/member/MemberShell";
 import { LuxeButton } from "@/components/luxe/LuxeButton";
 import { NotificationBell } from "@/components/community/NotificationBell";
+import { GuidelinesGate } from "@/components/community/GuidelinesGate";
 import { BadgesPanel } from "@/components/community/BadgesPanel";
 import { EventsPanel } from "@/components/community/EventsPanel";
 import { ChallengesPanel } from "@/components/community/ChallengesPanel";
@@ -109,6 +110,23 @@ export function CommunityLayout({
           </p>
         )}
       </div>
+
+      {/* Over the page, not instead of it: reading stays available while the
+          member decides, and the gate itself is enforced server-side on every
+          write regardless of whether this ever rendered. */}
+      {overview?.guidelines?.pending && (
+        <GuidelinesGate
+          slug={slug}
+          text={overview.guidelines.text}
+          onAccepted={() =>
+            setOverview((prev) =>
+              prev && prev.guidelines
+                ? { ...prev, guidelines: { ...prev.guidelines, pending: false } }
+                : prev,
+            )
+          }
+        />
+      )}
 
       {overview && (
         <div
@@ -215,6 +233,19 @@ function ChannelStrip({
       </ul>
 
       <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+        <Link
+          to={`/community/${slug}/messages`}
+          className={cn(
+            "inline-flex min-h-[2.75rem] items-center gap-2 text-xs font-semibold",
+            "uppercase tracking-[0.14em] text-orchid-dim transition-colors duration-300",
+            "hover:text-gold focus-visible:outline focus-visible:outline-2",
+            "focus-visible:outline-offset-2 focus-visible:outline-gold",
+          )}
+        >
+          <MessageSquare aria-hidden className="size-3.5" />
+          Messages
+        </Link>
+
         <Link
           to={`/community/${slug}/members`}
           className={cn(

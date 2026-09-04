@@ -219,6 +219,14 @@ interface CommunityContext {
   /** The live room, so the chrome can offer it without a second request. */
   liveRoomEnabled: boolean;
   liveRoomAlias: string;
+  guidelinesMd: string;
+  /**
+   * True when there are guidelines this member has not accepted, or accepted
+   * before they were last changed. Reading stays open either way — the gate is
+   * on writing, so somebody deciding whether to accept can see what they are
+   * joining.
+   */
+  guidelinesPending: boolean;
 }
 
 interface CommunityRow {
@@ -237,13 +245,17 @@ interface CommunityRow {
   banned_at: Date | null;
   live_room_enabled: boolean;
   live_room_alias: string;
+  guidelines_md: string;
+  guidelines_updated_at: Date | null;
+  guidelines_accepted_at: Date | null;
 }
 
 const COMMUNITY_SELECT = `
   SELECT c.id, c.slug, c.name, c.description, c.cover_image,
          c.live_room_enabled, c.live_room_alias,
+         c.guidelines_md, c.guidelines_updated_at,
          cm.id AS membership_id, cm.role, cm.points, cm.bio, cm.headline,
-         cm.joined_at, cm.last_seen_at, cm.banned_at
+         cm.joined_at, cm.last_seen_at, cm.banned_at, cm.guidelines_accepted_at
     FROM communities c
     LEFT JOIN community_memberships cm
       ON cm.community_id = c.id AND cm.member_id = $1
@@ -334,7 +346,43 @@ async function enterCommunity(
     moderator: role === "moderator" || role === "admin",
     liveRoomEnabled: membership.live_room_enabled === true,
     liveRoomAlias: membership.live_room_alias ?? "",
+    guidelinesMd: membership.guidelines_md ?? "",
+    guidelinesPending: guidelinesOutstanding(membership),
   };
+}
+
+/**
+ * Whether this member still owes an acceptance.
+ *
+ * Compared against `guidelines_updated_at` rather than being a plain boolean,
+ * so editing the rules re-opens the gate. An acceptance is of a particular text
+ * and stops meaning anything the moment that text changes.
+ */
+export function guidelinesOutstanding(row: {
+  guidelines_md: string;
+  guidelines_updated_at: Date | null;
+  guidelines_accepted_at: Date | null;
+}): boolean {
+  if ((row.guidelines_md ?? "").trim() === "") return false;
+  const accepted = row.guidelines_accepted_at;
+  if (accepted === null) return true;
+  const changed = row.guidelines_updated_at;
+  return changed !== null && changed.getTime() > accepted.getTime();
+}
+
+const GUIDELINES_PENDING =
+  "Please read and accept the community guidelines before posting.";
+
+/**
+ * Refuses a write from somebody who has not accepted the guidelines.
+ *
+ * On writing only. Reading stays open on purpose: a member deciding whether to
+ * accept the rules has to be able to see the room they describe, and a blank
+ * screen behind a consent modal is how people bounce off a community they paid
+ * for. This mirrors the gate Kajabi puts in the same place.
+ */
+function assertGuidelinesAccepted(ctx: CommunityContext): void {
+  if (ctx.guidelinesPending) throw forbidden(GUIDELINES_PENDING);
 }
 
 /** Every `/:slug` route opens the same way: prove the room before reading it. */
@@ -865,14 +913,25 @@ async function readPostJson(postId: number, communityId: number, memberId: numbe
 
 const postCreateSchema = z
   .object({
-    kind: z.enum(["text", "image", "video", "poll", "link"]).default("text"),
+    kind: z.enum(["text", "image", "video", "poll", "link", "file"]).default("text"),
     title: textField(300).default(""),
     body: textField(20_000).default(""),
     mediaUrl: urlField.optional(),
+    /** What to call an attachment, since a stored filename is often a hash. */
+    mediaLabel: textField(200).default(""),
     pollOptions: z.array(requiredText(200, "An option needs some text.")).max(10).optional(),
+    /**
+     * Publish later. Hosts only — enforced in the handler, not here, because a
+     * schema cannot see who is asking.
+     */
+    publishAt: z.string().datetime().optional(),
   })
   .superRefine((value, ctx) => {
-    const needsMedia = value.kind === "image" || value.kind === "video" || value.kind === "link";
+    const needsMedia =
+      value.kind === "image" ||
+      value.kind === "video" ||
+      value.kind === "link" ||
+      value.kind === "file";
     if (needsMedia && !value.mediaUrl) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
@@ -915,22 +974,53 @@ memberCommunityRouter.post(
   asyncHandler(async (req, res) => {
     const member = currentMember(req);
     const ctx = await enterFromParams(req);
+    assertGuidelinesAccepted(ctx);
     const channel = await loadChannel(ctx, readSlug(req.params.channelSlug, CHANNEL_MISSING));
 
     const parsed = postCreateSchema.safeParse(req.body ?? {});
     if (!parsed.success) throw badRequest("Invalid post", parsed.error.flatten());
-    const { kind, title, body, mediaUrl, pollOptions } = parsed.data;
+    const { kind, title, body, mediaUrl, mediaLabel, pollOptions, publishAt } = parsed.data;
+
+    /*
+     * Scheduling is a host's tool, not a member's. A member writing a post that
+     * appears at 3am under their name — with no way for them to see it waiting
+     * — is a support ticket, and the brief puts scheduled posts on an admin
+     * page for exactly that reason.
+     */
+    let scheduledFor: Date | null = null;
+    if (publishAt !== undefined) {
+      if (!ctx.moderator) throw forbidden("Only a host can schedule a post for later.");
+      const when = new Date(publishAt);
+      // A past time is almost always a timezone mistake, and publishing
+      // immediately would hide the mistake rather than showing it.
+      if (when.getTime() <= Date.now()) {
+        throw badRequest("Choose a time in the future, or post it now.");
+      }
+      scheduledFor = when;
+    }
+    const status = scheduledFor === null ? "visible" : "scheduled";
 
     const authorName = await displayName(member.id);
 
     const postId = await withTransaction(async (client) => {
       const created = await client.query<{ id: number }>(
         `INSERT INTO community_posts
-           (channel_id, member_id, author_name, kind, title, body, media_url, status,
-            last_activity_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, 'visible', now())
+           (channel_id, member_id, author_name, kind, title, body, media_url, media_label,
+            status, publish_at, last_activity_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, now())
          RETURNING id`,
-        [channel.id, member.id, authorName, kind, title, body, mediaUrl ?? ""]
+        [
+          channel.id,
+          member.id,
+          authorName,
+          kind,
+          title,
+          body,
+          mediaUrl ?? "",
+          mediaLabel,
+          status,
+          scheduledFor,
+        ]
       );
       const id = created.rows[0].id;
 
@@ -943,26 +1033,46 @@ memberCommunityRouter.post(
         }
       }
 
-      await awardPoints({
-        communityId: ctx.id,
-        memberId: member.id,
-        action: "post",
-        link: `/community/${ctx.slug}`,
-        client,
-      });
+      /*
+       * Points, mentions and the domain event all wait for publication. A post
+       * nobody can read yet has not earned anything, and a mention
+       * notification pointing at a post that is not there is a broken link
+       * with somebody's name on it. The sweeper that publishes it is where
+       * these belong, and until then a scheduled post is inert.
+       */
+      if (scheduledFor === null) {
+        await awardPoints({
+          communityId: ctx.id,
+          memberId: member.id,
+          action: "post",
+          link: `/community/${ctx.slug}`,
+          client,
+        });
 
-      await notifyMentions({
-        text: `${title} ${body}`,
-        communityId: ctx.id,
-        actorId: member.id,
-        actorName: authorName,
-        link: `/community/${ctx.slug}/${channel.slug}?post=${id}`,
-        context: ctx.name,
-        client,
-      });
+        await notifyMentions({
+          text: `${title} ${body}`,
+          communityId: ctx.id,
+          actorId: member.id,
+          actorName: authorName,
+          link: `/community/${ctx.slug}/${channel.slug}?post=${id}`,
+          context: ctx.name,
+          client,
+        });
+      }
 
       return id;
     });
+
+    if (scheduledFor !== null) {
+      // Nothing to show in the feed yet, so the created post is returned as a
+      // scheduling receipt rather than through the feed shape.
+      res.status(201).json({
+        id: postId,
+        scheduled: true,
+        publishAt: scheduledFor.toISOString(),
+      });
+      return;
+    }
 
     const identity = await pool.query<{ contact_id: number | null; email: string }>(
       `SELECT contact_id, email::text AS email FROM members WHERE id = $1`,
@@ -1188,6 +1298,7 @@ memberCommunityRouter.post(
     const { body, parentId } = parsed.data;
 
     const { post, ctx } = await loadPost(member, postId);
+    assertGuidelinesAccepted(ctx);
     if (post.locked) throw forbidden("Comments are closed on this post.");
 
     let parentAuthorId: number | null = null;
@@ -1764,6 +1875,11 @@ memberCommunityRouter.get(
       // second request on every community page. The room's own endpoint still
       // owns whether it is open and who is in it — this is only whether it
       // exists and what Yvette calls it.
+      // The gate the client renders. `pending` is what raises the modal;
+      // the text comes with it so accepting needs no second request.
+      guidelines: ctx.guidelinesMd.trim()
+        ? { text: ctx.guidelinesMd, pending: ctx.guidelinesPending }
+        : null,
       liveRoom: ctx.liveRoomEnabled
         ? {
             enabled: true,
@@ -2097,5 +2213,39 @@ memberCommunityRouter.get(
       upcoming: events.filter((e) => e.upcoming),
       past: events.filter((e) => !e.upcoming).reverse(),
     });
+  })
+);
+
+/**
+ * POST /api/member/community/:slug/guidelines/accept
+ *
+ * Records that this member accepted the guidelines as they stand now.
+ *
+ * `denyImpersonation`, because accepting rules on somebody's behalf while
+ * viewing the site as them is putting words in their mouth — and it is the one
+ * write here that is a statement about the person rather than content.
+ */
+memberCommunityRouter.post(
+  "/:slug/guidelines/accept",
+  denyImpersonation,
+  asyncHandler(async (req, res) => {
+    const member = currentMember(req);
+    const ctx = await enterFromParams(req);
+
+    if (ctx.guidelinesMd.trim() === "") {
+      throw badRequest("This community has no guidelines to accept.");
+    }
+
+    // now(), not the community's `guidelines_updated_at`: stamping the text's
+    // timestamp would make an acceptance recorded before a later edit look
+    // like it covered that edit.
+    await pool.query(
+      `UPDATE community_memberships
+          SET guidelines_accepted_at = now()
+        WHERE community_id = $1 AND member_id = $2`,
+      [ctx.id, member.id]
+    );
+
+    res.json({ accepted: true });
   })
 );

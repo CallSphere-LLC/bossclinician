@@ -24,6 +24,7 @@ export const NOTIFICATION_KINDS = {
   commentReply: "community_comment_reply",
   mention: "community_mention",
   badge: "community_badge",
+  directMessage: "community_direct_message",
 } as const;
 
 /**
