@@ -776,3 +776,40 @@ export interface AdminLiveVisit {
   /** Null while they are still in the room. */
   seconds: number | null;
 }
+
+/* ---------------------------------------------------- email, section 3 */
+
+export interface SavedEmailTemplate {
+  id: Id;
+  name: string;
+  subject: string;
+  bodyMd: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MergeTag {
+  token: string;
+  label: string;
+  /** What it becomes, so the picker is self-explaining. */
+  example: string;
+}
+
+export interface SendingDomainCheck {
+  name: string;
+  purpose: string;
+  status: "pass" | "warn" | "fail";
+  detail: string;
+  found: string[];
+  expected: string;
+}
+
+export interface SendingDomainReport {
+  domain: string;
+  configuredDomain: string;
+  isCurrent: boolean;
+  /** True when nothing is failing. A warn is worth doing, not blocking. */
+  ready: boolean;
+  summary: string;
+  checks: SendingDomainCheck[];
+}

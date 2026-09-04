@@ -10,13 +10,19 @@ import {
   List,
   ListOrdered,
   Minus,
+  Monitor,
   MousePointerClick,
   Pilcrow,
+  Save,
+  Smartphone,
   type LucideIcon,
 } from "lucide-react";
 import { Button, Textarea, selectStyles } from "@/pages/admin/ui/primitives";
 import MediaPickerDialog from "@/components/admin/MediaPickerDialog";
-import type { MediaAsset } from "@/types/admin";
+import type { MediaAsset, MergeTag, SavedEmailTemplate } from "@/types/admin";
+import { adminApi } from "@/lib/api";
+import { toast } from "sonner";
+import { cn } from "@/lib/cn";
 
 type FormatId = "bold" | "italic" | "heading" | "bullets" | "numbers" | "link";
 
@@ -155,6 +161,24 @@ export default function EmailComposer({
   const pendingSelection = useRef<[number, number] | null>(null);
   const [preview, setPreview] = useState(false);
   const [choosingImage, setChoosingImage] = useState(false);
+  /**
+   * 3.11. Which width the preview is shown at. Not a media query — the point is
+   * to see the DESKTOP layout on a desktop and the phone layout beside it,
+   * which a responsive preview cannot do because it only ever has the one
+   * viewport.
+   */
+  const [device, setDevice] = useState<"desktop" | "mobile">("desktop");
+  const [mergeTags, setMergeTags] = useState<MergeTag[]>([]);
+  const [templates, setTemplates] = useState<SavedEmailTemplate[]>([]);
+  const [savingTemplate, setSavingTemplate] = useState(false);
+
+  // Both lists are small, cached by the browser, and only needed once the
+  // composer is on screen — so they are fetched here rather than threaded
+  // through every screen that renders one.
+  useEffect(() => {
+    adminApi.mergeTags().then(setMergeTags).catch(() => setMergeTags([]));
+    adminApi.savedTemplates().then(setTemplates).catch(() => setTemplates([]));
+  }, []);
 
   useEffect(() => {
     const range = pendingSelection.current;
@@ -179,6 +203,19 @@ export default function EmailComposer({
     const el = ref.current;
     if (!block || !el) return;
     commit(insertAt(el.value, el.selectionStart, el.selectionEnd, block.body));
+  }
+
+  /** Drops a merge tag in at the caret, which is where she is looking. */
+  function addMergeTag(token: string) {
+    const el = ref.current;
+    if (!el) return;
+    const before = el.value.slice(0, el.selectionStart);
+    const after = el.value.slice(el.selectionEnd);
+    commit({
+      value: before + token + after,
+      selectionStart: before.length + token.length,
+      selectionEnd: before.length + token.length,
+    });
   }
 
   function addImage(asset: MediaAsset) {
@@ -209,6 +246,20 @@ export default function EmailComposer({
                 onClick={() => onChange(starter.body)}
               >
                 {starter.label}
+              </Button>
+            ))}
+            {/* Her own saved templates alongside the three built-in starters —
+                3.2. Listed here rather than behind a picker because on an empty
+                composer this row IS the picker. */}
+            {templates.map((template) => (
+              <Button
+                key={template.id}
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={() => onChange(template.bodyMd)}
+              >
+                {template.name}
               </Button>
             ))}
           </div>
@@ -251,7 +302,84 @@ export default function EmailComposer({
             </select>
           </label>
         )}
+        {!preview && mergeTags.length > 0 && (
+          <label className="ml-1">
+            <span className="sr-only">Insert something about the reader</span>
+            <select
+              className={`${selectStyles} min-h-11 py-1.5 text-sm`}
+              defaultValue=""
+              onChange={(event) => {
+                if (event.target.value) addMergeTag(event.target.value);
+                event.target.value = "";
+              }}
+            >
+              <option value="" disabled>
+                Insert their details…
+              </option>
+              {mergeTags.map((tag) => (
+                <option key={tag.token} value={tag.token}>
+                  {tag.label} — {tag.example}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+
         <div className="ml-auto flex items-center gap-1">
+          {preview && (
+            <div className="mr-1 flex items-center gap-1">
+              <Button
+                type="button"
+                variant={device === "desktop" ? "secondary" : "ghost"}
+                size="iconSm"
+                title="Desktop width"
+                aria-label="Desktop width"
+                aria-pressed={device === "desktop"}
+                onClick={() => setDevice("desktop")}
+              >
+                <Monitor />
+              </Button>
+              <Button
+                type="button"
+                variant={device === "mobile" ? "secondary" : "ghost"}
+                size="iconSm"
+                title="Phone width"
+                aria-label="Phone width"
+                aria-pressed={device === "mobile"}
+                onClick={() => setDevice("mobile")}
+              >
+                <Smartphone />
+              </Button>
+            </div>
+          )}
+          {!preview && value.trim().length > 0 && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              disabled={savingTemplate}
+              onClick={async () => {
+                const name = window.prompt("Save this as a template called…");
+                if (!name?.trim()) return;
+                setSavingTemplate(true);
+                try {
+                  const saved = await adminApi.savedTemplateCreate({
+                    name: name.trim(),
+                    bodyMd: value,
+                  });
+                  setTemplates((prev) => [...prev, saved].sort((a, b) => a.name.localeCompare(b.name)));
+                  toast.success(`Saved as “${saved.name}”.`);
+                } catch {
+                  toast.error("We couldn't save that as a template.");
+                } finally {
+                  setSavingTemplate(false);
+                }
+              }}
+            >
+              <Save />
+              Save as template
+            </Button>
+          )}
           <Button type="button" variant={preview ? "ghost" : "secondary"} size="sm" onClick={() => setPreview(false)}>
             Write
           </Button>
@@ -262,7 +390,14 @@ export default function EmailComposer({
       </div>
 
       {preview ? (
-        <div className="prose-boss min-h-[14rem] rounded-xl border border-hairline bg-white/[0.03] p-4">
+        <div
+          className={cn(
+            "prose-boss min-h-[14rem] rounded-xl border border-hairline bg-white/[0.03] p-4",
+            // 390px is an iPhone's CSS width. Centred, so the narrow case reads
+            // as a phone rather than as a broken desktop layout.
+            device === "mobile" && "mx-auto w-[390px] max-w-full",
+          )}
+        >
           {value.trim() ? (
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}

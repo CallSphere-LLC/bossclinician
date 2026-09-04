@@ -419,10 +419,58 @@ export async function marketingBlockReason(
     if (preference.rows[0] && !preference.rows[0].subscribed) {
       return `unsubscribed from ${topic}`;
     }
+
+    /*
+     * The member portal's own switches, which this path used to ignore.
+     *
+     * There are two preference stores and they were checked in different
+     * places: the email-link preference centre writes
+     * `contact_email_preferences` keyed by contact and by the topic names this
+     * file uses, while /account writes `member_email_preferences` keyed by
+     * member and by its own names. Only the community digest job ever read the
+     * second one — so a member who turned "course and product updates" off in
+     * their account went on receiving every campaign, because nothing on the
+     * sending path had looked.
+     *
+     * Honouring both, and the OFF switch always wins. A member who has said no
+     * in either place has said no.
+     */
+    const memberTopic = MEMBER_TOPIC_FOR[topic];
+    if (memberTopic) {
+      const declined = await pool.query(
+        `SELECT 1
+           FROM members m
+           JOIN member_email_preferences p ON p.member_id = m.id
+          WHERE m.contact_id = $1 AND p.topic = $2 AND NOT p.subscribed`,
+        [contactId, memberTopic]
+      );
+      if ((declined.rowCount ?? 0) > 0) {
+        return `unsubscribed from ${topic} in their account`;
+      }
+    }
   }
 
   return null;
 }
+
+/**
+ * The member portal's topic names, mapped onto the ones the sending path uses.
+ *
+ * Two vocabularies for one idea, which is how they drifted apart in the first
+ * place. Mapping rather than renaming either: the stored rows on both sides are
+ * a record of what somebody chose, and rewriting their keys would silently
+ * reinterpret decisions people have already made.
+ *
+ * `events` has no member-portal switch, so it is deliberately absent rather
+ * than pointed at an approximation — mapping it to "product news" would let a
+ * member who muted course updates stop getting reminders for a webinar they
+ * registered for.
+ */
+const MEMBER_TOPIC_FOR: Record<string, string | undefined> = {
+  marketing: "product_news",
+  product: "course_updates",
+  community: "community_digest",
+};
 
 function fromHeader(name: string, address: string): string {
   if (!address) return env.smtp.from;

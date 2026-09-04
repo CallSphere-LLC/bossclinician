@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react
 import { Link, useParams } from "react-router-dom";
 import { ArrowLeft, CreditCard, ExternalLink, Receipt, Send } from "lucide-react";
 import { toast } from "sonner";
+import { adminApi } from "@/lib/api";
+import type { SendingDomainReport } from "@/types/admin";
 import {
   settingsApi,
   type EmailLogRow,
@@ -369,6 +371,131 @@ function TestEmailCard() {
   );
 }
 
+/**
+ * The sending domain check (3.9).
+ *
+ * This exists because of something read off real delivered mail: the site sends
+ * as `…@bossclinician.callsphere.site`, a staging subdomain, while the product
+ * it replaces sends from the customer's own domain. Moving that is a DNS job,
+ * not a provider one — SES is already wired and authenticating — so what was
+ * missing was a way to SEE whether the DNS is right without asking somebody to
+ * run `dig`.
+ *
+ * The domain box lets her check a domain BEFORE switching the from-address to
+ * it, which is the order anybody sane does this in.
+ */
+function SendingDomainCard() {
+  const [domain, setDomain] = useState("");
+  const [report, setReport] = useState<SendingDomainReport | null>(null);
+  const [checking, setChecking] = useState(false);
+  const [error, setError] = useState("");
+
+  const check = useCallback(async (which?: string) => {
+    setChecking(true);
+    setError("");
+    try {
+      setReport(await adminApi.sendingDomain(which));
+    } catch (err) {
+      setReport(null);
+      setError(friendlyError(err, "sending domain"));
+    } finally {
+      setChecking(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void check();
+  }, [check]);
+
+  const TONE: Record<string, "green" | "gold" | "red"> = {
+    pass: "green",
+    warn: "gold",
+    fail: "red",
+  };
+
+  return (
+    <Card>
+      <CardHeader
+        title="Where your email comes from"
+        subtitle="Whether the internet believes this domain is really you."
+        action={
+          report && (
+            <Badge tone={report.ready ? "green" : "red"}>{report.summary}</Badge>
+          )
+        }
+      />
+      <div className="space-y-4 px-5 py-5">
+        <form
+          className="flex flex-wrap items-end gap-3"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void check(domain.trim() || undefined);
+          }}
+        >
+          <Field
+            label="Check a domain"
+            hint="Leave blank to check the one you send from now"
+            className="min-w-[14rem] flex-1"
+          >
+            <Input
+              value={domain}
+              onChange={(e) => setDomain(e.target.value)}
+              placeholder="bossclinician.com"
+              autoCapitalize="none"
+              spellCheck={false}
+            />
+          </Field>
+          <Button type="submit" size="sm" variant="secondary" disabled={checking}>
+            {checking ? "Checking…" : "Check the DNS"}
+          </Button>
+        </form>
+
+        {error && <ErrorNotice message={error} />}
+
+        {report && (
+          <>
+            <p className="text-sm text-ink-soft">
+              Checking <span className="font-semibold text-ink">{report.domain}</span>
+              {report.isCurrent
+                ? " — the domain you send from now."
+                : report.configuredDomain
+                  ? ` — you currently send from ${report.configuredDomain}.`
+                  : " — no sending address is set yet."}
+            </p>
+
+            <ul className="space-y-3">
+              {report.checks.map((item) => (
+                <li key={item.name} className="rounded-xl border border-hairline px-4 py-3">
+                  <div className="flex flex-wrap items-center gap-2.5">
+                    <Badge tone={TONE[item.status] ?? "neutral"}>{item.name}</Badge>
+                    <p className="text-sm font-semibold text-ink">{item.detail}</p>
+                  </div>
+                  <p className="mt-1 text-xs text-ink-soft">{item.purpose}</p>
+                  {item.found.length > 0 && (
+                    <p className="mt-2 break-all font-mono text-[0.65rem] text-ink-soft/80">
+                      found: {item.found.join(" | ")}
+                    </p>
+                  )}
+                  {item.status !== "pass" && (
+                    <p className="mt-1 break-all font-mono text-[0.65rem] text-plum">
+                      should be: {item.expected}
+                    </p>
+                  )}
+                </li>
+              ))}
+            </ul>
+
+            <p className="text-xs text-ink-soft">
+              Checked live every time this loads — a remembered answer would say
+              “verified” for a record somebody deleted an hour ago.
+            </p>
+          </>
+        )}
+      </div>
+    </Card>
+  );
+}
+
 /** How a status reads to somebody who does not think in mail-server terms. */
 const DELIVERY_LABEL: Record<string, { text: string; tone: "green" | "red" | "gold" | "neutral" }> = {
   delivered: { text: "Arrived", tone: "green" },
@@ -599,6 +726,7 @@ export default function SettingsGroupPage() {
           ))}
           {group.key === "email" && <TestEmailCard />}
           {group.key === "email" && <EmailDeliveryCard />}
+          {group.key === "email" && <SendingDomainCard />}
         </div>
       )}
     </div>

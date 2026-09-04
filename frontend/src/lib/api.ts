@@ -48,6 +48,9 @@ import type {
   AdminLiveVisit,
   AdminPointRule,
   AdminScheduledPost,
+  MergeTag,
+  SavedEmailTemplate,
+  SendingDomainReport,
 } from "@/types/admin";
 
 /**
@@ -536,6 +539,50 @@ export const adminApi = {
   communityUpdate: (id: number, data: Record<string, unknown>) =>
     request<Community>(`/admin/community/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   communityDelete: (id: number) => request<void>(`/admin/community/${id}`, { method: "DELETE" }),
+
+  /* ---- email: saved templates and merge tags (3.2, 3.5) ---- */
+
+  savedTemplates: () => request<SavedEmailTemplate[]>("/admin/saved-templates"),
+
+  savedTemplateCreate: (data: { name: string; subject?: string; bodyMd?: string }) =>
+    request<SavedEmailTemplate>("/admin/saved-templates", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  savedTemplateRename: (id: number, name: string) =>
+    request<SavedEmailTemplate>(`/admin/saved-templates/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ name }),
+    }),
+
+  savedTemplateDuplicate: (id: number) =>
+    request<SavedEmailTemplate>(`/admin/saved-templates/${id}/duplicate`, { method: "POST" }),
+
+  savedTemplateDelete: (id: number) =>
+    request<void>(`/admin/saved-templates/${id}`, { method: "DELETE" }),
+
+  mergeTags: () => request<MergeTag[]>("/admin/saved-templates/merge-tags"),
+
+  /* ---- email: the sending domain (3.9) ---- */
+
+  sendingDomain: (domain?: string) =>
+    request<SendingDomainReport>(
+      `/admin/sending-domain${domain ? `?domain=${encodeURIComponent(domain)}` : ""}`,
+    ),
+
+  /* ---- sequences: specific excludes (3.7) ---- */
+
+  sequenceExcludes: (id: number) =>
+    request<{ offers: { id: number; title: string }[]; forms: { id: number; name: string }[] }>(
+      `/admin/sequences/${id}/excludes`,
+    ),
+
+  sequenceExcludesSave: (id: number, offerIds: number[], formIds: number[]) =>
+    request<{ ok: true }>(`/admin/sequences/${id}/excludes`, {
+      method: "PUT",
+      body: JSON.stringify({ offerIds, formIds }),
+    }),
 
   /* ---- gamification rules (2.7) ---- */
 
