@@ -134,7 +134,7 @@ export interface CommunityOverview {
 
 /* ------------------------------------------------------------------ feed */
 
-export type PostKind = "text" | "image" | "video" | "poll" | "link";
+export type PostKind = "text" | "image" | "video" | "poll" | "link" | "file";
 
 export interface PostReaction {
   emoji: string;
@@ -172,6 +172,8 @@ export interface CommunityPost {
   title: string;
   body: string;
   mediaUrl: string;
+  /** What the uploader called an attachment. Rendered as text. */
+  mediaLabel: string;
   pinned: boolean;
   locked: boolean;
   author: PostAuthor;
@@ -222,6 +224,8 @@ export interface NewPostInput {
   title?: string;
   body?: string;
   mediaUrl?: string;
+  /** What to call an attachment — a stored filename is often a hash. */
+  mediaLabel?: string;
   pollOptions?: string[];
 }
 
@@ -438,6 +442,28 @@ const seg = encodeURIComponent;
 
 /* ------------------------------------------------------------- live room */
 
+export interface CommunitySearchResults {
+  query: string;
+  channels: { slug: string; name: string; description: string; href: string }[];
+  people: {
+    memberId: number;
+    name: string;
+    avatarUrl: string;
+    headline: string;
+    href: string;
+  }[];
+  posts: {
+    id: number;
+    title: string;
+    /** One line, not the whole post — the palette only draws one. */
+    snippet: string;
+    authorName: string;
+    channelName: string;
+    href: string;
+    createdAt: string | null;
+  }[];
+}
+
 export interface LiveRoomPeer {
   peerId: string;
   memberId: number;
@@ -491,6 +517,27 @@ export interface LiveRoomStatus {
 
 export const communityApi = {
   list: () => memberRequest<CommunityListResponse>("/member/community"),
+
+  /**
+   * Attaches a file to a post. Multipart, so it does not go through the JSON
+   * helper — and no Content-Type is set by hand, because the browser has to
+   * add the multipart boundary itself.
+   */
+  uploadAttachment: (slug: string, file: File) => {
+    const body = new FormData();
+    body.append("file", file);
+    return memberRequest<{
+      url: string;
+      label: string;
+      contentType: string;
+      sizeBytes: number;
+    }>(`/member/community/${seg(slug)}/uploads`, { method: "POST", body });
+  },
+
+  search: (slug: string, q: string) =>
+    memberRequest<CommunitySearchResults>(
+      `/member/community/${seg(slug)}/search${query({ q })}`,
+    ),
 
   liveStatus: (slug: string) =>
     memberRequest<LiveRoomStatus>(`/member/community/${seg(slug)}/live`),

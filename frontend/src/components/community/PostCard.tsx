@@ -201,7 +201,7 @@ export function PostCard({
             </h3>
           )}
           <PostBody text={post.body} className={cn(post.title && "mt-2")} />
-          <PostMedia kind={post.kind} mediaUrl={post.mediaUrl} />
+          <PostMedia kind={post.kind} mediaUrl={post.mediaUrl} mediaLabel={post.mediaLabel} />
           {post.poll && (
             <PollBlock
               postId={post.id}

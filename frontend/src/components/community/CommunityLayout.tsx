@@ -6,6 +6,7 @@ import { MemberShell } from "@/components/member/MemberShell";
 import { LuxeButton } from "@/components/luxe/LuxeButton";
 import { NotificationBell } from "@/components/community/NotificationBell";
 import { GuidelinesGate } from "@/components/community/GuidelinesGate";
+import { CommandPalette } from "@/components/community/CommandPalette";
 import { BadgesPanel } from "@/components/community/BadgesPanel";
 import { EventsPanel } from "@/components/community/EventsPanel";
 import { ChallengesPanel } from "@/components/community/ChallengesPanel";
@@ -233,6 +234,10 @@ function ChannelStrip({
       </ul>
 
       <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+        {/* Cmd-K, with the shortcut printed on it — nobody discovers a
+            keyboard shortcut that is written down nowhere. */}
+        <CommandPalette slug={slug} />
+
         <Link
           to={`/community/${slug}/messages`}
           className={cn(

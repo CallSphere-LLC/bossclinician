@@ -1,10 +1,21 @@
 import { useState } from "react";
-import { BarChart3, Film, Image as ImageIcon, Link2, Loader2, Plus, Type, X } from "lucide-react";
+import {
+  BarChart3,
+  Film,
+  Image as ImageIcon,
+  Link2,
+  Loader2,
+  Paperclip,
+  Plus,
+  Type,
+  X,
+} from "lucide-react";
 import { GlassCard } from "@/components/luxe/GlassCard";
 import { LuxeButton } from "@/components/luxe/LuxeButton";
 import { luxeControlClass } from "@/components/luxe/LuxeField";
 import { MemberAvatar } from "@/components/member/MemberShell";
-import { safeLink, type NewPostInput, type PostKind } from "@/lib/communityApi";
+import { communityApi, safeLink, type NewPostInput, type PostKind } from "@/lib/communityApi";
+import { MemberApiError } from "@/lib/memberApi";
 import { cn } from "@/lib/cn";
 
 /**
@@ -24,18 +35,22 @@ const KINDS: { kind: PostKind; label: string; icon: typeof Type }[] = [
   { kind: "image", label: "Image", icon: ImageIcon },
   { kind: "video", label: "Video", icon: Film },
   { kind: "poll", label: "Poll", icon: BarChart3 },
+  { kind: "file", label: "File", icon: Paperclip },
   { kind: "link", label: "Link", icon: Link2 },
 ];
 
 const MEDIA_PLACEHOLDER: Partial<Record<PostKind, string>> = {
   image: "https://…/photo.jpg",
   video: "https://…/clip.mp4",
+  file: "https://…/worksheet.pdf",
   link: "https://…",
 };
 
 const MAX_POLL_OPTIONS = 6;
 
 interface PostComposerProps {
+  /** Needed for the upload endpoint, which is scoped to the community. */
+  communitySlug: string;
   channelName: string;
   authorName: string;
   authorEmail: string;
@@ -45,6 +60,7 @@ interface PostComposerProps {
 }
 
 export function PostComposer({
+  communitySlug,
   channelName,
   authorName,
   authorEmail,
@@ -59,14 +75,21 @@ export function PostComposer({
   const [options, setOptions] = useState(["", ""]);
   const [error, setError] = useState("");
   const [sending, setSending] = useState(false);
+  /** The name of what was uploaded, so the composer can show it. */
+  const [mediaLabel, setMediaLabel] = useState("");
+  const [uploading, setUploading] = useState(false);
 
-  const needsMedia = kind === "image" || kind === "video" || kind === "link";
+  const needsMedia =
+    kind === "image" || kind === "video" || kind === "link" || kind === "file";
+  /** Image and file can be uploaded here; video and link stay a URL. */
+  const canUpload = kind === "image" || kind === "file";
   const filledOptions = options.map((o) => o.trim()).filter(Boolean);
 
   const reset = () => {
     setTitle("");
     setBody("");
     setMediaUrl("");
+    setMediaLabel("");
     setOptions(["", ""]);
     setError("");
     setKind("text");
@@ -76,7 +99,9 @@ export function PostComposer({
   /** The same rules the endpoint applies, said before the round trip. */
   const validate = (): string => {
     if (needsMedia) {
-      if (!mediaUrl.trim()) return "Paste a link first.";
+      if (!mediaUrl.trim()) {
+        return canUpload ? "Choose a file, or paste a link." : "Paste a link first.";
+      }
       if (!safeLink(mediaUrl.trim())) {
         return "That link needs to start with http:// or https://";
       }
@@ -100,6 +125,7 @@ export function PostComposer({
       title: title.trim(),
       body: body.trim(),
       ...(needsMedia ? { mediaUrl: mediaUrl.trim() } : {}),
+      ...(mediaLabel ? { mediaLabel } : {}),
       ...(kind === "poll" ? { pollOptions: filledOptions } : {}),
     });
     setSending(false);
@@ -198,6 +224,55 @@ export function PostComposer({
 
           {needsMedia && (
             <>
+              {canUpload && (
+                <div className="flex flex-wrap items-center gap-3">
+                  {/* A real upload, not just a URL box. The composer could only
+                      take a link before, which meant a member could post a
+                      picture only if they already hosted it somewhere. */}
+                  <label
+                    className={cn(
+                      "inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-full",
+                      "border border-white/15 px-4 text-sm font-semibold text-white/80",
+                      "transition-colors hover:border-gold/40 hover:text-gold",
+                    )}
+                  >
+                    <Paperclip aria-hidden className="size-4" />
+                    {uploading ? "Uploading…" : "Choose a file"}
+                    <input
+                      type="file"
+                      className="sr-only"
+                      accept={kind === "image" ? "image/*" : "image/*,application/pdf"}
+                      disabled={uploading}
+                      onChange={async (event) => {
+                        const file = event.target.files?.[0];
+                        event.target.value = "";
+                        if (!file) return;
+                        setUploading(true);
+                        setError("");
+                        try {
+                          const saved = await communityApi.uploadAttachment(communitySlug, file);
+                          setMediaUrl(saved.url);
+                          setMediaLabel(saved.label);
+                        } catch (err) {
+                          setError(
+                            err instanceof MemberApiError
+                              ? err.message
+                              : "That file didn't upload. Try a smaller one.",
+                          );
+                        } finally {
+                          setUploading(false);
+                        }
+                      }}
+                    />
+                  </label>
+                  {mediaLabel && (
+                    <span className="min-w-0 truncate text-xs text-white/60">{mediaLabel}</span>
+                  )}
+                  <span className="text-xs text-white/35">
+                    or paste a link below · up to 8MB
+                  </span>
+                </div>
+              )}
               <label className="sr-only" htmlFor="composer-media">
                 Link
               </label>
@@ -208,7 +283,11 @@ export function PostComposer({
                 value={mediaUrl}
                 maxLength={2000}
                 placeholder={MEDIA_PLACEHOLDER[kind]}
-                onChange={(e) => setMediaUrl(e.target.value)}
+                onChange={(e) => {
+                  setMediaUrl(e.target.value);
+                  // A pasted link is not the uploaded file any more.
+                  setMediaLabel("");
+                }}
                 className={luxeControlClass}
               />
             </>

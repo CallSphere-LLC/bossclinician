@@ -735,6 +735,7 @@ interface FeedRow {
   kind: string;
   title: string;
   body: string;
+  media_label: string;
   media_url: string;
   pinned: boolean;
   locked: boolean;
@@ -750,7 +751,8 @@ interface FeedRow {
 }
 
 const FEED_SELECT = `
-  SELECT p.id, p.kind, p.title, p.body, p.media_url, p.pinned, p.locked, p.member_id,
+  SELECT p.id, p.kind, p.title, p.body, p.media_url, p.media_label,
+         p.pinned, p.locked, p.member_id,
          p.created_at, p.updated_at, p.last_activity_at,
          COALESCE(NULLIF(TRIM(m.first_name || ' ' || m.last_name), ''), NULLIF(m.name, ''),
                   NULLIF(p.author_name, ''), 'Member') AS author_name,
@@ -850,6 +852,7 @@ function toPostJson(
       fileId: row.id,
       memberId,
     }).url,
+    mediaLabel: row.media_label ?? "",
     pinned: row.pinned,
     locked: row.locked,
     author: {
@@ -2393,5 +2396,112 @@ memberCommunityRouter.post(
     );
 
     res.json({ accepted: true });
+  })
+);
+
+/**
+ * GET /api/member/community/:slug/search?q=
+ *
+ * Community search, for the Cmd-K palette (2.11).
+ *
+ * Three kinds of result in one response — channels, people, posts — because
+ * that is one question ("where is that thing?") and three requests would make
+ * the palette flicker as each landed.
+ *
+ * Every branch is scoped by the same rules the rest of this router uses:
+ * private channels only reach moderators, access-group channels only reach
+ * their tier, and hidden posts reach nobody. A search that leaked a private
+ * channel's post as a preview would be a hole no amount of hiding the channel
+ * could close.
+ */
+memberCommunityRouter.get(
+  "/:slug/search",
+  asyncHandler(async (req, res) => {
+    const member = currentMember(req);
+    const ctx = await enterFromParams(req);
+
+    const raw = typeof req.query.q === "string" ? req.query.q.trim() : "";
+    if (raw.length < 2) {
+      res.json({ query: raw, channels: [], people: [], posts: [] });
+      return;
+    }
+    // ILIKE, with the wildcards added here rather than accepted from the query:
+    // a reader typing "100%" is searching for "100%", not asking for a pattern.
+    const term = `%${raw.replace(/[%_\\]/g, (c) => `\\${c}`)}%`;
+
+    const [channels, people, posts] = await Promise.all([
+      pool.query<{ slug: string; name: string; description: string }>(
+        `SELECT ch.slug, ch.name, ch.description
+           FROM community_channels ch
+          WHERE ch.community_id = $1
+            AND (ch.name ILIKE $2 OR ch.description ILIKE $2)
+            AND (ch.visibility = 'public' OR $4::bool)
+            AND ($4::bool OR ${CHANNEL_GROUP_VISIBLE.replaceAll("$MEMBER$", "$3")})
+          ORDER BY ch.sort, ch.id
+          LIMIT 8`,
+        [ctx.id, term, member.id, ctx.moderator]
+      ),
+      pool.query<{ member_id: number; name: string; avatar_url: string; headline: string }>(
+        `SELECT cm.member_id, ${MEMBER_NAME_SQL} AS name,
+                COALESCE(m.avatar_url, '') AS avatar_url, cm.headline
+           FROM community_memberships cm
+           JOIN members m ON m.id = cm.member_id
+          WHERE cm.community_id = $1 AND cm.banned_at IS NULL AND m.status = 'active'
+            AND (${MEMBER_NAME_SQL} ILIKE $2 OR cm.headline ILIKE $2)
+          ORDER BY cm.points DESC
+          LIMIT 8`,
+        [ctx.id, term]
+      ),
+      pool.query<{
+        id: number;
+        title: string;
+        body: string;
+        author_name: string;
+        channel_slug: string;
+        channel_name: string;
+        created_at: Date;
+      }>(
+        `SELECT p.id, p.title, p.body, p.author_name,
+                ch.slug AS channel_slug, ch.name AS channel_name, p.created_at
+           FROM community_posts p
+           JOIN community_channels ch ON ch.id = p.channel_id
+          WHERE ch.community_id = $1
+            AND p.status = 'visible'
+            AND (p.title ILIKE $2 OR p.body ILIKE $2)
+            AND (ch.visibility = 'public' OR $4::bool)
+            AND ($4::bool OR ${CHANNEL_GROUP_VISIBLE.replaceAll("$MEMBER$", "$3")})
+          ORDER BY p.created_at DESC
+          LIMIT 12`,
+        [ctx.id, term, member.id, ctx.moderator]
+      ),
+    ]);
+
+    res.json({
+      query: raw,
+      channels: channels.rows.map((row) => ({
+        slug: row.slug,
+        name: row.name,
+        description: row.description,
+        href: `/community/${ctx.slug}/${row.slug}`,
+      })),
+      people: people.rows.map((row) => ({
+        memberId: row.member_id,
+        name: row.name,
+        avatarUrl: row.avatar_url,
+        headline: row.headline,
+        href: `/community/${ctx.slug}/members/${row.member_id}`,
+      })),
+      posts: posts.rows.map((row) => ({
+        id: row.id,
+        title: row.title,
+        // A snippet, not the post: the palette shows one line and sending the
+        // whole body of twelve posts to draw twelve lines is wasteful.
+        snippet: plainText(row.body).slice(0, 140),
+        authorName: row.author_name,
+        channelName: row.channel_name,
+        href: `/community/${ctx.slug}/${row.channel_slug}?post=${row.id}`,
+        createdAt: iso(row.created_at),
+      })),
+    });
   })
 );

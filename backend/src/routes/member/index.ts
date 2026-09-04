@@ -8,6 +8,7 @@ import { memberCertificatesRouter } from "./certificates";
 import { memberCommunityRouter } from "./community";
 import { memberCommunityLiveRouter } from "./communityLive";
 import { memberCommunityDmRouter } from "./communityDm";
+import { memberCommunityUploadsRouter } from "./communityUploads";
 import { memberCoachingRouter } from "./coaching";
 import { memberEventsRouter } from "./events";
 import { memberPublishingRouter } from "./publishing";
@@ -33,6 +34,7 @@ memberRouter.use("/downloads", memberDownloadsRouter);
 // otherwise swallow `/:slug/live` as a community named "live".
 memberRouter.use("/community", memberCommunityLiveRouter);
 memberRouter.use("/community", memberCommunityDmRouter);
+memberRouter.use("/community", memberCommunityUploadsRouter);
 memberRouter.use("/community", memberCommunityRouter);
 memberRouter.use("/coaching", memberCoachingRouter);
 memberRouter.use("/events", memberEventsRouter);

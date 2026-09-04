@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ExternalLink, Film } from "lucide-react";
+import { ExternalLink, Film, Paperclip } from "lucide-react";
 import { safeLink, type PostKind } from "@/lib/communityApi";
 import { cn } from "@/lib/cn";
 
@@ -38,11 +38,27 @@ function hostOf(href: string): string {
 
 const FRAME = "overflow-hidden rounded-xl border border-white/10 bg-black/40";
 
-export function PostMedia({ kind, mediaUrl }: { kind: PostKind; mediaUrl: string }) {
+export function PostMedia({
+  kind,
+  mediaUrl,
+  mediaLabel = "",
+}: {
+  kind: PostKind;
+  mediaUrl: string;
+  /** What the uploader called the file. Rendered as text, never as a path. */
+  mediaLabel?: string;
+}) {
   const [broken, setBroken] = useState(false);
   const href = safeLink(mediaUrl);
 
   if (!href || kind === "text" || kind === "poll") return null;
+
+  if (kind === "file") {
+    // A download, not an inline render. A PDF in an <iframe> is somebody
+    // else's renderer on a page where members are signed in, and the whole
+    // point of the attachment is that they can keep it.
+    return <LinkCard href={href} label={mediaLabel || "Download the file"} icon="file" />;
+  }
 
   if (kind === "image") {
     if (broken) return <LinkCard href={href} label="Image" />;
@@ -81,9 +97,9 @@ function LinkCard({
 }: {
   href: string;
   label?: string;
-  icon?: "link" | "video";
+  icon?: "link" | "video" | "file";
 }) {
-  const Icon = icon === "video" ? Film : ExternalLink;
+  const Icon = icon === "video" ? Film : icon === "file" ? Paperclip : ExternalLink;
   return (
     <a
       href={href}

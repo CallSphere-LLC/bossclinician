@@ -164,6 +164,7 @@ export function ChannelFeed({ communitySlug, channelSlug, role }: ChannelFeedPro
         title: input.title ?? "",
         body: input.body ?? "",
         mediaUrl: input.mediaUrl ?? "",
+        mediaLabel: input.mediaLabel ?? "",
         pinned: false,
         locked: false,
         author: {
@@ -271,6 +272,7 @@ export function ChannelFeed({ communitySlug, channelSlug, role }: ChannelFeedPro
         </GlassCard>
       ) : verified ? (
         <PostComposer
+          communitySlug={communitySlug}
           channelName={channel?.name ?? "the community"}
           authorName={member?.name ?? ""}
           authorEmail={member?.email ?? ""}
