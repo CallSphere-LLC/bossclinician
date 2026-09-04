@@ -785,6 +785,7 @@ function ImagePickerModal({
         <UploadDropzone
           compact
           accept="image/*"
+          scope="blog-image-picker"
           onUploaded={(asset) => setAssets((prev) => (prev ? [asset, ...prev] : [asset]))}
         />
 

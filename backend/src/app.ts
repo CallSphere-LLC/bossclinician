@@ -70,7 +70,13 @@ export function createApp(): Express {
   // stored here — course video, lesson attachments, product files, coaching
   // files and certificate PDFs live in env.protectedUploadDir, which is outside
   // this tree and reachable only through a signed link (services/signedUrls.ts).
-  app.use("/uploads", express.static(env.uploadDir));
+  //
+  // `dotfiles: "deny"` for the one directory inside it that is not published
+  // media: `.parts`, where a resumable upload accumulates. A 404 there would be
+  // enough; a 403 says the path is off limits whether the file exists or not,
+  // so a half-uploaded course video cannot be fetched by guessing its session
+  // id while it is still being written.
+  app.use("/uploads", express.static(env.uploadDir, { dotfiles: "deny" }));
 
   // Root-level, not under /api: crawlers fetch these at fixed paths. nginx
   // routes exactly these two paths here instead of to the SPA.

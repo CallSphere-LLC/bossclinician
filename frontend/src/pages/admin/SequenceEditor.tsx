@@ -38,10 +38,10 @@ import {
   PageHeader,
   selectStyles,
   Skeleton,
-  Textarea,
 } from "@/pages/admin/ui/primitives";
 import { Modal, useConfirm } from "@/pages/admin/ui/Dialog";
 import { friendlyError } from "@/pages/admin/ui/friendly";
+import EmailComposer from "@/components/admin/EmailComposer";
 
 /**
  * One sequence: its emails, its sending rules, and who is going through it.
@@ -626,14 +626,14 @@ export default function SequenceEditor() {
 
             <Field
               label="What the email says"
-              hint="Use {{firstName}} to greet them by name"
+              hint="Build with text, headings, images, buttons and dividers. Use {{firstName}} to personalise it."
               className="sm:col-span-2"
             >
-              <Textarea
+              <EmailComposer
                 rows={12}
                 value={editing.bodyMd}
-                onChange={(event) =>
-                  setEditing((draft) => draft && { ...draft, bodyMd: event.target.value })
+                onChange={(bodyMd) =>
+                  setEditing((draft) => draft && { ...draft, bodyMd })
                 }
                 placeholder={"Hi {{firstName}},\n\nHere's what I wanted to share…"}
               />

@@ -1074,6 +1074,7 @@ function MediaPicker({
         <UploadDropzone
           compact
           accept={isAudio ? "audio/*" : "image/*"}
+          scope={isAudio ? "podcast-audio-picker" : "podcast-artwork-picker"}
           onUploaded={(asset) => setAssets((prev) => (prev ? [asset, ...prev] : [asset]))}
         />
         {assets === null ? (

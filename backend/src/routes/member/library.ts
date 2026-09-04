@@ -539,6 +539,7 @@ interface LessonContentRow {
   transcript: string;
   captions_url: string;
   attachment_url: string;
+  assessment_slug: string | null;
 }
 
 function neighbour(lesson: MemberLessonView | undefined) {
@@ -639,9 +640,15 @@ memberLibraryRouter.get(
 
     const [content, files] = await Promise.all([
       pool.query<LessonContentRow>(
-        `SELECT body_md, video_url, audio_url, embed_html, transcript, captions_url,
-                attachment_url
-           FROM course_lessons WHERE id = $1`,
+        `SELECT l.body_md, l.video_url, l.audio_url, l.embed_html, l.transcript, l.captions_url,
+                l.attachment_url, a.slug::text AS assessment_slug
+           FROM course_lessons l
+           LEFT JOIN LATERAL (
+             SELECT slug FROM assessments
+              WHERE lesson_id = l.id AND kind = 'graded' AND published
+              ORDER BY id LIMIT 1
+           ) a ON true
+          WHERE l.id = $1`,
         [lesson.id]
       ),
       pool.query<{
@@ -702,6 +709,7 @@ memberLibraryRouter.get(
         transcript: body.transcript,
         captionsUrl: media.captions.url,
         attachmentUrl: media.attachment.url,
+        assessmentSlug: body.assessment_slug,
         // Null when nothing above needed signing. Otherwise the moment the four
         // URLs stop working, so a player left open through a long lesson can
         // reload this response before its source dies mid-sentence.

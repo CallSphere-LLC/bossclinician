@@ -13,7 +13,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { adminApi } from "@/lib/api";
-import type { Community, Coupon, Invoice, Payment, Plan, Subscription } from "@/types/admin";
+import { adminCommerceApi, PRODUCT_KIND, type Offer, type Product } from "@/lib/adminCommerceApi";
+import type { Coupon, Invoice, Payment, Plan, Subscription } from "@/types/admin";
 import { formatCurrency, formatDate } from "@/lib/format";
 import {
   Badge,
@@ -206,6 +207,7 @@ interface PlanDraft {
   interval: string;
   trialDays: number;
   communityId: string;
+  productIds: number[];
   features: string;
   published: boolean;
 }
@@ -217,6 +219,7 @@ const EMPTY_PLAN: PlanDraft = {
   interval: "month",
   trialDays: 0,
   communityId: "",
+  productIds: [],
   features: "",
   published: true,
 };
@@ -234,6 +237,7 @@ function draftOf(plan: Plan): PlanDraft {
     interval: plan.interval === "year" ? "year" : "month",
     trialDays: plan.trialDays,
     communityId: plan.communityId === null ? "" : String(plan.communityId),
+    productIds: plan.productIds ?? [],
     features: featuresOf(plan).join("\n"),
     published: plan.published,
   };
@@ -261,7 +265,7 @@ function trialDaysFrom(raw: string): number {
 
 export function PlansPage() {
   const [plans, setPlans] = useState<Plan[] | null>(null);
-  const [communities, setCommunities] = useState<Community[] | null>(null);
+  const [catalogue, setCatalogue] = useState<Product[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<Plan | null>(null);
@@ -278,24 +282,22 @@ export function PlansPage() {
 
   useEffect(load, [load]);
 
-  // The communities a plan can unlock. This screen only needs `orders.view`,
-  // while the community list sits behind `community.view`, so a Support or
-  // Marketing account can reach Plans and not this — an empty list rather than
-  // a broken page, and the picker hides itself below.
+  // Plans unlock catalogue products just like offers. Permission failures leave
+  // the picker empty without breaking the money screen for support staff.
   useEffect(() => {
-    adminApi
-      .communities()
-      .then(setCommunities)
-      .catch(() => setCommunities([]));
+    adminCommerceApi
+      .productList()
+      .then((products) => setCatalogue(products.filter((product) => product.status !== "archived")))
+      .catch(() => setCatalogue([]));
   }, []);
 
-  const communityName = useMemo(() => {
+  const productName = useMemo(() => {
     const byId = new Map<number, string>();
-    for (const community of communities ?? []) byId.set(community.id, community.name);
+    for (const product of catalogue ?? []) byId.set(product.id, product.title);
     return byId;
-  }, [communities]);
+  }, [catalogue]);
 
-  const canPickCommunity = communities !== null && communities.length > 0;
+  const canPickProducts = catalogue !== null && catalogue.length > 0;
 
   const priceCents = dollarsToCents(form.price);
   // Only complain when there's no number in there at all — a blank box and a
@@ -347,11 +349,12 @@ export function PlansPage() {
       description: form.description,
       trialDays: form.trialDays,
       features: featureList(form.features),
+      productIds: form.productIds,
       published: form.published,
     };
-    if (canPickCommunity) {
-      payload.communityId = form.communityId === "" ? null : Number(form.communityId);
-    }
+    // Clear the legacy one-community field. Existing access is represented by
+    // the selected community product after migration 025.
+    payload.communityId = null;
     if (!priceLocked) {
       payload.priceCents = priceCents;
       payload.interval = form.interval;
@@ -457,16 +460,12 @@ export function PlansPage() {
                   plan that grants nothing looks identical to one that grants a
                   community until you open it. */}
               <p className="mt-2 text-xs text-ink-soft">
-                {plan.communityId === null ? (
-                  "Doesn't unlock a community"
-                ) : (
-                  <>
-                    Unlocks{" "}
-                    <strong className="text-ink">
-                      {communityName.get(plan.communityId) ?? "a community"}
-                    </strong>
-                  </>
-                )}
+                {(plan.productIds ?? []).length === 0
+                  ? "Doesn't unlock anything yet"
+                  : `Unlocks ${(plan.productIds ?? [])
+                      .slice(0, 2)
+                      .map((id) => productName.get(id) ?? "a product")
+                      .join(", ")}${plan.productIds.length > 2 ? ` and ${plan.productIds.length - 2} more` : ""}`}
               </p>
 
               {features.length > 0 && (
@@ -617,29 +616,37 @@ export function PlansPage() {
             </p>
           )}
 
-          {/* The plan's one entitlement. Everything else a subscriber should
-              get is sold as an offer over products; this is the only thing a
-              plan unlocks by itself, and until it was on this form no plan
-              could unlock anything at all. */}
-          {canPickCommunity && (
-            <Field
-              label="Which community does this unlock?"
-              hint="optional"
-              htmlFor="plan-community"
-            >
-              <select
-                id="plan-community"
-                value={form.communityId}
-                onChange={(e) => setForm((f) => ({ ...f, communityId: e.target.value }))}
-                className={selectStyles}
-              >
-                <option value="">No community — this plan is just a payment</option>
-                {communities?.map((community) => (
-                  <option key={community.id} value={String(community.id)}>
-                    {community.name}
-                  </option>
-                ))}
-              </select>
+          {canPickProducts && (
+            <Field label="What does this plan unlock?" hint="courses, downloads, communities and more">
+              <div className="grid gap-2 sm:grid-cols-2">
+                {catalogue?.map((product) => {
+                  const selected = form.productIds.includes(product.id);
+                  return (
+                    <label
+                      key={product.id}
+                      className="flex min-h-11 cursor-pointer items-center gap-3 rounded-xl border border-hairline px-3 py-2.5 text-sm"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selected}
+                        onChange={() =>
+                          setForm((current) => ({
+                            ...current,
+                            productIds: selected
+                              ? current.productIds.filter((id) => id !== product.id)
+                              : [...current.productIds, product.id],
+                          }))
+                        }
+                        className="size-4 rounded border-hairline text-plum"
+                      />
+                      <span className="min-w-0">
+                        <span className="block truncate font-medium text-ink">{product.title}</span>
+                        <span className="text-xs text-ink-soft">{PRODUCT_KIND[product.kind].one}</span>
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
             </Field>
           )}
 
@@ -872,8 +879,20 @@ export function CouponsPage() {
   const [rows, setRows] = useState<Coupon[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
+  const [editing, setEditing] = useState<Coupon | null>(null);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ code: "", percentOff: 20, maxRedemptions: "" });
+  const emptyForm = {
+    code: "",
+    discountKind: "percent" as "percent" | "fixed",
+    discount: "20",
+    currency: "usd",
+    maxRedemptions: "",
+    expiresAt: "",
+    duration: "first" as "first" | "forever",
+    offerIds: [] as number[],
+  };
+  const [form, setForm] = useState(emptyForm);
+  const [offers, setOffers] = useState<Offer[]>([]);
   const [confirm, confirmDialog] = useConfirm();
 
   const load = useCallback(() => {
@@ -885,19 +904,54 @@ export function CouponsPage() {
 
   useEffect(load, [load]);
 
-  async function create(e: FormEvent) {
+  useEffect(() => {
+    adminCommerceApi.offerList().then(setOffers).catch(() => undefined);
+  }, []);
+
+  function edit(coupon: Coupon) {
+    setEditing(coupon);
+    setForm({
+      code: coupon.code,
+      discountKind: coupon.percentOff != null ? "percent" : "fixed",
+      discount: coupon.percentOff != null ? String(coupon.percentOff) : String((coupon.amountOffCents ?? 0) / 100),
+      currency: coupon.currency,
+      maxRedemptions: coupon.maxRedemptions == null ? "" : String(coupon.maxRedemptions),
+      expiresAt: coupon.expiresAt?.slice(0, 10) ?? "",
+      duration: coupon.duration,
+      offerIds: coupon.offerIds ?? [],
+    });
+    setCreating(true);
+  }
+
+  function closeEditor() {
+    setCreating(false);
+    setEditing(null);
+    setForm(emptyForm);
+  }
+
+  async function save(e: FormEvent) {
     e.preventDefault();
     if (!form.code.trim()) return;
     setSaving(true);
     try {
-      await adminApi.couponCreate({
-        code: form.code,
-        percentOff: form.percentOff,
-        ...(form.maxRedemptions ? { maxRedemptions: Number(form.maxRedemptions) } : {}),
-      });
-      toast.success("Coupon created — people can use it at checkout now");
-      setCreating(false);
-      setForm({ code: "", percentOff: 20, maxRedemptions: "" });
+      const rules = {
+        ...(form.discountKind === "percent"
+          ? { percentOff: Number(form.discount), amountOffCents: null }
+          : { percentOff: null, amountOffCents: dollarsToCents(form.discount) }),
+        currency: form.currency,
+        maxRedemptions: form.maxRedemptions ? Number(form.maxRedemptions) : null,
+        expiresAt: form.expiresAt || null,
+        duration: form.duration,
+        offerIds: form.offerIds,
+      };
+      if (editing) {
+        await adminApi.couponUpdate(editing.id, rules);
+        toast.success(`${editing.code} updated — its redemption history is unchanged`);
+      } else {
+        await adminApi.couponCreate({ code: form.code, ...rules });
+        toast.success("Coupon created — people can use it at checkout now");
+      }
+      closeEditor();
       load();
     } catch (err) {
       toast.error(friendlyError(err, "coupon"));
@@ -979,6 +1033,23 @@ export function CouponsPage() {
         ),
       },
       {
+        id: "rules",
+        header: "Where & when",
+        cell: ({ row }) => {
+          const coupon = row.original;
+          const scope = coupon.scope === "offers"
+            ? `${pluralize(coupon.offerIds?.length ?? 0, "offer")}`
+            : "Every offer";
+          const duration = coupon.duration === "forever" ? "every recurring payment" : "first payment";
+          return (
+            <span className="text-sm text-ink-soft">
+              {scope} · {duration}
+              {coupon.expiresAt ? ` · ends ${formatDate(coupon.expiresAt)}` : ""}
+            </span>
+          );
+        },
+      },
+      {
         accessorKey: "active",
         header: "Can it be used?",
         cell: ({ row }) => (
@@ -993,6 +1064,9 @@ export function CouponsPage() {
         enableSorting: false,
         cell: ({ row }) => (
           <RowActions>
+            <Button variant="ghost" size="sm" onClick={() => edit(row.original)}>
+              <Pencil /> Edit
+            </Button>
             <Button variant="ghost" size="sm" onClick={() => toggle(row.original)}>
               {row.original.active ? "Switch off" : "Switch on"}
             </Button>
@@ -1019,7 +1093,7 @@ export function CouponsPage() {
         title="Coupons"
         description="Discount codes people type in when they're paying, so they get money off."
         actions={
-          <Button size="sm" onClick={() => setCreating(true)}>
+          <Button size="sm" onClick={() => { setEditing(null); setForm(emptyForm); setCreating(true); }}>
             <Plus />
             New coupon
           </Button>
@@ -1049,21 +1123,23 @@ export function CouponsPage() {
 
       <Modal
         open={creating}
-        onOpenChange={setCreating}
-        title="New coupon"
-        description="A code people type in when they're paying, so they get money off. You'll see how many times it's been used."
+        onOpenChange={(open) => open ? setCreating(true) : closeEditor()}
+        title={editing ? `Edit ${editing.code}` : "New coupon"}
+        description={editing
+          ? "Change what this code does without losing the purchases already recorded against it."
+          : "A code people type in when they're paying, so they get money off. You'll see how many times it's been used."}
         footer={
           <>
-            <Button variant="secondary" size="sm" onClick={() => setCreating(false)}>
+            <Button variant="secondary" size="sm" onClick={closeEditor}>
               Cancel
             </Button>
             <Button size="sm" type="submit" form="new-coupon" disabled={saving}>
-              {saving ? "Creating…" : "Create coupon"}
+              {saving ? "Saving…" : editing ? "Save changes" : "Create coupon"}
             </Button>
           </>
         }
       >
-        <form id="new-coupon" onSubmit={create} className="space-y-4">
+        <form id="new-coupon" onSubmit={save} className="space-y-4">
           <Field
             label="What do people type in?"
             hint="we'll make it capitals"
@@ -1076,23 +1152,41 @@ export function CouponsPage() {
               placeholder="LAUNCH20"
               required
               autoFocus
+              disabled={editing !== null}
               className="font-mono"
             />
           </Field>
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="How much off?" hint="as a percentage" htmlFor="coupon-percent">
+            <Field label="Discount type" htmlFor="coupon-kind">
+              <select
+                id="coupon-kind"
+                className={selectStyles}
+                value={form.discountKind}
+                onChange={(e) => setForm((f) => ({
+                  ...f,
+                  discountKind: e.target.value as "percent" | "fixed",
+                  discount: e.target.value === "percent" ? "20" : "50",
+                }))}
+              >
+                <option value="percent">Percentage off</option>
+                <option value="fixed">Fixed amount off</option>
+              </select>
+            </Field>
+            <Field label="How much off?" hint={form.discountKind === "percent" ? "percentage" : form.currency.toUpperCase()} htmlFor="coupon-discount">
               <div className="relative">
                 <Input
-                  id="coupon-percent"
+                  id="coupon-discount"
                   type="number"
-                  min={1}
-                  max={100}
-                  className="pr-8"
-                  value={form.percentOff}
-                  onChange={(e) => setForm((f) => ({ ...f, percentOff: Number(e.target.value) }))}
+                  min={form.discountKind === "percent" ? 1 : 0.01}
+                  max={form.discountKind === "percent" ? 100 : undefined}
+                  step={form.discountKind === "percent" ? 1 : 0.01}
+                  className="pr-10"
+                  value={form.discount}
+                  onChange={(e) => setForm((f) => ({ ...f, discount: e.target.value }))}
+                  required
                 />
                 <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm text-ink-soft">
-                  %
+                  {form.discountKind === "percent" ? "%" : form.currency.toUpperCase()}
                 </span>
               </div>
             </Field>
@@ -1110,15 +1204,80 @@ export function CouponsPage() {
                 placeholder="No limit"
               />
             </Field>
+            <Field label="Expiry date" hint="optional" htmlFor="coupon-expiry">
+              <Input
+                id="coupon-expiry"
+                type="date"
+                min={new Date(Date.now() + 86_400_000).toISOString().slice(0, 10)}
+                value={form.expiresAt}
+                onChange={(e) => setForm((f) => ({ ...f, expiresAt: e.target.value }))}
+              />
+            </Field>
+            <Field label="On a subscription" htmlFor="coupon-duration">
+              <select
+                id="coupon-duration"
+                className={selectStyles}
+                value={form.duration}
+                onChange={(e) => setForm((f) => ({ ...f, duration: e.target.value as "first" | "forever" }))}
+              >
+                <option value="first">Discount the first payment only</option>
+                <option value="forever">Discount every recurring payment</option>
+              </select>
+            </Field>
+            {form.discountKind === "fixed" && (
+              <Field label="Currency" htmlFor="coupon-currency">
+                <select
+                  id="coupon-currency"
+                  className={selectStyles}
+                  value={form.currency}
+                  onChange={(e) => setForm((f) => ({ ...f, currency: e.target.value }))}
+                >
+                  {[
+                    ["usd", "USD — US dollar"],
+                    ["cad", "CAD — Canadian dollar"],
+                    ["gbp", "GBP — British pound"],
+                    ["eur", "EUR — Euro"],
+                    ["aud", "AUD — Australian dollar"],
+                  ].map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                </select>
+              </Field>
+            )}
           </div>
+          <Field label="Which offers accept it?" hint="leave all clear to use it everywhere">
+            <div className="max-h-44 space-y-1 overflow-auto rounded-xl border border-hairline p-2">
+              {offers.length === 0 ? (
+                <p className="px-2 py-1 text-sm text-ink-soft">No offers are available yet.</p>
+              ) : offers.map((offer) => (
+                <label key={offer.id} className="flex min-h-10 cursor-pointer items-center gap-3 rounded-lg px-2 py-1.5 text-sm hover:bg-cream">
+                  <input
+                    type="checkbox"
+                    className="size-4 rounded border-hairline text-plum"
+                    checked={form.offerIds.includes(offer.id)}
+                    onChange={() => setForm((current) => ({
+                      ...current,
+                      offerIds: current.offerIds.includes(offer.id)
+                        ? current.offerIds.filter((id) => id !== offer.id)
+                        : [...current.offerIds, offer.id],
+                    }))}
+                  />
+                  <span>{offer.title}</span>
+                </label>
+              ))}
+            </div>
+          </Field>
           <p className="rounded-xl bg-cream px-3.5 py-2.5 text-xs text-ink-soft">
             {form.code ? (
               <>
                 Someone typing <strong className="text-ink">{form.code}</strong> pays{" "}
-                <strong className="text-ink">{form.percentOff}% less</strong>
+                <strong className="text-ink">
+                  {form.discountKind === "percent"
+                    ? `${form.discount}% less`
+                    : `${form.currency.toUpperCase()} ${form.discount} less`}
+                </strong>
                 {form.maxRedemptions
                   ? `, until ${form.maxRedemptions} people have used it.`
-                  : ", however many people use it."}
+                  : ", however many people use it."}{" "}
+                {form.offerIds.length ? `It works on ${pluralize(form.offerIds.length, "selected offer")}.` : "It works on every offer."}
               </>
             ) : (
               "Pick something short and easy to type — people copy these out of an email."

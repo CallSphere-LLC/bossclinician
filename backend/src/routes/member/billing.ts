@@ -10,6 +10,7 @@ import { badRequest, notFound, serviceUnavailable, unauthorized } from "../../ut
 import { denyImpersonation, type AuthedMember } from "../../middleware/memberAuth";
 import { escapeHtml } from "../../email/templates";
 import { formatAmount } from "../../utils/money";
+import { readSetting } from "../../services/settings";
 
 /**
  * `/api/member/billing` — the customer's own money: what they have bought, what
@@ -772,10 +773,12 @@ memberBillingRouter.get(
 
 /* ------------------------------------------------------------------- receipt */
 
-interface BusinessDetails {
+export interface BusinessDetails {
   name: string;
   addressLines: string[];
   email: string;
+  /** EIN or VAT number. Printed only when she has filled it in. */
+  taxId: string;
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
@@ -796,7 +799,7 @@ function asText(value: unknown): string {
  * receipt that renders nothing because the shape was unexpected is worse than
  * one built from whichever of those turned up.
  */
-function readBusinessDetails(rows: { key: string; value: unknown }[]): BusinessDetails {
+export function readBusinessDetails(rows: { key: string; value: unknown }[]): BusinessDetails {
   const byKey = new Map(rows.map((r) => [r.key, asRecord(r.value)]));
   const business = byKey.get("business") ?? {};
   const contact = byKey.get("contact") ?? {};
@@ -823,6 +826,10 @@ function readBusinessDetails(rows: { key: string; value: unknown }[]): BusinessD
     name: asText(business.name) || asText(contact.name) || "Boss Clinician",
     addressLines: lines.map((l) => asText(l)).filter((l) => l !== "").slice(0, 6),
     email: asText(business.email) || asText(contact.email),
+    // Settings has carried `taxId` since the group was written, and its help
+    // text has always said "Printed on receipts" — nothing read it, so a VAT
+    // number typed in to satisfy an accountant never reached the document.
+    taxId: asText(business.taxId),
   };
 }
 
@@ -832,8 +839,12 @@ interface ReceiptLine {
   amountCents: number;
 }
 
-interface ReceiptView {
+export interface ReceiptView {
   business: BusinessDetails;
+  /** Heads the document. "Receipt" unless she has renamed it. */
+  title: string;
+  /** Her refund policy, printed at the foot so the terms travel with the money. */
+  refundPolicy: string;
   billedToName: string;
   billedToEmail: string;
   reference: string;
@@ -870,7 +881,7 @@ function formatDate(value: string | null): string {
  * a person, and this page is served from the site's own origin, so an unescaped
  * one would be script running with the member's session.
  */
-function renderReceipt(view: ReceiptView): string {
+export function renderReceipt(view: ReceiptView): string {
   const money = (cents: number): string => escapeHtml(formatAmount(cents, view.currency));
 
   const lines = view.lines
@@ -912,7 +923,7 @@ function renderReceipt(view: ReceiptView): string {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Receipt ${escapeHtml(view.reference)} &middot; ${escapeHtml(view.business.name)}</title>
+<title>${escapeHtml(view.title)} ${escapeHtml(view.reference)} &middot; ${escapeHtml(view.business.name)}</title>
 <style>
   :root { color-scheme: light; }
   body { margin: 0; padding: 40px 24px; background: #f6f5f2; color: #1c1917;
@@ -940,6 +951,7 @@ function renderReceipt(view: ReceiptView): string {
   .pill.unpaid { background: #fef3c7; color: #92400e; }
   footer { margin-top: 32px; padding-top: 20px; border-top: 1px solid #e7e5e4;
            font-size: 13px; color: #78716c; }
+  .policy { margin-top: 10px; white-space: pre-line; }
   @media print { body { background: #fff; padding: 0; } .sheet { box-shadow: none; padding: 0; } }
 </style>
 </head>
@@ -947,7 +959,7 @@ function renderReceipt(view: ReceiptView): string {
   <div class="sheet">
     <header>
       <div>
-        <h1>Receipt</h1>
+        <h1>${escapeHtml(view.title)}</h1>
         <div class="muted">${escapeHtml(view.reference)}</div>
         <div style="margin-top:10px"><span class="pill${view.paid ? "" : " unpaid"}">${paidLine}</span></div>
       </div>
@@ -955,6 +967,7 @@ function renderReceipt(view: ReceiptView): string {
         <strong>${escapeHtml(view.business.name)}</strong>
 ${addressBlock}
 ${view.business.email ? `      <div>${escapeHtml(view.business.email)}</div>` : ""}
+${view.business.taxId ? `      <div>Tax ID ${escapeHtml(view.business.taxId)}</div>` : ""}
       </div>
     </header>
 
@@ -984,6 +997,7 @@ ${totals}
 
     <footer>
       Thank you. Keep this receipt for your records &mdash; ${escapeHtml(view.business.name)}.
+${view.refundPolicy ? `      <div class="policy">${escapeHtml(view.refundPolicy)}</div>` : ""}
     </footer>
   </div>
 </body>
@@ -1060,7 +1074,7 @@ memberBillingRouter.get(
             [invoice.order_id]
           ),
       pool.query<{ key: string; value: unknown }>(
-        `SELECT key, value FROM settings WHERE key IN ('business','contact')`
+        `SELECT key, value FROM settings WHERE key IN ('business','contact','customer_payments')`
       ),
     ]);
 
@@ -1093,8 +1107,18 @@ memberBillingRouter.get(
           }))
         : [{ title: invoice.description, quantity: 1, amountCents: subtotalCents }];
 
+    const payments = asRecord(
+      settings.rows.find((r) => r.key === "customer_payments")?.value
+    );
+    // Trimmed and length-capped rather than trusted: both are free text from
+    // settings, and the first is a page heading.
+    const receiptTitle = asText(payments.receiptTitle).slice(0, 60) || "Receipt";
+    const refundPolicy = asText(payments.refundPolicy).slice(0, 600);
+
     const html = renderReceipt({
       business: readBusinessDetails(settings.rows),
+      title: receiptTitle,
+      refundPolicy,
       billedToName: invoice.billing_name ?? "",
       // The signed-in member's own address, never the order's: this document is
       // only ever shown to them, and it is the one value here that is certain.
@@ -1138,31 +1162,42 @@ memberBillingRouter.get(
  * churn vocabulary as well, so the same answer lands in both places rather than
  * in neither.
  */
-const cancelReasonSchema = z.enum([
-  "too_expensive",
-  "not_using_it",
-  "missing_feature",
-  "found_alternative",
-  "temporary_pause",
-  "other",
-]);
+interface CancelReasonOption { value: string; label: string }
 
-type CancelReason = z.infer<typeof cancelReasonSchema>;
+const DEFAULT_CANCEL_REASONS: CancelReasonOption[] = [
+  { value: "too_expensive", label: "It's too expensive" },
+  { value: "not_using_it", label: "I'm not using it" },
+  { value: "missing_feature", label: "It's missing something I need" },
+  { value: "found_alternative", label: "I found another option" },
+  { value: "temporary_pause", label: "I just need a break for now" },
+  { value: "other", label: "Something else" },
+];
 
-const CANCEL_REASON_LABELS: Record<CancelReason, string> = {
-  too_expensive: "It's too expensive",
-  not_using_it: "I'm not using it",
-  missing_feature: "It's missing something I need",
-  found_alternative: "I found another option",
-  temporary_pause: "I just need a break for now",
-  other: "Something else",
-};
+/** Parses the owner-editable list without allowing report keys to become arbitrary data. */
+export function parseCancelReasons(value: unknown): CancelReasonOption[] {
+  if (typeof value !== "string") return DEFAULT_CANCEL_REASONS;
+  const seen = new Set<string>();
+  const parsed = value.split(/\r?\n/).flatMap((line) => {
+    const [rawKey, ...labelParts] = line.split("|");
+    const key = rawKey?.trim() ?? "";
+    const label = labelParts.join("|").trim();
+    if (!/^[a-z][a-z0-9_]{1,49}$/.test(key) || !label || seen.has(key)) return [];
+    seen.add(key);
+    return [{ value: key, label: label.slice(0, 160) }];
+  });
+  return parsed.length > 0 ? parsed.slice(0, 30) : DEFAULT_CANCEL_REASONS;
+}
+
+async function cancelReasons(): Promise<CancelReasonOption[]> {
+  const settings = await readSetting("customer_payments");
+  return parseCancelReasons(settings.cancellationReasons);
+}
 
 type StripeCancelFeedback = NonNullable<
   Stripe.SubscriptionUpdateParams["cancellation_details"]
 >["feedback"];
 
-const STRIPE_CANCEL_FEEDBACK: Record<CancelReason, StripeCancelFeedback> = {
+const STRIPE_CANCEL_FEEDBACK: Record<string, StripeCancelFeedback> = {
   too_expensive: "too_expensive",
   not_using_it: "unused",
   missing_feature: "missing_features",
@@ -1174,7 +1209,7 @@ const STRIPE_CANCEL_FEEDBACK: Record<CancelReason, StripeCancelFeedback> = {
 
 const cancelSchema = z
   .object({
-    reason: cancelReasonSchema,
+    reason: z.string().trim().regex(/^[a-z][a-z0-9_]{1,49}$/),
     feedback: z.string().trim().max(2000).optional(),
   })
   // "Something else" with nothing written in it is precisely the row the
@@ -1254,10 +1289,7 @@ memberBillingRouter.get(
       subscriptions: found.rows.map(toSubscriptionJson),
       // The cancellation form's options come from the server so the only list
       // of reasons is the one the endpoint validates against.
-      cancelReasons: cancelReasonSchema.options.map((value) => ({
-        value,
-        label: CANCEL_REASON_LABELS[value],
-      })),
+      cancelReasons: await cancelReasons(),
     });
   })
 );
@@ -1283,6 +1315,10 @@ memberBillingRouter.post(
       throw badRequest("Please choose a reason for cancelling.", parsed.error.flatten());
     }
     const { reason, feedback = "" } = parsed.data;
+    const allowedReasons = await cancelReasons();
+    if (!allowedReasons.some((option) => option.value === reason)) {
+      throw badRequest("Please choose one of the cancellation reasons shown.");
+    }
 
     const row = await loadOwnedSubscription(member.id, subscriptionId);
     assertStillLive(row);
@@ -1292,7 +1328,7 @@ memberBillingRouter.post(
       await stripe().subscriptions.update(row.stripe_subscription_id, {
         cancel_at_period_end: true,
         cancellation_details: {
-          feedback: STRIPE_CANCEL_FEEDBACK[reason],
+          feedback: STRIPE_CANCEL_FEEDBACK[reason] ?? "other",
           // Stripe caps the comment; ours allows more, and the full text is kept
           // in cancel_feedback either way.
           comment: feedback.slice(0, 500) || undefined,

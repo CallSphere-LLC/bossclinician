@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent, type RefObject } from "react";
+import { useSearchParams } from "react-router-dom";
 import { motion } from "motion/react";
 import {
   ArrowDown,
   Bold,
+  CheckCircle2,
   ChevronDown,
   ChevronUp,
   Copy,
@@ -17,6 +19,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { adminApi } from "@/lib/api";
+import { adminCommerceApi, type Offer } from "@/lib/adminCommerceApi";
 import type { Funnel, FunnelStep } from "@/types/admin";
 import { cn } from "@/lib/cn";
 import { formatNumber } from "@/lib/format";
@@ -74,6 +77,13 @@ const FUNNEL_KINDS: { value: string; label: string }[] = [
   { value: "sales", label: "Selling something" },
   { value: "launch", label: "Running a launch" },
 ];
+
+const BLUEPRINT_SUMMARY: Record<string, string> = {
+  opt_in: "3 pages, a sign-up form, a joined tag and a welcome email",
+  webinar: "4 pages, a registration form, a joined tag and 3 reminder/replay emails",
+  sales: "3 pages, a sign-up form, a joined tag and a customer welcome email",
+  launch: "4 pages, a waitlist form, a joined tag and a 4-email launch sequence",
+};
 
 /* ------------------------------------------------------- formatting toolbar */
 
@@ -183,23 +193,51 @@ export default function Funnels() {
   const [error, setError] = useState<string | null>(null);
   const [funnelDraft, setFunnelDraft] = useState<Partial<Funnel> | null>(null);
   const [stepDraft, setStepDraft] = useState<Partial<FunnelStep> | null>(null);
+  const [offers, setOffers] = useState<Offer[]>([]);
   const [reordering, setReordering] = useState(false);
   const bodyRef = useRef<HTMLTextAreaElement>(null);
   const [confirm, confirmDialog] = useConfirm();
+  const [searchParams, setSearchParams] = useSearchParams();
+  /* Read once, on mount only. `?funnel=` is an opening instruction, not a
+     binding: once she clicks a different row the URL follows the selection
+     rather than the other way round, so re-reading it here would fight the
+     effect below and snap the panel back to the funnel in the address bar. */
+  const openAtRef = useRef<number | null>(Number(searchParams.get("funnel")) || null);
 
-  const load = useCallback(() => {
-    adminApi
-      .growthList<Funnel>("funnels")
-      .then((list) => {
+  const load = useCallback(async (preferredId?: number) => {
+    try {
+      const list = await adminApi.growthList<Funnel>("funnels");
         setFunnels(list);
-        // Re-read by id: keeping the pre-save object left the share panel still
-        // saying the funnel wasn't live after she had just made it live.
-        setActive((prev) => (prev ? (list.find((f) => f.id === prev.id) ?? list[0]) : list[0]) ?? null);
-      })
-      .catch(() => setError("We couldn't load your funnels. Try refreshing the page."));
+      // Prefer a newly-created funnel explicitly. The former implicit fallback
+      // is what left the detail panel showing the previous funnel after Create.
+      setActive((prev) => {
+        const wantedId = preferredId ?? prev?.id;
+        return (wantedId ? list.find((f) => f.id === wantedId) : undefined) ?? list[0] ?? null;
+      });
+    } catch {
+      setError("We couldn't load your funnels. Try refreshing the page.");
+    }
   }, []);
 
-  useEffect(load, [load]);
+  useEffect(() => {
+    void load(openAtRef.current ?? undefined);
+  }, [load]);
+
+  /* Selection is the single source of truth and the URL trails it, so the view
+     is linkable: whichever funnel the panel is showing is the one a copied
+     address reopens. `replace` keeps Back going to the previous screen instead
+     of walking her through every funnel she happened to click. */
+  useEffect(() => {
+    if (!active) return;
+    if (searchParams.get("funnel") === String(active.id)) return;
+    const next = new URLSearchParams(searchParams);
+    next.set("funnel", String(active.id));
+    setSearchParams(next, { replace: true });
+  }, [active, searchParams, setSearchParams]);
+
+  useEffect(() => {
+    adminCommerceApi.offerList().then(setOffers).catch(() => setOffers([]));
+  }, []);
 
   const loadSteps = useCallback((id: number) => {
     setSteps(null);
@@ -223,11 +261,37 @@ export default function Funnels() {
       slug: funnelDraft.slug || uniqueKey(slugify(funnelDraft.name) || "funnel", taken, "-"),
     };
     try {
-      if (funnelDraft.id) await adminApi.growthUpdate("funnels", funnelDraft.id, payload);
-      else await adminApi.growthCreate("funnels", payload);
-      toast.success("Saved.");
-      setFunnelDraft(null);
-      load();
+      if (funnelDraft.id) {
+        const saved = await adminApi.growthUpdate<Funnel>("funnels", funnelDraft.id, payload);
+        toast.success("Saved.");
+        setFunnelDraft(null);
+        await load(saved.id);
+      } else {
+        const built = await adminApi.funnelBlueprint(payload);
+        toast.success(`Funnel ready with ${built.stageCount} stages and ${built.emailCount} follow-up email${built.emailCount === 1 ? "" : "s"}.`);
+        setFunnelDraft(null);
+        await load(built.funnel.id);
+      }
+    } catch (err) {
+      toast.error(friendlyError(err, "funnel"));
+    }
+  }
+
+  async function deleteFunnel(funnel: Funnel) {
+    const ok = await confirm({
+      title: `Delete the funnel “${funnel.name}”?`,
+      description: funnel.formId
+        ? "Its blueprint stages, sign-up form, joined tag and follow-up sequence will be deleted too."
+        : "Its stages and reporting history will be deleted too.",
+      confirmLabel: "Yes, delete it",
+      destructive: true,
+    });
+    if (!ok) return;
+    try {
+      await adminApi.growthDelete("funnels", funnel.id);
+      setActive(null);
+      await load();
+      toast.success("Funnel deleted.");
     } catch (err) {
       toast.error(friendlyError(err, "funnel"));
     }
@@ -333,8 +397,9 @@ export default function Funnels() {
                   <button
                     type="button"
                     onClick={() => setActive(f)}
+                    aria-current={active?.id === f.id ? "true" : undefined}
                     className={cn(
-                      "flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm transition-colors",
+                      "flex min-h-11 w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm transition-colors",
                       active?.id === f.id
                         ? "bg-lilac-tint font-semibold text-plum-deep"
                         : "text-ink-soft hover:bg-cream",
@@ -388,6 +453,46 @@ export default function Funnels() {
               </div>
             )}
 
+            {active && (active.formId || active.sequenceId || active.tagId) && (
+              <Card className="p-5">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="font-semibold text-ink">Blueprint readiness</p>
+                    <p className="mt-1 text-sm text-ink-soft">
+                      The working parts were created together and are ready for you to personalise.
+                    </p>
+                  </div>
+                  <Badge tone={active.published ? "green" : "neutral"}>
+                    {active.published ? "Ready and live" : "Ready to review"}
+                  </Badge>
+                </div>
+                <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                  {active.formId && (
+                    <a className="flex min-h-11 items-center gap-2 rounded-lg border border-hairline px-3 text-sm font-semibold text-ink hover:border-plum" href={`/admin/marketing/forms-v2?form=${active.formId}`}>
+                      <CheckCircle2 className="size-4 text-green" /> Sign-up form and joined tag
+                    </a>
+                  )}
+                  {active.sequenceId && (
+                    <a className="flex min-h-11 items-center gap-2 rounded-lg border border-hairline px-3 text-sm font-semibold text-ink hover:border-plum" href={`/admin/marketing/sequences/${active.sequenceId}`}>
+                      <CheckCircle2 className="size-4 text-green" /> Follow-up email sequence
+                    </a>
+                  )}
+                  <div className="flex min-h-11 items-center gap-2 rounded-lg border border-hairline px-3 text-sm font-semibold text-ink">
+                    <CheckCircle2 className="size-4 text-green" /> {steps?.length ?? 0} connected stages
+                  </div>
+                  {active.offerId ? (
+                    <a className="flex min-h-11 items-center gap-2 rounded-lg border border-hairline px-3 text-sm font-semibold text-ink hover:border-plum" href={`/admin/offers/${active.offerId}`}>
+                      <CheckCircle2 className="size-4 text-green" /> Attached offer
+                    </a>
+                  ) : ["sales", "launch"].includes(active.kind) ? (
+                    <div className="flex min-h-11 items-center gap-2 rounded-lg border border-gold/40 bg-gold/5 px-3 text-sm text-ink">
+                      Choose an offer before publishing
+                    </div>
+                  ) : null}
+                </div>
+              </Card>
+            )}
+
             <Card>
               <CardHeader
                 title={active ? `${active.name} — stages` : "Stages"}
@@ -401,9 +506,14 @@ export default function Funnels() {
                 action={
                   <div className="flex gap-2">
                     {active && (
-                      <Button variant="secondary" size="sm" onClick={() => setFunnelDraft(active)}>
-                        Edit this funnel
-                      </Button>
+                      <>
+                        <Button variant="secondary" size="sm" onClick={() => setFunnelDraft(active)}>
+                          Edit this funnel
+                        </Button>
+                        <Button variant="dangerGhost" size="iconSm" aria-label={`Delete “${active.name}”`} onClick={() => deleteFunnel(active)}>
+                          <Trash2 />
+                        </Button>
+                      </>
                     )}
                     <Button
                       size="sm"
@@ -627,6 +737,27 @@ export default function Funnels() {
                 ))}
               </select>
             </Field>
+            {!funnelDraft.id && (
+              <div className="rounded-xl border border-plum/20 bg-lilac-tint/45 p-3 text-sm text-ink">
+                <strong>This blueprint creates:</strong>{" "}
+                {BLUEPRINT_SUMMARY[funnelDraft.kind ?? "opt_in"]}.
+              </div>
+            )}
+            {!funnelDraft.id && ["sales", "launch"].includes(funnelDraft.kind ?? "") && offers.length > 0 && (
+              <Field label="Offer this funnel sells" hint="optional — you can connect it later">
+                <select
+                  className={selectStyles}
+                  value={funnelDraft.offerId ?? ""}
+                  onChange={(event) => setFunnelDraft((current) => ({
+                    ...current,
+                    offerId: event.target.value ? Number(event.target.value) : null,
+                  }))}
+                >
+                  <option value="">Choose later</option>
+                  {offers.map((offer) => <option key={offer.id} value={offer.id}>{offer.title}</option>)}
+                </select>
+              </Field>
+            )}
             <div>
               <label className="flex cursor-pointer items-center gap-2.5 text-sm font-medium text-ink">
                 <input

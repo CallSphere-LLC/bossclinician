@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, Send } from "lucide-react";
+import { ArrowLeft, CreditCard, ExternalLink, Receipt, Send } from "lucide-react";
 import { toast } from "sonner";
 import {
   settingsApi,
@@ -364,6 +364,38 @@ function TestEmailCard() {
   );
 }
 
+/** Makes the already-live member billing surface visible from payment settings. */
+function BillingPortalCard() {
+  return (
+    <Card>
+      <CardHeader
+        title="Customer billing portal"
+        subtitle="Customers can replace a card, see invoices and PDF receipts, pause or resume a subscription, and cancel with a reason."
+      />
+      <div className="grid gap-3 px-5 py-5 sm:grid-cols-2">
+        <Button asChild variant="secondary" className="min-h-11 justify-start">
+          <a href="/account/billing" target="_blank" rel="noreferrer">
+            <CreditCard />
+            Open the customer portal
+            <ExternalLink className="ml-auto" />
+          </a>
+        </Button>
+        <Button asChild variant="secondary" className="min-h-11 justify-start">
+          <Link to="/admin/marketing/emails">
+            <Receipt />
+            Customise receipt emails
+          </Link>
+        </Button>
+        <p className="text-sm leading-relaxed text-ink-soft sm:col-span-2">
+          Failed recurring payments follow Stripe&rsquo;s retry dates. Each new failed attempt sends
+          a payment-failed email with the hosted invoice link; a successful retry restores the
+          subscription automatically.
+        </p>
+      </div>
+    </Card>
+  );
+}
+
 export default function SettingsGroupPage() {
   const { group: groupKey } = useParams<{ group: string }>();
   const [group, setGroup] = useState<SettingGroup | null | undefined>(undefined);
@@ -409,6 +441,7 @@ export default function SettingsGroupPage() {
         <ErrorNotice message="We couldn't find that group of settings." />
       ) : (
         <div className="space-y-5">
+          {group.key === "payments" && <BillingPortalCard />}
           {group.settings.map((card) => (
             <SettingCard key={card.key} card={card} onSaved={load} />
           ))}

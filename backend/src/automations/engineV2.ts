@@ -38,6 +38,8 @@ export const TRIGGER_TYPES = [
   "tag_added",
   "tag_removed",
   "subscription_cancelled",
+  "subscription_cancel_requested",
+  "payment_plan_completed",
   "payment_failed",
   "event_registered",
   "event_attended",
@@ -81,7 +83,12 @@ export const TRIGGER_DESCRIPTORS: TriggerDescriptor[] = [
   { type: "sequence_completed", label: "someone finishes an email sequence", subjectKey: "sequenceId", subjectSource: "sequences", subjectLabel: "Which sequence" },
   { type: "tag_added", label: "a tag is added to someone", subjectKey: "tagId", subjectSource: "tags", subjectLabel: "Which tag" },
   { type: "tag_removed", label: "a tag is removed from someone", subjectKey: "tagId", subjectSource: "tags", subjectLabel: "Which tag" },
-  { type: "subscription_cancelled", label: "someone cancels a subscription", subjectKey: "planId", subjectSource: "plans", subjectLabel: "Which plan" },
+  { type: "subscription_cancelled", label: "someone's subscription actually ends", subjectKey: "planId", subjectSource: "plans", subjectLabel: "Which plan" },
+  // "Asked to cancel" and "has now gone" are weeks apart on a period-end
+  // cancellation, and they want opposite emails: a win-back offer while she can
+  // still keep them, and a goodbye once she cannot.
+  { type: "subscription_cancel_requested", label: "someone asks to cancel a subscription", subjectKey: "planId", subjectSource: "plans", subjectLabel: "Which plan" },
+  { type: "payment_plan_completed", label: "someone finishes paying off a payment plan", subjectKey: "offerId", subjectSource: "offers", subjectLabel: "Which offer" },
   { type: "payment_failed", label: "a payment fails", subjectKey: "", subjectSource: "", subjectLabel: "" },
   { type: "event_registered", label: "someone registers for an event", subjectKey: "eventId", subjectSource: "events", subjectLabel: "Which event" },
   { type: "event_attended", label: "someone attends an event", subjectKey: "eventId", subjectSource: "events", subjectLabel: "Which event" },

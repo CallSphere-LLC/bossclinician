@@ -62,12 +62,15 @@ export function CouponField({
           spellCheck={false}
           value={value}
           disabled={disabled}
+          aria-invalid={Boolean(error) || undefined}
+          aria-describedby={`${id}-result`}
           onChange={(e) => onChange(e.target.value)}
           placeholder="Have a code?"
           className={cn(
             luxeControlClass,
             "pl-11 pr-11 uppercase tracking-[0.08em] placeholder:normal-case placeholder:tracking-normal",
             applied && "border-gold/50",
+            error && "border-red-400/70 bg-red-950/20 focus:border-red-300",
           )}
         />
         {pending && (
@@ -81,11 +84,13 @@ export function CouponField({
       {/* Polite rather than assertive: the buyer is still typing, and an
           interruption per keystroke is worse than hearing the result a beat late. */}
       <p
+        id={`${id}-result`}
         aria-live="polite"
+        role={error ? "alert" : "status"}
         className={cn(
-          "min-h-[1rem] text-xs",
-          tone === "good" && "font-medium text-gold",
-          tone === "bad" && "text-red-400",
+          "min-h-[1.75rem] rounded-lg px-2 py-1 text-xs",
+          tone === "good" && "bg-gold/10 font-medium text-gold",
+          tone === "bad" && "border border-red-400/30 bg-red-950/30 font-medium text-red-300",
           tone === "muted" && "text-orchid-faint",
         )}
       >

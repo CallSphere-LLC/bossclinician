@@ -54,6 +54,7 @@ import {
   type OfferCustomField,
   type OfferDetail,
   type OfferInput,
+  type OfferPricingOption,
   type OfferUpsell,
   type PricingType,
   type Product,
@@ -785,6 +786,9 @@ export default function OfferEditor() {
                 update({ minAmountCents: dollarsToCents(raw) ?? 0 });
               }}
               currency={offer?.currency ?? "usd"}
+              offer={offer}
+              onChanged={() => void refresh()}
+              confirm={confirm}
             />
           </Tabs.Content>
 
@@ -1041,6 +1045,9 @@ function PriceTab({
   onAmountInput,
   onMinInput,
   currency,
+  offer,
+  onChanged,
+  confirm,
 }: {
   draft: OfferDraft;
   errors: Record<string, string>;
@@ -1051,6 +1058,9 @@ function PriceTab({
   onAmountInput: (raw: string) => void;
   onMinInput: (raw: string) => void;
   currency: string;
+  offer: OfferDetail | null;
+  onChanged: () => void;
+  confirm: Confirm;
 }) {
   const preview = pricePreview({ ...draft, currency });
 
@@ -1204,8 +1214,253 @@ function PriceTab({
             {preview ?? "Fill in the numbers above and this will say exactly what they'll pay."}
           </p>
         </div>
+
+        {offer ? (
+          <AdditionalPricingOptions offer={offer} onChanged={onChanged} confirm={confirm} />
+        ) : (
+          <Card>
+            <div className="p-5 text-sm text-ink-soft">Save this offer once to add another way to pay.</div>
+          </Card>
+        )}
       </div>
     </div>
+  );
+}
+
+interface PricingOptionDraft {
+  label: string;
+  pricingType: PricingType;
+  amount: string;
+  minAmount: string;
+  interval: BillingInterval | null;
+  intervalCount: number;
+  installmentCount: number | null;
+  trialDays: number;
+  recommended: boolean;
+  active: boolean;
+}
+
+function pricingOptionDraft(option?: OfferPricingOption): PricingOptionDraft {
+  return option
+    ? {
+        label: option.label,
+        pricingType: option.pricingType,
+        amount: centsToDollars(option.amountCents),
+        minAmount: centsToDollars(option.minAmountCents),
+        interval: option.interval,
+        intervalCount: option.intervalCount,
+        installmentCount: option.installmentCount,
+        trialDays: option.trialDays,
+        recommended: option.recommended,
+        active: option.active,
+      }
+    : {
+        label: "",
+        pricingType: "payment_plan",
+        amount: "",
+        minAmount: "",
+        interval: "month",
+        intervalCount: 1,
+        installmentCount: 3,
+        trialDays: 0,
+        recommended: false,
+        active: true,
+      };
+}
+
+function AdditionalPricingOptions({ offer, onChanged, confirm }: {
+  offer: OfferDetail;
+  onChanged: () => void;
+  confirm: Confirm;
+}) {
+  const [editing, setEditing] = useState<OfferPricingOption | null>(null);
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState<PricingOptionDraft>(() => pricingOptionDraft());
+  const [saving, setSaving] = useState(false);
+
+  function begin(option?: OfferPricingOption) {
+    setEditing(option ?? null);
+    setDraft(pricingOptionDraft(option));
+    setOpen(true);
+  }
+
+  function choose(kind: PricingType) {
+    setDraft((current) => ({
+      ...current,
+      pricingType: kind,
+      interval: kind === "subscription" || kind === "payment_plan" ? "month" : null,
+      intervalCount: 1,
+      installmentCount: kind === "payment_plan" ? 3 : null,
+      trialDays: kind === "subscription" ? current.trialDays : 0,
+      amount: kind === "free" || kind === "pwyw" ? "" : current.amount,
+      minAmount: kind === "pwyw" ? current.minAmount : "",
+    }));
+  }
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    const amountCents = dollarsToCents(draft.amount) ?? 0;
+    const minAmountCents = dollarsToCents(draft.minAmount) ?? 0;
+    const errors = offerPricingErrors({
+      pricingType: draft.pricingType,
+      amountCents,
+      minAmountCents,
+      installmentCount: draft.installmentCount,
+    });
+    if (!draft.label.trim()) {
+      toast.error("Give this payment option a short label.");
+      return;
+    }
+    if (Object.keys(errors).length > 0) {
+      toast.error(Object.values(errors)[0]);
+      return;
+    }
+    const input = {
+      label: draft.label.trim(),
+      pricingType: draft.pricingType,
+      amountCents,
+      minAmountCents,
+      interval: draft.interval,
+      intervalCount: draft.intervalCount,
+      installmentCount: draft.installmentCount,
+      trialDays: draft.trialDays,
+      recommended: draft.recommended,
+      active: draft.active,
+      sort: editing?.sort ?? offer.pricingOptions.length,
+    };
+    setSaving(true);
+    try {
+      if (editing) await adminCommerceApi.pricingOptionUpdate(offer.id, editing.id, input);
+      else await adminCommerceApi.pricingOptionAdd(offer.id, input);
+      toast.success(editing ? "Payment option updated" : "Payment option added");
+      setOpen(false);
+      onChanged();
+    } catch (err) {
+      toast.error(commerceMessage(err, "payment option"));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function remove(option: OfferPricingOption) {
+    const ok = await confirm({
+      title: `Remove “${option.label}”?`,
+      description: "Existing orders keep their recorded totals. New customers will no longer see this way to pay.",
+      confirmLabel: "Remove option",
+      destructive: true,
+    });
+    if (!ok) return;
+    try {
+      await adminCommerceApi.pricingOptionDelete(offer.id, option.id);
+      toast.success("Payment option removed");
+      onChanged();
+    } catch (err) {
+      toast.error(commerceMessage(err, "payment option"));
+    }
+  }
+
+  async function makeMainDefault() {
+    const recommended = offer.pricingOptions.find((option) => option.recommended);
+    if (!recommended) return;
+    try {
+      await adminCommerceApi.pricingOptionUpdate(offer.id, recommended.id, { recommended: false });
+      toast.success("The main price is recommended again");
+      onChanged();
+    } catch (err) {
+      toast.error(commerceMessage(err, "payment option"));
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader
+        icon={<BadgeDollarSign className="size-4" />}
+        title="Other ways to pay"
+        subtitle="Put a pay-in-full and payment-plan choice on one checkout"
+        action={<Button type="button" size="sm" variant="secondary" onClick={() => begin()}><Plus /> Add option</Button>}
+      />
+      <div className="space-y-2 p-5 pt-0">
+        <div className="flex min-h-12 items-center gap-3 rounded-xl border border-gold/30 bg-gold/[0.06] px-4 py-2.5">
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold text-ink">Main price</p>
+            <p className="text-xs text-ink-soft">{priceSummary(offer)}</p>
+          </div>
+          {!offer.pricingOptions.some((option) => option.recommended) ? (
+            <Badge tone="gold">Recommended</Badge>
+          ) : (
+            <Button type="button" size="sm" variant="ghost" onClick={() => void makeMainDefault()}>Recommend</Button>
+          )}
+        </div>
+        {offer.pricingOptions.map((option) => (
+          <div key={option.id} className="flex min-h-12 items-center gap-3 rounded-xl border border-hairline px-4 py-2.5">
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-semibold text-ink">{option.label}</p>
+              <p className="text-xs text-ink-soft">{priceSummary(option)}</p>
+            </div>
+            {option.recommended && <Badge tone="gold">Recommended</Badge>}
+            {!option.active && <Badge tone="slate">Hidden</Badge>}
+            <Button type="button" size="iconSm" variant="ghost" aria-label={`Edit ${option.label}`} onClick={() => begin(option)}><Pencil /></Button>
+            <Button type="button" size="iconSm" variant="dangerGhost" aria-label={`Remove ${option.label}`} onClick={() => void remove(option)}><Trash2 /></Button>
+          </div>
+        ))}
+      </div>
+
+      <Modal
+        open={open}
+        onOpenChange={setOpen}
+        title={editing ? "Edit payment option" : "Add another way to pay"}
+        description="Customers choose between these options before entering their card."
+        footer={
+          <>
+            <Button type="button" size="sm" variant="secondary" onClick={() => setOpen(false)}>Cancel</Button>
+            <Button type="submit" size="sm" form="pricing-option-form" disabled={saving}>{saving ? "Saving…" : "Save option"}</Button>
+          </>
+        }
+      >
+        <form id="pricing-option-form" className="space-y-4" onSubmit={submit}>
+          <Field label="Label" hint="shown beside the price">
+            <Input value={draft.label} onChange={(e) => setDraft((current) => ({ ...current, label: e.target.value }))} placeholder="6 monthly payments" autoFocus />
+          </Field>
+          <Field label="Payment style">
+            <select className={selectStyles} value={draft.pricingType} onChange={(e) => choose(e.target.value as PricingType)}>
+              {PRICING_CHOICES.map((choice) => <option key={choice.value} value={choice.value}>{choice.label}</option>)}
+            </select>
+          </Field>
+          {draft.pricingType !== "free" && draft.pricingType !== "pwyw" && (
+            <Field label={draft.pricingType === "payment_plan" ? "Each payment" : "Price"}>
+              <MoneyInput value={draft.amount} onChange={(amount) => setDraft((current) => ({ ...current, amount }))} />
+            </Field>
+          )}
+          {draft.pricingType === "pwyw" && (
+            <Field label="Minimum amount"><MoneyInput value={draft.minAmount} onChange={(minAmount) => setDraft((current) => ({ ...current, minAmount }))} /></Field>
+          )}
+          {(draft.pricingType === "subscription" || draft.pricingType === "payment_plan") && (
+            <CadenceSelect
+              label="How far apart?"
+              interval={draft.interval}
+              count={draft.intervalCount}
+              onChange={(interval, intervalCount) => setDraft((current) => ({ ...current, interval, intervalCount }))}
+            />
+          )}
+          {draft.pricingType === "payment_plan" && (
+            <Field label="Number of payments">
+              <Input type="number" min={2} max={60} value={draft.installmentCount ?? 3} onChange={(e) => setDraft((current) => ({ ...current, installmentCount: Math.min(60, Math.max(2, Number(e.target.value) || 2)) }))} />
+            </Field>
+          )}
+          {draft.pricingType === "subscription" && (
+            <Field label="Free trial days"><Input type="number" min={0} max={365} value={draft.trialDays} onChange={(e) => setDraft((current) => ({ ...current, trialDays: Math.min(365, Math.max(0, Number(e.target.value) || 0)) }))} /></Field>
+          )}
+          <label className="flex min-h-11 cursor-pointer items-center gap-3 rounded-xl border border-hairline px-3 text-sm font-medium text-ink">
+            <input type="checkbox" className="size-4 rounded border-hairline text-plum" checked={draft.recommended} onChange={(e) => setDraft((current) => ({ ...current, recommended: e.target.checked }))} />
+            Recommend and preselect this option
+          </label>
+          <label className="flex min-h-11 cursor-pointer items-center gap-3 rounded-xl border border-hairline px-3 text-sm font-medium text-ink">
+            <input type="checkbox" className="size-4 rounded border-hairline text-plum" checked={draft.active} onChange={(e) => setDraft((current) => ({ ...current, active: e.target.checked }))} />
+            Show this option at checkout
+          </label>
+        </form>
+      </Modal>
+    </Card>
   );
 }
 

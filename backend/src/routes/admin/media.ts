@@ -5,37 +5,37 @@ import crypto from "crypto";
 import fs from "fs";
 import { z } from "zod";
 import { pool } from "../../db/pool";
-import { rowToCamel } from "../../utils/case";
 import { asyncHandler } from "../../utils/asyncHandler";
-import { env } from "../../config/env";
-import { badRequest, notFound } from "../../utils/httpError";
+import { badRequest, conflict, notFound } from "../../utils/httpError";
 import { adminPreviewUrl, isProtectedRef, protectedRef } from "../../services/signedUrls";
+import { toMediaJson } from "../../services/mediaAssets";
+import {
+  VISIBILITIES,
+  ensureStorageDirs,
+  kindFromMime,
+  resolveMime,
+  storageDir,
+  storedExtension,
+  unsupportedTypeMessage,
+  type Visibility,
+} from "../../services/mediaStorage";
+import { adminMediaUploadsRouter } from "./mediaUploads";
+import { env } from "../../config/env";
 
 export const adminMediaRouter = Router();
 
-fs.mkdirSync(env.uploadDir, { recursive: true });
-fs.mkdirSync(env.protectedUploadDir, { recursive: true });
+ensureStorageDirs();
 
-/**
- * Where an upload lands, and therefore who can open it.
- *
- * Asked at upload time rather than worked out from the file type, because the
- * same mp4 is a promotional trailer on the sales page and the second lesson of a
- * $297 course, and nothing about the bytes says which. Being wrong in one
- * direction is a broken image on a blog post; in the other it is the course
- * given away, so there is no default — the request has to say.
- */
-const VISIBILITIES = ["public", "protected"] as const;
-type Visibility = (typeof VISIBILITIES)[number];
+// Re-exported: the file-type rules moved to services/mediaStorage so the
+// resumable upload path applies exactly the same ones, and media.test.ts pins
+// them here, where the stored-XSS bug they exist to prevent was found.
+export { resolveMime, storedExtension };
+export type { MediaAsset } from "../../services/mediaAssets";
 
 const uploadQuerySchema = z.object({ visibility: z.enum(VISIBILITIES) });
 
 const VISIBILITY_REQUIRED =
   "Say whether this file is for everyone or only for people who bought it.";
-
-function storageDir(visibility: Visibility): string {
-  return visibility === "protected" ? env.protectedUploadDir : env.uploadDir;
-}
 
 /**
  * Fails closed.
@@ -49,167 +49,9 @@ function requestedVisibility(req: Request): Visibility {
   return parsed.success ? parsed.data.visibility : "protected";
 }
 
-export interface MediaAsset {
-  id: number;
-  filename: string;
-  originalName: string;
-  url: string;
-  mime: string;
-  kind: string;
-  sizeBytes: number;
-  title: string;
-  folder: string;
-  createdAt: string;
-}
-
-/**
- * What the library shows: the row, which directory it is in, and an address the
- * admin screens can point an <img>, <video> or <audio> at.
- *
- * `url` is a storage reference, and for a protected file it is not a URL at all
- * — `protected:abc.mp4` in a src attribute draws an empty box, which is how a
- * video Yvette uploaded turns out to be unplayable on the one screen where she
- * could have caught it. `previewUrl` is the playable form: a signed link for a
- * protected file, the same path for a public one. It is minted here so a grid of
- * twelve videos costs one request rather than thirteen.
- */
-type MediaAssetJson = MediaAsset & { visibility: Visibility; previewUrl: string };
-
-function toMediaJson(row: Record<string, unknown>, adminUserId: number): MediaAssetJson {
-  const asset = rowToCamel<MediaAsset>(row);
-  const isProtected = isProtectedRef(asset.url);
-  return {
-    ...asset,
-    visibility: isProtected ? "protected" : "public",
-    previewUrl: isProtected
-      ? adminPreviewUrl({ assetId: asset.id, adminUserId }).url
-      : asset.url,
-  };
-}
-
 /** The signed-in administrator. Non-null: every route here is behind requireAuth. */
 function adminId(req: Request): number {
   return Number(req.user?.sub);
-}
-
-/**
- * SVG stays excluded on purpose: it can carry embedded scripts and we serve
- * /uploads from the same origin as the admin, so a stored SVG is a stored-XSS
- * vector. Everything else below is inert when served as a download/media file.
- */
-const ALLOWED_MIME = new Set([
-  // images
-  "image/png",
-  "image/jpeg",
-  "image/webp",
-  "image/gif",
-  "image/avif",
-  // video
-  "video/mp4",
-  "video/webm",
-  "video/quicktime",
-  "video/x-m4v",
-  // audio
-  "audio/mpeg",
-  "audio/mp4",
-  "audio/wav",
-  "audio/webm",
-  "audio/ogg",
-  // documents
-  "application/pdf",
-  "application/msword",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  "application/vnd.ms-powerpoint",
-  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-  "application/vnd.ms-excel",
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  "text/csv",
-  "text/plain",
-  "application/zip",
-]);
-
-/**
- * Extension fallback for when the client declares a useless MIME type.
- *
- * Browsers and OSes routinely send `application/octet-stream` for .mp4/.mov
- * uploads, so a MIME-only whitelist rejects perfectly valid course videos.
- * This stays deny-by-default: the extension must itself be whitelisted, and
- * the resolved type is what gets stored.
- */
-const EXT_TO_MIME = new Map<string, string>([
-  [".mp4", "video/mp4"],
-  [".m4v", "video/x-m4v"],
-  [".webm", "video/webm"],
-  [".mov", "video/quicktime"],
-  [".mp3", "audio/mpeg"],
-  [".m4a", "audio/mp4"],
-  [".wav", "audio/wav"],
-  [".ogg", "audio/ogg"],
-  [".png", "image/png"],
-  [".jpg", "image/jpeg"],
-  [".jpeg", "image/jpeg"],
-  [".webp", "image/webp"],
-  [".gif", "image/gif"],
-  [".avif", "image/avif"],
-  [".pdf", "application/pdf"],
-  [".csv", "text/csv"],
-  [".txt", "text/plain"],
-  [".zip", "application/zip"],
-  [".doc", "application/msword"],
-  [".docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"],
-  [".ppt", "application/vnd.ms-powerpoint"],
-  [".pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation"],
-  [".xls", "application/vnd.ms-excel"],
-  [".xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"],
-]);
-
-/** The extension each allowed type is stored under, first entry winning. */
-const MIME_TO_EXT = new Map<string, string>();
-for (const [ext, mime] of EXT_TO_MIME) {
-  if (!MIME_TO_EXT.has(mime)) MIME_TO_EXT.set(mime, ext);
-}
-
-/** Resolves the effective MIME type, or null if the upload isn't allowed. */
-export function resolveMime(declared: string, originalName: string): string | null {
-  if (ALLOWED_MIME.has(declared)) return declared;
-
-  // Only fall back when the declaration carries no information. A client that
-  // explicitly claims a disallowed type is still rejected.
-  if (declared === "application/octet-stream" || declared === "") {
-    const ext = path.extname(originalName).toLowerCase();
-    return EXT_TO_MIME.get(ext) ?? null;
-  }
-  return null;
-}
-
-/**
- * The suffix the stored file is written under.
- *
- * Never the uploader's own: /uploads is handed to express.static, which reads
- * the Content-Type off the extension and not off the `mime` column, so a file
- * called "notes.html" — or "logo.svg" — declared as text/plain lands as live
- * markup on the site's own origin however inert its declared type was. That is
- * the stored-XSS the SVG exclusion above exists to prevent, reached by a
- * filename instead of a MIME type.
- *
- * An extension the whitelist already knows is kept, so an .m4a stays an .m4a;
- * anything else is replaced by the one its resolved type is served under. The
- * name the uploader chose survives untouched in `original_name`.
- */
-export function storedExtension(declared: string, originalName: string): string {
-  const ext = path.extname(originalName).toLowerCase();
-  if (EXT_TO_MIME.has(ext)) return ext;
-  const mime = resolveMime(declared, originalName);
-  return mime === null ? "" : (MIME_TO_EXT.get(mime) ?? "");
-}
-
-/** Coarse bucket used by the library's filter chips. */
-function kindFromMime(mime: string): string {
-  if (mime.startsWith("image/")) return "image";
-  if (mime.startsWith("video/")) return "video";
-  if (mime.startsWith("audio/")) return "audio";
-  if (mime === "application/zip") return "file";
-  return "document";
 }
 
 const storage = multer.diskStorage({
@@ -226,12 +68,20 @@ const upload = multer({
   limits: { fileSize: env.maxUploadMb * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     if (!resolveMime(file.mimetype, file.originalname)) {
-      cb(new Error(`Unsupported file type: ${file.mimetype || "unknown"}`));
+      cb(new Error(unsupportedTypeMessage(file.mimetype)));
       return;
     }
     cb(null, true);
   },
 });
+
+/**
+ * Resumable uploads, mounted first.
+ *
+ * Ahead of the `/:id` routes below because `/uploads` is a single path segment
+ * and would otherwise be read as the id of an asset to rename or delete.
+ */
+adminMediaRouter.use("/uploads", adminMediaUploadsRouter);
 
 /** GET /admin/media?kind=video — newest first. */
 adminMediaRouter.get(
@@ -250,7 +100,34 @@ adminMediaRouter.get(
 );
 
 /**
+ * The library row for a file already stored under this name for this audience.
+ *
+ * The same rule the resumable path applies before it accepts a byte, applied
+ * here after multer has already written the file: this route streams first and
+ * asks questions afterwards, so the duplicate check cannot come earlier without
+ * rewriting it into the chunked one — which is what /uploads already is.
+ */
+async function assetWithName(
+  originalName: string,
+  visibility: Visibility,
+): Promise<Record<string, unknown> | null> {
+  const rows = await pool.query<Record<string, unknown>>(
+    "SELECT * FROM media_assets WHERE original_name = $1 ORDER BY id DESC",
+    [originalName],
+  );
+  for (const row of rows.rows) {
+    const rowVisibility: Visibility = isProtectedRef(String(row.url)) ? "protected" : "public";
+    if (rowVisibility === visibility) return row;
+  }
+  return null;
+}
+
+/**
  * POST /admin/media?visibility=public|protected
+ *
+ * The whole file in one request. Kept for API clients and for the small
+ * uploads that were never the problem; the admin itself now uses /uploads,
+ * which survives an interruption instead of discarding 400MB.
  *
  * The visibility rides in the query string rather than in the form, because the
  * destination has to be known before the first byte is written and a multipart
@@ -286,27 +163,48 @@ adminMediaRouter.post("/", (req, res, next) => {
       return;
     }
 
+    const discard = (): Promise<void> =>
+      fs.promises
+        .unlink(path.join(storageDir(visibility), file.filename))
+        .catch(() => undefined);
+
     const url =
       visibility === "protected" ? protectedRef(file.filename) : `/uploads/${file.filename}`;
     // Non-null: fileFilter already rejected anything resolveMime can't map.
     const mime = resolveMime(file.mimetype, file.originalname) ?? file.mimetype;
     const kind = kindFromMime(mime);
 
-    pool
-      .query(
-        `INSERT INTO media_assets (filename, original_name, url, mime, kind, size_bytes, title)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
-         RETURNING *`,
-        [file.filename, file.originalname, url, mime, kind, file.size, file.originalname],
-      )
-      .then((result) => {
+    assetWithName(file.originalname, visibility)
+      .then(async (existing) => {
+        if (existing) {
+          // Same name and same size is the file she already has: give it back
+          // and drop the copy. A different size under the same name is two
+          // files the library cannot tell apart, which it refuses.
+          await discard();
+          if (Number(existing.size_bytes) === file.size) {
+            res.status(200).json(toMediaJson(existing, adminId(req)));
+            return;
+          }
+          next(
+            conflict(
+              `You already have a different file called "${file.originalname}". Rename this one and try again.`,
+              { duplicateName: file.originalname },
+            ),
+          );
+          return;
+        }
+
+        const result = await pool.query(
+          `INSERT INTO media_assets (filename, original_name, url, mime, kind, size_bytes, title)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)
+           RETURNING *`,
+          [file.filename, file.originalname, url, mime, kind, file.size, file.originalname],
+        );
         res.status(201).json(toMediaJson(result.rows[0], adminId(req)));
       })
-      .catch((dbErr: unknown) => {
+      .catch(async (dbErr: unknown) => {
         // The bytes are already on disk; don't leave an orphan if the row fails.
-        fs.promises
-          .unlink(path.join(storageDir(visibility), file.filename))
-          .catch(() => undefined);
+        await discard();
         next(dbErr);
       });
   });

@@ -141,6 +141,7 @@ export interface AppliedCoupon {
 
 export interface OfferQuote extends Quote {
   offerSlug: string;
+  selectedPricingOptionId: number | null;
   billing: OfferBilling;
   taxRateBps: number;
   /** The bumps the server actually priced, which may be fewer than were sent. */
@@ -160,6 +161,8 @@ export interface PublicOffer {
   currency: string;
   amountCents: number;
   billing: OfferBilling;
+  selectedPricingOptionId: number | null;
+  pricingOptions: PublicPricingOption[];
   orderForm: OfferOrderForm;
   redirectUrl: string;
   thankYouPageSlug: string | null;
@@ -172,6 +175,16 @@ export interface PublicOffer {
   alreadyOwned: boolean;
 }
 
+export interface PublicPricingOption {
+  id: number | null;
+  label: string;
+  recommended: boolean;
+  currency: string;
+  amountCents: number;
+  billing: OfferBilling;
+  quote: Quote;
+}
+
 export interface BillingAddressInput {
   line1?: string;
   line2?: string;
@@ -182,6 +195,7 @@ export interface BillingAddressInput {
 }
 
 export interface QuoteInput {
+  pricingOptionId?: number | null;
   couponCode?: string;
   bumpProductIds?: number[];
   pwywAmountCents?: number;
@@ -205,6 +219,7 @@ export interface CheckoutResult extends Quote {
   orderToken: string;
   offerSlug: string;
   billing: OfferBilling;
+  selectedPricingOptionId: number | null;
   redirectUrl: string | null;
   thankYouPageSlug: string | null;
   /** 'paid' only ever comes back for a genuinely free enrolment. */

@@ -15,6 +15,8 @@ import { asyncHandler } from "../../utils/asyncHandler";
 import { badRequest, notFound } from "../../utils/httpError";
 import { plainText } from "../../utils/plainText";
 import { publishDomainEvent } from "../../services/domainEvents";
+import { optionalMember } from "../../middleware/memberAuth";
+import { forbidden } from "../../utils/httpError";
 
 /**
  * The public quiz.
@@ -62,6 +64,7 @@ assessmentsPublicRouter.get(
 
 assessmentsPublicRouter.post(
   "/assessments/:slug/submit",
+  optionalMember,
   leadsLimiter,
   asyncHandler(async (req, res) => {
     const parsed = submitSchema.safeParse(req.body);
@@ -73,13 +76,52 @@ assessmentsPublicRouter.post(
       title: string;
       require_email: boolean;
       show_feedback: boolean;
+      kind: string;
+      lesson_id: number | null;
+      max_attempts: number | null;
     }>(
-      `SELECT id, title, require_email, show_feedback
+      `SELECT id, title, require_email, show_feedback, kind, lesson_id, max_attempts
          FROM assessments WHERE slug = $1 AND published`,
       [req.params.slug]
     );
     const assessment = assessmentRes.rows[0];
     if (!assessment) throw notFound("Quiz not found");
+
+    if (req.member?.impersonatedBy !== undefined) {
+      throw forbidden("View as customer is read-only.");
+    }
+
+    let memberIdentity: { contact_id: number | null; name: string } | null = null;
+    if (req.member && assessment.kind === "graded" && assessment.lesson_id !== null) {
+      const owned = await pool.query<{ contact_id: number | null; name: string }>(
+        `SELECT m.contact_id, m.name
+           FROM members m
+          WHERE m.id = $1
+            AND EXISTS (
+              SELECT 1
+                FROM course_lessons l
+                JOIN course_modules cm ON cm.id = l.module_id
+                JOIN products p ON p.kind = 'course' AND p.course_id = cm.course_id
+                JOIN access_grants g ON g.product_id = p.id AND g.member_id = m.id
+               WHERE l.id = $2 AND g.status = 'active'
+                 AND (g.expires_at IS NULL OR g.expires_at > now())
+            )`,
+        [req.member.id, assessment.lesson_id],
+      );
+      memberIdentity = owned.rows[0] ?? null;
+      if (!memberIdentity) throw notFound("Quiz not found");
+
+      if (assessment.max_attempts !== null) {
+        const attempts = await pool.query<{ count: string }>(
+          `SELECT count(*)::text AS count FROM assessment_attempts
+            WHERE assessment_id = $1 AND member_id = $2 AND completed_at IS NOT NULL`,
+          [assessment.id, req.member.id],
+        );
+        if (Number(attempts.rows[0]?.count ?? 0) >= assessment.max_attempts) {
+          throw badRequest("You have used every attempt allowed for this test.");
+        }
+      }
+    }
 
     const responses: AttemptResponse[] = input.responses.map((response) => ({
       questionId: response.questionId,
@@ -97,7 +139,7 @@ assessmentsPublicRouter.post(
       });
     }
 
-    const email = (input.email ?? "").trim().toLowerCase();
+    const email = (req.member?.email ?? input.email ?? "").trim().toLowerCase();
     if (assessment.require_email && !email) {
       throw badRequest("An email address is needed to show your result");
     }
@@ -115,10 +157,29 @@ assessmentsPublicRouter.post(
     let contactId: number | null = null;
     let contactWasCreated = false;
     let attemptId: number | null = null;
-    if (email && !isBot) {
+    if (req.member && memberIdentity && !isBot) {
+      contactId = memberIdentity.contact_id;
+      attemptId = await saveAttempt({
+        assessmentId: assessment.id,
+        contactId,
+        memberId: req.member.id,
+        email,
+        responses,
+        scored,
+      });
+      if (scored.passed === true && assessment.lesson_id !== null) {
+        await pool.query(
+          `INSERT INTO lesson_progress (member_id, lesson_id, completed_at, first_viewed_at, last_viewed_at)
+           VALUES ($1,$2,now(),now(),now())
+           ON CONFLICT (member_id, lesson_id) DO UPDATE
+             SET completed_at = COALESCE(lesson_progress.completed_at, now()), last_viewed_at = now()`,
+          [req.member.id, assessment.lesson_id],
+        );
+      }
+    } else if (email && !isBot) {
       const contact = await upsertContactWithStatus({
         email,
-        name: input.name ?? "",
+        name: memberIdentity?.name ?? input.name ?? "",
         timezone: input.timezone ?? "",
         source: `quiz: ${req.params.slug}`,
         consentSource: `quiz: ${req.params.slug}`,

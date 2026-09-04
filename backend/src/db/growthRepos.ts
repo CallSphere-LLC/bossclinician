@@ -88,7 +88,10 @@ export const newsletterIssuesRepo = createCrudRepo<Row>("newsletter_issues", [
 
 export const campaignsRepo = createCrudRepo<Row>("email_campaigns", [
   "name",
+  "folder",
   "subject",
+  "subjectB",
+  "abSplitPercent",
   "previewText",
   "bodyMd",
   "audience",
@@ -98,6 +101,7 @@ export const campaignsRepo = createCrudRepo<Row>("email_campaigns", [
   "excludeTagIds",
   "status",
   "scheduledAt",
+  "timezone",
 ]);
 
 export const funnelsRepo = createCrudRepo<Row>("funnels", [
@@ -106,6 +110,10 @@ export const funnelsRepo = createCrudRepo<Row>("funnels", [
   "description",
   "kind",
   "published",
+  "formId",
+  "tagId",
+  "sequenceId",
+  "offerId",
 ]);
 
 export const funnelStepsRepo = createCrudRepo<Row>("funnel_steps", [

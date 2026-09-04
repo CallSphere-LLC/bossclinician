@@ -529,13 +529,10 @@ const planFields = {
   stripePriceId: optionalRef(255).default(null),
   /** The bullet list printed under the price. Text only — no link, no markup. */
   features: z.array(z.string().trim().min(1).max(200)).max(25).default([]),
-  /**
-   * The one thing a plan grants on its own: the Stripe webhook writes a
-   * `community_memberships` row with source 'plan' for whatever is named here,
-   * and the door reads that row for as long as the subscription is paying.
-   * Everything else a plan should unlock is sold as an offer over products.
-   */
+  /** Legacy community shortcut, retained for existing plans. */
   communityId: nullableIdRef.default(null),
+  /** Catalogue products kept unlocked while the subscription is active. */
+  productIds: z.array(idRef).max(100).default([]),
   trialDays: z.number().int().min(0).max(365).default(0),
   published: z.boolean().default(true),
 };

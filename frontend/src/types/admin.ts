@@ -51,10 +51,25 @@ export interface CourseLesson {
   title: string;
   bodyMd: string;
   videoUrl: string;
+  audioUrl: string;
   attachmentUrl: string;
+  thumbnailUrl: string;
+  requiresPreviousLesson: boolean;
   durationMinutes: number;
   preview: boolean;
   published: boolean;
+  sort: number;
+}
+
+export interface LessonFile {
+  id: Id;
+  lessonId: Id;
+  mediaId: Id | null;
+  title: string;
+  storagePath: string;
+  filename: string;
+  mime: string;
+  sizeBytes: string | number;
   sort: number;
 }
 
@@ -228,6 +243,7 @@ export interface Plan {
   stripePriceId: string | null;
   features: string[];
   communityId: Id | null;
+  productIds: Id[];
   trialDays: number;
   published: boolean;
   sort: number;
@@ -280,6 +296,9 @@ export interface Coupon {
   maxRedemptions: number | null;
   redeemed: number;
   expiresAt: string | null;
+  scope: "global" | "offers";
+  duration: "first" | "forever";
+  offerIds: Id[];
   active: boolean;
   createdAt: string;
 }
@@ -437,7 +456,10 @@ export interface NewsletterIssue {
 export interface Campaign {
   id: Id;
   name: string;
+  folder: string;
   subject: string;
+  subjectB: string;
+  abSplitPercent: number;
   previewText: string;
   bodyMd: string;
   audience: string;
@@ -513,6 +535,10 @@ export interface Funnel {
   description: string;
   kind: string;
   published: boolean;
+  formId: number | null;
+  tagId: number | null;
+  sequenceId: number | null;
+  offerId: number | null;
 }
 
 export interface FunnelStep {

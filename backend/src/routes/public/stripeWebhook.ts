@@ -16,6 +16,7 @@ import {
   paymentPlanDefaultedAlert,
   paymentPlanOverchargeAlert,
   purchaseReceipt,
+  refundReceipt,
   type ReceiptLine,
 } from "../../email/commerceTemplates";
 import { fireTriggerAsync } from "../../automations/engine";
@@ -26,13 +27,15 @@ import {
   type FulfillResult,
 } from "../../services/fulfillment";
 import { releaseRedemption } from "../../services/coupons";
-import { grantOfferAccess, revokeOfferAccess } from "../../services/access";
+import { grantAccess, grantOfferAccess, revokeOfferAccess } from "../../services/access";
 import { sendSetPasswordLink } from "../../services/setPasswordLink";
 import { deliverPurchase, notifyOwnerOfSale } from "../../services/purchaseDelivery";
 import { addInterval, type BillingInterval } from "../../services/pricing";
 import { publishDomainEvent } from "../../services/domainEvents";
 import { dispatchEvent } from "../../services/webhooksOut";
 import { upsertContactWithStatus } from "../../services/contacts";
+import { readSetting } from "../../services/settings";
+import { withStoredTemplate } from "../../email/templateStore";
 
 /**
  * Stripe webhook receiver — the only place money becomes access.
@@ -606,6 +609,22 @@ async function mirrorLegacyPlanSubscription(session: Stripe.Checkout.Session): P
              subscription_id = COALESCE(EXCLUDED.subscription_id, community_memberships.subscription_id)`,
       [planId, memberId, subscriptionId]
     );
+
+    // Plans use the same catalogue entitlements as offers. Binding each grant
+    // to the local subscription makes cancellation, pause and dunning revoke
+    // exactly what this subscription supplied without touching outright buys.
+    const planProducts = await pool.query<{ product_id: number }>(
+      `SELECT product_id FROM plan_products WHERE plan_id = $1 ORDER BY sort, product_id`,
+      [planId],
+    );
+    for (const item of planProducts.rows) {
+      await grantAccess({
+        memberId,
+        productId: item.product_id,
+        subscriptionId: subscription.rows[0].id,
+        source: "plan",
+      });
+    }
   }
 
   if (contactWasCreated && contactId !== null) {
@@ -1057,6 +1076,50 @@ async function recordRecurringPayment(input: {
   return res.rows[0]?.id ?? null;
 }
 
+/** Sends a renewal/installment receipt once the idempotent ledger row exists. */
+async function sendRecurringReceipt(
+  invoice: Stripe.Invoice,
+  order: OrderRow | null,
+  plan: PlanRow | null,
+  collectedCents: number,
+): Promise<void> {
+  const settings = await readSetting("customer_payments");
+  const rule = String(settings.receiptRule ?? "every");
+  if (settings.sendReceipts === false || rule === "first" || (rule === "nonzero" && collectedCents <= 0)) {
+    return;
+  }
+  const to = invoice.customer_email ?? order?.email ?? plan?.email ?? "";
+  if (!to) return;
+  const title = order ? describe(order) : "Your payment";
+  const fallback = purchaseReceipt({
+    buyerName: order?.billing_name ?? "",
+    orderId: order?.id ?? plan?.order_id ?? 0,
+    lines: [{ title, quantity: 1, amountCents: collectedCents }],
+    subtotalCents: collectedCents,
+    discountCents: 0,
+    couponCode: "",
+    taxCents: 0,
+    totalCents: collectedCents,
+    currency: invoice.currency,
+  });
+  const portalLine = invoice.hosted_invoice_url
+    ? `\n\nView the invoice: ${invoice.hosted_invoice_url}`
+    : `\n\nView your invoices: ${env.publicSiteUrl}/account/billing`;
+  const content = await withStoredTemplate(
+    "purchase_receipt",
+    {
+      firstName: (order?.billing_name ?? "").split(/\s+/)[0] ?? "",
+      name: order?.billing_name ?? "",
+      email: to,
+      offer: title,
+      orderId: String(order?.id ?? plan?.order_id ?? ""),
+      total: fallback.subject,
+    },
+    { ...fallback, text: `${fallback.text}${portalLine}` },
+  );
+  await sendMail({ to, ...content });
+}
+
 /** The first payment's transaction, for linking installment 1 of a plan. */
 async function firstTransactionForOrder(orderId: number): Promise<number | null> {
   const res = await pool.query<{ id: number }>(
@@ -1328,15 +1391,42 @@ async function advancePaymentPlan(input: {
 
   if (completedPlan !== null && completedPlan.email) {
     const order = completedPlan.order_id ? await loadOrderById(completedPlan.order_id) : null;
+    const paidToDate = await planPaidToDate(completedPlan.id);
     void sendMail({
       to: completedPlan.email,
       ...paymentPlanCompleted({
         buyerName: order?.billing_name ?? "",
         description: order ? describe(order) : "your payment plan",
         installmentCount: completedPlan.installment_count,
-        totalPaidCents: await planPaidToDate(completedPlan.id),
+        totalPaidCents: paidToDate,
         currency: completedPlan.currency,
       }),
+    });
+
+    // Paying off an instalment plan is the end of a months-long relationship
+    // with a customer who has now spent the full price, and it was previously
+    // invisible to automations: no tag, no sequence, no upsell. Keyed by plan,
+    // so the replayed invoice webhooks behind it cannot fire it twice.
+    const identity = await automationIdentity(
+      completedPlan.member_id ?? order?.member_id ?? null,
+      completedPlan.email,
+      order?.billing_name ?? "",
+    );
+    await publishDomainEvent("payment_plan_completed", {
+      eventKey: `payment-plan-completed:${completedPlan.id}`,
+      contactId: identity.contactId,
+      email: identity.email,
+      name: identity.name,
+      subjectId: order?.offer_id ?? completedPlan.offer_id ?? null,
+      source: "stripe",
+      facts: {
+        paymentPlanId: completedPlan.id,
+        orderId: completedPlan.order_id ?? 0,
+        offerId: order?.offer_id ?? completedPlan.offer_id ?? 0,
+        installmentCount: completedPlan.installment_count,
+        totalPaidCents: paidToDate,
+        currency: completedPlan.currency,
+      },
     });
   }
 }
@@ -1613,6 +1703,14 @@ async function handleInvoicePaid(invoice: Stripe.Invoice): Promise<void> {
     occurredAt: paidAt,
   });
 
+  if (transactionId !== null) {
+    await sendRecurringReceipt(invoice, order, plan, collectedCents).catch((error: unknown) => {
+      // Money and access are already correct. A mail outage must not replay the
+      // payment workflow, and the invoice remains available in the portal.
+      console.error(`[stripe] recurring receipt for ${invoice.id} failed:`, error);
+    });
+  }
+
   if (isPlan && stripeSubscriptionId) {
     // An installment is a payment, so only money advances the counter. A $0
     // invoice that consumed one would leave a three-payment contract collecting
@@ -1715,6 +1813,22 @@ async function handleInvoicePaymentFailed(invoice: Stripe.Invoice): Promise<void
       [subscriptionId, attempt]
     );
     attempt = bumped.rows[0]?.failed_payment_count ?? attempt;
+
+    const paymentSettings = await readSetting("customer_payments");
+    if (paymentSettings.revokeOnFirstFailedPayment === true) {
+      const owner = await pool.query<{ member_id: number | null; offer_id: number | null }>(
+        `SELECT member_id, offer_id FROM subscriptions WHERE id = $1`,
+        [subscriptionId],
+      );
+      const linked = owner.rows[0];
+      if (linked?.member_id && linked.offer_id) {
+        await revokeOfferAccess({
+          memberId: linked.member_id,
+          offerId: linked.offer_id,
+          reason: "recurring payment failed",
+        });
+      }
+    }
   }
 
   if (plan !== null) {
@@ -2142,7 +2256,31 @@ async function handleSubscriptionChange(
   }
 
   // cancel_at_period_end is not an ending: the customer keeps everything until
-  // the period actually runs out, and Stripe sends deleted when it does.
+  // the period actually runs out, and Stripe sends deleted when it does. It is
+  // still the moment worth automating on, though — it is the only window in
+  // which a win-back email can change the outcome, and it is weeks wide.
+  // Published from here rather than from the member cancel route so that a
+  // cancellation started in the Stripe dashboard counts too; the event key
+  // makes the repeat webhooks Stripe sends for the same subscription collapse
+  // into one occurrence.
+  if (!deleted && sub.cancel_at_period_end && subscriptionId !== null) {
+    const identity = await automationIdentity(order?.member_id ?? null, order?.email ?? "");
+    await publishDomainEvent("subscription_cancel_requested", {
+      eventKey: `subscription-cancel-requested:${subscriptionId}`,
+      contactId: identity.contactId,
+      email: identity.email,
+      name: identity.name,
+      subjectId: null,
+      source: "stripe",
+      facts: {
+        subscriptionId,
+        offerId: order?.offer_id ?? meta.offerId ?? 0,
+        status,
+        endsAt: periodEnd ? periodEnd.toISOString() : null,
+      },
+    });
+  }
+
   if (deleted || ACCESS_ENDING_STATUSES.has(status)) {
     await endSubscriptionAccess({
       stripeSubscriptionId: sub.id,
@@ -2176,6 +2314,38 @@ interface ChargeTransaction {
   id: number;
   order_id: number | null;
   email: string;
+}
+
+async function emailRefundReceipt(
+  orderId: number,
+  amountCents: number,
+  currency: string,
+  fullyRefunded: boolean,
+): Promise<void> {
+  const settings = await readSetting("customer_payments");
+  if (settings.sendRefundReceipts === false) return;
+  const order = await loadOrderById(orderId);
+  if (!order?.email) return;
+  const fallback = refundReceipt({
+    buyerName: order.billing_name,
+    orderId,
+    amountCents,
+    currency,
+    fullyRefunded,
+  });
+  const content = await withStoredTemplate(
+    "refund_receipt",
+    {
+      firstName: (order.billing_name || "").split(/\s+/)[0] ?? "",
+      name: order.billing_name,
+      email: order.email,
+      offer: describe(order),
+      orderId: String(order.id),
+      total: fallback.subject,
+    },
+    fallback,
+  );
+  await sendMail({ to: order.email, ...content });
 }
 
 async function loadTransactionForCharge(
@@ -2245,6 +2415,14 @@ async function handleChargeRefunded(charge: Stripe.Charge): Promise<void> {
     });
     orderFullyRefunded = orderFullyRefunded || result.fullyRefunded;
     revokedCount += result.revokedCount;
+    if (result.recorded) {
+      await emailRefundReceipt(
+        transaction.order_id,
+        refund.amount,
+        refund.currency,
+        result.fullyRefunded,
+      ).catch((error: unknown) => console.error(`[stripe] refund receipt ${refund.id} failed:`, error));
+    }
   }
 
   if (refunds.length === 0 && charge.amount_refunded > 0) {
@@ -2265,6 +2443,14 @@ async function handleChargeRefunded(charge: Stripe.Charge): Promise<void> {
       });
       orderFullyRefunded = orderFullyRefunded || result.fullyRefunded;
       revokedCount += result.revokedCount;
+      if (result.recorded) {
+        await emailRefundReceipt(
+          transaction.order_id,
+          outstanding,
+          charge.currency,
+          result.fullyRefunded,
+        ).catch((error: unknown) => console.error(`[stripe] refund receipt ${charge.id} failed:`, error));
+      }
     }
   }
 

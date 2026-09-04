@@ -173,6 +173,11 @@ export default function Quiz() {
     };
   }, [slug, reloadKey]);
 
+  useEffect(() => {
+    if (quiz?.kind !== "graded" || outcome?.passed !== true || window.parent === window) return;
+    window.parent.postMessage({ type: "boss-assessment-passed", slug }, window.location.origin);
+  }, [outcome?.passed, quiz?.kind, slug]);
+
   const questions = useMemo(() => quiz?.questions ?? [], [quiz]);
   const current = stage === "questions" ? questions[index] : undefined;
 

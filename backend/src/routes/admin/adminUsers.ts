@@ -514,7 +514,8 @@ adminUsersRouter.get(
     const sessions = await pool.query(
       `SELECT id, user_agent, ip, created_at, last_used_at, expires_at
          FROM admin_sessions
-        WHERE admin_user_id = $1 AND revoked_at IS NULL AND expires_at > now()
+        WHERE admin_user_id = $1 AND interactive = true
+          AND revoked_at IS NULL AND expires_at > now()
         ORDER BY last_used_at DESC NULLS LAST, created_at DESC`,
       [me.id]
     );
@@ -735,18 +736,39 @@ export async function issueAdminSession(input: {
   ttlSeconds: number;
 }): Promise<string> {
   const token = signToken({ sub: input.adminUserId, email: input.email, role: input.role });
+  const userAgent = input.userAgent.slice(0, 400);
+  const ip = input.ip.slice(0, 64);
+  const interactive =
+    !["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(ip) &&
+    !/^(node|curl|wget|codex)/i.test(userAgent.trim());
 
-  await pool.query(
-    `INSERT INTO admin_sessions (admin_user_id, token_hash, user_agent, ip, expires_at, last_used_at)
-     VALUES ($1, $2, $3, $4, $5, now())`,
-    [
-      input.adminUserId,
-      hashToken(token),
-      input.userAgent.slice(0, 400),
-      input.ip.slice(0, 64),
-      expiresIn(input.ttlSeconds),
-    ]
-  );
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    // One recognisable browser/device fingerprint gets one live row. Logging
+    // in again replaces the old token rather than filling the panel with
+    // indistinguishable copies.
+    if (interactive) {
+      await client.query(
+        `UPDATE admin_sessions SET revoked_at = now()
+          WHERE admin_user_id = $1 AND user_agent = $2 AND ip = $3
+            AND interactive = true AND revoked_at IS NULL`,
+        [input.adminUserId, userAgent, ip],
+      );
+    }
+    await client.query(
+      `INSERT INTO admin_sessions
+         (admin_user_id, token_hash, user_agent, ip, expires_at, last_used_at, interactive)
+       VALUES ($1, $2, $3, $4, $5, now(), $6)`,
+      [input.adminUserId, hashToken(token), userAgent, ip, expiresIn(input.ttlSeconds), interactive],
+    );
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
 
   return token;
 }

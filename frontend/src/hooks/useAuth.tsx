@@ -7,6 +7,7 @@ import {
   type ReactNode,
 } from "react";
 import { adminApi, clearToken, getToken, setToken } from "@/lib/api";
+import { uploadManager } from "@/lib/uploads/manager";
 import type { AdminUser } from "@/types";
 
 interface AuthContextValue {
@@ -48,6 +49,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { token, user: loggedInUser } = await adminApi.login(email, password, code);
     setToken(token);
     setUser(loggedInUser);
+    // An upload that stopped because the session expired is holding a file and
+    // a place in it. Now there is a token again, it can carry on from the byte
+    // it reached rather than waiting to be noticed.
+    uploadManager.resumeAfterSignIn();
   }, []);
 
   const logout = useCallback(() => {

@@ -10,6 +10,8 @@ import { formatDateTime, formatNumber, formatRelative } from "@/lib/format";
 import {
   Badge,
   Button,
+  Chip,
+  chipRowStyles,
   EmptyState,
   ErrorNotice,
   LEAD_STATUS_TONE,
@@ -270,27 +272,17 @@ export default function Leads() {
 
       {error && <ErrorNotice message={error} />}
 
-      <div className="flex flex-wrap gap-1.5">
+      <div className={chipRowStyles}>
         {["all", ...STATUSES].map((status) => {
           const active = filter === status;
           const count = status === "all" ? (leads?.length ?? 0) : (counts.get(status) ?? 0);
           return (
-            <button
-              key={status}
-              type="button"
-              onClick={() => setFilter(status)}
-              className={cn(
-                "rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors",
-                active
-                  ? "bg-brand-gradient text-white"
-                  : "border border-hairline bg-surface text-ink-soft hover:border-plum/40 hover:text-plum",
-              )}
-            >
+            <Chip key={status} selected={active} onClick={() => setFilter(status)}>
               {status === "all" ? "Everyone" : leadStatusLabel(status)}
-              <span className={cn("ml-1.5", active ? "text-white/70" : "text-ink-soft/60")}>
+              <span className={cn(active ? "text-white/70" : "text-ink-soft/60")}>
                 {count}
               </span>
-            </button>
+            </Chip>
           );
         })}
       </div>

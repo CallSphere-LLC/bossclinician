@@ -70,7 +70,29 @@ bossclinician/
 - `GET /api/admin/subscribers`
 - `GET/PUT /api/admin/settings`
 - `POST /api/admin/ai/generate-blog` `{topic,tone?,keywords?[]}` → `{title,excerpt,bodyMd,tags}` (proxies to ai:/generate/blog)
-- `POST /api/admin/media` (multipart image upload) → `{url}`
+- `POST /api/admin/media` (multipart upload, whole file in one request) → media asset
+- `POST /api/admin/media/uploads` → open or resume a chunked upload → `{uploadId, offset, chunkSize}`
+- `GET  /api/admin/media/uploads` → unfinished uploads for this administrator (any device)
+- `GET  /api/admin/media/uploads/:id` → `{offset, sizeBytes, status}`
+- `PUT  /api/admin/media/uploads/:id?offset=N` (raw `application/octet-stream` chunk) → `{offset, complete}`
+- `POST /api/admin/media/uploads/:id/complete` → media asset (idempotent)
+- `DELETE /api/admin/media/uploads/:id` → discard the half-file
+
+### Resumable uploads
+Course videos are hundreds of megabytes over connections that drop, and one
+POST of the whole file has nowhere to keep the bytes when it does. `/uploads`
+accumulates them in a `.part` file inside the destination volume and records the
+acknowledged offset in `media_upload_sessions`, so an interrupted upload resumes
+from that byte — after a dropped connection, a closed tab, a sign-out, or a
+redeploy. `received_bytes` is the only authority on where to resume; the part
+file is truncated back to it before each write, so an unacknowledged tail can
+never end up spliced into the middle of the file. The browser half
+(`frontend/src/lib/uploads/`) is a module singleton, so uploads keep running as
+she moves between admin screens, and IndexedDB holds the `File` handle so a
+reload comes back with a Resume button. Abandoned sessions and orphaned part
+files are swept hourly (`media.sweepUploads`). Uploading a file whose name and
+size the library already holds returns the existing asset instead of storing it
+twice; the same name with different content is refused.
 
 ## AI service contract (FastAPI, internal — called by backend only)
 - `GET  /health`

@@ -13,7 +13,7 @@ import { dispatchEvent } from "./webhooksOut";
  * table, one writer, one reader.
  */
 
-export type GrantSource = "purchase" | "manual" | "automation" | "bundle" | "affiliate" | "import";
+export type GrantSource = "purchase" | "plan" | "manual" | "automation" | "bundle" | "affiliate" | "import";
 
 type Queryable = Pick<PoolClient, "query"> | typeof pool;
 

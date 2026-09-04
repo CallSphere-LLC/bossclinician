@@ -1,5 +1,6 @@
 import { pool } from "../db/pool";
 import { sweepExpiredGrants } from "../services/access";
+import { sweepUploadSessions } from "../services/resumableUploads";
 import { releaseRedemption } from "../services/coupons";
 import { registerHandler } from "./worker";
 import { registerContactJobs } from "./contactRollup";
@@ -9,6 +10,7 @@ import { registerWebhookJobs } from "./webhookJobs";
 import { registerReportJobs } from "./reportJobs";
 import { registerEventJobs } from "./eventJobs";
 import { registerCoachingJobs } from "./coachingJobs";
+import { registerBillingJobs } from "./billingJobs";
 import {
   dispatchDomainEvent,
   publishContactAnniversaries,
@@ -242,6 +244,9 @@ export function registerCoreHandlers(): void {
   registerHandler("plans.sweepDefaulted", () => sweepDefaultedPlans());
   registerHandler("checkout.abandoned", () => sweepAbandonedCheckouts());
   registerHandler("jobs.retention", () => jobRetention());
+  // Half-finished uploads: a week of grace to come back and resume, then the
+  // part file is bytes on a volume nobody will ever ask for again.
+  registerHandler("media.sweepUploads", () => sweepUploadSessions());
   registerHandler("access.sweepExpired", async () => ({ expired: await sweepExpiredGrants() }));
   registerHandler("domainEvents.dispatch", (payload) => dispatchDomainEvent(payload));
   registerHandler("domainEvents.sweep", () => sweepDomainEvents());
@@ -258,4 +263,5 @@ export function registerCoreHandlers(): void {
   registerReportJobs();
   registerEventJobs();
   registerCoachingJobs();
+  registerBillingJobs();
 }

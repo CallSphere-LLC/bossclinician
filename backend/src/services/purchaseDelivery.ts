@@ -9,6 +9,7 @@ import { loadBusinessDetails } from "./businessIdentity";
 import { invoiceFilename, renderInvoicePdf } from "./invoicePdf";
 import { issueSetPasswordLink } from "./setPasswordLink";
 import { exitContactOnPurchase } from "./sequences";
+import { readSetting } from "./settings";
 
 /**
  * Everything a customer is owed the moment a purchase completes.
@@ -270,7 +271,13 @@ export async function deliverPurchase(
 
     /* ------------------------------------------------------------ receipt */
 
-    if (input.sendReceipt !== false) {
+    const paymentSettings = await readSetting("customer_payments");
+    const receiptRule = String(paymentSettings.receiptRule ?? "every");
+    const receiptAllowed =
+      input.sendReceipt !== false &&
+      paymentSettings.sendReceipts !== false &&
+      (receiptRule !== "nonzero" || order.total_cents > 0);
+    if (receiptAllowed) {
       outcome.receiptSent = await sendReceiptEmail(order, lines, {
         reference: payment?.stripe_payment_intent_id ?? "",
         method: describePaymentMethod(

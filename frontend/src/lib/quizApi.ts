@@ -118,6 +118,7 @@ export interface AssessmentSummary {
   published: boolean;
   requireEmail: boolean;
   passMark: number | null;
+  lessonId: number | null;
   questionCount: number;
   resultCount: number;
   attemptCount: number;
@@ -177,6 +178,7 @@ export interface AssessmentDraft {
   title?: string;
   introMd?: string;
   kind?: QuizKind;
+  lessonId?: number | null;
   passMark?: number | null;
   maxAttempts?: number | null;
   showFeedback?: boolean;

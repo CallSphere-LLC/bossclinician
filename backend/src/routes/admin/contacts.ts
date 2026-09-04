@@ -10,6 +10,8 @@ import { MAILABLE_CONTACT_SQL } from "../../services/audience";
 import { dispatchEvent } from "../../services/webhooksOut";
 import { publishDomainEvent } from "../../services/domainEvents";
 import { requirePermission } from "../../services/permissions";
+import { enrollContact } from "../../services/sequences";
+import { grantOfferAccess } from "../../services/access";
 
 /**
  * Contacts — the one list of people, mounted at /admin/contacts.
@@ -73,7 +75,16 @@ interface ContactFilters {
   tag?: string;
   status?: string;
   untagged?: boolean;
+  audience?: "new" | "subscribed" | "new_subscriber" | "customer" | "new_customer";
+  optOut?: "manual" | "self";
+  engagement?: "healthy" | "passive" | "unengaged" | "inactive";
 }
+
+const LAST_ENGAGED_SQL = `GREATEST(
+  COALESCE((SELECT MAX(m.first_clicked_at) FROM email_messages m WHERE m.contact_id = c.id), '-infinity'::timestamptz),
+  COALESCE((SELECT MAX(m.first_opened_at)  FROM email_messages m WHERE m.contact_id = c.id), '-infinity'::timestamptz),
+  COALESCE(c.opted_in_at, c.created_at)
+)`;
 
 function buildFilters(filters: ContactFilters): { where: string; params: unknown[] } {
   const clauses: string[] = [];
@@ -105,6 +116,36 @@ function buildFilters(filters: ContactFilters): { where: string; params: unknown
     clauses.push(`NOT EXISTS (SELECT 1 FROM contact_tags ct WHERE ct.contact_id = c.id)`);
   }
 
+  if (filters.audience === "new") clauses.push(`c.created_at >= now() - interval '30 days'`);
+  if (filters.audience === "subscribed") clauses.push(MAILABLE_CONTACT_SQL);
+  if (filters.audience === "new_subscriber") {
+    clauses.push(MAILABLE_CONTACT_SQL, `c.opted_in_at >= now() - interval '30 days'`);
+  }
+  if (filters.audience === "customer") clauses.push(`c.order_count > 0`);
+  if (filters.audience === "new_customer") {
+    clauses.push(`c.order_count > 0`, `c.last_ordered_at >= now() - interval '30 days'`);
+  }
+
+  if (filters.optOut === "manual") {
+    clauses.push(`c.email_marketing_status = 'opted_out'`, `c.consent_source IN ('admin','manual')`);
+  }
+  if (filters.optOut === "self") {
+    clauses.push(`c.email_marketing_status = 'opted_out'`, `c.consent_source NOT IN ('admin','manual')`);
+  }
+
+  if (filters.engagement) {
+    clauses.push(MAILABLE_CONTACT_SQL);
+    const age = LAST_ENGAGED_SQL;
+    if (filters.engagement === "healthy") clauses.push(`${age} >= now() - interval '90 days'`);
+    if (filters.engagement === "passive") {
+      clauses.push(`${age} < now() - interval '90 days'`, `${age} >= now() - interval '180 days'`);
+    }
+    if (filters.engagement === "unengaged") {
+      clauses.push(`${age} < now() - interval '180 days'`, `${age} >= now() - interval '270 days'`);
+    }
+    if (filters.engagement === "inactive") clauses.push(`${age} < now() - interval '270 days'`);
+  }
+
   return { where: clauses.length ? `WHERE ${clauses.join(" AND ")}` : "", params };
 }
 
@@ -113,10 +154,79 @@ const listQuerySchema = z.object({
   tag: z.string().trim().max(80).optional(),
   status: z.enum(EMAIL_STATUSES).optional(),
   untagged: z.enum(["true", "false"]).transform((v) => v === "true").optional(),
+  audience: z.enum(["new", "subscribed", "new_subscriber", "customer", "new_customer"]).optional(),
+  optOut: z.enum(["manual", "self"]).optional(),
+  engagement: z.enum(["healthy", "passive", "unengaged", "inactive"]).optional(),
   sort: z.enum(["recent", "newest", "oldest", "name", "value", "orders"]).default("recent"),
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(200).default(50),
 });
+
+/**
+ * List health, computed from the same contact and delivery facts the sender
+ * uses. It is live rather than a second denormalised counter, so every tile and
+ * the People list agree immediately after an opt-out, bounce or purchase.
+ */
+adminContactsRouter.get(
+  "/insights",
+  asyncHandler(async (_req, res) => {
+    const [summary, engagement] = await Promise.all([
+      pool.query<{
+        contacts: number;
+        new_contacts: number;
+        subscribed: number;
+        new_subscribers: number;
+        customers: number;
+        new_customers: number;
+        manually_unsubscribed: number;
+        opted_out: number;
+        bounced: number;
+        complained: number;
+        never_subscribed: number;
+      }>(
+        `SELECT COUNT(*)::int AS contacts,
+                COUNT(*) FILTER (WHERE c.created_at >= now() - INTERVAL '30 days')::int AS new_contacts,
+                COUNT(*) FILTER (WHERE ${MAILABLE_CONTACT_SQL})::int AS subscribed,
+                COUNT(*) FILTER (WHERE ${MAILABLE_CONTACT_SQL}
+                                   AND c.opted_in_at >= now() - INTERVAL '30 days')::int AS new_subscribers,
+                COUNT(*) FILTER (WHERE c.order_count > 0)::int AS customers,
+                COUNT(*) FILTER (WHERE c.order_count > 0
+                                   AND c.last_ordered_at >= now() - INTERVAL '30 days')::int AS new_customers,
+                COUNT(*) FILTER (WHERE c.email_marketing_status = 'opted_out'
+                                   AND c.consent_source IN ('admin','manual'))::int AS manually_unsubscribed,
+                COUNT(*) FILTER (WHERE c.email_marketing_status = 'opted_out'
+                                   AND c.consent_source NOT IN ('admin','manual'))::int AS opted_out,
+                COUNT(*) FILTER (WHERE c.email_marketing_status = 'bounced')::int AS bounced,
+                COUNT(*) FILTER (WHERE c.email_marketing_status = 'complained')::int AS complained,
+                COUNT(*) FILTER (WHERE c.email_marketing_status = 'unconfirmed')::int AS never_subscribed
+           FROM contacts c`,
+      ),
+      pool.query<{ healthy: number; passive: number; unengaged: number; inactive: number }>(
+        `WITH last_touch AS (
+           SELECT c.id,
+                  GREATEST(
+                    COALESCE(MAX(m.first_clicked_at), '-infinity'::timestamptz),
+                    COALESCE(MAX(m.first_opened_at), '-infinity'::timestamptz),
+                    COALESCE(c.opted_in_at, c.created_at)
+                  ) AS engaged_at
+             FROM contacts c
+             LEFT JOIN email_messages m ON m.contact_id = c.id
+            WHERE ${MAILABLE_CONTACT_SQL}
+            GROUP BY c.id, c.opted_in_at, c.created_at
+         )
+         SELECT COUNT(*) FILTER (WHERE engaged_at >= now() - INTERVAL '90 days')::int AS healthy,
+                COUNT(*) FILTER (WHERE engaged_at < now() - INTERVAL '90 days'
+                                  AND engaged_at >= now() - INTERVAL '180 days')::int AS passive,
+                COUNT(*) FILTER (WHERE engaged_at < now() - INTERVAL '180 days'
+                                  AND engaged_at >= now() - INTERVAL '270 days')::int AS unengaged,
+                COUNT(*) FILTER (WHERE engaged_at < now() - INTERVAL '270 days')::int AS inactive
+           FROM last_touch`,
+      ),
+    ]);
+
+    res.json({ ...rowToCamel(summary.rows[0]), engagement: rowToCamel(engagement.rows[0]) });
+  }),
+);
 
 adminContactsRouter.get(
   "/",
@@ -398,8 +508,13 @@ const bulkTagSchema = z.object({
   action: z.enum(["add", "remove"]),
 });
 
+const bulkTargetsSchema = z.object({
+  contactIds: z.array(z.coerce.number().int().positive()).min(1).max(5000),
+});
+
 adminContactsRouter.post(
   "/bulk/tags",
+  requireManage,
   asyncHandler(async (req, res) => {
     const parsed = bulkTagSchema.safeParse(req.body);
     if (!parsed.success) throw badRequest("Invalid payload", parsed.error.flatten());
@@ -426,6 +541,136 @@ adminContactsRouter.post(
 
     res.json({ changed, contacts: contactIds.length });
   })
+);
+
+adminContactsRouter.post(
+  "/bulk/sequence",
+  requireManage,
+  asyncHandler(async (req, res) => {
+    const parsed = bulkTargetsSchema.extend({ sequenceId: z.coerce.number().int().positive() }).safeParse(req.body);
+    if (!parsed.success) throw badRequest("Invalid payload", parsed.error.flatten());
+    let enrolled = 0;
+    let alreadyEnrolled = 0;
+    const blocked: { contactId: number; reason: string }[] = [];
+    for (const contactId of new Set(parsed.data.contactIds)) {
+      const result = await enrollContact(parsed.data.sequenceId, contactId, { reason: "Added by an administrator" });
+      if (result.outcome === "enrolled") enrolled += 1;
+      else if (result.outcome === "already_enrolled") alreadyEnrolled += 1;
+      else blocked.push({ contactId, reason: result.reason });
+    }
+    await recordAdminAction({
+      req,
+      action: "contact.bulk_sequence",
+      entityType: "contact",
+      entityId: "",
+      after: { sequenceId: parsed.data.sequenceId, enrolled, alreadyEnrolled, blocked: blocked.length },
+    });
+    res.json({ enrolled, alreadyEnrolled, blocked });
+  }),
+);
+
+adminContactsRouter.post(
+  "/bulk/offer",
+  requireManage,
+  asyncHandler(async (req, res) => {
+    const parsed = bulkTargetsSchema.extend({ offerId: z.coerce.number().int().positive() }).safeParse(req.body);
+    if (!parsed.success) throw badRequest("Invalid payload", parsed.error.flatten());
+    const exists = await pool.query(`SELECT 1 FROM offers WHERE id = $1`, [parsed.data.offerId]);
+    if (exists.rowCount === 0) throw notFound("Offer not found");
+
+    let granted = 0;
+    for (const contactId of new Set(parsed.data.contactIds)) {
+      const contact = await pool.query<{ email: string; name: string }>(
+        `SELECT email::text AS email, name FROM contacts WHERE id = $1`,
+        [contactId],
+      );
+      if (!contact.rows[0]) continue;
+      const member = await pool.query<{ id: number }>(
+        `INSERT INTO members (email, name, status, contact_id)
+         VALUES ($1, $2, 'active', $3)
+         ON CONFLICT (email) DO UPDATE
+           SET contact_id = COALESCE(members.contact_id, EXCLUDED.contact_id), updated_at = now()
+         RETURNING id`,
+        [contact.rows[0].email, contact.rows[0].name, contactId],
+      );
+      const products = await grantOfferAccess({
+        memberId: member.rows[0].id,
+        offerId: parsed.data.offerId,
+        source: "manual",
+      });
+      if (products.length > 0) granted += 1;
+      await recordActivity({
+        contactId,
+        kind: "offer_granted",
+        title: "Offer access granted",
+        subjectType: "offer",
+        subjectId: String(parsed.data.offerId),
+      });
+    }
+    await recordAdminAction({
+      req,
+      action: "contact.bulk_offer",
+      entityType: "contact",
+      entityId: "",
+      after: { offerId: parsed.data.offerId, contacts: granted },
+    });
+    res.json({ granted });
+  }),
+);
+
+adminContactsRouter.post(
+  "/bulk/export.csv",
+  asyncHandler(async (req, res) => {
+    const parsed = bulkTargetsSchema.safeParse(req.body);
+    if (!parsed.success) throw badRequest("Invalid payload", parsed.error.flatten());
+    const ids = [...new Set(parsed.data.contactIds)];
+    const result = await pool.query<ExportRow>(
+      `SELECT c.email::text AS email, c.name, c.first_name, c.last_name, c.phone,
+              c.email_marketing_status, c.lifetime_value_cents, c.order_count,
+              c.last_activity_at, c.created_at,
+              COALESCE((SELECT array_agg(t.name ORDER BY t.name)
+                          FROM contact_tags ct JOIN tags t ON t.id = ct.tag_id
+                         WHERE ct.contact_id = c.id), '{}') AS tag_names
+         FROM contacts c WHERE c.id = ANY($1::int[]) ORDER BY c.created_at DESC`,
+      [ids],
+    );
+    const lines = [CSV_HEADERS.map(csvCell).join(",")];
+    for (const row of result.rows) {
+      lines.push([row.email, row.first_name, row.last_name, row.name, row.phone,
+        row.email_marketing_status, row.tag_names.join(", "),
+        (row.lifetime_value_cents / 100).toFixed(2), row.order_count,
+        row.last_activity_at ?? "", row.created_at].map(csvCell).join(","));
+    }
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="selected-contacts-${new Date().toISOString().slice(0, 10)}.csv"`);
+    res.send(`\uFEFF${lines.join("\r\n")}\r\n`);
+  }),
+);
+
+adminContactsRouter.post(
+  "/bulk/delete",
+  requireManage,
+  asyncHandler(async (req, res) => {
+    const parsed = bulkTargetsSchema.safeParse(req.body);
+    if (!parsed.success) throw badRequest("Invalid payload", parsed.error.flatten());
+    const ids = [...new Set(parsed.data.contactIds)];
+    await pool.query(
+      `DELETE FROM webhook_deliveries
+        WHERE payload->>'contactId' = ANY($1::text[])
+           OR payload->'contact'->>'id' = ANY($1::text[])`,
+      [ids.map(String)],
+    );
+    const deleted = await pool.query(`DELETE FROM contacts WHERE id = ANY($1::int[])`, [ids]);
+    await recordAdminAction({
+      req,
+      action: "contact.bulk_delete",
+      entityType: "contact",
+      entityId: "",
+      before: { contactIds: ids },
+      after: { deleted: deleted.rowCount ?? 0 },
+    });
+    res.json({ deleted: deleted.rowCount ?? 0 });
+  }),
 );
 
 /** The tables whose `contact_id` has to follow the survivor of a merge. */

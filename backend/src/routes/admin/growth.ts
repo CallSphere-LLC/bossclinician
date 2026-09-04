@@ -19,6 +19,7 @@ import {
 import { upsertContact } from "../../services/contacts";
 import { fireTriggerAsync, type TriggerType } from "../../automations/engine";
 import { dispatchEvent } from "../../services/webhooksOut";
+import { env } from "../../config/env";
 import {
   automationActionsRepo,
   automationsRepo,
@@ -60,6 +61,186 @@ const campaignTestSchema = z.object({
   subject: z.string().trim().min(1).max(500),
   bodyMd: z.string().max(100_000).default(""),
 });
+
+const funnelBlueprintSchema = z.object({
+  name: z.string().trim().min(1).max(200),
+  slug: z.string().trim().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).max(120),
+  description: z.string().trim().max(2000).default(""),
+  kind: z.enum(["opt_in", "webinar", "sales", "launch"]),
+  published: z.boolean().default(false),
+  offerId: z.number().int().positive().nullable().optional(),
+});
+
+const FUNNEL_BLUEPRINTS = {
+  opt_in: {
+    stages: [
+      ["Landing page", "landing", "A useful free resource", "Show what they will get and why it helps.", "Get it"],
+      ["Sign-up", "opt_in", "Where should we send it?", "Ask for the details you actually need.", "Send it to me"],
+      ["Thank you", "thank_you", "It is on its way", "Tell them what to expect next.", "Back to the site"],
+    ],
+    emails: [[0, "Here is what you asked for", "Thanks for joining us — here is your next step."]],
+  },
+  webinar: {
+    stages: [
+      ["Registration page", "landing", "Save your seat", "Explain the session, date and outcome.", "Register"],
+      ["Registration form", "opt_in", "Join the webinar", "Collect the attendee's details.", "Save my seat"],
+      ["Confirmation", "thank_you", "You are registered", "Add the joining instructions here.", "Add to calendar"],
+      ["Replay", "landing", "Watch the replay", "Share the replay while it is available.", "Watch now"],
+    ],
+    emails: [
+      [0, "You are registered", "Your place is saved. Here are the details."],
+      [1440, "Your webinar is coming up", "A quick reminder and the link you will need."],
+      [1440, "The replay is ready", "Here is another chance to watch."],
+    ],
+  },
+  sales: {
+    stages: [
+      ["Sales page", "landing", "The result your customer wants", "Explain the problem, promise and proof.", "See the offer"],
+      ["Offer", "offer", "Choose how you want to begin", "Connect the offer this funnel sells.", "Buy now"],
+      ["Thank you", "thank_you", "Welcome", "Tell your new customer what happens next.", "Get started"],
+    ],
+    emails: [[0, "Welcome — here is what happens next", "Thank you for joining. Start here."]],
+  },
+  launch: {
+    stages: [
+      ["Waitlist", "opt_in", "Be first to know", "Invite people onto the launch list.", "Join the waitlist"],
+      ["Launch page", "landing", "Doors are open", "Tell the story and introduce the offer.", "See what is included"],
+      ["Offer", "offer", "Choose your next step", "Connect the offer and answer final questions.", "Join now"],
+      ["Thank you", "thank_you", "You are in", "Give the buyer a clear first action.", "Get started"],
+    ],
+    emails: [
+      [0, "You are on the list", "I will let you know first when doors open."],
+      [10080, "Doors are open", "The full details are ready for you."],
+      [2880, "A quick look inside", "Here is what you can expect when you join."],
+      [2880, "A reminder before doors close", "If this is for you, now is the time."],
+    ],
+  },
+} as const;
+
+/** Creates the connected pages, capture form, tag and follow-up sequence as one transaction. */
+adminGrowthRouter.post(
+  "/funnels/blueprint",
+  asyncHandler(async (req, res) => {
+    const input = funnelBlueprintSchema.parse(req.body);
+    const spec = FUNNEL_BLUEPRINTS[input.kind];
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      let offerSlug = "";
+      if (input.offerId) {
+        const offer = await client.query<{ slug: string }>(`SELECT slug::text AS slug FROM offers WHERE id = $1`, [input.offerId]);
+        if (offer.rowCount === 0) throw badRequest("That offer no longer exists.");
+        offerSlug = offer.rows[0].slug;
+      }
+
+      const funnel = await client.query<{ id: number }>(
+        `INSERT INTO funnels (slug, name, description, kind, published, offer_id)
+         VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+        [input.slug, input.name, input.description, input.kind, input.published, input.offerId ?? null],
+      );
+      const funnelId = funnel.rows[0].id;
+      const tag = await client.query<{ id: number }>(
+        `INSERT INTO tags (name, slug, description)
+         VALUES ($1,$2,$3) RETURNING id`,
+        [`${input.name} — joined`, `funnel-${funnelId}-joined`, `Created by the ${input.name} funnel blueprint.`],
+      );
+      const sequence = await client.query<{ id: number }>(
+        `INSERT INTO email_sequences (name, slug, description, status, topic)
+         VALUES ($1,$2,$3,'draft','marketing') RETURNING id`,
+        [`${input.name} — follow-up`, `funnel-${funnelId}-follow-up`, `Created by the ${input.name} funnel blueprint.`],
+      );
+      for (const [index, email] of spec.emails.entries()) {
+        await client.query(
+          `INSERT INTO sequence_emails (sequence_id, position, delay_minutes, subject, preview_text, body_md)
+           VALUES ($1,$2,$3,$4,$5,$6)`,
+          [sequence.rows[0].id, index + 1, email[0], email[1], "", `Hi {{firstName}},\n\n${email[2]}\n\n[Take the next step](${env.publicSiteUrl}/funnel/${input.slug} \"button\")`],
+        );
+      }
+      const formSlug = `funnel-${funnelId}-signup`;
+      const form = await client.query<{ id: number }>(
+        `INSERT INTO forms
+           (slug, name, description, fields, submit_label, success_message, create_lead,
+            published, apply_tag_ids, subscribe_sequence_id, spam_protection)
+         VALUES ($1,$2,$3,$4::jsonb,'Join','Thanks — you are in.',true,$5,$6,$7,'honeypot')
+         RETURNING id`,
+        [formSlug, `${input.name} — sign-up`, `Created by the ${input.name} funnel blueprint.`,
+         JSON.stringify([{ key: "firstName", label: "First name", type: "text", required: true }, { key: "email", label: "Email", type: "email", required: true }]),
+         input.published, [tag.rows[0].id], sequence.rows[0].id],
+      );
+
+      for (const [index, stage] of spec.stages.entries()) {
+        const stepType = stage[1];
+        const ctaUrl = stepType === "opt_in"
+          ? `/forms/${formSlug}`
+          : stepType === "offer" && offerSlug
+            ? `/offers/${offerSlug}`
+            : index < spec.stages.length - 1 ? "" : "/";
+        await client.query(
+          `INSERT INTO funnel_steps
+             (funnel_id, name, slug, step_type, headline, body_md, cta_label, cta_url, sort)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+          [funnelId, stage[0], `${input.slug}-${index + 1}`, stepType, stage[2], stage[3], stage[4], ctaUrl, index],
+        );
+      }
+      const linked = await client.query(
+        `UPDATE funnels SET form_id=$2, tag_id=$3, sequence_id=$4, updated_at=now()
+          WHERE id=$1 RETURNING *`,
+        [funnelId, form.rows[0].id, tag.rows[0].id, sequence.rows[0].id],
+      );
+      await client.query("COMMIT");
+      res.status(201).json({
+        funnel: rowToCamel(linked.rows[0]),
+        stageCount: spec.stages.length,
+        emailCount: spec.emails.length,
+        formId: form.rows[0].id,
+        tagId: tag.rows[0].id,
+        sequenceId: sequence.rows[0].id,
+      });
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }),
+);
+
+/**
+ * Deletes the resources owned by a blueprint together. Legacy hand-built
+ * funnels have no linked ids, so this also remains a safe ordinary delete.
+ */
+adminGrowthRouter.delete(
+  "/funnels/:id",
+  asyncHandler(async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) throw badRequest("Invalid funnel id");
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const linked = await client.query<{
+        form_id: number | null;
+        tag_id: number | null;
+        sequence_id: number | null;
+      }>(`SELECT form_id, tag_id, sequence_id FROM funnels WHERE id = $1 FOR UPDATE`, [id]);
+      if (linked.rowCount === 0) throw notFound("Funnel not found");
+
+      const { form_id: formId, tag_id: tagId, sequence_id: sequenceId } = linked.rows[0];
+      await client.query(`DELETE FROM funnels WHERE id = $1`, [id]);
+      if (formId) await client.query(`DELETE FROM forms WHERE id = $1`, [formId]);
+      if (sequenceId) await client.query(`DELETE FROM email_sequences WHERE id = $1`, [sequenceId]);
+      if (tagId) await client.query(`DELETE FROM tags WHERE id = $1`, [tagId]);
+
+      await client.query("COMMIT");
+      res.json({ ok: true });
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }),
+);
 
 /* ---------------------------------------------------------------- Coaching */
 

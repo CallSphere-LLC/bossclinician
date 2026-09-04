@@ -7,6 +7,7 @@ import { buildUpdate } from "../../utils/sqlUpdate";
 import { isExternalRef, isProtectedRef } from "../../services/signedUrls";
 import { DEFAULT_DRIP_SETTINGS, zonedWallClockToUtc, type DripSettings } from "../../services/drip";
 import { loadDripSettings } from "../../services/curriculum";
+import { z } from "zod";
 
 /**
  * Course curriculum: course -> modules -> lessons.
@@ -28,6 +29,8 @@ export interface CourseLesson {
   contentType: string;
   commentsEnabled: boolean;
   attachmentUrl: string;
+  thumbnailUrl: string;
+  requiresPreviousLesson: boolean;
   durationMinutes: number;
   preview: boolean;
   published: boolean;
@@ -66,6 +69,8 @@ export const LESSON_FIELDS = [
   "video_url",
   "audio_url",
   "attachment_url",
+  "thumbnail_url",
+  "requires_previous_lesson",
   "content_type",
   "comments_enabled",
   "duration_minutes",
@@ -307,8 +312,15 @@ adminCurriculumRouter.get(
       [courseId],
     );
     const lessons = await pool.query(
-      `SELECT l.* FROM course_lessons l
+      `SELECT l.*, a.id AS assessment_id, a.slug::text AS assessment_slug,
+              a.title AS assessment_title
+         FROM course_lessons l
        JOIN course_modules m ON m.id = l.module_id
+       LEFT JOIN LATERAL (
+         SELECT id, slug, title FROM assessments
+          WHERE lesson_id = l.id AND kind = 'graded'
+          ORDER BY id LIMIT 1
+       ) a ON true
        WHERE m.course_id = $1
        ORDER BY l.sort, l.id`,
       [courseId],
@@ -399,28 +411,32 @@ adminCurriculumRouter.post(
     // the slug is disambiguated in the same statement that reads the sort.
     const result = await pool.query(
       `INSERT INTO course_lessons
-         (module_id, slug, title, body_md, video_url, attachment_url, duration_minutes,
-          preview, published, content_type, comments_enabled, drip_days, drip_date, sort)
+         (module_id, slug, title, body_md, video_url, audio_url, attachment_url, thumbnail_url,
+          duration_minutes, preview, published, content_type, comments_enabled,
+          requires_previous_lesson, drip_days, drip_date, sort)
        SELECT $1,
-              CASE WHEN taken.n = 0 THEN $9::text ELSE $9::text || '-' || (taken.n + 1) END,
-              $2, $3, $4, $5, $6, $7, $8, $10, $11, $12, $13,
+              CASE WHEN taken.n = 0 THEN $11::text ELSE $11::text || '-' || (taken.n + 1) END,
+              $2, $3, $4, $5, $6, $7, $8, $9, $10, $12, $13, $14, $15, $16,
               (SELECT COALESCE(MAX(sort), -1) + 1 FROM course_lessons WHERE module_id = $1)
          FROM (SELECT COUNT(*)::int AS n FROM course_lessons
                 WHERE module_id = $1
-                  AND (slug = $9::text OR slug LIKE $9::text || '-%')) taken
+                  AND (slug = $11::text OR slug LIKE $11::text || '-%')) taken
        RETURNING *`,
       [
         req.params.moduleId,
         title,
         body.bodyMd ?? "",
         body.videoUrl ?? "",
+        body.audioUrl ?? "",
         body.attachmentUrl ?? "",
+        body.thumbnailUrl ?? "",
         body.durationMinutes ?? 0,
         body.preview ?? false,
         body.published ?? true,
         lessonSlug(title),
         body.contentType ?? "text",
         body.commentsEnabled ?? true,
+        body.requiresPreviousLesson ?? false,
         drip.drip_days ?? null,
         drip.drip_date ?? null,
       ],
@@ -454,6 +470,76 @@ adminCurriculumRouter.delete(
   asyncHandler(async (req, res) => {
     const result = await pool.query("DELETE FROM course_lessons WHERE id = $1", [req.params.id]);
     if (result.rowCount === 0) throw notFound("Lesson not found");
+    res.status(204).end();
+  }),
+);
+
+const lessonFileSchema = z.object({
+  mediaId: z.number().int().positive().nullable().default(null),
+  title: z.string().trim().max(300).default(""),
+  storagePath: z.string().trim().min(1).max(1000),
+  filename: z.string().trim().max(300).default(""),
+  mime: z.string().trim().max(200).default(""),
+  sizeBytes: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).default(0),
+  sort: z.number().int().min(0).max(9999).default(0),
+});
+
+adminCurriculumRouter.get(
+  "/lessons/:id/files",
+  asyncHandler(async (req, res) => {
+    const result = await pool.query(
+      `SELECT * FROM lesson_files WHERE lesson_id = $1 ORDER BY sort, id`,
+      [req.params.id],
+    );
+    res.json(rowsToCamel(result.rows));
+  }),
+);
+
+adminCurriculumRouter.post(
+  "/lessons/:id/files",
+  asyncHandler(async (req, res) => {
+    const parsed = lessonFileSchema.safeParse(req.body);
+    if (!parsed.success) throw badRequest("Invalid file", parsed.error.flatten());
+    if (!isProtectedRef(parsed.data.storagePath)) {
+      throw badRequest("Upload lesson downloads for buyers only before attaching them.");
+    }
+    const lesson = await pool.query(`SELECT 1 FROM course_lessons WHERE id = $1`, [req.params.id]);
+    if (lesson.rowCount === 0) throw notFound("Lesson not found");
+    const file = await pool.query(
+      `INSERT INTO lesson_files
+         (lesson_id, media_id, title, storage_path, filename, mime, size_bytes, sort)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+      [req.params.id, parsed.data.mediaId, parsed.data.title, parsed.data.storagePath,
+       parsed.data.filename, parsed.data.mime, parsed.data.sizeBytes, parsed.data.sort],
+    );
+    res.status(201).json(rowToCamel(file.rows[0]));
+  }),
+);
+
+adminCurriculumRouter.patch(
+  "/lessons/:id/files/:fileId",
+  asyncHandler(async (req, res) => {
+    const parsed = z.object({ title: z.string().trim().max(300).optional(), sort: z.number().int().min(0).max(9999).optional() }).safeParse(req.body);
+    if (!parsed.success) throw badRequest("Invalid file", parsed.error.flatten());
+    const file = await pool.query(
+      `UPDATE lesson_files
+          SET title = COALESCE($1, title), sort = COALESCE($2, sort)
+        WHERE id = $3 AND lesson_id = $4 RETURNING *`,
+      [parsed.data.title, parsed.data.sort, req.params.fileId, req.params.id],
+    );
+    if (file.rowCount === 0) throw notFound("File not found");
+    res.json(rowToCamel(file.rows[0]));
+  }),
+);
+
+adminCurriculumRouter.delete(
+  "/lessons/:id/files/:fileId",
+  asyncHandler(async (req, res) => {
+    const removed = await pool.query(
+      `DELETE FROM lesson_files WHERE id = $1 AND lesson_id = $2`,
+      [req.params.fileId, req.params.id],
+    );
+    if (removed.rowCount === 0) throw notFound("File not found");
     res.status(204).end();
   }),
 );

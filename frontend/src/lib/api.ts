@@ -44,7 +44,11 @@ import type {
   Subscription,
 } from "@/types/admin";
 
-const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? "/api";
+/**
+ * Exported for the resumable upload client, which drives XMLHttpRequest itself
+ * (fetch reports no upload progress) and so cannot go through `request` below.
+ */
+export const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? "/api";
 const TOKEN_KEY = "bc_admin_token";
 
 export function getToken(): string | null {
@@ -414,6 +418,15 @@ export const adminApi = {
     }),
   lessonDelete: (id: number) =>
     request<void>(`/admin/curriculum/lessons/${id}`, { method: "DELETE" }),
+  lessonFiles: (id: number) =>
+    request<import("@/types/admin").LessonFile[]>(`/admin/curriculum/lessons/${id}/files`),
+  lessonFileAdd: (id: number, data: Record<string, unknown>) =>
+    request<import("@/types/admin").LessonFile>(`/admin/curriculum/lessons/${id}/files`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  lessonFileDelete: (lessonId: number, fileId: number) =>
+    request<void>(`/admin/curriculum/lessons/${lessonId}/files/${fileId}`, { method: "DELETE" }),
 
   // ---- Members ----
   membersList: () => request<Member[]>("/admin/members"),
@@ -633,6 +646,11 @@ export const adminApi = {
   coupons: () => request<Coupon[]>("/admin/sales/coupons"),
   couponCreate: (data: Record<string, unknown>) =>
     request<Coupon>("/admin/sales/coupons", { method: "POST", body: JSON.stringify(data) }),
+  couponUpdate: (id: number, data: Record<string, unknown>) =>
+    request<Coupon>(`/admin/sales/coupons/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
   couponToggle: (id: number, active: boolean) =>
     request<Coupon>(`/admin/sales/coupons/${id}`, {
       method: "PUT",
@@ -743,6 +761,15 @@ export const adminApi = {
 
   funnelSteps: (funnelId: number) =>
     request<import("@/types/admin").FunnelStep[]>(`/admin/growth/funnels/${funnelId}/steps`),
+  funnelBlueprint: (data: Record<string, unknown>) =>
+    request<{
+      funnel: import("@/types/admin").Funnel;
+      stageCount: number;
+      emailCount: number;
+      formId: number;
+      tagId: number;
+      sequenceId: number;
+    }>("/admin/growth/funnels/blueprint", { method: "POST", body: JSON.stringify(data) }),
 
   automationActions: (id: number) =>
     request<import("@/types/admin").AutomationAction[]>(
@@ -779,61 +806,12 @@ export const adminApi = {
     request<import("@/types/admin").ContentReport>("/admin/growth/reports/content"),
 };
 
-/**
- * Uploads a file with progress reporting.
- *
- * Uses XMLHttpRequest rather than fetch: fetch still has no upload-progress
- * event, and a multi-hundred-megabyte course video with no progress bar reads
- * as a frozen page.
+/*
+ * The XHR upload that used to live here is gone. Every admin upload now goes
+ * through lib/uploads/manager.ts, which sends the file in chunks it can retry
+ * and resume; a single POST of a 400MB video had no way to survive the
+ * connection dropping, which on the connections this admin is used from is not
+ * an edge case.
  */
-export function uploadMediaWithProgress(
-  file: File,
-  visibility: MediaVisibility,
-  onProgress: (percent: number) => void,
-  signal?: AbortSignal,
-): Promise<MediaAsset> {
-  return new Promise((resolve, reject) => {
-    const form = new FormData();
-    form.append("file", file);
-
-    const xhr = new XMLHttpRequest();
-    xhr.open("POST", `${API_BASE}/admin/media?visibility=${visibility}`);
-
-    const token = getToken();
-    if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
-
-    xhr.upload.addEventListener("progress", (e) => {
-      if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
-    });
-
-    xhr.addEventListener("load", () => {
-      if (xhr.status >= 200 && xhr.status < 300) {
-        try {
-          resolve(JSON.parse(xhr.responseText) as MediaAsset);
-        } catch {
-          reject(new ApiError("That file didn't finish uploading. Please try again.", xhr.status));
-        }
-        return;
-      }
-      let message = "That file didn't upload. Please try again.";
-      try {
-        const body = JSON.parse(xhr.responseText) as { error?: string };
-        if (body.error) message = body.error;
-      } catch {
-        // A 413 from nginx is HTML, not JSON — say so in plain words instead.
-        if (xhr.status === 413) message = "That file is too large.";
-      }
-      reject(new ApiError(message, xhr.status));
-    });
-
-    xhr.addEventListener("error", () =>
-      reject(new ApiError("The upload was interrupted. Check your connection and try again.", 0)),
-    );
-    xhr.addEventListener("abort", () => reject(new ApiError("You stopped this upload.", 0)));
-
-    signal?.addEventListener("abort", () => xhr.abort());
-    xhr.send(form);
-  });
-}
 
 export { ApiError };

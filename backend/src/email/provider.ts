@@ -275,6 +275,14 @@ export async function resolveProvider(): Promise<EmailProvider> {
 export function renderMarkdown(markdown: string): string {
   const inline = (text: string): string =>
     escapeHtml(text)
+      .replace(
+        /!\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)/g,
+        '<img src="$2" alt="$1" style="display:block;max-width:100%;height:auto;border:0">'
+      )
+      .replace(
+        /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\s+&quot;button&quot;\)/g,
+        '<a href="$2" style="display:inline-block;padding:12px 20px;border-radius:8px;background:#5b214e;color:#ffffff;text-decoration:none;font-weight:700">$1</a>'
+      )
       .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2">$1</a>')
       .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
       .replace(/(^|[^*])\*([^*]+)\*/g, "$1<em>$2</em>");
@@ -287,9 +295,20 @@ export function renderMarkdown(markdown: string): string {
     if (trimmed === "") continue;
 
     const lines = trimmed.split("\n");
+    if (/^-{3,}$/.test(trimmed)) {
+      html.push('<hr style="border:0;border-top:1px solid #ded7db;margin:24px 0">');
+      continue;
+    }
+
     if (lines.every((line) => /^\s*[-*]\s+/.test(line))) {
       const items = lines.map((line) => `<li>${inline(line.replace(/^\s*[-*]\s+/, ""))}</li>`);
       html.push(`<ul>${items.join("")}</ul>`);
+      continue;
+    }
+
+    if (lines.every((line) => /^\s*\d+\.\s+/.test(line))) {
+      const items = lines.map((line) => `<li>${inline(line.replace(/^\s*\d+\.\s+/, ""))}</li>`);
+      html.push(`<ol>${items.join("")}</ol>`);
       continue;
     }
 

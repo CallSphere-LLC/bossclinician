@@ -1,53 +1,38 @@
 import { useCallback, useRef, useState, type DragEvent } from "react";
-import { AnimatePresence, motion } from "motion/react";
-import { CloudUpload, FileText, Film, Music, Image as ImageIcon, X } from "lucide-react";
+import { useLocation } from "react-router-dom";
+import { motion } from "motion/react";
+import { CloudUpload } from "lucide-react";
 import { toast } from "sonner";
-import { uploadMediaWithProgress } from "@/lib/api";
+import { uploadManager } from "@/lib/uploads/manager";
+import { useUploadCompletions, useUploads } from "@/hooks/useUploads";
 import type { MediaAsset, MediaVisibility } from "@/types/admin";
 import { cn } from "@/lib/cn";
-import { formatBytes } from "@/lib/format";
-import { friendlyError } from "@/pages/admin/ui/friendly";
+import { pluralize } from "@/pages/admin/ui/friendly";
 import { Button } from "@/pages/admin/ui/primitives";
 
-interface QueueItem {
-  id: string;
-  file: File;
-  progress: number;
-  // "cancelled" is separate from "error" so a file she stopped on purpose
-  // doesn't come back reading like something broke.
-  status: "uploading" | "done" | "error" | "cancelled";
-  error?: string;
-  controller: AbortController;
-}
-
-export function iconForKind(kind: string) {
-  if (kind === "image") return ImageIcon;
-  if (kind === "video") return Film;
-  if (kind === "audio") return Music;
-  return FileText;
-}
-
-function kindForFile(file: File): string {
-  if (file.type.startsWith("image/")) return "image";
-  if (file.type.startsWith("video/")) return "video";
-  if (file.type.startsWith("audio/")) return "audio";
-  return "document";
-}
+export { iconForKind } from "@/pages/admin/ui/UploadRow";
 
 /**
- * Drag-and-drop uploader with a per-file progress queue.
+ * Drag-and-drop uploader.
  *
- * Uploads run concurrently and report independently: one 400MB video failing
- * must not discard the four images that already succeeded, so each queue entry
- * owns its own AbortController and error state.
+ * It no longer owns the upload. Handing the files to the manager
+ * (lib/uploads/manager.ts) is the whole of its job, because an upload that
+ * lived in this component's state died the moment she clicked through to
+ * another screen — and the files this admin exists to handle are 400MB course
+ * videos that take longer than any one screen holds her attention.
+ *
+ * So: files go to the manager, the manager keeps uploading wherever she goes,
+ * the tray in the corner (UploadTray) shows every upload on every page, and
+ * this component is told when one of *its* files has landed.
  */
+
 /**
  * The one refusal the server words for itself, said her way.
  *
  * It answers "Unsupported file type: image/heic" — true, and half of it is a
  * machine name she has never seen. What she needs is which files do work.
  */
-function uploadProblem(err: unknown): string | null {
+export function uploadProblem(err: unknown): string | null {
   const said = err instanceof Error ? err.message : "";
   return /unsupported file type/i.test(said)
     ? "That kind of file can't be used here. Pictures work best as JPG or PNG, and videos as MP4."
@@ -59,6 +44,7 @@ export function UploadDropzone({
   accept,
   compact = false,
   visibility = "public",
+  scope,
 }: {
   onUploaded: (asset: MediaAsset) => void;
   accept?: string;
@@ -73,71 +59,46 @@ export function UploadDropzone({
    * lesson attachments, download-product files, coaching recordings.
    */
   visibility?: MediaVisibility;
+  /**
+   * Which uploads belong to this box.
+   *
+   * The finished file has to find its way back to the right place — a lesson's
+   * video field, a post's cover, the library grid — and the box that asked for
+   * it may well have been unmounted and remounted in between. The route path is
+   * a good enough name when a screen has one dropzone; a screen with several
+   * must name them apart, or a lesson video will arrive in the thumbnail slot.
+   */
+  scope?: string;
 }) {
-  const [queue, setQueue] = useState<QueueItem[]>([]);
+  const location = useLocation();
+  const zone = scope ?? location.pathname;
   const [dragging, setDragging] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
-  // Monotonic counter for stable queue keys — filenames can repeat.
-  const seqRef = useRef(0);
 
-  const startUpload = useCallback(
-    (files: FileList | File[]) => {
-      const list = Array.from(files);
-      if (list.length === 0) return;
+  const mine = useUploads(zone);
+  const working = mine.filter(
+    (item) => item.status !== "done" && item.status !== "cancelled",
+  ).length;
 
-      for (const file of list) {
-        const id = `${Date.now()}-${seqRef.current++}`;
-        const controller = new AbortController();
-        setQueue((prev) => [...prev, { id, file, progress: 0, status: "uploading", controller }]);
-
-        uploadMediaWithProgress(
-          file,
-          visibility,
-          (percent) =>
-            setQueue((prev) =>
-              prev.map((item) => (item.id === id ? { ...item, progress: percent } : item)),
-            ),
-          controller.signal,
-        )
-          .then((asset) => {
-            setQueue((prev) =>
-              prev.map((item) =>
-                item.id === id ? { ...item, status: "done", progress: 100 } : item,
-              ),
-            );
-            onUploaded(asset);
-            toast.success(`${asset.originalName} is in your files`);
-            // Clear finished rows so the queue doesn't grow without bound.
-            window.setTimeout(
-              () => setQueue((prev) => prev.filter((item) => item.id !== id)),
-              1800,
-            );
-          })
-          .catch((err: unknown) => {
-            // She pressed the stop button — that is not a failure, and it must
-            // not shout at her in red.
-            const stopped = controller.signal.aborted;
-            const message = stopped
-              ? "You stopped this one."
-              : uploadProblem(err) ?? friendlyError(err, "file");
-            setQueue((prev) =>
-              prev.map((item) =>
-                item.id === id
-                  ? { ...item, status: stopped ? "cancelled" : "error", error: message }
-                  : item,
-              ),
-            );
-            if (!stopped) toast.error(`${file.name} didn't upload. ${message}`);
-          });
-      }
+  const handleUploaded = useCallback(
+    (asset: MediaAsset) => {
+      onUploaded(asset);
+      toast.success(`${asset.originalName} is in your files`);
     },
-    [onUploaded, visibility],
+    [onUploaded],
   );
+  useUploadCompletions(zone, handleUploaded);
 
-  function handleDrop(e: DragEvent<HTMLDivElement>) {
+  function start(files: FileList | File[]): void {
+    const list = Array.from(files);
+    if (list.length === 0) return;
+    uploadManager.enqueue(list, { visibility, scope: zone });
+  }
+
+  function handleDrop(e: DragEvent<HTMLDivElement>): void {
     e.preventDefault();
     setDragging(false);
-    if (e.dataTransfer.files?.length) startUpload(e.dataTransfer.files);
+    if (e.dataTransfer.files?.length) start(e.dataTransfer.files);
   }
 
   return (
@@ -189,106 +150,28 @@ export function UploadDropzone({
             accept={accept}
             className="sr-only"
             onChange={(e) => {
-              if (e.target.files) startUpload(e.target.files);
+              if (e.target.files) start(e.target.files);
               // Reset so selecting the same file twice re-triggers change.
               e.target.value = "";
             }}
           />
+
+          {/* Said once, where the file was handed over, because the progress
+              itself has moved to the corner of the screen and a box that shows
+              nothing after a drop reads as a box that did nothing. */}
+          {working > 0 ? (
+            <p className="mt-3 text-xs font-medium text-plum">
+              {pluralize(working, "file")} uploading — it carries on while you work, and picks
+              up again if the internet drops.
+            </p>
+          ) : (
+            <p className="mt-3 text-[0.7rem] text-ink-soft/80">
+              Big videos are safe here: uploads survive a lost connection and can be resumed
+              later.
+            </p>
+          )}
         </div>
       </div>
-
-      <AnimatePresence initial={false}>
-        {queue.length > 0 && (
-          <motion.ul
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-            className="mt-4 space-y-2 overflow-hidden"
-          >
-            {queue.map((item) => {
-              const Icon = iconForKind(kindForFile(item.file));
-              return (
-                <motion.li
-                  key={item.id}
-                  layout
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, x: 12 }}
-                  className="flex items-center gap-3 rounded-xl border border-hairline bg-white/[0.04] px-3.5 py-3"
-                >
-                  <span
-                    className={cn(
-                      "grid size-9 shrink-0 place-items-center rounded-lg",
-                      item.status === "error"
-                        ? "bg-red-500/15 text-red-300"
-                        : "bg-lilac-tint text-plum",
-                    )}
-                  >
-                    <Icon className="size-4" />
-                  </span>
-
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-baseline justify-between gap-3">
-                      <p className="truncate text-sm font-medium text-ink">{item.file.name}</p>
-                      <span className="shrink-0 text-xs tabular-nums text-ink-soft">
-                        {item.status === "error"
-                          ? "Didn't upload"
-                          : item.status === "cancelled"
-                            ? "Stopped"
-                            : item.status === "done"
-                              ? formatBytes(item.file.size)
-                              : `${item.progress}% uploaded`}
-                      </span>
-                    </div>
-
-                    <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-lilac-tint">
-                      <motion.div
-                        className={cn(
-                          "h-full rounded-full",
-                          item.status === "error" ? "bg-red-500" : "bg-gold-foil",
-                        )}
-                        initial={{ width: 0 }}
-                        animate={{ width: `${item.status === "error" ? 100 : item.progress}%` }}
-                        transition={{ ease: "easeOut", duration: 0.15 }}
-                      />
-                    </div>
-                    {item.error && (
-                      <p
-                        className={cn(
-                          "mt-1 text-xs",
-                          item.status === "cancelled" ? "text-ink-soft" : "text-red-300",
-                        )}
-                      >
-                        {item.error}
-                      </p>
-                    )}
-                  </div>
-
-                  {item.status === "uploading" ? (
-                    <Button
-                      variant="ghost"
-                      size="iconSm"
-                      aria-label={`Stop uploading ${item.file.name}`}
-                      onClick={() => item.controller.abort()}
-                    >
-                      <X />
-                    </Button>
-                  ) : (
-                    <Button
-                      variant="ghost"
-                      size="iconSm"
-                      aria-label={`Hide ${item.file.name} from this list`}
-                      onClick={() => setQueue((prev) => prev.filter((q) => q.id !== item.id))}
-                    >
-                      <X />
-                    </Button>
-                  )}
-                </motion.li>
-              );
-            })}
-          </motion.ul>
-        )}
-      </AnimatePresence>
     </div>
   );
 }

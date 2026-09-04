@@ -259,6 +259,7 @@ export interface MemberLessonView {
   /** "Unlocks Tuesday, 3 March", or "" when it is already open. */
   unlockLabel: string;
   completed: boolean;
+  requiresPreviousLesson: boolean;
   completedAt: string | null;
   lastPositionSeconds: number;
   watchedPercent: number;
@@ -316,6 +317,7 @@ interface OutlineRow {
   lesson_drip_days: number | null;
   lesson_drip_date: Date | null;
   comments_enabled: boolean | null;
+  requires_previous_lesson: boolean | null;
   notes_enabled: boolean | null;
   last_position_seconds: number | null;
   watched_percent: number | null;
@@ -340,7 +342,7 @@ const OUTLINE_SQL = `
          m.drip_date AS module_drip_date,
          l.id       AS lesson_id,
          l.slug, l.title, l.content_type, l.duration_minutes, l.video_duration_seconds,
-         l.preview, l.comments_enabled, l.notes_enabled,
+         l.preview, l.comments_enabled, l.notes_enabled, l.requires_previous_lesson,
          l.drip_days AS lesson_drip_days,
          l.drip_date AS lesson_drip_date,
          lp.last_position_seconds, lp.watched_percent, lp.completed_at, lp.last_viewed_at
@@ -394,6 +396,7 @@ function toLessonView(
     moduleTitle,
     commentsEnabled: row.comments_enabled !== false,
     notesEnabled: row.notes_enabled !== false,
+    requiresPreviousLesson: row.requires_previous_lesson === true,
     unlocked,
     unlocksAt: iso(unlocksAt),
     unlockLabel: unlocksAt ? `Unlocks ${describeUnlock(unlocksAt, settings.timezone)}` : "",
@@ -439,6 +442,20 @@ function buildModules(
     }
     if (row.lesson_id !== null) {
       mod.lessons.push(toLessonView(row, mod.title, grantedAt, now, settings));
+    }
+  }
+
+  // Completion prerequisites follow the actual course order, across section
+  // boundaries. A preview remains available by definition.
+  let previous: MemberLessonView | null = null;
+  for (const mod of modules) {
+    for (const lesson of mod.lessons) {
+      if (lesson.requiresPreviousLesson && previous && !previous.completed && !lesson.preview) {
+        lesson.unlocked = false;
+        lesson.unlocksAt = null;
+        lesson.unlockLabel = `Finish “${previous.title}” first`;
+      }
+      previous = lesson;
     }
   }
 

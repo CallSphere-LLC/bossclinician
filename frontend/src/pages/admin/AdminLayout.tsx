@@ -17,6 +17,7 @@ import { cn } from "@/lib/cn";
 import { adminApi } from "@/lib/api";
 import { pluralize } from "@/pages/admin/ui/friendly";
 import { NAV_GROUPS, groupForPath, type NavGroup } from "@/pages/admin/ui/nav";
+import { UploadTray } from "@/pages/admin/ui/UploadTray";
 
 /**
  * Admin shell: dark rail + collapsible nav groups, glass topbar, content well.
@@ -341,6 +342,11 @@ export function AdminLayout({ children }: { children: ReactNode }) {
           </motion.div>
         </main>
       </div>
+
+      {/* Outside the routed content on purpose: an upload started on the media
+          library has to keep running, and keep showing, while she works on a
+          course three screens away. */}
+      <UploadTray />
     </div>
   );
 }

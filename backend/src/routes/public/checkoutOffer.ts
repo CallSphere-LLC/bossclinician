@@ -22,6 +22,7 @@ import { deliverPurchase, notifyOwnerOfSale } from "../../services/purchaseDeliv
 import { resolveAttribution } from "../../services/affiliates";
 import { VISITOR_COOKIE } from "./affiliateTracking";
 import { addInterval, computeOrderTotal, type OrderTotal } from "../../services/pricing";
+import { readSetting } from "../../services/settings";
 import {
   MAX_PWYW_CENTS,
   addressSchema,
@@ -32,6 +33,7 @@ import {
   loadPublishedOfferById,
   parseCustomFields,
   resolveTaxRateBps,
+  selectOfferPricing,
   selectBumps,
   submittedTaxAddress,
   toPricedOffer,
@@ -355,6 +357,7 @@ async function ensureRecurringPrice(offer: OfferRow): Promise<string> {
   if (!offer.interval) throw badRequest("This offer is not set up for recurring billing");
 
   const currency = offer.currency || "usd";
+  const descriptor = await cardStatementDescriptor();
   const price = await stripe().prices.create(
     {
       currency,
@@ -362,7 +365,12 @@ async function ensureRecurringPrice(offer: OfferRow): Promise<string> {
       recurring: { interval: offer.interval, interval_count: offer.interval_count },
       ...(offer.stripe_product_id
         ? { product: offer.stripe_product_id }
-        : { product_data: { name: offer.title } }),
+        : {
+            product_data: {
+              name: offer.title,
+              ...(descriptor ? { statement_descriptor: descriptor } : {}),
+            },
+          }),
       metadata: { offerId: String(offer.id), offerSlug: offer.slug },
     },
     {
@@ -373,16 +381,39 @@ async function ensureRecurringPrice(offer: OfferRow): Promise<string> {
   );
 
   const productId = typeof price.product === "string" ? price.product : price.product.id;
-  await pool.query(
-    `UPDATE offers
-        SET stripe_price_id = $2,
-            stripe_product_id = COALESCE(stripe_product_id, $3),
-            updated_at = now()
-      WHERE id = $1 AND stripe_price_id IS NULL`,
-    [offer.id, price.id, productId]
-  );
+  if (offer.pricing_option_id) {
+    await pool.query(
+      `UPDATE offer_pricing_options
+          SET stripe_price_id = $2,
+              stripe_product_id = COALESCE(stripe_product_id, $3),
+              updated_at = now()
+        WHERE id = $1 AND offer_id = $4 AND stripe_price_id IS NULL`,
+      [offer.pricing_option_id, price.id, productId, offer.id],
+    );
+  } else {
+    await pool.query(
+      `UPDATE offers
+          SET stripe_price_id = $2,
+              stripe_product_id = COALESCE(stripe_product_id, $3),
+              updated_at = now()
+        WHERE id = $1 AND stripe_price_id IS NULL`,
+      [offer.id, price.id, productId],
+    );
+  }
 
   return price.id;
+}
+
+/** Stripe accepts 5–22 Latin letters, digits and a small punctuation set. */
+async function cardStatementDescriptor(): Promise<string | undefined> {
+  const setting = await readSetting("customer_payments");
+  const clean = String(setting.statementDescriptor ?? "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9 .\-]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 22);
+  return clean.length >= 5 ? clean : undefined;
 }
 
 /**
@@ -513,14 +544,15 @@ async function createPendingOrder(input: PendingOrderInput): Promise<PendingOrde
 
     const orderRes = await client.query<{ id: number }>(
       `INSERT INTO orders
-         (offer_id, member_id, email, amount_cents, currency, status,
+         (offer_id, pricing_option_id, member_id, email, amount_cents, currency, status,
           subtotal_cents, discount_cents, tax_cents, total_cents,
           coupon_id, coupon_code, billing_name, billing_phone, billing_address,
           custom_field_data, parent_order_id, source, affiliate_id, affiliate_click_id)
-       VALUES ($1,$2,$3,$4,$5,'pending',$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
+       VALUES ($1,$2,$3,$4,$5,$6,'pending',$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
        RETURNING id`,
       [
         input.offer.id,
+        input.offer.pricing_option_id ?? null,
         input.memberId,
         input.email,
         total.totalCents,
@@ -636,6 +668,7 @@ async function markOrderFailed(orderId: number): Promise<void> {
 /* ---------------------------------------------------------------- checkout */
 
 const checkoutOfferSchema = z.object({
+  pricingOptionId: z.number().int().positive().nullable().optional(),
   email: z.string().trim().email().max(320),
   name: z.string().trim().max(200).optional(),
   phone: z.string().trim().max(40).optional(),
@@ -670,8 +703,9 @@ checkoutOfferRouter.post(
     if (!parsed.success) throw badRequest("Invalid checkout payload", parsed.error.flatten());
     const body = parsed.data;
 
-    const offer = await loadPublishedOffer(req.params.slug);
-    if (!offer) throw notFound("Offer not found");
+    const baseOffer = await loadPublishedOffer(req.params.slug);
+    if (!baseOffer) throw notFound("Offer not found");
+    const offer = await selectOfferPricing(baseOffer, body.pricingOptionId);
 
     if (offer.require_terms && body.acceptedTerms !== true) {
       throw badRequest("Please accept the terms to continue");
@@ -717,6 +751,7 @@ checkoutOfferRouter.post(
       orderToken: issueOrderToken(orderId),
       offerSlug: offer.slug,
       billing: billingToJson(offer, toPricedOffer(offer)),
+      selectedPricingOptionId: offer.pricing_option_id ?? null,
       redirectUrl: offer.redirect_url || null,
       thankYouPageSlug: offer.thank_you_page_id,
       ...totalToJson(total),
@@ -778,6 +813,7 @@ checkoutOfferRouter.post(
         offerId: String(offer.id),
         offerSlug: offer.slug,
         pricingType: offer.pricing_type,
+        pricingOptionId: String(offer.pricing_option_id ?? ""),
       };
 
       if (isRecurring(offer)) {
@@ -879,6 +915,7 @@ checkoutOfferRouter.post(
         return;
       }
 
+      const descriptor = await cardStatementDescriptor();
       const intent = await stripe().paymentIntents.create(
         {
           amount: total.totalCents,
@@ -892,6 +929,7 @@ checkoutOfferRouter.post(
           setup_future_usage: "off_session",
           receipt_email: email,
           description: offer.title,
+          ...(descriptor ? { statement_descriptor_suffix: descriptor } : {}),
           metadata,
         },
         { idempotencyKey: `offer-order-${orderId}` }

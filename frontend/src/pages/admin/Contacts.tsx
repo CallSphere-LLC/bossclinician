@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Download, Plus, Tags as TagsIcon, Upload, Users } from "lucide-react";
+import { BarChart3, Download, Gift, MailPlus, Plus, Tags as TagsIcon, Trash2, Upload, Users } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/cn";
 import { formatRelative } from "@/lib/format";
@@ -15,12 +15,15 @@ import {
   type ContactFilters,
   type EmailStatus,
   type ImportOutcome,
+  type SegmentOptions,
   type Tag,
 } from "@/lib/contactsApi";
 import {
   Badge,
   Button,
   Card,
+  Chip,
+  chipRowStyles,
   EmptyState,
   ErrorNotice,
   Field,
@@ -30,7 +33,7 @@ import {
   Textarea,
 } from "@/pages/admin/ui/primitives";
 import { DataTable } from "@/pages/admin/ui/DataTable";
-import { Modal } from "@/pages/admin/ui/Dialog";
+import { Modal, useConfirm } from "@/pages/admin/ui/Dialog";
 import { friendlyError, orNone, pluralize } from "@/pages/admin/ui/friendly";
 
 /**
@@ -196,33 +199,65 @@ function importSummary(result: ImportOutcome): string {
 
 export default function Contacts() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [people, setPeople] = useState<Contact[] | null>(null);
   const [total, setTotal] = useState(0);
   const [tags, setTags] = useState<Tag[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  const [search, setSearch] = useState("");
-  const [status, setStatus] = useState<EmailStatus | "all">("all");
-  const [tagFilter, setTagFilter] = useState("");
+  const requestedStatus = searchParams.get("status");
+  const [search, setSearch] = useState(searchParams.get("q") ?? "");
+  const [status, setStatus] = useState<EmailStatus | "all">(
+    EMAIL_STATUS_LABEL[requestedStatus as EmailStatus] ? requestedStatus as EmailStatus : "all",
+  );
+  const [tagFilter, setTagFilter] = useState(searchParams.get("tag") ?? "");
   const [sort, setSort] = useState<NonNullable<ContactFilters["sort"]>>("recent");
+
+  const audience = (["new", "subscribed", "new_subscriber", "customer", "new_customer"] as const)
+    .find((value) => value === searchParams.get("audience"));
+  const optOut = (["manual", "self"] as const).find((value) => value === searchParams.get("optOut"));
+  const engagement = (["healthy", "passive", "unengaged", "inactive"] as const)
+    .find((value) => value === searchParams.get("engagement"));
 
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [adding, setAdding] = useState(false);
   const [importing, setImporting] = useState(false);
   const [tagging, setTagging] = useState<"add" | "remove" | null>(null);
+  const [bulkPicker, setBulkPicker] = useState<"sequence" | "offer" | null>(null);
+  const [bulkOptions, setBulkOptions] = useState<SegmentOptions>({ tags: [], offers: [], sequences: [] });
   const [busy, setBusy] = useState(false);
+  const [confirm, confirmDialog] = useConfirm();
 
   const filters = useMemo<ContactFilters>(
     () => ({
       q: search.trim() || undefined,
       status: status === "all" ? undefined : status,
       tag: tagFilter || undefined,
+      audience,
+      optOut,
+      engagement,
       sort,
       limit: PAGE_SIZE,
     }),
-    [search, status, tagFilter, sort],
+    [search, status, tagFilter, sort, audience, optOut, engagement],
   );
+
+  const insightFilterLabel = audience
+    ? ({ new: "New contacts in the last 30 days", subscribed: "Subscribed contacts", new_subscriber: "New subscribers", customer: "Customers", new_customer: "New customers" } as const)[audience]
+    : optOut
+      ? optOut === "manual" ? "Unsubscribed by an administrator" : "People who opted out themselves"
+      : engagement
+        ? ({ healthy: "Healthy subscribers", passive: "Passive subscribers", unengaged: "Unengaged subscribers", inactive: "Inactive subscribers" } as const)[engagement]
+        : null;
+
+  function clearInsightFilter() {
+    const next = new URLSearchParams(searchParams);
+    next.delete("audience");
+    next.delete("optOut");
+    next.delete("engagement");
+    setSearchParams(next, { replace: true });
+  }
 
   const load = useCallback(() => {
     let current = true;
@@ -270,6 +305,10 @@ export default function Contacts() {
   }, []);
 
   useEffect(loadTags, [loadTags]);
+
+  useEffect(() => {
+    contactsApi.segmentOptions().then(setBulkOptions).catch(() => undefined);
+  }, []);
 
   const toggle = useCallback((id: number) => {
     setSelected((prev) => {
@@ -411,6 +450,44 @@ export default function Contacts() {
     }
   }
 
+  async function exportChosen() {
+    setBusy(true);
+    try {
+      const blob = await contactsApi.bulkExport([...selected]);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `chosen-people-${new Date().toISOString().slice(0, 10)}.csv`;
+      link.click();
+      URL.revokeObjectURL(url);
+      toast.success("Your chosen people are downloading");
+    } catch (err) {
+      toast.error(friendlyError(err, "list"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function deleteChosen() {
+    const ids = [...selected];
+    const ok = await confirm({
+      title: `Delete ${pluralize(ids.length, "person", "people")}?`,
+      description:
+        "Their contact card and marketing history will be erased. Payment records are kept for accounting.",
+      confirmLabel: "Delete chosen people",
+      destructive: true,
+    });
+    if (!ok) return;
+    try {
+      const result = await contactsApi.bulkDelete(ids);
+      toast.success(`${pluralize(result.deleted, "person", "people")} deleted`);
+      setSelected(new Set());
+      load();
+    } catch (err) {
+      toast.error(friendlyError(err, "people"));
+    }
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -419,6 +496,12 @@ export default function Contacts() {
         description="Everyone you know — whoever enquired, joined your list, signed up or bought something, all on one card each."
         actions={
           <>
+            <Button variant="secondary" size="sm" asChild>
+              <Link to="/admin/contacts/insights">
+                <BarChart3 />
+                Insights
+              </Link>
+            </Button>
             <Button variant="secondary" size="sm" asChild>
               <Link to="/admin/tags">
                 <TagsIcon />
@@ -443,21 +526,24 @@ export default function Contacts() {
 
       {error && <ErrorNotice message={error} />}
 
-      <div className="flex flex-wrap gap-1.5">
+      {insightFilterLabel && (
+        <Card className="flex min-h-12 flex-wrap items-center gap-3 px-4 py-2.5">
+          <p className="text-sm font-semibold text-ink">Showing: {insightFilterLabel}</p>
+          <Button className="ml-auto" variant="ghost" size="sm" onClick={clearInsightFilter}>
+            Clear this filter
+          </Button>
+        </Card>
+      )}
+
+      <div className={chipRowStyles}>
         {STATUS_FILTERS.map((option) => (
-          <button
+          <Chip
             key={option.value}
-            type="button"
+            selected={status === option.value}
             onClick={() => setStatus(option.value)}
-            className={cn(
-              "rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors",
-              status === option.value
-                ? "bg-brand-gradient text-white"
-                : "border border-hairline bg-surface text-ink-soft hover:border-plum/40 hover:text-plum",
-            )}
           >
             {option.label}
-          </button>
+          </Chip>
         ))}
       </div>
 
@@ -472,6 +558,18 @@ export default function Contacts() {
             </Button>
             <Button variant="secondary" size="sm" onClick={() => setTagging("remove")}>
               Take a tag off them
+            </Button>
+            <Button variant="secondary" size="sm" onClick={() => setBulkPicker("sequence")}>
+              <MailPlus /> Start a sequence
+            </Button>
+            <Button variant="secondary" size="sm" onClick={() => setBulkPicker("offer")}>
+              <Gift /> Grant an offer
+            </Button>
+            <Button variant="secondary" size="sm" onClick={exportChosen} disabled={busy}>
+              <Download /> Export chosen
+            </Button>
+            <Button variant="dangerGhost" size="sm" onClick={() => void deleteChosen()}>
+              <Trash2 /> Delete
             </Button>
             <Button variant="ghost" size="sm" onClick={() => setSelected(new Set())}>
               Clear
@@ -525,9 +623,9 @@ export default function Contacts() {
         emptyState={
           <EmptyState
             icon={<Users />}
-            title={search || tagFilter || status !== "all" ? "Nobody matches that" : "No people yet"}
+            title={search || tagFilter || status !== "all" || insightFilterLabel ? "Nobody matches that" : "No people yet"}
             description={
-              search || tagFilter || status !== "all"
+              search || tagFilter || status !== "all" || insightFilterLabel
                 ? "Try a shorter search, or clear the filters above."
                 : "People appear here as they enquire, join your list, sign up or buy something."
             }
@@ -589,7 +687,88 @@ export default function Contacts() {
           }
         }}
       />
+      <BulkPickModal
+        kind={bulkPicker}
+        count={selected.size}
+        options={bulkOptions}
+        onClose={() => setBulkPicker(null)}
+        onApply={async (id) => {
+          try {
+            if (bulkPicker === "sequence") {
+              const result = await contactsApi.bulkSequence([...selected], id);
+              toast.success(`${pluralize(result.enrolled, "person", "people")} started the sequence`);
+            } else {
+              const result = await contactsApi.bulkOffer([...selected], id);
+              toast.success(`${pluralize(result.granted, "person", "people")} granted access`);
+            }
+            setBulkPicker(null);
+            setSelected(new Set());
+            load();
+          } catch (err) {
+            toast.error(friendlyError(err, bulkPicker === "sequence" ? "sequence" : "offer"));
+          }
+        }}
+      />
+      {confirmDialog}
     </div>
+  );
+}
+
+function BulkPickModal({ kind, count, options, onClose, onApply }: {
+  kind: "sequence" | "offer" | null;
+  count: number;
+  options: SegmentOptions;
+  onClose: () => void;
+  onApply: (id: number) => Promise<void>;
+}) {
+  const [value, setValue] = useState("");
+  const [saving, setSaving] = useState(false);
+  const choices = kind === "sequence"
+    ? options.sequences.map((entry) => ({ id: entry.id, label: entry.name }))
+    : options.offers.map((entry) => ({ id: entry.id, label: entry.title }));
+  useEffect(() => setValue(""), [kind]);
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    if (!value) return;
+    setSaving(true);
+    try {
+      await onApply(Number(value));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal
+      open={kind !== null}
+      onOpenChange={(open) => !open && onClose()}
+      title={kind === "sequence" ? "Start an email sequence" : "Grant an offer"}
+      description={`This will apply to ${pluralize(count, "chosen person", "chosen people")}.`}
+      footer={
+        <>
+          <Button variant="secondary" size="sm" onClick={onClose}>Cancel</Button>
+          <Button size="sm" type="submit" form="bulk-pick-form" disabled={!value || saving}>
+            {saving ? "Working…" : "Apply"}
+          </Button>
+        </>
+      }
+    >
+      <form id="bulk-pick-form" onSubmit={submit}>
+        <Field label={kind === "sequence" ? "Which sequence?" : "Which offer?"}>
+          <select
+            className={selectStyles}
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            required
+            autoFocus
+          >
+            <option value="">Choose…</option>
+            {choices.map((choice) => <option key={choice.id} value={choice.id}>{choice.label}</option>)}
+          </select>
+        </Field>
+      </form>
+    </Modal>
   );
 }
 
@@ -708,21 +887,15 @@ function TagPicker({
 
   return (
     <div className="space-y-2.5">
-      <div className="flex flex-wrap gap-1.5">
+      <div className={chipRowStyles}>
         {tags.map((tag) => (
-          <button
+          <Chip
             key={tag.slug}
-            type="button"
+            selected={chosen.includes(tag.slug)}
             onClick={() => toggle(tag.slug)}
-            className={cn(
-              "rounded-full px-3 py-1.5 text-xs font-semibold transition-colors",
-              chosen.includes(tag.slug)
-                ? "bg-brand-gradient text-white"
-                : "border border-hairline bg-surface text-ink-soft hover:border-plum/40 hover:text-plum",
-            )}
           >
             {tag.name}
-          </button>
+          </Chip>
         ))}
         {tags.length === 0 && <p className="text-xs text-ink-soft">You don't have any tags yet.</p>}
       </div>

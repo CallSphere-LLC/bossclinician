@@ -223,6 +223,8 @@ export interface UnlockedLesson extends LessonCommon {
   transcript: string;
   captionsUrl: string;
   attachmentUrl: string;
+  /** Linked graded test; null while the test is still a draft or none is attached. */
+  assessmentSlug: string | null;
   /**
    * When the four media URLs above stop working, or null if none needed signing.
    *

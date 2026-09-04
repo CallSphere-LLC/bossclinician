@@ -1038,6 +1038,7 @@ export default function AssessmentEditor() {
                   requireEmail: detail.requireEmail,
                   showFeedback: detail.showFeedback,
                   passMark: detail.passMark,
+                  maxAttempts: detail.maxAttempts,
                   published: detail.published,
                 })
               }
@@ -1268,21 +1269,38 @@ export default function AssessmentEditor() {
             </Field>
 
             {graded && (
-              <Field label="Pass mark" hint="out of 100">
-                <Input
-                  inputMode="numeric"
-                  aria-label="Pass mark out of 100"
-                  value={settings.passMark === null ? "" : String(settings.passMark ?? "")}
-                  onChange={(event) => {
-                    const raw = event.target.value.replace(/[^0-9]/g, "");
-                    setSettings((current) => ({
-                      ...current,
-                      passMark: raw === "" ? null : Number(raw),
-                    }));
-                  }}
-                  placeholder="70"
-                />
-              </Field>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Field label="Pass mark" hint="out of 100">
+                  <Input
+                    inputMode="numeric"
+                    aria-label="Pass mark out of 100"
+                    value={settings.passMark === null ? "" : String(settings.passMark ?? "")}
+                    onChange={(event) => {
+                      const raw = event.target.value.replace(/[^0-9]/g, "");
+                      setSettings((current) => ({
+                        ...current,
+                        passMark: raw === "" ? null : Number(raw),
+                      }));
+                    }}
+                    placeholder="70"
+                  />
+                </Field>
+                <Field label="Attempts allowed" hint="leave blank for unlimited">
+                  <Input
+                    inputMode="numeric"
+                    aria-label="Attempts allowed"
+                    value={settings.maxAttempts === null ? "" : String(settings.maxAttempts ?? "")}
+                    onChange={(event) => {
+                      const raw = event.target.value.replace(/[^0-9]/g, "");
+                      setSettings((current) => ({
+                        ...current,
+                        maxAttempts: raw === "" ? null : Number(raw),
+                      }));
+                    }}
+                    placeholder="Unlimited"
+                  />
+                </Field>
+              </div>
             )}
 
             <label className="flex cursor-pointer items-start gap-2.5 text-sm text-ink">

@@ -100,7 +100,7 @@ adminAssessmentsRouter.get(
   asyncHandler(async (_req, res) => {
     const result = await pool.query(
       `SELECT a.id, a.slug::text AS slug, a.title, a.kind, a.published, a.require_email,
-              a.pass_mark, a.updated_at,
+              a.pass_mark, a.lesson_id, a.updated_at,
               (SELECT count(*)::int FROM assessment_questions q WHERE q.assessment_id = a.id) AS question_count,
               (SELECT count(*)::int FROM assessment_results r WHERE r.assessment_id = a.id)   AS result_count,
               (SELECT count(*)::int FROM assessment_attempts t
@@ -137,7 +137,7 @@ adminAssessmentsRouter.post(
         passMark,
         input.maxAttempts ?? null,
         input.showFeedback ?? true,
-        input.requireEmail ?? true,
+        input.requireEmail ?? input.kind !== "graded",
         input.published ?? false,
       ]
     );

@@ -41,6 +41,8 @@ const WEBHOOK_BY_TRIGGER: Partial<Record<TriggerV2, string[]>> = {
   tag_added: ["contact.tagged"],
   offer_purchased: ["order.paid"],
   subscription_cancelled: ["subscription.cancelled"],
+  subscription_cancel_requested: ["subscription.cancel_requested"],
+  payment_plan_completed: ["payment_plan.completed"],
   form_submitted: ["form.submitted"],
 };
 

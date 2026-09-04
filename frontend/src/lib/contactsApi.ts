@@ -118,6 +118,21 @@ export interface ContactPage {
   pageSize: number;
 }
 
+export interface ContactInsights {
+  contacts: number;
+  newContacts: number;
+  subscribed: number;
+  newSubscribers: number;
+  customers: number;
+  newCustomers: number;
+  manuallyUnsubscribed: number;
+  optedOut: number;
+  bounced: number;
+  complained: number;
+  neverSubscribed: number;
+  engagement: { healthy: number; passive: number; unengaged: number; inactive: number };
+}
+
 export interface Tag {
   id: number;
   name: string;
@@ -180,6 +195,9 @@ export interface ContactFilters {
   tag?: string;
   status?: EmailStatus;
   untagged?: boolean;
+  audience?: "new" | "subscribed" | "new_subscriber" | "customer" | "new_customer";
+  optOut?: "manual" | "self";
+  engagement?: "healthy" | "passive" | "unengaged" | "inactive";
   sort?: "recent" | "newest" | "oldest" | "name" | "value" | "orders";
   page?: number;
   limit?: number;
@@ -191,6 +209,9 @@ function toQuery(filters: ContactFilters): string {
   if (filters.tag) qs.set("tag", filters.tag);
   if (filters.status) qs.set("status", filters.status);
   if (filters.untagged) qs.set("untagged", "true");
+  if (filters.audience) qs.set("audience", filters.audience);
+  if (filters.optOut) qs.set("optOut", filters.optOut);
+  if (filters.engagement) qs.set("engagement", filters.engagement);
   if (filters.sort) qs.set("sort", filters.sort);
   if (filters.page) qs.set("page", String(filters.page));
   if (filters.limit) qs.set("limit", String(filters.limit));
@@ -201,6 +222,7 @@ function toQuery(filters: ContactFilters): string {
 /* ── Calls ──────────────────────────────────────────────────────────────── */
 
 export const contactsApi = {
+  insights: () => request<ContactInsights>("/admin/contacts/insights"),
   list: (filters: ContactFilters = {}) =>
     request<ContactPage>(`/admin/contacts${toQuery(filters)}`),
   get: (id: number) => request<ContactDetail>(`/admin/contacts/${id}`),
@@ -240,6 +262,34 @@ export const contactsApi = {
       method: "POST",
       body: JSON.stringify({ contactIds, tagSlugs, action }),
     }),
+  bulkSequence: (contactIds: number[], sequenceId: number) =>
+    request<{ enrolled: number; alreadyEnrolled: number; blocked: { contactId: number; reason: string }[] }>(
+      "/admin/contacts/bulk/sequence",
+      { method: "POST", body: JSON.stringify({ contactIds, sequenceId }) },
+    ),
+  bulkOffer: (contactIds: number[], offerId: number) =>
+    request<{ granted: number }>("/admin/contacts/bulk/offer", {
+      method: "POST",
+      body: JSON.stringify({ contactIds, offerId }),
+    }),
+  bulkDelete: (contactIds: number[]) =>
+    request<{ deleted: number }>("/admin/contacts/bulk/delete", {
+      method: "POST",
+      body: JSON.stringify({ contactIds }),
+    }),
+  bulkExport: async (contactIds: number[]) => {
+    const token = getToken();
+    const res = await fetch(`${API_BASE}/admin/contacts/bulk/export.csv`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ contactIds }),
+    });
+    if (!res.ok) throw new ApiError("That download didn't finish. Please try again.", res.status);
+    return res.blob();
+  },
 
   addNote: (id: number, body: string) =>
     request<{ ok: true }>(`/admin/contacts/${id}/notes`, {

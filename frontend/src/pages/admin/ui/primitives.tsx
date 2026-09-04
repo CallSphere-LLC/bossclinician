@@ -41,11 +41,11 @@ const buttonVariants = cva(
         dark: "border border-hairline bg-night-deep text-ink hover:bg-white/[0.05]",
       },
       size: {
-        sm: "h-9 px-3.5 text-xs [&_svg]:size-4",
+        sm: "min-h-11 px-3.5 py-2 text-xs [&_svg]:size-4",
         md: "h-11 px-5 text-sm [&_svg]:size-[1.05rem]",
         lg: "h-12 px-7 text-[0.95rem] [&_svg]:size-5",
         icon: "size-10 [&_svg]:size-[1.05rem]",
-        iconSm: "size-9 [&_svg]:size-4",
+        iconSm: "size-11 [&_svg]:size-4",
       },
     },
     defaultVariants: { variant: "primary", size: "md" },
@@ -363,5 +363,53 @@ export function ErrorNotice({ message }: { message: string }) {
       </span>
       <span>{message}</span>
     </div>
+  );
+}
+
+/**
+ * A pill-shaped toggle — status filters, tag pickers, anything that reads as a
+ * row of choices rather than a form control.
+ *
+ * It exists because the look was copied into four screens as
+ * `rounded-full px-3.5 py-1.5 text-xs`, which computes to a 28px-tall target.
+ * Four rounds of testing produced repeated false "it's broken" readings, and
+ * every one of them was a click that landed a few pixels outside a chip and was
+ * silently swallowed. `min-h-10` is the floor (40px), the padding is what grows
+ * to meet it, and `active:` gives the press somewhere to show.
+ *
+ * `selected` drives `aria-pressed` as well as the fill, so the state is not
+ * carried by colour alone.
+ */
+export function chipStyles(selected: boolean): string {
+  return cn(
+    "inline-flex min-h-10 items-center justify-center gap-1.5 rounded-full px-4 py-2",
+    "text-xs font-semibold transition-colors",
+    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-plum/40",
+    selected
+      ? "bg-brand-gradient text-white active:brightness-95"
+      : "border border-hairline bg-surface text-ink-soft hover:border-plum/40 hover:text-plum active:bg-cream",
+  );
+}
+
+/** The row a set of `Chip`s sits in — `gap-2` so 40px targets never touch. */
+export const chipRowStyles = "flex flex-wrap gap-2";
+
+export function Chip({
+  selected,
+  onClick,
+  children,
+  className,
+  ...rest
+}: ButtonHTMLAttributes<HTMLButtonElement> & { selected: boolean }) {
+  return (
+    <button
+      type="button"
+      aria-pressed={selected}
+      onClick={onClick}
+      className={cn(chipStyles(selected), className)}
+      {...rest}
+    >
+      {children}
+    </button>
   );
 }

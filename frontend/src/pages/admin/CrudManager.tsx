@@ -600,6 +600,7 @@ export function PicturePickerModal({
         <UploadDropzone
           compact
           accept="image/*"
+          scope="picture-picker"
           onUploaded={(asset) => setPictures((prev) => (prev ? [asset, ...prev] : [asset]))}
         />
 

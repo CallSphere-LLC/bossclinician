@@ -61,6 +61,9 @@ export interface OfferRow {
   access_expires_after_days: number | null;
   stripe_price_id: string | null;
   stripe_product_id: string | null;
+  /** Present when the price was overlaid from an additional checkout option. */
+  pricing_option_id?: number | null;
+  pricing_label?: string;
 }
 
 const OFFER_COLUMNS = `id, title, slug, description, checkout_headline, thumbnail_url,
@@ -107,6 +110,100 @@ export function toPricedOffer(offer: OfferRow): PricedOffer {
     intervalCount: offer.interval_count,
     installmentCount: offer.installment_count,
     trialDays: offer.trial_days,
+  };
+}
+
+export interface OfferPricingOptionRow {
+  id: number;
+  offer_id: number;
+  label: string;
+  pricing_type: PricingType;
+  amount_cents: number;
+  min_amount_cents: number;
+  currency: string;
+  interval: BillingInterval | null;
+  interval_count: number;
+  installment_count: number | null;
+  trial_days: number;
+  recommended: boolean;
+  active: boolean;
+  stripe_price_id: string | null;
+  stripe_product_id: string | null;
+  sort: number;
+}
+
+const PRICING_OPTION_COLUMNS = `id, offer_id, label, pricing_type, amount_cents,
+  min_amount_cents, currency, interval, interval_count, installment_count,
+  trial_days, recommended, active, stripe_price_id, stripe_product_id, sort`;
+
+export async function loadOfferPricingOptions(
+  offerId: number,
+  db: Queryable = pool,
+): Promise<OfferPricingOptionRow[]> {
+  const result = await db.query<OfferPricingOptionRow>(
+    `SELECT ${PRICING_OPTION_COLUMNS}
+       FROM offer_pricing_options
+      WHERE offer_id = $1 AND active = true
+      ORDER BY sort, id`,
+    [offerId],
+  );
+  return result.rows;
+}
+
+function optionOverlay(offer: OfferRow, option: OfferPricingOptionRow): OfferRow {
+  return {
+    ...offer,
+    pricing_type: option.pricing_type,
+    amount_cents: option.amount_cents,
+    min_amount_cents: option.min_amount_cents,
+    currency: option.currency,
+    interval: option.interval,
+    interval_count: option.interval_count,
+    installment_count: option.installment_count,
+    trial_days: option.trial_days,
+    stripe_price_id: option.stripe_price_id,
+    stripe_product_id: option.stripe_product_id,
+    pricing_option_id: option.id,
+    pricing_label: option.label,
+  };
+}
+
+/**
+ * Resolves a shopper's choice from rows owned by this offer. `undefined` means
+ * use the recommended option; `null` explicitly selects the original price.
+ */
+export async function selectOfferPricing(
+  offer: OfferRow,
+  pricingOptionId: number | null | undefined,
+  db: Queryable = pool,
+): Promise<OfferRow> {
+  if (pricingOptionId === null) return { ...offer, pricing_option_id: null };
+  const options = await loadOfferPricingOptions(offer.id, db);
+  const option = pricingOptionId === undefined
+    ? options.find((entry) => entry.recommended)
+    : options.find((entry) => entry.id === pricingOptionId);
+  if (pricingOptionId !== undefined && !option) throw badRequest("That payment option is no longer available.");
+  return option ? optionOverlay(offer, option) : { ...offer, pricing_option_id: null };
+}
+
+function pricingLabel(offer: OfferRow): string {
+  if (offer.pricing_type === "payment_plan") return "Payment plan";
+  if (offer.pricing_type === "subscription") return "Subscription";
+  if (offer.pricing_type === "free") return "Free";
+  if (offer.pricing_type === "pwyw") return "Choose your price";
+  return "Pay in full";
+}
+
+function pricingOptionJson(offer: OfferRow, id: number | null, label: string, recommended: boolean) {
+  const priced = toPricedOffer(offer);
+  return {
+    id,
+    label,
+    recommended,
+    currency: offer.currency || "usd",
+    amountCents: offer.amount_cents,
+    billing: billingToJson(offer, priced),
+    quote: totalToJson(computeOrderTotal({ offer: priced })),
   };
 }
 
@@ -405,13 +502,16 @@ offersRouter.get(
     const offer = await loadPublishedOffer(req.params.slug);
     if (!offer) throw notFound("Offer not found");
 
-    const priced = toPricedOffer(offer);
-    const [products, bumps, upsells, productIds] = await Promise.all([
+    const [products, bumps, upsells, productIds, additionalPricing] = await Promise.all([
       loadOfferProducts(offer.id),
       loadOfferBumps(offer.id),
       loadUpsells(offer.id),
       offerProductIds(offer.id),
+      loadOfferPricingOptions(offer.id),
     ]);
+    const selectedOffer = await selectOfferPricing(offer, undefined);
+    const priced = toPricedOffer(selectedOffer);
+    const additionalRecommended = additionalPricing.some((option) => option.recommended);
 
     let alreadyOwned = false;
     if (req.member && productIds.length > 0) {
@@ -426,9 +526,17 @@ offersRouter.get(
       description: offer.description,
       checkoutHeadline: offer.checkout_headline,
       thumbnailUrl: offer.thumbnail_url,
-      currency: offer.currency || "usd",
-      amountCents: offer.amount_cents,
-      billing: billingToJson(offer, priced),
+      currency: selectedOffer.currency || "usd",
+      amountCents: selectedOffer.amount_cents,
+      billing: billingToJson(selectedOffer, priced),
+      selectedPricingOptionId: selectedOffer.pricing_option_id ?? null,
+      pricingOptions: [
+        pricingOptionJson(offer, null, pricingLabel(offer), !additionalRecommended),
+        ...additionalPricing.map((option) => {
+          const overlaid = optionOverlay(offer, option);
+          return pricingOptionJson(overlaid, option.id, option.label || pricingLabel(overlaid), option.recommended);
+        }),
+      ],
       orderForm: {
         collectTax: offer.collect_tax,
         collectAddress: offer.collect_address,
@@ -455,7 +563,7 @@ offersRouter.get(
         title: b.title || b.product_title,
         description: b.description,
         amountCents: b.amount_cents,
-        formattedAmount: formatAmount(b.amount_cents, offer.currency),
+        formattedAmount: formatAmount(b.amount_cents, selectedOffer.currency),
         product: {
           slug: b.product_slug,
           title: b.product_title,
@@ -504,6 +612,7 @@ const quoteLimiter = rateLimit({
 });
 
 const quoteSchema = z.object({
+  pricingOptionId: z.number().int().positive().nullable().optional(),
   couponCode: z.string().trim().max(64).optional(),
   bumpProductIds: z.array(z.number().int().positive()).max(20).optional(),
   pwywAmountCents: z.number().int().min(0).max(MAX_PWYW_CENTS).optional(),
@@ -532,8 +641,9 @@ offersRouter.post(
     if (!parsed.success) throw badRequest("Invalid quote request", parsed.error.flatten());
     const body = parsed.data;
 
-    const offer = await loadPublishedOffer(req.params.slug);
-    if (!offer) throw notFound("Offer not found");
+    const baseOffer = await loadPublishedOffer(req.params.slug);
+    if (!baseOffer) throw notFound("Offer not found");
+    const offer = await selectOfferPricing(baseOffer, body.pricingOptionId);
 
     const priced = toPricedOffer(offer);
     const bumpRows = await loadOfferBumps(offer.id);
@@ -561,6 +671,7 @@ offersRouter.post(
 
     res.json({
       offerSlug: offer.slug,
+      selectedPricingOptionId: offer.pricing_option_id ?? null,
       billing: billingToJson(offer, priced),
       taxRateBps,
       appliedBumpProductIds: bumps.map((b) => b.productId),

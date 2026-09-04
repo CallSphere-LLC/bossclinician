@@ -1,5 +1,6 @@
 import { Router } from "express";
 import type { PoolClient } from "pg";
+import { z } from "zod";
 import { pool } from "../../db/pool";
 import { rowToCamel, rowsToCamel } from "../../utils/case";
 import { asyncHandler } from "../../utils/asyncHandler";
@@ -68,6 +69,27 @@ type OfferRow = {
   welcome_next_steps: string;
   stripe_price_id: string | null;
   stripe_product_id: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+type PricingOptionRow = {
+  id: number;
+  offer_id: number;
+  label: string;
+  pricing_type: PricingType;
+  amount_cents: number;
+  min_amount_cents: number;
+  currency: string;
+  interval: BillingInterval | null;
+  interval_count: number;
+  installment_count: number | null;
+  trial_days: number;
+  recommended: boolean;
+  active: boolean;
+  stripe_price_id: string | null;
+  stripe_product_id: string | null;
+  sort: number;
   created_at: string;
   updated_at: string;
 };
@@ -284,7 +306,7 @@ adminOffersRouter.get(
     const offer = result.rows[0];
     if (!offer) throw notFound("Offer not found");
 
-    const [bumps, upsells] = await Promise.all([
+    const [bumps, upsells, pricingOptions] = await Promise.all([
       pool.query(
         `SELECT b.id, b.offer_id, b.product_id, b.title, b.description, b.amount_cents,
                 b.sort, b.created_at, b.updated_at, p.title AS product_title, p.kind AS product_kind
@@ -305,13 +327,163 @@ adminOffersRouter.get(
           ORDER BY u.step`,
         [id],
       ),
+      pool.query(
+        `SELECT * FROM offer_pricing_options WHERE offer_id = $1 ORDER BY sort, id`,
+        [id],
+      ),
     ]);
 
     res.json({
       ...rowToCamel(offer),
       bumps: rowsToCamel(bumps.rows),
       upsells: rowsToCamel(upsells.rows),
+      pricingOptions: rowsToCamel(pricingOptions.rows),
     });
+  }),
+);
+
+/* ------------------------------------------------------ pricing options */
+
+const pricingOptionSchema = z.object({
+  label: z.string().trim().min(1).max(120),
+  pricingType: z.enum(["one_time", "subscription", "payment_plan", "free", "pwyw"]),
+  amountCents: z.number().int().min(0),
+  minAmountCents: z.number().int().min(0).default(0),
+  interval: z.enum(["day", "week", "month", "year"]).nullable().default(null),
+  intervalCount: z.number().int().min(1).max(365).default(1),
+  installmentCount: z.number().int().min(2).max(60).nullable().default(null),
+  trialDays: z.number().int().min(0).max(365).default(0),
+  recommended: z.boolean().default(false),
+  active: z.boolean().default(true),
+  sort: z.number().int().min(0).max(9999).default(0),
+});
+
+function assertPricingOption(input: z.infer<typeof pricingOptionSchema>): void {
+  const issue = offerPricingIssue(input);
+  if (issue) throw issueError(issue);
+}
+
+async function loadPricingOption(offerId: number, optionId: number): Promise<PricingOptionRow> {
+  const result = await pool.query<PricingOptionRow>(
+    `SELECT * FROM offer_pricing_options WHERE id = $1 AND offer_id = $2`,
+    [optionId, offerId],
+  );
+  if (!result.rows[0]) throw notFound("Payment option not found");
+  return result.rows[0];
+}
+
+adminOffersRouter.post(
+  "/:id/pricing-options",
+  asyncHandler(async (req, res) => {
+    const offerId = parseId(req.params.id);
+    const parsed = pricingOptionSchema.safeParse(req.body);
+    if (!parsed.success) throw badRequest("Invalid payment option", parsed.error.flatten());
+    assertPricingOption(parsed.data);
+    const offer = await loadOffer(offerId);
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      if (parsed.data.recommended && parsed.data.active) {
+        await client.query(
+          `UPDATE offer_pricing_options SET recommended = false, updated_at = now()
+            WHERE offer_id = $1 AND recommended = true`,
+          [offerId],
+        );
+      }
+      const result = await client.query<PricingOptionRow>(
+        `INSERT INTO offer_pricing_options
+           (offer_id, label, pricing_type, amount_cents, min_amount_cents, currency,
+            interval, interval_count, installment_count, trial_days, recommended, active, sort)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
+        [offerId, parsed.data.label, parsed.data.pricingType, parsed.data.amountCents,
+         parsed.data.minAmountCents, offer.currency, parsed.data.interval,
+         parsed.data.intervalCount, parsed.data.installmentCount, parsed.data.trialDays,
+         parsed.data.recommended && parsed.data.active, parsed.data.active, parsed.data.sort],
+      );
+      await client.query("COMMIT");
+      await recordAdminAction({ req, action: "offer.pricing_option_create", entityType: "offer", entityId: offerId, after: rowToCamel(result.rows[0]) });
+      res.status(201).json(rowToCamel(result.rows[0]));
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }),
+);
+
+adminOffersRouter.put(
+  "/:id/pricing-options/:optionId",
+  asyncHandler(async (req, res) => {
+    const offerId = parseId(req.params.id);
+    const optionId = parseId(req.params.optionId, "payment option");
+    const patch = pricingOptionSchema.partial().safeParse(req.body);
+    if (!patch.success) throw badRequest("Invalid payment option", patch.error.flatten());
+    const before = await loadPricingOption(offerId, optionId);
+    const next = pricingOptionSchema.parse({
+      label: patch.data.label ?? before.label,
+      pricingType: patch.data.pricingType ?? before.pricing_type,
+      amountCents: patch.data.amountCents ?? before.amount_cents,
+      minAmountCents: patch.data.minAmountCents ?? before.min_amount_cents,
+      interval: patch.data.interval === undefined ? before.interval : patch.data.interval,
+      intervalCount: patch.data.intervalCount ?? before.interval_count,
+      installmentCount: patch.data.installmentCount === undefined ? before.installment_count : patch.data.installmentCount,
+      trialDays: patch.data.trialDays ?? before.trial_days,
+      recommended: patch.data.recommended ?? before.recommended,
+      active: patch.data.active ?? before.active,
+      sort: patch.data.sort ?? before.sort,
+    });
+    assertPricingOption(next);
+    const repriced = next.pricingType !== before.pricing_type || next.amountCents !== before.amount_cents ||
+      next.interval !== before.interval || next.intervalCount !== before.interval_count;
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      if (next.recommended && next.active) {
+        await client.query(
+          `UPDATE offer_pricing_options SET recommended = false, updated_at = now()
+            WHERE offer_id = $1 AND id <> $2 AND recommended = true`,
+          [offerId, optionId],
+        );
+      }
+      const result = await client.query<PricingOptionRow>(
+        `UPDATE offer_pricing_options SET
+           label = $3, pricing_type = $4, amount_cents = $5, min_amount_cents = $6,
+           interval = $7, interval_count = $8, installment_count = $9, trial_days = $10,
+           recommended = $11, active = $12, sort = $13,
+           stripe_price_id = CASE WHEN $14 THEN NULL ELSE stripe_price_id END,
+           updated_at = now()
+         WHERE id = $1 AND offer_id = $2 RETURNING *`,
+        [optionId, offerId, next.label, next.pricingType, next.amountCents, next.minAmountCents,
+         next.interval, next.intervalCount, next.installmentCount, next.trialDays,
+         next.recommended && next.active, next.active, next.sort, repriced],
+      );
+      await client.query("COMMIT");
+      await recordAdminAction({ req, action: "offer.pricing_option_update", entityType: "offer", entityId: offerId, before: rowToCamel(before), after: rowToCamel(result.rows[0]) });
+      res.json(rowToCamel(result.rows[0]));
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }),
+);
+
+adminOffersRouter.delete(
+  "/:id/pricing-options/:optionId",
+  asyncHandler(async (req, res) => {
+    const offerId = parseId(req.params.id);
+    const optionId = parseId(req.params.optionId, "payment option");
+    const removed = await pool.query<PricingOptionRow>(
+      `DELETE FROM offer_pricing_options WHERE id = $1 AND offer_id = $2 RETURNING *`,
+      [optionId, offerId],
+    );
+    if (!removed.rows[0]) throw notFound("Payment option not found");
+    await recordAdminAction({ req, action: "offer.pricing_option_delete", entityType: "offer", entityId: offerId, before: rowToCamel(removed.rows[0]) });
+    res.status(204).end();
   }),
 );
 
@@ -534,6 +706,14 @@ adminOffersRouter.put(
         ],
       );
       after = result.rows[0];
+      if (currency !== before.currency) {
+        await pool.query(
+          `UPDATE offer_pricing_options
+              SET currency = $2, stripe_price_id = NULL, updated_at = now()
+            WHERE offer_id = $1`,
+          [id, currency],
+        );
+      }
     } catch (err) {
       if (isUniqueViolation(err)) {
         throw issueError({ field: "slug", message: "That web address is already taken by another offer." });
@@ -625,6 +805,15 @@ adminOffersRouter.post(
         `INSERT INTO offer_bumps (offer_id, product_id, title, description, amount_cents, sort)
          SELECT $2, product_id, title, description, amount_cents, sort
            FROM offer_bumps WHERE offer_id = $1`,
+        [id, created.id],
+      );
+      await client.query(
+        `INSERT INTO offer_pricing_options
+           (offer_id, label, pricing_type, amount_cents, min_amount_cents, currency,
+            interval, interval_count, installment_count, trial_days, recommended, active, sort)
+         SELECT $2, label, pricing_type, amount_cents, min_amount_cents, currency,
+                interval, interval_count, installment_count, trial_days, recommended, active, sort
+           FROM offer_pricing_options WHERE offer_id = $1`,
         [id, created.id],
       );
       await client.query(

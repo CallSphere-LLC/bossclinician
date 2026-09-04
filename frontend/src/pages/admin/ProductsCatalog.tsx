@@ -825,7 +825,12 @@ function FilesModal({
       }
     >
       <div className="space-y-5">
-        <UploadDropzone compact visibility="protected" onUploaded={(asset) => void attach(asset)} />
+        <UploadDropzone
+          compact
+          visibility="protected"
+          scope="product-files"
+          onUploaded={(asset) => void attach(asset)}
+        />
 
         {files === null ? (
           <Skeleton className="h-24 w-full" />

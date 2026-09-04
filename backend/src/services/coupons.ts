@@ -28,21 +28,18 @@ export type CouponResult =
   | { ok: true; coupon: ValidatedCoupon }
   | { ok: false; reason: string };
 
-/**
- * One message for every reason a code cannot be used here.
- *
- * "No such code", "switched off", "misconfigured", "not started yet",
- * "expired", "all fifty taken" and "not for this offer" are one answer on
- * purpose. Each of the last four is only reachable for a code that exists, so
- * telling them apart turns the coupon field into an oracle that confirms which
- * codes are real — at 120 tries per ten minutes, that is how a private launch
- * discount escapes before the launch.
- *
- * The one distinction kept below is "you have already used this", which is
- * reached only by a code that exists, is live, and applies to this offer, and
- * which tells the shopper nothing except their own history.
- */
-const UNKNOWN_CODE = "That code isn't valid.";
+/** Buyer-facing eligibility results. The quote route is rate-limited, so useful
+ * feedback wins over making a legitimate customer guess why their code did not
+ * change the total. None of these messages reveals the value of a discount. */
+const COUPON_ERROR = {
+  unknown: "We couldn't find that discount code.",
+  inactive: "That discount code is no longer active.",
+  notStarted: "That discount code isn't active yet.",
+  expired: "That discount code has expired.",
+  offer: "That discount code isn't valid for this offer.",
+  limit: "That discount code has reached its usage limit.",
+  currency: "That discount code can't be used with this currency.",
+} as const;
 
 /** Codes are stored and compared uppercase, so `save20` and `SAVE20` are one code. */
 export function normaliseCouponCode(code: string): string {
@@ -99,7 +96,7 @@ export async function validateCoupon(
   options: ValidateCouponOptions = {}
 ): Promise<CouponResult> {
   const normalised = normaliseCouponCode(code);
-  if (!normalised) return { ok: false, reason: UNKNOWN_CODE };
+  if (!normalised) return { ok: false, reason: COUPON_ERROR.unknown };
 
   const db = options.client ?? pool;
   const res = await db.query<CouponRow>(
@@ -108,25 +105,26 @@ export async function validateCoupon(
   );
 
   const row = res.rows[0];
-  if (!row || !row.active) return { ok: false, reason: UNKNOWN_CODE };
+  if (!row) return { ok: false, reason: COUPON_ERROR.unknown };
+  if (!row.active) return { ok: false, reason: COUPON_ERROR.inactive };
 
   const percentOff = row.percent_off !== null && row.percent_off > 0 ? row.percent_off : null;
   const amountOffCents =
     row.amount_off_cents !== null && row.amount_off_cents > 0 ? row.amount_off_cents : null;
   if (percentOff === null && amountOffCents === null) {
-    return { ok: false, reason: UNKNOWN_CODE };
+    return { ok: false, reason: COUPON_ERROR.unknown };
   }
 
   const now = Date.now();
-  if (row.starts_at && row.starts_at.getTime() > now) return { ok: false, reason: UNKNOWN_CODE };
-  if (row.expires_at && row.expires_at.getTime() <= now) return { ok: false, reason: UNKNOWN_CODE };
+  if (row.starts_at && row.starts_at.getTime() > now) return { ok: false, reason: COUPON_ERROR.notStarted };
+  if (row.expires_at && row.expires_at.getTime() <= now) return { ok: false, reason: COUPON_ERROR.expired };
 
   if (row.scope === "offers") {
     const scoped = await db.query(
       `SELECT 1 FROM coupon_offers WHERE coupon_id = $1 AND offer_id = $2`,
       [row.id, offerId]
     );
-    if (scoped.rows.length === 0) return { ok: false, reason: UNKNOWN_CODE };
+    if (scoped.rows.length === 0) return { ok: false, reason: COUPON_ERROR.offer };
   }
 
   // Counted from the ledger, not from `coupons.redeemed`. The denormalised
@@ -141,7 +139,7 @@ export async function validateCoupon(
       [row.id]
     );
     if ((taken.rows[0]?.used ?? 0) >= row.max_redemptions) {
-      return { ok: false, reason: UNKNOWN_CODE };
+      return { ok: false, reason: COUPON_ERROR.limit };
     }
   }
 
@@ -158,16 +156,11 @@ export async function validateCoupon(
     const offerCurrency = (offerRow.rows[0]?.currency || "usd").toLowerCase();
     const couponCurrency = (row.currency || "usd").toLowerCase();
     if (couponCurrency !== offerCurrency) {
-      // Answered as UNKNOWN_CODE, not explained. A currency mismatch is the
-      // store's own misconfiguration — the category that message already covers
-      // — and there is nothing the shopper could do with the detail except use
-      // it to confirm the code exists. It goes to the log instead, where the
-      // person who can fix it will find it.
       console.error(
         `[coupons] ${row.code} discounts ${couponCurrency.toUpperCase()} and offer ${offerId} is ` +
           `priced in ${offerCurrency.toUpperCase()}; the code was refused.`
       );
-      return { ok: false, reason: UNKNOWN_CODE };
+      return { ok: false, reason: COUPON_ERROR.currency };
     }
   }
 

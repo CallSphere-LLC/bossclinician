@@ -44,6 +44,34 @@ export interface PurchaseReceiptInput {
   currency: string;
 }
 
+export interface RefundReceiptInput {
+  buyerName: string;
+  orderId: number;
+  amountCents: number;
+  currency: string;
+  fullyRefunded: boolean;
+}
+
+/** Confirmation for money returned, distinct from the original purchase receipt. */
+export function refundReceipt(input: RefundReceiptInput): EmailContent {
+  const name = greeting(input.buyerName);
+  const amount = formatAmount(input.amountCents, input.currency);
+  const status = input.fullyRefunded ? "Your order has been refunded in full." : "This was a partial refund.";
+  return {
+    subject: `Your ${amount} refund is confirmed`,
+    text: [
+      `Hi ${name},`,
+      "",
+      `We have returned ${amount} for order #${input.orderId}.`,
+      status,
+      "",
+      "Your bank may take several business days to show it on your statement.",
+      `You can see the order at ${env.publicSiteUrl}/account/billing.`,
+    ].join("\n"),
+    html: `<p>Hi ${escapeHtml(name)},</p><p>We have returned <strong>${escapeHtml(amount)}</strong> for order #${input.orderId}.</p><p>${escapeHtml(status)}</p><p>Your bank may take several business days to show it on your statement.</p><p><a href="${env.publicSiteUrl}/account/billing">View your billing history</a></p>`,
+  };
+}
+
 /**
  * The receipt for a completed purchase.
  *

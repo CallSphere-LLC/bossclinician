@@ -318,7 +318,27 @@ export interface Offer {
 export interface OfferDetail extends Offer {
   bumps: OfferBump[];
   upsells: OfferUpsell[];
+  pricingOptions: OfferPricingOption[];
 }
+
+export interface OfferPricingOption {
+  id: number;
+  offerId: number;
+  label: string;
+  pricingType: PricingType;
+  amountCents: number;
+  minAmountCents: number;
+  currency: string;
+  interval: BillingInterval | null;
+  intervalCount: number;
+  installmentCount: number | null;
+  trialDays: number;
+  recommended: boolean;
+  active: boolean;
+  sort: number;
+}
+
+export type OfferPricingOptionInput = Omit<OfferPricingOption, "id" | "offerId" | "currency">;
 
 export interface OfferInput {
   title: string;
@@ -389,6 +409,18 @@ export const adminCommerceApi = {
     commerceRequest<Offer>(`/admin/offers/${id}/publish`, { method: "POST" }),
   offerArchive: (id: number) =>
     commerceRequest<Offer>(`/admin/offers/${id}/archive`, { method: "POST" }),
+  pricingOptionAdd: (offerId: number, input: OfferPricingOptionInput) =>
+    commerceRequest<OfferPricingOption>(`/admin/offers/${offerId}/pricing-options`, {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  pricingOptionUpdate: (offerId: number, optionId: number, patch: Partial<OfferPricingOptionInput>) =>
+    commerceRequest<OfferPricingOption>(`/admin/offers/${offerId}/pricing-options/${optionId}`, {
+      method: "PUT",
+      body: JSON.stringify(patch),
+    }),
+  pricingOptionDelete: (offerId: number, optionId: number) =>
+    commerceRequest<void>(`/admin/offers/${offerId}/pricing-options/${optionId}`, { method: "DELETE" }),
 
   offerProductAdd: (offerId: number, productId: number, sort: number) =>
     commerceRequest<{ offerId: number; productId: number; sort: number }>(

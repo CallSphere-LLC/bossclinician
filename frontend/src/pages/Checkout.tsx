@@ -30,6 +30,7 @@ import {
   type CheckoutInput,
   type CheckoutResult,
   type PublicOffer,
+  type PublicPricingOption,
 } from "@/lib/commerceApi";
 import { formatCurrency } from "@/lib/format";
 import { cn } from "@/lib/cn";
@@ -189,12 +190,26 @@ function elementsModeFor(offer: PublicOffer): ElementsMode {
  * `Elements`.
  */
 function CheckoutExperience({ offer }: { offer: PublicOffer }) {
-  const mode = useMemo(() => elementsModeFor(offer), [offer]);
-  const [amountCents, setAmountCents] = useState(offer.quote.totalCents);
+  const [pricingOptionId, setPricingOptionId] = useState<number | null>(offer.selectedPricingOptionId);
+  const selectedPricing = offer.pricingOptions.find((option) => option.id === pricingOptionId)
+    ?? offer.pricingOptions[0];
+  const pricedOffer = useMemo(
+    () => ({ ...offer, currency: selectedPricing.currency, amountCents: selectedPricing.amountCents, billing: selectedPricing.billing, quote: selectedPricing.quote }),
+    [offer, selectedPricing],
+  );
+  const mode = useMemo(() => elementsModeFor(pricedOffer), [pricedOffer]);
+  const [amountCents, setAmountCents] = useState(selectedPricing.quote.totalCents);
   const stripePromise = useMemo(() => getStripe(), []);
 
+  useEffect(() => setAmountCents(selectedPricing.quote.totalCents), [selectedPricing]);
+
+  function choosePricingOption(option: PublicPricingOption) {
+    setAmountCents(option.quote.totalCents);
+    setPricingOptionId(option.id);
+  }
+
   const options = useMemo<StripeElementsOptions>(() => {
-    const currency = (offer.currency || "usd").toLowerCase();
+    const currency = (selectedPricing.currency || "usd").toLowerCase();
     if (mode === "setup") {
       return { mode: "setup", currency, setupFutureUsage: "off_session", appearance: luxeAppearance };
     }
@@ -213,12 +228,46 @@ function CheckoutExperience({ offer }: { offer: PublicOffer }) {
       setupFutureUsage: "off_session",
       appearance: luxeAppearance,
     };
-  }, [mode, amountCents, offer.currency]);
+  }, [mode, amountCents, selectedPricing.currency]);
 
   return (
-    <Elements stripe={stripePromise} options={options}>
-      <CheckoutForm offer={offer} mode={mode} onAmountChange={setAmountCents} />
-    </Elements>
+    <div className="space-y-5">
+      {offer.pricingOptions.length > 1 && (
+        <GlassCard accent="plum" interactive={false} className="mx-auto max-w-5xl p-4 sm:p-5">
+          <fieldset>
+            <legend className="px-1 text-sm font-semibold text-white">Choose how you would like to pay</legend>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              {offer.pricingOptions.map((option) => {
+                const selected = option.id === pricingOptionId;
+                return (
+                  <label key={option.id ?? "base"} className={cn(
+                    "flex min-h-16 cursor-pointer items-center gap-3 rounded-xl border px-4 py-3 transition-colors",
+                    selected ? "border-gold bg-gold/10" : "border-white/10 bg-white/[0.02] hover:border-white/25",
+                  )}>
+                    <input type="radio" name="pricing-option" checked={selected} onChange={() => choosePricingOption(option)} className="size-4 accent-[#c9a46a]" />
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center gap-2 font-semibold text-white">
+                        {option.label}
+                        {option.recommended && <span className="rounded-full bg-gold/15 px-2 py-0.5 text-[0.65rem] uppercase tracking-wide text-gold">Recommended</span>}
+                      </span>
+                      <span className="mt-0.5 block text-sm text-orchid-faint">
+                        {(() => {
+                          const words = describeBilling({ billing: option.billing, amountCents: option.amountCents, currency: option.currency, coupon: null, hasBumps: false });
+                          return words.commitment || words.detail || words.badge;
+                        })()}
+                      </span>
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          </fieldset>
+        </GlassCard>
+      )}
+      <Elements key={`${pricingOptionId ?? "base"}:${mode}`} stripe={stripePromise} options={options}>
+        <CheckoutForm offer={pricedOffer} pricingOption={selectedPricing} mode={mode} onAmountChange={setAmountCents} />
+      </Elements>
+    </div>
   );
 }
 
@@ -226,11 +275,12 @@ function CheckoutExperience({ offer }: { offer: PublicOffer }) {
 
 interface CheckoutFormProps {
   offer: PublicOffer;
+  pricingOption: PublicPricingOption;
   mode: ElementsMode;
   onAmountChange: (cents: number) => void;
 }
 
-function CheckoutForm({ offer, mode, onAmountChange }: CheckoutFormProps) {
+function CheckoutForm({ offer, pricingOption, mode, onAmountChange }: CheckoutFormProps) {
   const navigate = useNavigate();
   const stripe = useStripe();
   const elements = useElements();
@@ -272,6 +322,7 @@ function CheckoutForm({ offer, mode, onAmountChange }: CheckoutFormProps) {
   const pwywAmountCents = billing.pricingType === "pwyw" ? inputToCents(pwywInput) : undefined;
 
   const quoteState = useOfferQuote(offer.slug, offer.quote, {
+    pricingOptionId: pricingOption.id,
     couponCode,
     bumpProductIds: selectedBumps,
     pwywAmountCents,
@@ -375,6 +426,7 @@ function CheckoutForm({ offer, mode, onAmountChange }: CheckoutFormProps) {
   /* ---- submission ---- */
 
   const payload: CheckoutInput = {
+    pricingOptionId: pricingOption.id,
     email: email.trim(),
     name: name.trim(),
     ...(orderForm.collectPhone || phone.trim() ? { phone: phone.trim() } : {}),

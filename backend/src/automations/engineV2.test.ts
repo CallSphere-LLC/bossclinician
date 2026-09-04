@@ -3,6 +3,7 @@ import {
   ACTION_CONFIG_SCHEMAS,
   ACTION_TYPES,
   TRIGGER_DESCRIPTORS,
+  TRIGGER_TYPES,
   actionCanRetry,
   describeActionProblem,
   describeConditionProblem,
@@ -214,5 +215,38 @@ describe("what counts as a finished condition", () => {
     // between a narrowed automation and one that runs for the whole list.
     expect(describeConditionProblem({ rules: 5 })).not.toBeNull();
     expect(describeConditionProblem({ match: "sometimes", rules: [] })).not.toBeNull();
+  });
+});
+
+describe("billing lifecycle triggers", () => {
+  it("separates asking to cancel from having actually gone", () => {
+    const requested = TRIGGER_DESCRIPTORS.find((t) => t.type === "subscription_cancel_requested");
+    const ended = TRIGGER_DESCRIPTORS.find((t) => t.type === "subscription_cancelled");
+
+    // Both must exist and read differently: a win-back email is only worth
+    // sending during the window between the two.
+    expect(requested?.label).toBe("someone asks to cancel a subscription");
+    expect(ended?.label).toBe("someone's subscription actually ends");
+    expect(TRIGGER_TYPES).toContain("subscription_cancel_requested");
+  });
+
+  it("offers paying off a payment plan as a trigger, narrowable by offer", () => {
+    const done = TRIGGER_DESCRIPTORS.find((t) => t.type === "payment_plan_completed");
+
+    expect(done?.label).toBe("someone finishes paying off a payment plan");
+    expect(done?.subjectKey).toBe("offerId");
+    expect(done?.subjectSource).toBe("offers");
+  });
+
+  it("can take an offer away and take someone off a sequence", () => {
+    // Named in the round-5 brief; both are what a cancellation automation needs.
+    expect(ACTION_TYPES).toContain("revoke_offer");
+    expect(ACTION_TYPES).toContain("unsubscribe_sequence");
+  });
+
+  it("gives every trigger a descriptor, so none is unpickable in the builder", () => {
+    const described = new Set(TRIGGER_DESCRIPTORS.map((t) => t.type));
+
+    expect([...TRIGGER_TYPES].filter((t) => !described.has(t))).toEqual([]);
   });
 });

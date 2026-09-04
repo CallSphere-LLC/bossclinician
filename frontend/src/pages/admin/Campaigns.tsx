@@ -1,28 +1,17 @@
 import {
   useCallback,
   useEffect,
-  useLayoutEffect,
   useMemo,
-  useRef,
   useState,
   type FormEvent,
 } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 import {
-  Bold,
-  Heading2,
-  Italic,
-  Link2,
-  List,
-  ListOrdered,
   Megaphone,
   Plus,
   Send,
   Trash2,
   Users,
-  type LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 import { adminApi } from "@/lib/api";
@@ -39,11 +28,11 @@ import {
   Input,
   PageHeader,
   selectStyles,
-  Textarea,
   type BadgeProps,
 } from "@/pages/admin/ui/primitives";
 import { DataTable, RowActions } from "@/pages/admin/ui/DataTable";
 import { Modal, useConfirm } from "@/pages/admin/ui/Dialog";
+import EmailComposer from "@/components/admin/EmailComposer";
 import { isoToWallClock, wallClockToIso } from "@/lib/zonedDateTime";
 import {
   friendlyError,
@@ -130,197 +119,6 @@ function campaignAudienceLabel(campaign: Partial<Campaign>, segments: Segment[],
   return audienceLabel(campaign.audience ?? "all_subscribers");
 }
 
-/* --------------------------------------------------- Writing box + toolbar */
-
-type FormatId = "bold" | "italic" | "heading" | "bullets" | "numbers" | "link";
-
-/** Formats that wrap whatever is selected. */
-const WRAPPERS: Record<"bold" | "italic", { marker: string; placeholder: string }> = {
-  bold: { marker: "**", placeholder: "bold words" },
-  italic: { marker: "_", placeholder: "italic words" },
-};
-
-/** Formats that act on whole lines; a numbered list needs the line's position. */
-const LINE_RULES: Record<
-  "heading" | "bullets" | "numbers",
-  { match: RegExp; prefix: (index: number) => string }
-> = {
-  heading: { match: /^#{1,6}\s+/, prefix: () => "## " },
-  bullets: { match: /^[-*]\s+/, prefix: () => "- " },
-  numbers: { match: /^\d+\.\s+/, prefix: (index) => `${index + 1}. ` },
-};
-
-interface TextEdit {
-  value: string;
-  selectionStart: number;
-  selectionEnd: number;
-}
-
-/**
- * Writes the formatting into the stored text and says where the cursor should
- * land afterwards. The message is still Markdown on its way to the mailer —
- * that's what turns it into a formatted email — but she never types the syntax.
- *
- * Same rules as the blog editor's toolbar, deliberately: every writing box in
- * the dashboard should behave the same. It lives per screen only because the
- * shared UI kit doesn't carry a writing box yet.
- */
-function applyFormat(id: FormatId, value: string, start: number, end: number): TextEdit {
-  if (id === "bold" || id === "italic") {
-    const { marker, placeholder } = WRAPPERS[id];
-    // With nothing selected we drop in an example and select it, so her next
-    // keystroke replaces it instead of leaving stray marks behind.
-    const selected = value.slice(start, end) || placeholder;
-    const inserted = `${marker}${selected}${marker}`;
-    return {
-      value: value.slice(0, start) + inserted + value.slice(end),
-      selectionStart: start + marker.length,
-      selectionEnd: start + marker.length + selected.length,
-    };
-  }
-
-  if (id === "link") {
-    const text = value.slice(start, end) || "the words people click";
-    const href = "https://";
-    const inserted = `[${text}](${href})`;
-    // Leave the address half selected: pasting the link is the very next thing
-    // she'll want to do.
-    const hrefStart = start + text.length + "[](".length;
-    return {
-      value: value.slice(0, start) + inserted + value.slice(end),
-      selectionStart: hrefStart,
-      selectionEnd: hrefStart + href.length,
-    };
-  }
-
-  // The rest change whole lines, so grow the range to cover every line the
-  // selection touches before rewriting them.
-  const lineStart = start === 0 ? 0 : value.lastIndexOf("\n", start - 1) + 1;
-  const nextBreak = value.indexOf("\n", end);
-  const lineEnd = nextBreak === -1 ? value.length : nextBreak;
-
-  const rule = LINE_RULES[id];
-  const lines = value.slice(lineStart, lineEnd).split("\n");
-  // Pressing the same button again takes the formatting off, the way the list
-  // button in a word processor does.
-  const alreadyApplied = lines.every((line) => rule.match.test(line));
-  const rewritten = lines
-    .map((line, index) => {
-      const bare = line.replace(rule.match, "");
-      return alreadyApplied ? bare : rule.prefix(index) + bare;
-    })
-    .join("\n");
-
-  return {
-    value: value.slice(0, lineStart) + rewritten + value.slice(lineEnd),
-    selectionStart: lineStart,
-    selectionEnd: lineStart + rewritten.length,
-  };
-}
-
-const TOOLBAR: { id: FormatId; label: string; Icon: LucideIcon }[] = [
-  { id: "bold", label: "Bold", Icon: Bold },
-  { id: "italic", label: "Italic", Icon: Italic },
-  { id: "heading", label: "Heading", Icon: Heading2 },
-  { id: "bullets", label: "Bulleted list", Icon: List },
-  { id: "numbers", label: "Numbered list", Icon: ListOrdered },
-  { id: "link", label: "Add a link", Icon: Link2 },
-];
-
-function BodyEditor({
-  value,
-  onChange,
-  rows = 12,
-  placeholder,
-}: {
-  value: string;
-  onChange: (next: string) => void;
-  rows?: number;
-  placeholder?: string;
-}) {
-  const ref = useRef<HTMLTextAreaElement>(null);
-  const pendingSelection = useRef<[number, number] | null>(null);
-  const [preview, setPreview] = useState(false);
-
-  // A controlled textarea puts the caret back at the end after every re-render,
-  // which would throw her cursor to the bottom each time she used the toolbar.
-  useLayoutEffect(() => {
-    const range = pendingSelection.current;
-    const el = ref.current;
-    if (!range || !el) return;
-    pendingSelection.current = null;
-    el.focus();
-    el.setSelectionRange(range[0], range[1]);
-  });
-
-  function runFormat(id: FormatId) {
-    const el = ref.current;
-    if (!el) return;
-    const edit = applyFormat(id, el.value, el.selectionStart, el.selectionEnd);
-    pendingSelection.current = [edit.selectionStart, edit.selectionEnd];
-    onChange(edit.value);
-  }
-
-  return (
-    <div className="space-y-2">
-      <div className="flex flex-wrap items-center gap-1 rounded-xl border border-hairline bg-white/[0.04] p-1">
-        {!preview &&
-          TOOLBAR.map(({ id, label, Icon }) => (
-            <Button
-              key={id}
-              type="button"
-              variant="ghost"
-              size="iconSm"
-              title={label}
-              aria-label={label}
-              onClick={() => runFormat(id)}
-            >
-              <Icon />
-            </Button>
-          ))}
-        <div className="ml-auto flex items-center gap-1">
-          <Button
-            type="button"
-            variant={preview ? "ghost" : "secondary"}
-            size="sm"
-            onClick={() => setPreview(false)}
-          >
-            Write
-          </Button>
-          <Button
-            type="button"
-            variant={preview ? "secondary" : "ghost"}
-            size="sm"
-            onClick={() => setPreview(true)}
-          >
-            See how it looks
-          </Button>
-        </div>
-      </div>
-
-      {preview ? (
-        <div className="prose-boss min-h-[14rem] rounded-xl border border-hairline bg-white/[0.03] p-4">
-          {value.trim() ? (
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{value}</ReactMarkdown>
-          ) : (
-            <p className="text-sm text-ink-soft">
-              Nothing written yet — switch to Write and start typing.
-            </p>
-          )}
-        </div>
-      ) : (
-        <Textarea
-          ref={ref}
-          rows={rows}
-          value={value}
-          placeholder={placeholder}
-          onChange={(e) => onChange(e.target.value)}
-        />
-      )}
-    </div>
-  );
-}
-
 /* ------------------------------------------------------------------ Screen */
 
 export default function Campaigns() {
@@ -330,6 +128,7 @@ export default function Campaigns() {
   const [audienceCount, setAudienceCount] = useState<number | null>(null);
   const [segments, setSegments] = useState<Segment[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
+  const [folderFilter, setFolderFilter] = useState("");
   const [confirm, confirmDialog] = useConfirm();
 
   const load = useCallback(() => {
@@ -502,6 +301,13 @@ export default function Campaigns() {
         ),
       },
       {
+        accessorKey: "folder",
+        header: "Folder",
+        cell: ({ row }) => row.original.folder
+          ? <Badge tone="slate">{row.original.folder}</Badge>
+          : <span className="text-sm text-ink-soft">Unfiled</span>,
+      },
+      {
         accessorKey: "audience",
         header: "Who gets it",
         cell: ({ row }) => (
@@ -614,10 +420,10 @@ export default function Campaigns() {
 
       <DataTable
         columns={columns}
-        data={campaigns}
+        data={folderFilter ? campaigns?.filter((campaign) => campaign.folder === folderFilter) ?? null : campaigns}
         searchPlaceholder="Search your emails…"
         itemNoun={{ one: "email", many: "emails" }}
-        minWidth="880px"
+        minWidth="960px"
         emptyState={
           <EmptyState
             icon={<Megaphone />}
@@ -634,6 +440,23 @@ export default function Campaigns() {
           />
         }
       />
+
+      {(campaigns?.some((campaign) => campaign.folder) || folderFilter) && (
+        <div className="flex items-center gap-3 rounded-xl border border-hairline bg-white/[0.03] p-3">
+          <label className="text-sm font-medium text-ink" htmlFor="campaign-folder-filter">Folder</label>
+          <select
+            id="campaign-folder-filter"
+            className={`${selectStyles} max-w-xs`}
+            value={folderFilter}
+            onChange={(event) => setFolderFilter(event.target.value)}
+          >
+            <option value="">Every folder</option>
+            {[...new Set((campaigns ?? []).map((campaign) => campaign.folder).filter(Boolean))]
+              .sort()
+              .map((folder) => <option key={folder} value={folder}>{folder}</option>)}
+          </select>
+        </div>
+      )}
 
       <Modal
         open={draft !== null}
@@ -663,6 +486,14 @@ export default function Campaigns() {
                 placeholder="March launch — waitlist"
                 required
                 autoFocus
+              />
+            </Field>
+
+            <Field label="Folder" hint="optional — emails with the same folder can be filtered together">
+              <Input
+                value={draft.folder ?? ""}
+                onChange={(event) => setDraft((current) => ({ ...current, folder: event.target.value }))}
+                placeholder="Launch emails"
               />
             </Field>
 
@@ -785,6 +616,44 @@ export default function Campaigns() {
               />
             </Field>
 
+            <label className="flex min-h-11 items-center gap-3 rounded-xl border border-hairline px-3 text-sm text-ink">
+              <input
+                type="checkbox"
+                className="size-5 rounded border-hairline text-plum focus-visible:ring-plum/30"
+                checked={(draft.abSplitPercent ?? 0) > 0}
+                onChange={(event) => setDraft((current) => ({
+                  ...current,
+                  abSplitPercent: event.target.checked ? 50 : 0,
+                  subjectB: event.target.checked ? current?.subjectB ?? "" : "",
+                }))}
+              />
+              Test a second subject line
+            </label>
+
+            {(draft.abSplitPercent ?? 0) > 0 && (
+              <div className="grid gap-3 sm:grid-cols-[1fr_10rem]">
+                <Field label="Subject line B" hint="compare this with the original subject">
+                  <Input
+                    value={draft.subjectB ?? ""}
+                    onChange={(event) => setDraft((current) => ({ ...current, subjectB: event.target.value }))}
+                    placeholder="A different way to say it"
+                    required
+                  />
+                </Field>
+                <Field label="Gets version B">
+                  <select
+                    className={selectStyles}
+                    value={draft.abSplitPercent ?? 50}
+                    onChange={(event) => setDraft((current) => ({ ...current, abSplitPercent: Number(event.target.value) }))}
+                  >
+                    <option value={25}>25%</option>
+                    <option value={50}>50%</option>
+                    <option value={75}>75%</option>
+                  </select>
+                </Field>
+              </div>
+            )}
+
             <Field
               label="Preview line"
               hint="the grey line under the subject in their inbox"
@@ -796,7 +665,7 @@ export default function Campaigns() {
             </Field>
 
             <Field label="Your message">
-              <BodyEditor
+              <EmailComposer
                 value={draft.bodyMd ?? ""}
                 onChange={(next) => setDraft((d) => ({ ...d, bodyMd: next }))}
                 placeholder={"Hi there,\n\nI wanted to tell you about…"}

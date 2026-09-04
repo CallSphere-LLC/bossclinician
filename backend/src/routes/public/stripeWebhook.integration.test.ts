@@ -507,6 +507,91 @@ describeDb("stripe webhook (integration)", () => {
     expect(bystander[0].status).toBe("active");
   });
 
+  it("unlocks every catalogue product selected on a recurring plan", async () => {
+    const course = await insertCourseProduct(client, "practice-growth-lab");
+    const download = await client.query<{ id: number }>(
+      `INSERT INTO products (slug, title, kind, status)
+       VALUES ('private-practice-cashflow-kit', 'Private Practice Cashflow Kit', 'download', 'published')
+       RETURNING id`,
+    );
+    const plan = await client.query<{ id: number }>(
+      `INSERT INTO plans (slug, name, price_cents, interval, published)
+       VALUES ('boss-club-monthly', 'B.O.S.S. Club Monthly', 9700, 'month', true)
+       RETURNING id`,
+    );
+    await client.query(
+      `INSERT INTO plan_products (plan_id, product_id, sort)
+       VALUES ($1, $2, 0), ($1, $3, 1)`,
+      [plan.rows[0].id, course.productId, download.rows[0].id],
+    );
+
+    const now = Math.floor(Date.now() / 1000);
+    const response = await deliver(
+      envelope("evt_plan_catalogue", "checkout.session.completed", {
+        id: "cs_plan_catalogue",
+        object: "checkout.session",
+        mode: "subscription",
+        payment_status: "paid",
+        status: "complete",
+        customer: "cus_plan_catalogue",
+        customer_email: "maya.thompson@example.test",
+        customer_details: { email: "maya.thompson@example.test", address: null },
+        subscription: "sub_plan_catalogue",
+        amount_total: 9700,
+        currency: "usd",
+        created: now,
+        metadata: { planId: String(plan.rows[0].id), planSlug: "boss-club-monthly" },
+      }),
+    );
+    expect(response.status).toBe(200);
+
+    const grants = await client.query<{ title: string; status: string; subscription_id: number | null }>(
+      `SELECT p.title, g.status, g.subscription_id
+         FROM access_grants g
+         JOIN products p ON p.id = g.product_id
+         JOIN members m ON m.id = g.member_id
+        WHERE m.email = 'maya.thompson@example.test'
+        ORDER BY p.title`,
+    );
+    expect(grants.rows).toEqual([
+      { title: "Private Practice Cashflow Kit", status: "active", subscription_id: expect.any(Number) },
+      { title: "Product practice-growth-lab", status: "active", subscription_id: expect.any(Number) },
+    ]);
+
+    const cancelled = await deliver(
+      envelope("evt_plan_catalogue_cancel", "customer.subscription.deleted", {
+        id: "sub_plan_catalogue",
+        object: "subscription",
+        customer: "cus_plan_catalogue",
+        status: "canceled",
+        currency: "usd",
+        cancel_at_period_end: false,
+        created: now - 5_184_000,
+        canceled_at: now,
+        ended_at: now,
+        metadata: { planId: String(plan.rows[0].id) },
+        items: {
+          data: [
+            {
+              current_period_start: now - 5_184_000,
+              current_period_end: now - 60,
+              price: { unit_amount: 9700, recurring: { interval: "month", interval_count: 1 } },
+            },
+          ],
+        },
+      }),
+    );
+    expect(cancelled.status).toBe(200);
+    const afterCancel = await client.query<{ status: string }>(
+      `SELECT g.status
+         FROM access_grants g
+         JOIN members m ON m.id = g.member_id
+        WHERE m.email = 'maya.thompson@example.test'
+        ORDER BY g.product_id`,
+    );
+    expect(afterCancel.rows).toEqual([{ status: "revoked" }, { status: "revoked" }]);
+  });
+
   /* ------------------------------------------------------- payment plans */
 
   /** A 2 x $1,250 plan, its order still pending, and its opening invoice. */

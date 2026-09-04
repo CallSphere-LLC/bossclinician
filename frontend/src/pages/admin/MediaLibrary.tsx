@@ -11,6 +11,8 @@ import {
   Badge,
   Button,
   Card,
+  Chip,
+  chipRowStyles,
   EmptyState,
   ErrorNotice,
   Input,
@@ -129,7 +131,13 @@ export default function MediaLibrary() {
   );
 
   function handleUploaded(asset: MediaAsset) {
-    setAssets((prev) => (prev ? [asset, ...prev] : [asset]));
+    // Filtered, not just prepended: choosing a file that is already in the
+    // library hands back the row she already has rather than storing it twice,
+    // and a grid with the same key in it twice is a React warning and a
+    // duplicate tile.
+    setAssets((prev) =>
+      prev ? [asset, ...prev.filter((existing) => existing.id !== asset.id)] : [asset],
+    );
   }
 
   async function copyLink(asset: MediaAsset) {
@@ -266,27 +274,17 @@ export default function MediaLibrary() {
 
       <Card>
         <div className="flex flex-wrap items-center gap-3 border-b border-hairline/60 px-4 py-3.5">
-          <div className="flex flex-wrap gap-1.5">
+          <div className={chipRowStyles}>
             {FILTERS.map((f) => {
               const active = filter === f.key;
               const count = f.key === "all" ? (assets?.length ?? 0) : (counts.get(f.key) ?? 0);
               return (
-                <button
-                  key={f.key}
-                  type="button"
-                  onClick={() => setFilter(f.key)}
-                  className={cn(
-                    "rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors",
-                    active
-                      ? "bg-brand-gradient text-white"
-                      : "border border-hairline text-ink-soft hover:border-plum/40 hover:text-plum",
-                  )}
-                >
+                <Chip key={f.key} selected={active} onClick={() => setFilter(f.key)}>
                   {f.label}
-                  <span className={cn("ml-1.5", active ? "text-white/70" : "text-ink-soft/60")}>
+                  <span className={cn(active ? "text-white/70" : "text-ink-soft/60")}>
                     {count}
                   </span>
-                </button>
+                </Chip>
               );
             })}
           </div>

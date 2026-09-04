@@ -20,7 +20,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { adminApi } from "@/lib/api";
-import type { CourseLesson, CourseModule, MediaAsset } from "@/types/admin";
+import { assessmentsApi, type AssessmentSummary } from "@/lib/quizApi";
+import type { CourseLesson, CourseModule, LessonFile, MediaAsset } from "@/types/admin";
 import type { Course } from "@/types";
 import { cn } from "@/lib/cn";
 import { formatBytes } from "@/lib/format";
@@ -73,6 +74,12 @@ interface Drip {
 interface LessonExtras {
   contentType?: string;
   commentsEnabled?: boolean;
+  audioUrl?: string;
+  thumbnailUrl?: string;
+  requiresPreviousLesson?: boolean;
+  assessmentId?: number | null;
+  assessmentSlug?: string | null;
+  assessmentTitle?: string | null;
 }
 
 type BuilderLesson = CourseLesson & Drip & LessonExtras;
@@ -136,7 +143,10 @@ function dripSummary(item: Drip): string | null {
  *
  * The column is CHECK-constrained to exactly these six and the member player
  * switches on it to decide what to draw, so a video lesson left at the "text"
- * default shows students the notes and no player at all.
+ * default shows students the notes and no player at all. Assessment is accepted
+ * by the API for the future graded-test player, but is deliberately not offered
+ * here until that player and pass gating are complete — a dead Quiz choice is
+ * worse than an honest missing feature.
  */
 const LESSON_KINDS: { value: string; label: string }[] = [
   { value: "video", label: "Video" },
@@ -144,7 +154,7 @@ const LESSON_KINDS: { value: string; label: string }[] = [
   { value: "text", label: "Reading" },
   { value: "pdf", label: "PDF" },
   { value: "embed", label: "Something embedded" },
-  { value: "assessment", label: "Quiz" },
+  { value: "assessment", label: "Graded test" },
 ];
 
 /** "45m" / "2h 30m" — a length she'd say out loud. */
@@ -198,6 +208,8 @@ export default function CourseBuilder() {
     drip: DripChoice;
   } | null>(null);
   const [picking, setPicking] = useState(false);
+  const [lessonFiles, setLessonFiles] = useState<LessonFile[]>([]);
+  const [gradedTests, setGradedTests] = useState<AssessmentSummary[]>([]);
   // Pasting a link is the escape hatch for video hosted somewhere else; it stays
   // out of the way until she asks for it, so the normal path is "choose a file".
   const [pastingLink, setPastingLink] = useState(false);
@@ -237,6 +249,12 @@ export default function CourseBuilder() {
       .then((list) => setCourse(list.find((c) => Number(c.id) === courseId) ?? null))
       .catch(() => undefined);
   }, [courseId]);
+
+  useEffect(() => {
+    assessmentsApi.list()
+      .then((rows) => setGradedTests(rows.filter((assessment) => assessment.kind === "graded")))
+      .catch(() => setGradedTests([]));
+  }, []);
 
   const lessonCount = (modules ?? []).reduce((sum, m) => sum + m.lessons.length, 0);
   const totalMinutes = (modules ?? []).reduce(
@@ -335,18 +353,38 @@ export default function CourseBuilder() {
       title: lesson.title,
       bodyMd: lesson.bodyMd ?? "",
       videoUrl: lesson.videoUrl ?? "",
+      audioUrl: lesson.audioUrl ?? "",
       attachmentUrl: lesson.attachmentUrl ?? "",
+      thumbnailUrl: lesson.thumbnailUrl ?? "",
       durationMinutes: lesson.durationMinutes ?? 0,
       preview: lesson.preview ?? false,
       published: lesson.published ?? true,
       contentType: lesson.contentType || "text",
       commentsEnabled: lesson.commentsEnabled !== false,
+      requiresPreviousLesson: lesson.requiresPreviousLesson === true,
       ...dripBody(lessonDraft.drip),
     };
 
     try {
-      if (lesson.id) await adminApi.lessonUpdate(lesson.id, payload);
-      else await adminApi.lessonCreate(moduleId, payload);
+      const saved = lesson.id
+        ? await adminApi.lessonUpdate(lesson.id, payload)
+        : await adminApi.lessonCreate(moduleId, payload);
+      const selectedAssessmentId = lesson.contentType === "assessment"
+        ? Number(lesson.assessmentId) || null
+        : null;
+      const linkedBefore = lesson.id
+        ? modules?.flatMap((section) => section.lessons).find((item) => item.id === lesson.id)?.assessmentId
+        : null;
+      if (linkedBefore && Number(linkedBefore) !== selectedAssessmentId) {
+        await assessmentsApi.update(Number(linkedBefore), { lessonId: null });
+      }
+      if (selectedAssessmentId) {
+        await assessmentsApi.update(selectedAssessmentId, {
+          kind: "graded",
+          lessonId: Number(saved.id),
+          requireEmail: false,
+        });
+      }
       toast.success(lesson.id ? "Lesson saved" : "Lesson added");
       setLessonDraft(null);
       load();
@@ -408,6 +446,40 @@ export default function CourseBuilder() {
     setLessonDraft({ moduleId, lesson, drip: dripChoice(lesson) });
     setPastingLink(false);
     showVideo(lesson.videoUrl ?? "");
+    if (lesson.id) adminApi.lessonFiles(lesson.id).then(setLessonFiles).catch(() => setLessonFiles([]));
+    else setLessonFiles([]);
+  }
+
+  async function attachLessonFile(asset: MediaAsset) {
+    const lessonId = lessonDraft?.lesson.id;
+    if (!lessonId) return;
+    try {
+      const file = await adminApi.lessonFileAdd(lessonId, {
+        mediaId: asset.id,
+        title: asset.title || asset.originalName,
+        storagePath: asset.url,
+        filename: asset.originalName,
+        mime: asset.mime,
+        sizeBytes: Number(asset.sizeBytes),
+        sort: lessonFiles.length,
+      });
+      setLessonFiles((files) => [...files, file]);
+      toast.success("Download attached");
+    } catch (err) {
+      toast.error(friendlyError(err, "file"));
+    }
+  }
+
+  async function removeLessonFile(file: LessonFile) {
+    const lessonId = lessonDraft?.lesson.id;
+    if (!lessonId) return;
+    try {
+      await adminApi.lessonFileDelete(lessonId, file.id);
+      setLessonFiles((files) => files.filter((entry) => entry.id !== file.id));
+      toast.success("Download removed");
+    } catch (err) {
+      toast.error(friendlyError(err, "file"));
+    }
   }
 
   function updateDrip(drip: DripChoice) {
@@ -795,7 +867,7 @@ export default function CourseBuilder() {
 
             <Field
               label="What is this lesson?"
-              hint="decides what students get shown — a player, a reading, a quiz"
+              hint="decides what students get shown — a player, reading, PDF, embed or graded test"
             >
               <select
                 className={selectStyles}
@@ -810,7 +882,38 @@ export default function CourseBuilder() {
               </select>
             </Field>
 
-            <Field label="Video" hint="students watch this at the top of the lesson">
+            {lessonDraft.lesson.contentType === "assessment" && (
+              <Field
+                label="Test students take"
+                hint="They must reach the pass mark before this lesson is complete. Attempts are stored in Quizzes."
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <select
+                    className={cn(selectStyles, "min-w-0 flex-1")}
+                    value={lessonDraft.lesson.assessmentId ?? ""}
+                    onChange={(event) => updateLesson({
+                      assessmentId: event.target.value ? Number(event.target.value) : null,
+                    })}
+                    required
+                  >
+                    <option value="">Choose a graded test</option>
+                    {gradedTests.map((assessment) => (
+                      <option key={assessment.id} value={assessment.id}>
+                        {assessment.title} — pass {assessment.passMark ?? 70}%{assessment.published ? "" : " (draft)"}
+                      </option>
+                    ))}
+                  </select>
+                  <Button asChild type="button" variant="secondary" size="sm">
+                    <Link to="/admin/marketing/quizzes">Manage tests</Link>
+                  </Button>
+                </div>
+                {gradedTests.length === 0 && (
+                  <p className="mt-2 text-sm text-ink-soft">Create a graded test first, then come back and choose it here.</p>
+                )}
+              </Field>
+            )}
+
+            {lessonDraft.lesson.contentType === "video" && <Field label="Video" hint="students watch this at the top of the lesson">
               <div className="space-y-2.5">
                 {lessonDraft.lesson.videoUrl ? (
                   videoSrc ? (
@@ -886,6 +989,47 @@ export default function CourseBuilder() {
                   />
                 )}
               </div>
+            </Field>}
+
+            {lessonDraft.lesson.contentType === "audio" && <Field label="Audio" hint="use this for a podcast-style lesson or an audio alternative">
+              <div className="space-y-2">
+                <Input
+                  value={lessonDraft.lesson.audioUrl ?? ""}
+                  onChange={(e) => updateLesson({ audioUrl: e.target.value, contentType: e.target.value ? "audio" : lessonDraft.lesson.contentType })}
+                  placeholder="Paste an audio link, or upload below"
+                />
+                {/* Named per lesson: an upload that finishes after she has
+                    moved on to the next lesson must not drop its audio into
+                    that one. Unclaimed, it waits for this lesson to be opened
+                    again. */}
+                <UploadDropzone
+                  compact
+                  accept="audio/*"
+                  visibility="protected"
+                  scope={`lesson-audio:${lessonDraft.lesson.id ?? "new"}`}
+                  onUploaded={(asset) => updateLesson({ audioUrl: asset.url, contentType: "audio" })}
+                />
+              </div>
+            </Field>}
+
+            <Field label="Lesson thumbnail" hint="the image students see in the outline">
+              <div className="space-y-2">
+                {lessonDraft.lesson.thumbnailUrl && (
+                  <img src={lessonDraft.lesson.thumbnailUrl} alt="Lesson thumbnail preview" className="h-28 w-44 rounded-xl object-cover" />
+                )}
+                <Input
+                  value={lessonDraft.lesson.thumbnailUrl ?? ""}
+                  onChange={(e) => updateLesson({ thumbnailUrl: e.target.value })}
+                  placeholder="Paste an image link, or upload below"
+                />
+                <UploadDropzone
+                  compact
+                  accept="image/*"
+                  visibility="public"
+                  scope={`lesson-thumbnail:${lessonDraft.lesson.id ?? "new"}`}
+                  onUploaded={(asset) => updateLesson({ thumbnailUrl: asset.url })}
+                />
+              </div>
             </Field>
 
             <Field label="Lesson notes" hint="what students read under the video">
@@ -903,6 +1047,32 @@ export default function CourseBuilder() {
                 onChange={(e) => updateLesson({ bodyMd: e.target.value })}
                 placeholder="A short recap, the homework, anything they should have to hand."
               />
+            </Field>
+
+            <Field label="Downloads" hint="attach as many worksheets, templates or resources as this lesson needs">
+              {lessonDraft.lesson.id ? (
+                <div className="space-y-3">
+                  <UploadDropzone
+                    compact
+                    visibility="protected"
+                    scope={`lesson-files:${lessonDraft.lesson.id}`}
+                    onUploaded={(asset) => void attachLessonFile(asset)}
+                  />
+                  {lessonFiles.length > 0 && (
+                    <ul className="space-y-2">
+                      {lessonFiles.map((file) => (
+                        <li key={file.id} className="flex min-h-11 items-center gap-3 rounded-xl border border-hairline px-3 py-2">
+                          <span className="min-w-0 flex-1 truncate text-sm text-ink">{file.title || file.filename}</span>
+                          <span className="text-xs text-ink-soft">{formatBytes(Number(file.sizeBytes))}</span>
+                          <Button type="button" variant="dangerGhost" size="iconSm" aria-label={`Remove ${file.title || file.filename}`} onClick={() => void removeLessonFile(file)}><Trash2 /></Button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              ) : (
+                <p className="rounded-xl border border-dashed border-hairline px-4 py-3 text-sm text-ink-soft">Save the lesson once, then reopen it to attach downloads.</p>
+              )}
             </Field>
 
             <DripFields value={lessonDraft.drip} onChange={updateDrip} noun="lesson" />
@@ -932,6 +1102,17 @@ export default function CourseBuilder() {
                     className="size-4 rounded border-hairline text-plum"
                   />
                   Free taster
+                </label>
+              </div>
+              <div className="flex items-end sm:col-span-2">
+                <label className="flex cursor-pointer items-center gap-2.5 text-sm font-medium text-ink">
+                  <input
+                    type="checkbox"
+                    checked={lessonDraft.lesson.requiresPreviousLesson === true}
+                    onChange={(e) => updateLesson({ requiresPreviousLesson: e.target.checked })}
+                    className="size-4 rounded border-hairline text-plum"
+                  />
+                  Require the previous lesson to be completed first
                 </label>
               </div>
               <div className="flex items-end">
@@ -1180,6 +1361,7 @@ function VideoPickerModal({
           compact
           accept="video/*"
           visibility="protected"
+          scope="course-video-picker"
           onUploaded={(asset) => setVideos((prev) => (prev ? [asset, ...prev] : [asset]))}
         />
 

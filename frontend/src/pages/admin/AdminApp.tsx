@@ -18,6 +18,7 @@ import TestimonialsAdmin from "@/pages/admin/TestimonialsAdmin";
 import ResourcesAdmin from "@/pages/admin/ResourcesAdmin";
 import Leads from "@/pages/admin/Leads";
 import Contacts from "@/pages/admin/Contacts";
+import ContactsInsights from "@/pages/admin/ContactsInsights";
 import ContactDetail from "@/pages/admin/ContactDetail";
 import Tags from "@/pages/admin/Tags";
 import Segments from "@/pages/admin/Segments";
@@ -135,6 +136,7 @@ function ProtectedRoutes() {
 
         {/* Contacts */}
         <Route path="/contacts" element={<Contacts />} />
+        <Route path="/contacts/insights" element={<ContactsInsights />} />
         <Route path="/contacts/:id" element={<ContactDetail />} />
         <Route path="/tags" element={<Tags />} />
         <Route path="/segments" element={<Segments />} />

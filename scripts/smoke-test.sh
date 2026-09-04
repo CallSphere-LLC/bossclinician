@@ -79,13 +79,22 @@ if command -v docker >/dev/null 2>&1; then
   # nothing else here would surface.
   STATS=$(docker exec bossclinician-db-1 psql -U boss -d bossclinician -t -A -c \
     "SELECT count(*) FILTER (WHERE status='dead')||' '||
+            count(*) FILTER (WHERE status='dead' AND updated_at >= now()-interval '1 hour')||' '||
             COALESCE(max(EXTRACT(EPOCH FROM (now()-run_at)))
                      FILTER (WHERE status='queued' AND run_at<=now()), 0)::int
        FROM jobs;" 2>/dev/null)
   DEAD=$(echo "$STATS" | cut -d' ' -f1)
-  OLDEST=$(echo "$STATS" | cut -d' ' -f2)
+  FRESH_DEAD=$(echo "$STATS" | cut -d' ' -f2)
+  OLDEST=$(echo "$STATS" | cut -d' ' -f3)
   if [ -n "$DEAD" ]; then
-    [ "$DEAD" = "0" ] && ok "job queue: no dead letters" || bad "job queue: $DEAD dead job(s) — check the dead-letter view"
+    # Dead jobs are intentionally retained as forensic records. A deploy smoke
+    # test should turn red when this rollout creates one, not forever because a
+    # resolved incident from weeks ago is still visible in the dead-letter view.
+    if [ "$FRESH_DEAD" = "0" ]; then
+      ok "job queue: no fresh dead letters ($DEAD historical retained)"
+    else
+      bad "job queue: $FRESH_DEAD fresh dead job(s), $DEAD total — check the dead-letter view"
+    fi
     # 300s is the lease; anything queued far beyond that means nothing is claiming.
     if [ -n "$OLDEST" ] && [ "$OLDEST" -lt 600 ]; then
       ok "job queue: head is fresh (${OLDEST}s)"

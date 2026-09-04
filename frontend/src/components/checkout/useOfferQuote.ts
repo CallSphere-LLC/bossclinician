@@ -27,6 +27,7 @@ export interface TaxAddress {
 }
 
 export interface QuoteSelections {
+  pricingOptionId: number | null;
   couponCode: string;
   bumpProductIds: number[];
   /** Set only for a pay-what-you-want offer. The server enforces the floor. */
@@ -49,7 +50,7 @@ export interface QuoteState {
 const DEBOUNCE_MS = 400;
 
 function buildRequest(selections: QuoteSelections): QuoteInput {
-  const request: QuoteInput = {};
+  const request: QuoteInput = { pricingOptionId: selections.pricingOptionId };
 
   const code = selections.couponCode.trim();
   if (code !== "") request.couponCode = code;
@@ -99,6 +100,7 @@ export function useOfferQuote(
     request.address ?? null,
   ]);
   const bumpKey = JSON.stringify(request.bumpProductIds ?? []);
+  const pricingKey = String(request.pricingOptionId ?? "base");
   const previousTypedKey = useRef(typedKey);
 
   useEffect(() => {
@@ -148,7 +150,7 @@ export function useOfferQuote(
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [slug, typedKey, bumpKey, listPrice]);
+  }, [slug, typedKey, bumpKey, pricingKey, listPrice]);
 
   return state;
 }

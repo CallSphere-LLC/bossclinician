@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState, type ReactNode } from "react";
+import { useCallback, useRef, useState, type ReactNode, type RefObject } from "react";
 import * as RadixDialog from "@radix-ui/react-dialog";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { AlertTriangle, X } from "lucide-react";
@@ -17,6 +17,7 @@ export function Modal({
   children,
   footer,
   size = "md",
+  initialFocusRef,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -25,6 +26,12 @@ export function Modal({
   children: ReactNode;
   footer?: ReactNode;
   size?: "sm" | "md" | "lg" | "xl";
+  /**
+   * Where focus should land when the dialog opens. Radix otherwise focuses the
+   * first tabbable child, which is the header's close button — fine for an
+   * editor, wrong for a confirm, where the safe choice must be what Enter hits.
+   */
+  initialFocusRef?: RefObject<HTMLElement | null>;
 }) {
   const reduceMotion = useReducedMotion();
 
@@ -59,6 +66,13 @@ export function Modal({
                  half-written testimonial used to vanish on one stray click.
                  Escape and the close button still cancel — both are deliberate. */
               onPointerDownOutside={(event) => event.preventDefault()}
+              onOpenAutoFocus={(event) => {
+                const target = initialFocusRef?.current;
+                if (!target) return;
+                // Radix has already picked a target by now; take it back.
+                event.preventDefault();
+                target.focus();
+              }}
             >
               <motion.div
                 initial={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.96, y: 12 }}
@@ -139,6 +153,7 @@ export function useConfirm(): [
 ] {
   const [options, setOptions] = useState<ConfirmOptions | null>(null);
   const resolverRef = useRef<((value: boolean) => void) | null>(null);
+  const cancelRef = useRef<HTMLButtonElement>(null);
 
   const confirm = useCallback((opts: ConfirmOptions) => {
     setOptions(opts);
@@ -162,9 +177,14 @@ export function useConfirm(): [
       }}
       title={options?.title ?? ""}
       size="sm"
+      /* Focus lands on "Never mind", not on the header close button Radix would
+         pick as the first tabbable child. A confirm is the one dialog where the
+         keyboard's default answer must be the harmless one: Enter on an opened
+         "Delete this?" should cancel, never delete. */
+      initialFocusRef={cancelRef}
       footer={
         <>
-          <Button variant="secondary" size="sm" onClick={() => settle(false)}>
+          <Button ref={cancelRef} variant="secondary" size="sm" onClick={() => settle(false)}>
             Never mind
           </Button>
           <Button

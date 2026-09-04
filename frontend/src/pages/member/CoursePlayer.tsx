@@ -188,6 +188,27 @@ export default function CoursePlayer() {
     };
   }, [productSlug, lessonSlug, lessonId, mediaExpiresAt]);
 
+  // The graded-test player runs in a same-origin frame. Once it records a pass,
+  // re-read both views so the tick and the newly-unlocked next lesson appear
+  // without asking the student to refresh the whole page.
+  useEffect(() => {
+    if (!lessonSlug) return;
+    const passed = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return;
+      if ((event.data as { type?: string } | null)?.type !== "boss-assessment-passed") return;
+      void Promise.all([
+        libraryApi.getProduct(productSlug),
+        libraryApi.getLesson(productSlug, lessonSlug),
+      ]).then(([freshProduct, freshLesson]) => {
+        setProduct(freshProduct);
+        setLessonData(freshLesson);
+        toast.success("Test passed — the next lesson is unlocked.");
+      }).catch(() => undefined);
+    };
+    window.addEventListener("message", passed);
+    return () => window.removeEventListener("message", passed);
+  }, [lessonSlug, productSlug]);
+
   /**
    * Folds a progress write back into what is on screen.
    *

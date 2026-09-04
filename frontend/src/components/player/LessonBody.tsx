@@ -85,8 +85,16 @@ export function LessonBody({ lesson, courseImage, onSaved }: LessonBodyProps) {
     case "assessment":
       return (
         <div className="flex flex-col gap-6">
-          {lesson.embedHtml.trim() && (
-            <EmbedFrame html={lesson.embedHtml} title={lesson.title} aspect="tall" />
+          {lesson.assessmentSlug ? (
+            <iframe
+              src={`/quiz/${encodeURIComponent(lesson.assessmentSlug)}`}
+              title={`${lesson.title} graded test`}
+              className="h-[46rem] max-h-[85vh] w-full rounded-2xl border border-white/10 bg-night-raised"
+            />
+          ) : (
+            <p className="rounded-2xl border border-gold/25 bg-gold/[0.06] px-5 py-6 text-sm text-orchid">
+              This graded test is not live yet. Please check back shortly.
+            </p>
           )}
           {notes}
         </div>

@@ -28,5 +28,15 @@ exec docker run --rm \
   -w /app \
   -e TEST_DATABASE_URL="postgres://boss:${DB_PASSWORD}@db:5432/postgres" \
   -e JWT_SECRET=integration-test-secret \
+  -e NODE_ENV=test \
+  -e SMTP_HOST= \
+  -e SMTP_USER= \
+  -e SMTP_PASS= \
+  -e NOTIFY_EMAIL= \
+  -e RESEND_API_KEY= \
+  -e SES_CONFIG_SET_TRANSACTIONAL= \
+  -e SES_CONFIG_SET_MARKETING= \
+  -e WORKER_ENABLED=false \
   node:20-alpine \
-  npx vitest run ${TARGET:-"--testNamePattern=integration"}
+  npx vitest run --poolOptions.forks.minForks=1 --poolOptions.forks.maxForks=1 \
+    ${TARGET:-"--testNamePattern=integration"}

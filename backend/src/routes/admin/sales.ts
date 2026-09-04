@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { z } from "zod";
 import { pool } from "../../db/pool";
 import { rowToCamel, rowsToCamel } from "../../utils/case";
 import { asyncHandler } from "../../utils/asyncHandler";
@@ -62,6 +63,45 @@ const PLAN_FIELDS = [
   "sort",
 ] as const;
 
+async function assertPlanProducts(productIds: number[]): Promise<number[]> {
+  const uniqueIds = [...new Set(productIds)];
+  if (uniqueIds.length > 0) {
+    const found = await pool.query<{ id: number }>(
+      `SELECT id FROM products WHERE id = ANY($1::int[])`,
+      [uniqueIds],
+    );
+    if (found.rowCount !== uniqueIds.length) {
+      throw issueError({
+        field: "productIds",
+        message: "One of the things this plan should unlock no longer exists. Refresh and choose again.",
+      });
+    }
+  }
+  return uniqueIds;
+}
+
+async function replacePlanProducts(planId: number, productIds: number[]): Promise<void> {
+  const uniqueIds = await assertPlanProducts(productIds);
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query(`DELETE FROM plan_products WHERE plan_id = $1`, [planId]);
+    for (const [sort, productId] of uniqueIds.entries()) {
+      await client.query(
+        `INSERT INTO plan_products (plan_id, product_id, sort) VALUES ($1, $2, $3)`,
+        [planId, productId, sort],
+      );
+    }
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 /* ------------------------------------------------------------------- Plans */
 
 adminSalesRouter.get(
@@ -70,7 +110,9 @@ adminSalesRouter.get(
     const result = await pool.query(
       `SELECT p.*,
         (SELECT COUNT(*)::int FROM subscriptions s
-          WHERE s.plan_id = p.id AND s.status IN ('active', 'trialing')) AS active_subscribers
+          WHERE s.plan_id = p.id AND s.status IN ('active', 'trialing')) AS active_subscribers,
+        COALESCE((SELECT array_agg(pp.product_id ORDER BY pp.sort, pp.product_id)
+                    FROM plan_products pp WHERE pp.plan_id = p.id), '{}') AS product_ids
        FROM plans p ORDER BY p.sort, p.id`,
     );
     res.json(rowsToCamel(result.rows));
@@ -84,6 +126,7 @@ adminSalesRouter.post(
     const parsed = planCreateSchema.safeParse(req.body);
     if (!parsed.success) throw badRequest("Invalid payload", parsed.error.flatten());
     const data = parsed.data;
+    await assertPlanProducts(data.productIds);
 
     const slug = data.slug ?? data.name.toLowerCase().replace(/[^a-z0-9]+/g, "-");
 
@@ -136,7 +179,9 @@ adminSalesRouter.post(
           data.published,
         ],
       );
-      res.status(201).json(rowToCamel(result.rows[0]));
+      const plan = rowToCamel<{ id: number }>(result.rows[0]);
+      await replacePlanProducts(plan.id, data.productIds);
+      res.status(201).json({ ...plan, productIds: [...new Set(data.productIds)] });
     } catch (err) {
       // The slug is derived from the name when none is typed, so a second plan
       // called "Membership" collides on a column the admin never sees. Without
@@ -189,20 +234,25 @@ adminSalesRouter.put(
     );
     if (issue) throw issueError(issue);
 
-    const body: Record<string, unknown> = { ...patch };
+    const { productIds, ...scalarPatch } = patch;
+    const body: Record<string, unknown> = { ...scalarPatch };
     if (patch.features !== undefined) body.features = JSON.stringify(patch.features);
 
     const update = buildUpdate(body, PLAN_FIELDS);
-    if (!update) throw badRequest("No updatable fields supplied");
+    if (!update && productIds === undefined) throw badRequest("No updatable fields supplied");
 
     try {
-      const result = await pool.query(
-        `UPDATE plans SET ${update.clause}, updated_at = now()
-         WHERE id = $${update.values.length + 1} RETURNING *`,
-        [...update.values, id.data],
-      );
+      const result = update
+        ? await pool.query(
+            `UPDATE plans SET ${update.clause}, updated_at = now()
+             WHERE id = $${update.values.length + 1} RETURNING *`,
+            [...update.values, id.data],
+          )
+        : await pool.query(`SELECT * FROM plans WHERE id = $1`, [id.data]);
       if (result.rowCount === 0) throw notFound("Plan not found");
-      res.json(rowToCamel(result.rows[0]));
+      if (productIds !== undefined) await replacePlanProducts(id.data, productIds);
+      const plan = rowToCamel(result.rows[0]) as Record<string, unknown>;
+      res.json({ ...plan, ...(productIds === undefined ? {} : { productIds: [...new Set(productIds)] }) });
     } catch (err) {
       if (isUniqueViolation(err)) {
         throw issueError({
@@ -329,57 +379,138 @@ adminSalesRouter.get(
 adminSalesRouter.get(
   "/coupons",
   asyncHandler(async (_req, res) => {
-    const result = await pool.query("SELECT * FROM coupons ORDER BY created_at DESC");
+    const result = await pool.query(
+      `SELECT c.*,
+              COALESCE((SELECT array_agg(co.offer_id ORDER BY co.offer_id)
+                          FROM coupon_offers co WHERE co.coupon_id = c.id), '{}') AS offer_ids
+         FROM coupons c ORDER BY c.created_at DESC`,
+    );
     res.json(rowsToCamel(result.rows));
   }),
 );
+
+const couponCreateSchema = z
+  .object({
+    code: z.string().trim().min(1).max(64).regex(/^[A-Za-z0-9_-]+$/),
+    percentOff: z.number().int().min(1).max(100).nullable().optional(),
+    amountOffCents: z.number().int().positive().nullable().optional(),
+    currency: z.string().trim().toLowerCase().regex(/^[a-z]{3}$/).default("usd"),
+    maxRedemptions: z.number().int().positive().nullable().optional(),
+    expiresAt: z.string().trim().max(40).nullable().optional(),
+    duration: z.enum(["first", "forever"]).default("first"),
+    offerIds: z.array(z.number().int().positive()).max(100).default([]),
+  })
+  .superRefine((value, ctx) => {
+    const discounts = Number(value.percentOff != null) + Number(value.amountOffCents != null);
+    if (discounts !== 1) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["percentOff"], message: "Choose one discount type." });
+    }
+    if (value.expiresAt) {
+      const end = new Date(`${value.expiresAt.slice(0, 10)}T23:59:59.999Z`);
+      if (!Number.isFinite(end.getTime()) || end.getTime() <= Date.now()) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["expiresAt"], message: "Choose a future expiry date." });
+      }
+    }
+  });
+
+const couponUpdateSchema = z
+  .object({
+    percentOff: z.number().int().min(1).max(100).nullable().optional(),
+    amountOffCents: z.number().int().positive().nullable().optional(),
+    currency: z.string().trim().toLowerCase().regex(/^[a-z]{3}$/),
+    maxRedemptions: z.number().int().positive().nullable(),
+    expiresAt: z.string().trim().max(40).nullable(),
+    duration: z.enum(["first", "forever"]),
+    offerIds: z.array(z.number().int().positive()).max(100),
+  })
+  .superRefine((value, ctx) => {
+    const discounts = Number(value.percentOff != null) + Number(value.amountOffCents != null);
+    if (discounts !== 1) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["percentOff"], message: "Choose one discount type." });
+    }
+    if (value.expiresAt) {
+      const end = new Date(`${value.expiresAt.slice(0, 10)}T23:59:59.999Z`);
+      if (!Number.isFinite(end.getTime()) || end.getTime() <= Date.now()) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["expiresAt"], message: "Choose a future expiry date." });
+      }
+    }
+  });
+
+async function checkedCouponOfferIds(offerIds: number[]): Promise<number[]> {
+  const unique = [...new Set(offerIds)];
+  if (unique.length > 0) {
+    const offers = await pool.query<{ id: number }>(`SELECT id FROM offers WHERE id = ANY($1::int[])`, [unique]);
+    if (offers.rowCount !== unique.length) throw badRequest("One of the selected offers no longer exists.");
+  }
+  return unique;
+}
+
+function couponExpiry(value: string | null | undefined): Date | null {
+  return value ? new Date(`${value.slice(0, 10)}T23:59:59.999Z`) : null;
+}
+
+async function createStripeCoupon(input: {
+  code: string;
+  percentOff: number | null;
+  amountOffCents: number | null;
+  currency: string;
+  maxRedemptions: number | null;
+  expiresAt: Date | null;
+  duration: "first" | "forever";
+}): Promise<string | null> {
+  if (!stripeEnabled()) return null;
+  const coupon = await stripe().coupons.create({
+    name: input.code,
+    duration: input.duration === "forever" ? "forever" : "once",
+    ...(input.percentOff != null
+      ? { percent_off: input.percentOff }
+      : { amount_off: input.amountOffCents as number, currency: input.currency }),
+    ...(input.maxRedemptions ? { max_redemptions: input.maxRedemptions } : {}),
+    ...(input.expiresAt ? { redeem_by: Math.floor(input.expiresAt.getTime() / 1000) } : {}),
+  });
+  return coupon.id;
+}
 
 adminSalesRouter.post(
   "/coupons",
   requireManage,
   asyncHandler(async (req, res) => {
-    const b = req.body as Record<string, unknown>;
-    const code = typeof b.code === "string" ? b.code.trim().toUpperCase() : "";
-    if (!code) throw badRequest("Coupon code is required");
+    const parsed = couponCreateSchema.safeParse(req.body);
+    if (!parsed.success) throw badRequest("Invalid coupon", parsed.error.flatten());
+    const b = parsed.data;
+    const code = b.code.toUpperCase();
+    const percentOff = b.percentOff ?? null;
+    const amountOffCents = b.amountOffCents ?? null;
+    const uniqueOfferIds = await checkedCouponOfferIds(b.offerIds);
+    const expiresAt = couponExpiry(b.expiresAt);
+    const stripeCouponId = await createStripeCoupon({
+      code, percentOff, amountOffCents, currency: b.currency,
+      maxRedemptions: b.maxRedemptions ?? null, expiresAt, duration: b.duration,
+    });
 
-    const percentOff = b.percentOff != null ? Number(b.percentOff) : null;
-    const amountOffCents = b.amountOffCents != null ? Number(b.amountOffCents) : null;
-    if (percentOff == null && amountOffCents == null) {
-      throw badRequest("Set either percentOff or amountOffCents");
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const result = await client.query(
+        `INSERT INTO coupons
+           (code, percent_off, amount_off_cents, currency, stripe_coupon_id,
+            max_redemptions, expires_at, duration, scope)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,
+        [code, percentOff, amountOffCents, b.currency, stripeCouponId,
+         b.maxRedemptions ?? null, expiresAt, b.duration,
+         uniqueOfferIds.length > 0 ? "offers" : "global"],
+      );
+      for (const offerId of uniqueOfferIds) {
+        await client.query(`INSERT INTO coupon_offers (coupon_id, offer_id) VALUES ($1, $2)`, [result.rows[0].id, offerId]);
+      }
+      await client.query("COMMIT");
+      res.status(201).json({ ...rowToCamel(result.rows[0]), offerIds: uniqueOfferIds });
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
     }
-    if (percentOff != null && amountOffCents != null) {
-      throw badRequest("Set only one of percentOff or amountOffCents");
-    }
-
-    const currency = typeof b.currency === "string" && b.currency ? b.currency : "usd";
-    let stripeCouponId: string | null = null;
-
-    if (stripeEnabled()) {
-      const coupon = await stripe().coupons.create({
-        name: code,
-        ...(percentOff != null
-          ? { percent_off: percentOff }
-          : { amount_off: amountOffCents as number, currency }),
-        ...(b.maxRedemptions ? { max_redemptions: Number(b.maxRedemptions) } : {}),
-      });
-      stripeCouponId = coupon.id;
-    }
-
-    const result = await pool.query(
-      `INSERT INTO coupons
-         (code, percent_off, amount_off_cents, currency, stripe_coupon_id, max_redemptions, expires_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
-      [
-        code,
-        percentOff,
-        amountOffCents,
-        currency,
-        stripeCouponId,
-        b.maxRedemptions ?? null,
-        b.expiresAt || null,
-      ],
-    );
-    res.status(201).json(rowToCamel(result.rows[0]));
   }),
 );
 
@@ -387,15 +518,75 @@ adminSalesRouter.put(
   "/coupons/:id",
   requireManage,
   asyncHandler(async (req, res) => {
-    const { active } = req.body as { active?: boolean };
-    if (typeof active !== "boolean") throw badRequest("active (boolean) is required");
+    // The compact enable/disable action remains a partial update. Editing the
+    // financial rules uses the complete validated shape below so an omitted
+    // checkbox can never silently clear the offer restrictions.
+    if (typeof req.body?.active === "boolean" && Object.keys(req.body).length === 1) {
+      const toggled = await pool.query(
+        "UPDATE coupons SET active = $1 WHERE id = $2 RETURNING *",
+        [req.body.active, req.params.id],
+      );
+      if (toggled.rowCount === 0) throw notFound("Coupon not found");
+      res.json(rowToCamel(toggled.rows[0]));
+      return;
+    }
 
-    const result = await pool.query(
-      "UPDATE coupons SET active = $1 WHERE id = $2 RETURNING *",
-      [active, req.params.id],
-    );
-    if (result.rowCount === 0) throw notFound("Coupon not found");
-    res.json(rowToCamel(result.rows[0]));
+    const parsed = couponUpdateSchema.safeParse(req.body);
+    if (!parsed.success) throw badRequest("Invalid coupon", parsed.error.flatten());
+    const b = parsed.data;
+    const existing = await pool.query<{
+      id: number; code: string; redeemed: number; active: boolean; stripe_coupon_id: string | null;
+    }>(`SELECT id, code::text AS code, redeemed, active, stripe_coupon_id FROM coupons WHERE id = $1`, [req.params.id]);
+    const before = existing.rows[0];
+    if (!before) throw notFound("Coupon not found");
+    if (b.maxRedemptions !== null && b.maxRedemptions < before.redeemed) {
+      throw badRequest(`This code has already been used ${before.redeemed} times, so its limit cannot be lower than that.`);
+    }
+
+    const offerIds = await checkedCouponOfferIds(b.offerIds);
+    const expiresAt = couponExpiry(b.expiresAt);
+    const percentOff = b.percentOff ?? null;
+    const amountOffCents = b.amountOffCents ?? null;
+    const replacementStripeId = await createStripeCoupon({
+      code: before.code,
+      percentOff,
+      amountOffCents,
+      currency: b.currency,
+      maxRedemptions: b.maxRedemptions,
+      expiresAt,
+      duration: b.duration,
+    });
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const updated = await client.query(
+        `UPDATE coupons SET percent_off = $2, amount_off_cents = $3, currency = $4,
+                 max_redemptions = $5, expires_at = $6, duration = $7, scope = $8,
+                 stripe_coupon_id = $9
+           WHERE id = $1 RETURNING *`,
+        [before.id, percentOff, amountOffCents, b.currency, b.maxRedemptions, expiresAt,
+         b.duration, offerIds.length > 0 ? "offers" : "global", replacementStripeId],
+      );
+      await client.query(`DELETE FROM coupon_offers WHERE coupon_id = $1`, [before.id]);
+      for (const offerId of offerIds) {
+        await client.query(`INSERT INTO coupon_offers (coupon_id, offer_id) VALUES ($1, $2)`, [before.id, offerId]);
+      }
+      await client.query("COMMIT");
+
+      if (before.stripe_coupon_id && stripeEnabled()) {
+        await stripe().coupons.del(before.stripe_coupon_id).catch(() => undefined);
+      }
+      res.json({ ...rowToCamel(updated.rows[0]), offerIds });
+    } catch (error) {
+      await client.query("ROLLBACK");
+      if (replacementStripeId && stripeEnabled()) {
+        await stripe().coupons.del(replacementStripeId).catch(() => undefined);
+      }
+      throw error;
+    } finally {
+      client.release();
+    }
   }),
 );
 
