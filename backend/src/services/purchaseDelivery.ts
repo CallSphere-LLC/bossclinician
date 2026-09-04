@@ -65,6 +65,7 @@ interface DeliveryOrderRow {
   id: number;
   offer_id: number | null;
   contact_id: number | null;
+  member_id: number | null;
   email: string;
   billing_name: string;
   billing_address: unknown;
@@ -83,7 +84,7 @@ interface DeliveryOrderRow {
 }
 
 const DELIVERY_ORDER_SELECT = `
-  SELECT o.id, o.offer_id, o.contact_id, o.email, o.billing_name, o.billing_address,
+  SELECT o.id, o.offer_id, o.contact_id, o.member_id, o.email, o.billing_name, o.billing_address,
          o.currency, o.subtotal_cents, o.discount_cents, o.coupon_code, o.tax_cents,
          o.total_cents, o.created_at,
          f.title       AS offer_title,
@@ -211,7 +212,15 @@ async function sendReceiptEmail(
     content
   );
 
-  await sendMail({ to: order.email, ...stored, attachments });
+  await sendMail({
+    topic: "purchase_receipt",
+    sourceId: order.id,
+    memberId: order.member_id ?? null,
+    contactId: order.contact_id ?? null,
+    to: order.email,
+    ...stored,
+    attachments,
+  });
   return true;
 }
 
@@ -325,7 +334,17 @@ export async function deliverPurchase(
         fallback
       );
 
-      await sendMail({ to: order.email, ...stored });
+      // Deliberately its own topic: access details and a receipt are different
+      // messages with different switches, and "did they get in?" must be
+      // answerable without reading the receipt log.
+      await sendMail({
+        topic: "purchase_access",
+        sourceId: order.id,
+        memberId: order.member_id ?? null,
+        contactId: order.contact_id ?? null,
+        to: order.email,
+        ...stored,
+      });
       outcome.welcomeSent = true;
       outcome.setPasswordLinkIncluded = setPasswordUrl !== null;
     } else if (setPasswordUrl !== null) {

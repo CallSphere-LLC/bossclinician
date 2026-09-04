@@ -4,14 +4,18 @@ import { ArrowLeft, CreditCard, ExternalLink, Receipt, Send } from "lucide-react
 import { toast } from "sonner";
 import {
   settingsApi,
+  type EmailLogRow,
   type SettingCard as SettingCardShape,
   type SettingField,
   type SettingGroup,
 } from "@/lib/settingsApi";
 import {
+  Badge,
   Button,
   Card,
   CardHeader,
+  Chip,
+  chipRowStyles,
   ErrorNotice,
   Field,
   Input,
@@ -21,6 +25,7 @@ import {
   Textarea,
 } from "@/pages/admin/ui/primitives";
 import { friendlyError } from "@/pages/admin/ui/friendly";
+import { formatDateTime } from "@/lib/format";
 
 /**
  * One group of settings, as plain boxes with plain labels.
@@ -364,6 +369,153 @@ function TestEmailCard() {
   );
 }
 
+/** How a status reads to somebody who does not think in mail-server terms. */
+const DELIVERY_LABEL: Record<string, { text: string; tone: "green" | "red" | "gold" | "neutral" }> = {
+  delivered: { text: "Arrived", tone: "green" },
+  sent: { text: "Handed over", tone: "neutral" },
+  queued: { text: "Still going", tone: "gold" },
+  bounced: { text: "Bounced back", tone: "red" },
+  complained: { text: "Marked as spam", tone: "red" },
+  failed: { text: "Didn't send", tone: "red" },
+  suppressed: { text: "Held back", tone: "gold" },
+};
+
+const DELIVERY_FILTERS = [
+  { value: "all", label: "Everything" },
+  { value: "delivered", label: "Arrived" },
+  { value: "sent", label: "Handed over" },
+  { value: "bounced", label: "Bounced" },
+  { value: "failed", label: "Didn't send" },
+] as const;
+
+function deliveryStatus(row: EmailLogRow): { text: string; tone: "green" | "red" | "gold" | "neutral" } {
+  // The provider's later word beats our own: we record "sent" the moment the
+  // handover succeeds, and a bounce arrives seconds afterwards. Showing "handed
+  // over" for a message the far end rejected is the exact lie this screen was
+  // built to stop telling.
+  const authoritative = row.lastEvent && row.lastEvent !== "opened" && row.lastEvent !== "clicked"
+    ? row.lastEvent
+    : row.status;
+  return DELIVERY_LABEL[authoritative] ?? { text: authoritative, tone: "neutral" };
+}
+
+/**
+ * The delivery log.
+ *
+ * Sits under the test-email button because both answer the same question, and
+ * this one answers it about real customers rather than about Yvette. Before it
+ * existed the only signal for a receipt was the checkout saying it had sent one.
+ */
+function EmailDeliveryCard() {
+  const [rows, setRows] = useState<EmailLogRow[] | null>(null);
+  const [tally, setTally] = useState<Record<string, number>>({});
+  const [filter, setFilter] = useState<string>("all");
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback((status: string) => {
+    setRows(null);
+    settingsApi
+      .emailLog({ limit: 50, status })
+      .then((res) => {
+        setRows(res.messages);
+        setTally(res.lastSevenDays);
+        setError(null);
+      })
+      .catch(() => setError("We couldn't load the delivery log. Try refreshing the page."));
+  }, []);
+
+  useEffect(() => {
+    load(filter);
+  }, [filter, load]);
+
+  const trouble = (tally.bounced ?? 0) + (tally.failed ?? 0) + (tally.complained ?? 0);
+  const arrived = tally.delivered ?? 0;
+
+  return (
+    <Card>
+      <CardHeader
+        title="What happened to your emails"
+        subtitle="Every message this site sent, and whether it actually arrived."
+        action={
+          rows !== null && (
+            <Badge tone={trouble > 0 ? "red" : "green"}>
+              {trouble > 0
+                ? `${trouble} had trouble in the last 7 days`
+                : `${arrived} arrived in the last 7 days`}
+            </Badge>
+          )
+        }
+      />
+      <div className="space-y-4 px-5 py-5">
+        <div className={chipRowStyles}>
+          {DELIVERY_FILTERS.map((option) => (
+            <Chip
+              key={option.value}
+              selected={filter === option.value}
+              onClick={() => setFilter(option.value)}
+            >
+              {option.label}
+            </Chip>
+          ))}
+        </div>
+
+        {error && <ErrorNotice message={error} />}
+
+        {rows === null ? (
+          <Skeleton className="h-40 w-full" />
+        ) : rows.length === 0 ? (
+          <p className="rounded-xl bg-cream px-3.5 py-3 text-sm text-ink-soft">
+            {filter === "all"
+              ? "Nothing has been sent yet. Receipts, access details and password links will all show up here."
+              : "Nothing matches that filter — which is usually the good news."}
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="text-xs uppercase tracking-wide text-ink-soft">
+                  <th className="py-2 pr-3 font-semibold">Who and what</th>
+                  <th className="py-2 pr-3 font-semibold">How it went</th>
+                  <th className="py-2 font-semibold">When</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row) => {
+                  const state = deliveryStatus(row);
+                  return (
+                    <tr key={row.id} className="border-t border-hairline/70 align-top">
+                      <td className="min-w-0 py-2.5 pr-3">
+                        <p className="truncate font-semibold text-ink">{row.toEmail}</p>
+                        <p className="truncate text-xs text-ink-soft">
+                          {row.subject || row.topic || "No subject"}
+                        </p>
+                        {row.error && (
+                          <p className="mt-1 text-xs text-red-400">{row.error}</p>
+                        )}
+                        {row.providerMessageId && (
+                          <p className="mt-1 truncate font-mono text-[0.65rem] text-ink-soft/70">
+                            {row.providerMessageId}
+                          </p>
+                        )}
+                      </td>
+                      <td className="py-2.5 pr-3">
+                        <Badge tone={state.tone}>{state.text}</Badge>
+                      </td>
+                      <td className="whitespace-nowrap py-2.5 text-xs text-ink-soft">
+                        {formatDateTime(row.sentAt ?? row.createdAt)}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </Card>
+  );
+}
+
 /** Makes the already-live member billing surface visible from payment settings. */
 function BillingPortalCard() {
   return (
@@ -446,6 +598,7 @@ export default function SettingsGroupPage() {
             <SettingCard key={card.key} card={card} onSaved={load} />
           ))}
           {group.key === "email" && <TestEmailCard />}
+          {group.key === "email" && <EmailDeliveryCard />}
         </div>
       )}
     </div>

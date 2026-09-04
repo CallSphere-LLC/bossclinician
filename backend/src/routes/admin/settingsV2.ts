@@ -3,6 +3,7 @@ import { z } from "zod";
 import { asyncHandler } from "../../utils/asyncHandler";
 import { badRequest, notFound } from "../../utils/httpError";
 import { env } from "../../config/env";
+import { pool } from "../../db/pool";
 import { sendMailStrict } from "../../email/mailer";
 import { escapeHtml } from "../../email/templates";
 import { recordAdminAction } from "../../services/adminAudit";
@@ -168,6 +169,95 @@ adminSettingsV2Router.post(
       sent,
       // Empty when it worked, so the client can branch on truthiness.
       failure,
+    });
+  })
+);
+
+const emailLogSchema = z.object({
+  limit: z.coerce.number().int().min(1).max(200).default(50),
+  status: z.enum(["all", "queued", "sent", "delivered", "bounced", "complained", "failed", "suppressed"]).default("all"),
+  topic: z.string().trim().max(100).optional(),
+});
+
+/**
+ * GET /api/admin/settings-v2/email-log
+ *
+ * What actually happened to the last messages this site sent.
+ *
+ * This exists because "Sent" was the only thing anybody could see. Receipts,
+ * access emails, dunning, confirmations and password links all went out through
+ * a path that wrote a console line and nothing else, so a customer saying "the
+ * receipt never arrived" could not be answered: there was no record that the
+ * message existed, no provider id to trace, and SES's own delivery and bounce
+ * notifications — which arrive keyed on that id — had nothing to attach to and
+ * were stored against a null message.
+ *
+ * `status` is the send's own outcome and `lastEvent` is what the provider said
+ * afterwards, and they are deliberately separate columns: "we handed it over"
+ * and "the far end took it" are different facts, and the gap between them is
+ * exactly where a silently undelivered email lives.
+ */
+adminSettingsV2Router.get(
+  "/email-log",
+  requirePermission("settings.view"),
+  asyncHandler(async (req, res) => {
+    const parsed = emailLogSchema.safeParse(req.query ?? {});
+    if (!parsed.success) throw badRequest("We couldn't read that filter.", parsed.error.flatten());
+    const { limit, status, topic } = parsed.data;
+
+    const rows = await pool.query(
+      `SELECT m.id, m.to_email, m.source_type, m.topic, m.subject, m.provider,
+              m.provider_message_id, m.status, m.error, m.sent_at, m.delivered_at,
+              m.created_at,
+              (SELECT e.kind FROM email_events e
+                WHERE e.message_id = m.id
+                ORDER BY e.occurred_at DESC, e.id DESC LIMIT 1) AS last_event,
+              (SELECT e.occurred_at FROM email_events e
+                WHERE e.message_id = m.id
+                ORDER BY e.occurred_at DESC, e.id DESC LIMIT 1) AS last_event_at
+         FROM email_messages m
+        WHERE ($1 = 'all' OR m.status = $1)
+          AND ($2::text IS NULL OR m.topic = $2)
+        ORDER BY m.created_at DESC, m.id DESC
+        LIMIT $3`,
+      [status, topic && topic.length > 0 ? topic : null, limit]
+    );
+
+    // The tally is over the last week rather than over the page above it: the
+    // question this screen answers is "is mail working right now", and a count
+    // of whatever happens to be in the newest fifty rows does not answer it.
+    const tally = await pool.query<{ status: string; count: number }>(
+      `SELECT status, COUNT(*)::int AS count
+         FROM email_messages
+        WHERE created_at >= now() - interval '7 days'
+        GROUP BY status`
+    );
+
+    const orphanEvents = await pool.query<{ count: number }>(
+      `SELECT COUNT(*)::int AS count FROM email_events
+        WHERE message_id IS NULL AND occurred_at >= now() - interval '7 days'`
+    );
+
+    res.json({
+      messages: rows.rows.map((r) => ({
+        id: Number(r.id),
+        toEmail: r.to_email,
+        sourceType: r.source_type,
+        topic: r.topic,
+        subject: r.subject,
+        provider: r.provider,
+        providerMessageId: r.provider_message_id ?? "",
+        status: r.status,
+        error: r.error,
+        sentAt: r.sent_at,
+        deliveredAt: r.delivered_at,
+        createdAt: r.created_at,
+        lastEvent: r.last_event ?? "",
+        lastEventAt: r.last_event_at ?? null,
+      })),
+      lastSevenDays: Object.fromEntries(tally.rows.map((r) => [r.status, r.count])),
+      /** Provider events we could not attribute — sends made before this log existed. */
+      unattributedEvents: orphanEvents.rows[0]?.count ?? 0,
     });
   })
 );

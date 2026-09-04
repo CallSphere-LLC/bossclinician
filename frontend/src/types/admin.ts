@@ -250,16 +250,31 @@ export interface Plan {
   activeSubscribers: number;
 }
 
+export interface PaymentItem {
+  title: string;
+  quantity: number;
+  amountCents: number;
+}
+
 export interface Payment {
   id: Id;
   courseSlug: string;
+  /** The offer's name, the legacy course's, or the first order line — in that order. */
   courseTitle: string;
+  offerSlug: string | null;
   email: string;
   amountCents: number;
+  /** What the order was worth before a discount took it to `amountCents`. */
+  totalCents: number;
+  subtotalCents: number;
+  discountCents: number;
+  couponCode: string;
   currency: string;
   status: "pending" | "paid" | "failed" | "expired" | string;
   stripeSessionId: string;
   createdAt: string;
+  /** Everything the order granted, bumps included. */
+  items: PaymentItem[];
 }
 
 export interface Subscription {

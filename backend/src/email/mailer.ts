@@ -1,5 +1,6 @@
 import nodemailer, { Transporter } from "nodemailer";
 import { env } from "../config/env";
+import { pool } from "../db/pool";
 
 let transporter: Transporter;
 
@@ -46,6 +47,26 @@ export interface SendMailInput {
   replyTo?: string;
   /** List-Unsubscribe and friends: CAN-SPAM and RFC 8058 live in headers, not in the body. */
   headers?: Record<string, string>;
+  /**
+   * What this message is, for the delivery log: "purchase_receipt",
+   * "email_confirmation", "payment_failed". Free text, but keep it stable —
+   * it is what "did the receipts go out?" is answered by.
+   */
+  topic?: string;
+  /** The order, subscription or member the message is about. */
+  sourceId?: number | null;
+  contactId?: number | null;
+  memberId?: number | null;
+}
+
+export interface SendMailOutcome {
+  /** The `email_messages` row, or null when the log could not be written. */
+  messageId: number | null;
+  sent: boolean;
+  /** The id SES assigned, which every later delivery event names. */
+  providerMessageId: string;
+  /** The transport's own words when `sent` is false. */
+  error: string;
 }
 
 /**
@@ -99,21 +120,102 @@ export async function sendMailStrict(input: SendMailInput): Promise<{ messageId:
   return { messageId: sesMessageId(info.response) || String(info.messageId ?? "") };
 }
 
-/** Sends mail; on any failure (or unconfigured SMTP) logs instead of throwing. */
-export async function sendMail(input: SendMailInput): Promise<void> {
-  if (!input.to) return;
+/**
+ * Writes the delivery-log row for a transactional send, before the transport runs.
+ *
+ * Returns null rather than throwing: this is bookkeeping, and a receipt that
+ * never goes out because the log insert failed would be a far worse bug than an
+ * unlogged receipt.
+ */
+async function openMailRecord(input: SendMailInput): Promise<number | null> {
   try {
-    const { messageId } = await sendMailStrict(input);
+    const res = await pool.query<{ id: string }>(
+      `INSERT INTO email_messages
+         (contact_id, member_id, to_email, source_type, source_id, topic, subject, provider, status)
+       VALUES ($1, $2, $3, 'transactional', $4, $5, $6, $7, 'queued')
+       RETURNING id`,
+      [
+        input.contactId ?? null,
+        input.memberId ?? null,
+        input.to.trim().toLowerCase(),
+        input.sourceId ?? null,
+        (input.topic ?? "").slice(0, 100),
+        input.subject.slice(0, 500),
+        env.smtp.host ? "smtp" : "console",
+      ]
+    );
+    return Number(res.rows[0].id);
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error("[mailer] could not open a delivery record:", (err as Error).message);
+    return null;
+  }
+}
+
+async function closeMailRecord(
+  messageId: number | null,
+  patch: { sent: boolean; providerMessageId: string; error: string }
+): Promise<void> {
+  if (messageId === null) return;
+  try {
+    if (patch.sent) {
+      await pool.query(
+        `UPDATE email_messages
+            SET status = 'sent', provider_message_id = NULLIF($2, ''),
+                sent_at = now(), error = ''
+          WHERE id = $1`,
+        [messageId, patch.providerMessageId]
+      );
+    } else {
+      await pool.query(`UPDATE email_messages SET status = 'failed', error = $2 WHERE id = $1`, [
+        messageId,
+        patch.error.slice(0, 1000),
+      ]);
+    }
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error("[mailer] could not close a delivery record:", (err as Error).message);
+  }
+}
+
+/**
+ * Sends mail; on any failure (or unconfigured SMTP) logs instead of throwing.
+ *
+ * Every send is now recorded in `email_messages` with the id SES assigned, which
+ * is what makes a transactional message traceable. Before this, receipts,
+ * access emails, dunning and confirmations went out with nothing but a console
+ * line behind them: SES's delivery and bounce notifications arrive keyed on
+ * `provider_message_id`, so with no row to match they landed in `email_events`
+ * with a null `message_id` and could never be attributed to anything. The
+ * practical cost was that "the customer says the receipt never arrived" had no
+ * answer — not for Yvette, and not for anyone reading the database.
+ *
+ * Still swallows transport failures, because every caller has already taken
+ * money or granted access and has nothing useful to do with an exception. The
+ * difference is that the failure is now written down instead of only logged,
+ * and the returned outcome lets a caller that wants to be honest say so.
+ */
+export async function sendMail(input: SendMailInput): Promise<SendMailOutcome> {
+  if (!input.to) return { messageId: null, sent: false, providerMessageId: "", error: "No recipient address" };
+
+  const messageId = await openMailRecord(input);
+  try {
+    const { messageId: providerMessageId } = await sendMailStrict(input);
     if (!env.smtp.host) {
       // jsonTransport puts the whole message in info.message (a Buffer)
       // eslint-disable-next-line no-console
       console.log(`[mailer:console] to=${input.to} subject="${input.subject}"`);
     } else {
       // eslint-disable-next-line no-console
-      console.log(`[mailer] sent messageId=${messageId} to=${input.to}`);
+      console.log(`[mailer] sent messageId=${providerMessageId} to=${input.to}`);
     }
+    await closeMailRecord(messageId, { sent: true, providerMessageId, error: "" });
+    return { messageId, sent: true, providerMessageId, error: "" };
   } catch (err) {
+    const error = err instanceof Error ? err.message : String(err);
     // eslint-disable-next-line no-console
     console.error("[mailer] send failed (continuing):", err);
+    await closeMailRecord(messageId, { sent: false, providerMessageId: "", error });
+    return { messageId, sent: false, providerMessageId: "", error };
   }
 }

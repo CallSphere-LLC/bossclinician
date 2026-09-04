@@ -8,6 +8,7 @@ import { sendMail } from "../email/mailer";
 import { escapeHtml } from "../email/templates";
 import type { EmailContent } from "../email/memberTemplates";
 import { hasCourseAccess } from "./access";
+import { automationIdentity, publishDomainEvent } from "./domainEvents";
 import { AUTO_COMPLETE_PERCENT } from "./curriculum";
 import { protectedRef, resolveStoredFile, uploadPath } from "./signedUrls";
 
@@ -857,6 +858,9 @@ export async function issueCertificateIfEarned(
   }
 
   await sendMail({
+    topic: "certificate_issued",
+    sourceId: row.id,
+    memberId,
     to: who.email,
     ...certificateEmail({
       firstName: who.first_name || who.name,
@@ -864,6 +868,25 @@ export async function issueCertificateIfEarned(
       creditLabel: formatCreditHours(row.ceu_credit_quarter_hours),
       verificationCode: row.verification_code,
     }),
+  });
+
+  // Only the winner of the insert race reaches here, so this fires once per
+  // certificate without needing the event key to defend it — the key is there
+  // anyway, because "once per certificate" is a property worth stating.
+  const identity = await automationIdentity(memberId, who.email, who.name);
+  await publishDomainEvent("certificate_earned", {
+    eventKey: `certificate-earned:${row.id}`,
+    contactId: identity.contactId,
+    email: identity.email,
+    name: identity.name,
+    subjectId: courseId,
+    source: "certificates",
+    facts: {
+      certificateId: row.id,
+      courseId,
+      courseTitle: row.course_title,
+      verificationCode: row.verification_code,
+    },
   });
 
   return row;

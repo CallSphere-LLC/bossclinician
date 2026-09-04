@@ -30,6 +30,7 @@ import {
 import { isProtectedRef, signedFileUrl } from "../../services/signedUrls";
 import type { EntitledMedia } from "./downloads";
 import { dispatchEvent } from "../../services/webhooksOut";
+import { automationIdentity, publishDomainEvent } from "../../services/domainEvents";
 
 /**
  * `/api/member/coaching` — booking, rescheduling and cancelling sessions.
@@ -1119,6 +1120,26 @@ memberCoachingRouter.post(
       offerId: booked.offer_id,
       scheduledAt: booked.scheduled_at?.toISOString() ?? null,
       timezone: zone,
+    });
+
+    // The outbound webhook above tells another system; this tells Yvette's own
+    // automations, which could not see a booking at all before. Keyed on the
+    // session, so a retried request cannot enrol the member twice.
+    const identity = await automationIdentity(member.id, member.email);
+    await publishDomainEvent("coaching_session_booked", {
+      eventKey: `coaching-session-booked:${booked.id}`,
+      contactId: identity.contactId,
+      email: identity.email,
+      name: identity.name,
+      subjectId: booked.offer_id ?? null,
+      source: "coaching",
+      facts: {
+        sessionId: booked.id,
+        offerId: booked.offer_id ?? 0,
+        offerTitle: booked.offer_title ?? "",
+        scheduledAt: booked.scheduled_at?.toISOString() ?? null,
+        timezone: zone,
+      },
     });
 
     const credits = await pool.query<CreditRow>(`${CREDIT_SELECT} WHERE c.member_id = $1`, [

@@ -117,19 +117,37 @@ export default function Account() {
 /**
  * Unconfirmed-email prompt.
  *
- * The resend response is deliberately identical whether or not anything was
- * sent, so the copy promises only that a message is on its way rather than
- * reporting a result the endpoint does not give us.
+ * Signed in, so the endpoint tells us what actually happened and this reports
+ * it. It used to say "Sent." unconditionally — including when the transport had
+ * refused the message — and because posting in the community and commenting on
+ * lessons are both gated behind confirming, a member whose link never went out
+ * was stuck at the gate with the screen insisting the link was on its way.
  */
 function ConfirmEmailPrompt({ email }: { email: string }) {
-  const [status, setStatus] = useState<"idle" | "sending" | "sent">("idle");
+  const [status, setStatus] = useState<"idle" | "sending" | "done">("idle");
+  const [message, setMessage] = useState("");
+  const [failed, setFailed] = useState(false);
 
   const resend = async () => {
     setStatus("sending");
+    setFailed(false);
     try {
-      await memberApi.resendVerification();
+      const result = await memberApi.resendVerification();
+      if (result.state === "failed") {
+        setFailed(true);
+        setMessage("We couldn't send it just now. Please try again in a few minutes.");
+      } else if (result.state === "throttled") {
+        setMessage("You've asked a few times already — give the last link a minute to arrive.");
+      } else if (result.state === "not_needed") {
+        setMessage("This address is already confirmed. Try reloading the page.");
+      } else {
+        setMessage("Sent. Give it a minute, and do check your spam folder.");
+      }
+    } catch {
+      setFailed(true);
+      setMessage("We couldn't send it just now. Please try again in a few minutes.");
     } finally {
-      setStatus("sent");
+      setStatus("done");
     }
   };
 
@@ -147,8 +165,11 @@ function ConfirmEmailPrompt({ email }: { email: string }) {
           We sent a link to <span className="text-white/85">{email}</span>. Opening it keeps your
           account recoverable if you ever forget your password.
         </p>
-        <p aria-live="polite" className="mt-2 min-h-[1.25rem] text-sm text-gold">
-          {status === "sent" ? "Sent. Give it a minute, and do check your spam folder." : ""}
+        <p
+          aria-live="polite"
+          className={`mt-2 min-h-[1.25rem] text-sm ${failed ? "text-red-300" : "text-gold"}`}
+        >
+          {status === "done" ? message : ""}
         </p>
       </div>
       <LuxeButton

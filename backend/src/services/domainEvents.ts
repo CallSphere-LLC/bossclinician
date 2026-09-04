@@ -43,11 +43,46 @@ const WEBHOOK_BY_TRIGGER: Partial<Record<TriggerV2, string[]>> = {
   subscription_cancelled: ["subscription.cancelled"],
   subscription_cancel_requested: ["subscription.cancel_requested"],
   payment_plan_completed: ["payment_plan.completed"],
+  certificate_earned: ["certificate.earned"],
+  coaching_session_booked: ["coaching_session.booked"],
   form_submitted: ["form.submitted"],
 };
 
 export function webhookEventsFor(trigger: TriggerV2): string[] {
   return [...(WEBHOOK_BY_TRIGGER[trigger] ?? [])];
+}
+
+/**
+ * Who an automation should treat a member as.
+ *
+ * Every domain event needs a contact to run conditions and tags against, and a
+ * member row is not one: `contacts` is the marketing identity and `members` is
+ * the login. This resolves the first from the second, falling back to whatever
+ * the caller already knows when the member has no contact yet.
+ *
+ * Lives here rather than beside any one publisher because the Stripe webhook,
+ * certificates and coaching all need the same answer, and three copies of this
+ * query would drift.
+ */
+export async function automationIdentity(
+  memberId: number | null,
+  fallbackEmail = "",
+  fallbackName = ""
+): Promise<{ contactId: number | null; email: string; name: string }> {
+  if (memberId === null) {
+    return { contactId: null, email: fallbackEmail, name: fallbackName };
+  }
+  const found = await pool.query<{ contact_id: number | null; email: string; name: string }>(
+    `SELECT contact_id, email::text AS email,
+            COALESCE(NULLIF(TRIM(first_name || ' ' || last_name), ''), name, '') AS name
+       FROM members WHERE id = $1`,
+    [memberId]
+  );
+  return {
+    contactId: found.rows[0]?.contact_id ?? null,
+    email: found.rows[0]?.email ?? fallbackEmail,
+    name: found.rows[0]?.name ?? fallbackName,
+  };
 }
 
 export function domainEventJobKey(eventId: string | number): string {

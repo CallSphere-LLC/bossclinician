@@ -42,7 +42,12 @@ async function deliver(kind: "trial" | "upcoming", row: ReminderRow): Promise<vo
     { firstName, name: row.name, email: row.email, offer: row.plan_name, total: amount, date: when },
     fallback,
   );
-  await sendMail({ to: row.email, ...content });
+  await sendMail({
+    topic: kind === "trial" ? "trial_ending" : "upcoming_payment",
+    sourceId: row.id,
+    to: row.email,
+    ...content,
+  });
 }
 
 async function trialReminders(days: number): Promise<number> {

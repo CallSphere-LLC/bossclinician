@@ -366,6 +366,8 @@ async function sendSetPasswordEmail(member: {
   );
 
   void sendMail({
+    topic: "set_password",
+    memberId: member.id,
     to: member.email,
     ...emails.setPassword({
       firstName: member.first_name,
@@ -375,11 +377,28 @@ async function sendSetPasswordEmail(member: {
   });
 }
 
-async function sendVerificationEmail(member: {
-  id: number;
-  email: string;
-  first_name: string;
-}): Promise<void> {
+/**
+ * What a resend actually did, for the one caller allowed to be told.
+ *
+ * "throttled" is its own answer rather than a failure: the per-account ceiling
+ * is working as designed, and a member pressing the button a fourth time is
+ * owed "give the last one a minute" rather than either a lie or an error.
+ */
+type VerificationSendResult =
+  | { state: "sent" }
+  | { state: "throttled" }
+  | { state: "failed"; error: string };
+
+async function sendVerificationEmail(
+  member: { id: number; email: string; first_name: string },
+  /**
+   * Wait for the transport and report back. Off by default: on signup a slow
+   * SMTP handshake must not decide how long the member waits for the page. The
+   * explicit "Send it again" button is the opposite case — the member is
+   * waiting precisely to find out whether it worked.
+   */
+  options: { awaitDelivery?: boolean } = {}
+): Promise<VerificationSendResult> {
   // The same durable per-account ceiling forgot-password uses. Without it,
   // resend-verification is an unauthenticated button that sends mail from this
   // domain to any unverified address, as often as the caller likes — the
@@ -391,7 +410,7 @@ async function sendVerificationEmail(member: {
         AND created_at > now() - make_interval(mins => $2)`,
     [member.id, RESET_WINDOW_MINUTES]
   );
-  if (Number(recent.rows[0]?.count ?? 0) >= RESET_MAX_PER_WINDOW) return;
+  if (Number(recent.rows[0]?.count ?? 0) >= RESET_MAX_PER_WINDOW) return { state: "throttled" };
 
   // Supersede outstanding links rather than adding to them: each one lives 24
   // hours, so a day of resends would otherwise leave a day's worth of
@@ -408,16 +427,27 @@ async function sendVerificationEmail(member: {
      VALUES ($1, $2, $3, $4)`,
     [member.id, member.email, hashToken(raw), expiresIn(EMAIL_VERIFICATION_TTL_MINUTES * 60)]
   );
-  // Fire and forget, here and everywhere below: a slow SMTP handshake must not
-  // decide how long a member waits for their signup to come back.
-  void sendMail({
+  const message = {
+    topic: "email_confirmation",
+    memberId: member.id,
     to: member.email,
     ...emails.verifyEmail({
       firstName: member.first_name,
       token: raw,
       expiresInMinutes: EMAIL_VERIFICATION_TTL_MINUTES,
     }),
-  });
+  };
+
+  if (!options.awaitDelivery) {
+    // Fire and forget, as on signup: a slow SMTP handshake must not decide how
+    // long a member waits for their signup to come back. The delivery log in
+    // settings is where this one's fate is read.
+    void sendMail(message);
+    return { state: "sent" };
+  }
+
+  const outcome = await sendMail(message);
+  return outcome.sent ? { state: "sent" } : { state: "failed", error: outcome.error };
 }
 
 /**
@@ -475,6 +505,8 @@ memberAuthRoutes.post(
         await sendSetPasswordEmail(existing);
       } else if (!SIGN_IN_BLOCKED.has(existing.status)) {
         void sendMail({
+          topic: "registration_attempted",
+          memberId: existing.id,
           to: existing.email,
           ...emails.registrationAttempted({ firstName: existing.first_name }),
         });
@@ -699,6 +731,8 @@ memberAuthRoutes.post(
           [member.id, hashToken(raw), expiresIn(PASSWORD_RESET_TTL_MINUTES * 60)]
         );
         void sendMail({
+          topic: "password_reset",
+          memberId: member.id,
           to: member.email,
           ...emails.passwordReset({
             firstName: member.first_name,
@@ -793,6 +827,8 @@ memberAuthRoutes.post(
     await clearLoginFailures(member.email);
 
     void sendMail({
+      topic: "password_changed",
+      memberId: member.id,
       to: member.email,
       ...emails.passwordChanged({ firstName: member.first_name }),
     });
@@ -816,7 +852,7 @@ memberAuthRoutes.post(
     if (!parsed.success) throw badRequest(GENERIC_LINK, parsed.error.flatten());
 
     const client = await pool.connect();
-    let member: { email: string; first_name: string; firstVerification: boolean };
+    let member: { id: number; email: string; first_name: string; firstVerification: boolean };
     try {
       await client.query("BEGIN");
 
@@ -859,6 +895,7 @@ memberAuthRoutes.post(
       if (!updated.rows[0]) throw badRequest(GENERIC_LINK);
       member = {
         ...updated.rows[0],
+        id: verification.member_id,
         firstVerification: before.rows[0]?.email_verified_at == null,
       };
 
@@ -875,6 +912,8 @@ memberAuthRoutes.post(
 
     if (member.firstVerification) {
       void sendMail({
+        topic: "member_welcome",
+        memberId: member.id,
         to: member.email,
         ...emails.welcome({ firstName: member.first_name }),
       });
@@ -889,6 +928,15 @@ memberAuthRoutes.post(
  *
  * Takes an address, or none at all when the caller is already signed in —
  * hence `optionalMember`. Always 200, for the same reason forgot-password is.
+ *
+ * A SIGNED-IN caller is told what actually happened; an anonymous one is not.
+ * The silence exists to stop this route being an account-existence oracle, and
+ * that argument does not apply to somebody asking about the account they are
+ * already holding a session for. It did, however, mean the one member who could
+ * safely be told got the same confident "Sent." as everyone else — including
+ * when the transport had refused the message — and posting in the community is
+ * gated behind confirming, so a member could be locked out of the gate with no
+ * way to see why.
  */
 memberAuthRoutes.post(
   "/resend-verification",
@@ -900,15 +948,29 @@ memberAuthRoutes.post(
       throw badRequest("Please enter a valid email address.", parsed.error.flatten());
     }
 
+    const signedIn = req.member != null;
     const address = req.member?.email ?? parsed.data.email;
+
+    let result: VerificationSendResult | null = null;
     if (address) {
       const member = await findByEmail(address);
       if (member && !member.email_verified_at && !SIGN_IN_BLOCKED.has(member.status)) {
-        await sendVerificationEmail(member);
+        result = await sendVerificationEmail(member, { awaitDelivery: signedIn });
       }
     }
 
-    res.json({ ok: true });
+    if (!signedIn) {
+      res.json({ ok: true });
+      return;
+    }
+
+    // An already-confirmed or blocked account reaching here needs no new link,
+    // and saying "sent" would be the same lie in a different costume.
+    res.json({
+      ok: true,
+      state: result?.state ?? "not_needed",
+      error: result?.state === "failed" ? result.error : "",
+    });
   })
 );
 
@@ -971,6 +1033,8 @@ memberAuthRoutes.post(
         [member.id, hashToken(raw), expiresIn(MAGIC_LINK_TTL_MINUTES * 60)]
       );
       void sendMail({
+        topic: "magic_link",
+        memberId: member.id,
         to: member.email,
         ...emails.magicLink({
           firstName: member.first_name,

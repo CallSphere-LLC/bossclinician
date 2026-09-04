@@ -47,6 +47,8 @@ export const TRIGGER_TYPES = [
   "assessment_passed",
   "lesson_completed",
   "course_completed",
+  "certificate_earned",
+  "coaching_session_booked",
   "community_post_created",
   "contact_created",
   "date_anniversary",
@@ -96,6 +98,11 @@ export const TRIGGER_DESCRIPTORS: TriggerDescriptor[] = [
   { type: "assessment_passed", label: "someone passes a quiz", subjectKey: "assessmentId", subjectSource: "assessments", subjectLabel: "Which quiz" },
   { type: "lesson_completed", label: "someone completes a lesson", subjectKey: "courseId", subjectSource: "courses", subjectLabel: "Which course" },
   { type: "course_completed", label: "someone completes a course", subjectKey: "courseId", subjectSource: "courses", subjectLabel: "Which course" },
+  // Finishing a course and earning its certificate are not the same moment: a
+  // course with no certificate template never reaches the second, and a member
+  // whose access was clawed back completes without earning.
+  { type: "certificate_earned", label: "someone earns a certificate", subjectKey: "courseId", subjectSource: "courses", subjectLabel: "Which course" },
+  { type: "coaching_session_booked", label: "someone books a coaching session", subjectKey: "", subjectSource: "", subjectLabel: "" },
   { type: "community_post_created", label: "someone posts in the community", subjectKey: "communityId", subjectSource: "communities", subjectLabel: "Which community" },
   { type: "contact_created", label: "a new person joins your list", subjectKey: "", subjectSource: "", subjectLabel: "" },
   { type: "date_anniversary", label: "it is someone's anniversary", subjectKey: "", subjectSource: "", subjectLabel: "" },

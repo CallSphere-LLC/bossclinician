@@ -121,25 +121,53 @@ export function PaymentsPage() {
       {
         accessorKey: "courseTitle",
         header: "What they bought",
-        cell: ({ row }) => (
-          <div className="min-w-0">
-            <p className="truncate font-semibold text-ink">
-              {row.original.courseTitle || "A one-off purchase"}
-            </p>
-            <p className="truncate text-xs text-ink-soft">
-              {row.original.email || "No email given"}
-            </p>
-          </div>
-        ),
+        cell: ({ row }) => {
+          const { courseTitle, items, email } = row.original;
+          // The offer names the purchase; the lines name what came with it. A
+          // single line repeating the offer's own name says nothing, so it is
+          // only worth a second row when there is more than one, or when it
+          // differs from the title.
+          const extra =
+            items && items.length > 0 &&
+            (items.length > 1 || items[0].title !== courseTitle)
+              ? items.map((i) => (i.quantity > 1 ? `${i.title} ×${i.quantity}` : i.title)).join(", ")
+              : "";
+          return (
+            <div className="min-w-0">
+              <p className="truncate font-semibold text-ink">
+                {courseTitle || "A one-off purchase"}
+              </p>
+              {extra && <p className="truncate text-xs text-ink-soft">{extra}</p>}
+              <p className="truncate text-xs text-ink-soft">
+                {email || "No email given"}
+              </p>
+            </div>
+          );
+        },
       },
       {
         accessorKey: "amountCents",
         header: "How much",
-        cell: ({ row }) => (
-          <span className="font-semibold tabular-nums text-ink">
-            {formatCurrency(row.original.amountCents, row.original.currency)}
-          </span>
-        ),
+        cell: ({ row }) => {
+          const { amountCents, totalCents, discountCents, couponCode, currency } = row.original;
+          // A 100%-off order took nothing and still bought something. Showing
+          // "$0.00" alone reads like a bug in the till, so what it was worth
+          // and the code that took it off are shown underneath.
+          const discounted = discountCents > 0 && amountCents < totalCents + discountCents;
+          return (
+            <div className="min-w-0">
+              <span className="font-semibold tabular-nums text-ink">
+                {formatCurrency(amountCents, currency)}
+              </span>
+              {discounted && (
+                <p className="truncate text-xs text-ink-soft">
+                  {formatCurrency(totalCents + discountCents, currency)} less{" "}
+                  {couponCode || "a discount"}
+                </p>
+              )}
+            </div>
+          );
+        },
       },
       {
         accessorKey: "status",

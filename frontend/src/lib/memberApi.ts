@@ -240,8 +240,17 @@ export const memberApi = {
       skipRefresh: true,
     }),
 
+  /**
+   * `state` and `error` come back only for a signed-in caller — anonymously
+   * this route stays deliberately silent so it cannot be used to test whether
+   * an address has an account.
+   */
   resendVerification: (email?: string) =>
-    request<{ ok: true }>("/auth/resend-verification", {
+    request<{
+      ok: true;
+      state?: "sent" | "throttled" | "failed" | "not_needed";
+      error?: string;
+    }>("/auth/resend-verification", {
       method: "POST",
       body: JSON.stringify(email ? { email } : {}),
     }),

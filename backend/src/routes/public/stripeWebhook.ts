@@ -31,7 +31,7 @@ import { grantAccess, grantOfferAccess, revokeOfferAccess } from "../../services
 import { sendSetPasswordLink } from "../../services/setPasswordLink";
 import { deliverPurchase, notifyOwnerOfSale } from "../../services/purchaseDelivery";
 import { addInterval, type BillingInterval } from "../../services/pricing";
-import { publishDomainEvent } from "../../services/domainEvents";
+import { automationIdentity, publishDomainEvent } from "../../services/domainEvents";
 import { dispatchEvent } from "../../services/webhooksOut";
 import { upsertContactWithStatus } from "../../services/contacts";
 import { readSetting } from "../../services/settings";
@@ -169,23 +169,6 @@ function truncate(value: string, max: number): string {
 function log(message: string): void {
   // eslint-disable-next-line no-console
   console.log(`[stripe:webhook] ${message}`);
-}
-
-async function automationIdentity(memberId: number | null, fallbackEmail = "", fallbackName = "") {
-  if (memberId === null) {
-    return { contactId: null as number | null, email: fallbackEmail, name: fallbackName };
-  }
-  const found = await pool.query<{ contact_id: number | null; email: string; name: string }>(
-    `SELECT contact_id, email::text AS email,
-            COALESCE(NULLIF(TRIM(first_name || ' ' || last_name), ''), name, '') AS name
-       FROM members WHERE id = $1`,
-    [memberId],
-  );
-  return {
-    contactId: found.rows[0]?.contact_id ?? null,
-    email: found.rows[0]?.email ?? fallbackEmail,
-    name: found.rows[0]?.name ?? fallbackName,
-  };
 }
 
 /* ----------------------------------------------------------- the event log */
@@ -1393,6 +1376,9 @@ async function advancePaymentPlan(input: {
     const order = completedPlan.order_id ? await loadOrderById(completedPlan.order_id) : null;
     const paidToDate = await planPaidToDate(completedPlan.id);
     void sendMail({
+      topic: "payment_plan_completed",
+      sourceId: completedPlan.order_id ?? null,
+      memberId: completedPlan.member_id ?? null,
       to: completedPlan.email,
       ...paymentPlanCompleted({
         buyerName: order?.billing_name ?? "",
@@ -1857,6 +1843,9 @@ async function handleInvoicePaymentFailed(invoice: Stripe.Invoice): Promise<void
   const buyerEmail = invoice.customer_email ?? order?.email ?? plan?.email ?? "";
   if (buyerEmail) {
     void sendMail({
+      topic: "payment_failed",
+      sourceId: order?.id ?? plan?.order_id ?? null,
+      memberId: order?.member_id ?? plan?.member_id ?? null,
       to: buyerEmail,
       ...paymentFailedDunning({
         buyerName: order?.billing_name ?? "",

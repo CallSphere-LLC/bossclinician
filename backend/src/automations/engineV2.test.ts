@@ -250,3 +250,24 @@ describe("billing lifecycle triggers", () => {
     expect([...TRIGGER_TYPES].filter((t) => !described.has(t))).toEqual([]);
   });
 });
+
+describe("member lifecycle triggers", () => {
+  it("separates earning a certificate from finishing the course", () => {
+    const earned = TRIGGER_DESCRIPTORS.find((t) => t.type === "certificate_earned");
+    const completed = TRIGGER_DESCRIPTORS.find((t) => t.type === "course_completed");
+
+    // A course with no certificate template is completed but never earned, so
+    // one trigger cannot stand in for the other.
+    expect(earned?.label).toBe("someone earns a certificate");
+    expect(earned?.subjectSource).toBe("courses");
+    expect(completed?.type).toBe("course_completed");
+  });
+
+  it("offers booking a coaching session, which automations could not see before", () => {
+    const booked = TRIGGER_DESCRIPTORS.find((t) => t.type === "coaching_session_booked");
+
+    expect(booked?.label).toBe("someone books a coaching session");
+    // Fires for every package rather than being narrowed to one.
+    expect(booked?.subjectKey).toBe("");
+  });
+});

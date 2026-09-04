@@ -109,7 +109,42 @@ export const settingsApi = {
         ...body(to ? { to } : {}),
       },
     ),
+
+  emailLog: (params: { limit?: number; status?: string } = {}) => {
+    const query = new URLSearchParams();
+    if (params.limit) query.set("limit", String(params.limit));
+    if (params.status && params.status !== "all") query.set("status", params.status);
+    const suffix = query.toString();
+    return request<EmailLogResponse>(
+      `/admin/settings-v2/email-log${suffix ? `?${suffix}` : ""}`,
+    );
+  },
 };
+
+export interface EmailLogRow {
+  id: number;
+  toEmail: string;
+  sourceType: string;
+  topic: string;
+  subject: string;
+  provider: string;
+  /** The id the provider assigned — what a support ticket is traced by. */
+  providerMessageId: string;
+  status: "queued" | "sent" | "delivered" | "bounced" | "complained" | "failed" | "suppressed" | string;
+  error: string;
+  sentAt: string | null;
+  deliveredAt: string | null;
+  createdAt: string;
+  /** What the provider said after the handover, which may contradict `status`. */
+  lastEvent: string;
+  lastEventAt: string | null;
+}
+
+export interface EmailLogResponse {
+  messages: EmailLogRow[];
+  lastSevenDays: Record<string, number>;
+  unattributedEvents: number;
+}
 
 /* ── People ─────────────────────────────────────────────────────────────── */
 

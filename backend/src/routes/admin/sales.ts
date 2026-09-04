@@ -277,13 +277,47 @@ adminSalesRouter.delete(
 
 /* ---------------------------------------------------------- Payments/orders */
 
+/**
+ * GET /api/admin/sales/payments
+ *
+ * "What they bought" is the whole point of this screen, and it used to answer
+ * "A one-off purchase" for every row: the query selected only `course_title`,
+ * which the legacy course checkout writes and the offer checkout never does.
+ * Every offer purchase therefore looked identical, distinguishable only by the
+ * buyer's email.
+ *
+ * The title now falls back through the three places a purchase can be named —
+ * the offer, the legacy course, then the first order line — and `items` carries
+ * what the order actually granted so a bump or a bundle is visible rather than
+ * collapsed into its offer's name.
+ *
+ * `total_cents` is reported alongside `amount_cents` because they disagree on a
+ * fully discounted order: the money taken was zero, and the thing bought was
+ * still a $19 offer. The screen wants the first and the receipt wants the
+ * second, so neither is thrown away here.
+ */
 adminSalesRouter.get(
   "/payments",
   asyncHandler(async (_req, res) => {
     const result = await pool.query(
-      `SELECT id, course_slug, course_title, email, amount_cents, currency, status,
-              stripe_session_id, stripe_payment_intent_id, created_at
-       FROM orders ORDER BY created_at DESC LIMIT 500`,
+      `SELECT o.id, o.course_slug, o.email, o.amount_cents, o.total_cents,
+              o.subtotal_cents, o.discount_cents, o.coupon_code, o.currency, o.status,
+              o.stripe_session_id, o.stripe_payment_intent_id, o.created_at,
+              COALESCE(NULLIF(f.title, ''), NULLIF(o.course_title, ''),
+                       (SELECT i.title FROM order_items i
+                         WHERE i.order_id = o.id ORDER BY i.id LIMIT 1),
+                       '') AS course_title,
+              f.slug AS offer_slug,
+              COALESCE(
+                (SELECT json_agg(json_build_object(
+                          'title', i.title, 'quantity', i.quantity, 'amountCents', i.amount_cents)
+                        ORDER BY i.id)
+                   FROM order_items i WHERE i.order_id = o.id),
+                '[]'::json
+              ) AS items
+         FROM orders o
+         LEFT JOIN offers f ON f.id = o.offer_id
+        ORDER BY o.created_at DESC LIMIT 500`,
     );
     res.json(rowsToCamel(result.rows));
   }),
