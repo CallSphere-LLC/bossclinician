@@ -4,6 +4,8 @@ import { rowToCamel, rowsToCamel } from "../../utils/case";
 import { asyncHandler } from "../../utils/asyncHandler";
 import { badRequest, notFound } from "../../utils/httpError";
 import { buildUpdate } from "../../utils/sqlUpdate";
+import { z } from "zod";
+import { POINT_ACTIONS } from "../../services/communityNotifications";
 
 /**
  * Community admin API — mounted at /admin/community.
@@ -29,8 +31,58 @@ const COMMUNITY_FIELDS = [
   "live_room_capacity",
   // Long-form markdown, shown in a modal a member must accept before posting.
   "guidelines_md",
+  // Which leaderboards members may see, each independently (2.7).
+  "leaderboard_weekly",
+  "leaderboard_monthly",
+  "leaderboard_all_time",
+  "points_per_title",
 ] as const;
-const CHANNEL_FIELDS = ["slug", "name", "description", "format", "visibility", "sort"] as const;
+const CHANNEL_FIELDS = [
+  "slug",
+  "name",
+  "description",
+  "format",
+  "visibility",
+  "sort",
+  // 2.2: the cover, the tier it belongs to, and the layouts it offers.
+  "cover_image",
+  "access_group_id",
+  "view_modes",
+  "default_view_mode",
+] as const;
+
+const VIEW_MODES = ["feed", "forum", "gallery"] as const;
+
+/**
+ * Guards the channel fields the database has constraints on.
+ *
+ * The default view mode has to be one of the modes actually offered, or a
+ * member opens a channel into a layout its owner switched off — and the
+ * constraint would come back as a 500 with a constraint name in it.
+ */
+function assertChannelValues(body: Record<string, unknown>): void {
+  const modes = body.viewModes;
+  if (modes !== undefined) {
+    if (!Array.isArray(modes) || modes.length === 0) {
+      throw badRequest("Choose at least one way for members to view this channel.");
+    }
+    if (modes.some((m) => !VIEW_MODES.includes(m as (typeof VIEW_MODES)[number]))) {
+      throw badRequest("Channels can be shown as a feed, a forum or a gallery.");
+    }
+  }
+  const preferred = body.defaultViewMode;
+  if (preferred !== undefined) {
+    if (!VIEW_MODES.includes(preferred as (typeof VIEW_MODES)[number])) {
+      throw badRequest("Channels can be shown as a feed, a forum or a gallery.");
+    }
+    if (Array.isArray(modes) && !modes.includes(preferred)) {
+      throw badRequest("The default view has to be one of the views you offer.");
+    }
+  }
+  if (body.format !== undefined && body.format !== "feed" && body.format !== "chat") {
+    throw badRequest("A channel is either a feed or a chat.");
+  }
+}
 const POST_FIELDS = ["title", "body", "media_url", "pinned", "status"] as const;
 const CHALLENGE_FIELDS = [
   "title",
@@ -243,6 +295,231 @@ adminCommunityRouter.put(
   }),
 );
 
+/* ------------------------------------------------------------ gamification */
+
+/**
+ * GET /:id/point-rules
+ *
+ * Kajabi's rules table: one row per thing that earns points, with the POINTS
+ * and the MAXIMUM Yvette can edit. The set of rules is fixed in code — each
+ * name is a place in a handler that awards them — so this returns the full set
+ * with whatever has been stored against each, rather than only the stored rows.
+ * A rule with no row yet must appear editable, not missing.
+ */
+adminCommunityRouter.get(
+  "/:id/point-rules",
+  asyncHandler(async (req, res) => {
+    const stored = await pool.query<{
+      action: string;
+      points: number;
+      max_per_period: number | null;
+      period: string;
+    }>(
+      `SELECT action, points, max_per_period, period
+         FROM community_point_rules WHERE community_id = $1`,
+      [req.params.id],
+    );
+    const byAction = new Map(stored.rows.map((r) => [r.action, r]));
+
+    res.json(
+      POINT_ACTIONS.map(({ action, label }) => {
+        const row = byAction.get(action);
+        return {
+          action,
+          label,
+          points: row?.points ?? 0,
+          maxPerPeriod: row?.max_per_period ?? null,
+          period: row?.period ?? "day",
+        };
+      }),
+    );
+  }),
+);
+
+const pointRuleSchema = z.object({
+  points: z.number().int().min(0).max(10_000),
+  /** Null is uncapped, which is right for a once-per-thing rule like an RSVP. */
+  maxPerPeriod: z.number().int().min(1).max(1000).nullable(),
+  period: z.enum(["day", "week", "month", "all"]),
+});
+
+/**
+ * PUT /:id/point-rules/:action
+ *
+ * Upsert, because a community that predates the rules table has no row for a
+ * given action and the first edit must create it rather than fail.
+ */
+adminCommunityRouter.put(
+  "/:id/point-rules/:action",
+  asyncHandler(async (req, res) => {
+    const action = req.params.action;
+    if (!POINT_ACTIONS.some((r) => r.action === action)) {
+      throw badRequest("That isn't a rule we can award points for.");
+    }
+    const parsed = pointRuleSchema.safeParse(req.body ?? {});
+    if (!parsed.success) throw badRequest("Check the points and the maximum.", parsed.error.flatten());
+
+    const saved = await pool.query(
+      `INSERT INTO community_point_rules (community_id, action, points, max_per_period, period)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (community_id, action) DO UPDATE
+         SET points = EXCLUDED.points,
+             max_per_period = EXCLUDED.max_per_period,
+             period = EXCLUDED.period
+       RETURNING action, points, max_per_period, period`,
+      [req.params.id, action, parsed.data.points, parsed.data.maxPerPeriod, parsed.data.period],
+    );
+    res.json(rowToCamel(saved.rows[0]));
+  }),
+);
+
+/* ----------------------------------------------------------- access groups */
+
+/**
+ * The tier layer the brief calls the missing piece. A community with no groups
+ * behaves exactly as before — a channel with no group is the whole community —
+ * so this is additive rather than a change to how access already works.
+ */
+adminCommunityRouter.get(
+  "/:id/access-groups",
+  asyncHandler(async (req, res) => {
+    const rows = await pool.query(
+      `SELECT g.id, g.name, g.description, g.sort, g.created_at,
+              (SELECT COUNT(*)::int FROM community_access_group_members m
+                WHERE m.group_id = g.id) AS member_count,
+              (SELECT COUNT(*)::int FROM community_channels ch
+                WHERE ch.access_group_id = g.id) AS channel_count
+         FROM community_access_groups g
+        WHERE g.community_id = $1
+        ORDER BY g.sort, g.id`,
+      [req.params.id],
+    );
+    res.json(rowsToCamel(rows.rows));
+  }),
+);
+
+const accessGroupSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  description: z.string().trim().max(600).default(""),
+  sort: z.number().int().min(0).max(1000).default(0),
+});
+
+adminCommunityRouter.post(
+  "/:id/access-groups",
+  asyncHandler(async (req, res) => {
+    const parsed = accessGroupSchema.safeParse(req.body ?? {});
+    if (!parsed.success) throw badRequest("Give the group a name.", parsed.error.flatten());
+    try {
+      const created = await pool.query(
+        `INSERT INTO community_access_groups (community_id, name, description, sort)
+         VALUES ($1, $2, $3, $4) RETURNING *`,
+        [req.params.id, parsed.data.name, parsed.data.description, parsed.data.sort],
+      );
+      res.status(201).json(rowToCamel(created.rows[0]));
+    } catch (error) {
+      // The UNIQUE is on (community, name): two tiers called the same thing
+      // would be indistinguishable in every picker that offers them.
+      if ((error as { code?: string }).code === "23505") {
+        throw badRequest("There is already a group with that name.");
+      }
+      throw error;
+    }
+  }),
+);
+
+adminCommunityRouter.put(
+  "/:id/access-groups/:groupId",
+  asyncHandler(async (req, res) => {
+    const parsed = accessGroupSchema.partial().safeParse(req.body ?? {});
+    if (!parsed.success) throw badRequest("Check the group's details.");
+    const update = buildUpdate(
+      { name: parsed.data.name, description: parsed.data.description, sort: parsed.data.sort },
+      ["name", "description", "sort"] as const,
+    );
+    if (!update) throw badRequest("No updatable fields supplied");
+    const saved = await pool.query(
+      `UPDATE community_access_groups SET ${update.clause}
+        WHERE id = $${update.values.length + 1} AND community_id = $${update.values.length + 2}
+      RETURNING *`,
+      [...update.values, req.params.groupId, req.params.id],
+    );
+    if (saved.rowCount === 0) throw notFound("Access group not found");
+    res.json(rowToCamel(saved.rows[0]));
+  }),
+);
+
+adminCommunityRouter.delete(
+  "/:id/access-groups/:groupId",
+  asyncHandler(async (req, res) => {
+    // Channels and products fall back to the whole community via ON DELETE SET
+    // NULL, so deleting a tier opens its channels rather than orphaning them.
+    // That is the safe direction: nobody loses access they had.
+    const gone = await pool.query(
+      `DELETE FROM community_access_groups WHERE id = $1 AND community_id = $2`,
+      [req.params.groupId, req.params.id],
+    );
+    if (gone.rowCount === 0) throw notFound("Access group not found");
+    res.status(204).end();
+  }),
+);
+
+/** Who is in a tier, and how they got there. */
+adminCommunityRouter.get(
+  "/:id/access-groups/:groupId/members",
+  asyncHandler(async (req, res) => {
+    const rows = await pool.query(
+      `SELECT m.member_id, m.source, m.added_at,
+              COALESCE(NULLIF(TRIM(me.first_name || ' ' || me.last_name), ''),
+                       NULLIF(me.name, ''), me.email::text) AS name,
+              me.email::text AS email
+         FROM community_access_group_members m
+         JOIN members me ON me.id = m.member_id
+         JOIN community_access_groups g ON g.id = m.group_id
+        WHERE m.group_id = $1 AND g.community_id = $2
+        ORDER BY m.added_at DESC
+        LIMIT 500`,
+      [req.params.groupId, req.params.id],
+    );
+    res.json(rowsToCamel(rows.rows));
+  }),
+);
+
+adminCommunityRouter.post(
+  "/:id/access-groups/:groupId/members",
+  asyncHandler(async (req, res) => {
+    const memberId = Number((req.body as Record<string, unknown>).memberId);
+    if (!Number.isInteger(memberId) || memberId < 1) throw badRequest("Choose a member to add.");
+
+    const owned = await pool.query(
+      `SELECT 1 FROM community_access_groups WHERE id = $1 AND community_id = $2`,
+      [req.params.groupId, req.params.id],
+    );
+    if (owned.rowCount === 0) throw notFound("Access group not found");
+
+    await pool.query(
+      `INSERT INTO community_access_group_members (group_id, member_id, source)
+       VALUES ($1, $2, 'manual')
+       ON CONFLICT (group_id, member_id) DO NOTHING`,
+      [req.params.groupId, memberId],
+    );
+    res.status(201).json({ ok: true });
+  }),
+);
+
+adminCommunityRouter.delete(
+  "/:id/access-groups/:groupId/members/:memberId",
+  asyncHandler(async (req, res) => {
+    await pool.query(
+      `DELETE FROM community_access_group_members m
+        USING community_access_groups g
+        WHERE m.group_id = g.id AND g.community_id = $1
+          AND m.group_id = $2 AND m.member_id = $3`,
+      [req.params.id, req.params.groupId, req.params.memberId],
+    );
+    res.status(204).end();
+  }),
+);
+
 /* -------------------------------------------------------- scheduled posts */
 
 /**
@@ -423,21 +700,40 @@ adminCommunityRouter.post(
 adminCommunityRouter.post(
   "/:id/channels",
   asyncHandler(async (req, res) => {
-    const { name, description, format, visibility } = req.body as Record<string, string>;
-    if (!name?.trim()) throw badRequest("Channel name is required");
+    const body = req.body as Record<string, unknown>;
+    assertChannelValues(body);
+
+    const name = typeof body.name === "string" ? body.name : "";
+    if (!name.trim()) throw badRequest("Channel name is required");
+
+    const modes = Array.isArray(body.viewModes) && body.viewModes.length > 0
+      ? (body.viewModes as string[])
+      : ["feed"];
+    // Default to a mode that is actually offered, so the CHECK cannot be hit
+    // by a create that named only the default.
+    const preferred =
+      typeof body.defaultViewMode === "string" && modes.includes(body.defaultViewMode)
+        ? body.defaultViewMode
+        : modes[0];
 
     const result = await pool.query(
-      `INSERT INTO community_channels (community_id, slug, name, description, format, visibility, sort)
-       VALUES ($1, $2, $3, $4, $5, $6,
+      `INSERT INTO community_channels
+         (community_id, slug, name, description, format, visibility,
+          cover_image, access_group_id, view_modes, default_view_mode, sort)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::text[], $10,
          (SELECT COALESCE(MAX(sort), -1) + 1 FROM community_channels WHERE community_id = $1))
        RETURNING *`,
       [
         req.params.id,
         slugify(name),
         name.trim(),
-        description ?? "",
-        format === "chat" ? "chat" : "feed",
-        visibility === "private" ? "private" : "public",
+        typeof body.description === "string" ? body.description : "",
+        body.format === "chat" ? "chat" : "feed",
+        body.visibility === "private" ? "private" : "public",
+        typeof body.coverImage === "string" ? body.coverImage : "",
+        body.accessGroupId == null ? null : Number(body.accessGroupId),
+        modes,
+        preferred,
       ],
     );
     res.status(201).json(rowToCamel(result.rows[0]));
@@ -447,6 +743,7 @@ adminCommunityRouter.post(
 adminCommunityRouter.put(
   "/channels/:channelId",
   asyncHandler(async (req, res) => {
+    assertChannelValues(req.body as Record<string, unknown>);
     const update = buildUpdate(req.body as Record<string, unknown>, CHANNEL_FIELDS);
     if (!update) throw badRequest("No updatable fields supplied");
 

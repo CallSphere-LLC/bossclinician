@@ -427,3 +427,65 @@ export async function sweepExpiredGrants(): Promise<number> {
   );
   return res.rowCount ?? 0;
 }
+
+/**
+ * The community access groups a member is effectively in.
+ *
+ * Two sources, unioned, and the split is the same one the rest of this module
+ * makes. A group Yvette added somebody to by hand is a row in
+ * `community_access_group_members`. A group an offer sells is NOT: it is
+ * derived from a live grant, so a refund takes the tier away with the room
+ * rather than leaving a row behind that nobody remembers to delete.
+ *
+ * Plans are read directly for the same reason plans unlock a community
+ * directly — a subscription has no product grant behind it.
+ */
+export async function memberAccessGroupIds(memberId: number): Promise<number[]> {
+  const found = await pool.query<{ group_id: number }>(
+    `SELECT group_id FROM community_access_group_members WHERE member_id = $1
+     UNION
+     SELECT gp.access_group_id AS group_id
+       FROM access_grants g
+       JOIN products gp ON gp.id = g.product_id
+      WHERE g.member_id = $1
+        AND gp.access_group_id IS NOT NULL
+        AND g.status = 'active'
+        AND (g.expires_at IS NULL OR g.expires_at > now())
+     UNION
+     SELECT pl.access_group_id AS group_id
+       FROM subscriptions s
+       JOIN plans pl ON pl.id = s.plan_id
+      WHERE s.member_id = $1
+        AND pl.access_group_id IS NOT NULL
+        AND s.status IN ('active', 'trialing', 'past_due')`,
+    [memberId]
+  );
+  return found.rows.map((r) => r.group_id);
+}
+
+/**
+ * SQL predicate: may `$1` (the member) see a channel scoped to `access_group_id`?
+ *
+ * Exported as a fragment rather than a function call so the channel list stays
+ * one query — resolving the member's groups first and then filtering in JS
+ * would make the overview two round trips for one answer.
+ */
+export const CHANNEL_GROUP_VISIBLE = `(
+    ch.access_group_id IS NULL
+    OR EXISTS (
+      SELECT 1 FROM community_access_group_members agm
+       WHERE agm.group_id = ch.access_group_id AND agm.member_id = $MEMBER$
+    )
+    OR EXISTS (
+      SELECT 1 FROM access_grants g
+        JOIN products gp ON gp.id = g.product_id
+       WHERE g.member_id = $MEMBER$ AND gp.access_group_id = ch.access_group_id
+         AND g.status = 'active' AND (g.expires_at IS NULL OR g.expires_at > now())
+    )
+    OR EXISTS (
+      SELECT 1 FROM subscriptions s
+        JOIN plans pl ON pl.id = s.plan_id
+       WHERE s.member_id = $MEMBER$ AND pl.access_group_id = ch.access_group_id
+         AND s.status IN ('active', 'trialing', 'past_due')
+    )
+  )`;

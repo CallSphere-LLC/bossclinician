@@ -157,57 +157,74 @@ export async function notifyMentions(input: NotifyMentionsInput): Promise<number
 
 /* ---------------------------------------------------------------- points */
 
-export type PointAction = "post" | "comment" | "challenge_approved";
+/**
+ * Everything that can earn points.
+ *
+ * The set is fixed in code because each name is a place in a handler that calls
+ * `awardPoints`; what the admin edits is the POINTS and the CAP for each,
+ * which live in `community_point_rules`. That split is the point: Yvette can
+ * decide a post is worth one point and cap it at five a day without anybody
+ * deploying, and she cannot invent a rule nothing fires.
+ *
+ * The labels are Kajabi's, so the admin table reads the same as the one it
+ * replaces.
+ */
+export const POINT_ACTIONS = [
+  { action: "challenge_completed", label: "Completed a challenge" },
+  { action: "challenge_comment", label: "Commented on a challenge" },
+  { action: "challenge_reaction", label: "Reacted to a challenge" },
+  { action: "challenge_reaction_received", label: "Received a reaction to a challenge" },
+  { action: "post", label: "Posted a message in channel" },
+  { action: "post_reaction", label: "Reacted to a message in channel" },
+  { action: "poll_response", label: "Responded to poll" },
+  { action: "comment", label: "Commented on a post" },
+  { action: "event_rsvp", label: "RSVPed to event" },
+] as const;
 
-interface PointRule {
-  /** Default award. `challenge_approved` overrides it with the challenge's own. */
+export type PointAction = (typeof POINT_ACTIONS)[number]["action"];
+
+/** The old name for `challenge_completed`, kept so existing callers compile. */
+export type LegacyPointAction = PointAction | "challenge_approved";
+
+interface StoredRule {
   points: number;
-  /** Most awards of this kind that count in a rolling day. null = uncapped. */
-  dailyCap: number | null;
-  /**
-   * Counts what the member has already done today, the new row included, so the
-   * cap can be applied without a separate ledger table. $1 = community,
-   * $2 = member.
-   */
-  countSql: string | null;
+  max_per_period: number | null;
+  period: string;
 }
 
 /**
- * Every rule about what earns points, in one table.
+ * The shipped numbers, used when a community has no row for a rule.
  *
- * The caps are what stops the leaderboard measuring stamina rather than
- * contribution: without them, five points a post makes badges a matter of
- * posting "thanks!" forty times in an evening. They are counted from the rows
- * the member actually created rather than from a ledger, so they stay honest
- * even if a handler forgets to call this.
+ * A community created before this table existed, or a rule added in a later
+ * release, must not silently award zero — and must not award without a cap
+ * either, since an uncapped post rule is how a leaderboard ends up measuring
+ * stamina rather than contribution.
  */
-const POINT_RULES: Record<PointAction, PointRule> = {
-  post: {
-    points: 5,
-    dailyCap: 5,
-    countSql: `SELECT COUNT(*)::int AS n
-                 FROM community_posts p
-                 JOIN community_channels ch ON ch.id = p.channel_id
-                WHERE ch.community_id = $1 AND p.member_id = $2
-                  AND p.created_at > now() - interval '24 hours'`,
-  },
-  comment: {
-    points: 2,
-    dailyCap: 10,
-    countSql: `SELECT COUNT(*)::int AS n
-                 FROM community_comments c
-                 JOIN community_posts p    ON p.id  = c.post_id
-                 JOIN community_channels ch ON ch.id = p.channel_id
-                WHERE ch.community_id = $1 AND c.member_id = $2
-                  AND c.created_at > now() - interval '24 hours'`,
-  },
-  challenge_approved: { points: 0, dailyCap: null, countSql: null },
+const RULE_FALLBACK: Record<PointAction, StoredRule> = {
+  challenge_completed: { points: 100, max_per_period: null, period: "day" },
+  challenge_comment: { points: 3, max_per_period: null, period: "day" },
+  challenge_reaction: { points: 1, max_per_period: null, period: "day" },
+  challenge_reaction_received: { points: 1, max_per_period: null, period: "day" },
+  post: { points: 1, max_per_period: 5, period: "day" },
+  post_reaction: { points: 1, max_per_period: 5, period: "day" },
+  poll_response: { points: 1, max_per_period: null, period: "day" },
+  comment: { points: 2, max_per_period: 10, period: "day" },
+  event_rsvp: { points: 25, max_per_period: null, period: "day" },
+};
+
+/** How far back a cap's period reaches. 'all' means the cap is a lifetime one. */
+const PERIOD_INTERVAL: Record<string, string | null> = {
+  day: "24 hours",
+  week: "7 days",
+  month: "30 days",
+  all: null,
 };
 
 export interface AwardPointsInput {
   communityId: number;
   memberId: number;
-  action: PointAction;
+  /** `LegacyPointAction` so the pre-rule-table name still compiles. */
+  action: LegacyPointAction;
   /** Overrides the rule's default — a challenge carries its own point value. */
   amount?: number;
   /** Where a badge notification should send them. */
@@ -238,19 +255,45 @@ export interface AwardPointsResult {
  * earns nothing — their row is still there, and it should not keep climbing.
  */
 export async function awardPoints(input: AwardPointsInput): Promise<AwardPointsResult> {
-  const rule = POINT_RULES[input.action];
-  const amount = Math.trunc(input.amount ?? rule.points);
   const empty: AwardPointsResult = { awarded: 0, points: 0, badges: [] };
-  if (amount <= 0) return empty;
-
   const db = input.client ?? pool;
 
-  if (rule.countSql !== null && rule.dailyCap !== null) {
-    const counted = await db.query<{ n: number }>(rule.countSql, [
-      input.communityId,
-      input.memberId,
-    ]);
-    if ((counted.rows[0]?.n ?? 0) > rule.dailyCap) return empty;
+  // "challenge_approved" was this action's name before the rule table existed.
+  const action: PointAction =
+    (input.action as string) === "challenge_approved"
+      ? "challenge_completed"
+      : (input.action as PointAction);
+
+  const stored = await db.query<StoredRule>(
+    `SELECT points, max_per_period, period
+       FROM community_point_rules WHERE community_id = $1 AND action = $2`,
+    [input.communityId, action]
+  );
+  const rule = stored.rows[0] ?? RULE_FALLBACK[action] ?? null;
+  if (rule === null) return empty;
+
+  const amount = Math.trunc(input.amount ?? rule.points);
+  if (amount <= 0) return empty;
+
+  /*
+   * The cap is counted from the LEDGER — payouts of this rule — rather than
+   * from the rows the member created. Counting rows meant a bespoke query per
+   * action and a cap that could only ever be daily; counting payouts makes both
+   * generic, and is also the honest question: the cap is on how often this rule
+   * pays, not on how often somebody posts.
+   */
+  if (rule.max_per_period !== null) {
+    const window = PERIOD_INTERVAL[rule.period] ?? null;
+    const counted = await db.query<{ n: number }>(
+      window === null
+        ? `SELECT COUNT(*)::int AS n FROM community_point_events
+            WHERE community_id = $1 AND member_id = $2 AND action = $3`
+        : `SELECT COUNT(*)::int AS n FROM community_point_events
+            WHERE community_id = $1 AND member_id = $2 AND action = $3
+              AND created_at > now() - interval '${window}'`,
+      [input.communityId, input.memberId, action]
+    );
+    if ((counted.rows[0]?.n ?? 0) >= rule.max_per_period) return empty;
   }
 
   const updated = await db.query<{ points: number }>(
@@ -262,6 +305,15 @@ export async function awardPoints(input: AwardPointsInput): Promise<AwardPointsR
   );
   const points = updated.rows[0]?.points;
   if (points === undefined) return empty;
+
+  // After the total, not before: a banned member's UPDATE matches nothing and
+  // must not leave a payout in the ledger that no total reflects, or the cap
+  // and the weekly leaderboard would both count points nobody has.
+  await db.query(
+    `INSERT INTO community_point_events (community_id, member_id, action, points)
+     VALUES ($1, $2, $3, $4)`,
+    [input.communityId, input.memberId, action, amount]
+  );
 
   const earned = await db.query<{ id: number; name: string; emoji: string; threshold: number }>(
     `WITH awarded AS (

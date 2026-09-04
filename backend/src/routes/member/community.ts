@@ -13,7 +13,12 @@ import {
   requireVerifiedEmail,
   type AuthedMember,
 } from "../../middleware/memberAuth";
-import { listEnterableCommunityIds, mayEnterCommunity } from "../../services/access";
+import {
+  CHANNEL_GROUP_VISIBLE,
+  listEnterableCommunityIds,
+  mayEnterCommunity,
+  memberAccessGroupIds,
+} from "../../services/access";
 import {
   NOTIFICATION_KINDS,
   awardPoints,
@@ -220,6 +225,9 @@ interface CommunityContext {
   liveRoomEnabled: boolean;
   liveRoomAlias: string;
   guidelinesMd: string;
+  leaderboardWeekly: boolean;
+  leaderboardMonthly: boolean;
+  leaderboardAllTime: boolean;
   /**
    * True when there are guidelines this member has not accepted, or accepted
    * before they were last changed. Reading stays open either way — the gate is
@@ -248,12 +256,16 @@ interface CommunityRow {
   guidelines_md: string;
   guidelines_updated_at: Date | null;
   guidelines_accepted_at: Date | null;
+  leaderboard_weekly: boolean;
+  leaderboard_monthly: boolean;
+  leaderboard_all_time: boolean;
 }
 
 const COMMUNITY_SELECT = `
   SELECT c.id, c.slug, c.name, c.description, c.cover_image,
          c.live_room_enabled, c.live_room_alias,
          c.guidelines_md, c.guidelines_updated_at,
+         c.leaderboard_weekly, c.leaderboard_monthly, c.leaderboard_all_time,
          cm.id AS membership_id, cm.role, cm.points, cm.bio, cm.headline,
          cm.joined_at, cm.last_seen_at, cm.banned_at, cm.guidelines_accepted_at
     FROM communities c
@@ -347,6 +359,9 @@ async function enterCommunity(
     liveRoomEnabled: membership.live_room_enabled === true,
     liveRoomAlias: membership.live_room_alias ?? "",
     guidelinesMd: membership.guidelines_md ?? "",
+    leaderboardWeekly: membership.leaderboard_weekly !== false,
+    leaderboardMonthly: membership.leaderboard_monthly !== false,
+    leaderboardAllTime: membership.leaderboard_all_time !== false,
     guidelinesPending: guidelinesOutstanding(membership),
   };
 }
@@ -408,9 +423,14 @@ interface ChannelRow {
  * table — so the only people who can be shown one are the moderators and admins
  * of the community. A plain member gets the same 404 as a stranger.
  */
-async function loadChannel(ctx: CommunityContext, channelSlug: string): Promise<ChannelRow> {
-  const found = await pool.query<ChannelRow>(
-    `SELECT id, slug, name, description, format, visibility
+async function loadChannel(
+  ctx: CommunityContext,
+  channelSlug: string,
+  memberId: number
+): Promise<ChannelRow> {
+  const found = await pool.query<ChannelRow & { access_group_id: number | null }>(
+    `SELECT id, slug, name, description, format, visibility, access_group_id,
+            view_modes, default_view_mode
        FROM community_channels
       WHERE community_id = $1 AND slug = $2`,
     [ctx.id, channelSlug]
@@ -418,6 +438,17 @@ async function loadChannel(ctx: CommunityContext, channelSlug: string): Promise<
   const channel = found.rows[0];
   if (!channel) throw notFound(CHANNEL_MISSING);
   if (channel.visibility === "private" && !ctx.moderator) throw notFound(CHANNEL_MISSING);
+
+  /*
+   * Access groups again, and this is the half that matters: the overview simply
+   * omits a channel the member is not in a tier for, which hides it, and
+   * hiding is not access control. This is what stops a URL reaching it.
+   */
+  if (channel.access_group_id !== null && !ctx.moderator) {
+    const groups = await memberAccessGroupIds(memberId);
+    if (!groups.includes(channel.access_group_id)) throw notFound(CHANNEL_MISSING);
+  }
+
   return channel;
 }
 
@@ -854,7 +885,7 @@ memberCommunityRouter.get(
   asyncHandler(async (req, res) => {
     const member = currentMember(req);
     const ctx = await enterFromParams(req);
-    const channel = await loadChannel(ctx, readSlug(req.params.channelSlug, CHANNEL_MISSING));
+    const channel = await loadChannel(ctx, readSlug(req.params.channelSlug, CHANNEL_MISSING), member.id);
     const { page, perPage, offset } = readPage(req);
 
     const found = await pool.query<FeedRow>(
@@ -975,7 +1006,7 @@ memberCommunityRouter.post(
     const member = currentMember(req);
     const ctx = await enterFromParams(req);
     assertGuidelinesAccepted(ctx);
-    const channel = await loadChannel(ctx, readSlug(req.params.channelSlug, CHANNEL_MISSING));
+    const channel = await loadChannel(ctx, readSlug(req.params.channelSlug, CHANNEL_MISSING), member.id);
 
     const parsed = postCreateSchema.safeParse(req.body ?? {});
     if (!parsed.success) throw badRequest("Invalid post", parsed.error.flatten());
@@ -1412,7 +1443,7 @@ memberCommunityRouter.post(
       throw badRequest("That isn't a reaction we support.", parsed.error.flatten());
     }
 
-    const { post } = await loadPost(member, postId);
+    const { post, ctx } = await loadPost(member, postId);
 
     await withTransaction(async (client) => {
       // ON CONFLICT DO NOTHING plus RETURNING is what keeps `reaction_count`
@@ -1430,6 +1461,27 @@ memberCommunityRouter.post(
           `UPDATE community_posts SET reaction_count = reaction_count + 1 WHERE id = $1`,
           [post.id]
         );
+
+        // Both sides earn, which is Kajabi's rule table and the right
+        // incentive: reacting is participation and being reacted to is
+        // contribution. Only on a genuinely new row, so a double-tap pays once,
+        // and never to yourself for your own post.
+        await awardPoints({
+          communityId: ctx.id,
+          memberId: member.id,
+          action: "post_reaction",
+          link: `/community/${ctx.slug}`,
+          client,
+        });
+        if (post.member_id !== null && post.member_id !== member.id) {
+          await awardPoints({
+            communityId: ctx.id,
+            memberId: post.member_id,
+            action: "challenge_reaction_received",
+            link: `/community/${ctx.slug}`,
+            client,
+          });
+        }
       }
     });
 
@@ -1502,7 +1554,7 @@ memberCommunityRouter.post(
     if (!parsed.success) throw badRequest("Invalid vote", parsed.error.flatten());
     const { optionId } = parsed.data;
 
-    const { post } = await loadPost(member, postId);
+    const { post, ctx } = await loadPost(member, postId);
     if (post.kind !== "poll") throw badRequest("That post isn't a poll.");
     if (post.locked) throw forbidden("This poll has been closed.");
 
@@ -1539,6 +1591,15 @@ memberCommunityRouter.post(
           `INSERT INTO community_poll_votes (post_id, option_id, member_id) VALUES ($1, $2, $3)`,
           [post.id, optionId, member.id]
         );
+        // Only on a first vote. Changing your mind is not a second answer, and
+        // paying for it would make a poll farmable by toggling.
+        await awardPoints({
+          communityId: ctx.id,
+          memberId: member.id,
+          action: "poll_response",
+          link: `/community/${ctx.slug}`,
+          client,
+        });
       }
 
       await client.query(
@@ -1737,15 +1798,27 @@ memberCommunityRouter.post(
     const event = found.rows[0];
     if (!event) throw notFound(EVENT_MISSING);
 
-    await enterCommunity(member, { id: event.community_id });
+    const rsvpCtx = await enterCommunity(member, { id: event.community_id });
 
-    const saved = await pool.query<{ status: string }>(
+    const saved = await pool.query<{ status: string; created: boolean }>(
       `INSERT INTO community_event_rsvps (event_id, member_id, status)
        VALUES ($1, $2, $3)
        ON CONFLICT (event_id, member_id) DO UPDATE SET status = EXCLUDED.status
-       RETURNING status`,
+       RETURNING status, (xmax = 0) AS created`,
       [event.id, member.id, parsed.data.status]
     );
+
+    // 25 points in Kajabi's table, and the most valuable single action in it —
+    // so it pays once, on a first "going", not every time somebody toggles
+    // between going and not.
+    if (saved.rows[0]?.created === true && parsed.data.status === "going") {
+      await awardPoints({
+        communityId: rsvpCtx.id,
+        memberId: member.id,
+        action: "event_rsvp",
+        link: `/community/${rsvpCtx.slug}`,
+      });
+    }
 
     const going = await pool.query<{ n: number }>(
       `SELECT COUNT(*)::int AS n FROM community_event_rsvps
@@ -1786,10 +1859,15 @@ memberCommunityRouter.get(
         description: string;
         format: string;
         visibility: string;
+        cover_image: string;
+        view_modes: string[];
+        default_view_mode: string;
+        access_group_id: number | null;
         post_count: number;
         unread_count: number;
       }>(
         `SELECT ch.id, ch.slug, ch.name, ch.description, ch.format, ch.visibility,
+                ch.cover_image, ch.view_modes, ch.default_view_mode, ch.access_group_id,
                 (SELECT COUNT(*)::int FROM community_posts p
                   WHERE p.channel_id = ch.id AND p.status = 'visible') AS post_count,
                 (SELECT COUNT(*)::int FROM community_posts p
@@ -1798,6 +1876,11 @@ memberCommunityRouter.get(
                     AND (p.member_id IS NULL OR p.member_id <> $3)) AS unread_count
            FROM community_channels ch
           WHERE ch.community_id = $1 AND (ch.visibility = 'public' OR $4::bool)
+            -- Access groups: a channel scoped to a tier is only listed for
+            -- members of that tier. Null means the whole community, which is
+            -- every channel that existed before groups did, so this widens
+            -- nothing by default. Moderators see all of them.
+            AND ($4::bool OR ${CHANNEL_GROUP_VISIBLE.replaceAll("$MEMBER$", "$3")})
           ORDER BY ch.sort, ch.id`,
         [ctx.id, since, member.id, ctx.moderator]
       ),
@@ -1865,6 +1948,10 @@ memberCommunityRouter.get(
         description: ch.description,
         format: ch.format,
         visibility: ch.visibility,
+        coverImage: ch.cover_image,
+        // The layouts this channel offers, and the one it opens in.
+        viewModes: ch.view_modes,
+        defaultViewMode: ch.default_view_mode,
         postCount: ch.post_count,
         unreadCount: ch.unread_count,
         href: `/community/${ctx.slug}/${ch.slug}`,
@@ -2055,6 +2142,32 @@ memberCommunityRouter.get(
     const member = currentMember(req);
     const ctx = await enterFromParams(req);
 
+    /*
+     * Three boards, per 2.7, each independently visible.
+     *
+     * All-time reads the running total on the membership; weekly and monthly
+     * sum the point ledger instead. They have to come from different places:
+     * the membership total is a lifetime figure that nothing decrements, so it
+     * cannot answer "this week", and summing the ledger for all time would
+     * disagree with the total the moment anybody's points are adjusted by hand.
+     */
+    const period = ((): "week" | "month" | "all" => {
+      const asked = String(req.query.period ?? "all");
+      return asked === "week" || asked === "month" ? asked : "all";
+    })();
+
+    const allowed =
+      period === "week"
+        ? ctx.leaderboardWeekly
+        : period === "month"
+          ? ctx.leaderboardMonthly
+          : ctx.leaderboardAllTime;
+    if (!allowed && !ctx.moderator) {
+      throw notFound("That leaderboard isn't switched on for this community.");
+    }
+
+    const window = period === "week" ? "7 days" : "30 days";
+
     const found = await pool.query<{
       member_id: number;
       name: string;
@@ -2064,20 +2177,47 @@ memberCommunityRouter.get(
       rank: string;
       badge: string | null;
     }>(
-      `WITH ranked AS (
-         SELECT cm.member_id, ${MEMBER_NAME_SQL} AS name,
-                COALESCE(m.avatar_url, '') AS avatar_url, cm.headline, cm.points,
-                RANK() OVER (ORDER BY cm.points DESC) AS rank,
-                (SELECT b.emoji FROM community_badges b
-                  WHERE b.community_id = cm.community_id AND b.threshold <= cm.points
-                  ORDER BY b.threshold DESC LIMIT 1) AS badge
-           FROM community_memberships cm
-           JOIN members m ON m.id = cm.member_id
-          WHERE cm.community_id = $1 AND cm.banned_at IS NULL AND m.status = 'active'
-       )
-       SELECT * FROM ranked
-        WHERE rank <= 20 OR member_id = $2
-        ORDER BY rank, name`,
+      period === "all"
+        ? `WITH ranked AS (
+             SELECT cm.member_id, ${MEMBER_NAME_SQL} AS name,
+                    COALESCE(m.avatar_url, '') AS avatar_url, cm.headline, cm.points,
+                    RANK() OVER (ORDER BY cm.points DESC) AS rank,
+                    (SELECT b.emoji FROM community_badges b
+                      WHERE b.community_id = cm.community_id AND b.threshold <= cm.points
+                      ORDER BY b.threshold DESC LIMIT 1) AS badge
+               FROM community_memberships cm
+               JOIN members m ON m.id = cm.member_id
+              WHERE cm.community_id = $1 AND cm.banned_at IS NULL AND m.status = 'active'
+           )
+           SELECT * FROM ranked
+            WHERE rank <= 20 OR member_id = $2
+            ORDER BY rank, name`
+        : `WITH earned AS (
+             SELECT e.member_id, SUM(e.points)::int AS points
+               FROM community_point_events e
+              WHERE e.community_id = $1
+                AND e.created_at > now() - interval '${window}'
+              GROUP BY e.member_id
+           ),
+           ranked AS (
+             SELECT cm.member_id, ${MEMBER_NAME_SQL} AS name,
+                    COALESCE(m.avatar_url, '') AS avatar_url, cm.headline,
+                    COALESCE(e.points, 0) AS points,
+                    RANK() OVER (ORDER BY COALESCE(e.points, 0) DESC) AS rank,
+                    (SELECT b.emoji FROM community_badges b
+                      WHERE b.community_id = cm.community_id AND b.threshold <= cm.points
+                      ORDER BY b.threshold DESC LIMIT 1) AS badge
+               FROM community_memberships cm
+               JOIN members m ON m.id = cm.member_id
+               LEFT JOIN earned e ON e.member_id = cm.member_id
+              WHERE cm.community_id = $1 AND cm.banned_at IS NULL AND m.status = 'active'
+                -- Nobody who earned nothing this period: a board of zeroes is
+                -- not a leaderboard, and the empty state says it better.
+                AND COALESCE(e.points, 0) > 0
+           )
+           SELECT * FROM ranked
+            WHERE rank <= 20 OR member_id = $2
+            ORDER BY rank, name`,
       [ctx.id, member.id]
     );
 
