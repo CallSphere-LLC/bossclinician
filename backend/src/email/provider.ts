@@ -132,6 +132,10 @@ const marketingSettingSchema = z.object({
   replyTo: z.string().default(""),
   address: z.string().default(""),
   footer: z.string().default(""),
+  /** 3.9: a logo at the head of marketing email. Blank means text only. */
+  logoUrl: z.string().default(""),
+  defaultSendHour: z.coerce.number().int().min(0).max(23).default(9),
+  defaultTimezone: z.string().default("America/New_York"),
 });
 
 export type MarketingSettings = z.infer<typeof marketingSettingSchema>;
@@ -158,7 +162,16 @@ export async function marketingSettings(): Promise<MarketingSettings> {
   const parsed = marketingSettingSchema.safeParse(await readSetting("marketing_email"));
   return parsed.success
     ? parsed.data
-    : { fromName: "", fromEmail: "", replyTo: "", address: "", footer: "" };
+    : {
+        fromName: "",
+        fromEmail: "",
+        replyTo: "",
+        address: "",
+        footer: "",
+        logoUrl: "",
+        defaultSendHour: 9,
+        defaultTimezone: "America/New_York",
+      };
 }
 
 export async function providerSettings(): Promise<ProviderSettings> {
@@ -510,6 +523,22 @@ export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult>
   // The compliance block needs a contact to address the opt-out to. A marketing
   // send with no contact row cannot honour an unsubscribe and so must not go —
   // every caller in this phase resolves a contact first.
+  /*
+   * 3.9: the logo, above the body and on marketing only.
+   *
+   * Only when it is an https URL. A logo is the first thing in the email and
+   * an <img> pointing at http on an https-delivered message is a mixed-content
+   * block in some clients and a broken picture in the rest — worse than the
+   * text-only header it replaced.
+   */
+  if (isMarketing && /^https:\/\//i.test(settings.logoUrl)) {
+    html =
+      `<div style="margin:0 0 24px"><img src="${escapeHtml(settings.logoUrl)}" ` +
+      `alt="${escapeHtml(settings.fromName || "")}" ` +
+      `style="max-width:220px;height:auto;display:block;border:0"></div>` +
+      html;
+  }
+
   if (isMarketing) {
     if (input.contactId === null || input.contactId === undefined) {
       await pool.query(

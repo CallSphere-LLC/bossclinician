@@ -479,10 +479,37 @@ export async function tickBroadcasts(now: Date = new Date()): Promise<{
   started: number;
   finished: number;
 }> {
+  /*
+   * Event-anchored campaigns are resolved HERE rather than at save time, which
+   * is the whole point of them: "24 hours before the CEU" has to follow the
+   * event if the event moves. Computing an absolute `scheduled_at` when the
+   * campaign was written would silently send at the old time after a
+   * reschedule, which is precisely the bug the brief describes event reminders
+   * having.
+   *
+   * `anchor_offset_minutes` is signed — negative is before, positive is after —
+   * so one column expresses both directions and the arithmetic is the same.
+   */
   const due = await pool.query<{ id: number }>(
-    `SELECT id FROM email_campaigns
-      WHERE status = 'scheduled' AND scheduled_at IS NOT NULL AND scheduled_at <= $1
-      ORDER BY scheduled_at
+    `SELECT c.id
+       FROM email_campaigns c
+       LEFT JOIN events e ON e.id = c.anchor_event_id
+      WHERE c.status = 'scheduled'
+        AND (
+          (c.anchor_kind = 'absolute'
+             AND c.scheduled_at IS NOT NULL
+             AND c.scheduled_at <= $1)
+          OR
+          (c.anchor_kind = 'event_start'
+             AND e.starts_at IS NOT NULL
+             AND e.published
+             AND e.starts_at + make_interval(mins => c.anchor_offset_minutes) <= $1
+             -- Not after the event has been and gone by more than a day: a
+             -- campaign anchored to an event that happened last month must not
+             -- fire the moment somebody re-publishes it.
+             AND e.starts_at + make_interval(mins => c.anchor_offset_minutes) > $1::timestamptz - interval '1 day')
+        )
+      ORDER BY COALESCE(c.scheduled_at, e.starts_at)
       LIMIT 20`,
     [now]
   );
@@ -516,4 +543,214 @@ export async function tickBroadcasts(now: Date = new Date()): Promise<{
   );
 
   return { started, finished: finished.rowCount ?? 0 };
+}
+
+/* ------------------------------------------- upon registration, per person */
+
+/**
+ * Sends an "upon registration" campaign to people as they register.
+ *
+ * Different in kind from every other campaign here, and worth saying why. A
+ * broadcast goes out once, to a list, at one moment. "Upon registration for the
+ * masterclass, plus two hours" is per person on their own clock — two people
+ * who register a week apart get it a week apart — so it cannot be a single
+ * send, and it never reaches a terminal "sent" state: it keeps going for as
+ * long as people keep registering.
+ *
+ * Deduplication is on `email_messages`, which already records one row per
+ * transactional or broadcast send with its source. That is why there is no
+ * extra table: the send log IS the record of who has had it, and it survives
+ * the campaign being edited.
+ */
+export async function tickRegistrationCampaigns(
+  now: Date = new Date()
+): Promise<{ sent: number }> {
+  /*
+   * Stamp the activation moment before doing anything else, and only ever
+   * consider registrations from that moment on.
+   *
+   * Without this, switching on "two hours after they register" for an event
+   * that already has five hundred registrants sends to all five hundred at
+   * once, because every one of them registered more than two hours ago. That
+   * is a mailing nobody asked for, going out under Yvette's name, and it
+   * cannot be recalled. `sent_at` is the stamp — unused by this anchor kind
+   * otherwise, since a per-person campaign never reaches a terminal "sent".
+   *
+   * The stamp happens in its own statement first, so the very tick that
+   * activates a campaign sends to nobody. A first tick that both stamped and
+   * sent would still catch the backlog it is meant to exclude.
+   */
+  await pool.query(
+    `UPDATE email_campaigns
+        SET sent_at = now(), updated_at = now()
+      WHERE status = 'sending'
+        AND anchor_kind = 'event_registration'
+        AND anchor_event_id IS NOT NULL
+        AND sent_at IS NULL`
+  );
+
+  const campaigns = await pool.query<{
+    id: number;
+    anchor_event_id: number;
+    anchor_offset_minutes: number;
+    sent_at: Date;
+  }>(
+    `SELECT id, anchor_event_id, anchor_offset_minutes, sent_at
+       FROM email_campaigns
+      WHERE status = 'sending'
+        AND anchor_kind = 'event_registration'
+        AND anchor_event_id IS NOT NULL
+        AND sent_at IS NOT NULL
+      LIMIT 10`
+  );
+
+  let sent = 0;
+  for (const campaign of campaigns.rows) {
+    /*
+     * Claim first, send second.
+     *
+     * `email_sends` is UNIQUE on (campaign_id, email), so the insert IS the
+     * deduplication: a registrant who already has a row is skipped by the
+     * conflict, and RETURNING hands back only the rows this tick created. Two
+     * overlapping ticks therefore cannot both send to the same person, which a
+     * read-then-send would allow.
+     *
+     * A negative offset is meaningless here — you cannot send before somebody
+     * registers — so GREATEST clamps it to zero.
+     */
+    const claimed = await pool.query<{ id: number }>(
+      `INSERT INTO email_sends (campaign_id, email, contact_id, variant)
+       SELECT $4, r.email, MIN(r.contact_id), 'a'
+         FROM event_registrations r
+        WHERE r.event_id = $1
+          AND r.email <> ''
+          -- Registered since this campaign was switched on. Everybody who was
+          -- already on the list before that is deliberately left alone.
+          AND r.created_at >= $5
+          AND r.created_at + make_interval(mins => GREATEST(0, $2)) <= $3
+        GROUP BY r.email
+        LIMIT 200
+       ON CONFLICT (campaign_id, email) DO NOTHING
+       RETURNING id`,
+      [
+        campaign.anchor_event_id,
+        campaign.anchor_offset_minutes,
+        now,
+        campaign.id,
+        campaign.sent_at,
+      ]
+    );
+
+    for (const row of claimed.rows) {
+      try {
+        await sendBroadcastOne({ campaignId: campaign.id, sendId: row.id });
+        sent += 1;
+      } catch (err) {
+        // One bad address must not stop the rest; the send row records the
+        // failure against that recipient either way.
+        // eslint-disable-next-line no-console
+        console.error(
+          `[broadcasts] registration campaign ${campaign.id} could not send to a registrant:`,
+          (err as Error).message
+        );
+      }
+    }
+  }
+
+  return { sent };
+}
+
+/* ------------------------------------------------------------ A/B decision */
+
+/**
+ * Picks the winning subject line and records it.
+ *
+ * Only once, and only with enough to go on. An A/B call made on four opens is
+ * noise dressed up as a decision, so a campaign below the floor is left
+ * undecided rather than given a winner that means nothing — and the screen says
+ * "too early to call" instead of showing a coin toss as a result.
+ *
+ * Ties go to A. It is the subject the sender wrote first, and a tie means the
+ * test found no difference worth acting on.
+ */
+export const AB_MINIMUM_PER_VARIANT = 20;
+
+export async function decideAbWinner(
+  campaignId: number
+): Promise<{ winner: "a" | "b" | null; reason: string }> {
+  const found = await pool.query<{
+    subject_b: string | null;
+    ab_split_percent: number;
+    ab_winner: string | null;
+    sent_a: number;
+    opened_a: number;
+    sent_b: number;
+    opened_b: number;
+  }>(
+    `SELECT c.subject_b, c.ab_split_percent, c.ab_winner,
+            COUNT(*) FILTER (WHERE s.variant = 'a')::int AS sent_a,
+            COUNT(*) FILTER (WHERE s.variant = 'a' AND s.opened_at IS NOT NULL)::int AS opened_a,
+            COUNT(*) FILTER (WHERE s.variant = 'b')::int AS sent_b,
+            COUNT(*) FILTER (WHERE s.variant = 'b' AND s.opened_at IS NOT NULL)::int AS opened_b
+       FROM email_campaigns c
+       LEFT JOIN email_sends s ON s.campaign_id = c.id
+      WHERE c.id = $1
+      GROUP BY c.id, c.subject_b, c.ab_split_percent, c.ab_winner`,
+    [campaignId]
+  );
+  const row = found.rows[0];
+  if (!row) return { winner: null, reason: "That campaign no longer exists." };
+  if (!row.subject_b) return { winner: null, reason: "This campaign only has one subject line." };
+  if (row.ab_winner === "a" || row.ab_winner === "b") {
+    return { winner: row.ab_winner, reason: "Already decided." };
+  }
+  if (row.sent_a < AB_MINIMUM_PER_VARIANT || row.sent_b < AB_MINIMUM_PER_VARIANT) {
+    return {
+      winner: null,
+      reason: `Too early to call — each subject needs at least ${AB_MINIMUM_PER_VARIANT} sends.`,
+    };
+  }
+
+  const rateA = row.opened_a / row.sent_a;
+  const rateB = row.opened_b / row.sent_b;
+  const winner: "a" | "b" = rateB > rateA ? "b" : "a";
+
+  await pool.query(
+    `UPDATE email_campaigns SET ab_winner = $2, ab_decided_at = now(), updated_at = now()
+      WHERE id = $1 AND ab_winner IS NULL`,
+    [campaignId, winner]
+  );
+
+  return {
+    winner,
+    reason:
+      `Subject ${winner.toUpperCase()} won: ` +
+      `${Math.round(rateA * 100)}% against ${Math.round(rateB * 100)}%.`,
+  };
+}
+
+/**
+ * Decides A/B winners for campaigns that have been out long enough.
+ *
+ * Four hours, because opens arrive over a working day and a decision made
+ * twenty minutes after a send measures who happened to be at their desk. Only
+ * campaigns with a second subject and no verdict yet are considered, so this is
+ * a no-op on almost every tick.
+ */
+export async function sweepAbDecisions(): Promise<{ decided: number }> {
+  const waiting = await pool.query<{ id: number }>(
+    `SELECT id FROM email_campaigns
+      WHERE subject_b IS NOT NULL AND subject_b <> ''
+        AND ab_winner IS NULL
+        AND sent_at IS NOT NULL
+        AND sent_at < now() - interval '4 hours'
+      LIMIT 20`
+  );
+
+  let decided = 0;
+  for (const row of waiting.rows) {
+    const result = await decideAbWinner(row.id);
+    if (result.winner !== null) decided += 1;
+  }
+  return { decided };
 }

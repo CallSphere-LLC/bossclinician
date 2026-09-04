@@ -25,10 +25,15 @@ import { adminRedirectsRouter } from "./redirects";
 import { adminContactsRouter } from "./contacts";
 import { adminTagsRouter } from "./tags";
 import { adminSegmentsRouter } from "./segments";
-import { adminSequencesRouter, adminEmailTemplatesRouter } from "./sequences";
+import {
+  adminSequencesRouter,
+  adminEmailTemplatesRouter,
+  adminSavedTemplatesRouter,
+} from "./sequences";
 import { adminAutomationsV2Router } from "./automationsV2";
 import { adminAffiliatesRouter } from "./affiliates";
 import { adminSettingsV2Router } from "./settingsV2";
+import { adminSendingDomainRouter } from "./sendingDomain";
 import { adminUsersRouter, adminInviteRouter } from "./adminUsers";
 import { adminIntegrationsRouter } from "./integrations";
 import { adminReportsRouter } from "./reports";
@@ -142,11 +147,14 @@ adminRouter.use("/tags", requireAuth, moduleGate("contacts"), adminTagsRouter);
 adminRouter.use("/segments", requireAuth, moduleGate("contacts"), adminSegmentsRouter);
 adminRouter.use("/sequences", requireAuth, moduleGate("marketing"), adminSequencesRouter);
 adminRouter.use("/email-templates", requireAuth, moduleGate("marketing"), adminEmailTemplatesRouter);
+// The admin's own reusable templates, distinct from the system store above.
+adminRouter.use("/saved-templates", requireAuth, moduleGate("marketing"), adminSavedTemplatesRouter);
 // The original engine stays reachable at /growth/automations until its call
 // sites are repointed; these two are different paths, not a replacement in place.
 adminRouter.use("/automations", requireAuth, moduleGate("marketing"), adminAutomationsV2Router);
 adminRouter.use("/affiliates", requireAuth, moduleGate("orders"), adminAffiliatesRouter);
 adminRouter.use("/settings-v2", requireAuth, requirePermission("settings.view"), adminSettingsV2Router);
+adminRouter.use("/sending-domain", requireAuth, moduleGate("settings"), adminSendingDomainRouter);
 adminRouter.use("/admins", requireAuth, adminsGate, adminUsersRouter);
 adminRouter.use("/integrations", requireAuth, moduleGate("settings"), adminIntegrationsRouter);
 adminRouter.use("/reports", requireAuth, moduleGate("reports"), adminReportsRouter);

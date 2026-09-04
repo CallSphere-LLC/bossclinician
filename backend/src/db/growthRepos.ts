@@ -102,6 +102,11 @@ export const campaignsRepo = createCrudRepo<Row>("email_campaigns", [
   "status",
   "scheduledAt",
   "timezone",
+  // 3.3: scheduled relative to an event rather than to the clock. Resolved at
+  // send time, so a rescheduled event carries its campaigns with it.
+  "anchorKind",
+  "anchorEventId",
+  "anchorOffsetMinutes",
 ]);
 
 export const funnelsRepo = createCrudRepo<Row>("funnels", [

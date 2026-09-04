@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
+import { marketingSettings } from "../../email/provider";
 import { pool } from "../../db/pool";
 import { renderMarkdown, renderTokens, sendEmail } from "../../email/provider";
 import { enrollContact, exitContact } from "../../services/sequences";
@@ -47,6 +48,8 @@ const sequenceSchema = z.object({
   exitTagId: z.number().int().positive().nullable().optional(),
   completionTagId: z.number().int().positive().nullable().optional(),
   allowReentry: z.boolean().optional(),
+  /** 3.1: a folder, which campaigns already had and sequences did not. */
+  folder: z.string().trim().max(120).optional(),
 });
 
 const emailSchema = z.object({
@@ -102,12 +105,24 @@ adminSequencesRouter.post(
     const input = sequenceSchema.parse(req.body);
     const slug = input.slug?.trim() || slugify(input.name) || `sequence-${Date.now()}`;
 
+    /*
+     * 3.10: a new sequence starts from the site's defaults rather than from
+     * whatever this file happens to hardcode. Without it every sequence was
+     * configured from scratch and they drifted apart — one sending at 9am
+     * Eastern, the next at midnight UTC because nobody touched the field.
+     *
+     * An explicit value in the request still wins: this is a default, not a
+     * policy.
+     */
+    const marketing = await marketingSettings();
+    const defaultWindowStart = marketing.defaultSendHour * 60;
+
     const result = await pool.query(
       `INSERT INTO email_sequences
          (name, slug, description, status, topic, skip_weekends,
           send_window_start_minute, send_window_end_minute, use_contact_timezone, timezone,
-          exit_on_purchase, exit_tag_id, completion_tag_id, allow_reentry)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+          exit_on_purchase, exit_tag_id, completion_tag_id, allow_reentry, folder)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
        RETURNING *`,
       [
         input.name,
@@ -116,14 +131,15 @@ adminSequencesRouter.post(
         input.status ?? "draft",
         input.topic ?? "marketing",
         input.skipWeekends ?? false,
-        input.sendWindowStartMinute ?? null,
+        input.sendWindowStartMinute ?? defaultWindowStart,
         input.sendWindowEndMinute ?? null,
         input.useContactTimezone ?? true,
-        input.timezone ?? "America/New_York",
+        input.timezone ?? marketing.defaultTimezone,
         input.exitOnPurchase ?? true,
         input.exitTagId ?? null,
         input.completionTagId ?? null,
         input.allowReentry ?? false,
+        input.folder ?? "",
       ]
     );
     res.status(201).json(rowToCamel(result.rows[0]));
@@ -173,6 +189,7 @@ adminSequencesRouter.patch(
           exit_tag_id = CASE WHEN $14::boolean THEN $15::int ELSE exit_tag_id END,
           completion_tag_id = CASE WHEN $16::boolean THEN $17::int ELSE completion_tag_id END,
           allow_reentry = COALESCE($18, allow_reentry),
+          folder      = COALESCE($19, folder),
           updated_at  = now()
         WHERE id = $1
         RETURNING *`,
@@ -195,6 +212,7 @@ adminSequencesRouter.patch(
         "completionTagId" in req.body,
         input.completionTagId ?? null,
         input.allowReentry ?? null,
+        input.folder ?? null,
       ]
     );
     if (result.rowCount === 0) throw notFound("Sequence not found");
@@ -524,5 +542,225 @@ adminEmailTemplatesRouter.patch(
     );
     if (result.rowCount === 0) throw notFound("Template not found");
     res.json(rowToCamel(result.rows[0]));
+  })
+);
+
+/* -------------------------------------------------- specific exclude rules */
+
+/**
+ * GET /:id/excludes
+ *
+ * 3.7. The single global "stop the moment they buy something" is a blunt
+ * instrument: a sequence selling the toolkit should stop when somebody buys the
+ * toolkit, not when they buy a $7 bump. These narrow it to named offers and
+ * named forms, and sit alongside `exit_on_purchase` rather than replacing it —
+ * the global switch is still the right answer for a welcome sequence.
+ */
+adminSequencesRouter.get(
+  "/:id/excludes",
+  asyncHandler(async (req, res) => {
+    const [offers, forms] = await Promise.all([
+      pool.query(
+        `SELECT o.id, o.title
+           FROM sequence_exclude_offers x
+           JOIN offers o ON o.id = x.offer_id
+          WHERE x.sequence_id = $1
+          ORDER BY o.title`,
+        [req.params.id]
+      ),
+      pool.query(
+        `SELECT f.id, f.name
+           FROM sequence_exclude_forms x
+           JOIN forms f ON f.id = x.form_id
+          WHERE x.sequence_id = $1
+          ORDER BY f.name`,
+        [req.params.id]
+      ),
+    ]);
+    res.json({ offers: rowsToCamel(offers.rows), forms: rowsToCamel(forms.rows) });
+  })
+);
+
+const excludesSchema = z.object({
+  offerIds: z.array(z.number().int().positive()).max(100).default([]),
+  formIds: z.array(z.number().int().positive()).max(100).default([]),
+});
+
+/**
+ * PUT /:id/excludes
+ *
+ * Replaces both lists in one transaction. A partial save — offers written and
+ * forms not — would leave a sequence excluding half of what the screen showed.
+ */
+adminSequencesRouter.put(
+  "/:id/excludes",
+  asyncHandler(async (req, res) => {
+    const parsed = excludesSchema.safeParse(req.body ?? {});
+    if (!parsed.success) throw badRequest("Check the offers and forms you chose.");
+
+    const exists = await pool.query(`SELECT 1 FROM email_sequences WHERE id = $1`, [req.params.id]);
+    if (exists.rowCount === 0) throw notFound("Sequence not found");
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query(`DELETE FROM sequence_exclude_offers WHERE sequence_id = $1`, [
+        req.params.id,
+      ]);
+      await client.query(`DELETE FROM sequence_exclude_forms WHERE sequence_id = $1`, [
+        req.params.id,
+      ]);
+      for (const offerId of new Set(parsed.data.offerIds)) {
+        await client.query(
+          `INSERT INTO sequence_exclude_offers (sequence_id, offer_id) VALUES ($1, $2)
+           ON CONFLICT DO NOTHING`,
+          [req.params.id, offerId]
+        );
+      }
+      for (const formId of new Set(parsed.data.formIds)) {
+        await client.query(
+          `INSERT INTO sequence_exclude_forms (sequence_id, form_id) VALUES ($1, $2)
+           ON CONFLICT DO NOTHING`,
+          [req.params.id, formId]
+        );
+      }
+      await client.query("COMMIT");
+    } catch (err) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      throw err;
+    } finally {
+      client.release();
+    }
+
+    res.json({ ok: true });
+  })
+);
+
+/* ------------------------------------------------- the saved template library */
+
+/**
+ * 3.2. A library of the admin's own email templates.
+ *
+ * Deliberately a different table from `email_templates` above, which is the
+ * SYSTEM store: those rows are keyed by purpose (purchase_receipt,
+ * trial_ending, certificate_issued) and the code looks them up by that key, so
+ * a row a person can rename or delete has no business in it. Deleting
+ * `purchase_receipt` would stop receipts having a template at all.
+ *
+ * These are free-form: three fixed starters existed before and could not be
+ * saved to, duplicated or renamed.
+ */
+export const adminSavedTemplatesRouter = Router();
+
+adminSavedTemplatesRouter.get(
+  "/",
+  asyncHandler(async (_req, res) => {
+    const result = await pool.query(
+      `SELECT id, name, subject, body_md, created_at, updated_at
+         FROM email_saved_templates ORDER BY name`
+    );
+    res.json(rowsToCamel(result.rows));
+  })
+);
+
+const savedTemplateSchema = z.object({
+  name: z.string().trim().min(1, "Give the template a name").max(160),
+  subject: z.string().max(500).default(""),
+  bodyMd: z.string().max(200_000).default(""),
+});
+
+/** Save the email on screen as a template, which is the whole point of 3.2. */
+adminSavedTemplatesRouter.post(
+  "/",
+  asyncHandler(async (req, res) => {
+    const input = savedTemplateSchema.parse(req.body);
+    const created = await pool.query(
+      `INSERT INTO email_saved_templates (name, subject, body_md)
+       VALUES ($1, $2, $3)
+       RETURNING id, name, subject, body_md, created_at, updated_at`,
+      [input.name, input.subject, input.bodyMd]
+    );
+    res.status(201).json(rowToCamel(created.rows[0]));
+  })
+);
+
+adminSavedTemplatesRouter.patch(
+  "/:id",
+  asyncHandler(async (req, res) => {
+    const input = savedTemplateSchema.partial().parse(req.body);
+    const saved = await pool.query(
+      `UPDATE email_saved_templates SET
+          name    = COALESCE($2, name),
+          subject = COALESCE($3, subject),
+          body_md = COALESCE($4, body_md),
+          updated_at = now()
+        WHERE id = $1
+        RETURNING id, name, subject, body_md, created_at, updated_at`,
+      [req.params.id, input.name ?? null, input.subject ?? null, input.bodyMd ?? null]
+    );
+    if (saved.rowCount === 0) throw notFound("Template not found");
+    res.json(rowToCamel(saved.rows[0]));
+  })
+);
+
+/**
+ * Duplicate. "(copy)" rather than a bare name, because the UNIQUE-less table
+ * would otherwise show two identical rows and no way to tell which is which.
+ */
+adminSavedTemplatesRouter.post(
+  "/:id/duplicate",
+  asyncHandler(async (req, res) => {
+    const copied = await pool.query(
+      `INSERT INTO email_saved_templates (name, subject, body_md)
+       SELECT left(name || ' (copy)', 160), subject, body_md
+         FROM email_saved_templates WHERE id = $1
+       RETURNING id, name, subject, body_md, created_at, updated_at`,
+      [req.params.id]
+    );
+    if (copied.rowCount === 0) throw notFound("Template not found");
+    res.status(201).json(rowToCamel(copied.rows[0]));
+  })
+);
+
+adminSavedTemplatesRouter.delete(
+  "/:id",
+  asyncHandler(async (req, res) => {
+    const gone = await pool.query(`DELETE FROM email_saved_templates WHERE id = $1`, [
+      req.params.id,
+    ]);
+    if (gone.rowCount === 0) throw notFound("Template not found");
+    res.status(204).end();
+  })
+);
+
+/* ---------------------------------------------------------------- merge tags */
+
+/**
+ * 3.5. Every token the composer understands, with what it becomes.
+ *
+ * Served rather than hardcoded in the client for one reason: the list has to
+ * agree with what the renderer actually substitutes. A picker offering
+ * `{{courseName}}` that renders as the literal text is worse than no picker,
+ * because it puts the broken token into the email under Yvette's name.
+ */
+export const MERGE_TAGS = [
+  { token: "{{firstName}}", label: "First name", example: "Yvette" },
+  { token: "{{lastName}}", label: "Last name", example: "Howard" },
+  { token: "{{name}}", label: "Full name", example: "Yvette Howard" },
+  { token: "{{email}}", label: "Email address", example: "yvette@example.com" },
+  { token: "{{offerName}}", label: "What they bought", example: "The B.O.S.S Blueprint" },
+  { token: "{{courseName}}", label: "Course name", example: "Practice Reset Intensive" },
+  { token: "{{communityName}}", label: "Community name", example: "The Boss" },
+  { token: "{{total}}", label: "Amount paid", example: "$19.00" },
+  { token: "{{date}}", label: "The date in question", example: "September 15" },
+  { token: "{{loginUrl}}", label: "Sign-in link", example: "https://…/login" },
+  { token: "{{startUrl}}", label: "Their library", example: "https://…/library" },
+  { token: "{{unsubscribeUrl}}", label: "Unsubscribe link", example: "https://…/email/prefs" },
+] as const;
+
+adminSavedTemplatesRouter.get(
+  "/merge-tags",
+  asyncHandler(async (_req, res) => {
+    res.json(MERGE_TAGS);
   })
 );

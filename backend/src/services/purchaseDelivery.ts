@@ -363,7 +363,10 @@ export async function deliverPurchase(
     if (order.contact_id !== null) {
       outcome.sequencesExited = await exitContactOnPurchase(
         order.contact_id,
-        `bought ${describe(order)}`
+        `bought ${describe(order)}`,
+        // The offer, so a sequence that named THIS offer exits too — not only
+        // the ones with the blunt global switch on.
+        order.offer_id
       );
     }
 

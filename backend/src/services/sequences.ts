@@ -306,7 +306,12 @@ export async function exitContact(
  */
 export async function exitContactOnPurchase(
   contactId: number,
-  reason = "bought something"
+  reason = "bought something",
+  /**
+   * Which offer was bought. Given, the specific rules apply too; omitted, only
+   * the global switch does — which is what a legacy caller gets, unchanged.
+   */
+  offerId: number | null = null
 ): Promise<number> {
   const res = await pool.query(
     `UPDATE sequence_subscriptions s
@@ -316,8 +321,49 @@ export async function exitContactOnPurchase(
       WHERE q.id = s.sequence_id
         AND s.contact_id = $1
         AND s.status = 'active'
-        AND q.exit_on_purchase`,
-    [contactId, reason.slice(0, 200)]
+        AND (
+          -- The blunt global switch, still the right answer for a welcome
+          -- sequence that should stop the moment somebody becomes a customer.
+          q.exit_on_purchase
+          -- Or a rule naming this offer specifically (3.7). A sequence selling
+          -- the toolkit should stop when somebody buys the toolkit, and keep
+          -- going when they buy a $7 bump.
+          OR ($3::int IS NOT NULL AND EXISTS (
+                SELECT 1 FROM sequence_exclude_offers x
+                 WHERE x.sequence_id = q.id AND x.offer_id = $3
+              ))
+        )`,
+    [contactId, reason.slice(0, 200), offerId]
+  );
+  return res.rowCount ?? 0;
+}
+
+/**
+ * Takes somebody out of the sequences that named the form they just submitted.
+ *
+ * The mirror of the offer rule and the reason 3.7 asks for both: a sequence
+ * whose whole job is to get somebody to book a call has nothing left to say
+ * once they have booked it, and the global purchase switch never fires because
+ * no money moved.
+ */
+export async function exitContactOnFormSubmission(
+  contactId: number,
+  formId: number,
+  reason = "filled in a form"
+): Promise<number> {
+  const res = await pool.query(
+    `UPDATE sequence_subscriptions s
+        SET status = 'exited', exit_reason = $3, next_send_at = NULL,
+            completed_at = now(), updated_at = now()
+       FROM email_sequences q
+      WHERE q.id = s.sequence_id
+        AND s.contact_id = $1
+        AND s.status = 'active'
+        AND EXISTS (
+          SELECT 1 FROM sequence_exclude_forms x
+           WHERE x.sequence_id = q.id AND x.form_id = $2
+        )`,
+    [contactId, formId, reason.slice(0, 200)]
   );
   return res.rowCount ?? 0;
 }

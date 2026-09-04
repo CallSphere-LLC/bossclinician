@@ -372,7 +372,19 @@ export const SETTING_DEFINITIONS: SettingDefinition[] = [
     group: "email",
     label: "Who your emails come from",
     description: "This appears on every email you send, and the law requires the address.",
-    defaults: { fromName: "", fromEmail: "", replyTo: "", address: "", footer: "" },
+    defaults: {
+      fromName: "",
+      fromEmail: "",
+      replyTo: "",
+      address: "",
+      footer: "",
+      // 3.9: a logo at the head of marketing email.
+      logoUrl: "",
+      // 3.10: what a NEW sequence starts with, rather than every sequence
+      // being configured from scratch and drifting apart.
+      defaultSendHour: 9,
+      defaultTimezone: "America/New_York",
+    },
     fields: [
       {
         name: "fromName",
@@ -392,6 +404,29 @@ export const SETTING_DEFINITIONS: SettingDefinition[] = [
         label: "Replies go to",
         help: "Leave blank to use the sending address.",
         type: "email",
+      },
+      {
+        name: "logoUrl",
+        label: "Logo at the top of marketing emails",
+        help: "A URL to an image. Leave blank for text only — a broken logo looks worse than none.",
+        type: "text",
+        placeholder: "https://bossclinician.com/logo.png",
+      },
+      {
+        name: "defaultSendHour",
+        label: "New sequences send at",
+        help: "The hour a newly created sequence uses until you change it. 0–23.",
+        type: "number",
+        min: 0,
+        max: 23,
+        unit: "o'clock",
+      },
+      {
+        name: "defaultTimezone",
+        label: "New sequences use this timezone",
+        help: "Yours, unless a sequence is set to use each reader's own.",
+        type: "text",
+        placeholder: "America/New_York",
       },
       {
         name: "address",

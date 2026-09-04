@@ -3,7 +3,12 @@ import { env } from "../config/env";
 import { pool } from "../db/pool";
 import { renderMarkdown, sendEmail } from "../email/provider";
 import { runAutomation, type RunContext } from "../automations/engineV2";
-import { sendBroadcastOne, tickBroadcasts } from "../services/broadcasts";
+import {
+  sendBroadcastOne,
+  sweepAbDecisions,
+  tickBroadcasts,
+  tickRegistrationCampaigns,
+} from "../services/broadcasts";
 import { upsertContact } from "../services/contacts";
 import { sendDueEmail, tickDueSubscriptions } from "../services/sequences";
 import { registerHandler } from "./worker";
@@ -299,6 +304,12 @@ export function registerEmailJobs(): void {
   registerHandler("sequence.tick", () => tickDueSubscriptions());
   registerHandler("sequence.sendEmail", (payload) => sequenceSendEmail(payload));
   registerHandler("broadcast.tick", () => tickBroadcasts());
+  // Its own handler, because it never finishes: an "upon registration"
+  // campaign keeps sending for as long as people keep registering, so it
+  // cannot share the sweep that closes a campaign off when its sends have all
+  // left.
+  registerHandler("broadcast.registrationTick", () => tickRegistrationCampaigns());
+  registerHandler("broadcast.abDecide", () => sweepAbDecisions());
   registerHandler("broadcast.sendOne", (payload) =>
     sendBroadcastOne(broadcastPayload.parse(payload))
   );

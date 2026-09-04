@@ -11,6 +11,7 @@ import { fireTriggerAsync } from "../../automations/engine";
 // engine above still owns `lead_created` until that mount is switched, so a form
 // submission has to reach both. Aliased because the two export the same name.
 import { publishDomainEvent } from "../../services/domainEvents";
+import { exitContactOnFormSubmission } from "../../services/sequences";
 import {
   applyTags,
   linkContact,
@@ -557,6 +558,22 @@ growthPublicRouter.post(
       subjectId: form.id,
       source: `form:${form.slug}`,
     });
+
+    // 3.7: a sequence whose job was to get somebody to fill in THIS form has
+    // nothing left to say once they have. The global purchase switch never
+    // fires here, because no money moved.
+    if (contactId !== null) {
+      await exitContactOnFormSubmission(contactId, form.id, `filled in ${form.name}`).catch(
+        (error: unknown) => {
+          // Worth having, never worth failing a form submission for.
+          console.error(
+            "[forms] could not apply sequence exclude rules:",
+            (error as Error).message
+          );
+          return 0;
+        }
+      );
+    }
 
     res.status(201).json({ ok: true, message: form.success_message });
   }),
