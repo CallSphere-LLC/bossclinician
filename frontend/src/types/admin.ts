@@ -139,6 +139,8 @@ export interface CommunityChannel {
 }
 
 export interface CommunityDetail extends Omit<Community, "channelCount" | "memberCount" | "postCount"> {
+  /** Long-form markdown members must accept before posting. */
+  guidelinesMd?: string;
   channels: CommunityChannel[];
 }
 
@@ -702,4 +704,75 @@ export interface ContentReport {
   issuesSent: number;
   communityPosts: number;
   mediaAssets: number;
+}
+
+/* ------------------------------------------------- community, deepened (2.x) */
+
+export interface AdminPointRule {
+  action: string;
+  /** Kajabi's own wording, so the table reads the same as the one it replaces. */
+  label: string;
+  points: number;
+  /** Null is uncapped — right for a once-per-thing rule like an RSVP. */
+  maxPerPeriod: number | null;
+  period: "day" | "week" | "month" | "all";
+}
+
+export interface AdminAccessGroup {
+  id: Id;
+  name: string;
+  description: string;
+  sort: number;
+  memberCount: number;
+  channelCount: number;
+  createdAt: string;
+}
+
+export interface AdminAccessGroupMember {
+  memberId: Id;
+  name: string;
+  email: string;
+  /** 'manual' only — purchase-based tiers are derived from a live grant. */
+  source: string;
+  addedAt: string;
+}
+
+export interface AdminCommunityReport {
+  id: Id;
+  reason: string;
+  status: string;
+  createdAt: string;
+  resolvedAt: string | null;
+  postId: Id | null;
+  commentId: Id | null;
+  reporterName: string;
+  content: string;
+  contentStatus: string;
+  authorName: string;
+  channelName: string;
+}
+
+export interface AdminScheduledPost {
+  id: Id;
+  title: string;
+  body: string;
+  kind: string;
+  mediaUrl: string;
+  mediaLabel: string;
+  publishAt: string;
+  createdAt: string;
+  authorName: string;
+  channelName: string;
+  channelSlug: string;
+}
+
+export interface AdminLiveVisit {
+  id: Id;
+  memberId: Id;
+  memberName: string;
+  email: string;
+  joinedAt: string;
+  leftAt: string | null;
+  /** Null while they are still in the room. */
+  seconds: number | null;
 }

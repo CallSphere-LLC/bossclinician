@@ -414,6 +414,8 @@ interface ChannelRow {
   description: string;
   format: string;
   visibility: string;
+  view_modes: string[];
+  default_view_mode: string;
 }
 
 /**
@@ -920,6 +922,10 @@ memberCommunityRouter.get(
         description: channel.description,
         format: channel.format,
         visibility: channel.visibility,
+        // The layouts this channel offers and the one it opens in, so the
+        // switcher renders without a second request for the overview.
+        viewModes: channel.view_modes ?? ["feed"],
+        defaultViewMode: channel.default_view_mode ?? "feed",
       },
       posts: found.rows.map((row) =>
         toPostJson(row, member.id, reactions.get(row.id) ?? [], polls.get(row.id))

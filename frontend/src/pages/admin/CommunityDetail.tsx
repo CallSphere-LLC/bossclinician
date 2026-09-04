@@ -7,11 +7,16 @@ import {
   Award,
   CalendarDays,
   Check,
+  Clock,
   Hash,
+  Layers,
   MessageSquare,
   Pin,
   Plus,
+  ScrollText,
   Send,
+  ShieldAlert,
+  Sparkles,
   Target,
   Trash2,
   Trophy,
@@ -30,6 +35,11 @@ import type {
   CommunityPost,
   LeaderboardEntry,
   Member,
+  AdminAccessGroup,
+  AdminCommunityReport,
+  AdminPointRule,
+  AdminScheduledPost,
+  CommunityDetail as CommunityDetailShape,
 } from "@/types/admin";
 import { cn } from "@/lib/cn";
 import { formatDateTime, formatNumber, formatRelative } from "@/lib/format";
@@ -58,9 +68,14 @@ import {
 const TAB_LIST = [
   { value: "channels", label: "Channels", icon: Hash },
   { value: "members", label: "Members", icon: Users },
+  { value: "groups", label: "Access groups", icon: Layers },
   { value: "challenges", label: "Challenges", icon: Target },
   { value: "events", label: "Events", icon: CalendarDays },
   { value: "badges", label: "Badges", icon: Award },
+  { value: "points", label: "Points", icon: Sparkles },
+  { value: "review", label: "Review feed", icon: ShieldAlert },
+  { value: "scheduled", label: "Scheduled", icon: Clock },
+  { value: "guidelines", label: "Guidelines", icon: ScrollText },
 ] as const;
 
 /**
@@ -173,6 +188,21 @@ export default function CommunityDetail() {
           </Tabs.Content>
           <Tabs.Content value="badges">
             <BadgesTab communityId={communityId} />
+          </Tabs.Content>
+          <Tabs.Content value="groups">
+            <AccessGroupsTab communityId={communityId} />
+          </Tabs.Content>
+          <Tabs.Content value="points">
+            <PointRulesTab communityId={communityId} />
+          </Tabs.Content>
+          <Tabs.Content value="review">
+            <ReviewFeedTab communityId={communityId} />
+          </Tabs.Content>
+          <Tabs.Content value="scheduled">
+            <ScheduledPostsTab communityId={communityId} />
+          </Tabs.Content>
+          <Tabs.Content value="guidelines">
+            <GuidelinesTab communityId={communityId} community={community} />
           </Tabs.Content>
         </div>
       </Tabs.Root>
@@ -1284,5 +1314,543 @@ function BadgesTab({ communityId }: { communityId: number }) {
 
       {confirmDialog}
     </div>
+  );
+}
+
+/* ------------------------------------------------------------ Access groups */
+
+/**
+ * The tier layer.
+ *
+ * Deleting a group deliberately opens its channels to the whole community
+ * rather than orphaning them — the database does that with ON DELETE SET NULL,
+ * and it is the safe direction: nobody loses access they already had. The
+ * dialog says so, because "delete" that quietly widens access is worse than
+ * one that says it will.
+ */
+function AccessGroupsTab({ communityId }: { communityId: number }) {
+  const [groups, setGroups] = useState<AdminAccessGroup[] | null>(null);
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [confirm, confirmDialog] = useConfirm();
+
+  const load = useCallback(() => {
+    adminApi
+      .accessGroups(communityId)
+      .then(setGroups)
+      .catch(() => toast.error("We couldn't load your access groups."));
+  }, [communityId]);
+
+  useEffect(load, [load]);
+
+  const create = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!name.trim()) return;
+    setSaving(true);
+    try {
+      await adminApi.accessGroupCreate(communityId, { name, description });
+      setName("");
+      setDescription("");
+      load();
+      toast.success("Group added.");
+    } catch (err) {
+      toast.error(friendlyError(err, "access group"));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="space-y-5">
+      <Card>
+        <CardHeader
+          title="Access groups"
+          subtitle="Tiers inside this community. Channels can be limited to one, and an offer can grant it."
+        />
+        <form onSubmit={create} className="flex flex-wrap items-end gap-3 px-5 py-5">
+          <Field label="Group name" className="min-w-[12rem] flex-1">
+            <Input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Inner Circle"
+              maxLength={120}
+            />
+          </Field>
+          <Field label="What it is" className="min-w-[14rem] flex-[2]">
+            <Input
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="The paid tier"
+              maxLength={600}
+            />
+          </Field>
+          <Button type="submit" size="sm" disabled={saving || !name.trim()}>
+            <Plus />
+            {saving ? "Adding…" : "Add group"}
+          </Button>
+        </form>
+      </Card>
+
+      {groups === null ? (
+        <Skeleton className="h-32 w-full" />
+      ) : groups.length === 0 ? (
+        <EmptyState
+          icon={<Layers />}
+          title="No groups yet"
+          description="Without a group, every channel is open to everyone in the community — which is fine until you want a tier that isn't."
+        />
+      ) : (
+        <div className="space-y-3">
+          {groups.map((group) => (
+            <Card key={group.id} className="flex flex-wrap items-center gap-4 px-5 py-4">
+              <div className="min-w-0 flex-1">
+                <p className="font-semibold text-ink">{group.name}</p>
+                {group.description && (
+                  <p className="truncate text-sm text-ink-soft">{group.description}</p>
+                )}
+              </div>
+              <Badge tone="neutral">
+                {pluralize(group.memberCount, "member", "members")}
+              </Badge>
+              <Badge tone="neutral">
+                {pluralize(group.channelCount, "channel", "channels")}
+              </Badge>
+              <Button
+                variant="dangerGhost"
+                size="sm"
+                onClick={async () => {
+                  const ok = await confirm({
+                    title: `Delete ${group.name}?`,
+                    description:
+                      group.channelCount > 0
+                        ? `Its ${pluralize(group.channelCount, "channel", "channels")} will become open to everyone in the community. Nobody loses access.`
+                        : "Members of this group keep their community access.",
+                    confirmLabel: "Yes, delete it",
+                    destructive: true,
+                  });
+                  if (!ok) return;
+                  try {
+                    await adminApi.accessGroupDelete(communityId, Number(group.id));
+                    load();
+                    toast.success("Group deleted.");
+                  } catch (err) {
+                    toast.error(friendlyError(err, "access group"));
+                  }
+                }}
+              >
+                <Trash2 />
+                Delete
+              </Button>
+            </Card>
+          ))}
+        </div>
+      )}
+      {confirmDialog}
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------- Point rules */
+
+const PERIOD_LABELS: Record<string, string> = {
+  day: "a day",
+  week: "a week",
+  month: "a month",
+  all: "ever",
+};
+
+/**
+ * Kajabi's rules table, editable.
+ *
+ * The MAXIMUM column is the one that matters and the one people skip: without a
+ * cap, a point-per-post rule makes the leaderboard a measure of stamina, and
+ * badges something you get by typing "thanks!" forty times in an evening.
+ */
+function PointRulesTab({ communityId }: { communityId: number }) {
+  const [rules, setRules] = useState<AdminPointRule[] | null>(null);
+  const [savingAction, setSavingAction] = useState<string | null>(null);
+
+  const load = useCallback(() => {
+    adminApi
+      .pointRules(communityId)
+      .then(setRules)
+      .catch(() => toast.error("We couldn't load your points rules."));
+  }, [communityId]);
+
+  useEffect(load, [load]);
+
+  const save = async (rule: AdminPointRule, patch: Partial<AdminPointRule>) => {
+    const next = { ...rule, ...patch };
+    setSavingAction(rule.action);
+    try {
+      const saved = await adminApi.pointRuleSave(communityId, rule.action, {
+        points: next.points,
+        maxPerPeriod: next.maxPerPeriod,
+        period: next.period,
+      });
+      setRules((prev) =>
+        prev ? prev.map((r) => (r.action === rule.action ? { ...r, ...saved } : r)) : prev,
+      );
+    } catch (err) {
+      toast.error(friendlyError(err, "points rule"));
+      load();
+    } finally {
+      setSavingAction(null);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader
+        title="Points"
+        subtitle="What earns points, and how often it can. Get points when you engage with your community."
+      />
+      <div className="overflow-x-auto px-5 py-5">
+        {rules === null ? (
+          <Skeleton className="h-48 w-full" />
+        ) : (
+          <table className="w-full min-w-[34rem] text-left text-sm">
+            <thead>
+              <tr className="text-xs uppercase tracking-wide text-ink-soft">
+                <th className="py-2 pr-4 font-semibold">Rule</th>
+                <th className="py-2 pr-4 font-semibold">Points</th>
+                <th className="py-2 font-semibold">Most times</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rules.map((rule) => (
+                <tr key={rule.action} className="border-t border-hairline/70">
+                  <td className="py-3 pr-4 font-medium text-ink">{rule.label}</td>
+                  <td className="py-3 pr-4">
+                    <Input
+                      type="number"
+                      min={0}
+                      max={10000}
+                      className="h-11 w-24"
+                      aria-label={`Points for ${rule.label}`}
+                      value={rule.points}
+                      disabled={savingAction === rule.action}
+                      onChange={(e) =>
+                        setRules((prev) =>
+                          prev
+                            ? prev.map((r) =>
+                                r.action === rule.action
+                                  ? { ...r, points: Number(e.target.value) }
+                                  : r,
+                              )
+                            : prev,
+                        )
+                      }
+                      onBlur={() => save(rule, {})}
+                    />
+                  </td>
+                  <td className="py-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Input
+                        type="number"
+                        min={1}
+                        max={1000}
+                        className="h-11 w-24"
+                        aria-label={`Cap for ${rule.label}`}
+                        placeholder="No limit"
+                        value={rule.maxPerPeriod ?? ""}
+                        disabled={savingAction === rule.action}
+                        onChange={(e) =>
+                          setRules((prev) =>
+                            prev
+                              ? prev.map((r) =>
+                                  r.action === rule.action
+                                    ? {
+                                        ...r,
+                                        maxPerPeriod:
+                                          e.target.value === "" ? null : Number(e.target.value),
+                                      }
+                                    : r,
+                                )
+                              : prev,
+                          )
+                        }
+                        onBlur={() => save(rule, {})}
+                      />
+                      <select
+                        className={cn(selectStyles, "w-auto")}
+                        aria-label={`Period for ${rule.label}`}
+                        value={rule.period}
+                        disabled={savingAction === rule.action}
+                        onChange={(e) =>
+                          void save(rule, { period: e.target.value as AdminPointRule["period"] })
+                        }
+                      >
+                        {Object.entries(PERIOD_LABELS).map(([value, label]) => (
+                          <option key={value} value={value}>
+                            {label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+        <p className="mt-4 text-xs text-ink-soft">
+          Leave the limit blank for no cap. A cap is what stops the leaderboard
+          measuring who posts most rather than who helps most.
+        </p>
+      </div>
+    </Card>
+  );
+}
+
+/* --------------------------------------------------------------- Review feed */
+
+function ReviewFeedTab({ communityId }: { communityId: number }) {
+  const [reports, setReports] = useState<AdminCommunityReport[] | null>(null);
+  const [status, setStatus] = useState("open");
+  const [confirm, confirmDialog] = useConfirm();
+
+  const load = useCallback(() => {
+    setReports(null);
+    adminApi
+      .communityReports(communityId, status)
+      .then(setReports)
+      .catch(() => toast.error("We couldn't load the review feed."));
+  }, [communityId, status]);
+
+  useEffect(load, [load]);
+
+  const resolve = async (report: AdminCommunityReport, action: "hide" | "dismiss") => {
+    if (action === "hide") {
+      const ok = await confirm({
+        title: "Hide this from the community?",
+        description: "Members won't see it any more. Every open report about it is closed too.",
+        confirmLabel: "Yes, hide it",
+        destructive: true,
+      });
+      if (!ok) return;
+    }
+    try {
+      await adminApi.communityReportResolve(communityId, Number(report.id), action);
+      load();
+      toast.success(action === "hide" ? "Hidden." : "Report dismissed.");
+    } catch (err) {
+      toast.error(friendlyError(err, "report"));
+    }
+  };
+
+  return (
+    <div className="space-y-5">
+      <Card>
+        <CardHeader
+          title="Review feed"
+          subtitle="What members have reported. Nothing here is hidden until you say so."
+          action={
+            <select
+              className={cn(selectStyles, "w-auto")}
+              aria-label="Which reports to show"
+              value={status}
+              onChange={(e) => setStatus(e.target.value)}
+            >
+              <option value="open">Waiting on you</option>
+              <option value="actioned">Hidden</option>
+              <option value="dismissed">Dismissed</option>
+              <option value="all">Everything</option>
+            </select>
+          }
+        />
+      </Card>
+
+      {reports === null ? (
+        <Skeleton className="h-32 w-full" />
+      ) : reports.length === 0 ? (
+        <EmptyState
+          icon={<ShieldAlert />}
+          title={status === "open" ? "Nothing to review" : "Nothing here"}
+          description={
+            status === "open"
+              ? "When somebody reports a post or a comment, it will wait for you here."
+              : "Try a different filter."
+          }
+        />
+      ) : (
+        <div className="space-y-3">
+          {reports.map((report) => (
+            <Card key={report.id} className="px-5 py-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold text-ink">
+                    {report.reporterName} reported {report.commentId ? "a comment" : "a post"}
+                    {report.channelName ? ` in ${report.channelName}` : ""}
+                  </p>
+                  <p className="mt-1 text-sm text-ink-soft">“{report.reason}”</p>
+                  <p className="mt-2 rounded-xl bg-cream px-3.5 py-2.5 text-sm text-ink">
+                    <span className="font-semibold">{report.authorName}: </span>
+                    {report.content.slice(0, 400) || "(nothing to show)"}
+                  </p>
+                </div>
+                <div className="flex shrink-0 flex-wrap gap-2">
+                  {report.status === "open" ? (
+                    <>
+                      <Button variant="danger" size="sm" onClick={() => void resolve(report, "hide")}>
+                        Hide it
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => void resolve(report, "dismiss")}
+                      >
+                        It's fine
+                      </Button>
+                    </>
+                  ) : (
+                    <Badge tone={report.status === "actioned" ? "red" : "neutral"}>
+                      {report.status === "actioned" ? "Hidden" : "Dismissed"}
+                    </Badge>
+                  )}
+                </div>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+      {confirmDialog}
+    </div>
+  );
+}
+
+/* ----------------------------------------------------------- Scheduled posts */
+
+function ScheduledPostsTab({ communityId }: { communityId: number }) {
+  const [posts, setPosts] = useState<AdminScheduledPost[] | null>(null);
+
+  const load = useCallback(() => {
+    adminApi
+      .communityScheduledPosts(communityId)
+      .then(setPosts)
+      .catch(() => toast.error("We couldn't load your scheduled posts."));
+  }, [communityId]);
+
+  useEffect(load, [load]);
+
+  return (
+    <div className="space-y-5">
+      <Card>
+        <CardHeader
+          title="Waiting to go out"
+          subtitle="Posts written now and published later. Nobody can see them until they land."
+        />
+      </Card>
+
+      {posts === null ? (
+        <Skeleton className="h-32 w-full" />
+      ) : posts.length === 0 ? (
+        <EmptyState
+          icon={<Clock />}
+          title="Nothing scheduled"
+          description="Write a post in a channel and choose a time for it, and it will wait here until then."
+        />
+      ) : (
+        <div className="space-y-3">
+          {posts.map((post) => (
+            <Card key={post.id} className="flex flex-wrap items-center gap-4 px-5 py-4">
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-ink">
+                  {post.title || post.body.slice(0, 70) || "(no words yet)"}
+                </p>
+                <p className="text-xs text-ink-soft">
+                  {post.channelName} · by {post.authorName} · goes out{" "}
+                  {formatDateTime(post.publishAt)}
+                </p>
+              </div>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={async () => {
+                  try {
+                    await adminApi.communityScheduledPostSave(communityId, Number(post.id), {
+                      publishNow: true,
+                    });
+                    load();
+                    toast.success("Published.");
+                  } catch (err) {
+                    toast.error(friendlyError(err, "scheduled post"));
+                  }
+                }}
+              >
+                <Send />
+                Send it now
+              </Button>
+            </Card>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------- Guidelines */
+
+function GuidelinesTab({
+  communityId,
+  community,
+}: {
+  communityId: number;
+  community: CommunityDetailShape | null;
+}) {
+  const [text, setText] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    if (community && !loaded) {
+      setText(community.guidelinesMd ?? "");
+      setLoaded(true);
+    }
+  }, [community, loaded]);
+
+  return (
+    <Card>
+      <CardHeader
+        title="Community guidelines"
+        subtitle="Shown in a panel members must accept before they post. Markdown, so headings and links work."
+      />
+      <div className="space-y-4 px-5 py-5">
+        <Textarea
+          rows={14}
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder={"## House rules\n\nBe kind. No selling.\n\nEmail yvette@bossclinician.com if something is wrong."}
+        />
+        <div className="flex flex-wrap items-center gap-3">
+          <Button
+            size="sm"
+            disabled={saving}
+            onClick={async () => {
+              setSaving(true);
+              try {
+                const res = await adminApi.communityGuidelinesSave(communityId, text);
+                toast.success(
+                  res.reAccceptanceRequired
+                    ? "Saved. Members will be asked to accept these again."
+                    : "Saved. Nothing changed, so nobody has to accept again.",
+                );
+              } catch (err) {
+                toast.error(friendlyError(err, "guidelines"));
+              } finally {
+                setSaving(false);
+              }
+            }}
+          >
+            {saving ? "Saving…" : "Save guidelines"}
+          </Button>
+          <p className="text-xs text-ink-soft">
+            Changing the words asks everyone to accept again — rules somebody
+            agreed to in March are not the rules they're being held to now.
+          </p>
+        </div>
+      </div>
+    </Card>
   );
 }

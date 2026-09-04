@@ -88,6 +88,11 @@ export interface CommunityChannel {
   format: string;
   /** `public` or `private`. Private channels only reach moderators at all. */
   visibility: string;
+  coverImage: string;
+  /** The layouts this channel offers: feed, forum, gallery. */
+  viewModes: string[];
+  /** Which of them it opens in. */
+  defaultViewMode: string;
   postCount: number;
   unreadCount: number;
   href: string;
@@ -191,6 +196,8 @@ export interface ChannelFeedPage {
     description: string;
     format: string;
     visibility: string;
+    viewModes: string[];
+    defaultViewMode: string;
   };
   posts: CommunityPost[];
   /** The server's allowlist. The reaction row is drawn from this, not a const. */

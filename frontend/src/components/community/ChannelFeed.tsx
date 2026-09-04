@@ -4,6 +4,11 @@ import { Loader2, MessagesSquare } from "lucide-react";
 import { toast } from "sonner";
 import { GlassCard } from "@/components/luxe/GlassCard";
 import { PostCard } from "@/components/community/PostCard";
+import {
+  ForumView,
+  GalleryView,
+  ViewModeSwitch,
+} from "@/components/community/ChannelViews";
 import { PostComposer } from "@/components/community/PostComposer";
 import { useMember } from "@/hooks/useMember";
 import { MemberApiError } from "@/lib/memberApi";
@@ -53,6 +58,13 @@ export function ChannelFeed({ communitySlug, channelSlug, role }: ChannelFeedPro
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState("");
+  /**
+   * Which layout is on screen. Null until the channel loads, then its default —
+   * the channel decides where a member starts, and the switcher only overrides
+   * it for this visit. Storing the choice would mean a member who once tried
+   * the gallery never sees the feed the host chose.
+   */
+  const [viewMode, setViewMode] = useState<string | null>(null);
 
   const sentinel = useRef<HTMLDivElement | null>(null);
   // Optimistic posts need ids the server will never mint, so the list can find
@@ -234,6 +246,16 @@ export function ChannelFeed({ communitySlug, channelSlug, role }: ChannelFeedPro
   const impersonated = member?.impersonatedBy != null;
   const verified = member?.emailVerifiedAt != null;
 
+  /*
+   * The channel's default until the member picks something else, and forced
+   * back to a mode the channel actually offers — a host who removes "gallery"
+   * must not leave anybody stranded in it.
+   */
+  const offered = channel?.viewModes ?? ["feed"];
+  const mode = viewMode !== null && offered.includes(viewMode)
+    ? viewMode
+    : (channel?.defaultViewMode ?? "feed");
+
   return (
     <div className="flex flex-col gap-5">
       {channel && channel.description && (
@@ -289,7 +311,23 @@ export function ChannelFeed({ communitySlug, channelSlug, role }: ChannelFeedPro
         </GlassCard>
       )}
 
-      {posts.length > 0 && (
+      {channel && channel.viewModes.length > 1 && (
+        <ViewModeSwitch
+          modes={channel.viewModes}
+          active={mode}
+          onChange={setViewMode}
+        />
+      )}
+
+      {posts.length > 0 && mode === "forum" && (
+        <ForumView posts={posts} communitySlug={communitySlug} channelSlug={channelSlug} />
+      )}
+
+      {posts.length > 0 && mode === "gallery" && (
+        <GalleryView posts={posts} communitySlug={communitySlug} channelSlug={channelSlug} />
+      )}
+
+      {posts.length > 0 && mode === "feed" && (
         <ul className="flex flex-col gap-4">
           {posts.map((post) => (
             <li key={post.id}>

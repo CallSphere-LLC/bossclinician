@@ -42,6 +42,12 @@ import type {
   RevenueSummary,
   StripeStatus,
   Subscription,
+  AdminAccessGroup,
+  AdminAccessGroupMember,
+  AdminCommunityReport,
+  AdminLiveVisit,
+  AdminPointRule,
+  AdminScheduledPost,
 } from "@/types/admin";
 
 /**
@@ -530,6 +536,85 @@ export const adminApi = {
   communityUpdate: (id: number, data: Record<string, unknown>) =>
     request<Community>(`/admin/community/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   communityDelete: (id: number) => request<void>(`/admin/community/${id}`, { method: "DELETE" }),
+
+  /* ---- gamification rules (2.7) ---- */
+
+  pointRules: (communityId: number) =>
+    request<AdminPointRule[]>(`/admin/community/${communityId}/point-rules`),
+
+  pointRuleSave: (communityId: number, action: string, data: Record<string, unknown>) =>
+    request<AdminPointRule>(`/admin/community/${communityId}/point-rules/${action}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+
+  /* ---- access groups (2.10) ---- */
+
+  accessGroups: (communityId: number) =>
+    request<AdminAccessGroup[]>(`/admin/community/${communityId}/access-groups`),
+
+  accessGroupCreate: (communityId: number, data: Record<string, unknown>) =>
+    request<AdminAccessGroup>(`/admin/community/${communityId}/access-groups`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  accessGroupDelete: (communityId: number, groupId: number) =>
+    request<void>(`/admin/community/${communityId}/access-groups/${groupId}`, {
+      method: "DELETE",
+    }),
+
+  accessGroupMembers: (communityId: number, groupId: number) =>
+    request<AdminAccessGroupMember[]>(
+      `/admin/community/${communityId}/access-groups/${groupId}/members`,
+    ),
+
+  accessGroupAddMember: (communityId: number, groupId: number, memberId: number) =>
+    request<{ ok: true }>(`/admin/community/${communityId}/access-groups/${groupId}/members`, {
+      method: "POST",
+      body: JSON.stringify({ memberId }),
+    }),
+
+  accessGroupRemoveMember: (communityId: number, groupId: number, memberId: number) =>
+    request<void>(
+      `/admin/community/${communityId}/access-groups/${groupId}/members/${memberId}`,
+      { method: "DELETE" },
+    ),
+
+  /* ---- moderation and scheduling ---- */
+
+  communityReports: (communityId: number, status = "open") =>
+    request<AdminCommunityReport[]>(
+      `/admin/community/${communityId}/reports?status=${encodeURIComponent(status)}`,
+    ),
+
+  communityReportResolve: (communityId: number, reportId: number, action: "hide" | "dismiss") =>
+    request<{ ok: true }>(`/admin/community/${communityId}/reports/${reportId}/resolve`, {
+      method: "POST",
+      body: JSON.stringify({ action }),
+    }),
+
+  communityScheduledPosts: (communityId: number) =>
+    request<AdminScheduledPost[]>(`/admin/community/${communityId}/scheduled-posts`),
+
+  communityScheduledPostSave: (
+    communityId: number,
+    postId: number,
+    data: Record<string, unknown>,
+  ) =>
+    request<{ id: number }>(`/admin/community/${communityId}/scheduled-posts/${postId}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+
+  communityLiveVisits: (communityId: number) =>
+    request<AdminLiveVisit[]>(`/admin/community/${communityId}/live-visits`),
+
+  communityGuidelinesSave: (communityId: number, guidelinesMd: string) =>
+    request<{ reAccceptanceRequired: boolean }>(
+      `/admin/community/${communityId}/guidelines`,
+      { method: "PUT", body: JSON.stringify({ guidelinesMd }) },
+    ),
 
   channelCreate: (communityId: number, data: Record<string, unknown>) =>
     request<CommunityChannel>(`/admin/community/${communityId}/channels`, {
