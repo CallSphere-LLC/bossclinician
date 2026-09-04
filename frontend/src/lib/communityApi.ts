@@ -117,6 +117,8 @@ export interface CommunityOverview {
   channels: CommunityChannel[];
   unreadTotal: number;
   unreadNotifications: number;
+  /** Null when the community has no live room, so the chip is simply absent. */
+  liveRoom: { enabled: true; label: string; href: string } | null;
 }
 
 /* ------------------------------------------------------------------ feed */
@@ -421,8 +423,36 @@ function query(params: Record<string, string | number | boolean | undefined>): s
 /** Path segments are member-supplied only in the sense that they came from a URL bar. */
 const seg = encodeURIComponent;
 
+/* ------------------------------------------------------------- live room */
+
+export interface LiveRoomPeer {
+  peerId: string;
+  memberId: number;
+  name: string;
+  avatarUrl: string;
+  role: string;
+}
+
+export interface LiveRoomStatus {
+  /** Yvette calls hers Office Hours; this is Kajabi's "feature alias". */
+  label: string;
+  communityName: string;
+  access: "always" | "hosted";
+  open: boolean;
+  /** Said plainly — a closed room with no reason reads as a bug. */
+  closedReason: string;
+  capacity: number;
+  occupancy: number;
+  full: boolean;
+  youAreHost: boolean;
+  roster: LiveRoomPeer[];
+}
+
 export const communityApi = {
   list: () => memberRequest<CommunityListResponse>("/member/community"),
+
+  liveStatus: (slug: string) =>
+    memberRequest<LiveRoomStatus>(`/member/community/${seg(slug)}/live`),
 
   overview: (slug: string) => memberRequest<CommunityOverview>(`/member/community/${seg(slug)}`),
 

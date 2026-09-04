@@ -216,6 +216,9 @@ interface CommunityContext {
   lastSeenAt: Date | null;
   /** Private channels are the one thing a plain member is not shown. */
   moderator: boolean;
+  /** The live room, so the chrome can offer it without a second request. */
+  liveRoomEnabled: boolean;
+  liveRoomAlias: string;
 }
 
 interface CommunityRow {
@@ -232,10 +235,13 @@ interface CommunityRow {
   joined_at: Date | null;
   last_seen_at: Date | null;
   banned_at: Date | null;
+  live_room_enabled: boolean;
+  live_room_alias: string;
 }
 
 const COMMUNITY_SELECT = `
   SELECT c.id, c.slug, c.name, c.description, c.cover_image,
+         c.live_room_enabled, c.live_room_alias,
          cm.id AS membership_id, cm.role, cm.points, cm.bio, cm.headline,
          cm.joined_at, cm.last_seen_at, cm.banned_at
     FROM communities c
@@ -326,6 +332,8 @@ async function enterCommunity(
     joinedAt: membership.joined_at ?? new Date(),
     lastSeenAt: membership.last_seen_at,
     moderator: role === "moderator" || role === "admin",
+    liveRoomEnabled: membership.live_room_enabled === true,
+    liveRoomAlias: membership.live_room_alias ?? "",
   };
 }
 
@@ -1752,6 +1760,17 @@ memberCommunityRouter.get(
       })),
       unreadTotal: channels.rows.reduce((sum, ch) => sum + ch.unread_count, 0),
       unreadNotifications: counts.rows[0]?.unread_notifications ?? 0,
+      // Carried on the overview so the chrome can offer the room without a
+      // second request on every community page. The room's own endpoint still
+      // owns whether it is open and who is in it — this is only whether it
+      // exists and what Yvette calls it.
+      liveRoom: ctx.liveRoomEnabled
+        ? {
+            enabled: true,
+            label: ctx.liveRoomAlias.trim() || "Live room",
+            href: `/community/${ctx.slug}/live`,
+          }
+        : null,
     });
   })
 );

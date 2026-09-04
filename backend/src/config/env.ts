@@ -88,6 +88,27 @@ export const env = {
     snsTopicArn: process.env.SES_SNS_TOPIC_ARN ?? "",
   },
 
+  /**
+   * STUN/TURN for the community live room.
+   *
+   * Same scheme the telehealth app on this host uses: coturn started with a
+   * `--static-auth-secret`, and the browser handed a short-lived credential
+   * minted from it (TURN REST API) rather than a standing password.
+   *
+   * Both blank is a supported configuration, not a broken one — the room still
+   * connects over host and STUN candidates, which covers most home and office
+   * networks. It fails on symmetric NAT, which is exactly what TURN relays, so
+   * the ICE endpoint reports whether a relay is configured instead of leaving
+   * a silent hole for someone to discover mid-call.
+   */
+  turn: {
+    host: process.env.TURN_HOST ?? "",
+    /** Never sent to a browser. Only HMACs of a timestamped username are. */
+    staticAuthSecret: process.env.TURN_STATIC_AUTH_SECRET ?? "",
+    /** A public STUN fallback so a room works with no TURN deployed at all. */
+    stunFallback: process.env.STUN_FALLBACK_URL ?? "stun:stun.l.google.com:19302",
+  },
+
   uploadDir,
   protectedUploadDir,
   // Course videos are the large case; images sit far below this. Keep in sync

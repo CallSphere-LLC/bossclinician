@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { Hash, Loader2, Lock, Users } from "lucide-react";
+import { Hash, Loader2, Lock, Radio, Users } from "lucide-react";
 import { Seo } from "@/components/Seo";
 import { MemberShell } from "@/components/member/MemberShell";
 import { LuxeButton } from "@/components/luxe/LuxeButton";
@@ -189,6 +189,29 @@ function ChannelStrip({
             </Link>
           </li>
         ))}
+
+        {/* The live room sits in the channel strip rather than the links below,
+            because that is where members look for "places to be" — and it
+            carries the host's own name for it, not ours. */}
+        {overview.liveRoom && (
+          <li className="snap-start">
+            <Link
+              to={overview.liveRoom.href}
+              aria-current={activeChannel === "live" ? "page" : undefined}
+              className={cn(
+                "inline-flex min-h-[2.75rem] items-center gap-2 whitespace-nowrap rounded-full px-4",
+                "text-[0.7rem] font-semibold uppercase tracking-[0.12em] transition-colors duration-300",
+                "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold",
+                activeChannel === "live"
+                  ? "bg-gold/[0.12] text-gold"
+                  : "text-white/55 hover:bg-white/[0.05] hover:text-white",
+              )}
+            >
+              <Radio aria-hidden className="size-3.5" />
+              {overview.liveRoom.label}
+            </Link>
+          </li>
+        )}
       </ul>
 
       <div className="flex flex-wrap items-center gap-x-5 gap-y-2">

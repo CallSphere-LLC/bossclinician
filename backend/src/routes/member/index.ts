@@ -6,6 +6,7 @@ import { memberProgressRouter } from "./progress";
 import { memberDownloadsRouter } from "./downloads";
 import { memberCertificatesRouter } from "./certificates";
 import { memberCommunityRouter } from "./community";
+import { memberCommunityLiveRouter } from "./communityLive";
 import { memberCoachingRouter } from "./coaching";
 import { memberPublishingRouter } from "./publishing";
 import { memberAffiliateRouter } from "./affiliatePortal";
@@ -26,6 +27,9 @@ memberRouter.use("/billing", memberBillingRouter);
 memberRouter.use("/library", memberLibraryRouter);
 memberRouter.use("/certificates", memberCertificatesRouter);
 memberRouter.use("/downloads", memberDownloadsRouter);
+// Before the general community router, whose `/:slug` handler would
+// otherwise swallow `/:slug/live` as a community named "live".
+memberRouter.use("/community", memberCommunityLiveRouter);
 memberRouter.use("/community", memberCommunityRouter);
 memberRouter.use("/coaching", memberCoachingRouter);
 memberRouter.use("/affiliate", memberAffiliateRouter);

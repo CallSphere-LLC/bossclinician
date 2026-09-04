@@ -21,6 +21,12 @@ const COMMUNITY_FIELDS = [
   "cover_image",
   "access",
   "published",
+  // The live room. Kajabi calls the alias a "feature alias"; Yvette's is
+  // Office Hours, and members should see her word for it rather than ours.
+  "live_room_enabled",
+  "live_room_access",
+  "live_room_alias",
+  "live_room_capacity",
 ] as const;
 const CHANNEL_FIELDS = ["slug", "name", "description", "format", "visibility", "sort"] as const;
 const POST_FIELDS = ["title", "body", "media_url", "pinned", "status"] as const;
@@ -111,9 +117,35 @@ adminCommunityRouter.get(
   }),
 );
 
+/**
+ * Guards the two live-room values the database has CHECK constraints on.
+ *
+ * Without this a typo reaches Postgres and comes back as a 500 with a
+ * constraint name in it, which tells the person editing the room nothing.
+ */
+function assertLiveRoomValues(body: Record<string, unknown>): void {
+  if (body.liveRoomAccess !== undefined) {
+    if (body.liveRoomAccess !== "always" && body.liveRoomAccess !== "hosted") {
+      throw badRequest("Live room access is either always open or open when you're there.");
+    }
+  }
+  if (body.liveRoomCapacity !== undefined) {
+    const capacity = Number(body.liveRoomCapacity);
+    if (!Number.isInteger(capacity) || capacity < 2 || capacity > 16) {
+      // The ceiling is a mesh constraint, not a preference: every participant
+      // uploads their camera once per other participant.
+      throw badRequest("Choose a room size between 2 and 16 people.");
+    }
+  }
+  if (body.liveRoomAlias !== undefined && String(body.liveRoomAlias).length > 60) {
+    throw badRequest("That name for the room is too long.");
+  }
+}
+
 adminCommunityRouter.put(
   "/:id",
   asyncHandler(async (req, res) => {
+    assertLiveRoomValues(req.body as Record<string, unknown>);
     const update = buildUpdate(req.body as Record<string, unknown>, COMMUNITY_FIELDS);
     if (!update) throw badRequest("No updatable fields supplied");
 
@@ -133,6 +165,40 @@ adminCommunityRouter.delete(
     const result = await pool.query("DELETE FROM communities WHERE id = $1", [req.params.id]);
     if (result.rowCount === 0) throw notFound("Community not found");
     res.status(204).end();
+  }),
+);
+
+/**
+ * GET /:id/live-visits
+ *
+ * Who has been in the live room, most recent first.
+ *
+ * The in-process roster answers "who is in there now" and forgets the moment
+ * the room empties, so this reads the persisted visits instead — "did anyone
+ * come to office hours on Tuesday" is the question Yvette actually asks, and
+ * it is unanswerable from presence.
+ */
+adminCommunityRouter.get(
+  "/:id/live-visits",
+  asyncHandler(async (req, res) => {
+    const visits = await pool.query(
+      `SELECT v.id, v.member_id, v.joined_at, v.left_at,
+              COALESCE(NULLIF(TRIM(m.first_name || ' ' || m.last_name), ''),
+                       NULLIF(m.name, ''), m.email::text) AS member_name,
+              m.email::text AS email,
+              -- Still open when left_at is null, which is a live visit rather
+              -- than a missing one; the client shows it as "in there now".
+              CASE WHEN v.left_at IS NULL THEN NULL
+                   ELSE GREATEST(0, EXTRACT(EPOCH FROM (v.left_at - v.joined_at))::int)
+              END AS seconds
+         FROM community_live_visits v
+         JOIN members m ON m.id = v.member_id
+        WHERE v.community_id = $1
+        ORDER BY v.joined_at DESC
+        LIMIT 200`,
+      [req.params.id],
+    );
+    res.json(rowsToCamel(visits.rows));
   }),
 );
 

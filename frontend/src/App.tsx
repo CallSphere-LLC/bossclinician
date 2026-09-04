@@ -27,6 +27,7 @@ const MemberCoursePlayer = lazy(() => import("@/pages/member/CoursePlayer"));
 const MemberCommunity = lazy(() => import("@/pages/member/Community"));
 const MemberCommunityChannel = lazy(() => import("@/pages/member/CommunityChannel"));
 const MemberCommunityProfile = lazy(() => import("@/pages/member/CommunityProfile"));
+const MemberCommunityLive = lazy(() => import("@/pages/member/CommunityLive"));
 const MemberCoaching = lazy(() => import("@/pages/member/Coaching"));
 const MemberCoachingSession = lazy(() => import("@/pages/member/CoachingSession"));
 const MemberPodcasts = lazy(() => import("@/pages/member/Podcasts"));
@@ -179,6 +180,9 @@ function memberRoutes() {
         {/* Two segments, no `channels` in the middle: that is the shape the
             API builds into every channel's own `href`, and a route that
             disagreed sent each one to the marketing 404. */}
+        {/* Before the channel wildcard below, which would otherwise treat
+            "live" as the slug of a channel that does not exist. */}
+        <Route path="/community/:slug/live" element={<MemberCommunityLive />} />
         <Route path="/community/:slug/:channelSlug" element={<MemberCommunityChannel />} />
         <Route path="/coaching" element={<MemberCoaching />} />
         <Route path="/coaching/sessions/:id" element={<MemberCoachingSession />} />
