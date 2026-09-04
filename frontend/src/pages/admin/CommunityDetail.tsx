@@ -56,6 +56,8 @@ import {
   selectStyles,
   Skeleton,
   Textarea,
+  Chip,
+  chipRowStyles,
 } from "@/pages/admin/ui/primitives";
 import { Modal, useConfirm } from "@/pages/admin/ui/Dialog";
 import {
@@ -157,14 +159,20 @@ export default function CommunityDetail() {
       />
 
       <Tabs.Root defaultValue="channels">
-        <Tabs.List className="flex gap-1 overflow-x-auto rounded-xl border border-hairline/70 bg-surface p-1.5">
+        {/* Wraps rather than scrolls. This started as five tabs in a row and is
+            now ten; `overflow-x-auto` kept them reachable in principle but
+            clipped the last three at the card's edge with no visible hint that
+            anything was there, which is indistinguishable from them being
+            missing. Wrapping costs a second line on a narrow window and shows
+            every tab at every width. */}
+        <Tabs.List className="flex flex-wrap gap-1 rounded-xl border border-hairline/70 bg-surface p-1.5">
           {TAB_LIST.map((tab) => {
             const Icon = tab.icon;
             return (
               <Tabs.Trigger
                 key={tab.value}
                 value={tab.value}
-                className="flex shrink-0 items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-ink-soft transition-colors hover:text-plum data-[state=active]:bg-brand-gradient data-[state=active]:text-white"
+                className="flex min-h-11 shrink-0 items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-semibold text-ink-soft transition-colors hover:text-plum data-[state=active]:bg-brand-gradient data-[state=active]:text-white"
               >
                 <Icon className="size-4" />
                 {tab.label}
@@ -224,7 +232,22 @@ function ChannelsTab({
   const [active, setActive] = useState<CommunityChannel | null>(null);
   const [posts, setPosts] = useState<CommunityPost[] | null>(null);
   const [creating, setCreating] = useState(false);
-  const [form, setForm] = useState({ name: "", description: "", format: "feed", visibility: "public" });
+  const [form, setForm] = useState({
+    name: "",
+    description: "",
+    format: "feed",
+    visibility: "public",
+    coverImage: "",
+    accessGroupId: "",
+    viewModes: ["feed"] as string[],
+    defaultViewMode: "feed",
+  });
+  /** Offered in the tier picker. Empty is fine — it just means no tiers yet. */
+  const [groups, setGroups] = useState<AdminAccessGroup[]>([]);
+
+  useEffect(() => {
+    adminApi.accessGroups(communityId).then(setGroups).catch(() => setGroups([]));
+  }, [communityId]);
   const [composer, setComposer] = useState("");
   const [confirm, confirmDialog] = useConfirm();
 
@@ -249,10 +272,24 @@ function ChannelsTab({
     e.preventDefault();
     if (!form.name.trim()) return;
     try {
-      await adminApi.channelCreate(communityId, form);
+      await adminApi.channelCreate(communityId, {
+        ...form,
+        // "" is the empty option in a <select>; the endpoint wants null for
+        // "the whole community".
+        accessGroupId: form.accessGroupId === "" ? null : Number(form.accessGroupId),
+      });
       toast.success("Channel created");
       setCreating(false);
-      setForm({ name: "", description: "", format: "feed", visibility: "public" });
+      setForm({
+        name: "",
+        description: "",
+        format: "feed",
+        visibility: "public",
+        coverImage: "",
+        accessGroupId: "",
+        viewModes: ["feed"],
+        defaultViewMode: "feed",
+      });
       onChange();
     } catch (err) {
       toast.error(friendlyError(err, "channel"));
@@ -304,13 +341,9 @@ function ChannelsTab({
         <CardHeader
           title="Channels"
           action={
-            <Button
-              variant="ghost"
-              size="iconSm"
-              aria-label="Add a channel"
-              onClick={() => setCreating(true)}
-            >
+            <Button variant="secondary" size="sm" onClick={() => setCreating(true)}>
               <Plus />
+              New
             </Button>
           }
         />
@@ -539,6 +572,92 @@ function ChannelsTab({
               </div>
             </Field>
           </div>
+
+          <Field
+            label="Which members?"
+            hint="leave open to the whole community unless you have a tier for it"
+            htmlFor="channel-group"
+          >
+            <select
+              id="channel-group"
+              className={selectStyles}
+              value={form.accessGroupId}
+              onChange={(e) => setForm((f) => ({ ...f, accessGroupId: e.target.value }))}
+            >
+              <option value="">Everyone in this community</option>
+              {groups.map((group) => (
+                <option key={group.id} value={String(group.id)}>
+                  {group.name} only
+                </option>
+              ))}
+            </select>
+          </Field>
+
+          <Field
+            label="How can members read it?"
+            hint="pick at least one — the default is what they see first"
+          >
+            <div className={chipRowStyles}>
+              {CHANNEL_VIEW_MODES.map((mode) => {
+                const on = form.viewModes.includes(mode.value);
+                return (
+                  <Chip
+                    key={mode.value}
+                    selected={on}
+                    title={mode.help}
+                    onClick={() =>
+                      setForm((f) => {
+                        // Never empty: turning the last one off would leave a
+                        // channel with no way to read it, which the database
+                        // refuses anyway.
+                        const next = on
+                          ? f.viewModes.filter((v) => v !== mode.value)
+                          : [...f.viewModes, mode.value];
+                        if (next.length === 0) return f;
+                        return {
+                          ...f,
+                          viewModes: next,
+                          // Keep the default inside the set she just chose.
+                          defaultViewMode: next.includes(f.defaultViewMode)
+                            ? f.defaultViewMode
+                            : next[0],
+                        };
+                      })
+                    }
+                  >
+                    {mode.label}
+                  </Chip>
+                );
+              })}
+            </div>
+            {form.viewModes.length > 1 && (
+              <select
+                className={cn(selectStyles, "mt-3")}
+                aria-label="Which one members see first"
+                value={form.defaultViewMode}
+                onChange={(e) => setForm((f) => ({ ...f, defaultViewMode: e.target.value }))}
+              >
+                {form.viewModes.map((mode) => (
+                  <option key={mode} value={mode}>
+                    Opens as {CHANNEL_VIEW_MODES.find((m) => m.value === mode)?.label ?? mode}
+                  </option>
+                ))}
+              </select>
+            )}
+          </Field>
+
+          <Field
+            label="Cover image"
+            hint="optional — a link to a picture, 1280x720 looks best"
+            htmlFor="channel-cover"
+          >
+            <Input
+              id="channel-cover"
+              value={form.coverImage}
+              onChange={(e) => setForm((f) => ({ ...f, coverImage: e.target.value }))}
+              placeholder="https://…/cover.jpg"
+            />
+          </Field>
         </form>
       </Modal>
 
@@ -546,6 +665,13 @@ function ChannelsTab({
     </div>
   );
 }
+
+/** Kajabi's three, with its own words for what each is good for. */
+const CHANNEL_VIEW_MODES = [
+  { value: "feed", label: "Feed", help: "Cards to scroll through — text and pictures." },
+  { value: "forum", label: "Forum", help: "A compact table for scanning topics and replies." },
+  { value: "gallery", label: "Gallery", help: "A grid, for channels that are mostly images." },
+] as const;
 
 /* ----------------------------------------------------------------- Members */
 
