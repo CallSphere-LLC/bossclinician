@@ -28,6 +28,7 @@ const MemberCommunity = lazy(() => import("@/pages/member/Community"));
 const MemberCommunityChannel = lazy(() => import("@/pages/member/CommunityChannel"));
 const MemberCommunityProfile = lazy(() => import("@/pages/member/CommunityProfile"));
 const MemberCommunityLive = lazy(() => import("@/pages/member/CommunityLive"));
+const MemberEvents = lazy(() => import("@/pages/member/Events"));
 const MemberCoaching = lazy(() => import("@/pages/member/Coaching"));
 const MemberCoachingSession = lazy(() => import("@/pages/member/CoachingSession"));
 const MemberPodcasts = lazy(() => import("@/pages/member/Podcasts"));
@@ -161,6 +162,7 @@ function memberRoutes() {
           path="/library/:productSlug/lessons/:lessonSlug"
           element={<MemberCoursePlayer />}
         />
+        <Route path="/my-events" element={<MemberEvents />} />
         <Route path="/community" element={<MemberCommunity />} />
         <Route path="/community/:slug" element={<MemberCommunity />} />
         {/* The people directory and one person's profile. Declared alongside

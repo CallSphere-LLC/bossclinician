@@ -2,7 +2,16 @@ import { useState, type ReactNode } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { Toaster } from "sonner";
-import { BookOpen, ChevronDown, Eye, LogOut, Sparkles, User, Users } from "lucide-react";
+import {
+  BookOpen,
+  CalendarDays,
+  ChevronDown,
+  Eye,
+  LogOut,
+  Sparkles,
+  User,
+  Users,
+} from "lucide-react";
 import { useMember } from "@/hooks/useMember";
 import { cn } from "@/lib/cn";
 
@@ -38,6 +47,9 @@ const RAIL: RailLink[] = [
   { to: "/library", label: "Library", icon: BookOpen },
   { to: "/community", label: "Community", icon: Users },
   { to: "/coaching", label: "Coaching", icon: Sparkles },
+  // Between coaching and account, because it is a thing you attend rather than
+  // a setting you change.
+  { to: "/my-events", label: "Events", icon: CalendarDays },
   { to: "/account", label: "Account", icon: User },
 ];
 

@@ -8,6 +8,7 @@ import { memberCertificatesRouter } from "./certificates";
 import { memberCommunityRouter } from "./community";
 import { memberCommunityLiveRouter } from "./communityLive";
 import { memberCoachingRouter } from "./coaching";
+import { memberEventsRouter } from "./events";
 import { memberPublishingRouter } from "./publishing";
 import { memberAffiliateRouter } from "./affiliatePortal";
 
@@ -32,6 +33,7 @@ memberRouter.use("/downloads", memberDownloadsRouter);
 memberRouter.use("/community", memberCommunityLiveRouter);
 memberRouter.use("/community", memberCommunityRouter);
 memberRouter.use("/coaching", memberCoachingRouter);
+memberRouter.use("/events", memberEventsRouter);
 memberRouter.use("/affiliate", memberAffiliateRouter);
 
 // Progress routes are keyed on a lesson rather than on the product it belongs
