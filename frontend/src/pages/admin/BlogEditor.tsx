@@ -495,7 +495,7 @@ export default function BlogEditor() {
               </Field>
 
               {editingAddress ? (
-                <div className="rounded-xl border border-hairline bg-white/[0.03] p-4">
+                <div className="rounded-xl border border-hairline bg-raise p-4">
                   <Field
                     label="Web address"
                     hint="the last part is the bit you choose"
@@ -554,7 +554,7 @@ export default function BlogEditor() {
               title="Body"
               subtitle={words ? pluralize(words, "word") : "The article itself."}
               action={
-                <div className="flex items-center gap-1 rounded-xl border border-hairline bg-white/[0.04] p-1">
+                <div className="flex items-center gap-1 rounded-xl border border-hairline bg-raise p-1">
                   <Button
                     variant={preview ? "ghost" : "secondary"}
                     size="sm"
@@ -574,7 +574,7 @@ export default function BlogEditor() {
             />
             <div className="p-5">
               {preview ? (
-                <div className="prose-boss min-h-[26rem] rounded-xl border border-hairline bg-white/[0.03] p-5">
+                <div className="prose-boss min-h-[26rem] rounded-xl border border-hairline bg-raise p-5">
                   {body.trim() ? (
                     <ReactMarkdown remarkPlugins={[remarkGfm]}>{body}</ReactMarkdown>
                   ) : (
@@ -585,7 +585,7 @@ export default function BlogEditor() {
                 </div>
               ) : (
                 <>
-                  <div className="mb-2 flex flex-wrap items-center gap-1 rounded-xl border border-hairline bg-white/[0.04] p-1">
+                  <div className="mb-2 flex flex-wrap items-center gap-1 rounded-xl border border-hairline bg-raise p-1">
                     {TOOLBAR.map(({ id: formatId, label, Icon }) => (
                       <Button
                         key={formatId}
@@ -813,7 +813,7 @@ function ImagePickerModal({
                   src={asset.previewUrl}
                   alt={asset.title || asset.originalName}
                   loading="lazy"
-                  className="aspect-[16/9] w-full bg-white/[0.04] object-cover"
+                  className="aspect-[16/9] w-full bg-raise object-cover"
                 />
                 <span className="block truncate px-3 py-2 text-xs text-ink-soft">
                   {asset.title || asset.originalName}

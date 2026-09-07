@@ -86,9 +86,9 @@ export default function Tags() {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="Contacts"
+        eyebrow="People"
         title="Tags"
-        description="Labels you put on people so you can find them again — quiz answers, waitlists, anyone who's been to a retreat."
+        description="Labels you attach to people to organise them and trigger automations."
         actions={
           <>
             <Button variant="secondary" size="sm" asChild>

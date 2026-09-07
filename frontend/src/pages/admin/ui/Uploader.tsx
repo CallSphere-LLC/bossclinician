@@ -161,7 +161,7 @@ export function UploadDropzone({
           <motion.span
             animate={dragging ? { y: -4, scale: 1.06 } : { y: 0, scale: 1 }}
             transition={{ type: "spring", stiffness: 300, damping: 20 }}
-            className="grid size-12 place-items-center rounded-2xl bg-brand-gradient text-white shadow-[0_10px_24px_-10px_rgba(92,69,125,0.8)]"
+            className="grid size-12 place-items-center rounded-2xl bg-accent-solid text-accent-on shadow-[0_10px_24px_-10px_rgba(92,69,125,0.8)]"
           >
             <CloudUpload className="size-6" />
           </motion.span>
@@ -214,7 +214,7 @@ export function UploadDropzone({
                   initial={{ opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, x: 12 }}
-                  className="flex items-center gap-3 rounded-xl border border-hairline bg-white/[0.04] px-3.5 py-3"
+                  className="flex items-center gap-3 rounded-xl border border-hairline bg-raise px-3.5 py-3"
                 >
                   <span
                     className={cn(

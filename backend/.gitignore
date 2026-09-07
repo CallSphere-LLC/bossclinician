@@ -3,4 +3,8 @@ dist/
 .env
 uploads/*
 !uploads/.gitkeep
+# Signed-URL delivery drops member-only media here (lesson video, attachments).
+# Runtime uploads, same as uploads/ above — not source, and large.
+uploads-protected/*
+!uploads-protected/.gitkeep
 *.log

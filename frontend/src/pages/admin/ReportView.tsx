@@ -276,7 +276,7 @@ export default function ReportView() {
               {report.group}
             </p>
           )}
-          <h1 className="font-display text-[1.75rem] leading-tight text-white">
+          <h1 className="font-display text-[1.75rem] leading-tight text-ink">
             {report?.name ?? "Loading your numbers…"}
           </h1>
           {report && (
@@ -355,7 +355,7 @@ export default function ReportView() {
             type="checkbox"
             checked={range.compare}
             onChange={(e) => setRange((current) => ({ ...current, compare: e.target.checked }))}
-            className="size-4 rounded border-hairline bg-white/[0.06] accent-plum-bright"
+            className="size-4 rounded border-hairline bg-raise accent-plum-bright"
           />
           Compare with the period before
         </label>
@@ -389,7 +389,7 @@ export default function ReportView() {
       </Card>
 
       {report?.note && (
-        <p className="rounded-xl border border-hairline bg-white/[0.03] px-4 py-3 text-sm leading-relaxed text-ink-soft">
+        <p className="rounded-xl border border-hairline bg-raise px-4 py-3 text-sm leading-relaxed text-ink-soft">
           {report.note}
         </p>
       )}

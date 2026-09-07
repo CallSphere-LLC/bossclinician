@@ -6,6 +6,7 @@ import {
   ArrowLeft,
   ArrowUp,
   ClipboardList,
+  Eye,
   Flag,
   ListChecks,
   Plus,
@@ -312,7 +313,7 @@ function QuestionBlock({
         </label>
 
         {typedAnswer ? (
-          <p className="rounded-xl border border-hairline bg-white/[0.03] px-4 py-3 text-sm text-ink-soft">
+          <p className="rounded-xl border border-hairline bg-raise px-4 py-3 text-sm text-ink-soft">
             People type their own answer here, so there is nothing to score. You will see what they
             wrote further down the page.
           </p>
@@ -594,7 +595,7 @@ function ResultBlock({
 
 function StatTile({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-hairline bg-white/[0.03] px-4 py-3">
+    <div className="rounded-xl border border-hairline bg-raise px-4 py-3">
       <p className="text-xs text-ink-soft">{label}</p>
       <p className="mt-1 font-display text-xl text-ink">{value}</p>
     </div>
@@ -936,6 +937,21 @@ export default function AssessmentEditor() {
             <Badge tone={detail.published ? "green" : "slate"}>
               {publishLabel(detail.published)}
             </Badge>
+            {/* Preview inside the quiz editor, when the quiz lives in a
+                course — that is the only place there is a student view to
+                show. Opens the course preview positioned on this quiz. */}
+            {detail.courseId && (
+              <Button asChild size="sm" variant="secondary">
+                <a
+                  href={`/admin/courses/${detail.courseId}/preview?step=quiz-${detail.id}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <Eye />
+                  Preview
+                </a>
+              </Button>
+            )}
             <Button asChild size="sm" variant="ghost">
               <Link to="/admin/marketing/quizzes">
                 <ArrowLeft />

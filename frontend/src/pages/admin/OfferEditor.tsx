@@ -247,7 +247,7 @@ function Check({
   hint?: string;
 }) {
   return (
-    <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-hairline bg-white/[0.02] px-4 py-3 transition-colors hover:border-white/20">
+    <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-hairline bg-raise px-4 py-3 transition-colors hover:border-ink-soft/35">
       <input
         type="checkbox"
         checked={checked}
@@ -719,7 +719,7 @@ export default function OfferEditor() {
               <Tabs.Trigger
                 key={entry.value}
                 value={entry.value}
-                className="flex shrink-0 items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-ink-soft transition-colors hover:text-plum data-[state=active]:bg-brand-gradient data-[state=active]:text-white"
+                className="flex shrink-0 items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-ink-soft transition-colors hover:text-accent data-[state=active]:bg-accent-solid data-[state=active]:text-accent-on"
               >
                 <Icon className="size-4" />
                 {entry.label}
@@ -889,7 +889,7 @@ function SellingTab({
 
           <Field label="Picture" hint="shown beside the price at checkout">
             {draft.thumbnailUrl ? (
-              <div className="flex flex-wrap items-center gap-3 rounded-xl border border-hairline bg-white/[0.03] p-2.5">
+              <div className="flex flex-wrap items-center gap-3 rounded-xl border border-hairline bg-raise p-2.5">
                 <img
                   src={draft.thumbnailUrl}
                   alt=""
@@ -935,7 +935,7 @@ function SellingTab({
               {attached.map((product) => (
                 <li
                   key={product.id}
-                  className="flex items-center gap-3 rounded-xl border border-hairline bg-white/[0.03] px-3 py-2.5"
+                  className="flex items-center gap-3 rounded-xl border border-hairline bg-raise px-3 py-2.5"
                 >
                   {product.thumbnailUrl ? (
                     <img
@@ -1049,7 +1049,7 @@ function PriceTab({
                   "flex w-full items-start gap-3 rounded-xl border px-4 py-3 text-left transition-all",
                   selected
                     ? "border-gold/60 bg-gold/[0.10] shadow-[0_0_0_4px_rgba(201,164,106,0.10)]"
-                    : "border-hairline bg-white/[0.02] hover:border-white/25",
+                    : "border-hairline bg-raise hover:border-ink-soft/35",
                 )}
               >
                 <span
@@ -2247,7 +2247,7 @@ function Radio({
         "flex w-full items-start gap-3 rounded-xl border px-4 py-3 text-left transition-all",
         checked
           ? "border-gold/60 bg-gold/[0.10]"
-          : "border-hairline bg-white/[0.02] hover:border-white/25",
+          : "border-hairline bg-raise hover:border-ink-soft/35",
       )}
     >
       <span

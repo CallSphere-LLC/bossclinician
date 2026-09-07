@@ -221,7 +221,7 @@ function SecurityCard() {
               {security.sessions.map((session) => (
                 <li
                   key={session.id}
-                  className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-hairline bg-white/[0.03] px-4 py-3"
+                  className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-hairline bg-raise px-4 py-3"
                 >
                   <span className="min-w-0">
                     <span className="block text-sm font-medium text-ink">
@@ -268,7 +268,7 @@ function SecurityCard() {
             <p className="text-sm text-ink">
               1. In your authenticator app, choose "add account" and type this in:
             </p>
-            <p className="mt-2 select-all break-all rounded-xl border border-hairline bg-white/[0.04] px-4 py-3 font-mono text-sm tracking-[0.12em] text-ink">
+            <p className="mt-2 select-all break-all rounded-xl border border-hairline bg-raise px-4 py-3 font-mono text-sm tracking-[0.12em] text-ink">
               {enrolling?.secret}
             </p>
             <p className="mt-2 text-xs text-ink-soft">
@@ -351,7 +351,7 @@ function SecurityCard() {
           {(recoveryCodes ?? []).map((c) => (
             <span
               key={c}
-              className="select-all rounded-lg border border-hairline bg-white/[0.04] px-3 py-2 text-center tracking-wider text-ink"
+              className="select-all rounded-lg border border-hairline bg-raise px-3 py-2 text-center tracking-wider text-ink"
             >
               {c}
             </span>
@@ -583,9 +583,9 @@ export default function AdminUsers() {
           All settings
         </Link>
         <PageHeader
-          eyebrow="Settings"
-          title="Who can get in"
-          description="The people who can sign in to this admin, and what each of them is allowed to do."
+          eyebrow="Administration"
+          title="Staff"
+          description="Manage Boss Clinician team members, their roles, and their access."
           actions={
             isOwner && (
               <Button size="sm" onClick={() => setInviting(true)}>
@@ -768,7 +768,7 @@ export default function AdminUsers() {
 function RoleExplainer({ role }: { role: RoleDescriptor | undefined }) {
   if (!role) return null;
   return (
-    <div className="rounded-xl border border-hairline bg-white/[0.03] px-4 py-3.5">
+    <div className="rounded-xl border border-hairline bg-raise px-4 py-3.5">
       <p className="text-sm text-ink">{role.summary}</p>
       <ul className="mt-2.5 space-y-1 text-sm text-ink-soft">
         {role.canDo.map((item) => (

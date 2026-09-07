@@ -46,7 +46,7 @@ export function Modal({
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
                 transition={{ duration: reduceMotion ? 0 : 0.18 }}
-                className="theme-console fixed inset-0 z-50 bg-night-deep/75 backdrop-blur-sm"
+                className="fixed inset-0 z-50 bg-black/55 backdrop-blur-sm"
               />
             </RadixDialog.Overlay>
 
@@ -72,14 +72,15 @@ export function Modal({
                 transformTemplate={(_, generated) => `translate(-50%, -50%) ${generated}`}
                 className={cn(
                   /*
-                   * `theme-console` again, because the portal puts this on
-                   * <body> — outside the layout that carries it. Without it
-                   * every token here resolves to the light marketing palette and
-                   * the admin gets a white form floating over a dark console:
-                   * fields the wrong colour, and a <select> whose chosen value
-                   * she cannot read.
+                   * No theme class here any more. This content is portalled to
+                   * <body>, and it used to carry a hard-coded `theme-console`
+                   * so its tokens would not fall back to the light marketing
+                   * palette. Now that ConsoleThemeProvider writes the class on
+                   * <html>, the portal inherits it — and the hard-coded copy
+                   * became a bug in the other direction, pinning every dialog
+                   * in the console to dark while the page behind it was light.
                    */
-                  "theme-console fixed left-1/2 top-1/2 z-50 flex max-h-[88vh] w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-hairline bg-surface-raised shadow-[0_32px_80px_-24px_rgba(0,0,0,0.9)]",
+                  "fixed left-1/2 top-1/2 z-50 flex max-h-[88vh] w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-hairline bg-surface-raised shadow-console-pop",
                   widths[size],
                 )}
               >
@@ -179,7 +180,7 @@ export function useConfirm(): [
     >
       <div className="flex gap-4">
         {options?.destructive && (
-          <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-red-500/15 text-red-300">
+          <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-neg-soft text-neg">
             <AlertTriangle className="size-5" />
           </span>
         )}

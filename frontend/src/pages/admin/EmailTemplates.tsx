@@ -80,8 +80,8 @@ export default function EmailTemplates() {
     <div className="space-y-6">
       <PageHeader
         eyebrow="Marketing"
-        title="Automatic emails"
-        description="The ones your site sends on its own — receipts, password resets, welcome notes. Change the words without touching anything else."
+        title="Templates"
+        description="Save reusable email designs and content for future emails."
       />
 
       {error && <ErrorNotice message={error} />}

@@ -427,7 +427,7 @@ export function CrudManager<T extends { id: string }>({
                     className={className}
                   >
                     {url ? (
-                      <div className="flex flex-wrap items-center gap-3 rounded-xl border border-hairline bg-white/[0.03] p-2.5">
+                      <div className="flex flex-wrap items-center gap-3 rounded-xl border border-hairline bg-raise p-2.5">
                         <img
                           src={url}
                           alt=""

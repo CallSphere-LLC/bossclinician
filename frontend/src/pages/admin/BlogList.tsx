@@ -67,7 +67,7 @@ export default function BlogList() {
         cell: ({ row }) => (
           <Link
             to={`/admin/blog/${row.original.id}`}
-            className="flex min-w-0 items-center gap-3 hover:text-plum"
+            className="flex min-w-0 items-center gap-3 hover:text-accent"
           >
             {row.original.coverImage ? (
               <img
@@ -143,7 +143,7 @@ export default function BlogList() {
       <PageHeader
         eyebrow="Website"
         title="Blog Posts"
-        description="Your articles. Write a new one, tidy up an old one, and choose which ones people can read."
+        description="Write and publish articles on your website."
         actions={
           <Button asChild size="sm">
             <Link to="/admin/blog/new">

@@ -39,8 +39,27 @@ function scratchFile(name: string, body: string, root: string = env.uploadDir): 
   return absolute;
 }
 
+/**
+ * `fs.rmSync` follows the link before deleting, so it cannot remove a
+ * *dangling* symlink — and the two escape tests below deliberately create one
+ * pointing at /etc/passwd, which does not exist on Windows. With `force: true`
+ * the resulting ENOENT is swallowed and the link is left on disk, so the very
+ * next `npm test` fails at `symlinkSync` with EEXIST. The suite passed once
+ * and then failed forever.
+ *
+ * `lstatSync` + `unlinkSync` acts on the link itself rather than its target.
+ */
+function removeScratch(file: string): void {
+  try {
+    if (fs.lstatSync(file).isSymbolicLink()) fs.unlinkSync(file);
+    else fs.rmSync(file, { force: true });
+  } catch {
+    // Already gone, which is the outcome this wanted anyway.
+  }
+}
+
 afterAll(() => {
-  for (const file of scratch) fs.rmSync(file, { force: true });
+  for (const file of scratch) removeScratch(file);
 });
 
 describe("signDownload / verifyDownload", () => {
@@ -194,7 +213,7 @@ describe("resolveStoredFile", () => {
   it("returns null for a symlink pointing out of the upload root", async () => {
     // The textual check above passes for this path; only realpath catches it.
     const link = path.join(env.uploadDir, ".test-escape");
-    fs.rmSync(link, { force: true });
+    removeScratch(link);
     fs.symlinkSync("/etc/passwd", link);
     scratch.push(link);
     await expect(resolveStoredFile(".test-escape")).resolves.toBeNull();
@@ -216,7 +235,7 @@ describe("resolveStoredFile", () => {
   it("returns null for a symlink out of the protected root", async () => {
     const link = path.join(env.protectedUploadDir, ".test-escape");
     fs.mkdirSync(env.protectedUploadDir, { recursive: true });
-    fs.rmSync(link, { force: true });
+    removeScratch(link);
     fs.symlinkSync("/etc/passwd", link);
     scratch.push(link);
     await expect(resolveStoredFile(protectedRef(".test-escape"))).resolves.toBeNull();

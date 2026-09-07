@@ -189,9 +189,9 @@ export default function MediaLibrary() {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="Products"
+        eyebrow="Content & Services"
         title="Media Library"
-        description="Every picture, video, audio file and document you've uploaded — ready to drop into a course, a post, an episode or your website."
+        description="Store and reuse your videos, images, PDFs, audio, and other media across Boss Clinician."
         actions={
           assets && (
             <Badge tone="neutral">
@@ -228,7 +228,7 @@ export default function MediaLibrary() {
                   <span
                     className={cn(
                       "grid size-4 shrink-0 place-items-center rounded-full border",
-                      active ? "border-plum bg-plum text-white" : "border-hairline",
+                      active ? "border-accent bg-accent-solid text-accent-on" : "border-hairline",
                     )}
                   >
                     {active && <Check className="size-3" />}
@@ -258,12 +258,12 @@ export default function MediaLibrary() {
                   className={cn(
                     "rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors",
                     active
-                      ? "bg-brand-gradient text-white"
-                      : "border border-hairline text-ink-soft hover:border-plum/40 hover:text-plum",
+                      ? "bg-accent-solid text-accent-on"
+                      : "border border-hairline text-ink-soft hover:border-plum/40 hover:text-accent",
                   )}
                 >
                   {f.label}
-                  <span className={cn("ml-1.5", active ? "text-white/70" : "text-ink-soft/60")}>
+                  <span className={cn("ml-1.5", active ? "text-accent-on/75" : "text-ink-soft/60")}>
                     {count}
                   </span>
                 </button>
@@ -334,7 +334,7 @@ export default function MediaLibrary() {
                             className="size-full object-cover"
                           />
                           <span className="absolute inset-0 grid place-items-center bg-ink/35 transition-colors group-hover:bg-ink/45">
-                            <span className="grid size-11 place-items-center rounded-full bg-night-deep/85 text-gold ring-1 ring-white/15 shadow-lg">
+                            <span className="grid size-11 place-items-center rounded-full bg-night-deep/85 text-gold ring-1 ring-white/20 shadow-lg">
                               <Play className="size-5 translate-x-0.5 fill-current" />
                             </span>
                           </span>
@@ -347,13 +347,13 @@ export default function MediaLibrary() {
 
                       <Badge
                         tone={asset.kind === "video" ? "plum" : "neutral"}
-                        className="absolute left-2 top-2 !bg-night-deep/80 !text-white ring-1 ring-white/15 !text-[0.6rem] backdrop-blur"
+                        className="absolute left-2 top-2 !bg-night-deep/80 !text-white ring-1 ring-white/20 !text-[0.6rem] backdrop-blur"
                       >
                         {kindLabel(asset.kind)}
                       </Badge>
                       <Badge
                         tone={paid ? "gold" : "neutral"}
-                        className="absolute right-2 top-2 !bg-night-deep/80 ring-1 ring-white/15 !text-[0.6rem] backdrop-blur"
+                        className="absolute right-2 top-2 !bg-night-deep/80 ring-1 ring-white/20 !text-[0.6rem] backdrop-blur"
                       >
                         {audienceBadge(asset.visibility)}
                       </Badge>

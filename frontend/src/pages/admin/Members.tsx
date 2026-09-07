@@ -255,7 +255,7 @@ function MenuItem({
         "flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-3 py-2 text-sm outline-none [&_svg]:size-4",
         destructive
           ? "text-red-400 data-[highlighted]:bg-red-500/10"
-          : "text-ink data-[highlighted]:bg-white/[0.07] [&_svg]:text-ink-soft",
+          : "text-ink data-[highlighted]:bg-raise [&_svg]:text-ink-soft",
       )}
     >
       {icon}
@@ -716,9 +716,9 @@ export default function Members() {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="Contacts"
+        eyebrow="People"
         title="Members"
-        description="Everyone with an account — what they're in, and when you last saw them."
+        description="People who can sign in and use what they have bought."
         actions={
           <>
             <Button variant="secondary" size="sm" onClick={openImport}>
@@ -761,7 +761,7 @@ export default function Members() {
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search by name or email"
                 aria-label="Search by name or email"
-                className="h-11 w-full rounded-xl border border-hairline bg-white/[0.04] pl-10 pr-3 text-sm text-ink outline-none transition-all placeholder:text-ink-soft/55 focus-visible:border-gold/60 focus-visible:bg-white/[0.07] focus-visible:ring-4 focus-visible:ring-gold/15"
+                className="h-11 w-full rounded-xl border border-hairline bg-raise pl-10 pr-3 text-sm text-ink outline-none transition-all placeholder:text-ink-soft/55 focus-visible:border-gold/60 focus-visible:bg-raise focus-visible:ring-4 focus-visible:ring-gold/15"
               />
             </div>
             <select
@@ -888,7 +888,7 @@ export default function Members() {
                 autoFocus
               />
             </Field>
-            <div className="rounded-xl border border-hairline bg-white/[0.03] px-4 py-3 text-sm text-ink-soft">
+            <div className="rounded-xl border border-hairline bg-raise px-4 py-3 text-sm text-ink-soft">
               <p>
                 They sign in with <span className="font-semibold text-ink">{editing.email}</span>.
               </p>
@@ -1005,7 +1005,7 @@ export default function Members() {
           <div className="space-y-4">
             <p className="text-sm font-semibold text-ink">{importSummary(importResult)}</p>
             {importResult.errors.length > 0 && (
-              <div className="rounded-xl border border-hairline bg-white/[0.03] px-4 py-3">
+              <div className="rounded-xl border border-hairline bg-raise px-4 py-3">
                 <p className="text-sm font-semibold text-ink">These ones need a second look</p>
                 <ul className="mt-2 space-y-1.5 text-sm text-ink-soft">
                   {importResult.errors.slice(0, 8).map((entry, i) => (

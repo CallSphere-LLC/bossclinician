@@ -112,9 +112,9 @@ export default function Conversations() {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="Contacts"
-        title="Conversations"
-        description="Every chat someone has had with the assistant on your website — typed or spoken — word for word."
+        eyebrow="People"
+        title="Inbox"
+        description="One-to-one conversations with the people who contact you."
       />
 
       {error && <ErrorNotice message={error} />}
@@ -238,7 +238,7 @@ export default function Conversations() {
                               "whitespace-pre-wrap rounded-2xl px-4 py-3 text-sm leading-relaxed",
                               fromVisitor
                                 ? "rounded-tr-sm border border-plum-bright/30 bg-plum-bright/[0.14] text-ink"
-                                : "rounded-tl-sm border border-hairline bg-white/[0.04] text-ink-soft",
+                                : "rounded-tl-sm border border-hairline bg-raise text-ink-soft",
                             )}
                           >
                             {m.content}

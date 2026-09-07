@@ -86,7 +86,7 @@ function MenuItem({
         "flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-3 py-2 text-sm outline-none [&_svg]:size-4",
         destructive
           ? "text-red-400 data-[highlighted]:bg-red-500/10"
-          : "text-ink data-[highlighted]:bg-white/[0.07] [&_svg]:text-ink-soft",
+          : "text-ink data-[highlighted]:bg-raise [&_svg]:text-ink-soft",
       )}
     >
       {icon}
@@ -337,9 +337,9 @@ export default function Offers() {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="Sales"
+        eyebrow="Main"
         title="Offers"
-        description="An offer is a price and a checkout page for something you've already made. Sell the same thing at as many prices as you like."
+        description="Create and manage what customers can buy, including pricing and purchase options."
         actions={
           <Button asChild size="sm">
             <Link to="/admin/offers/new">

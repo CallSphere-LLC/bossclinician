@@ -295,9 +295,9 @@ export default function Funnels() {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="Marketing"
+        eyebrow="Engagement"
         title="Funnels"
-        description="Walk people from a first click through to your offer, and see how many make it to each stage."
+        description="Multi-step paths that lead someone from first interest to a purchase."
         actions={
           <Button size="sm" onClick={() => setFunnelDraft({ kind: "opt_in", published: false })}>
             <Plus />

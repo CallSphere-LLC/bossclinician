@@ -124,9 +124,9 @@ export default function SettingsHub() {
   return (
     <div className="space-y-7">
       <PageHeader
-        eyebrow="Settings"
+        eyebrow="Administration"
         title="Settings"
-        description="Everything about how your business runs, in one place. Pick what you'd like to change."
+        description="Manage the main account, business, security, and platform settings."
       />
 
       {error && <ErrorNotice message={error} />}

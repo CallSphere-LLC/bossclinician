@@ -414,9 +414,9 @@ export default function Contacts() {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="Contacts"
+        eyebrow="People"
         title="People"
-        description="Everyone you know — whoever enquired, joined your list, signed up or bought something, all on one card each."
+        description="Everyone connected to your business — customers, subscribers, leads, and other contacts."
         actions={
           <>
             <Button variant="secondary" size="sm" asChild>
@@ -452,8 +452,8 @@ export default function Contacts() {
             className={cn(
               "rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors",
               status === option.value
-                ? "bg-brand-gradient text-white"
-                : "border border-hairline bg-surface text-ink-soft hover:border-plum/40 hover:text-plum",
+                ? "bg-accent-solid text-accent-on"
+                : "border border-hairline bg-surface text-ink-soft hover:border-plum/40 hover:text-accent",
             )}
           >
             {option.label}
@@ -717,8 +717,8 @@ function TagPicker({
             className={cn(
               "rounded-full px-3 py-1.5 text-xs font-semibold transition-colors",
               chosen.includes(tag.slug)
-                ? "bg-brand-gradient text-white"
-                : "border border-hairline bg-surface text-ink-soft hover:border-plum/40 hover:text-plum",
+                ? "bg-accent-solid text-accent-on"
+                : "border border-hairline bg-surface text-ink-soft hover:border-plum/40 hover:text-accent",
             )}
           >
             {tag.name}
@@ -917,7 +917,7 @@ function ImportModal({
         )}
 
         {preview.length > 0 && (
-          <div className="rounded-xl border border-hairline bg-white/[0.03] p-3">
+          <div className="rounded-xl border border-hairline bg-raise p-3">
             <p className="mb-2 text-xs font-semibold text-ink">A quick look at what we read</p>
             <ul className="space-y-1 text-xs text-ink-soft">
               {preview.map((row, i) => (
@@ -937,7 +937,7 @@ function ImportModal({
         )}
 
         {result && (
-          <div className="space-y-2 rounded-xl border border-hairline bg-white/[0.03] p-3">
+          <div className="space-y-2 rounded-xl border border-hairline bg-raise p-3">
             <p className="text-sm font-semibold text-ink">{importSummary(result)}</p>
             {result.errors.length > 0 && (
               <ul className="space-y-1 text-xs text-ink-soft">

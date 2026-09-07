@@ -176,9 +176,9 @@ export default function CoursesAdmin() {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="Products"
+        eyebrow="Content & Services"
         title="Courses"
-        description="Everything you teach. Open a course to add its sections, lessons and videos."
+        description="Create and manage courses, lessons, and learning content for your customers and members."
         actions={
           <Button size="sm" onClick={startNew}>
             <Plus />
@@ -229,12 +229,12 @@ export default function CoursesAdmin() {
                   )}
                   <div className="absolute left-3 top-3 flex gap-1.5">
                     {!course.published && (
-                      <Badge tone="slate" className="!bg-night-deep/80 !text-white ring-1 ring-white/15 backdrop-blur">
+                      <Badge tone="slate" className="!bg-night-deep/80 !text-white ring-1 ring-white/20 backdrop-blur">
                         {PUBLISH_LABEL.draft}
                       </Badge>
                     )}
                     {(course.stripePriceId || (course.priceCents ?? 0) > 0) && (
-                      <Badge tone="green" className="!bg-night-deep/80 !text-white ring-1 ring-white/15 backdrop-blur">
+                      <Badge tone="green" className="!bg-night-deep/80 !text-white ring-1 ring-white/20 backdrop-blur">
                         On sale
                       </Badge>
                     )}
@@ -364,7 +364,7 @@ export default function CoursesAdmin() {
 
             <Field label="Cover image" className="sm:col-span-2">
               {editing.image ? (
-                <div className="flex flex-wrap items-center gap-3 rounded-xl border border-hairline bg-white/[0.03] p-2.5">
+                <div className="flex flex-wrap items-center gap-3 rounded-xl border border-hairline bg-raise p-2.5">
                   <img src={editing.image} alt="" className="h-16 w-24 shrink-0 rounded-lg object-cover" />
                   <div className="flex flex-wrap gap-2">
                     <Button type="button" variant="secondary" size="sm" onClick={() => setPicking(true)}>

@@ -209,7 +209,7 @@ export default function AutomationBuilder() {
       <PageHeader
         eyebrow="Marketing"
         title="Automations"
-        description="Rules that run themselves. When something happens, check a condition, then do something about it."
+        description="Automatically take actions when something happens in your business."
         actions={
           <Button size="sm" onClick={() => setCreating(true)} disabled={!options}>
             <Plus />

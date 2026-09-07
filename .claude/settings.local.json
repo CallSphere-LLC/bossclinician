@@ -1,5 +1,20 @@
 {
   "permissions": {
+    "allow": [
+      "PowerShell(Get-Content C:\\\\Users\\\\meena\\\\bossclinician\\\\package.json -ErrorAction SilentlyContinue; echo \"=== FRONTEND ===\"; \\(Get-Content C:\\\\Users\\\\meena\\\\bossclinician\\\\frontend\\\\package.json | ConvertFrom-Json\\).scripts | ConvertTo-Json; echo \"=== BACKEND ===\"; \\(Get-Content C:\\\\Users\\\\meena\\\\bossclinician\\\\backend\\\\package.json | ConvertFrom-Json\\).scripts | ConvertTo-Json)",
+      "Skill(claude-in-chrome)",
+      "PowerShell(Select-String -Path \"C:\\\\Users\\\\meena\\\\bossclinician\\\\frontend\\\\src\\\\content\\\\courses.ts\" -Pattern 'url:|slug:' | Select-Object -First 60 | ForEach-Object { $_.LineNumber.ToString\\(\\) + \": \" + $_.Line.Trim\\(\\) })",
+      "PowerShell($j = Get-Content \"C:\\\\Users\\\\meena\\\\bossclinician\\\\backend\\\\src\\\\seed\\\\data\\\\content.json\" -Raw | ConvertFrom-Json; $j.PSObject.Properties.Name; Write-Output \"---courses---\"; $j.courses | Select-Object -First 5 slug, url, priceCents, stripePriceId, published)",
+      "PowerShell(Get-NetTCPConnection *)",
+      "PowerShell(try { $r = Invoke-RestMethod -Uri \"http://localhost:4000/api/courses\" -TimeoutSec 10; Write-Output \\(\"count=\" + $r.Count\\); $r | Select-Object -First 20 slug, url, priceCents, stripePriceId, published | Format-Table -AutoSize | Out-String -Width 200 } catch { Write-Output \"ERR: $\\($_.Exception.Message\\)\" })",
+      "PowerShell(try { $r = Invoke-RestMethod -Uri \"http://localhost:4000/api/courses/fully-booked-toolkit\" -TimeoutSec 10; Write-Output \\(\"title=\" + $r.title\\); Write-Output \\(\"url=\" + $r.url\\); Write-Output \\(\"modules=\" + $r.modules.Count\\); Write-Output \\(\"offers=\" + $r.offers.Count\\) } catch { Write-Output \"ERR: $\\($_.Exception.Message\\)\" })",
+      "PowerShell(try { $r = Invoke-WebRequest -Uri \"http://localhost:5173/courses/fully-booked-toolkit\" -TimeoutSec 15 -UseBasicParsing; Write-Output \\(\"status=\" + $r.StatusCode\\) } catch { Write-Output \"ERR: $\\($_.Exception.Message\\)\" })",
+      "PowerShell(cd C:\\\\Users\\\\meena\\\\bossclinician\\\\backend; \\(Get-Content package.json -Raw | ConvertFrom-Json\\).scripts | Format-List | Out-String -Width 200)",
+      "PowerShell(try { $r = Invoke-RestMethod -Uri \"http://localhost:4000/api/courses\" -TimeoutSec 15; $r | Select-Object -First 4 slug, url | Format-Table -AutoSize | Out-String -Width 120 } catch { Write-Output \"ERR: $\\($_.Exception.Message\\)\" })",
+      "PowerShell(cd C:\\\\Users\\\\meena\\\\bossclinician; Write-Output \"---uploads-protected---\"; Get-ChildItem backend\\\\uploads-protected -Recurse -File -ErrorAction SilentlyContinue | Select-Object -First 20 FullName, Length | Format-Table -AutoSize | Out-String -Width 160; Write-Output \\(\"file count: \" + \\(Get-ChildItem backend\\\\uploads-protected -Recurse -File -ErrorAction SilentlyContinue\\).Count\\))",
+      "PowerShell(cd C:\\\\Users\\\\meena\\\\bossclinician; Get-Content .claude\\\\settings.local.json; Write-Output \"---docs sizes---\"; Get-ChildItem docs -File | Select-Object Name, @{n='MB';e={[math]::Round\\($_.Length/1MB,2\\)}} | Format-Table -AutoSize | Out-String -Width 160)",
+      "PowerShell(git add *)"
+    ],
     "defaultMode": "bypassPermissions"
   }
 }

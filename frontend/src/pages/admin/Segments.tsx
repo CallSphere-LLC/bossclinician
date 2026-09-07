@@ -280,9 +280,9 @@ export default function Segments() {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="Contacts"
+        eyebrow="People"
         title="Groups"
-        description="Saved questions about your people — “bought the masterclass”, “on the retreat waitlist and never bought”. A group keeps itself up to date."
+        description="Saved groups of people you can email, automate against, and report on."
         actions={
           <>
             <Button variant="secondary" size="sm" asChild>
@@ -541,7 +541,7 @@ function SegmentEditor({
           </Field>
         </div>
 
-        <div className="rounded-2xl border border-hairline bg-white/[0.03] p-4">
+        <div className="rounded-2xl border border-hairline bg-raise p-4">
           <div className="flex flex-wrap items-center gap-2 text-sm text-ink">
             <span className="font-semibold">Include people where</span>
             <select

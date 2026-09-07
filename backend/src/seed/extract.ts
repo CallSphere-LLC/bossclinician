@@ -299,14 +299,18 @@ export function extractCoursesFromAllCourses(page: ContentPage): CourseSeed[] {
       }
       if (bestImage) usedImages.add(bestImage.src);
 
+      const slug = toSlug(title);
       courses.push({
-        slug: toSlug(title),
+        slug,
         title,
         subtitle: contentPs[0] ?? "",
         description: contentPs.slice(1).join(" ") || contentPs[0] || "",
         priceText: "",
         image: bestImage?.src ?? null,
-        url: "#",
+        // This site's own sales page, not a placeholder. `"#"` used to go here,
+        // and a card carrying it rendered a link that resolved back to the page
+        // the visitor was already reading — the whole catalogue looked dead.
+        url: `/courses/${slug}`,
         features: ctaLabel ? [ctaLabel] : [],
         sort: courses.length,
       });
@@ -336,14 +340,15 @@ export function extractCoursesFromStore(page: ContentPage): CourseSeed[] {
         const priceText = `$${match[2]} USD`;
         const image = candidateImages[imgIdx]?.src ?? fallbackImages[imgIdx]?.src ?? null;
         imgIdx++;
+        const slug = toSlug(title);
         results.push({
-          slug: toSlug(title),
+          slug,
           title,
           subtitle: priceText,
           description: `1:1 consulting package — ${title}.`,
           priceText,
           image,
-          url: "#",
+          url: `/courses/${slug}`,
           features: [],
           sort: results.length,
         });

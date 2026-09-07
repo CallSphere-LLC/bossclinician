@@ -89,9 +89,9 @@ export default function Coaching() {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="Products"
+        eyebrow="Content & Services"
         title="Coaching"
-        description="Sell your coaching packages, then keep every booked session, agenda and private note in one place."
+        description="Manage your coaching services, programs, sessions, and customer access."
       />
 
       <Tabs.Root defaultValue="offers">
@@ -103,7 +103,7 @@ export default function Coaching() {
             <Tabs.Trigger
               key={tab.value}
               value={tab.value}
-              className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-ink-soft transition-colors hover:text-plum data-[state=active]:bg-brand-gradient data-[state=active]:text-white"
+              className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-ink-soft transition-colors hover:text-accent data-[state=active]:bg-accent-solid data-[state=active]:text-accent-on"
             >
               <tab.icon className="size-4" />
               {tab.label}

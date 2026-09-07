@@ -270,7 +270,7 @@ export default function AffiliateDetail() {
       <Card>
         <CardHeader title="Their link" subtitle="This is what they share." />
         <div className="flex flex-wrap items-center gap-3 p-5">
-          <code className="min-w-0 flex-1 truncate rounded-xl border border-hairline bg-white/[0.04] px-4 py-3 text-sm text-ink">
+          <code className="min-w-0 flex-1 truncate rounded-xl border border-hairline bg-raise px-4 py-3 text-sm text-ink">
             {partner.shareLink}
           </code>
           <Button

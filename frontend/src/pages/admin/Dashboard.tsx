@@ -1,34 +1,45 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import {
-  ArrowUpRight,
+  Activity,
+  AlertTriangle,
+  ArrowRight,
+  Award,
   BookOpen,
+  CalendarDays,
   CreditCard,
   FileText,
-  Inbox,
+  Info,
   Landmark,
+  Mail,
   MessageSquare,
   Plus,
   RefreshCw,
+  Repeat,
+  ShoppingBag,
   Sparkles,
-  TrendingDown,
+  Ticket,
   TrendingUp,
-  Upload,
+  UserPlus,
   Users,
   Wallet,
 } from "lucide-react";
-import { adminApi } from "@/lib/api";
-import { formatValue, reportsApi, type DashboardOverview as Overview } from "@/lib/reportsApi";
-import type { DashboardOverview, RevenueSummary, StripeStatus } from "@/types/admin";
 import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/cn";
+import { formatCurrency, formatNumber, formatRelative } from "@/lib/format";
+import { formatValue, reportsApi } from "@/lib/reportsApi";
 import {
-  formatBytes,
-  formatCurrency,
-  formatNumber,
-  formatRelative,
-} from "@/lib/format";
+  comparisonLabel,
+  DASHBOARD_RANGES,
+  dashboardApi,
+  type AttentionItem,
+  type DashboardMoney,
+  type DashboardPulse,
+  type Kpi,
+  type RecentSale,
+  type TodayEntry,
+} from "@/lib/dashboardApi";
 import {
   Badge,
   Button,
@@ -40,723 +51,1198 @@ import {
   Skeleton,
   leadStatusLabel,
 } from "@/pages/admin/ui/primitives";
+import { KPICard, KPIGrid } from "@/pages/admin/ui/KPICard";
+import { Drawer, DrawerFacts } from "@/pages/admin/ui/Drawer";
+import { TrendAreaChart, useChartColors } from "@/pages/admin/ui/Charts";
 import { friendlyError, pluralize } from "@/pages/admin/ui/friendly";
-import { CHART_COLORS, DonutChart, Sparkline, TrendAreaChart } from "@/pages/admin/ui/Charts";
+import { DEMO_ATTENTION, demoMoney, demoPulse, demoToday } from "@/pages/admin/ui/demoData";
 
 /**
- * The screen Yvette opens every morning.
+ * The business command centre — Part II §11, §14–§16, §18–§31, §55.
  *
- * The top row is the five figures she actually asks for — money coming in,
- * money every month, people joining the list, things sold, and everything she
- * has kept all time — each with the last thirty days behind it and a comparison
- * against the thirty before. The Stripe balance joins them only when card
- * payments are set up: a "£0.00 balance" tile on an account with no payment
- * provider reads as a bank account somebody has emptied.
+ * Laid out in the order §55 draws it: the KPI row, then revenue beside what
+ * needs attention, then programs beside today, then the sales table, then the
+ * three summaries, then the activity feed. That order is not decoration — it
+ * answers §1's five questions from the top down, so the owner who reads only
+ * the first screenful has still read the important half.
  *
- * Those five come from the nightly rollup rather than from live table scans, so
- * this page is a handful of index lookups however many years of trade sit behind
- * it. The one thing that must never happen is a silently stale figure, so the
- * page says when it was last worked out and offers to do it again.
+ * Four rules run through the whole file:
+ *
+ * - **A section the role cannot see is absent, not empty.** The server omits
+ *   it (see `dashboardPanels.ts`), and `undefined` here renders nothing at all,
+ *   where `[]` renders the §43 empty state. A Coach should not be told there
+ *   is a payments panel she is not allowed to read.
+ *
+ * - **Partial failure is normal.** Four requests fan out and each is caught
+ *   separately; one 403 or one slow panel must not blank a screen where the
+ *   rest of the figures are fine.
+ *
+ * - **Nothing is invented.** Where there is no data the panel says so in
+ *   words. Sample data exists (§53) but only behind an explicit toggle and a
+ *   banner, because an empty database and a demo dataset are indistinguishable
+ *   on a KPI card and only one of them is her money.
+ *
+ * - **Colour is never the only signal** (§51): every status carries a word,
+ *   every trend carries an arrow and a sign.
  */
 
-/** The palette each tile charts in, in the order the tiles appear. */
-const TILE_COLORS: Record<string, string> = {
-  gross: CHART_COLORS.plum,
-  recurring: CHART_COLORS.gold,
-  optins: CHART_COLORS.green,
-  sold: CHART_COLORS.lilac,
-  net: CHART_COLORS.plumDeep,
+/* ------------------------------------------------------------------ helpers */
+
+function greeting(): string {
+  const hour = new Date().getHours();
+  if (hour < 12) return "Good morning";
+  if (hour < 18) return "Good afternoon";
+  return "Good evening";
+}
+
+/** First name only — "Good morning, Yvette Howard" reads like a form letter. */
+function firstName(user: { name?: string | null; email?: string | null } | null): string {
+  const source = user?.name?.trim() || user?.email || "";
+  const name = source.split(/[\s@.]+/)[0] ?? "";
+  return name ? name[0].toUpperCase() + name.slice(1) : "there";
+}
+
+function formatKpi(kpi: Kpi): string {
+  return formatValue(kpi.value, kpi.format, kpi.currency);
+}
+
+const KPI_ICONS: Record<string, ReactNode> = {
+  "gross-revenue": <TrendingUp />,
+  "net-revenue": <Wallet />,
+  "subscription-revenue": <Repeat />,
+  "offers-sold": <ShoppingBag />,
+  "new-contacts": <UserPlus />,
+  "email-optins": <Mail />,
+  mrr: <Repeat />,
+  aov: <CreditCard />,
+  refunds: <RefreshCw />,
+  "active-members": <Users />,
+  applications: <FileText />,
+  "course-completion": <BookOpen />,
+  "coaching-sessions": <CalendarDays />,
+  "failed-payments": <AlertTriangle />,
+  "email-open-rate": <Mail />,
+  "email-click-rate": <Mail />,
 };
+
+/* -------------------------------------------------------------------- page */
+
+type RevenueSeriesKey = "gross" | "net" | "subscriptions";
 
 export default function Dashboard() {
   const { user } = useAuth();
-  const [figures, setFigures] = useState<Overview | null>(null);
-  const [overview, setOverview] = useState<DashboardOverview | null>(null);
-  const [revenue, setRevenue] = useState<RevenueSummary | null>(null);
-  const [stripe, setStripe] = useState<StripeStatus | null>(null);
+  const colors = useChartColors();
+
+  const [rangeKey, setRangeKey] = useState("30");
+  const [sample, setSample] = useState(false);
+
+  const [money, setMoney] = useState<DashboardMoney | null>(null);
+  const [attention, setAttention] = useState<AttentionItem[] | null>(null);
+  const [today, setToday] = useState<TodayEntry[] | null>(null);
+  const [pulse, setPulse] = useState<DashboardPulse | null>(null);
+
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selected, setSelected] = useState<string>("gross");
   const [refreshing, setRefreshing] = useState(false);
+  const [revenueSeries, setRevenueSeries] = useState<RevenueSeriesKey>("gross");
+  const [showSecondary, setShowSecondary] = useState(false);
+
+  const range = DASHBOARD_RANGES.find((r) => r.key === rangeKey) ?? DASHBOARD_RANGES[2];
+  const days = range.days;
 
   useEffect(() => {
+    if (sample) {
+      setMoney(demoMoney(days));
+      setAttention(DEMO_ATTENTION);
+      setToday(demoToday());
+      setPulse(demoPulse(days));
+      setLoading(false);
+      setError(null);
+      return;
+    }
+
     let cancelled = false;
+    setLoading(true);
 
-    // Taken one at a time: an account without permission for the money figures
-    // used to fail all three and land on an error screen it could never leave.
+    // Settled separately rather than through Promise.all: a role without
+    // `orders.view` gets a 403 on one of these, and one rejection must not
+    // take the other three figures off the screen with it.
     Promise.all([
-      reportsApi.dashboard(30).catch(() => null),
-      adminApi.overview().catch(() => null),
-      adminApi.revenue().catch(() => null),
-    ])
-      .then(([f, o, r]) => {
-        if (cancelled) return;
-        if (f) setFigures(f);
-        if (o) setOverview(o);
-        if (r) setRevenue(r);
-        // Only nothing at all is worth an error: the rest of the screen still
-        // has something true to show.
-        if (!f && !o && !r) {
-          // Whatever went wrong is ours to fix, so she gets the one thing she
-          // can usefully do rather than a diagnosis of our servers.
-          setError("We couldn't load your dashboard. Try refreshing the page.");
-        }
-      })
-      .catch(() => {
-        if (!cancelled) setError("We couldn't load your dashboard. Try refreshing the page.");
-      });
-
-    // Stripe is optional; a missing key must not blank the whole dashboard.
-    adminApi
-      .stripeStatus()
-      .then((s) => !cancelled && setStripe(s))
-      .catch(() => !cancelled && setStripe({ configured: false }));
+      dashboardApi.money(days).catch(() => null),
+      dashboardApi.attention().catch(() => null),
+      dashboardApi.today().catch(() => null),
+      dashboardApi.pulse(days).catch(() => null),
+    ]).then(([m, a, t, p]) => {
+      if (cancelled) return;
+      setMoney(m);
+      setAttention(a?.items ?? null);
+      setToday(t?.entries ?? null);
+      setPulse(p);
+      // Only a clean sweep is worth an error banner — anything less and the
+      // screen still has something true on it.
+      setError(
+        m || a || t || p
+          ? null
+          : "We couldn't load your dashboard. Try refreshing the page.",
+      );
+      setLoading(false);
+    });
 
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [days, sample]);
 
-  const tiles = figures?.tiles ?? [];
-  const active = tiles.find((t) => t.key === selected) ?? tiles[0];
-
-  /** The selected tile's own daily series, ready for the big chart. */
-  const chartData = useMemo(
-    () => (active?.sparkline ?? []).map((p) => ({ date: p.date, value: p.value })),
-    [active],
-  );
-
-  /**
-   * The activity series as plain rows.
-   *
-   * Recharts takes an indexable record; a named interface has no index
-   * signature, so the shape is spelled out here once rather than cast four
-   * times at the call sites.
-   */
-  const activitySeries = useMemo(
-    () =>
-      (overview?.series ?? []).map((p) => ({
-        date: p.date,
-        leads: p.leads,
-        subscribers: p.subscribers,
-        revenueCents: p.revenueCents,
-      })),
-    [overview],
-  );
-
-  const leadDonut = useMemo(() => {
-    const palette: Record<string, string> = {
-      new: "#3B82F6",
-      contacted: CHART_COLORS.gold,
-      qualified: CHART_COLORS.green,
-      closed: CHART_COLORS.plum,
-      archived: CHART_COLORS.slate,
-    };
-    return (overview?.leadsByStatus ?? []).map((s) => ({
-      // The stored status is a one-word machine state; the slice, its tooltip
-      // and the legend below all read the owner's wording for it instead.
-      name: leadStatusLabel(s.status),
-      value: s.count,
-      color: palette[s.status] ?? CHART_COLORS.slate,
-    }));
-  }, [overview]);
-
-  const firstName = (user?.name || user?.email || "there").split(/[\s@]/)[0];
-
-  async function refreshFigures() {
+  /** Re-run the nightly rollup so the figures catch up without waiting for it. */
+  const recalculate = useCallback(async () => {
     setRefreshing(true);
     try {
       await reportsApi.refresh();
-      toast.success("We're working your figures out — check back in a minute or two.");
+      toast.success("Working your figures out again. They'll update shortly.");
     } catch (err) {
-      toast.error(friendlyError(err, "figure"));
+      toast.error(friendlyError(err, "work your figures out again"));
     } finally {
       setRefreshing(false);
     }
-  }
+  }, []);
 
-  if (error) {
-    return (
-      <div className="space-y-6">
-        <h1 className="font-display text-2xl text-ink">Dashboard</h1>
-        <ErrorNotice message={error} />
-      </div>
-    );
-  }
+  const comparison = comparisonLabel(days);
+
+  const revenuePoints = useMemo(() => {
+    if (!money) return [];
+    return money.revenue[revenueSeries].map((p) => ({ date: p.date, value: p.value }));
+  }, [money, revenueSeries]);
 
   return (
     <div className="space-y-6">
-      {/* Greeting */}
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="text-[0.7rem] font-semibold uppercase tracking-[0.18em] text-plum">
-            {new Date().toLocaleDateString("en-US", {
-              weekday: "long",
-              month: "long",
-              day: "numeric",
-            })}
-          </p>
-          <h1 className="mt-1.5 font-display text-[2rem] leading-tight text-ink">
-            Welcome back, {firstName}.
-          </h1>
-        </div>
-        <div className="flex flex-wrap items-center gap-2.5">
-          <Button asChild variant="secondary" size="sm">
-            <Link to="/admin/media">
-              <Upload />
-              Add a file
-            </Link>
-          </Button>
-          <Button asChild size="sm">
-            <Link to="/admin/blog/new">
-              <Plus />
-              Write a post
-            </Link>
-          </Button>
-        </div>
-      </div>
+      <DashboardHeader
+        name={firstName(user)}
+        rangeKey={rangeKey}
+        onRange={setRangeKey}
+        comparison={comparison}
+        figuresUpdatedAt={money?.figuresUpdatedAt ?? null}
+        refreshing={refreshing}
+        onRefresh={recalculate}
+        sample={sample}
+        onSample={setSample}
+      />
 
-      {/* When the figures were last worked out */}
-      {figures && (
-        <p className="flex flex-wrap items-center gap-2 text-xs text-ink-soft">
-          {figures.figuresUpdatedAt ? (
-            <>Worked out {formatRelative(figures.figuresUpdatedAt)}, and again every night.</>
-          ) : (
-            <>Your figures haven't been worked out yet.</>
-          )}
-          <button
-            type="button"
-            onClick={refreshFigures}
-            disabled={refreshing}
-            className="inline-flex items-center gap-1 font-semibold text-plum hover:underline disabled:opacity-60"
-          >
-            <RefreshCw className={cn("size-3", refreshing && "animate-spin")} />
-            {refreshing ? "Working them out…" : "Work them out now"}
-          </button>
-        </p>
-      )}
+      {sample && <SampleBanner onExit={() => setSample(false)} />}
+      {error && <ErrorNotice message={error} />}
 
-      {/* The daily numbers */}
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        {tiles.length === 0
-          ? Array.from({ length: 5 }, (_, i) => <Skeleton key={i} className="h-36 w-full" />)
-          : tiles.map((tile) => {
-              const chosen = tile.key === selected;
-              const colour = TILE_COLORS[tile.key] ?? CHART_COLORS.plum;
-              return (
-                <Card
-                  key={tile.key}
-                  className={cn(
-                    "overflow-hidden transition-colors",
-                    chosen && "border-plum-bright/45",
-                  )}
-                >
-                  <button
-                    type="button"
-                    onClick={() => setSelected(tile.key)}
-                    aria-pressed={chosen}
-                    className="w-full px-5 pt-5 text-left"
-                  >
-                    <span className="block text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-ink-soft">
-                      {tile.label}
-                    </span>
-                    <span className="mt-2 flex flex-wrap items-baseline gap-2">
-                      <span className="font-display text-[1.7rem] leading-none text-ink">
-                        {formatValue(tile.value, tile.format, tile.currency)}
-                      </span>
-                      {tile.changePercent !== null && (
-                        <span
-                          className={cn(
-                            "inline-flex items-center gap-0.5 text-[0.7rem] font-bold",
-                            tile.changePercent >= 0 ? "text-green-bright" : "text-red-300",
-                          )}
-                        >
-                          {tile.changePercent >= 0 ? (
-                            <TrendingUp className="size-3" />
-                          ) : (
-                            <TrendingDown className="size-3" />
-                          )}
-                          {Math.abs(tile.changePercent)}%
-                        </span>
-                      )}
-                    </span>
-                    <span className="mt-1.5 block text-xs leading-relaxed text-ink-soft">
-                      {tile.description}
-                    </span>
-                  </button>
-
-                  {tile.sparkline.length > 0 && (
-                    <div className="-mx-1 mt-3">
-                      <Sparkline
-                        data={tile.sparkline.map((p) => ({ date: p.date, value: p.value }))}
-                        dataKey="value"
-                        color={colour}
-                      />
-                    </div>
-                  )}
-
-                  {tile.reportId && (
-                    <div className="border-t border-hairline/60 px-5 py-2.5">
-                      <Link
-                        to={`/admin/analytics/reports/${tile.reportId}`}
-                        className="inline-flex items-center gap-1 text-xs font-semibold text-plum hover:underline"
-                      >
-                        See the whole picture
-                        <ArrowUpRight className="size-3.5" />
-                      </Link>
-                    </div>
-                  )}
-                </Card>
-              );
-            })}
-
-        {/* Only when card payments are actually set up. */}
-        {figures?.balance && (
-          <Card className="overflow-hidden p-5">
-            <div className="flex items-start justify-between gap-3">
-              <div className="min-w-0">
-                <p className="text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-ink-soft">
-                  Waiting to reach your bank
-                </p>
-                <p className="mt-2 font-display text-[1.7rem] leading-none text-ink">
-                  {figures.balance.available.length === 0
-                    ? formatCurrency(0)
-                    : figures.balance.available
-                        .map((b) => formatValue(b.amountCents, "money", b.currency))
-                        .join(" · ")}
-                </p>
-                <p className="mt-1.5 text-xs leading-relaxed text-ink-soft">
-                  Ready to pay out
-                  {figures.balance.pending.length > 0 && (
-                    <>
-                      , with{" "}
-                      {figures.balance.pending
-                        .map((b) => formatValue(b.amountCents, "money", b.currency))
-                        .join(" · ")}{" "}
-                      still clearing
-                    </>
-                  )}
-                  .
-                </p>
-              </div>
-              <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-gold/[0.12] text-gold">
-                <Landmark className="size-4" />
-              </span>
-            </div>
-            <div className="mt-4 border-t border-hairline/70 pt-3">
-              <Link
-                to="/admin/sales/payouts"
-                className="inline-flex items-center gap-1 text-xs font-semibold text-plum hover:underline"
-              >
-                See your payouts
-                <ArrowUpRight className="size-3.5" />
-              </Link>
-            </div>
-          </Card>
-        )}
-      </div>
-
-      {/* The chart for whichever number she picked */}
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_19rem]">
-        <Card className="overflow-hidden">
-          <div className="flex flex-wrap items-center gap-2 border-b border-hairline/60 px-5 py-3.5">
-            <Badge tone="plum">Last {figures?.range.days ?? 30} days</Badge>
-            {active && active.format === "money" && (
-              <Badge tone="neutral">
-                {active.currency === "mixed"
-                  ? "More than one currency"
-                  : active.currency.toUpperCase()}
-              </Badge>
-            )}
-            <p className="text-xs text-ink-soft">Pick a number above to chart it here.</p>
-            <Link
-              to="/admin/analytics/reports"
-              className="ml-auto inline-flex items-center gap-1 text-xs font-semibold text-plum hover:underline"
-            >
-              See all your numbers
-              <ArrowUpRight className="size-3.5" />
-            </Link>
-          </div>
-
-          <div className="px-3 py-5 sm:px-5">
-            {active && (
-              <p className="mb-3 px-2 text-xs leading-relaxed text-ink-soft sm:px-1">
-                <span className="font-semibold text-ink">{active.label}.</span>{" "}
-                {active.description}
-                {active.previousValue !== null && (
-                  <>
-                    {" "}
-                    That's {formatValue(active.value, active.format, active.currency)} against{" "}
-                    {formatValue(active.previousValue, active.format, active.currency)} in the
-                    period before.
-                  </>
-                )}
-              </p>
-            )}
-            {figures === null ? (
-              <Skeleton className="h-[260px] w-full" />
-            ) : chartData.length === 0 ? (
-              /* An all-time total has no day-by-day line. A skeleton here reads
-                 as "still loading" and never resolves. */
-              <p className="px-2 py-16 text-center text-sm text-ink-soft">
-                This one is an all-time total, so there's no day-by-day line to draw.
-              </p>
-            ) : (
-              <TrendAreaChart
-                data={chartData}
-                currency={active?.format === "money"}
-                series={[
-                  {
-                    key: "value",
-                    label: active?.label ?? "Money coming in",
-                    color: TILE_COLORS[active?.key ?? "gross"] ?? CHART_COLORS.plum,
-                  },
-                ]}
+      {/* §14 — the six primary figures. */}
+      {loading && !money ? (
+        <KPIGrid columns={6}>
+          {Array.from({ length: 6 }, (_, i) => (
+            <Skeleton key={i} className="h-[7.5rem]" />
+          ))}
+        </KPIGrid>
+      ) : money ? (
+        <>
+          <KPIGrid columns={6}>
+            {money.kpis.primary.map((k) => (
+              <KPICard
+                key={k.key}
+                title={k.label}
+                value={formatKpi(k)}
+                change={k.changePercent}
+                comparison={comparison}
+                sense={k.sense}
+                sparkline={k.sparkline}
+                icon={KPI_ICONS[k.key]}
+                to={sample ? undefined : (k.to ?? undefined)}
+                highlight={k.key === "gross-revenue"}
               />
+            ))}
+          </KPIGrid>
+
+          <div>
+            <button
+              type="button"
+              onClick={() => setShowSecondary((v) => !v)}
+              aria-expanded={showSecondary}
+              className="mb-3 inline-flex items-center gap-1.5 rounded-lg px-1 text-[0.8rem] font-semibold text-ink-soft transition-colors hover:text-accent"
+            >
+              {showSecondary ? "Hide" : "Show"} the other figures
+              <span aria-hidden className={cn("transition-transform", showSecondary && "rotate-90")}>
+                ›
+              </span>
+            </button>
+            {/* Progressive disclosure, per §1: eleven more cards above the
+                revenue chart would bury the thing the page exists to show. */}
+            {showSecondary && (
+              <KPIGrid columns={5}>
+                {money.kpis.secondary.map((k) => (
+                  <KPICard
+                    key={k.key}
+                    title={k.label}
+                    value={formatKpi(k)}
+                    change={k.changePercent}
+                    comparison={k.changePercent === null ? undefined : comparison}
+                    hint={k.changePercent === null ? k.description : undefined}
+                    sense={k.sense}
+                    sparkline={k.sparkline}
+                    icon={KPI_ICONS[k.key]}
+                    to={sample ? undefined : (k.to ?? undefined)}
+                  />
+                ))}
+                {money.balance && <BalanceCard balance={money.balance} />}
+              </KPIGrid>
             )}
           </div>
-        </Card>
+        </>
+      ) : null}
 
-        {/* Income rail */}
-        <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-1">
-          <Card className="relative overflow-hidden bg-[linear-gradient(150deg,#3D2D5C_0%,#0F1E3A_100%)] p-5 text-white">
-            <div className="pointer-events-none absolute -right-10 -top-12 size-36 rounded-full bg-gold/20 blur-2xl" />
-            <p className="text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-white/65">
-              Money you've made
-            </p>
-            <p className="text-[0.68rem] text-white/45">Everything people have paid you, all time</p>
-            {revenue ? (
-              <p className="mt-3 font-display text-[1.9rem] leading-none">
-                {formatCurrency(revenue.grossCents)}
-              </p>
-            ) : (
-              <Skeleton className="mt-3 h-7 w-32 bg-white/15" />
-            )}
-            <p className="mt-3 flex items-center gap-1.5 text-xs text-white/60">
-              <Wallet className="size-3.5 text-gold" />
-              {revenue ? `From ${pluralize(revenue.ordersPaid, "purchase")}` : "Adding it up…"}
-            </p>
-          </Card>
-
-          <Card className="p-5">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-ink-soft">
-                  Money every month
-                </p>
-                <p className="text-[0.68rem] text-ink-soft/75">From people on a plan</p>
-                {revenue ? (
-                  <p className="mt-2.5 font-display text-[1.6rem] leading-none text-ink">
-                    {formatCurrency(revenue.mrrCents)}
-                  </p>
-                ) : (
-                  <Skeleton className="mt-2.5 h-6 w-24" />
-                )}
-              </div>
-              <span className="grid size-9 place-items-center rounded-xl bg-gold/[0.12] text-gold">
-                <CreditCard className="size-4" />
-              </span>
-            </div>
-
-            <div className="mt-4 border-t border-hairline/70 pt-3">
-              {stripe === null ? (
-                <Skeleton className="h-4 w-32" />
-              ) : stripe.configured ? (
-                <p className="flex items-center gap-2 text-xs text-ink-soft">
-                  <span
-                    className={cn(
-                      "size-2 rounded-full",
-                      stripe.chargesEnabled ? "bg-green" : "bg-gold",
-                    )}
-                  />
-                  {stripe.chargesEnabled
-                    ? "Card payments are switched on"
-                    : "Card payments are still being checked"}
-                </p>
-              ) : (
-                <Link
-                  to="/admin/sales/plans"
-                  className="inline-flex items-center gap-1.5 text-xs font-semibold text-plum hover:underline"
-                >
-                  Set up card payments so people can buy
-                  <ArrowUpRight className="size-3.5" />
-                </Link>
-              )}
-            </div>
-          </Card>
-        </div>
-      </div>
-
-      {/* Bento stat row */}
-      <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
-        <StatTile
-          label="Enquiries"
-          value={overview?.totals.leads}
-          hint={
-            overview
-              ? overview.totals.newLeads === 0
-                ? "You've replied to everyone"
-                : `${pluralize(overview.totals.newLeads, "new enquiry", "new enquiries")} to reply to`
-              : undefined
-          }
-          icon={<Inbox className="size-4" />}
-          to="/admin/leads"
-          series={activitySeries}
-          seriesKey="leads"
-          color={CHART_COLORS.plum}
-        />
-        <StatTile
-          label="Members"
-          value={overview?.totals.members}
-          hint={
-            overview
-              ? overview.totals.enrollments === 0
-                ? "Nobody in a course yet"
-                : `${formatNumber(overview.totals.enrollments)} students enrolled`
-              : undefined
-          }
-          icon={<Users className="size-4" />}
-          to="/admin/members"
-          series={activitySeries}
-          seriesKey="subscribers"
-          color={CHART_COLORS.green}
-        />
-        <StatTile
-          label="Lessons"
-          value={overview?.totals.lessons}
-          hint={overview ? `Across ${pluralize(overview.totals.courses, "course")}` : undefined}
-          icon={<BookOpen className="size-4" />}
-          to="/admin/courses"
-          series={activitySeries}
-          /* No lessons-per-day figure is collected, and the line under this
-             number used to be daily takings — a money curve under a count. */
-          color={CHART_COLORS.gold}
-        />
-        {/* Points at the inbox that actually holds these conversations, rather
-            than at analytics where there is nothing to read. */}
-        <StatTile
-          label="AI chat conversations"
-          value={overview?.totals.chats}
-          hint="Typed and voice chats on your site"
-          icon={<MessageSquare className="size-4" />}
-          to="/admin/conversations"
-          series={activitySeries}
-          /* Likewise: this drew email sign-ups under a count of chats. */
-          color={CHART_COLORS.lilac}
-        />
-      </div>
-
-      {/* Bento content row */}
-      <div className="grid gap-5 xl:grid-cols-3">
+      {/* §18 + §19 — revenue beside what needs her. */}
+      <div className="grid gap-4 xl:grid-cols-3">
         <Card className="xl:col-span-2">
           <CardHeader
-            title="Latest enquiries"
-            subtitle="The most recent people to get in touch"
-            icon={<Inbox className="size-4" />}
+            title="Revenue"
+            subtitle={`Last ${days} days · ${comparison}`}
+            icon={<TrendingUp />}
             action={
-              <Button asChild variant="ghost" size="sm">
-                <Link to="/admin/leads">See them all</Link>
-              </Button>
+              <SeriesSwitch value={revenueSeries} onChange={setRevenueSeries} />
             }
           />
-          {overview === null ? (
-            <div className="space-y-3 p-5">
-              {Array.from({ length: 4 }, (_, i) => (
-                <Skeleton key={i} className="h-12 w-full" />
-              ))}
-            </div>
-          ) : overview.recentLeads.length === 0 ? (
-            <EmptyState
-              icon={<Inbox />}
-              title="No enquiries yet"
-              description="They'll appear here as people fill in the forms on your site."
+          <div className="px-2 pb-2 pt-4">
+            <TrendAreaChart
+              data={revenuePoints}
+              series={[{ key: "value", label: SERIES_LABEL[revenueSeries], color: colors.accent }]}
+              currency
+              height={244}
+              emptyMessage="No revenue in this period yet — this fills in as orders come through."
             />
-          ) : (
-            <ul className="divide-y divide-hairline/60">
-              {overview.recentLeads.map((lead) => (
-                <li
-                  key={lead.id}
-                  className="flex flex-wrap items-center gap-3 px-5 py-3.5 transition-colors hover:bg-lilac-tint/25"
-                >
-                  <span className="grid size-9 shrink-0 place-items-center rounded-full bg-lilac-tint text-xs font-bold text-plum-deep">
-                    {lead.name.slice(0, 1).toUpperCase()}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold text-ink">{lead.name}</p>
-                    <p className="truncate text-xs text-ink-soft">{lead.email}</p>
-                  </div>
-                  <Badge tone={LEAD_STATUS_TONE[lead.status] ?? "neutral"}>
-                    {leadStatusLabel(lead.status)}
-                  </Badge>
-                  <span className="w-full text-xs text-ink-soft/80 sm:w-auto">
-                    {formatRelative(lead.createdAt)}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
+          </div>
+          {money && <RevenueSummary summary={money.revenue.summary} currency={money.revenue.currency} />}
         </Card>
 
-        <Card>
-          <CardHeader
-            title="Where your enquiries are up to"
-            subtitle="Everyone who's got in touch, grouped by what you've done next"
-          />
-          <div className="p-5">
-            {overview === null ? (
-              <Skeleton className="h-[200px] w-full" />
-            ) : leadDonut.length === 0 ? (
-              <EmptyState
-                icon={<Inbox />}
-                title="No enquiries yet"
-                description="They'll appear here as they come in."
-              />
-            ) : (
-              <>
-                <DonutChart data={leadDonut} totalLabel="Enquiries" />
-                <ul className="mt-4 space-y-1.5">
-                  {leadDonut.map((slice) => (
-                    <li key={slice.name} className="flex items-center gap-2 text-sm">
-                      <span
-                        className="size-2.5 rounded-full"
-                        style={{ background: slice.color }}
-                      />
-                      <span className="text-ink-soft">{slice.name}</span>
-                      <span className="ml-auto font-semibold tabular-nums text-ink">
-                        {slice.value}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </>
-            )}
-          </div>
-        </Card>
+        <NeedsAttention items={attention} loading={loading} />
       </div>
 
-      {/* Community + storage */}
-      <div className="grid gap-5 xl:grid-cols-3">
-        <Card className="relative overflow-hidden xl:col-span-2">
-          <div className="pointer-events-none absolute -right-16 -top-16 size-56 rounded-full bg-lilac-tint/70 blur-3xl" />
-          <div className="relative p-6">
-            <Badge tone="gold">
-              <Sparkles className="size-3" />
-              Community
-            </Badge>
-            <h3 className="mt-3 font-display text-xl text-ink">Grow more together</h3>
-            <p className="mt-1.5 max-w-lg text-sm text-ink-soft">
-              Run group conversations, challenges, leaderboards and live events for your members —
-              all from here, with as many groups as you like and no extra charge per person.
-            </p>
-            <div className="mt-5 flex flex-wrap gap-2.5">
-              <Button asChild size="sm">
-                <Link to="/admin/community">Open your community</Link>
-              </Button>
-              <Button asChild variant="secondary" size="sm">
-                <a href="https://www.kajabi.com/product/communities" target="_blank" rel="noreferrer">
-                  Compare with Kajabi
-                  <ArrowUpRight />
-                </a>
-              </Button>
-            </div>
-          </div>
-        </Card>
+      {/* §21 + §20 — programs beside today. */}
+      <div className="grid gap-4 xl:grid-cols-3">
+        <ProgramPerformance programs={pulse?.programs} className="xl:col-span-2" />
+        <TodayPanel entries={today} loading={loading} />
+      </div>
 
-        <Card>
-          <CardHeader title="Your files" subtitle="Pictures, videos, audio and documents" />
-          <div className="p-5">
-            {overview ? (
-              <>
-                <p className="font-display text-[1.6rem] leading-none text-ink">
-                  {formatNumber(overview.totals.media)}
-                </p>
-                <p className="mt-1 text-xs text-ink-soft">
-                  {formatBytes(overview.totals.storageBytes)} of space used
-                </p>
-              </>
-            ) : (
-              <>
-                <Skeleton className="h-6 w-16" />
-                <Skeleton className="mt-2 h-3 w-28" />
-              </>
-            )}
-            <Button asChild variant="secondary" size="sm" className="mt-4 w-full">
-              <Link to="/admin/media">
-                <Upload />
-                Add files
-              </Link>
-            </Button>
-            <Button asChild variant="ghost" size="sm" className="mt-2 w-full">
-              <Link to="/admin/blog/new">
-                <FileText />
-                Write a blog post
-              </Link>
-            </Button>
-            {overview && (
-              <p className="mt-1.5 text-center text-[0.68rem] text-ink-soft">
-                {overview.totals.posts === 0
-                  ? "Nothing on your blog yet"
-                  : `${pluralize(overview.totals.posts, "post")} live on your blog`}
-              </p>
-            )}
-          </div>
-        </Card>
+      {/* §22 + §23 */}
+      {pulse?.sales && <SalesSection sales={pulse.sales} days={days} />}
+
+      {/* §25, §26, §28 */}
+      <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
+        <MarketingPanel marketing={pulse?.marketing} />
+        <CoursePanel courses={pulse?.courses} />
+        <CommunityPanel community={pulse?.community} />
+      </div>
+
+      {/* §24, §27, §29 */}
+      <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
+        <ContactsPanel contacts={pulse?.contacts} />
+        <CoachingPanel coaching={pulse?.coaching} />
+        <ApplicationsPanel applications={pulse?.applications} />
+      </div>
+
+      {/* §30 + §31 */}
+      <div className="grid gap-4 xl:grid-cols-3">
+        <RecentActivity activity={pulse?.activity} className="xl:col-span-2" />
+        <QuickActions />
       </div>
     </div>
   );
 }
 
-/* ---------------------------------------------------------------- StatTile */
+/* ------------------------------------------------------------------ header */
 
-function StatTile({
-  label,
-  value,
-  hint,
-  icon,
-  to,
-  series,
-  seriesKey,
-  color,
+function DashboardHeader({
+  name,
+  rangeKey,
+  onRange,
+  comparison,
+  figuresUpdatedAt,
+  refreshing,
+  onRefresh,
+  sample,
+  onSample,
 }: {
-  label: string;
-  value: number | undefined;
-  hint?: string;
-  icon: React.ReactNode;
-  to: string;
-  series: Record<string, unknown>[];
-  /** Omitted where nothing collected matches the number above. */
-  seriesKey?: string;
-  color: string;
+  name: string;
+  rangeKey: string;
+  onRange: (key: string) => void;
+  comparison: string;
+  figuresUpdatedAt: string | null;
+  refreshing: boolean;
+  onRefresh: () => void;
+  sample: boolean;
+  onSample: (on: boolean) => void;
 }) {
   return (
-    <Link to={to} className="group">
-      <Card className="h-full overflow-hidden p-5 transition-all duration-200 group-hover:-translate-y-0.5 group-hover:border-plum/30 group-hover:shadow-[0_18px_40px_-20px_rgba(15,30,58,0.35)]">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-ink-soft">
-              {label}
-            </p>
-            {value === undefined ? (
-              <Skeleton className="mt-2 h-6 w-16" />
-            ) : (
-              <p className="mt-2 font-display text-[1.65rem] leading-none text-ink">
-                {formatNumber(value)}
-              </p>
-            )}
-            {hint && <p className="mt-1.5 truncate text-xs text-ink-soft">{hint}</p>}
-          </div>
-          <span
-            className="grid size-9 shrink-0 place-items-center rounded-xl"
-            style={{ background: `${color}1A`, color }}
-          >
-            {icon}
-          </span>
+    <div className="flex flex-wrap items-end justify-between gap-4">
+      <div className="min-w-0">
+        <h1 className="font-display text-[1.75rem] leading-tight text-ink">
+          {greeting()}, {name}
+        </h1>
+        <p className="mt-1.5 text-sm text-ink-soft">
+          Here&rsquo;s what&rsquo;s happening with Boss Clinician today.
+          {figuresUpdatedAt && !sample && (
+            <>
+              {" "}
+              <span className="text-ink-soft/80">
+                Figures worked out {formatRelative(figuresUpdatedAt)}.
+              </span>
+            </>
+          )}
+        </p>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        {/* §11 — the period, and the comparison it implies. */}
+        <div
+          role="group"
+          aria-label="Date range"
+          className="flex items-center gap-0.5 rounded-xl border border-hairline bg-surface p-0.5"
+        >
+          {DASHBOARD_RANGES.map((r) => (
+            <button
+              key={r.key}
+              type="button"
+              onClick={() => onRange(r.key)}
+              aria-pressed={rangeKey === r.key}
+              className={cn(
+                "rounded-[0.6rem] px-3 py-1.5 text-[0.78rem] font-semibold transition-colors",
+                rangeKey === r.key
+                  ? "bg-accent-solid text-accent-on"
+                  : "text-ink-soft hover:bg-raise hover:text-ink",
+              )}
+            >
+              {r.label}
+            </button>
+          ))}
         </div>
-        {seriesKey && series.length > 0 && (
-          <div className="-mx-1 mt-3">
-            <Sparkline data={series} dataKey={seriesKey} color={color} />
+
+        <span className="hidden text-[0.72rem] text-ink-soft sm:inline">{comparison}</span>
+
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={onRefresh}
+          disabled={refreshing || sample}
+          title="Work the figures out again now, without waiting for tonight"
+        >
+          <RefreshCw className={cn(refreshing && "animate-spin")} />
+          {refreshing ? "Working…" : "Recalculate"}
+        </Button>
+
+        <Button
+          variant={sample ? "primary" : "ghost"}
+          size="sm"
+          onClick={() => onSample(!sample)}
+          aria-pressed={sample}
+          title="Fill the dashboard with example figures so you can see how it works"
+        >
+          <Sparkles />
+          Sample data
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The banner that must be showing whenever a figure on this page is invented.
+ *
+ * Not dismissible while sample mode is on, and the only control on it turns
+ * sample mode off. A dismissible "this is fake" notice on a screen full of
+ * revenue is a trap.
+ */
+function SampleBanner({ onExit }: { onExit: () => void }) {
+  return (
+    <div
+      role="status"
+      className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-warn/40 bg-warn-soft px-4 py-3"
+    >
+      <p className="flex items-center gap-2.5 text-sm font-medium text-warn">
+        <Sparkles aria-hidden className="size-4 shrink-0" />
+        You&rsquo;re looking at example figures, not your business. Nothing here is real.
+      </p>
+      <Button variant="secondary" size="sm" onClick={onExit}>
+        Show my real figures
+      </Button>
+    </div>
+  );
+}
+
+/* ----------------------------------------------------------------- revenue */
+
+const SERIES_LABEL: Record<RevenueSeriesKey, string> = {
+  gross: "Gross revenue",
+  net: "Net revenue",
+  subscriptions: "Subscriptions",
+};
+
+function SeriesSwitch({
+  value,
+  onChange,
+}: {
+  value: RevenueSeriesKey;
+  onChange: (next: RevenueSeriesKey) => void;
+}) {
+  return (
+    <div
+      role="group"
+      aria-label="Revenue series"
+      className="flex items-center gap-0.5 rounded-lg border border-hairline p-0.5"
+    >
+      {(Object.keys(SERIES_LABEL) as RevenueSeriesKey[]).map((key) => (
+        <button
+          key={key}
+          type="button"
+          onClick={() => onChange(key)}
+          aria-pressed={value === key}
+          className={cn(
+            "rounded-md px-2.5 py-1 text-[0.72rem] font-semibold transition-colors",
+            value === key ? "bg-accent-soft text-accent" : "text-ink-soft hover:text-ink",
+          )}
+        >
+          {key === "subscriptions" ? "Subs" : SERIES_LABEL[key].split(" ")[0]}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function RevenueSummary({
+  summary,
+  currency,
+}: {
+  summary: DashboardMoney["revenue"]["summary"];
+  currency: string;
+}) {
+  const figures = [
+    { label: "Gross", value: formatValue(summary.grossCents, "money", currency) },
+    { label: "Net", value: formatValue(summary.netCents, "money", currency) },
+    { label: "Refunds", value: formatValue(summary.refundCents, "money", currency) },
+    { label: "Subscriptions", value: formatValue(summary.subscriptionCents, "money", currency) },
+    { label: "Average order", value: formatValue(summary.averageOrderCents, "money", currency) },
+  ];
+  return (
+    <dl className="grid grid-cols-2 gap-x-4 gap-y-3 border-t border-hairline/70 px-5 py-4 sm:grid-cols-3 lg:grid-cols-5">
+      {figures.map((f) => (
+        <div key={f.label}>
+          <dt className="text-[0.72rem] text-ink-soft">{f.label}</dt>
+          <dd className="mt-0.5 font-numeric text-[1.05rem] font-semibold text-ink tabular-nums">{f.value}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+function BalanceCard({ balance }: { balance: NonNullable<DashboardMoney["balance"]> }) {
+  const available = balance.available[0];
+  const pending = balance.pending[0];
+  return (
+    <KPICard
+      title="Stripe Balance"
+      value={available ? formatCurrency(available.amountCents, available.currency) : "—"}
+      hint={pending ? `${formatCurrency(pending.amountCents, pending.currency)} on its way` : undefined}
+      icon={<Landmark />}
+    />
+  );
+}
+
+/* --------------------------------------------------------- §19 needs attention */
+
+const SEVERITY_STYLE = {
+  critical: { ring: "border-neg/35 bg-neg-soft", text: "text-neg", Icon: AlertTriangle },
+  warning: { ring: "border-warn/35 bg-warn-soft", text: "text-warn", Icon: AlertTriangle },
+  info: { ring: "border-hairline bg-raise", text: "text-ink-soft", Icon: Info },
+} as const;
+
+function NeedsAttention({ items, loading }: { items: AttentionItem[] | null; loading: boolean }) {
+  return (
+    <Card className="flex flex-col">
+      <CardHeader
+        title="Needs attention"
+        subtitle={items && items.length > 0 ? pluralize(items.length, "thing", "things") : undefined}
+        icon={<AlertTriangle />}
+      />
+      {loading && !items ? (
+        <div className="space-y-2 p-4">
+          <Skeleton className="h-16" />
+          <Skeleton className="h-16" />
+        </div>
+      ) : !items ? null : items.length === 0 ? (
+        <EmptyState
+          icon={<Award />}
+          title="Nothing needs you right now"
+          description="Failed payments, reported posts and anything else that needs a decision will appear here."
+        />
+      ) : (
+        <ul className="divide-y divide-hairline/60">
+          {items.map((item) => {
+            const style = SEVERITY_STYLE[item.severity];
+            return (
+              <li key={item.key}>
+                <Link
+                  to={item.to}
+                  className="group flex items-start gap-3 px-4 py-3.5 transition-colors hover:bg-raise"
+                >
+                  <span
+                    aria-hidden
+                    className={cn(
+                      "mt-0.5 grid size-8 shrink-0 place-items-center rounded-lg border [&_svg]:size-4",
+                      style.ring,
+                      style.text,
+                    )}
+                  >
+                    <style.Icon />
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-baseline justify-between gap-3">
+                      <span className="truncate text-[0.86rem] font-semibold text-ink">
+                        {item.title}
+                      </span>
+                      {/* The count is its own element, not colour on the title:
+                          §51 forbids leaning on colour, and a number reads at a
+                          glance where a red tint does not. */}
+                      <span className={cn("shrink-0 font-numeric text-base font-semibold tabular-nums", style.text)}>
+                        {item.count}
+                      </span>
+                    </span>
+                    <span className="mt-0.5 block text-[0.76rem] leading-snug text-ink-soft">
+                      {item.detail}
+                    </span>
+                    <span className="mt-1.5 inline-flex items-center gap-1 text-[0.74rem] font-semibold text-accent">
+                      {item.actionLabel}
+                      <ArrowRight aria-hidden className="size-3 transition-transform group-hover:translate-x-0.5" />
+                    </span>
+                  </span>
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </Card>
+  );
+}
+
+/* -------------------------------------------------------------- §20 today */
+
+function TodayPanel({ entries, loading }: { entries: TodayEntry[] | null; loading: boolean }) {
+  const time = (iso: string) =>
+    new Date(iso).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+
+  return (
+    <Card className="flex flex-col">
+      <CardHeader
+        title="Today"
+        subtitle={new Date().toLocaleDateString(undefined, {
+          weekday: "long",
+          day: "numeric",
+          month: "long",
+        })}
+        icon={<CalendarDays />}
+        action={
+          <Button variant="ghost" size="sm" asChild>
+            <Link to="/admin/coaching">View calendar</Link>
+          </Button>
+        }
+      />
+      {loading && !entries ? (
+        <div className="space-y-2 p-4">
+          <Skeleton className="h-12" />
+          <Skeleton className="h-12" />
+        </div>
+      ) : !entries ? null : entries.length === 0 ? (
+        <EmptyState
+          icon={<CalendarDays />}
+          title="Nothing scheduled today"
+          description="Your coaching sessions, classes and community events will appear here."
+          action={
+            <Button variant="secondary" size="sm" asChild>
+              <Link to="/admin/coaching">View calendar</Link>
+            </Button>
+          }
+        />
+      ) : (
+        <ul className="divide-y divide-hairline/60">
+          {entries.map((entry) => (
+            <li key={entry.key}>
+              <Link
+                to={entry.to}
+                className="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-raise"
+              >
+                <span className="w-[4.25rem] shrink-0 font-numeric text-[0.78rem] font-semibold tabular-nums text-accent">
+                  {time(entry.at)}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[0.85rem] font-medium text-ink">
+                    {entry.title}
+                  </span>
+                  <span className="block truncate text-[0.75rem] text-ink-soft">{entry.subtitle}</span>
+                </span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
+  );
+}
+
+/* --------------------------------------------------- §21 program performance */
+
+function ProgramPerformance({
+  programs,
+  className,
+}: {
+  programs?: DashboardPulse["programs"];
+  className?: string;
+}) {
+  if (!programs) return null;
+
+  return (
+    <Card className={cn("flex flex-col", className)}>
+      <CardHeader
+        title="Program performance"
+        subtitle="Members, revenue and progress across everything you sell"
+        icon={<Sparkles />}
+        action={
+          <Button variant="ghost" size="sm" asChild>
+            <Link to="/admin/products">View products</Link>
+          </Button>
+        }
+      />
+      {programs.length === 0 ? (
+        <EmptyState
+          icon={<Sparkles />}
+          title="No published products yet"
+          description="Publish a course, community or coaching package and its performance shows here."
+          action={
+            <Button variant="secondary" size="sm" asChild>
+              <Link to="/admin/products">Create a product</Link>
+            </Button>
+          }
+        />
+      ) : (
+        <ul className="divide-y divide-hairline/60">
+          {programs.map((program) => (
+            <li key={program.id} className="flex flex-wrap items-center gap-4 px-5 py-3.5">
+              <div className="min-w-[10rem] flex-1">
+                <Link
+                  to="/admin/products"
+                  className="text-[0.88rem] font-semibold text-ink hover:text-accent"
+                >
+                  {program.title}
+                </Link>
+                <p className="mt-0.5 text-[0.72rem] capitalize text-ink-soft">{program.kind}</p>
+              </div>
+              <div className="text-right">
+                <p className="font-numeric text-[0.95rem] font-semibold tabular-nums text-ink">
+                  {formatNumber(program.members)}
+                </p>
+                <p className="text-[0.68rem] text-ink-soft">Members</p>
+              </div>
+              <div className="text-right">
+                <p className="font-numeric text-[0.95rem] font-semibold tabular-nums text-ink">
+                  {formatCurrency(program.revenueCents)}
+                </p>
+                <p className="text-[0.68rem] text-ink-soft">Revenue</p>
+              </div>
+              <div className="w-[7.5rem]">
+                {/* Null means "this product is not a course", which is not 0%.
+                    A full-width empty bar would read as nobody making progress. */}
+                {program.completionPercent === null ? (
+                  <p className="text-right text-[0.72rem] text-ink-soft">—</p>
+                ) : (
+                  <ProgressBar percent={program.completionPercent} label="Completion" />
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
+  );
+}
+
+function ProgressBar({ percent, label }: { percent: number; label: string }) {
+  const clamped = Math.max(0, Math.min(100, Math.round(percent)));
+  return (
+    <div>
+      <div className="mb-1 flex items-baseline justify-between gap-2">
+        <span className="text-[0.68rem] text-ink-soft">{label}</span>
+        <span className="font-numeric text-[0.72rem] font-semibold tabular-nums text-ink">{clamped}%</span>
+      </div>
+      <div
+        role="progressbar"
+        aria-valuenow={clamped}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-label={label}
+        className="h-1.5 overflow-hidden rounded-full bg-raise-strong"
+      >
+        <div className="h-full rounded-full bg-accent" style={{ width: `${clamped}%` }} />
+      </div>
+    </div>
+  );
+}
+
+/* ----------------------------------------------------- §22–§23 sales section */
+
+const SALE_STATUS_TONE: Record<string, "green" | "gold" | "red" | "plum" | "slate"> = {
+  paid: "green",
+  pending: "gold",
+  failed: "red",
+  refunded: "red",
+};
+
+const PRICING_LABEL: Record<string, string> = {
+  one_time: "One-time",
+  subscription: "Subscription",
+  payment_plan: "Payment plan",
+  free: "Free",
+  pwyw: "Pay what you want",
+};
+
+function SalesSection({
+  sales,
+  days,
+}: {
+  sales: NonNullable<DashboardPulse["sales"]>;
+  days: number;
+}) {
+  // §23: "Clicking a row should open order details." A drawer rather than a
+  // navigation, per §44 — she is reading the dashboard, and the whole point of
+  // glancing at an order is to go straight back to it.
+  const [openOrder, setOpenOrder] = useState<RecentSale | null>(null);
+
+  const stats = [
+    { label: "Purchases", value: sales.purchases },
+    { label: "Refunds", value: sales.refunds },
+    { label: "Upsells", value: sales.upsells },
+    { label: "Recovered checkouts", value: sales.recoveredCheckouts },
+    { label: "Left unfinished", value: sales.abandonedCheckouts },
+  ];
+
+  return (
+    <Card>
+      <CardHeader
+        title="Sales"
+        subtitle={`Last ${days} days`}
+        icon={<ShoppingBag />}
+        action={
+          <Button variant="ghost" size="sm" asChild>
+            <Link to="/admin/sales/payments">View all orders</Link>
+          </Button>
+        }
+      />
+
+      <dl className="grid grid-cols-2 gap-x-4 gap-y-3 border-b border-hairline/60 px-5 py-4 sm:grid-cols-3 lg:grid-cols-5">
+        {stats.map((s) => (
+          <div key={s.label}>
+            <dt className="text-[0.72rem] text-ink-soft">{s.label}</dt>
+            <dd className="mt-0.5 font-numeric text-[1.05rem] font-semibold tabular-nums text-ink">
+              {formatNumber(s.value)}
+            </dd>
           </div>
-        )}
-      </Card>
-    </Link>
+        ))}
+      </dl>
+
+      {sales.recent.length === 0 ? (
+        <EmptyState
+          icon={<ShoppingBag />}
+          title="No orders yet"
+          description="Every purchase will appear here the moment it completes."
+          action={
+            <Button variant="secondary" size="sm" asChild>
+              <Link to="/admin/offers">Create an offer</Link>
+            </Button>
+          }
+        />
+      ) : (
+        // §49: the table stays readable on a narrow screen by scrolling inside
+        // its own container rather than pushing the page sideways.
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[46rem] text-left text-sm">
+            <caption className="sr-only">Your most recent orders</caption>
+            <thead>
+              <tr className="border-b border-hairline/60 text-[0.7rem] uppercase tracking-[0.08em] text-ink-soft">
+                <th scope="col" className="px-5 py-2.5 font-semibold">Customer</th>
+                <th scope="col" className="px-5 py-2.5 font-semibold">Offer</th>
+                <th scope="col" className="px-5 py-2.5 font-semibold">Type</th>
+                <th scope="col" className="px-5 py-2.5 text-right font-semibold">Amount</th>
+                <th scope="col" className="px-5 py-2.5 font-semibold">Status</th>
+                <th scope="col" className="px-5 py-2.5 font-semibold">Date</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-hairline/50">
+              {sales.recent.map((sale) => (
+                <tr
+                  key={sale.id}
+                  onClick={() => setOpenOrder(sale)}
+                  className="cursor-pointer transition-colors hover:bg-raise"
+                >
+                  <td className="px-5 py-3">
+                    {/* The row is clickable, but a row is not focusable and a
+                        keyboard user needs something that is — so the customer
+                        cell carries a real button that opens the same drawer. */}
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setOpenOrder(sale);
+                      }}
+                      className="rounded font-medium text-ink hover:text-accent"
+                    >
+                      {sale.customer}
+                    </button>
+                  </td>
+                  <td className="px-5 py-3 text-ink-soft">{sale.offer}</td>
+                  <td className="px-5 py-3 text-ink-soft">
+                    {PRICING_LABEL[sale.type] ?? sale.type}
+                  </td>
+                  <td className="px-5 py-3 text-right font-numeric tabular-nums text-ink">
+                    {formatCurrency(sale.amountCents, sale.currency)}
+                  </td>
+                  <td className="px-5 py-3">
+                    <Badge tone={SALE_STATUS_TONE[sale.status] ?? "slate"}>{sale.status}</Badge>
+                  </td>
+                  <td className="px-5 py-3 text-ink-soft">{formatRelative(sale.at)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <OrderDrawer sale={openOrder} onClose={() => setOpenOrder(null)} />
+    </Card>
+  );
+}
+
+/** §44's "Order Details" drawer. */
+function OrderDrawer({ sale, onClose }: { sale: RecentSale | null; onClose: () => void }) {
+  return (
+    <Drawer
+      open={sale !== null}
+      onOpenChange={(open) => !open && onClose()}
+      title={sale ? `Order #${sale.id}` : ""}
+      description={sale?.offer}
+      footer={
+        <Button variant="primary" size="sm" asChild>
+          <Link to="/admin/sales/payments">Open in payments</Link>
+        </Button>
+      }
+    >
+      {sale && (
+        <DrawerFacts
+          items={[
+            { label: "Customer", value: sale.customer },
+            { label: "Email", value: sale.email },
+            { label: "Offer", value: sale.offer },
+            { label: "Type", value: PRICING_LABEL[sale.type] ?? sale.type },
+            {
+              label: "Amount",
+              value: formatCurrency(sale.amountCents, sale.currency),
+            },
+            {
+              label: "Status",
+              value: <Badge tone={SALE_STATUS_TONE[sale.status] ?? "slate"}>{sale.status}</Badge>,
+            },
+            { label: "Placed", value: formatRelative(sale.at) },
+          ]}
+        />
+      )}
+    </Drawer>
+  );
+}
+
+/* ---------------------------------------------------------- small summaries */
+
+/** The shared shell for the §24–§29 summary tiles. */
+function SummaryCard({
+  title,
+  icon,
+  to,
+  cta,
+  children,
+}: {
+  title: string;
+  icon: ReactNode;
+  to: string;
+  cta: string;
+  children: ReactNode;
+}) {
+  return (
+    <Card className="flex flex-col">
+      <CardHeader title={title} icon={icon} />
+      <div className="flex-1 px-5 py-4">{children}</div>
+      <div className="border-t border-hairline/60 px-5 py-3">
+        <Link
+          to={to}
+          className="inline-flex items-center gap-1 text-[0.78rem] font-semibold text-accent hover:underline"
+        >
+          {cta}
+          <ArrowRight aria-hidden className="size-3.5" />
+        </Link>
+      </div>
+    </Card>
+  );
+}
+
+function StatRow({ items }: { items: { label: string; value: string }[] }) {
+  return (
+    <dl className="space-y-2.5">
+      {items.map((item) => (
+        <div key={item.label} className="flex items-baseline justify-between gap-3">
+          <dt className="text-[0.8rem] text-ink-soft">{item.label}</dt>
+          <dd className="font-numeric text-[0.98rem] font-semibold tabular-nums text-ink">{item.value}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+function MarketingPanel({ marketing }: { marketing?: DashboardPulse["marketing"] }) {
+  if (!marketing) return null;
+  const pct = (v: number | null) => (v === null ? "—" : `${v}%`);
+  return (
+    <SummaryCard title="Marketing" icon={<Mail />} to="/admin/marketing/campaigns" cta="View email">
+      <StatRow
+        items={[
+          { label: "Emails sent", value: formatNumber(marketing.sends) },
+          { label: "Open rate", value: pct(marketing.openRate) },
+          { label: "Click rate", value: pct(marketing.clickRate) },
+          { label: "Unsubscribed", value: pct(marketing.unsubscribeRate) },
+          { label: "Active sequences", value: formatNumber(marketing.activeSequences) },
+          { label: "Active automations", value: formatNumber(marketing.activeAutomations) },
+        ]}
+      />
+    </SummaryCard>
+  );
+}
+
+function CoursePanel({ courses }: { courses?: DashboardPulse["courses"] }) {
+  if (!courses) return null;
+  return (
+    <SummaryCard title="Courses" icon={<BookOpen />} to="/admin/courses" cta="View courses">
+      {courses.length === 0 ? (
+        <p className="text-sm text-ink-soft">
+          No one is enrolled yet. Average progress appears here once people start learning.
+        </p>
+      ) : (
+        <ul className="space-y-3.5">
+          {courses.map((course) => (
+            <li key={course.id}>
+              <p className="mb-1 truncate text-[0.82rem] font-medium text-ink">{course.title}</p>
+              <ProgressBar
+                percent={course.completionPercent}
+                label={pluralize(course.learners, "learner", "learners")}
+              />
+            </li>
+          ))}
+        </ul>
+      )}
+    </SummaryCard>
+  );
+}
+
+function CommunityPanel({ community }: { community?: DashboardPulse["community"] }) {
+  if (!community) return null;
+  return (
+    <SummaryCard title="Community" icon={<MessageSquare />} to="/admin/community" cta="View community">
+      <StatRow
+        items={[
+          { label: "Members", value: formatNumber(community.activeMembers) },
+          { label: "Posts this week", value: formatNumber(community.postsThisWeek) },
+          { label: "Comments this week", value: formatNumber(community.commentsThisWeek) },
+          { label: "Reported posts", value: formatNumber(community.reportedPosts) },
+        ]}
+      />
+    </SummaryCard>
+  );
+}
+
+function ContactsPanel({ contacts }: { contacts?: DashboardPulse["contacts"] }) {
+  if (!contacts) return null;
+  return (
+    <SummaryCard title="Contacts" icon={<Users />} to="/admin/contacts" cta="View contacts">
+      <StatRow
+        items={[
+          { label: "Total contacts", value: formatNumber(contacts.total) },
+          { label: "New this period", value: formatNumber(contacts.newThisPeriod) },
+          { label: "Members", value: formatNumber(contacts.members) },
+          { label: "Email subscribers", value: formatNumber(contacts.subscribed) },
+        ]}
+      />
+      {contacts.topCustomer && (
+        <div className="mt-4 rounded-lg border border-hairline bg-raise px-3 py-2.5">
+          <p className="text-[0.68rem] uppercase tracking-[0.08em] text-ink-soft">Top customer</p>
+          <p className="mt-0.5 truncate text-[0.85rem] font-semibold text-ink">
+            {contacts.topCustomer.name}
+          </p>
+          <p className="font-numeric text-[0.75rem] tabular-nums text-ink-soft">
+            {formatCurrency(contacts.topCustomer.lifetimeValueCents)} lifetime
+          </p>
+        </div>
+      )}
+    </SummaryCard>
+  );
+}
+
+function CoachingPanel({ coaching }: { coaching?: DashboardPulse["coaching"] }) {
+  if (!coaching) return null;
+  return (
+    <SummaryCard title="Coaching" icon={<CalendarDays />} to="/admin/coaching" cta="View coaching">
+      <StatRow
+        items={[
+          { label: "Sessions today", value: formatNumber(coaching.today) },
+          { label: "This week", value: formatNumber(coaching.thisWeek) },
+          { label: "Completed", value: formatNumber(coaching.completed) },
+          { label: "Cancelled", value: formatNumber(coaching.cancelled) },
+          { label: "Upcoming", value: formatNumber(coaching.upcoming) },
+        ]}
+      />
+      {coaching.next.length > 0 && (
+        <div className="mt-4 space-y-2">
+          <p className="text-[0.68rem] uppercase tracking-[0.08em] text-ink-soft">Next up</p>
+          {coaching.next.map((session) => (
+            <div key={session.id} className="rounded-lg border border-hairline bg-raise px-3 py-2">
+              <p className="truncate text-[0.82rem] font-medium text-ink">{session.member}</p>
+              <p className="truncate text-[0.73rem] text-ink-soft">
+                {formatRelative(session.at)} · {session.title}
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
+    </SummaryCard>
+  );
+}
+
+function ApplicationsPanel({ applications }: { applications?: DashboardPulse["applications"] }) {
+  if (!applications) return null;
+  const total = applications.reduce((sum, row) => sum + row.count, 0);
+  return (
+    <SummaryCard title="Applications" icon={<FileText />} to="/admin/leads" cta="Review applications">
+      {total === 0 ? (
+        <p className="text-sm text-ink-soft">
+          No enquiries in this period. New applications from your forms appear here.
+        </p>
+      ) : (
+        <ul className="flex flex-wrap gap-2">
+          {applications.map((row) => (
+            <li key={row.status}>
+              <Badge tone={LEAD_STATUS_TONE[row.status] ?? "slate"}>
+                {row.count} {leadStatusLabel(row.status)}
+              </Badge>
+            </li>
+          ))}
+        </ul>
+      )}
+    </SummaryCard>
+  );
+}
+
+/* ----------------------------------------------------------- §30 activity */
+
+const ACTIVITY_ICON: Record<string, ReactNode> = {
+  order: <ShoppingBag />,
+  payment: <CreditCard />,
+  refund: <RefreshCw />,
+  lesson: <BookOpen />,
+  booking: <CalendarDays />,
+  form: <FileText />,
+  email: <Mail />,
+  certificate: <Award />,
+  tag: <Ticket />,
+  community: <MessageSquare />,
+};
+
+function RecentActivity({
+  activity,
+  className,
+}: {
+  activity?: DashboardPulse["activity"];
+  className?: string;
+}) {
+  if (!activity) return null;
+
+  return (
+    <Card className={cn("flex flex-col", className)}>
+      <CardHeader title="Recent activity" icon={<Activity />} />
+      {activity.length === 0 ? (
+        <EmptyState
+          icon={<Activity />}
+          title="Nothing has happened yet"
+          description="Purchases, lessons, bookings and sign-ups all show up here as they happen."
+        />
+      ) : (
+        <ul className="divide-y divide-hairline/60">
+          {activity.map((item) => (
+            <li key={item.id} className="flex items-center gap-3 px-5 py-2.5">
+              <span
+                aria-hidden
+                className="grid size-8 shrink-0 place-items-center rounded-lg bg-raise text-ink-soft [&_svg]:size-4"
+              >
+                {ACTIVITY_ICON[item.kind] ?? <Activity />}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[0.84rem] text-ink">
+                  {item.contactId ? (
+                    <Link
+                      to={`/admin/contacts/${item.contactId}`}
+                      className="font-medium hover:text-accent"
+                    >
+                      {item.person}
+                    </Link>
+                  ) : (
+                    <span className="font-medium">{item.person}</span>
+                  )}{" "}
+                  <span className="text-ink-soft">{item.title}</span>
+                </span>
+              </span>
+              <time
+                dateTime={item.at}
+                className="shrink-0 font-numeric text-[0.72rem] tabular-nums text-ink-soft"
+              >
+                {formatRelative(item.at)}
+              </time>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
+  );
+}
+
+/* ------------------------------------------------------ §31 quick actions */
+
+const QUICK_ACTIONS = [
+  { to: "/admin/contacts", label: "Add contact", icon: <UserPlus /> },
+  { to: "/admin/offers/new", label: "Create offer", icon: <Ticket /> },
+  { to: "/admin/products", label: "Create product", icon: <ShoppingBag /> },
+  { to: "/admin/marketing/campaigns", label: "Send email", icon: <Mail /> },
+  { to: "/admin/marketing/automations-v2", label: "Create automation", icon: <Sparkles /> },
+  { to: "/admin/marketing/events-v2", label: "Schedule event", icon: <CalendarDays /> },
+];
+
+function QuickActions() {
+  return (
+    <Card className="flex flex-col">
+      <CardHeader title="Quick actions" icon={<Plus />} />
+      <div className="grid grid-cols-2 gap-2 p-4">
+        {QUICK_ACTIONS.map((action) => (
+          <Link
+            key={action.to}
+            to={action.to}
+            className="flex items-center gap-2.5 rounded-xl border border-hairline bg-raise px-3 py-2.5 text-[0.8rem] font-medium text-ink transition-all hover:-translate-y-0.5 hover:border-accent/45 hover:text-accent motion-reduce:hover:translate-y-0 [&_svg]:size-4 [&_svg]:shrink-0 [&_svg]:text-ink-soft"
+          >
+            {action.icon}
+            <span className="truncate">{action.label}</span>
+          </Link>
+        ))}
+      </div>
+    </Card>
   );
 }

@@ -33,6 +33,9 @@ import { adminUsersRouter, adminInviteRouter } from "./adminUsers";
 import { adminIntegrationsRouter } from "./integrations";
 import { adminReportsRouter } from "./reports";
 import { adminDashboardRouter } from "./dashboard";
+import { adminNotificationsRouter, adminSearchRouter } from "./console";
+import { adminCalendarRouter } from "./calendar";
+import { adminSocialRouter } from "./social";
 import { adminAssessmentsRouter } from "./assessments";
 import { adminEventsRouter } from "./events";
 import { adminFormsRouter as adminFormsV2Router } from "./formsV2";
@@ -144,6 +147,17 @@ adminRouter.use("/admins", requireAuth, adminsGate, adminUsersRouter);
 adminRouter.use("/integrations", requireAuth, moduleGate("settings"), adminIntegrationsRouter);
 adminRouter.use("/reports", requireAuth, moduleGate("reports"), adminReportsRouter);
 adminRouter.use("/dashboard", requireAuth, requirePermission("reports.view"), adminDashboardRouter);
+// The header's global search and notification feed (Part II §10, §42). Both
+// span every module, so neither can be gated at the mount: they carry no
+// permission of their own and filter each source against the caller's role
+// inside the handler. Authentication alone is the gate here.
+// The unified calendar spans coaching, events and community, so like the
+// dashboard panels it filters each source against the caller's role inside the
+// handler rather than carrying one permission at the mount.
+adminRouter.use("/calendar", requireAuth, adminCalendarRouter);
+adminRouter.use("/social", requireAuth, moduleGate("marketing"), adminSocialRouter);
+adminRouter.use("/search", requireAuth, adminSearchRouter);
+adminRouter.use("/notifications", requireAuth, adminNotificationsRouter);
 adminRouter.use("/assessments", requireAuth, moduleGate("marketing"), adminAssessmentsRouter);
 adminRouter.use("/events", requireAuth, moduleGate("marketing"), adminEventsRouter);
 adminRouter.use("/forms-v2", requireAuth, moduleGate("marketing"), adminFormsV2Router);

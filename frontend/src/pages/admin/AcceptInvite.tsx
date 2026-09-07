@@ -44,7 +44,7 @@ export default function AcceptInvite() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-night-deep px-4 py-12">
+    <div className="flex min-h-screen items-center justify-center bg-cream px-4 py-12">
       <Card className="w-full max-w-md p-7">
         {invite === undefined ? (
           <div className="space-y-3">
@@ -56,7 +56,7 @@ export default function AcceptInvite() {
           <ErrorNotice message="That invitation has expired or has already been used. Ask for a new one." />
         ) : (
           <>
-            <h1 className="font-display text-2xl text-white">Set your password</h1>
+            <h1 className="font-display text-2xl text-ink">Set your password</h1>
             <p className="mt-2 text-sm text-ink-soft">
               You've been given access to Boss Clinician as{" "}
               <span className="text-ink">{invite.email}</span>.

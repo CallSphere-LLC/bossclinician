@@ -225,7 +225,7 @@ function BodyEditor({
 
   return (
     <div className="space-y-2">
-      <div className="flex flex-wrap items-center gap-1 rounded-xl border border-hairline bg-white/[0.04] p-1">
+      <div className="flex flex-wrap items-center gap-1 rounded-xl border border-hairline bg-raise p-1">
         {!preview &&
           TOOLBAR.map(({ id, label, Icon }) => (
             <Button
@@ -261,7 +261,7 @@ function BodyEditor({
       </div>
 
       {preview ? (
-        <div className="prose-boss min-h-[10rem] rounded-xl border border-hairline bg-white/[0.03] p-4">
+        <div className="prose-boss min-h-[10rem] rounded-xl border border-hairline bg-raise p-4">
           {value.trim() ? (
             <ReactMarkdown remarkPlugins={[remarkGfm]}>{value}</ReactMarkdown>
           ) : (
@@ -431,9 +431,9 @@ export default function Podcasts() {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="Products"
+        eyebrow="Content & Services"
         title="Podcasts"
-        description="Publish a public show, or a members-only one. Listeners subscribe in Apple Podcasts, Spotify and the rest."
+        description="Create and manage private or member-only podcast content."
         actions={
           <Button size="sm" onClick={() => setShowDraft({ ...EMPTY_SHOW })}>
             <Plus />

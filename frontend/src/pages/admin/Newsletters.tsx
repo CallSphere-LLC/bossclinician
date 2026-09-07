@@ -201,7 +201,7 @@ function BodyEditor({
 
   return (
     <div className="space-y-2">
-      <div className="flex flex-wrap items-center gap-1 rounded-xl border border-hairline bg-white/[0.04] p-1">
+      <div className="flex flex-wrap items-center gap-1 rounded-xl border border-hairline bg-raise p-1">
         {!preview &&
           TOOLBAR.map(({ id, label, Icon }) => (
             <Button
@@ -237,7 +237,7 @@ function BodyEditor({
       </div>
 
       {preview ? (
-        <div className="prose-boss min-h-[14rem] rounded-xl border border-hairline bg-white/[0.03] p-4">
+        <div className="prose-boss min-h-[14rem] rounded-xl border border-hairline bg-raise p-4">
           {value.trim() ? (
             <ReactMarkdown remarkPlugins={[remarkGfm]}>{value}</ReactMarkdown>
           ) : (
@@ -385,9 +385,9 @@ export default function Newsletters() {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="Products"
+        eyebrow="Marketing"
         title="Newsletters"
-        description="Write to your list on a regular rhythm. A newsletter can be free for everyone, or only for people paying for one of your plans."
+        description="Write and send regular issues to the people subscribed to them."
         actions={
           <Button size="sm" onClick={() => setNlDraft({ access: "free", published: true })}>
             <Plus />

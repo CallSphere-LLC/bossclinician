@@ -29,6 +29,7 @@ import type {
   CommunityMembership,
   CommunityPost,
   CourseModule,
+  CourseQuiz,
   Coupon,
   DashboardOverview,
   Enrollment,
@@ -341,7 +342,31 @@ export const adminApi = {
 
   // ---- Curriculum ----
   curriculum: (courseId: number) => request<CourseModule[]>(`/admin/curriculum/${courseId}`),
-  moduleCreate: (courseId: number, data: { title: string; summary?: string }) =>
+  /** Create a quiz inside a section, without leaving the course builder. */
+  courseQuizCreate: (moduleId: number, data: { title: string; kind?: "quiz" | "graded" }) =>
+    request<CourseQuiz>(`/admin/curriculum/modules/${moduleId}/quizzes`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  /** Reorder the outline in one transaction rather than a request per row. */
+  curriculumReorder: (
+    courseId: number,
+    data: {
+      modules?: { id: number; sort: number }[];
+      lessons?: { id: number; sort: number; moduleId?: number }[];
+      quizzes?: { id: number; sort: number; moduleId?: number }[];
+    },
+  ) =>
+    request<void>(`/admin/curriculum/${courseId}/order`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+
+  moduleCreate: (
+    courseId: number,
+    data: { title: string; summary?: string; parentId?: number | null },
+  ) =>
     request<CourseModule>(`/admin/curriculum/${courseId}/modules`, {
       method: "POST",
       body: JSON.stringify(data),

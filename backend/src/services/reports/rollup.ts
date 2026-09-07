@@ -321,6 +321,26 @@ const METRICS: MetricSource[] = [
         FROM base GROUP BY day`,
   },
   {
+    // Part II §14 and §18 both want subscription revenue as its own line
+    // beside gross and net. It is deliberately *not* `paid_invoices`: that
+    // metric counts every paid invoice, and a one-off offer settled through
+    // an invoice would inflate recurring revenue with money that will not
+    // arrive again next month.
+    metric: "subscription_revenue",
+    sql: `
+      WITH base AS (
+        SELECT ${day("COALESCE(i.paid_at, i.created_at)")} AS day,
+               i.amount_paid_cents, i.currency
+          FROM invoices i
+         WHERE i.status = 'paid'
+           AND i.subscription_id IS NOT NULL
+           AND ${within("COALESCE(i.paid_at, i.created_at)")}
+      )
+      SELECT day, '' AS dimension, SUM(amount_paid_cents)::bigint AS value_cents,
+             COUNT(*)::int AS value_count, ${currencyOf} AS currency
+        FROM base GROUP BY day`,
+  },
+  {
     metric: "new_subscriptions",
     sql: `
       WITH base AS (

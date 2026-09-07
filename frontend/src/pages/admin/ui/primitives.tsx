@@ -29,16 +29,20 @@ const buttonVariants = cva(
   "inline-flex shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-xl font-semibold transition-all duration-200 disabled:pointer-events-none disabled:opacity-55 [&_svg]:pointer-events-none [&_svg]:shrink-0",
   {
     variants: {
+      // §48: solid accent primary, neutral bordered secondary, text tertiary,
+      // restrained red danger. Every fill is a token so the same button reads
+      // correctly on warm ivory and on charcoal — the previous gold-foil
+      // gradient with near-black text was legible in exactly one of the two.
       variant: {
-        primary:
-          "bg-gold-foil font-bold text-night-deep shadow-[0_8px_22px_-10px_rgba(201,164,106,0.7)] hover:shadow-[0_12px_28px_-10px_rgba(201,164,106,0.9)] active:brightness-95",
-        secondary:
-          "border border-hairline bg-white/[0.04] text-ink hover:border-gold/45 hover:bg-white/[0.08]",
-        ghost: "text-ink-soft hover:bg-white/[0.06] hover:text-ink",
+        primary: "bg-accent-solid text-accent-on shadow-console hover:brightness-110 active:brightness-95",
+        secondary: "border border-hairline bg-raise text-ink hover:border-accent/45 hover:bg-raise-strong",
+        ghost: "text-ink-soft hover:bg-raise hover:text-ink",
+        // Kept for the few places that are deliberately brand-gold (the sign-in
+        // call to action, the upgrade prompts) rather than console-accent.
         gold: "bg-gold-foil font-bold text-night-deep hover:brightness-105",
-        danger: "bg-red-500/90 text-white shadow-[0_6px_18px_-8px_rgba(220,38,38,0.7)] hover:bg-red-500",
-        dangerGhost: "text-red-400 hover:bg-red-500/10",
-        dark: "border border-hairline bg-night-deep text-ink hover:bg-white/[0.05]",
+        danger: "bg-neg text-white shadow-console hover:brightness-110",
+        dangerGhost: "text-neg hover:bg-neg-soft",
+        dark: "border border-hairline bg-sand text-ink hover:bg-raise-strong",
       },
       size: {
         sm: "h-9 px-3.5 text-xs [&_svg]:size-4",
@@ -78,7 +82,9 @@ export const Card = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(
         // Console card: a flat raised surface with a hairline, not the public
         // theme's frosted glass. Backdrop blur behind a 200-row table costs a
         // full-viewport repaint on every scroll frame.
-        "rounded-2xl border border-hairline bg-surface shadow-[0_1px_0_rgba(255,255,255,0.04)_inset,0_18px_40px_-24px_rgba(0,0,0,0.8)]",
+        // §47: 8–14px radius, 1px border, soft shadow. The shadow is a theme
+        // variable — one tuned for a near-black page reads as a smudge on ivory.
+        "rounded-2xl border border-hairline bg-surface shadow-console",
         className,
       )}
       {...props}
@@ -109,7 +115,7 @@ export function CardHeader({
     >
       <div className="flex min-w-0 items-center gap-3">
         {icon && (
-          <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-gold/[0.12] text-gold">
+          <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-accent/[0.12] text-accent">
             {icon}
           </span>
         )}
@@ -129,14 +135,17 @@ const badgeVariants = cva(
   "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[0.68rem] font-semibold uppercase tracking-[0.08em]",
   {
     variants: {
+      // §13's meaning-carrying palette. `green`/`red`/`gold` keep their names
+      // because ~40 call sites pass them, but they now resolve to the muted
+      // status tokens rather than to Tailwind's stock saturated families.
       tone: {
-        neutral: "border-hairline bg-white/[0.05] text-ink-soft",
-        plum: "border-plum-bright/40 bg-plum-bright/[0.16] text-lilac",
-        gold: "border-gold/40 bg-gold/[0.14] text-gold",
-        green: "border-green-bright/35 bg-green-bright/[0.14] text-green-bright",
-        red: "border-red-400/35 bg-red-500/[0.14] text-red-300",
-        blue: "border-sky-400/35 bg-sky-500/[0.14] text-sky-300",
-        slate: "border-white/12 bg-white/[0.05] text-orchid-dim",
+        neutral: "border-hairline bg-raise text-ink-soft",
+        plum: "border-accent/35 bg-accent-soft text-accent",
+        gold: "border-warn/35 bg-warn-soft text-warn",
+        green: "border-pos/35 bg-pos-soft text-pos",
+        red: "border-neg/35 bg-neg-soft text-neg",
+        blue: "border-accent/35 bg-accent-soft text-accent",
+        slate: "border-hairline bg-raise text-ink-soft",
       },
     },
     defaultVariants: { tone: "neutral" },
@@ -182,7 +191,7 @@ export function leadStatusLabel(status: string): string {
 /* ------------------------------------------------------------- Form fields */
 
 const fieldStyles =
-  "w-full rounded-xl border border-hairline bg-white/[0.04] px-4 text-sm text-ink outline-none transition-all placeholder:text-ink-soft/55 hover:border-white/20 focus-visible:border-gold/60 focus-visible:bg-white/[0.07] focus-visible:ring-4 focus-visible:ring-gold/15 disabled:bg-white/[0.02] disabled:text-ink-soft";
+  "w-full rounded-xl border border-hairline bg-raise px-4 text-sm text-ink outline-none transition-all placeholder:text-ink-soft/60 hover:border-ink-soft/35 focus-visible:border-accent focus-visible:bg-surface focus-visible:ring-4 focus-visible:ring-accent/20 disabled:opacity-60 disabled:text-ink-soft";
 
 export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement>>(
   ({ className, ...props }, ref) => (
@@ -288,7 +297,7 @@ export function Field({
       </label>
       {control}
       {error && (
-        <p id={errorId} className="mt-1.5 text-xs font-medium text-red-300" role="alert">
+        <p id={errorId} className="mt-1.5 text-xs font-medium text-neg" role="alert">
           {error}
         </p>
       )}
@@ -313,11 +322,13 @@ export function PageHeader({
     <div className="flex flex-wrap items-end justify-between gap-4">
       <div className="min-w-0">
         {eyebrow && (
-          <p className="mb-1.5 text-[0.7rem] font-semibold uppercase tracking-[0.18em] text-gold/85">
+          <p className="mb-1.5 text-[0.7rem] font-semibold uppercase tracking-[0.18em] text-accent">
             {eyebrow}
           </p>
         )}
-        <h1 className="font-display text-[1.75rem] leading-tight text-white">{title}</h1>
+        {/* §46 puts the page title at 28–32px. `text-white` here was invisible
+            the moment the console gained a light theme. */}
+        <h1 className="font-display text-[1.75rem] leading-tight text-ink">{title}</h1>
         {description && <p className="mt-1.5 max-w-2xl text-sm text-ink-soft">{description}</p>}
       </div>
       {actions && <div className="flex flex-wrap items-center gap-2.5">{actions}</div>}
@@ -326,7 +337,7 @@ export function PageHeader({
 }
 
 export function Skeleton({ className }: { className?: string }) {
-  return <div className={cn("animate-pulse rounded-xl bg-white/[0.06]", className)} />;
+  return <div className={cn("animate-pulse rounded-xl bg-raise-strong", className)} />;
 }
 
 export function EmptyState({
@@ -342,7 +353,7 @@ export function EmptyState({
 }) {
   return (
     <div className="flex flex-col items-center justify-center px-6 py-14 text-center">
-      <span className="grid size-14 place-items-center rounded-2xl bg-gold/[0.10] text-gold [&_svg]:size-6">
+      <span className="grid size-14 place-items-center rounded-2xl bg-accent/[0.10] text-accent [&_svg]:size-6">
         {icon}
       </span>
       <p className="mt-4 font-display text-lg text-ink">{title}</p>
@@ -356,9 +367,9 @@ export function ErrorNotice({ message }: { message: string }) {
   return (
     <div
       role="alert"
-      className="flex items-start gap-3 rounded-xl border border-red-400/30 bg-red-500/10 px-4 py-3 text-sm text-red-200"
+      className="flex items-start gap-3 rounded-xl border border-neg/30 bg-neg-soft px-4 py-3 text-sm text-neg"
     >
-      <span className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-full bg-red-500 text-xs font-bold text-white">
+      <span className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-full bg-neg text-xs font-bold text-white">
         !
       </span>
       <span>{message}</span>

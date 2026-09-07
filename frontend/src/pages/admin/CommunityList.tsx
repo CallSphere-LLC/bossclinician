@@ -91,9 +91,9 @@ export default function CommunityList() {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="Products"
+        eyebrow="Content & Services"
         title="Community"
-        description="Private spaces where your members talk to you and to each other — with channels, challenges and live events."
+        description="Manage the space where members can connect, participate, and access community content."
         actions={
           <Button size="sm" onClick={() => setCreating(true)}>
             <Plus />
@@ -145,12 +145,12 @@ export default function CommunityList() {
                   <div className="absolute inset-x-4 bottom-3 flex items-center gap-2">
                     <Badge
                       tone={community.access === "paid" ? "gold" : "neutral"}
-                      className="!bg-night-deep/80 !text-white ring-1 ring-white/15 backdrop-blur"
+                      className="!bg-night-deep/80 !text-white ring-1 ring-white/20 backdrop-blur"
                     >
                       {accessBadge(community.access)}
                     </Badge>
                     {!community.published && (
-                      <Badge tone="slate" className="!bg-night-deep/80 !text-white ring-1 ring-white/15 backdrop-blur">
+                      <Badge tone="slate" className="!bg-night-deep/80 !text-white ring-1 ring-white/20 backdrop-blur">
                         {PUBLISH_LABEL.draft}
                       </Badge>
                     )}
@@ -248,8 +248,8 @@ export default function CommunityList() {
                   onClick={() => setForm((f) => ({ ...f, access: option.value }))}
                   className={
                     form.access === option.value
-                      ? "flex-1 rounded-xl bg-brand-gradient px-4 py-2.5 text-sm font-semibold text-white"
-                      : "flex-1 rounded-xl border border-hairline px-4 py-2.5 text-sm font-semibold text-ink-soft transition-colors hover:border-plum/40 hover:text-plum"
+                      ? "flex-1 rounded-xl bg-accent-solid px-4 py-2.5 text-sm font-semibold text-accent-on"
+                      : "flex-1 rounded-xl border border-hairline px-4 py-2.5 text-sm font-semibold text-ink-soft transition-colors hover:border-plum/40 hover:text-accent"
                   }
                 >
                   {option.label}

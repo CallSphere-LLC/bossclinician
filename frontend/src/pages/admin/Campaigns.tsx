@@ -41,9 +41,11 @@ import {
   Textarea,
   type BadgeProps,
 } from "@/pages/admin/ui/primitives";
+import { cn } from "@/lib/cn";
 import { DataTable, RowActions } from "@/pages/admin/ui/DataTable";
 import { Modal, useConfirm } from "@/pages/admin/ui/Dialog";
 import { friendlyError, humanizeKey, pluralize } from "@/pages/admin/ui/friendly";
+import { BROADCAST_KINDS, broadcastKind } from "@/pages/admin/ui/broadcastKinds";
 
 const STATUS_TONE: Record<string, NonNullable<BadgeProps["tone"]>> = {
   draft: "slate",
@@ -211,7 +213,7 @@ function BodyEditor({
 
   return (
     <div className="space-y-2">
-      <div className="flex flex-wrap items-center gap-1 rounded-xl border border-hairline bg-white/[0.04] p-1">
+      <div className="flex flex-wrap items-center gap-1 rounded-xl border border-hairline bg-raise p-1">
         {!preview &&
           TOOLBAR.map(({ id, label, Icon }) => (
             <Button
@@ -247,7 +249,7 @@ function BodyEditor({
       </div>
 
       {preview ? (
-        <div className="prose-boss min-h-[14rem] rounded-xl border border-hairline bg-white/[0.03] p-4">
+        <div className="prose-boss min-h-[14rem] rounded-xl border border-hairline bg-raise p-4">
           {value.trim() ? (
             <ReactMarkdown remarkPlugins={[remarkGfm]}>{value}</ReactMarkdown>
           ) : (
@@ -273,8 +275,31 @@ function BodyEditor({
 
 export default function Campaigns() {
   const [campaigns, setCampaigns] = useState<Campaign[] | null>(null);
+  // §G — a real filter over the persisted `kind`, not a visual affordance.
+  // "all" is a filter state rather than a kind, so it is kept separate from
+  // BroadcastKind and cannot be saved onto a record by accident.
+  const [kindFilter, setKindFilter] = useState<string>("all");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+
+  /** Statuses actually present, so the filter never offers a dead option. */
+  const statuses = useMemo(
+    () => [...new Set((campaigns ?? []).map((c) => c.status))].sort(),
+    [campaigns],
+  );
+
+  const visible = useMemo(() => {
+    if (campaigns === null) return null;
+    return campaigns.filter(
+      (c) =>
+        (kindFilter === "all" || (c.kind || "general") === kindFilter) &&
+        (statusFilter === "all" || c.status === statusFilter),
+    );
+  }, [campaigns, kindFilter, statusFilter]);
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState<Partial<Campaign> | null>(null);
+  // "When the admin clicks + New Broadcast, ask what kind of email they want
+  // to send." One system underneath; the kind only steers what is suggested.
+  const [choosingKind, setChoosingKind] = useState(false);
   const [audienceCount, setAudienceCount] = useState<number | null>(null);
   const [confirm, confirmDialog] = useConfirm();
 
@@ -390,6 +415,21 @@ export default function Campaigns() {
         ),
       },
       {
+        // The kind is what tells a newsletter from a promotion at a glance,
+        // now that both are broadcasts rather than separate screens.
+        accessorKey: "kind",
+        header: "Type",
+        cell: ({ row }) => {
+          const spec = broadcastKind(row.original.kind);
+          return (
+            <span className="flex items-center gap-1.5 text-[0.82rem] text-ink">
+              <spec.Icon aria-hidden className="size-3.5 shrink-0 text-ink-soft" />
+              {spec.label}
+            </span>
+          );
+        },
+      },
+      {
         accessorKey: "audience",
         header: "Who gets it",
         cell: ({ row }) => (
@@ -467,12 +507,12 @@ export default function Campaigns() {
     <div className="space-y-6">
       <PageHeader
         eyebrow="Marketing"
-        title="Email Campaigns"
-        description="Write one email and send it to your subscribers, members or enquiries."
+        title="Broadcasts"
+        description="Send newsletters, promotions, announcements, event invitations, program updates, and other emails to a selected audience."
         actions={
-          <Button size="sm" onClick={() => setDraft({ audience: "all_subscribers", status: "draft" })}>
+          <Button size="sm" onClick={() => setChoosingKind(true)}>
             <Plus />
-            Write an email
+            New Broadcast
           </Button>
         }
       />
@@ -481,31 +521,125 @@ export default function Campaigns() {
 
       <DataTable
         columns={columns}
-        data={campaigns}
-        searchPlaceholder="Search your emails…"
-        itemNoun={{ one: "email", many: "emails" }}
-        minWidth="880px"
+        data={visible}
+        searchPlaceholder="Search your broadcasts…"
+        itemNoun={{ one: "broadcast", many: "broadcasts" }}
+        minWidth="980px"
+        columnControls
+        toolbar={
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="sr-only" htmlFor="broadcast-kind-filter">
+              Filter by type
+            </label>
+            <select
+              id="broadcast-kind-filter"
+              value={kindFilter}
+              onChange={(e) => setKindFilter(e.target.value)}
+              className={cn(selectStyles, "h-10 w-auto min-w-[11rem]")}
+            >
+              <option value="all">All Types</option>
+              {BROADCAST_KINDS.map((spec) => (
+                <option key={spec.kind} value={spec.kind}>
+                  {spec.label}
+                </option>
+              ))}
+            </select>
+
+            <label className="sr-only" htmlFor="broadcast-status-filter">
+              Filter by status
+            </label>
+            <select
+              id="broadcast-status-filter"
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className={cn(selectStyles, "h-10 w-auto min-w-[9rem]")}
+            >
+              <option value="all">All statuses</option>
+              {statuses.map((status) => (
+                <option key={status} value={status}>
+                  {STATUS_LABEL[status] ?? humanizeKey(status)}
+                </option>
+              ))}
+            </select>
+
+            {(kindFilter !== "all" || statusFilter !== "all") && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setKindFilter("all");
+                  setStatusFilter("all");
+                }}
+              >
+                Clear filters
+              </Button>
+            )}
+          </div>
+        }
         emptyState={
           <EmptyState
             icon={<Megaphone />}
             title="No emails yet"
             description="Write one and send it to your subscribers, members or enquiries."
             action={
-              <Button
-                size="sm"
-                onClick={() => setDraft({ audience: "all_subscribers", status: "draft" })}
-              >
-                Write an email
+              <Button size="sm" onClick={() => setChoosingKind(true)}>
+                New Broadcast
               </Button>
             }
           />
         }
       />
 
+      {/* "When the admin clicks + New Broadcast, ask what kind of email they
+          want to send." Choosing a kind opens the same editor with the same
+          fields — it only decides what is suggested inside it. */}
+      <Modal
+        open={choosingKind}
+        onOpenChange={(open) => !open && setChoosingKind(false)}
+        title="What kind of email is this?"
+        description="This only changes what we suggest to start you off. You can edit everything."
+        size="lg"
+      >
+        <ul className="grid gap-2.5 sm:grid-cols-2">
+          {BROADCAST_KINDS.map((spec) => (
+            <li key={spec.kind}>
+              <button
+                type="button"
+                onClick={() => {
+                  setChoosingKind(false);
+                  setDraft({
+                    audience: "all_subscribers",
+                    status: "draft",
+                    kind: spec.kind,
+                    subject: spec.suggestedSubject,
+                    bodyMd: spec.suggestedBody,
+                  });
+                }}
+                className="flex h-full w-full items-start gap-3 rounded-xl border border-hairline bg-raise p-3.5 text-left transition-all hover:-translate-y-0.5 hover:border-accent/45 motion-reduce:hover:translate-y-0"
+              >
+                <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-accent-soft text-accent [&_svg]:size-[1.05rem]">
+                  <spec.Icon aria-hidden />
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-[0.88rem] font-semibold text-ink">{spec.label}</span>
+                  <span className="mt-0.5 block text-[0.76rem] leading-snug text-ink-soft">
+                    {spec.description}
+                  </span>
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      </Modal>
+
       <Modal
         open={draft !== null}
         onOpenChange={(open) => !open && setDraft(null)}
-        title={draft?.id ? "Edit email" : "New email"}
+        title={
+          draft?.id
+            ? `Edit ${broadcastKind(draft.kind).label.toLowerCase()}`
+            : `New ${broadcastKind(draft?.kind).label.toLowerCase()}`
+        }
         size="lg"
         footer={
           <>

@@ -6,6 +6,8 @@ import { badRequest } from "../../utils/httpError";
 import { stripeEnabled } from "../../config/env";
 import { stripe } from "../../stripe/client";
 import { daysBetween, lastRollupAt, reportDay, shiftDay } from "../../services/reports/rollup";
+import { adminDashboardPanelsRouter } from "./dashboardPanels";
+import { can, type Permission } from "../../services/permissions";
 
 /**
  * The daily overview — mounted at /admin/dashboard.
@@ -15,6 +17,10 @@ import { daysBetween, lastRollupAt, reportDay, shiftDay } from "../../services/r
  * lookups rather than a scan of every transaction the business has ever taken.
  */
 export const adminDashboardRouter = Router();
+
+// §19–§30 live in their own file: they are cross-module and permission-gated
+// per section, where everything below this line is the money roll-up.
+adminDashboardRouter.use("/", adminDashboardPanelsRouter);
 
 const query = z.object({
   days: z.coerce.number().int().min(2).max(365).optional(),
@@ -34,6 +40,31 @@ interface Tile {
   sparkline: { date: string; value: number }[];
   /** Which report opens when the tile is clicked. */
   reportId: string | null;
+}
+
+/**
+ * A KPI card's worth of data — Part II §12, §14, §16.
+ *
+ * Distinct from `Tile` above, which is the five-figure row this dashboard has
+ * always had and which other screens still read. A KPI additionally carries
+ * where clicking it goes (§16) and which direction is good (§13): refunds
+ * rising is an arrow up and a red number, and one field cannot say both.
+ */
+interface Kpi {
+  key: string;
+  /** The label §14 names. */
+  label: string;
+  /** The same figure in the owner's words, for the card's title attribute. */
+  description: string;
+  format: Format | "percent";
+  currency: string;
+  value: number;
+  previousValue: number | null;
+  changePercent: number | null;
+  sparkline: number[];
+  sense: "higher-is-better" | "lower-is-better" | "neutral";
+  /** Admin route opened when the card is clicked (§16). */
+  to: string | null;
 }
 
 interface MetricWindow {
@@ -155,6 +186,311 @@ async function readBalance(): Promise<BalanceTile | null> {
   }
 }
 
+/* ------------------------------------------------------------------- KPIs */
+
+interface RevenueSeries {
+  gross: { date: string; value: number }[];
+  net: { date: string; value: number }[];
+  subscriptions: { date: string; value: number }[];
+  currency: string;
+  summary: {
+    grossCents: number;
+    netCents: number;
+    refundCents: number;
+    subscriptionCents: number;
+    averageOrderCents: number;
+    orders: number;
+  };
+}
+
+/**
+ * The §14 KPI set.
+ *
+ * Six primary cards, then the secondary row. Everything that can come from
+ * `report_daily` does, so the top of the dashboard stays a handful of index
+ * lookups; the ones that cannot (active members, average course completion,
+ * coaching sessions, enquiries) are snapshot counts with no meaningful
+ * previous period, and say so by carrying a null `changePercent` rather than
+ * a fabricated 0%.
+ *
+ * Cards whose data belongs to another module are omitted for a role that
+ * cannot see that module — the same rule the panels router applies, for the
+ * same reason: Marketing holds `reports.view` and reaches this endpoint, but
+ * holds no `orders.view`, so the failed-payment count must not appear on its
+ * home screen.
+ */
+async function buildKpis(opts: {
+  role: string;
+  window: { from: string; to: string; previousFrom: string; previousTo: string };
+  gross: MetricWindow;
+  sold: MetricWindow;
+  optins: MetricWindow;
+}): Promise<{ primary: Kpi[]; secondary: Kpi[]; revenue: RevenueSeries }> {
+  const { window, gross, sold, optins } = opts;
+  const may = (permission: Permission) => can(opts.role, permission);
+
+  const [net, subscription, newContacts, refunds, mrr, sends, opens, clicks] = await Promise.all([
+    readWindow({ ...window, metric: "net_revenue", column: "value_cents" }),
+    readWindow({ ...window, metric: "subscription_revenue", column: "value_cents" }),
+    readWindow({ ...window, metric: "new_contacts", column: "value_count" }),
+    readWindow({ ...window, metric: "refunds", column: "value_cents" }),
+    readWindow({ ...window, metric: "mrr", column: "value_cents", aggregate: "last" }),
+    readWindow({ ...window, metric: "email_sends", column: "value_count" }),
+    readWindow({ ...window, metric: "email_opens", column: "value_count" }),
+    readWindow({ ...window, metric: "email_clicks", column: "value_count" }),
+  ]);
+
+  const fromWindow = (
+    key: string,
+    label: string,
+    description: string,
+    format: Format,
+    metric: MetricWindow,
+    to: string | null,
+    sense: Kpi["sense"] = "higher-is-better",
+  ): Kpi => ({
+    key,
+    label,
+    description,
+    format,
+    currency: format === "money" ? metric.currency : "usd",
+    value: metric.total,
+    previousValue: metric.previousTotal,
+    changePercent: changePercent(metric.total, metric.previousTotal),
+    sparkline: metric.points.map((p) => p.value),
+    sense,
+    to,
+  });
+
+  /** A figure with no comparable period behind it. */
+  const snapshot = (
+    key: string,
+    label: string,
+    description: string,
+    format: Kpi["format"],
+    value: number,
+    to: string | null,
+    sense: Kpi["sense"] = "higher-is-better",
+  ): Kpi => ({
+    key,
+    label,
+    description,
+    format,
+    currency: "usd",
+    value,
+    previousValue: null,
+    changePercent: null,
+    sparkline: [],
+    sense,
+    to,
+  });
+
+  const primary: Kpi[] = [
+    fromWindow(
+      "gross-revenue",
+      "Gross Revenue",
+      "Everything people paid you.",
+      "money",
+      gross,
+      "/admin/analytics/reports/gross-revenue",
+    ),
+    fromWindow(
+      "net-revenue",
+      "Net Revenue",
+      "What you kept after refunds.",
+      "money",
+      net,
+      "/admin/analytics/reports/net-revenue",
+    ),
+    fromWindow(
+      "subscription-revenue",
+      "Subscription Revenue",
+      "Membership invoices settled in this period.",
+      "money",
+      subscription,
+      "/admin/sales/subscriptions",
+    ),
+    fromWindow(
+      "offers-sold",
+      "Offers Sold",
+      "Purchases people completed.",
+      "count",
+      sold,
+      "/admin/analytics/reports/cart-orders",
+    ),
+  ];
+
+  if (may("contacts.view")) {
+    primary.push(
+      fromWindow(
+        "new-contacts",
+        "New Contacts",
+        "People who arrived in your list.",
+        "count",
+        newContacts,
+        "/admin/contacts",
+      ),
+      fromWindow(
+        "email-optins",
+        "Email Opt-ins",
+        "New sign-ups to hear from you.",
+        "count",
+        optins,
+        "/admin/subscribers",
+      ),
+    );
+  }
+
+  const secondary: Kpi[] = [
+    snapshot(
+      "mrr",
+      "MRR",
+      "What memberships add up to each month, as things stand today.",
+      "money",
+      mrr.total,
+      "/admin/sales/subscriptions",
+    ),
+    // Average order value is a ratio, so it has no daily series of its own —
+    // averaging thirty daily averages is not the period's average order.
+    snapshot(
+      "aov",
+      "Average Order Value",
+      "Gross revenue divided by the number of orders.",
+      "money",
+      sold.total === 0 ? 0 : Math.round(gross.total / sold.total),
+      "/admin/analytics/reports/cart-orders",
+    ),
+    fromWindow(
+      "refunds",
+      "Refunds",
+      "Money handed back in this period.",
+      "money",
+      refunds,
+      "/admin/sales/payments",
+      "lower-is-better",
+    ),
+  ];
+
+  if (may("contacts.view")) {
+    const [members, applications] = await Promise.all([
+      pool.query<{ n: string }>(`SELECT COUNT(*)::text AS n FROM members WHERE status = 'active'`),
+      pool.query<{ n: string }>(`SELECT COUNT(*)::text AS n FROM leads WHERE created_at >= $1::date`, [
+        window.from,
+      ]),
+    ]);
+    secondary.push(
+      snapshot(
+        "active-members",
+        "Active Members",
+        "People who can sign in right now.",
+        "count",
+        Number(members.rows[0]?.n ?? 0),
+        "/admin/members",
+      ),
+      snapshot(
+        "applications",
+        "Applications",
+        "Enquiries received in this period.",
+        "count",
+        Number(applications.rows[0]?.n ?? 0),
+        "/admin/leads",
+      ),
+    );
+  }
+
+  if (may("products.view")) {
+    const completion = await pool.query<{ pct: string | null }>(
+      `SELECT ROUND(AVG(progress))::text AS pct FROM enrollments`,
+    );
+    secondary.push(
+      snapshot(
+        "course-completion",
+        "Course Completion",
+        "Average progress across everyone enrolled.",
+        "percent",
+        Number(completion.rows[0]?.pct ?? 0),
+        "/admin/courses",
+      ),
+    );
+  }
+
+  if (may("coaching.view")) {
+    const sessions = await pool.query<{ n: string }>(
+      `SELECT COUNT(*)::text AS n FROM coaching_sessions WHERE scheduled_at >= $1::date`,
+      [window.from],
+    );
+    secondary.push(
+      snapshot(
+        "coaching-sessions",
+        "Coaching Sessions",
+        "Sessions booked into this period.",
+        "count",
+        Number(sessions.rows[0]?.n ?? 0),
+        "/admin/coaching",
+      ),
+    );
+  }
+
+  if (may("orders.view")) {
+    const failed = await pool.query<{ n: string }>(
+      `SELECT COUNT(*)::text AS n FROM transactions
+        WHERE kind = 'payment' AND status = 'failed' AND occurred_at >= $1::date`,
+      [window.from],
+    );
+    secondary.push(
+      snapshot(
+        "failed-payments",
+        "Failed Payments",
+        "Card charges that did not go through.",
+        "count",
+        Number(failed.rows[0]?.n ?? 0),
+        "/admin/sales/payments",
+        "lower-is-better",
+      ),
+    );
+  }
+
+  if (may("marketing.view")) {
+    const rate = (n: number) => (sends.total === 0 ? 0 : Math.round((n / sends.total) * 1000) / 10);
+    secondary.push(
+      snapshot(
+        "email-open-rate",
+        "Email Open Rate",
+        "Opens as a share of everything sent.",
+        "percent",
+        rate(opens.total),
+        "/admin/marketing/campaigns",
+      ),
+      snapshot(
+        "email-click-rate",
+        "Email Click Rate",
+        "Clicks as a share of everything sent.",
+        "percent",
+        rate(clicks.total),
+        "/admin/marketing/campaigns",
+      ),
+    );
+  }
+
+  // §18: one chart, three switchable series, and the summary figures beside it.
+  const revenue: RevenueSeries = {
+    gross: gross.points,
+    net: net.points,
+    subscriptions: subscription.points,
+    currency: gross.currency,
+    summary: {
+      grossCents: gross.total,
+      netCents: net.total,
+      refundCents: refunds.total,
+      subscriptionCents: subscription.total,
+      averageOrderCents: sold.total === 0 ? 0 : Math.round(gross.total / sold.total),
+      orders: sold.total,
+    },
+  };
+
+  return { primary, secondary, revenue };
+}
+
 /* -------------------------------------------------------------- the overview */
 
 adminDashboardRouter.get(
@@ -255,10 +591,23 @@ adminDashboardRouter.get(
       },
     ];
 
+    // §14/§18. Built from the same three windows already read above rather
+    // than re-querying them, so the KPI row and the legacy tile row can never
+    // disagree about what gross revenue was for this period.
+    const { primary, secondary, revenue } = await buildKpis({
+      role: req.user?.role ?? "",
+      window,
+      gross,
+      sold,
+      optins,
+    });
+
     const body: Record<string, unknown> = {
       range: { from, to, previousFrom, previousTo, days: length },
       figuresUpdatedAt: figuresUpdatedAt ? figuresUpdatedAt.toISOString() : null,
       tiles,
+      kpis: { primary, secondary },
+      revenue,
     };
 
     // Omitted entirely rather than shown as zero: a business with no card

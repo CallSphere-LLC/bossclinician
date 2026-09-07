@@ -99,13 +99,32 @@ adminAssessmentsRouter.get(
   "/",
   asyncHandler(async (_req, res) => {
     const result = await pool.query(
+      // `lesson_id` and the course it rolls up to are what separate a quiz
+      // that lives inside a course from a standalone one — the list could not
+      // tell them apart without them, so the Quizzes filter had nothing real
+      // to filter on.
+      // A quiz reaches its course by either of two paths: attached to a lesson
+      // (the original in-lesson assessment) or placed directly in a module as
+      // a step in the outline. Resolving only the lesson path reported every
+      // course quiz as standalone.
       `SELECT a.id, a.slug::text AS slug, a.title, a.kind, a.published, a.require_email,
-              a.pass_mark, a.updated_at,
+              a.pass_mark, a.updated_at, a.lesson_id, a.module_id,
+              COALESCE(cl.id, cm.id)       AS course_id,
+              COALESCE(cl.title, cm.title) AS course_title,
+              l.title                      AS lesson_title,
+              COALESCE(ml.title, dm.title) AS module_title,
               (SELECT count(*)::int FROM assessment_questions q WHERE q.assessment_id = a.id) AS question_count,
               (SELECT count(*)::int FROM assessment_results r WHERE r.assessment_id = a.id)   AS result_count,
               (SELECT count(*)::int FROM assessment_attempts t
                 WHERE t.assessment_id = a.id AND t.completed_at IS NOT NULL)                  AS attempt_count
          FROM assessments a
+         -- via lesson
+         LEFT JOIN course_lessons l  ON l.id = a.lesson_id
+         LEFT JOIN course_modules ml ON ml.id = l.module_id
+         LEFT JOIN courses cl        ON cl.id = ml.course_id
+         -- via module
+         LEFT JOIN course_modules dm ON dm.id = a.module_id
+         LEFT JOIN courses cm        ON cm.id = COALESCE(dm.course_id, 0)
         ORDER BY a.title`
     );
     res.json(rowsToCamel(result.rows));
@@ -148,8 +167,20 @@ adminAssessmentsRouter.post(
 adminAssessmentsRouter.get(
   "/:id",
   asyncHandler(async (req, res) => {
+    // The course this quiz belongs to, by either link — the detail screen needs
+    // it to offer "Preview in the course", and `SELECT *` alone cannot see it
+    // because it is reached through a join.
     const assessment = await pool.query(
-      `SELECT *, slug::text AS slug FROM assessments WHERE id = $1`,
+      `SELECT a.*, a.slug::text AS slug,
+              COALESCE(cl.id, cm.id)       AS course_id,
+              COALESCE(cl.title, cm.title) AS course_title
+         FROM assessments a
+         LEFT JOIN course_lessons l  ON l.id = a.lesson_id
+         LEFT JOIN course_modules ml ON ml.id = l.module_id
+         LEFT JOIN courses cl        ON cl.id = ml.course_id
+         LEFT JOIN course_modules dm ON dm.id = a.module_id
+         LEFT JOIN courses cm        ON cm.id = COALESCE(dm.course_id, 0)
+        WHERE a.id = $1`,
       [req.params.id]
     );
     if (assessment.rowCount === 0) throw notFound("Quiz not found");

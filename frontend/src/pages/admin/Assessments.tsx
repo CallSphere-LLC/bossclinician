@@ -13,6 +13,7 @@ import {
   Input,
   PageHeader,
 } from "@/pages/admin/ui/primitives";
+import { cn } from "@/lib/cn";
 import { DataTable, RowActions } from "@/pages/admin/ui/DataTable";
 import { Modal, useConfirm } from "@/pages/admin/ui/Dialog";
 import { friendlyError, pluralize, publishLabel, webAddress } from "@/pages/admin/ui/friendly";
@@ -45,6 +46,17 @@ export default function Assessments() {
   const [kind, setKind] = useState<QuizKind>("quiz");
   const [saving, setSaving] = useState(false);
   const [confirm, confirmDialog] = useConfirm();
+  // §C — "All | Course Quizzes | Standalone Quizzes", filtering on the real
+  // lesson link rather than on a label.
+  const [scope, setScope] = useState<"all" | "course" | "standalone">("all");
+
+  const visible = useMemo(() => {
+    if (quizzes === null) return null;
+    if (scope === "all") return quizzes;
+    // A course quiz is one attached to a lesson *or* placed in a module.
+    const inCourse = (q: AssessmentSummary) => q.lessonId !== null || q.moduleId !== null;
+    return quizzes.filter((q) => (scope === "course" ? inCourse(q) : !inCourse(q)));
+  }, [quizzes, scope]);
 
   const load = useCallback(() => {
     assessmentsApi
@@ -113,7 +125,7 @@ export default function Assessments() {
         cell: ({ row }) => (
           <Link
             to={`/admin/marketing/quizzes/${row.original.id}`}
-            className="flex min-w-0 items-center gap-3 hover:text-plum"
+            className="flex min-w-0 items-center gap-3 hover:text-accent"
           >
             <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-lilac-tint text-plum">
               <ClipboardList className="size-4" />
@@ -135,6 +147,27 @@ export default function Assessments() {
             {KIND_LABEL[row.original.kind]}
           </Badge>
         ),
+      },
+      {
+        // Where the quiz lives. Without this the scope filter changes the row
+        // count and gives no reason why.
+        accessorKey: "courseTitle",
+        header: "Where it lives",
+        cell: ({ row }) =>
+          row.original.courseTitle ? (
+            <span className="min-w-0">
+              <span className="block truncate text-[0.84rem] text-ink">
+                {row.original.courseTitle}
+              </span>
+              {(row.original.lessonTitle || row.original.moduleTitle) && (
+                <span className="block truncate text-xs text-ink-soft">
+                  {row.original.lessonTitle ?? row.original.moduleTitle}
+                </span>
+              )}
+            </span>
+          ) : (
+            <span className="text-[0.84rem] text-ink-soft">Standalone</span>
+          ),
       },
       {
         accessorKey: "questionCount",
@@ -214,9 +247,9 @@ export default function Assessments() {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="Marketing"
+        eyebrow="Engagement"
         title="Quizzes"
-        description="Ask people a few questions, add up their answers, and send each of them the result that fits."
+        description="Create interactive quizzes that use people's answers to provide a result, recommendation, or personalized outcome."
         actions={
           <Button size="sm" onClick={startNew}>
             <Plus />
@@ -229,10 +262,34 @@ export default function Assessments() {
 
       <DataTable
         columns={columns}
-        data={quizzes}
+        data={visible}
         searchPlaceholder="Search your quizzes…"
         itemNoun={{ one: "quiz", many: "quizzes" }}
         minWidth="1040px"
+        toolbar={
+          <div role="group" aria-label="Filter quizzes" className="flex items-center gap-0.5 rounded-xl border border-hairline p-0.5">
+            {([
+              ["all", "All"],
+              ["course", "Course quizzes"],
+              ["standalone", "Standalone"],
+            ] as const).map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setScope(value)}
+                aria-pressed={scope === value}
+                className={cn(
+                  "rounded-[0.6rem] px-3 py-1.5 text-[0.78rem] font-semibold transition-colors",
+                  scope === value
+                    ? "bg-accent-solid text-accent-on"
+                    : "text-ink-soft hover:bg-raise hover:text-ink",
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        }
         emptyState={
           <EmptyState
             icon={<ClipboardList />}
@@ -286,7 +343,7 @@ export default function Assessments() {
                 className={`flex cursor-pointer gap-3 rounded-xl border p-3.5 transition-colors ${
                   kind === choice
                     ? "border-gold/50 bg-gold/[0.08]"
-                    : "border-hairline bg-white/[0.03] hover:border-white/20"
+                    : "border-hairline bg-raise hover:border-ink-soft/35"
                 }`}
               >
                 <input

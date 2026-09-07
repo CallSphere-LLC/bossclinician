@@ -142,8 +142,8 @@ export default function Events() {
     <div className="space-y-6">
       <PageHeader
         eyebrow="Marketing"
-        title="Events"
-        description="Your live sessions, Q&As and meet-ups across every community, in one calendar."
+        title="Community Events"
+        description="Events that happen inside one of your communities."
         actions={
           <Button
             size="sm"

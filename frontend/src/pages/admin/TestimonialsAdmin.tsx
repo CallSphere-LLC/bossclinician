@@ -44,7 +44,7 @@ export default function TestimonialsAdmin() {
   return (
     <CrudManager<Testimonial>
       title="Testimonials"
-      description="The kind words clients have said about working with you."
+      description="What your clients say about working with you."
       noun={{ one: "testimonial", many: "testimonials" }}
       nameHeader="Who said it"
       fields={fields}

@@ -1,30 +1,25 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
-import { Link, useParams } from "react-router-dom";
-import { AnimatePresence, motion } from "motion/react";
+import { useNavigate, Link, useParams } from "react-router-dom";
 import {
   ArrowLeft,
   Bold,
-  ChevronDown,
   Clock,
+  Eye,
   Film,
   Italic,
   Layers,
   Link2,
   List,
   Play,
-  Plus,
-  Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { adminApi } from "@/lib/api";
 import type { CourseLesson, CourseModule, MediaAsset } from "@/types/admin";
 import type { Course } from "@/types";
-import { cn } from "@/lib/cn";
 import { formatBytes } from "@/lib/format";
 import {
   Badge,
   Button,
-  Card,
   EmptyState,
   ErrorNotice,
   Field,
@@ -32,10 +27,18 @@ import {
   PageHeader,
   Skeleton,
   Textarea,
+  Select,
 } from "@/pages/admin/ui/primitives";
 import { Modal, useConfirm } from "@/pages/admin/ui/Dialog";
+import {
+  AddContentMenu,
+  CourseOutline,
+  type AddKind,
+  type DragPayload,
+  type MoveKind,
+} from "@/pages/admin/ui/CourseOutline";
 import { UploadDropzone } from "@/pages/admin/ui/Uploader";
-import { PUBLISH_LABEL, friendlyError, pluralize } from "@/pages/admin/ui/friendly";
+import { friendlyError, pluralize } from "@/pages/admin/ui/friendly";
 
 /*
  * A stored "module" is called a **section** everywhere she can see it — that's
@@ -105,6 +108,151 @@ export default function CourseBuilder() {
   const videoRequest = useRef(0);
   const notesRef = useRef<HTMLTextAreaElement>(null);
   const [confirm, confirmDialog] = useConfirm();
+  const navigate = useNavigate();
+  const [addingQuiz, setAddingQuiz] = useState<number | null>(null);
+  /** Set when content was added from the header and needs a module. */
+  const [choosingModule, setChoosingModule] = useState<{ kind: AddKind } | null>(null);
+  /** The item just created — scrolled to and briefly highlighted. */
+  const [highlightId, setHighlightId] = useState<string | null>(null);
+
+  /**
+   * Mark something as just-created.
+   *
+   * The outline scrolls it into view and rings it; the ring clears itself
+   * after a few seconds so it does not become permanent decoration.
+   */
+  function flag(key: string) {
+    setHighlightId(key);
+    window.setTimeout(() => setHighlightId((current) => (current === key ? null : current)), 2600);
+  }
+  const [quizTitle, setQuizTitle] = useState("");
+  const [quizKind, setQuizKind] = useState<"quiz" | "graded">("quiz");
+  const [renamingModule, setRenamingModule] = useState<{ id: number; title: string } | null>(null);
+
+  /**
+   * The §A "+ Add Content" menu, routed to whichever thing was chosen.
+   *
+   * "Upload multiple videos" reuses the existing media picker one file at a
+   * time rather than pretending to a bulk pipeline that does not exist —
+   * §I rules out controls that look functional and are not.
+   */
+  /**
+   * The + Add Content menu.
+   *
+   * Where a new item lands is deliberate: a Module added from the header goes
+   * *after* the last one, and content added from a Module's own + Add goes
+   * into that Module. Nothing is ever inserted at the top, because the admin
+   * is rarely working there and being thrown back to it loses their place.
+   * The backend already appends (`MAX(sort) + 1`), so this only has to pass
+   * the right container.
+   */
+  function handleAdd(kind: AddKind, moduleId?: number) {
+    if (kind === "module") return setAddingModule(true);
+
+    // Content needs a home. From a Module's + Add we have one; from the header
+    // we ask, rather than guessing a module the admin was not looking at.
+    const target = moduleId ?? (modules?.length === 1 ? Number(modules[0].id) : null);
+    if (target === null) {
+      if (!modules || modules.length === 0) {
+        return toast.error("Add a module first, then put content inside it.");
+      }
+      return setChoosingModule({ kind });
+    }
+
+    if (kind === "quiz") {
+      setQuizTitle("");
+      setQuizKind("quiz");
+      return setAddingQuiz(target);
+    }
+
+    // Lesson, video, audio and resource are all lessons — the content type is
+    // what differs, and `course_lessons.content_type` already carries it.
+    const contentType =
+      kind === "video" ? "video" : kind === "audio" ? "audio" : kind === "resource" ? "pdf" : "text";
+    openLesson(target, { published: true, contentType });
+    if (kind === "video" || kind === "audio" || kind === "resource") setPicking(true);
+  }
+
+  /** The list one item sits in. */
+  function siblingIds(kind: MoveKind, parentId: number | null): number[] {
+    if (!modules) return [];
+    if (kind === "module") return modules.map((m) => Number(m.id));
+    const container = modules.find((m) => Number(m.id) === parentId);
+    const list = kind === "lesson" ? (container?.lessons ?? []) : (container?.quizzes ?? []);
+    return list.map((item) => Number(item.id));
+  }
+
+  /**
+   * Save a new ordering.
+   *
+   * The whole list is renumbered and sent as one request, so a failure leaves
+   * the outline exactly as it was rather than half-applied.
+   */
+  async function persistOrder(kind: MoveKind, ids: number[]) {
+    try {
+      await adminApi.curriculumReorder(courseId, {
+        [`${kind}s`]: ids.map((id, index) => ({ id, sort: index })),
+      });
+      load();
+    } catch (err) {
+      toast.error(friendlyError(err, "order"));
+    }
+  }
+
+  /** Drop: move the held item to `toIndex` among its siblings. */
+  async function reorder(payload: DragPayload, toIndex: number) {
+    const ids = siblingIds(payload.kind, payload.parentId);
+    const from = ids.indexOf(payload.id);
+    if (from < 0 || from === toIndex) return;
+    const next = [...ids];
+    next.splice(from, 1);
+    next.splice(toIndex, 0, payload.id);
+    await persistOrder(payload.kind, next);
+  }
+
+  /** Keyboard: swap with the neighbour in that direction. */
+  async function nudge(payload: DragPayload, direction: -1 | 1) {
+    const ids = siblingIds(payload.kind, payload.parentId);
+    const from = ids.indexOf(payload.id);
+    const to = from + direction;
+    if (from < 0 || to < 0 || to >= ids.length) return;
+    const next = [...ids];
+    [next[from], next[to]] = [next[to], next[from]];
+    await persistOrder(payload.kind, next);
+  }
+
+  async function createQuiz(e: FormEvent) {
+    e.preventDefault();
+    if (!quizTitle.trim() || addingQuiz === null) return;
+    try {
+      const quiz = await adminApi.courseQuizCreate(addingQuiz, {
+        title: quizTitle.trim(),
+        kind: quizKind,
+      });
+      toast.success("Quiz added — open it to write the questions.");
+      setAddingQuiz(null);
+      await load();
+      // Deliberately staying put: navigating straight to the quiz editor threw
+      // the admin out of the course they were building. The new quiz is
+      // highlighted where it landed, and one click opens it.
+      flag(`quiz-${quiz.id}`);
+    } catch (err) {
+      toast.error(friendlyError(err, "quiz"));
+    }
+  }
+
+  async function renameModule(e: FormEvent) {
+    e.preventDefault();
+    if (!renamingModule?.title.trim()) return;
+    try {
+      await adminApi.moduleUpdate(renamingModule.id, { title: renamingModule.title.trim() });
+      toast.success("Renamed");
+      setRenamingModule(null);
+      load();
+    } catch (err) {
+      toast.error(friendlyError(err, "module"));
+    }
+  }
 
   const load = useCallback(() => {
     if (!courseId) return;
@@ -114,7 +262,16 @@ export default function CourseBuilder() {
         setModules(mods);
         setError(null);
         // Open everything on first load; a collapsed wall of sections is useless.
-        setOpenModules(new Set(mods.map((m) => m.id)));
+        // Submodules are containers too. Seeding only the top level left
+        // every subsection collapsed on load, hiding the lessons inside them.
+        setOpenModules(
+          new Set(
+            mods.flatMap((m) => [
+              Number(m.id),
+              ...(m.submodules ?? []).map((sub) => Number(sub.id)),
+            ]),
+          ),
+        );
       })
       .catch(() => setError("We couldn't load this course. Try refreshing the page."));
   }, [courseId]);
@@ -128,8 +285,16 @@ export default function CourseBuilder() {
       .catch(() => undefined);
   }, [courseId]);
 
-  const lessonCount = (modules ?? []).reduce((sum, m) => sum + m.lessons.length, 0);
-  const totalMinutes = (modules ?? []).reduce(
+  /*
+   * Counted across the whole outline, subsections included.
+   *
+   * These summed only the top-level sections, so a course whose lessons all
+   * sit inside subsections reported "0 lessons" while showing them on screen.
+   */
+  const flatSections = modules ?? [];
+  const lessonCount = flatSections.reduce((sum, m) => sum + m.lessons.length, 0);
+  const quizCount = flatSections.reduce((sum, m) => sum + (m.quizzes?.length ?? 0), 0);
+  const totalMinutes = flatSections.reduce(
     (sum, m) => sum + m.lessons.reduce((s, l) => s + (l.durationMinutes || 0), 0),
     0,
   );
@@ -138,13 +303,17 @@ export default function CourseBuilder() {
     e.preventDefault();
     if (!moduleTitle.trim()) return;
     try {
-      await adminApi.moduleCreate(courseId, { title: moduleTitle.trim() });
-      toast.success("Section added");
+      // The API appends (`MAX(sort) + 1`), so a new module lands after the
+      // last one rather than at the top.
+      const created = await adminApi.moduleCreate(courseId, { title: moduleTitle.trim() });
+      toast.success("Module added");
       setModuleTitle("");
       setAddingModule(false);
-      load();
+      await load();
+      setOpenModules((prev) => new Set(prev).add(Number(created.id)));
+      flag(`module-${created.id}`);
     } catch (err) {
-      toast.error(friendlyError(err, "section"));
+      toast.error(friendlyError(err, "module"));
     }
   }
 
@@ -158,10 +327,10 @@ export default function CourseBuilder() {
     if (!ok) return;
     try {
       await adminApi.moduleDelete(mod.id);
-      toast.success("Section deleted");
+      toast.success("Module deleted");
       load();
     } catch (err) {
-      toast.error(friendlyError(err, "section"));
+      toast.error(friendlyError(err, "module"));
     }
   }
 
@@ -172,6 +341,9 @@ export default function CourseBuilder() {
     const { moduleId, lesson } = lessonDraft;
     const payload = {
       title: lesson.title,
+      // Set when the item was created from Video / Audio / Resource, so the
+      // outline can show it with the right icon and label.
+      contentType: lesson.contentType ?? "text",
       bodyMd: lesson.bodyMd ?? "",
       videoUrl: lesson.videoUrl ?? "",
       attachmentUrl: lesson.attachmentUrl ?? "",
@@ -181,11 +353,17 @@ export default function CourseBuilder() {
     };
 
     try {
-      if (lesson.id) await adminApi.lessonUpdate(lesson.id, payload);
-      else await adminApi.lessonCreate(moduleId, payload);
-      toast.success(lesson.id ? "Lesson saved" : "Lesson added");
+      let createdId: number | null = null;
+      if (lesson.id) {
+        await adminApi.lessonUpdate(lesson.id, payload);
+      } else {
+        const created = await adminApi.lessonCreate(moduleId, payload);
+        createdId = Number(created.id);
+      }
+      toast.success(lesson.id ? "Lesson saved" : "Content added");
       setLessonDraft(null);
-      load();
+      await load();
+      if (createdId !== null) flag(`lesson-${createdId}`);
     } catch (err) {
       toast.error(friendlyError(err, "lesson"));
     }
@@ -273,11 +451,12 @@ export default function CourseBuilder() {
       <PageHeader
         eyebrow="Courses"
         title={course?.title ?? "Course content"}
-        description="Break your course into sections, then add the lessons that go inside each one."
+        description="Build your course from modules, then add lessons, videos and quizzes inside each one."
         actions={
           <>
             <Badge tone="neutral">
-              {pluralize(modules?.length ?? 0, "section")} · {pluralize(lessonCount, "lesson")}
+              {pluralize(modules?.length ?? 0, "module")} · {pluralize(lessonCount, "lesson")}
+              {quizCount > 0 && ` · ${pluralize(quizCount, "quiz", "quizzes")}`}
             </Badge>
             {totalMinutes > 0 && (
               <Badge tone="plum">
@@ -285,10 +464,23 @@ export default function CourseBuilder() {
                 {courseLength(totalMinutes)} in total
               </Badge>
             )}
-            <Button size="sm" onClick={() => setAddingModule(true)}>
-              <Plus />
-              Add a section
+            {/* Recommended header actions: Preview | Course Settings | + Add
+                Content. Preview opens in a new tab so the builder keeps its
+                place. */}
+            <Button variant="secondary" size="sm" asChild>
+              <a
+                href={`/admin/courses/${courseId}/preview`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                <Eye />
+                Preview
+              </a>
             </Button>
+            <Button variant="secondary" size="sm" asChild>
+              <Link to="/admin/courses">Course Settings</Link>
+            </Button>
+            <AddContentMenu onAdd={handleAdd} label="Add Content" />
           </>
         }
       />
@@ -301,165 +493,44 @@ export default function CourseBuilder() {
             <Skeleton key={i} className="h-24 w-full" />
           ))}
         </div>
-      ) : modules.length === 0 ? (
-        <Card>
-          <EmptyState
-            icon={<Layers />}
-            title="Nothing in this course yet"
-            description="Start with your first section — something like “Getting started” — then fill it with lessons."
-            action={
-              <Button size="sm" onClick={() => setAddingModule(true)}>
-                <Plus />
-                Add a section
-              </Button>
-            }
-          />
-        </Card>
       ) : (
-        <div className="space-y-4">
-          {modules.map((mod, index) => {
-            const open = openModules.has(mod.id);
-            return (
-              <Card key={mod.id} className="overflow-hidden">
-                <div className="flex items-center gap-3 border-b border-hairline/60 px-4 py-3.5">
-                  <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-lilac-tint text-xs font-bold text-plum-deep">
-                    {index + 1}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => toggleModule(mod.id)}
-                    aria-expanded={open}
-                    className="flex min-w-0 flex-1 items-center gap-2 text-left"
-                  >
-                    <span className="min-w-0">
-                      <span className="block truncate font-display text-base text-ink">
-                        {mod.title}
-                      </span>
-                      <span className="block text-xs text-ink-soft">
-                        {mod.lessons.length === 0
-                          ? "No lessons yet"
-                          : pluralize(mod.lessons.length, "lesson")}
-                      </span>
-                    </span>
-                    <motion.span animate={{ rotate: open ? 180 : 0 }} className="ml-auto shrink-0">
-                      <ChevronDown className="size-4 text-ink-soft" />
-                    </motion.span>
-                  </button>
-                  <Button
-                    variant="dangerGhost"
-                    size="iconSm"
-                    aria-label={`Delete ${mod.title}`}
-                    onClick={() => removeModule(mod)}
-                  >
-                    <Trash2 />
-                  </Button>
-                </div>
-
-                <AnimatePresence initial={false}>
-                  {open && (
-                    <motion.div
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: "auto", opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
-                      transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-                      className="overflow-hidden"
-                    >
-                      {mod.lessons.length === 0 ? (
-                        <p className="px-5 py-6 text-center text-sm text-ink-soft">
-                          Nothing in this section yet — add your first lesson below.
-                        </p>
-                      ) : (
-                        <ul className="divide-y divide-hairline/60">
-                          {mod.lessons.map((lesson) => (
-                            <li
-                              key={lesson.id}
-                              className="flex items-center gap-3 px-5 py-3 transition-colors hover:bg-lilac-tint/25"
-                            >
-                              <span
-                                className={cn(
-                                  "grid size-8 shrink-0 place-items-center rounded-lg",
-                                  lesson.videoUrl
-                                    ? "bg-plum/10 text-plum"
-                                    : "bg-cream text-ink-soft",
-                                )}
-                              >
-                                {lesson.videoUrl ? (
-                                  <Play className="size-3.5 fill-current" />
-                                ) : (
-                                  <Film className="size-3.5" />
-                                )}
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => openLesson(mod.id, lesson)}
-                                className="min-w-0 flex-1 text-left"
-                              >
-                                <span className="block truncate text-sm font-medium text-ink">
-                                  {lesson.title}
-                                </span>
-                                <span className="block text-xs text-ink-soft">
-                                  {lesson.durationMinutes
-                                    ? `${lesson.durationMinutes} min`
-                                    : "Length not set"}
-                                  {lesson.videoUrl ? " · has a video" : " · no video yet"}
-                                </span>
-                              </button>
-                              {lesson.preview && <Badge tone="gold">Free taster</Badge>}
-                              {!lesson.published && <Badge tone="slate">{PUBLISH_LABEL.draft}</Badge>}
-                              <Button
-                                variant="dangerGhost"
-                                size="iconSm"
-                                aria-label={`Delete ${lesson.title}`}
-                                onClick={() => removeLesson(lesson)}
-                              >
-                                <Trash2 />
-                              </Button>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-
-                      <div className="border-t border-hairline/60 p-3">
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          className="w-full"
-                          onClick={() =>
-                            openLesson(mod.id, { title: "", published: true, durationMinutes: 0 })
-                          }
-                        >
-                          <Plus />
-                          Add a lesson
-                        </Button>
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </Card>
-            );
-          })}
-        </div>
+        <CourseOutline
+          modules={modules}
+          openIds={openModules}
+          onToggle={toggleModule}
+          handlers={{
+            onAdd: handleAdd,
+            onEditModule: (mod) => setRenamingModule({ id: Number(mod.id), title: mod.title }),
+            onDeleteModule: removeModule,
+            onEditLesson: (moduleId, lesson) => openLesson(moduleId, lesson),
+            onDeleteLesson: removeLesson,
+            onEditQuiz: (quiz) => navigate(`/admin/marketing/quizzes/${quiz.id}`),
+            onReorder: reorder,
+            onNudge: nudge,
+            highlightId,
+          }}
+        />
       )}
 
       {/* Add a section */}
       <Modal
         open={addingModule}
         onOpenChange={setAddingModule}
-        title="Add a section"
-        description="A section is a chunk of your course — a week, a phase, a theme."
+        title="Add a module"
+        description="A module is a major part of your course — a week, a phase, a theme."
         footer={
           <>
             <Button variant="secondary" size="sm" onClick={() => setAddingModule(false)}>
               Cancel
             </Button>
             <Button size="sm" type="submit" form="new-module">
-              Add section
+              Add module
             </Button>
           </>
         }
       >
         <form id="new-module" onSubmit={addModule}>
-          <Field label="Section name">
+          <Field label="Module name">
             <Input
               value={moduleTitle}
               onChange={(e) => setModuleTitle(e.target.value)}
@@ -467,6 +538,117 @@ export default function CourseBuilder() {
               required
               autoFocus
             />
+          </Field>
+        </form>
+      </Modal>
+
+      {/* Which module should this go in? — only asked when the add came from
+          the header and there is more than one module to choose between. */}
+      <Modal
+        open={choosingModule !== null}
+        onOpenChange={(open) => !open && setChoosingModule(null)}
+        title="Which module?"
+        description="Pick where this should go. You can move it afterwards."
+      >
+        <ul className="space-y-1.5">
+          {(modules ?? []).map((mod) => (
+            <li key={mod.id}>
+              <button
+                type="button"
+                onClick={() => {
+                  const kind = choosingModule?.kind;
+                  setChoosingModule(null);
+                  if (kind) handleAdd(kind, Number(mod.id));
+                }}
+                className="flex w-full items-center gap-3 rounded-xl border border-hairline bg-raise px-3.5 py-3 text-left transition-colors hover:border-accent/45"
+              >
+                <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-accent/10 text-accent">
+                  <Layers aria-hidden className="size-4" />
+                </span>
+                <span className="min-w-0">
+                  <span className="block truncate text-[0.88rem] font-medium text-ink">
+                    {mod.title}
+                  </span>
+                  <span className="block truncate text-[0.72rem] text-ink-soft">
+                    {pluralize(mod.lessons.length + (mod.quizzes?.length ?? 0), "item")}
+                  </span>
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      </Modal>
+
+      {/* Rename a section */}
+      <Modal
+        open={renamingModule !== null}
+        onOpenChange={(open) => !open && setRenamingModule(null)}
+        title="Rename module"
+        footer={
+          <>
+            <Button variant="secondary" size="sm" onClick={() => setRenamingModule(null)}>
+              Cancel
+            </Button>
+            <Button size="sm" type="submit" form="rename-module">
+              Save
+            </Button>
+          </>
+        }
+      >
+        <form id="rename-module" onSubmit={renameModule}>
+          <Field label="Name">
+            <Input
+              value={renamingModule?.title ?? ""}
+              onChange={(e) =>
+                setRenamingModule((current) =>
+                  current ? { ...current, title: e.target.value } : current,
+                )
+              }
+              required
+              autoFocus
+            />
+          </Field>
+        </form>
+      </Modal>
+
+      {/* Add a quiz, without leaving the course (§C) */}
+      <Modal
+        open={addingQuiz !== null}
+        onOpenChange={(open) => !open && setAddingQuiz(null)}
+        title="Add a quiz"
+        description="It goes into this section, and you'll write the questions next."
+        footer={
+          <>
+            <Button variant="secondary" size="sm" onClick={() => setAddingQuiz(null)}>
+              Cancel
+            </Button>
+            <Button size="sm" type="submit" form="new-quiz">
+              Add quiz
+            </Button>
+          </>
+        }
+      >
+        <form id="new-quiz" onSubmit={createQuiz} className="space-y-4">
+          <Field label="Quiz name">
+            <Input
+              value={quizTitle}
+              onChange={(e) => setQuizTitle(e.target.value)}
+              placeholder="Check what you've learned"
+              required
+              autoFocus
+            />
+          </Field>
+          <Field
+            label="What kind"
+            hint="a graded test has a pass mark; a quiz just gives a result"
+          >
+            <Select
+              value={quizKind}
+              onChange={(e) => setQuizKind(e.target.value as "quiz" | "graded")}
+            >
+              <option value="quiz">Quiz</option>
+              <option value="graded">Graded test</option>
+            </Select>
           </Field>
         </form>
       </Modal>
@@ -479,6 +661,22 @@ export default function CourseBuilder() {
         size="lg"
         footer={
           <>
+            {/* Preview inside the lesson editor. Only for a saved lesson —
+                an unsaved draft has no id for the preview to open, and
+                previewing what is on screen rather than what is stored would
+                be a preview of something that does not exist yet. */}
+            {lessonDraft?.lesson.id && (
+              <Button variant="secondary" size="sm" asChild className="mr-auto">
+                <a
+                  href={`/admin/courses/${courseId}/preview?step=lesson-${lessonDraft.lesson.id}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  <Eye />
+                  Preview lesson
+                </a>
+              </Button>
+            )}
             <Button variant="secondary" size="sm" onClick={() => setLessonDraft(null)}>
               Cancel
             </Button>
@@ -716,7 +914,7 @@ function FormattingToolbar({ onFormat }: { onFormat: (kind: Format) => void }) {
   ];
 
   return (
-    <div className="flex flex-wrap items-center gap-0.5 rounded-t-xl border border-b-0 border-hairline bg-white/[0.03] px-1.5 py-1">
+    <div className="flex flex-wrap items-center gap-0.5 rounded-t-xl border border-b-0 border-hairline bg-raise px-1.5 py-1">
       {tools.map((tool) => (
         <Button
           key={tool.kind}
@@ -816,7 +1014,7 @@ function VideoPickerModal({
                     className="size-full object-cover"
                   />
                   <span className="absolute inset-0 grid place-items-center bg-ink/25 transition-colors group-hover:bg-ink/40">
-                    <span className="grid size-9 place-items-center rounded-full bg-night-deep/85 text-gold ring-1 ring-white/15">
+                    <span className="grid size-9 place-items-center rounded-full bg-night-deep/85 text-gold ring-1 ring-white/20">
                       <Play className="size-4 translate-x-0.5 fill-current" />
                     </span>
                   </span>

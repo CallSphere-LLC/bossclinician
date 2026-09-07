@@ -49,9 +49,9 @@ export default function Products() {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="Products"
+        eyebrow="Content & Services"
         title="All Products"
-        description="Everything you sell or give away — your courses, your communities and the plans people subscribe to."
+        description="What a customer receives when they buy. Pricing lives on Offers, not here."
       />
 
       {error && <ErrorNotice message={error} />}

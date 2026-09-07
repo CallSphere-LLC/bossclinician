@@ -243,9 +243,9 @@ export default function Integrations() {
           All settings
         </Link>
         <PageHeader
-          eyebrow="Settings"
-          title="Connections"
-          description="Plug your other tools into this one — Zapier, your CRM, anything that can talk to a web address."
+          eyebrow="Administration"
+          title="Integrations"
+          description="Connect Boss Clinician with the external services and platforms your business uses."
         />
       </div>
 
@@ -492,7 +492,7 @@ export default function Integrations() {
                 .map((event) => (
                   <label
                     key={event.type}
-                    className="flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm text-ink hover:bg-white/[0.04]"
+                    className="flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm text-ink hover:bg-raise"
                   >
                     <input
                       type="checkbox"
@@ -541,7 +541,7 @@ export default function Integrations() {
               {scopes.map((scope) => (
                 <label
                   key={scope.value}
-                  className="flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm text-ink hover:bg-white/[0.04]"
+                  className="flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm text-ink hover:bg-raise"
                 >
                   <input
                     type="checkbox"
@@ -576,7 +576,7 @@ export default function Integrations() {
         }
       >
         <div className="flex items-center gap-2.5">
-          <code className="min-w-0 flex-1 select-all break-all rounded-xl border border-hairline bg-white/[0.04] px-4 py-3 font-mono text-sm text-ink">
+          <code className="min-w-0 flex-1 select-all break-all rounded-xl border border-hairline bg-raise px-4 py-3 font-mono text-sm text-ink">
             {revealed?.value}
           </code>
           <Button

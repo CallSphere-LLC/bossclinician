@@ -150,7 +150,23 @@ function draftFrom(product: Product): Draft {
   };
 }
 
-export default function ProductsCatalog() {
+/**
+ * Optionally narrowed to one kind.
+ *
+ * The Downloads entry in the sidebar is this screen with `restrictKind` set,
+ * not a second page over the same rows — §1 of the sidebar requirements rules
+ * out duplicate pages, and a filtered view of the catalogue is the honest way
+ * to give downloads a home of their own.
+ */
+export default function ProductsCatalog({
+  restrictKind,
+  heading,
+  description,
+}: {
+  restrictKind?: ProductKind;
+  heading?: string;
+  description?: string;
+} = {}) {
   const [products, setProducts] = useState<Product[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showRetired, setShowRetired] = useState(false);
@@ -221,16 +237,24 @@ export default function ProductsCatalog() {
 
   const grouped = useMemo(() => {
     if (products === null) return null;
+    const showing = restrictKind
+      ? products.filter((product) => product.kind === restrictKind)
+      : products;
     const visible = showRetired
-      ? products
-      : products.filter((product) => product.status !== "archived");
-    return KIND_ORDER.map((kind) => ({
-      kind,
-      items: visible.filter((product) => product.kind === kind),
-    })).filter((group) => group.items.length > 0);
-  }, [products, showRetired]);
+      ? showing
+      : showing.filter((product) => product.status !== "archived");
+    const order = restrictKind ? [restrictKind] : KIND_ORDER;
+    return order
+      .map((kind) => ({ kind, items: visible.filter((product) => product.kind === kind) }))
+      .filter((group) => group.items.length > 0);
+  }, [products, showRetired, restrictKind]);
 
-  const retiredCount = (products ?? []).filter((product) => product.status === "archived").length;
+  // Counted within the restriction, so the Downloads screen does not offer to
+  // reveal retired courses.
+  const retiredCount = (products ?? []).filter(
+    (product) =>
+      product.status === "archived" && (!restrictKind || product.kind === restrictKind),
+  ).length;
 
   function startNew(kind: ProductKind) {
     setChoosingKind(false);
@@ -344,9 +368,12 @@ export default function ProductsCatalog() {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="Products"
-        title="Your catalogue"
-        description="Everything people can be given access to. Put a price on one of these and you have an offer."
+        eyebrow="Content & Services"
+        title={heading ?? "Catalogue"}
+        description={
+          description ??
+          "Everything you sell or give away, grouped by what the customer receives. Put a price on one of these and you have an offer."
+        }
         actions={
           <Button size="sm" onClick={() => setChoosingKind(true)}>
             <Plus />
@@ -527,7 +554,7 @@ export default function ProductsCatalog() {
               key={kind}
               type="button"
               onClick={() => startNew(kind)}
-              className="flex items-start gap-3 rounded-xl border border-hairline bg-white/[0.02] px-4 py-3 text-left transition-all hover:border-gold/50 hover:bg-gold/[0.06]"
+              className="flex items-start gap-3 rounded-xl border border-hairline bg-raise px-4 py-3 text-left transition-all hover:border-gold/50 hover:bg-gold/[0.06]"
             >
               <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-gold/[0.12] text-gold">
                 <Package className="size-4" />
@@ -627,7 +654,7 @@ export default function ProductsCatalog() {
 
             <Field label="Picture" error={draftErrors.thumbnailUrl}>
               {draft.thumbnailUrl ? (
-                <div className="flex flex-wrap items-center gap-3 rounded-xl border border-hairline bg-white/[0.03] p-2.5">
+                <div className="flex flex-wrap items-center gap-3 rounded-xl border border-hairline bg-raise p-2.5">
                   <img
                     src={draft.thumbnailUrl}
                     alt=""
@@ -655,7 +682,7 @@ export default function ProductsCatalog() {
               )}
             </Field>
 
-            <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-hairline bg-white/[0.02] px-4 py-3">
+            <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-hairline bg-raise px-4 py-3">
               <input
                 type="checkbox"
                 checked={draft.status === "published"}
@@ -839,7 +866,7 @@ function FilesModal({
             {files.map((file) => (
               <li
                 key={file.id}
-                className="flex flex-wrap items-center gap-3 rounded-xl border border-hairline bg-white/[0.03] px-3 py-2.5"
+                className="flex flex-wrap items-center gap-3 rounded-xl border border-hairline bg-raise px-3 py-2.5"
               >
                 <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-lilac-tint text-plum">
                   <FileText className="size-4" />
@@ -966,7 +993,7 @@ function BundleModal({
                 <label
                   className={cn(
                     "flex cursor-pointer items-center gap-3 rounded-xl border px-4 py-3 transition-colors",
-                    ticked ? "border-gold/50 bg-gold/[0.08]" : "border-hairline hover:border-white/25",
+                    ticked ? "border-gold/50 bg-gold/[0.08]" : "border-hairline hover:border-ink-soft/35",
                   )}
                 >
                   <input

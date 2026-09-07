@@ -93,6 +93,9 @@ export const campaignsRepo = createCrudRepo<Row>("email_campaigns", [
   "audience",
   "status",
   "scheduledAt",
+  // A newsletter is a kind of broadcast, not a separate system — see
+  // migration 021. The column drives what the editor suggests, nothing more.
+  "kind",
 ]);
 
 export const funnelsRepo = createCrudRepo<Row>("funnels", [

@@ -122,6 +122,13 @@ export interface AssessmentSummary {
   resultCount: number;
   attemptCount: number;
   updatedAt: string;
+  /** Set when the quiz lives inside a course lesson; null when standalone. */
+  lessonId: number | null;
+  moduleId: number | null;
+  courseId: number | null;
+  courseTitle: string | null;
+  lessonTitle: string | null;
+  moduleTitle: string | null;
 }
 
 export interface EditableAnswer {

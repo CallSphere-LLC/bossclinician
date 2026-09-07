@@ -33,7 +33,10 @@ CREATE TABLE IF NOT EXISTS courses (
   description   TEXT NOT NULL DEFAULT '',
   price_text    TEXT NOT NULL DEFAULT '',
   image         TEXT,
-  url           TEXT NOT NULL DEFAULT '#',
+  -- Empty, not '#'. See migration 025: a '#' here reads as a link and behaves
+  -- like a dead one. Blank means "not set", and the catalogue falls back to the
+  -- course's own /courses/<slug> page.
+  url           TEXT NOT NULL DEFAULT '',
   features      JSONB NOT NULL DEFAULT '[]',
   sort          INT NOT NULL DEFAULT 0,
   published     BOOLEAN NOT NULL DEFAULT true,

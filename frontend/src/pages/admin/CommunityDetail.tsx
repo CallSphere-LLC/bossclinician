@@ -138,7 +138,7 @@ export default function CommunityDetail() {
               <Tabs.Trigger
                 key={tab.value}
                 value={tab.value}
-                className="flex shrink-0 items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-ink-soft transition-colors hover:text-plum data-[state=active]:bg-brand-gradient data-[state=active]:text-white"
+                className="flex shrink-0 items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-ink-soft transition-colors hover:text-accent data-[state=active]:bg-accent-solid data-[state=active]:text-accent-on"
               >
                 <Icon className="size-4" />
                 {tab.label}
@@ -469,7 +469,7 @@ function ChannelsTab({
                     className={cn(
                       "flex-1 rounded-xl px-3 py-2.5 text-sm font-semibold transition-colors",
                       form.format === option.value
-                        ? "bg-brand-gradient text-white"
+                        ? "bg-accent-solid text-accent-on"
                         : "border border-hairline text-ink-soft hover:border-plum/40",
                     )}
                   >
@@ -488,7 +488,7 @@ function ChannelsTab({
                     className={cn(
                       "flex-1 rounded-xl px-3 py-2.5 text-sm font-semibold transition-colors",
                       form.visibility === option.value
-                        ? "bg-brand-gradient text-white"
+                        ? "bg-accent-solid text-accent-on"
                         : "border border-hairline text-ink-soft hover:border-plum/40",
                     )}
                   >

@@ -51,7 +51,7 @@ export default function Subscribers() {
         cell: ({ row }) => (
           <a
             href={`mailto:${row.original.email}`}
-            className="font-medium text-ink hover:text-plum hover:underline"
+            className="font-medium text-ink hover:text-accent hover:underline"
           >
             {row.original.email}
           </a>
@@ -104,9 +104,9 @@ export default function Subscribers() {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="Contacts"
+        eyebrow="People"
         title="Subscribers"
-        description="Everyone on your email list — where they signed up, and when."
+        description="People who have agreed to receive your marketing email."
         actions={
           <Button
             variant="secondary"

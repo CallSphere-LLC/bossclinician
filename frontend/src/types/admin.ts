@@ -45,9 +45,21 @@ export interface MediaAsset {
 
 /* -------------------------------------------------------------- Curriculum */
 
+/** A downloadable file attached to one lesson. */
+export interface LessonFile {
+  id: Id;
+  title: string;
+  filename: string;
+  mime: string;
+  sizeBytes: number;
+  storagePath: string;
+  sort: number;
+}
+
 export interface CourseLesson {
   id: Id;
   moduleId: Id;
+  files?: LessonFile[];
   title: string;
   bodyMd: string;
   videoUrl: string;
@@ -56,15 +68,44 @@ export interface CourseLesson {
   preview: boolean;
   published: boolean;
   sort: number;
+  /* Columns that existed on the table long before the admin could write them —
+     the update whitelist had fallen behind the migrations. */
+  contentType?: string;
+  audioUrl?: string;
+  embedHtml?: string;
+  captionsUrl?: string;
+  transcript?: string;
+  thumbnailUrl?: string;
+  commentsEnabled?: boolean;
+  notesEnabled?: boolean;
+  requireCompletion?: boolean;
+  dripDays?: number | null;
+  dripDate?: string | null;
+}
+
+/** A quiz that sits in the course outline as a sibling of lessons. */
+export interface CourseQuiz {
+  id: Id;
+  title: string;
+  slug: string;
+  kind: string;
+  published: boolean;
+  sort: number;
+  questionCount: number;
 }
 
 export interface CourseModule {
   id: Id;
   courseId: Id;
+  /** Null on a top-level section; set on a subsection. */
+  parentId: Id | null;
   title: string;
   summary: string;
   sort: number;
   lessons: CourseLesson[];
+  quizzes: CourseQuiz[];
+  /** Only ever populated on a top-level section — nesting stops at one level. */
+  submodules: CourseModule[];
 }
 
 /* ----------------------------------------------------------------- Members */
@@ -436,6 +477,8 @@ export interface NewsletterIssue {
 export interface Campaign {
   id: Id;
   name: string;
+  /** A newsletter is a kind of broadcast, not a separate system. */
+  kind: string;
   subject: string;
   previewText: string;
   bodyMd: string;

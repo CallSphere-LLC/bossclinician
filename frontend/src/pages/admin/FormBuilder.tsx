@@ -256,7 +256,7 @@ function FieldBlock({
           They have to answer this one
         </label>
 
-        <details className="rounded-xl border border-hairline bg-white/[0.03] px-4 py-3">
+        <details className="rounded-xl border border-hairline bg-raise px-4 py-3">
           <summary className="cursor-pointer text-sm font-semibold text-ink">More rules</summary>
           <div className="mt-4 grid gap-4 sm:grid-cols-3">
             <Field label="Shortest answer" hint="letters">
@@ -657,7 +657,7 @@ export default function FormBuilder() {
           <button
             type="button"
             onClick={() => openForm(row.original.id)}
-            className="flex min-w-0 items-center gap-3 text-left hover:text-plum"
+            className="flex min-w-0 items-center gap-3 text-left hover:text-accent"
           >
             <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-lilac-tint text-plum">
               <ListChecks className="size-4" />
@@ -746,7 +746,7 @@ export default function FormBuilder() {
         <PageHeader
           eyebrow="Marketing"
           title="Forms"
-          description="Ask people whatever you need to know, then tag them and start their emails automatically."
+          description="Create forms to collect sign-ups, applications, registrations, enquiries, and other information from your audience."
           actions={
             <Button size="sm" onClick={() => setAdding(true)}>
               <Plus />
@@ -983,7 +983,7 @@ export default function FormBuilder() {
                 className={`rounded-xl border p-3.5 transition-colors ${
                   draft.postAction === action
                     ? "border-gold/50 bg-gold/[0.08]"
-                    : "border-hairline bg-white/[0.03] hover:border-white/20"
+                    : "border-hairline bg-raise hover:border-ink-soft/35"
                 }`}
               >
                 <label className="flex cursor-pointer items-center gap-3">
@@ -1039,7 +1039,7 @@ export default function FormBuilder() {
                   You have no tags yet — make one under Contacts and it will show up here.
                 </p>
               ) : (
-                <div className="max-h-40 space-y-1.5 overflow-y-auto rounded-xl border border-hairline bg-white/[0.03] p-3">
+                <div className="max-h-40 space-y-1.5 overflow-y-auto rounded-xl border border-hairline bg-raise p-3">
                   {tags.map((tag) => (
                     <label
                       key={tag.id}

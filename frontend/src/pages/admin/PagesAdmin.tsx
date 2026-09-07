@@ -273,7 +273,7 @@ export default function PagesAdmin() {
       <PageHeader
         eyebrow="Website"
         title="Pages"
-        description="Draft the words for each page here. They aren't on your live website yet — your developer has to switch these pages over first."
+        description="Standalone pages on your website."
         actions={
           <>
             {dirty && <Badge tone="gold">Unsaved changes</Badge>}
@@ -389,7 +389,7 @@ export default function PagesAdmin() {
                     </div>
 
                     {blocks.length === 0 ? (
-                      <p className="rounded-xl border border-hairline/60 bg-white/[0.02] px-4 py-3 text-sm text-ink-soft">
+                      <p className="rounded-xl border border-hairline/60 bg-raise px-4 py-3 text-sm text-ink-soft">
                         This page doesn't have any editable wording yet — its layout is built into
                         your site.
                       </p>
@@ -399,7 +399,7 @@ export default function PagesAdmin() {
                         return (
                           <div
                             key={key}
-                            className="space-y-4 rounded-xl border border-hairline/60 bg-white/[0.02] p-4"
+                            className="space-y-4 rounded-xl border border-hairline/60 bg-raise p-4"
                           >
                             <div>
                               <p className="text-[0.8rem] font-semibold text-ink">
@@ -460,7 +460,7 @@ function ContentValue({
         {value.map((item, index) => (
           <div
             key={index}
-            className="space-y-4 rounded-xl border border-hairline/50 bg-white/[0.02] p-4"
+            className="space-y-4 rounded-xl border border-hairline/50 bg-raise p-4"
           >
             <p className="text-[0.7rem] font-semibold uppercase tracking-[0.08em] text-ink-soft">
               {itemHeading(item, index)}

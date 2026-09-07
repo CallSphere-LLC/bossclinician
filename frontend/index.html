@@ -17,10 +17,37 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600;1,700&family=Montserrat:wght@300;400;500;600;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600;1,700&family=Montserrat:wght@300;400;500;600;700&family=Inter:wght@400;500;600;700&display=swap"
       rel="stylesheet"
     />
     <!--bc-head-->
+    <!--
+      Console theme, resolved before first paint (Part II §6).
+
+      React cannot add the class until it mounts, which is one paint too late:
+      the admin would flash the light marketing palette before settling. This
+      is a deliberate copy of the resolution in
+      src/pages/admin/ui/theme.tsx — change one, change the other. It is kept
+      to the /admin path so the marketing site is untouched.
+    -->
+    <script>
+      (function () {
+        try {
+          var p = localStorage.getItem("bc_admin_theme");
+          if (p !== "light" && p !== "dark" && p !== "system") p = "system";
+          var dark =
+            p === "dark" ||
+            (p === "system" &&
+              window.matchMedia &&
+              window.matchMedia("(prefers-color-scheme: dark)").matches);
+          if (location.pathname.indexOf("/admin") === 0) {
+            document.documentElement.classList.add(
+              dark ? "theme-console" : "theme-console-light"
+            );
+          }
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <!-- The page floor is the dark theme's surface: it is what shows through an
        overscroll bounce and behind the first paint, so a cream body would flash

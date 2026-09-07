@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { motion } from "motion/react";
 import { useEntranceMotion } from "@/hooks/useEntranceMotion";
 import { Seo } from "@/components/Seo";
@@ -315,8 +316,27 @@ function MissionPortrait() {
 
 /* ── Card ─────────────────────────────────────────────────────────────────── */
 
+/**
+ * Where a card's action leads.
+ *
+ * `course.url` is the legacy off-site product link the scraper seeded, and on
+ * every DB-backed row it is the placeholder `"#"` — which `<Link>` resolves
+ * against the current location, so the button landed the visitor back on the
+ * page they were already standing on and the card read as dead. A real
+ * absolute link is still honoured, as is a site path an admin set by hand;
+ * anything else falls through to this site's own sales page, which every
+ * course has at `/courses/<slug>`.
+ */
+function courseTarget(course: Course): { href: string } | { to: string } {
+  const url = course.url?.trim() ?? "";
+  if (/^https?:\/\//i.test(url)) return { href: url };
+  if (url.startsWith("/")) return { to: url };
+  return { to: `/courses/${course.slug}` };
+}
+
 function CourseCard({ course, accent }: { course: Course; accent: Accent }) {
   const meta = courseMeta[course.slug] ?? defaultCourseMeta;
+  const target = courseTarget(course);
 
   return (
     <GlassCard as="article" accent={accent} className="group flex h-full flex-col overflow-hidden">
@@ -344,8 +364,29 @@ function CourseCard({ course, accent }: { course: Course; accent: Accent }) {
       </div>
 
       <div className="flex flex-1 flex-col px-6 pb-6 pt-5 sm:px-7 sm:pb-7">
+        {/* The heading carries the card's click target. `after:inset-0` spreads
+            it over the whole panel — GlassCard is the nearest positioned
+            ancestor — so the cover and the copy open the course too, not just
+            the button at the bottom. The action below lifts itself back above
+            this overlay. */}
         <h3 className="text-balance font-display text-[1.05rem] font-medium leading-[1.32] tracking-[0.04em] text-white sm:text-[1.12rem]">
-          {course.title}
+          {"href" in target ? (
+            <a
+              href={target.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="after:absolute after:inset-0 after:rounded-2xl after:content-[''] focus-visible:outline-none focus-visible:after:outline focus-visible:after:outline-2 focus-visible:after:outline-offset-2 focus-visible:after:outline-gold"
+            >
+              {course.title}
+            </a>
+          ) : (
+            <Link
+              to={target.to}
+              className="after:absolute after:inset-0 after:rounded-2xl after:content-[''] focus-visible:outline-none focus-visible:after:outline focus-visible:after:outline-2 focus-visible:after:outline-offset-2 focus-visible:after:outline-gold"
+            >
+              {course.title}
+            </Link>
+          )}
         </h3>
 
         <p className="mt-2.5 text-pretty text-[0.9rem] font-medium leading-snug text-lilac">
@@ -387,14 +428,14 @@ function CourseCard({ course, accent }: { course: Course; accent: Accent }) {
             </p>
           )}
 
-          <div className="mt-5">
+          <div className="relative z-[1] mt-5">
             {isPurchasable(course) ? (
               <BuyButton slug={course.slug} label={meta.ctaLabel} />
-            ) : course.url.startsWith("http") ? (
+            ) : "href" in target ? (
               <LuxeButton
                 variant="glass"
                 size="sm"
-                href={course.url}
+                href={target.href}
                 target="_blank"
                 rel="noopener noreferrer"
                 className={CTA_CLASS}
@@ -402,7 +443,7 @@ function CourseCard({ course, accent }: { course: Course; accent: Accent }) {
                 {meta.ctaLabel}
               </LuxeButton>
             ) : (
-              <LuxeButton variant="glass" size="sm" to={course.url} className={CTA_CLASS}>
+              <LuxeButton variant="glass" size="sm" to={target.to} className={CTA_CLASS}>
                 {meta.ctaLabel}
               </LuxeButton>
             )}

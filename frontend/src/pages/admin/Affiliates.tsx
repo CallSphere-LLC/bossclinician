@@ -85,7 +85,7 @@ function TabBar({ active, onChange }: { active: Tab; onChange: (tab: Tab) => voi
           className={
             active === tab.id
               ? "rounded-xl bg-gold/[0.14] px-4 py-2 text-sm font-semibold text-gold"
-              : "rounded-xl px-4 py-2 text-sm font-medium text-ink-soft transition-colors hover:bg-white/[0.05] hover:text-ink"
+              : "rounded-xl px-4 py-2 text-sm font-medium text-ink-soft transition-colors hover:bg-raise hover:text-ink"
           }
         >
           {tab.label}
@@ -153,7 +153,7 @@ function PartnersTab({ onError }: { onError: (message: string) => void }) {
           <div className="min-w-0">
             <Link
               to={`/admin/partners/${row.original.id}`}
-              className="font-medium text-ink hover:text-plum hover:underline"
+              className="font-medium text-ink hover:text-accent hover:underline"
             >
               {row.original.name}
             </Link>
@@ -1074,9 +1074,9 @@ export default function Affiliates() {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="Sales"
-        title="Partners"
-        description="People who recommend your work and earn a share of what they send you."
+        eyebrow="Marketing"
+        title="Affiliates"
+        description="Manage people who refer customers to Boss Clinician and track referral links, sales, commissions, and payouts."
       />
 
       {error && <ErrorNotice message={error} />}

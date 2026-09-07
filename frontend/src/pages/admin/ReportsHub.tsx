@@ -115,7 +115,9 @@ export default function ReportsHub() {
   if (error) {
     return (
       <div className="space-y-6">
-        <PageHeader title="Your numbers" />
+        <PageHeader
+        eyebrow="Growth" title="Reports"
+        description="The full catalogue of reports on how your business is performing." />
         <ErrorNotice message={error} />
       </div>
     );
@@ -160,7 +162,7 @@ export default function ReportsHub() {
             {saved.map((view) => (
               <li
                 key={view.id}
-                className="flex flex-wrap items-center gap-3 px-5 py-3 transition-colors hover:bg-white/[0.03]"
+                className="flex flex-wrap items-center gap-3 px-5 py-3 transition-colors hover:bg-raise"
               >
                 <div className="min-w-0 flex-1">
                   <Link

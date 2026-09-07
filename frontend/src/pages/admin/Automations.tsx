@@ -495,8 +495,8 @@ export default function Automations() {
     <div className="space-y-6">
       <PageHeader
         eyebrow="Marketing"
-        title="Automations"
-        description="Set up the follow-up you'd otherwise do by hand. Pick something that happens in your business, then choose what should happen next."
+        title="Automations (old)"
+        description="The earlier automations screen, kept reachable while anything still uses it."
         actions={
           <Button
             size="sm"

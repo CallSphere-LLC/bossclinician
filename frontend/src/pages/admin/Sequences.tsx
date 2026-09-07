@@ -107,8 +107,8 @@ export default function Sequences() {
     <div className="space-y-6">
       <PageHeader
         eyebrow="Marketing"
-        title="Email sequences"
-        description="A set of emails that goes out one after another, on your schedule, once somebody joins it."
+        title="Email Series"
+        description="Create a series of emails that goes out in order over time. An Automation can start the series automatically when someone meets a condition."
         actions={
           <Button size="sm" onClick={() => setCreating(true)}>
             <Plus />
@@ -129,7 +129,7 @@ export default function Sequences() {
         <Card>
           <EmptyState
             icon={<Mails />}
-            title="No sequences yet"
+            title="No email series yet"
             description="Build one and everybody who joins it will get your emails in order, spaced however you like."
             action={
               <Button size="sm" onClick={() => setCreating(true)}>
@@ -217,7 +217,7 @@ export default function Sequences() {
       <Modal
         open={creating}
         onOpenChange={(open) => !open && setCreating(false)}
-        title="Start a new sequence"
+        title="Start a new email series"
         description="You can add the emails and choose when they go out next."
         footer={
           <>
@@ -231,7 +231,7 @@ export default function Sequences() {
         }
       >
         <form id="sequence-form" onSubmit={create} className="grid gap-4">
-          <Field label="What is this sequence called?" hint="Only you see this">
+          <Field label="What is this email series called?" hint="Only you see this">
             <Input
               value={name}
               onChange={(event) => setName(event.target.value)}

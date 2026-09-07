@@ -80,10 +80,65 @@ export default {
           light: "#12211B", // dark green wash (was a mint tint)
         },
         hairline: "rgb(var(--c-hairline) / <alpha-value>)",
+
+        // ── Admin console tokens (Part II §7–§9, §13) ──────────────────
+        // The console runs in three states — light, dark, and whatever the
+        // machine says — so every colour it uses has to be a variable, not a
+        // literal. `accent` is the one restrained brand accent §9 asks for;
+        // `accent-solid` is the fill behind `accent-on` text, kept separate
+        // because a hue readable as *text* on near-black is far too light to
+        // be a button, and a hue dark enough to be a button is unreadable as
+        // a link. One token cannot be both.
+        accent: {
+          DEFAULT: "rgb(var(--c-accent) / <alpha-value>)",
+          solid: "rgb(var(--c-accent-solid) / <alpha-value>)",
+          on: "rgb(var(--c-accent-on) / <alpha-value>)",
+          soft: "rgb(var(--c-accent-soft) / <alpha-value>)",
+        },
+        // The sidebar is a deeper neutral in light mode and a *lighter*
+        // charcoal in dark mode (§7, §8) — it inverts its relationship to the
+        // page, so it cannot reuse the surface scale.
+        rail: {
+          DEFAULT: "rgb(var(--c-rail) / <alpha-value>)",
+          raised: "rgb(var(--c-rail-raised) / <alpha-value>)",
+          text: "rgb(var(--c-rail-text) / <alpha-value>)",
+          dim: "rgb(var(--c-rail-dim) / <alpha-value>)",
+          line: "rgb(var(--c-rail-line) / <alpha-value>)",
+        },
+        // The subtle elevate fill that replaces hard-coded `white/[0.04]`.
+        // Pre-composed rather than `rgb(var(…) / <alpha-value>)` because the
+        // *alpha* is the part that differs between themes — near-white at 4.5%
+        // over charcoal, near-black at 3.5% over ivory — and Tailwind cannot
+        // take `<alpha-value>` from a variable.
+        raise: {
+          DEFAULT: "var(--fill-raise)",
+          strong: "var(--fill-raise-strong)",
+        },
+        // Status meaning, per §13: muted green / restrained red / muted amber
+        // / slate. Deliberately not Tailwind's stock green-500 family, which
+        // is far too saturated for the "calm, executive" bar §2 sets.
+        pos: {
+          DEFAULT: "rgb(var(--c-pos) / <alpha-value>)",
+          soft: "rgb(var(--c-pos-soft) / <alpha-value>)",
+        },
+        neg: {
+          DEFAULT: "rgb(var(--c-neg) / <alpha-value>)",
+          soft: "rgb(var(--c-neg-soft) / <alpha-value>)",
+        },
+        warn: {
+          DEFAULT: "rgb(var(--c-warn) / <alpha-value>)",
+          soft: "rgb(var(--c-warn-soft) / <alpha-value>)",
+        },
       },
       fontFamily: {
         display: ["Playfair Display", "Georgia", "serif"],
         body: ["Montserrat", "Arial", "sans-serif"],
+        // Figures. Part II §46 names Inter first, and a dashboard's numbers
+        // are the one thing on it that must be scanned rather than read:
+        // Playfair's figures are lovely in a headline and wrong in a column of
+        // money, where the eye needs even width and a flat baseline. Applied
+        // with `tabular-nums` so a changing value does not shift its neighbours.
+        numeric: ["Inter", "Montserrat", "Arial", "sans-serif"],
       },
       backgroundImage: {
         // Lifted from plum->navy: the original bottomed out at #0F1E3A, which
@@ -102,6 +157,12 @@ export default {
       boxShadow: {
         soft: "0 8px 30px -8px rgba(15, 30, 58, 0.25)",
         card: "0 4px 20px -4px rgba(15, 30, 58, 0.12)",
+        // Console elevations. §13 and §47 both ask for "very soft" — a shadow
+        // tuned for a near-black page reads as a smudge on warm ivory and one
+        // tuned for ivory disappears entirely on charcoal, so the whole value
+        // is swapped per theme rather than the opacity alone.
+        console: "var(--shadow-console)",
+        "console-pop": "var(--shadow-console-pop)",
         // Glass panel: deep ambient drop + a 1px inner top highlight so the
         // edge catches light the way real glass does.
         glass:

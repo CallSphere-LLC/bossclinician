@@ -52,7 +52,7 @@ export default function ResourcesAdmin() {
   return (
     <CrudManager<Resource>
       title="Resources"
-      description="The guides, checklists and tools you give away on your website."
+      description="Free guides and downloads you offer on your website."
       noun={{ one: "free resource", many: "free resources" }}
       nameHeader="Resource"
       fields={fields}

@@ -199,7 +199,7 @@ function formFromDetail(detail: EventDetail): EventForm {
 
 function StatTile({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-hairline bg-white/[0.03] px-4 py-3">
+    <div className="rounded-xl border border-hairline bg-raise px-4 py-3">
       <p className="text-xs text-ink-soft">{label}</p>
       <p className="mt-1 font-display text-xl text-ink">{value}</p>
     </div>
@@ -227,7 +227,7 @@ function KindChoice({
           className={`flex cursor-pointer gap-3 rounded-xl border p-3.5 transition-colors ${
             value === kind
               ? "border-gold/50 bg-gold/[0.08]"
-              : "border-hairline bg-white/[0.03] hover:border-white/20"
+              : "border-hairline bg-raise hover:border-ink-soft/35"
           }`}
         >
           <input
@@ -580,7 +580,7 @@ export default function EventsAdmin() {
           <button
             type="button"
             onClick={() => open(row.original.id)}
-            className="flex min-w-0 items-center gap-3 text-left hover:text-plum"
+            className="flex min-w-0 items-center gap-3 text-left hover:text-accent"
           >
             <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-lilac-tint text-plum">
               <CalendarClock className="size-4" />
@@ -971,7 +971,7 @@ export default function EventsAdmin() {
                     You have no tags yet — make one under Contacts and it will show up here.
                   </p>
                 ) : (
-                  <div className="max-h-40 space-y-1.5 overflow-y-auto rounded-xl border border-hairline bg-white/[0.03] p-3">
+                  <div className="max-h-40 space-y-1.5 overflow-y-auto rounded-xl border border-hairline bg-raise p-3">
                     {tags.map((tag) => (
                       <label
                         key={tag.id}

@@ -15,6 +15,7 @@ import {
   YAxis,
 } from "recharts";
 import { formatCurrency, shortDay } from "@/lib/format";
+import { useConsoleTheme } from "@/pages/admin/ui/theme";
 
 /**
  * Recharts wrappers pinned to the brand palette.
@@ -25,7 +26,16 @@ import { formatCurrency, shortDay } from "@/lib/format";
  * default chart library dump.
  */
 
+/**
+ * The dark-theme series palette, kept as a named export because several
+ * screens pass individual colours in by hand. New code should prefer
+ * `useChartColors()`, which returns the set for whichever theme is showing.
+ */
 export const CHART_COLORS = {
+  // `accent` is the §9 brand accent and the colour a single-series chart
+  // should use. The rest are the legacy series palette, kept because several
+  // screens still name them directly.
+  accent: "#8AAAE6",
   plum: "#9B7DD4",
   plumDeep: "#7B5EA7",
   gold: "#D8B676",
@@ -35,12 +45,55 @@ export const CHART_COLORS = {
   slate: "#7E7391",
 } as const;
 
-const axisProps = {
-  stroke: "#8B7FA0",
-  fontSize: 11,
-  tickLine: false,
-  axisLine: false,
+/**
+ * Light-theme series colours.
+ *
+ * Not the dark set darkened: these are chosen against warm ivory, where the
+ * dark palette's pastels sit at roughly 1.8:1 and vanish. `accent` leads
+ * because §18 asks for a restrained chart and §9 for a single accent.
+ */
+const LIGHT_COLORS = {
+  accent: "#2C4A7C",
+  plum: "#2C4A7C",
+  plumDeep: "#1D3157",
+  gold: "#8A5A12",
+  green: "#2F6B4F",
+  lilac: "#6E86AE",
+  ink: "#1C1E24",
+  slate: "#6A6760",
 } as const;
+
+// Widened to `string`: `as const` on the two palettes gives each a literal
+// type, and the light set is not assignable to the dark set's literals.
+export type ChartColors = Record<keyof typeof CHART_COLORS, string>;
+
+/** The series palette for the theme currently showing. */
+export function useChartColors(): ChartColors {
+  return useConsoleTheme().theme === "light" ? LIGHT_COLORS : CHART_COLORS;
+}
+
+/**
+ * Axis chrome, per theme.
+ *
+ * Recharts writes these as SVG presentation attributes, where `var(--token)`
+ * is not reliably resolved — so the concrete value has to be picked in JS
+ * rather than handed to CSS. A single hard-coded `#8B7FA0` was ~2:1 on ivory,
+ * which is below the 3:1 WCAG asks of a graphical object (§51).
+ */
+function useAxisProps() {
+  const dark = useConsoleTheme().theme === "dark";
+  return {
+    stroke: dark ? "#9299A6" : "#6A6760",
+    fontSize: 11,
+    tickLine: false,
+    axisLine: false,
+  } as const;
+}
+
+/** What an active dot is punched out against — the card fill, not the page. */
+function useDotStroke(): string {
+  return useConsoleTheme().theme === "dark" ? "#191B20" : "#FFFFFF";
+}
 
 /**
  * A chart with nothing in it is a blank rectangle, which reads as broken
@@ -114,6 +167,8 @@ export function TrendAreaChart({
   emptyMessage?: string;
 }) {
   const gradientId = useId();
+  const axisProps = useAxisProps();
+  const dotStroke = useDotStroke();
 
   if (data.length === 0) return <ChartEmpty message={emptyMessage} height={height} />;
 
@@ -136,13 +191,17 @@ export function TrendAreaChart({
         />
         <YAxis
           {...axisProps}
-          width={54}
+          width={68}
           allowDecimals={false}
           // With an all-zero series Recharts emits five identical ticks ($0 $0
           // $0…). Flooring the max keeps the scale readable before any revenue
           // or signups exist.
           domain={[0, (dataMax: number) => Math.max(dataMax, currency ? 400 : 4)]}
-          tickFormatter={(v: number) => (currency ? `$${Math.round(v / 100)}` : String(v))}
+          tickFormatter={(v: number) =>
+            currency
+              ? `$${new Intl.NumberFormat("en-US").format(Math.round(v / 100))}`
+              : String(v)
+          }
         />
         <Tooltip content={<ChartTooltip currency={currency} />} />
         {series.map((s) => (
@@ -155,7 +214,7 @@ export function TrendAreaChart({
             strokeWidth={2.25}
             fill={`url(#${gradientId}-${s.key})`}
             dot={false}
-            activeDot={{ r: 4, strokeWidth: 2, stroke: "#0A0713" }}
+            activeDot={{ r: 4, strokeWidth: 2, stroke: dotStroke }}
           />
         ))}
       </AreaChart>
@@ -209,19 +268,22 @@ export function ComparisonLineChart({
   height?: number;
   emptyMessage?: string;
 }) {
+  const axisProps = useAxisProps();
+  const colors = useChartColors();
+
   if (data.length === 0) return <ChartEmpty message={emptyMessage} height={height} />;
 
   return (
     <ResponsiveContainer width="100%" height={height}>
       <LineChart data={data} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
         <XAxis dataKey="date" {...axisProps} tickFormatter={shortDay} minTickGap={28} />
-        <YAxis {...axisProps} width={54} tickFormatter={(v: number) => `$${Math.round(v / 100)}`} />
+        <YAxis {...axisProps} width={68} tickFormatter={(v: number) => `$${Math.round(v / 100)}`} />
         <Tooltip content={<ChartTooltip currency />} />
         <Line
           type="monotone"
           dataKey="previous"
           name="The period before"
-          stroke={CHART_COLORS.slate}
+          stroke={colors.slate}
           strokeWidth={2}
           strokeDasharray="4 4"
           dot={false}
@@ -230,7 +292,7 @@ export function ComparisonLineChart({
           type="monotone"
           dataKey="current"
           name="This period"
-          stroke={CHART_COLORS.plum}
+          stroke={colors.plum}
           strokeWidth={2.5}
           dot={false}
           activeDot={{ r: 4, strokeWidth: 2, stroke: "#0A0713" }}
@@ -303,6 +365,8 @@ export function MiniBarChart({
   height?: number;
   emptyMessage?: string;
 }) {
+  const axisProps = useAxisProps();
+
   if (data.length === 0) return <ChartEmpty message={emptyMessage} height={height} />;
 
   return (

@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { AdminLayout } from "@/pages/admin/AdminLayout";
+import { ConsoleThemeProvider } from "@/pages/admin/ui/theme";
 import Login from "@/pages/admin/Login";
 import Dashboard from "@/pages/admin/Dashboard";
 import Products from "@/pages/admin/Products";
@@ -11,6 +12,7 @@ import BlogList from "@/pages/admin/BlogList";
 import BlogEditor from "@/pages/admin/BlogEditor";
 import CoursesAdmin from "@/pages/admin/CoursesAdmin";
 import CourseBuilder from "@/pages/admin/CourseBuilder";
+import CoursePreview from "@/pages/admin/CoursePreview";
 import CommunityList from "@/pages/admin/CommunityList";
 import CommunityDetail from "@/pages/admin/CommunityDetail";
 import MediaLibrary from "@/pages/admin/MediaLibrary";
@@ -57,10 +59,12 @@ import EventsAdmin from "@/pages/admin/EventsAdmin";
 import FormBuilder from "@/pages/admin/FormBuilder";
 import ReportsHub from "@/pages/admin/ReportsHub";
 import ReportView from "@/pages/admin/ReportView";
-import Forms from "@/pages/admin/Forms";
 import Events from "@/pages/admin/Events";
 import PagesAdmin from "@/pages/admin/PagesAdmin";
 import Reports from "@/pages/admin/Reports";
+import NotificationsPage from "@/pages/admin/Notifications";
+import CalendarPage from "@/pages/admin/Calendar";
+import SocialMedia from "@/pages/admin/SocialMedia";
 
 function LoadingScreen() {
   return (
@@ -87,12 +91,25 @@ function ProtectedRoutes() {
         {/* Products */}
         <Route path="/products" element={<Products />} />
         <Route path="/catalogue" element={<ProductsCatalog />} />
+        {/* The same catalogue screen, narrowed to one kind — not a second page. */}
+        <Route
+          path="/downloads"
+          element={
+            <ProductsCatalog
+              restrictKind="download"
+              heading="Downloads"
+              description="Manage downloadable resources and digital files you provide to customers or members."
+            />
+          }
+        />
         <Route path="/courses" element={<CoursesAdmin />} />
         <Route path="/courses/:id/curriculum" element={<CourseBuilder />} />
+        <Route path="/courses/:id/preview" element={<CoursePreview />} />
         <Route path="/community" element={<CommunityList />} />
         <Route path="/community/:id" element={<CommunityDetail />} />
         <Route path="/media" element={<MediaLibrary />} />
         <Route path="/coaching" element={<Coaching />} />
+        <Route path="/calendar" element={<CalendarPage />} />
         <Route path="/podcasts" element={<Podcasts />} />
         <Route path="/newsletters" element={<Newsletters />} />
 
@@ -130,7 +147,7 @@ function ProtectedRoutes() {
         <Route path="/marketing/quizzes/:id" element={<AssessmentEditor />} />
         <Route path="/marketing/events-v2" element={<EventsAdmin />} />
         <Route path="/marketing/forms-v2" element={<FormBuilder />} />
-        <Route path="/marketing/forms" element={<Forms />} />
+        <Route path="/marketing/social" element={<SocialMedia />} />
 
         {/* Contacts */}
         <Route path="/contacts" element={<Contacts />} />
@@ -150,6 +167,9 @@ function ProtectedRoutes() {
             it still works, and nothing is lost if the new hub has a gap. */}
         <Route path="/analytics/reports-legacy" element={<Reports />} />
 
+        {/* Administration (§5) */}
+        <Route path="/notifications" element={<NotificationsPage />} />
+
         <Route path="/settings" element={<SettingsHub />} />
         <Route path="/settings/team" element={<AdminUsers />} />
         <Route path="/settings/connections" element={<Integrations />} />
@@ -163,12 +183,17 @@ function ProtectedRoutes() {
 
 export default function AdminApp() {
   return (
-    <Routes>
-      <Route path="/login" element={<Login />} />
-      {/* The invitee has no account yet — a guard here would bounce them to a
-          sign-in they cannot pass. The token in the link is the credential. */}
-      <Route path="/invite/:token" element={<AcceptInvite />} />
-      <Route path="/*" element={<ProtectedRoutes />} />
-    </Routes>
+    // Outside the auth guard on purpose: the sign-in and invite screens are
+    // part of the console and are read in whichever theme the operator set,
+    // not in the marketing palette (Part II §6).
+    <ConsoleThemeProvider>
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        {/* The invitee has no account yet — a guard here would bounce them to a
+            sign-in they cannot pass. The token in the link is the credential. */}
+        <Route path="/invite/:token" element={<AcceptInvite />} />
+        <Route path="/*" element={<ProtectedRoutes />} />
+      </Routes>
+    </ConsoleThemeProvider>
   );
 }

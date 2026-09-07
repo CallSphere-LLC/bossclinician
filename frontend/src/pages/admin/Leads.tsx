@@ -263,9 +263,9 @@ export default function Leads() {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="Contacts"
+        eyebrow="People"
         title="Enquiries"
-        description="Everyone who has reached out through your website — applications, contact forms and anything else people fill in."
+        description="Questions and requests received from people through your website, email, forms, applications, or other enquiry channels."
       />
 
       {error && <ErrorNotice message={error} />}
@@ -282,12 +282,12 @@ export default function Leads() {
               className={cn(
                 "rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors",
                 active
-                  ? "bg-brand-gradient text-white"
-                  : "border border-hairline bg-surface text-ink-soft hover:border-plum/40 hover:text-plum",
+                  ? "bg-accent-solid text-accent-on"
+                  : "border border-hairline bg-surface text-ink-soft hover:border-plum/40 hover:text-accent",
               )}
             >
               {status === "all" ? "Everyone" : leadStatusLabel(status)}
-              <span className={cn("ml-1.5", active ? "text-white/70" : "text-ink-soft/60")}>
+              <span className={cn("ml-1.5", active ? "text-accent-on/75" : "text-ink-soft/60")}>
                 {count}
               </span>
             </button>

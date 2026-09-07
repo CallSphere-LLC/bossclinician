@@ -53,25 +53,157 @@
     --c-plum-deep: 216 202 235;
   }
 
-  /* Admin console. Slightly lighter surfaces than the public theme and a
-     cooler hairline: a data grid needs its row separators to survive at 1px
-     under a bright screen, where the marketing theme can afford to whisper. */
+  /* ══════════════════════════════════════════════════════════════════════
+     ADMIN CONSOLE — light and dark (Part II §6–§9, §13)
+
+     Two deliberately designed palettes, not one inverted into the other. The
+     console picks between them from `useConsoleTheme`, which writes exactly
+     one of these classes onto the shell.
+
+     Both blocks define every console token. A token defined in only one of
+     them is a bug that shows up as an invisible control in the other, so the
+     two lists are kept in the same order to make a gap easy to spot.
+     ══════════════════════════════════════════════════════════════════════ */
+
+  /* Dark — §8: deep charcoal page, *lighter* charcoal sidebar, graphite
+     cards, soft-white copy. Never pure black: a #000 field under a graphite
+     card makes the card look like a mistake rather than an elevation. */
   .theme-console {
     /* See .theme-luxe: this is what stops a <select> painting itself in the
        machine's colours and hiding the value she just chose. */
     color-scheme: dark;
-    --c-ink: 237 233 245;
-    --c-ink-soft: 152 141 176;
-    --c-cream: 11 8 20;
-    --c-sand: 20 15 34;
-    --c-surface: 20 15 34;
-    --c-surface-raised: 27 20 44;
-    --c-hairline: 62 51 86;
+    --c-ink: 237 238 243;
+    --c-ink-soft: 150 155 166;
+    --c-cream: 16 17 21;
+    --c-sand: 24 26 31;
+    --c-surface: 25 27 32;
+    --c-surface-raised: 32 35 41;
+    --c-hairline: 49 53 61;
     --c-lilac-soft: 167 139 196;
-    --c-lilac-tint: 35 25 56;
-    --c-dark: 8 5 15;
+    --c-lilac-tint: 30 36 48;
+    --c-dark: 11 12 15;
     --c-plum: 185 162 214;
     --c-plum-deep: 216 202 235;
+
+    /* Muted royal blue. The light `accent` clears 8:1 on the page field as
+       body-sized text; the darker `accent-solid` carries white at 5.6:1. */
+    --c-accent: 138 170 230;
+    --c-accent-solid: 59 95 168;
+    --c-accent-on: 255 255 255;
+    --c-accent-soft: 32 44 68;
+
+    --c-rail: 23 25 30;
+    --c-rail-raised: 36 40 47;
+    --c-rail-text: 233 235 240;
+    --c-rail-dim: 145 151 163;
+    --c-rail-line: 45 49 57;
+
+    --fill-raise: rgb(255 255 255 / 0.045);
+    --fill-raise-strong: rgb(255 255 255 / 0.085);
+
+    --c-pos: 111 191 149;
+    --c-pos-soft: 24 47 39;
+    --c-neg: 232 130 122;
+    --c-neg-soft: 58 31 30;
+    --c-warn: 220 168 92;
+    --c-warn-soft: 56 43 22;
+
+    --shadow-console: 0 1px 0 rgb(255 255 255 / 0.03) inset, 0 14px 34px -22px rgb(0 0 0 / 0.9);
+    --shadow-console-pop: 0 24px 54px -18px rgb(0 0 0 / 0.85);
+
+    /* Sign-in atmosphere: the floor the composed background settles onto and
+       the strength of its vignette. These cannot reuse `--c-dark`, which means
+       "the darkest surface in this theme" — in the light theme that is
+       charcoal, and using it here painted the foot of the light sign-in screen
+       nearly black under dark footer text. */
+    --atmo-floor: 8 9 12;
+    --atmo-veil: 0.55;
+  }
+
+  /* Light — §7: warm ivory page, white cards, a *deeper* neutral sidebar,
+     deep-charcoal copy on warm gray. Pure #FFF is reserved for card fills so
+     the cards read as lifted off the page rather than flush with it. */
+  .theme-console-light {
+    color-scheme: light;
+    /* Brightened: the first pass ran warm and grey — a beige page under warm
+       grey secondary text, which read as dim rather than as calm. The surfaces
+       are now near-white with only a trace of warmth, and both text tokens are
+       cooler and darker, taking body copy to ~16:1 and secondary copy from
+       ~5.3:1 to ~6.4:1. */
+    --c-ink: 22 24 30;
+    --c-ink-soft: 92 96 104;
+    --c-cream: 250 250 249;
+    --c-sand: 244 245 246;
+    --c-surface: 255 255 255;
+    --c-surface-raised: 255 255 255;
+    --c-hairline: 226 228 232;
+    --c-lilac-soft: 148 128 176;
+    --c-lilac-tint: 238 235 246;
+    --c-dark: 22 24 30;
+    --c-plum: 92 69 125;
+    --c-plum-deep: 61 45 92;
+
+    /* Deep navy / slate blue. One hue serves both roles here because it is
+       already dark enough to carry white and readable enough to be a link. */
+    /* A more saturated navy than the muted first pass, so links and the
+       primary button carry on a near-white field. 7.2:1 on white. */
+    --c-accent: 29 78 154;
+    --c-accent-solid: 29 78 154;
+    --c-accent-on: 255 255 255;
+    --c-accent-soft: 232 240 252;
+
+    --c-rail: 243 244 246;
+    --c-rail-raised: 230 232 236;
+    --c-rail-text: 22 24 30;
+    --c-rail-dim: 92 96 104;
+    --c-rail-line: 224 227 232;
+
+    --fill-raise: rgb(22 24 30 / 0.035);
+    --fill-raise-strong: rgb(22 24 30 / 0.07);
+
+    --c-pos: 47 107 79;
+    --c-pos-soft: 232 242 236;
+    --c-neg: 163 58 50;
+    --c-neg-soft: 249 234 232;
+    --c-warn: 138 90 18;
+    --c-warn-soft: 249 241 226;
+
+    --shadow-console: 0 1px 2px rgb(22 24 30 / 0.05), 0 8px 24px -16px rgb(22 24 30 / 0.22);
+    --shadow-console-pop: 0 18px 44px -14px rgb(22 24 30 / 0.2);
+
+    /* See the dark block: a warm stone floor and a whisper of a vignette. */
+    --atmo-floor: 226 229 234;
+    --atmo-veil: 0.12;
+  }
+
+  /* index.html paints the body near-black so the public site never flashes
+     white. Under the console that floor is wrong in both directions — it is
+     what shows through an overscroll bounce and behind the first paint — so
+     the theme claims the body too. The class sits on <html>, which is why
+     these can reach it. */
+  html.theme-console body,
+  html.theme-console-light body {
+    background-color: rgb(var(--c-cream));
+    color: rgb(var(--c-ink));
+  }
+
+  /* Focus and selection follow the accent in both console themes (§9, §51).
+     The public site keeps its gold ring — these are scoped, not global. */
+  .theme-console,
+  .theme-console-light {
+    --tw-ring-color: rgb(var(--c-accent) / 0.5);
+  }
+
+  .theme-console :focus-visible,
+  .theme-console-light :focus-visible {
+    outline: 2px solid rgb(var(--c-accent));
+    outline-offset: 2px;
+  }
+
+  .theme-console ::selection,
+  .theme-console-light ::selection {
+    background: rgb(var(--c-accent-soft));
+    color: rgb(var(--c-ink));
   }
 
   html {
