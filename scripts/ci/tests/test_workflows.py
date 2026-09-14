@@ -69,7 +69,8 @@ class WorkflowContractTests(unittest.TestCase):
     def test_ci_runs_for_pull_requests_other_branches_and_deploys(self):
         on = self.ci["on"]
         self.assertIn("pull_request", on)
-        self.assertEqual(on["push"]["branches-ignore"], ["main"])
+        # Dependabot branches get CI from their pull request only, never twice.
+        self.assertEqual(on["push"]["branches-ignore"], ["main", "dependabot/**"])
         self.assertIn("ref", on["workflow_call"]["inputs"])
 
     def test_ci_keeps_every_suite(self):

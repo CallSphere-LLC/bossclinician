@@ -9,7 +9,10 @@ name: CI
 on:
   pull_request:
   push:
-    branches-ignore: [main]
+    # Not main (deploy.yml runs CI for it) and not Dependabot's branches, which
+    # always come with a pull request: running both doubled every Dependabot
+    # update's CI and queued a production deploy behind them.
+    branches-ignore: [main, 'dependabot/**']
   workflow_call:
     inputs:
       ref:
