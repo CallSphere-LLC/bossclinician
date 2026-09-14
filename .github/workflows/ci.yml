@@ -118,7 +118,7 @@ jobs:
         # Selected by file name, not test name, so a DB-backed suite whose
         # describe() forgets the word "integration" still runs. One fork, as
         # backend/scripts/test-integration.sh does.
-        run: npx vitest run integration.test --poolOptions.forks.minForks=1 --poolOptions.forks.maxForks=1
+        run: npx vitest run integration.test --maxWorkers=1
       - name: Build
         run: npm run build
 

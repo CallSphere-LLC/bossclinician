@@ -62,5 +62,5 @@ exec docker run --rm \
   -e WORKER_ENABLED=false \
   node:24-alpine \
   sh -c 'npm ci --no-audit --no-fund --loglevel=error \
-    && exec node_modules/.bin/vitest run --poolOptions.forks.minForks=1 --poolOptions.forks.maxForks=1 "$@"' \
+    && exec node_modules/.bin/vitest run --maxWorkers=1 "$@"' \
   vitest "$@"

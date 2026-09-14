@@ -197,7 +197,7 @@ emailPrefsRouter.get(
 /* ------------------------------------------------------------------ writing */
 
 const updateSchema = z.object({
-  topics: z.record(z.boolean()).optional(),
+  topics: z.record(z.string(), z.boolean()).optional(),
   unsubscribeAll: z.boolean().optional(),
 });
 

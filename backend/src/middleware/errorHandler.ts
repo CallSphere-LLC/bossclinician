@@ -68,6 +68,23 @@ function fieldLabel(issue: ZodIssue): string {
 }
 
 /**
+ * Whether a type failure is about a value that simply isn't there.
+ *
+ * zod 3 said so in `received` ("undefined", "null", "nan"). zod 4 keeps that
+ * field only for NaN and otherwise says it in the message alone — "expected
+ * string, received undefined" — so both are read: the message for this zod,
+ * `received` for an error from an older copy (see `isZodError`). A schema with
+ * its own wording for a missing value falls through to "doesn't look right",
+ * which is still true.
+ */
+function isMissingValue(issue: ZodIssue): boolean {
+  if (issue.code !== "invalid_type") return false;
+  const received = (issue as { received?: unknown }).received;
+  if (typeof received === "string") return ["undefined", "null", "nan"].includes(received.toLowerCase());
+  return /received (undefined|null|NaN)$/.test(issue.message);
+}
+
+/**
  * One zod failure → one sentence the business owner can act on.
  *
  * The point of the whole clause: `schema.parse(req.body)` throws rather than
@@ -88,10 +105,7 @@ export function zodMessage(err: ZodError): string {
   const label = fieldLabel(issue);
   if (!label) return generic;
 
-  const missing =
-    issue.code === "invalid_type" &&
-    (issue.received === "undefined" || issue.received === "null" || issue.received === "nan");
-  if (missing) return `Please fill in "${label}" — it can't be left empty.`;
+  if (isMissingValue(issue)) return `Please fill in "${label}" — it can't be left empty.`;
   if (issue.code === "too_small") return `"${label}" is too short — please add a bit more.`;
   if (issue.code === "too_big") return `"${label}" is too long — please shorten it.`;
   return `"${label}" doesn't look right — please check it and try again.`;

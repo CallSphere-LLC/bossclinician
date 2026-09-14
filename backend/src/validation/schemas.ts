@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { partialUpdate } from "./partialUpdate";
 import { isProtectedRef } from "../services/signedUrls";
 
 /**
@@ -34,7 +35,7 @@ export const leadSchema = z.object({
   // The column is free TEXT (dynamic forms write `form:<slug>` directly), so
   // this enum is the only gate on what the *public* endpoint will accept.
   source: z.enum(["apply", "contact", "work-with-me", "income-calculator"]).default("contact"),
-  meta: z.record(z.unknown()).optional(),
+  meta: z.record(z.string(), z.unknown()).optional(),
   // Bot trap, written by frontend/src/components/forms/useHoneypot: a field no
   // person can see, and how long the form was on screen before it was sent.
   // Both optional — an older client that posts neither is still a valid lead.
@@ -86,7 +87,7 @@ export const blogSchema = z.object({
   published: z.boolean().default(false),
   publishedAt: z.string().max(50).nullable().optional(),
 });
-export const blogUpdateSchema = blogSchema.partial();
+export const blogUpdateSchema = partialUpdate(blogSchema);
 
 export const courseSchema = z.object({
   slug: z.string().min(1).max(200),
@@ -105,7 +106,7 @@ export const courseSchema = z.object({
   sort: z.number().int().default(0),
   published: z.boolean().default(true),
 });
-export const courseUpdateSchema = courseSchema.partial();
+export const courseUpdateSchema = partialUpdate(courseSchema);
 
 export const testimonialSchema = z.object({
   name: z.string().min(1).max(200),
@@ -115,7 +116,7 @@ export const testimonialSchema = z.object({
   sort: z.number().int().default(0),
   published: z.boolean().default(true),
 });
-export const testimonialUpdateSchema = testimonialSchema.partial();
+export const testimonialUpdateSchema = partialUpdate(testimonialSchema);
 
 export const resourceSchema = z.object({
   slug: z.string().min(1).max(200),
@@ -128,7 +129,7 @@ export const resourceSchema = z.object({
   sort: z.number().int().default(0),
   published: z.boolean().default(true),
 });
-export const resourceUpdateSchema = resourceSchema.partial();
+export const resourceUpdateSchema = partialUpdate(resourceSchema);
 
 export const pageUpdateSchema = z.object({
   title: z.string().max(300).optional(),
@@ -136,7 +137,7 @@ export const pageUpdateSchema = z.object({
   sections: z.unknown().optional(),
 });
 
-export const settingsUpdateSchema = z.record(z.unknown());
+export const settingsUpdateSchema = z.record(z.string(), z.unknown());
 
 export const generateBlogSchema = z.object({
   topic: z.string().min(1).max(300),

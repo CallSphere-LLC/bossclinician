@@ -5,6 +5,7 @@ import { asyncHandler } from "../../utils/asyncHandler";
 import { badRequest, notFound } from "../../utils/httpError";
 import { buildUpdate } from "../../utils/sqlUpdate";
 import { z } from "zod";
+import { partialUpdate } from "../../validation/partialUpdate";
 import { POINT_ACTIONS } from "../../services/communityNotifications";
 
 /**
@@ -468,7 +469,7 @@ adminCommunityRouter.post(
 adminCommunityRouter.put(
   "/:id/access-groups/:groupId",
   asyncHandler(async (req, res) => {
-    const parsed = accessGroupSchema.partial().safeParse(req.body ?? {});
+    const parsed = partialUpdate(accessGroupSchema).safeParse(req.body ?? {});
     if (!parsed.success) throw badRequest("Check the group's details.");
     const update = buildUpdate(
       { name: parsed.data.name, description: parsed.data.description, sort: parsed.data.sort },

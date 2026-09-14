@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import { Router } from "express";
 import { z } from "zod";
+import { partialUpdate } from "../../validation/partialUpdate";
 import { pool } from "../../db/pool";
 import { asyncHandler } from "../../utils/asyncHandler";
 import { badRequest, notFound } from "../../utils/httpError";
@@ -48,7 +49,7 @@ const endpointSchema = z.object({
   enabled: z.boolean().default(true),
 });
 
-const endpointUpdateSchema = endpointSchema.partial();
+const endpointUpdateSchema = partialUpdate(endpointSchema);
 
 function assertKnownEvents(types: string[]): void {
   const unknown = types.filter((t) => !isKnownEvent(t));

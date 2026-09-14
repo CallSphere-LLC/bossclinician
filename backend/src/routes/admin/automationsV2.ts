@@ -50,7 +50,7 @@ const automationSchema = z.object({
   name: z.string().trim().min(1, "Give this automation a name").max(200),
   description: z.string().max(2000).optional(),
   triggerType: z.enum(TRIGGER_TYPES),
-  triggerConfig: z.record(z.union([z.string(), z.number(), z.boolean(), z.null()])).optional(),
+  triggerConfig: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])).optional(),
   conditions: savedConditionsSchema.optional(),
   status: z.enum(["active", "paused"]).optional(),
   maxRunsPerContactPerDay: z.number().int().min(0).max(500).optional(),
@@ -58,7 +58,7 @@ const automationSchema = z.object({
 
 const actionSchema = z.object({
   actionType: z.enum(ACTION_TYPES),
-  config: z.record(z.unknown()).optional(),
+  config: z.record(z.string(), z.unknown()).optional(),
   delayMinutes: z.number().int().min(0).max(525_600).optional(),
   conditions: savedConditionsSchema.optional(),
   sort: z.number().int().min(0).optional(),
