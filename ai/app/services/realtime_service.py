@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import logging
 
-import httpx
+import httpx2
 
 from app.config import settings
 
@@ -129,7 +129,7 @@ async def create_realtime_session() -> dict:
     }
 
     try:
-        async with httpx.AsyncClient(timeout=15) as client:
+        async with httpx2.AsyncClient(timeout=15) as client:
             res = await client.post(
                 OPENAI_REALTIME_SECRETS_URL,
                 headers={
@@ -138,7 +138,7 @@ async def create_realtime_session() -> dict:
                 },
                 json=payload,
             )
-    except httpx.HTTPError as exc:
+    except httpx2.HTTPError as exc:
         logger.exception("realtime session request failed")
         raise RuntimeError(f"Could not reach OpenAI Realtime: {exc}") from exc
 
