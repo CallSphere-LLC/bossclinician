@@ -70,7 +70,9 @@ jobs:
   deploy:
     name: Deploy to production
     needs: [resolve, ci]
-    if: github.repository == 'shankasf/bossclinician' && github.ref == 'refs/heads/main'
+    # By repository id, which survives transfers and renames; a fork has its
+    # own id and never tries to deploy. Must match scripts/ci/runner-job-guard.sh.
+    if: github.repository_id == '1350709869' && github.ref == 'refs/heads/main'
     runs-on: [self-hosted, bossclinician]
     timeout-minutes: 75
     environment:

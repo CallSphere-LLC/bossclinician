@@ -3,6 +3,7 @@ runner's job guard, the secret scan, and the CI env writer's refusal to run
 anywhere it could overwrite real secrets."""
 from __future__ import annotations
 
+import re
 import shutil
 import tempfile
 import unittest
@@ -11,11 +12,13 @@ from pathlib import Path
 from helpers import CI_DIR, REPO_ROOT, run
 
 GUARD = CI_DIR / "runner-job-guard.sh"
+REPOSITORY_ID = "1350709869"
 ADMITTED = {
-    "GITHUB_REPOSITORY": "shankasf/bossclinician",
+    "GITHUB_REPOSITORY": "CallSphere-LLC/bossclinician",
+    "GITHUB_REPOSITORY_ID": REPOSITORY_ID,
     "GITHUB_REF": "refs/heads/main",
     "GITHUB_EVENT_NAME": "push",
-    "GITHUB_WORKFLOW_REF": "shankasf/bossclinician/.github/workflows/deploy.yml@refs/heads/main",
+    "GITHUB_WORKFLOW_REF": "CallSphere-LLC/bossclinician/.github/workflows/deploy.yml@refs/heads/main",
     "GITHUB_SHA": "a" * 40,
 }
 
@@ -37,28 +40,50 @@ class RunnerGuardTests(unittest.TestCase):
     def test_refuses_a_workflow_pushed_on_another_branch(self):
         result = self.guard(
             GITHUB_REF="refs/heads/meena",
-            GITHUB_WORKFLOW_REF="shankasf/bossclinician/.github/workflows/deploy.yml@refs/heads/meena",
+            GITHUB_WORKFLOW_REF="CallSphere-LLC/bossclinician/.github/workflows/deploy.yml@refs/heads/meena",
         )
         self.assertEqual(result.returncode, 1)
         self.assertIn("refs/heads/meena", result.stderr)
 
     def test_refuses_a_different_workflow_file_even_on_main(self):
-        result = self.guard(GITHUB_WORKFLOW_REF="shankasf/bossclinician/.github/workflows/sneaky.yml@refs/heads/main")
+        result = self.guard(GITHUB_WORKFLOW_REF="CallSphere-LLC/bossclinician/.github/workflows/sneaky.yml@refs/heads/main")
         self.assertEqual(result.returncode, 1)
 
     def test_refuses_pull_request_events(self):
         for event in ("pull_request", "pull_request_target", "workflow_run", "schedule"):
             self.assertEqual(self.guard(GITHUB_EVENT_NAME=event).returncode, 1, event)
 
-    def test_refuses_another_repository(self):
-        self.assertEqual(self.guard(GITHUB_REPOSITORY="someone/fork").returncode, 1)
+    def test_still_admits_after_the_organization_is_renamed(self):
+        # The id is what survived the move from shankasf/ into the organization.
+        result = self.guard(
+            GITHUB_REPOSITORY="CallSphere-Inc/bossclinician",
+            GITHUB_WORKFLOW_REF="CallSphere-Inc/bossclinician/.github/workflows/deploy.yml@refs/heads/main",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_refuses_a_fork_even_with_an_identical_name_and_workflow(self):
+        result = self.guard(GITHUB_REPOSITORY_ID="999999999")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("999999999", result.stderr)
+
+    def test_refuses_a_workflow_that_belongs_to_another_repository(self):
+        result = self.guard(GITHUB_WORKFLOW_REF="someone/elsewhere/.github/workflows/deploy.yml@refs/heads/main")
+        self.assertEqual(result.returncode, 1)
 
     def test_refuses_when_the_runner_provides_no_context(self):
-        self.assertEqual(self.guard(GITHUB_WORKFLOW_REF=None).returncode, 1)
-        self.assertEqual(self.guard(GITHUB_REF=None).returncode, 1)
+        for missing in ("GITHUB_REPOSITORY_ID", "GITHUB_REPOSITORY", "GITHUB_WORKFLOW_REF", "GITHUB_REF"):
+            self.assertEqual(self.guard(**{missing: None}).returncode, 1, missing)
 
     def test_guard_names_a_workflow_that_exists(self):
         self.assertTrue((REPO_ROOT / ".github/workflows/deploy.yml").is_file())
+
+    def test_deploy_workflow_and_guard_agree_on_the_repository_id(self):
+        # Two copies of one number: if they drift, every deploy is either skipped
+        # by the workflow or refused by the runner.
+        guard_default = re.search(r"GUARD_EXPECTED_REPOSITORY_ID:-(\d+)", GUARD.read_text()).group(1)
+        workflow = (REPO_ROOT / ".github/workflows/deploy.yml").read_text()
+        self.assertIn(f"github.repository_id == '{guard_default}'", workflow)
+        self.assertEqual(guard_default, REPOSITORY_ID)
 
 
 class SecretScanTests(unittest.TestCase):

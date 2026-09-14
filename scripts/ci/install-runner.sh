@@ -13,7 +13,7 @@
 set -euo pipefail
 
 : "${RUNNER_TOKEN:?set RUNNER_TOKEN (Settings → Actions → Runners → New self-hosted runner)}"
-REPO_URL="${REPO_URL:-https://github.com/shankasf/bossclinician}"
+REPO_URL="${REPO_URL:-https://github.com/CallSphere-LLC/bossclinician}"
 RUNNER_DIR="${RUNNER_DIR:-/opt/actions-runner-bossclinician}"
 RUNNER_VERSION="${RUNNER_VERSION:-2.337.0}"
 RUNNER_NAME="${RUNNER_NAME:-bossclinician-$(hostname -s)}"
@@ -46,7 +46,10 @@ sudo install -d -o root -g root -m 755 "$RUNNER_DIR/hooks"
 sudo install -o root -g root -m 755 "$SRC/runner-job-guard.sh" "$RUNNER_DIR/hooks/job-started.sh"
 
 if [ -f .service ]; then
+  # The systemd unit is named after the repository it was registered for.
+  # Remove it so the unit installed below carries the current owner/name.
   sudo ./svc.sh stop || true
+  sudo ./svc.sh uninstall || true
 fi
 if [ -f .runner ]; then
   # Forget the old local registration; --replace below takes over the name.
@@ -61,7 +64,7 @@ if ! grep -q '^ACTIONS_RUNNER_HOOK_JOB_STARTED=' .env; then
   echo "ACTIONS_RUNNER_HOOK_JOB_STARTED=$RUNNER_DIR/hooks/job-started.sh" >>.env
 fi
 
-[ -f .service ] || sudo ./svc.sh install "$RUNNER_USER"
+sudo ./svc.sh install "$RUNNER_USER"
 sudo ./svc.sh start
 sudo ./svc.sh status --no-pager | head -n 5
 echo "Runner '$RUNNER_NAME' registered for $REPO_URL with label 'bossclinician'."

@@ -195,7 +195,7 @@ a domain that does not point here. When `k8s/` changes, the deploy log shows
 ## The production runner
 
 - **Where:** `/opt/actions-runner-bossclinician`, systemd service
-  `actions.runner.shankasf-bossclinician.*`, label `bossclinician`. It is
+  `actions.runner.CallSphere-LLC-bossclinician.*`, label `bossclinician`. It is
   separate from `/opt/actions-runner-callsphere`, which serves another
   repository.
 - **Install or re-register:** `RUNNER_TOKEN=<token> scripts/ci/install-runner.sh`.
@@ -205,7 +205,14 @@ a domain that does not point here. When `k8s/` changes, the deploy log shows
   `scripts/ci/runner-job-guard.sh`, wired through
   `ACTIONS_RUNNER_HOOK_JOB_STARTED` in the runner's `.env`. Changing the guard
   in git changes nothing until you re-run the install script.
-- **Status and logs:** `sudo systemctl status 'actions.runner.shankasf-bossclinician.*'`,
+- **Repository identity:** the guard and the deploy job's `if` match the
+  repository by its numeric id (`1350709869`), not its name. The id survived
+  the move from `shankasf/` into the organization and survives renames, so
+  renaming the organization or the repository does not stop deploys. Git
+  remotes and web URLs keep working through GitHub's redirects; update them
+  with `git remote set-url` at leisure. Re-run the install script after a
+  rename only if you want the systemd unit and runner URL to show the new name.
+- **Status and logs:** `sudo systemctl status 'actions.runner.CallSphere-LLC-bossclinician.*'`,
   and `_diag/` in the runner directory.
 - **Deploy history on the server:** `.git/bossclinician-deploy/history` and
   `last-deployed` in `/opt/bossclinician`.
