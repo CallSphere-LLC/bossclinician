@@ -150,15 +150,23 @@ describeDb("job queue (integration)", () => {
       await client.query(`UPDATE jobs SET run_at = now() WHERE id = $1`, [id]);
       await queue.claim("worker-1", 5);
       await queue.fail(id, new Error("still failing"));
+      // Measured against updated_at, not now(): fail() sets both from the same
+      // now() in one UPDATE, so the difference is exactly the delay it chose.
+      // A now() read in this later statement is a few microseconds on, which
+      // took 60 + 0 jitter (floor(random() * 60) = 0, about 1 run in 60) to
+      // 59.9999 and failed the first bound for no reason — and CI runs this
+      // before every deploy.
       const row = await client.query<{ secs: string }>(
-        `SELECT EXTRACT(EPOCH FROM (run_at - now()))::text AS secs FROM jobs WHERE id = $1`,
+        `SELECT EXTRACT(EPOCH FROM (run_at - updated_at))::text AS secs FROM jobs WHERE id = $1`,
         [id]
       );
       delays.push(Number(row.rows[0].secs));
     }
 
     // Each wait is longer than the last. Asserted as growth rather than exact
-    // values because of the jitter deliberately added to each.
+    // values because of the jitter deliberately added to each: the base doubles
+    // from 60s and the jitter stays under 60s, so every wait still outgrows the
+    // one before.
     for (let i = 1; i < delays.length; i += 1) {
       expect(delays[i]).toBeGreaterThan(delays[i - 1]);
     }
