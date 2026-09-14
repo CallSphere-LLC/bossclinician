@@ -109,14 +109,20 @@ describeDb("event reminders (integration)", () => {
     overrides: { email?: string; createdAt?: Date } = {}
   ): Promise<number> {
     const res = await client.query<{ id: string }>(
+      // The database's clock by default, not this process's: the planner compares
+      // this against event_reminders.created_at, which addReminder takes from
+      // Postgres now() in microseconds. A JS Date is truncated to the millisecond,
+      // so a registration made in the same millisecond as the reminder read as
+      // older than it and was skipped — about one CI run in dozens failed
+      // "expected [] to deeply equal [ 2 ]".
       `INSERT INTO event_registrations (event_id, email, name, session_at, created_at)
-       VALUES ($1, $2, 'Test Person', $3, $4)
+       VALUES ($1, $2, 'Test Person', $3, COALESCE($4, now()))
        RETURNING id`,
       [
         eventId,
         overrides.email ?? `reg-${Math.random().toString(16).slice(2)}@test.invalid`,
         sessionAt,
-        overrides.createdAt ?? new Date(),
+        overrides.createdAt ?? null,
       ]
     );
     return Number(res.rows[0].id);
