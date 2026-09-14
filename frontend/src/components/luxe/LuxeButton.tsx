@@ -1,6 +1,7 @@
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { cn } from "@/lib/cn";
+import { safeHref } from "@/lib/safeHref";
 
 type Variant = "foil" | "glass" | "outline" | "quiet";
 type Size = "sm" | "md" | "lg";
@@ -87,9 +88,11 @@ export function LuxeButton(props: Props) {
   // The label sits above the sheen pseudo-element, which is z-index 1.
   const inner = <span className="relative z-[2] inline-flex items-center gap-2.5">{children}</span>;
 
+  // Both addresses are often admin-typed; see safeHref. A refused `to` becomes
+  // "#" (Link requires one) and a refused `href` leaves an anchor that goes nowhere.
   if ("to" in props && props.to) {
     return (
-      <Link to={props.to} onClick={props.onClick} className={classes}>
+      <Link to={safeHref(props.to) ?? "#"} onClick={props.onClick} className={classes}>
         {inner}
       </Link>
     );
@@ -98,7 +101,7 @@ export function LuxeButton(props: Props) {
   if ("href" in props && props.href) {
     return (
       <a
-        href={props.href}
+        href={safeHref(props.href)}
         target={props.target}
         rel={props.rel ?? (props.target === "_blank" ? "noopener noreferrer" : undefined)}
         onClick={props.onClick}

@@ -26,9 +26,11 @@ function writeStored(id: string): void {
 function mint(): string {
   // randomUUID needs a secure context and a recent browser; the chat widget
   // does not, and must not start failing on an old phone over an id format.
-  return typeof crypto.randomUUID === "function"
-    ? crypto.randomUUID()
-    : `bc-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+  // Whoever holds the id can write into that conversation, so the fallback is
+  // still drawn from the CSPRNG: getRandomValues has neither restriction.
+  if (typeof crypto.randomUUID === "function") return crypto.randomUUID();
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  return `bc-${Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("")}`;
 }
 
 /**
