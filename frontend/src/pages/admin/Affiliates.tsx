@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 import type { ColumnDef } from "@tanstack/react-table";
 import { toast } from "sonner";
 import {

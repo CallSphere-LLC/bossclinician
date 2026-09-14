@@ -22,7 +22,7 @@ import {
 } from "@/pages/admin/ui/primitives";
 import { UploadDropzone, iconForKind } from "@/pages/admin/ui/Uploader";
 import { Modal, useConfirm } from "@/pages/admin/ui/Dialog";
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 
 /** `plural` names the group in a sentence: "No images yet — upload your first one." */
 const FILTERS: { key: MediaKind | "all"; label: string; plural: string }[] = [

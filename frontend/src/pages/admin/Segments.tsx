@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 import { Filter, Pencil, Plus, Trash2, Users } from "lucide-react";
 import { toast } from "sonner";
 import { motion } from "motion/react";

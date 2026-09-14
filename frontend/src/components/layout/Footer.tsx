@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 import { Container } from "@/components/ui/Container";
 import { Aurora } from "@/components/luxe/Aurora";
 import { footer } from "@/content/site";

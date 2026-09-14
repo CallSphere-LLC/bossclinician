@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 import { Check, Lock } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { lessonPath, type OutlineLesson, type OutlineModule } from "@/lib/libraryApi";

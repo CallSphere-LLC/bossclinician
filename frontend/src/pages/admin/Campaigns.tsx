@@ -6,7 +6,7 @@ import {
   type FormEvent,
 } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router";
 import {
   CalendarClock,
   Copy,

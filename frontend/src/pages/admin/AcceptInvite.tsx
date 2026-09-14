@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
 import { Button, Card, ErrorNotice, Field, Input, Skeleton } from "@/pages/admin/ui/primitives";
 import { friendlyError } from "@/pages/admin/ui/friendly";

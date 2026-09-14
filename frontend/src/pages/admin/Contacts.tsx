@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router";
 import type { ColumnDef } from "@tanstack/react-table";
 import { BarChart3, Download, Gift, MailPlus, Plus, Tags as TagsIcon, Trash2, Upload, Users } from "lucide-react";
 import { toast } from "sonner";

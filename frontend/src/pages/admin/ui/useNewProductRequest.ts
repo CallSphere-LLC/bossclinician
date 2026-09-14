@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router";
 
 /** Consume the All Products creation request once; closing the dialog stays closed. */
 export function useNewProductRequest(open: () => void) {

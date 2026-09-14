@@ -25,7 +25,7 @@ const BAND = [
 ] as const;
 
 export default function ResourceHub() {
-  // react-router-dom does not scroll to hash fragments on its own.
+  // React Router does not scroll to hash fragments on its own.
   useHashScroll();
 
   return (

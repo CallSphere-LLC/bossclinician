@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router";
 import { motion, useReducedMotion } from "motion/react";
 import { AlertCircle, Check, Loader2 } from "lucide-react";
 import { Seo } from "@/components/Seo";

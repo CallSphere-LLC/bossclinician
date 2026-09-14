@@ -1,6 +1,6 @@
 import { SiteThemeToggle } from "./SiteThemeToggle";
 import { useEffect, useState } from "react";
-import { Link, NavLink, useLocation } from "react-router-dom";
+import { Link, NavLink, useLocation } from "react-router";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Container } from "@/components/ui/Container";
 import { LuxeButton } from "@/components/luxe/LuxeButton";

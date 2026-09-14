@@ -2,7 +2,7 @@ import { initializeSiteTheme } from "./lib/siteTheme";
 import { clearLegacyAdminToken } from "./lib/adminTransport";
 import { StrictMode, type ReactNode } from "react";
 import { createRoot, hydrateRoot } from "react-dom/client";
-import { BrowserRouter } from "react-router-dom";
+import { BrowserRouter } from "react-router";
 import App from "./App";
 import { enableEntrances } from "./hooks/useEntranceMotion";
 import { SSR_PAYLOAD_ID, SsrProvider, type SsrPayload, type SsrRuntime } from "./ssr/context";

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router";
 import { Loader2, MessagesSquare } from "lucide-react";
 import { toast } from "sonner";
 import { GlassCard } from "@/components/luxe/GlassCard";

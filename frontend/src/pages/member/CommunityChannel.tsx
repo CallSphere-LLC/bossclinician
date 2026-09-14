@@ -1,4 +1,4 @@
-import { Navigate, useParams } from "react-router-dom";
+import { Navigate, useParams } from "react-router";
 import { CommunityLayout } from "@/components/community/CommunityLayout";
 import { ChannelFeed } from "@/components/community/ChannelFeed";
 

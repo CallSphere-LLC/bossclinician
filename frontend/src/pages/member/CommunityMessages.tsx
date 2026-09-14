@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate } from "react-router";
 import { Loader2, MessageSquare, Send } from "lucide-react";
 import { CommunityLayout } from "@/components/community/CommunityLayout";
 import { GlassCard } from "@/components/luxe/GlassCard";

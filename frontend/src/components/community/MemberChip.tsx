@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 import { MemberAvatar } from "@/components/member/MemberShell";
 import { cn } from "@/lib/cn";
 

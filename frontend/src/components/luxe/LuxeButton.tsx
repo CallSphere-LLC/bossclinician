@@ -1,5 +1,5 @@
 import type { ButtonHTMLAttributes, ReactNode } from "react";
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 import { cn } from "@/lib/cn";
 import { safeHref } from "@/lib/safeHref";
 

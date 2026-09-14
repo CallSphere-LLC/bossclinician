@@ -1,6 +1,6 @@
 import { SiteThemeToggle } from "@/components/layout/SiteThemeToggle";
 import { useState, type ReactNode } from "react";
-import { Link, NavLink, useNavigate } from "react-router-dom";
+import { Link, NavLink, useNavigate } from "react-router";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { Toaster } from "sonner";
 import {

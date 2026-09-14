@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router";
 import { motion } from "motion/react";
 import { CheckCircle2, Mails, Plus, Trash2, Users } from "lucide-react";
 import { toast } from "sonner";

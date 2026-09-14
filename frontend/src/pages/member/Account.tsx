@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 import { CreditCard, MailWarning, Receipt, ShieldCheck, User, type LucideIcon } from "lucide-react";
 import { Seo } from "@/components/Seo";
 import { MemberShell, MemberAvatar } from "@/components/member/MemberShell";

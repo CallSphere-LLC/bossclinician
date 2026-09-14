@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 import type { ColumnDef } from "@tanstack/react-table";
 import { FileText, Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";

@@ -1,5 +1,5 @@
 import { useId, useState, type InputHTMLAttributes, type ReactNode } from "react";
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 import { motion, useReducedMotion } from "motion/react";
 import { AlertCircle, Eye, EyeOff, Loader2 } from "lucide-react";
 import { Seo } from "@/components/Seo";

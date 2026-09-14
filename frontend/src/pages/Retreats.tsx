@@ -1,5 +1,5 @@
 import { useId, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 import { motion, useReducedMotion } from "motion/react";
 import { Seo } from "@/components/Seo";
 import { GoldRule, Section, SectionTitle } from "@/components/luxe/Section";

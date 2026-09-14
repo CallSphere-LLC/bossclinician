@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { useParams } from "react-router-dom";
+import { useParams } from "react-router";
 import { CheckCircle2, Loader2 } from "lucide-react";
 import {
   AuthCard,

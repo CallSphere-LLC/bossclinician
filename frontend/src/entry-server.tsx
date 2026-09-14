@@ -1,6 +1,6 @@
 import { StrictMode } from "react";
 import { renderToString } from "react-dom/server";
-import { StaticRouter } from "react-router-dom/server";
+import { StaticRouter } from "react-router";
 import App from "./App";
 import { renderHead, resolveHead } from "./seo/head";
 import type { HeadDescriptor } from "./seo/types";

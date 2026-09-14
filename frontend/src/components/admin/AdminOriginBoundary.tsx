@@ -1,5 +1,5 @@
 import { useEffect, type ReactNode } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation } from "react-router";
 import { ADMIN_ORIGIN, PUBLIC_ORIGIN } from "@/lib/siteOrigins";
 
 /** React navigation also crosses the boundary; an SPA Link does not hit nginx. */

@@ -1,4 +1,4 @@
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams } from "react-router";
 import { motion } from "motion/react";
 import { Check, Clock, Lock, PlayCircle, ShieldCheck } from "lucide-react";
 import { Seo } from "@/components/Seo";

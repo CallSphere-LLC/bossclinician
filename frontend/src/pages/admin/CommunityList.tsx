@@ -1,6 +1,6 @@
 import { useNewProductRequest } from "./ui/useNewProductRequest";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 import { motion } from "motion/react";
 import { ArrowUpRight, Hash, MessagesSquare, Plus, Trash2, Users } from "lucide-react";
 import { toast } from "sonner";

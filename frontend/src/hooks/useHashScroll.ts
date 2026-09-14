@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation } from "react-router";
 
 function prefersReducedMotion(): boolean {
   return (
@@ -34,7 +34,8 @@ export function scrollToSection(id: string, updateHash = true): void {
 }
 
 /**
- * react-router-dom v6 does not scroll to hash fragments on navigation, and
+ * React Router does not scroll to hash fragments on navigation (its
+ * `<ScrollRestoration>` needs a data router, and this app mounts a plain one), and
  * `Layout` resets scroll to the top on every pathname change. Child effects run
  * before parent effects, so we defer past that reset with a double rAF before
  * honouring an incoming `location.hash`.

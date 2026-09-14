@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams } from "react-router";
 import { AlertTriangle, ArrowLeft, CheckCircle2, CreditCard, ExternalLink, Receipt, Send } from "lucide-react";
 import { toast } from "sonner";
 import { adminApi } from "@/lib/api";

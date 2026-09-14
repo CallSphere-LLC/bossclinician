@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router";
 import type { ColumnDef } from "@tanstack/react-table";
 import { ClipboardList, Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";

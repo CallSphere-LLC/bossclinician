@@ -11,7 +11,7 @@ import {
   Tag,
   Trash2,
 } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 import { toast } from "sonner";
 import { adminApi } from "@/lib/api";
 import { downloadAdminDocument } from "@/lib/adminReceipt";

@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Link, Navigate, useLocation } from "react-router-dom";
+import { Link, Navigate, useLocation } from "react-router";
 import { Compass, LayoutDashboard } from "lucide-react";
 import { Button, Card, EmptyState, PageHeader } from "@/pages/admin/ui/primitives";
 import { resolveAdminAlias } from "@/pages/admin/adminAliases";
