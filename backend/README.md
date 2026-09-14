@@ -1,6 +1,6 @@
 # Boss Clinician — Backend
 
-Node 20 + Express + TypeScript (strict) + PostgreSQL REST API and admin CMS backing
+Node 24 + Express + TypeScript (strict) + PostgreSQL REST API and admin CMS backing
 the Boss Clinician site (Yvette Howard, LCSW). Implements the full contract in
 `../ARCHITECTURE.md`.
 

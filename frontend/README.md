@@ -80,12 +80,15 @@ Visit `/admin/login`. On success, a JWT is stored in `localStorage` and sent as
 ## Docker
 
 ```bash
-docker build -t bossclinician-frontend --build-arg VITE_API_BASE=/api .
+# from the repository root
+docker build -f backend/Dockerfile --target web -t bossclinician-frontend --build-arg VITE_API_BASE=/api .
 docker run -p 8080:80 bossclinician-frontend
 ```
 
-The multi-stage `Dockerfile` builds the app with Node 20, then serves the static `dist/`
-output with `nginx:1.27-alpine` using `nginx.conf`, which includes a SPA fallback
+There is no Dockerfile in this directory: the image is the `web` stage of
+`backend/Dockerfile`, which shares one Vite build with the API's server renderer.
+It builds the app with Node 24, then serves the static `dist/client/`
+output with `nginx:1.31-alpine` using `nginx.conf`, which includes a SPA fallback
 (`try_files $uri $uri/ /index.html`) so client-side routes like `/blog/:slug` and
 `/admin/*` work on refresh.
 

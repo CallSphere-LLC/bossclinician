@@ -1,4 +1,4 @@
-# Boss Clinician backend — Node 20 + Express + TypeScript + Postgres
+# Boss Clinician backend — Node 24 + Express + TypeScript + Postgres
 #
 # The build context is the repository root, not backend/, because this image
 # also carries the server-rendering build of the React app: the public marketing
@@ -12,7 +12,7 @@
 # bundle. Only those two travel into the runtime image; the browser assets
 # themselves are served by the frontend container from its own build of the same
 # source, which produces byte-identical, content-hashed filenames.
-FROM node:20-alpine AS frontend
+FROM node:24-alpine AS frontend
 WORKDIR /app
 COPY frontend/package.json frontend/package-lock.json* ./
 RUN npm install
@@ -31,7 +31,7 @@ ENV NODE_OPTIONS=--max-old-space-size=1536
 RUN npm run build
 
 # ---- The API ----
-FROM node:20-alpine AS build
+FROM node:24-alpine AS build
 WORKDIR /app
 COPY backend/package*.json ./
 RUN npm install
@@ -39,7 +39,7 @@ COPY backend/ ./
 ENV NODE_OPTIONS=--max-old-space-size=1024
 RUN npm run build
 
-FROM node:20-alpine AS api
+FROM node:24-alpine AS api
 WORKDIR /app
 ENV NODE_ENV=production
 # Below the container's memory cap on purpose. V8 sizes its heap from what the
@@ -91,7 +91,7 @@ CMD ["node", "dist/server.js"]
 # server-rendered document shell baked into the API image names the browser
 # bundle by its content hash, and the file it names has to be the file this
 # container actually holds. One build cannot disagree with itself.
-FROM nginx:1.27-alpine AS web
+FROM nginx:1.31-alpine AS web
 COPY --from=frontend /app/dist/client /usr/share/nginx/html
 COPY frontend/nginx.conf /etc/nginx/conf.d/default.conf
 EXPOSE 80
