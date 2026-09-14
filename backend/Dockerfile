@@ -14,6 +14,13 @@
 # source, which produces byte-identical, content-hashed filenames.
 FROM node:24-alpine AS frontend
 WORKDIR /app
+# The registry is fetched on every image build, and one dropped connection used
+# to fail `npm install` outright and, with it, the CI that gates a production
+# deploy (14 Sep 2026: "npm error network" on a GitHub runner). Retry with
+# backoff instead; a registry that is really down still fails, after ~5 minutes.
+ENV npm_config_fetch_retries=5 \
+    npm_config_fetch_retry_mintimeout=20000 \
+    npm_config_fetch_retry_maxtimeout=120000
 COPY frontend/package.json frontend/package-lock.json* ./
 RUN npm install
 COPY frontend/ ./
@@ -33,6 +40,10 @@ RUN npm run build
 # ---- The API ----
 FROM node:24-alpine AS build
 WORKDIR /app
+# Same registry retries as the frontend stage above.
+ENV npm_config_fetch_retries=5 \
+    npm_config_fetch_retry_mintimeout=20000 \
+    npm_config_fetch_retry_maxtimeout=120000
 COPY backend/package*.json ./
 RUN npm install
 COPY backend/ ./
@@ -41,6 +52,10 @@ RUN npm run build
 
 FROM node:24-alpine AS api
 WORKDIR /app
+# Same registry retries as the frontend stage above.
+ENV npm_config_fetch_retries=5 \
+    npm_config_fetch_retry_mintimeout=20000 \
+    npm_config_fetch_retry_maxtimeout=120000
 ENV NODE_ENV=production
 # Below the container's memory cap on purpose. V8 sizes its heap from what the
 # host reports, not from the cgroup, so without this it will happily grow past
