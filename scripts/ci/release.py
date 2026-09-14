@@ -18,6 +18,7 @@ GitHub-hosted runner. Every rule here has a case in tests/test_release.py.
 from __future__ import annotations
 
 import argparse
+import base64
 import os
 import shlex
 import shutil
@@ -138,8 +139,31 @@ def classify(paths, force_rebuild: bool = False) -> Plan:
     return plan
 
 
-def _git(repo: Path, *args: str, check: bool = True) -> str:
-    result = subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True)
+def fetch_env(environ=None) -> dict[str, str] | None:
+    """Credentials for `git fetch`, without storing any on the server.
+
+    The deploy job passes its own GITHUB_TOKEN (read-only, expires with the job)
+    as GIT_FETCH_TOKEN. It reaches git as an http.extraheader through
+    GIT_CONFIG_* variables, the way actions/checkout authenticates, so it never
+    lands in a command line, the process list, or a config file. The systemd
+    runner has no other GitHub credential; without a token, git falls back to
+    whatever the invoking user has, and never prompts.
+    """
+    env = dict(os.environ if environ is None else environ)
+    env["GIT_TERMINAL_PROMPT"] = "0"
+    token = env.pop("GIT_FETCH_TOKEN", "")
+    if not token:
+        return env
+    basic = base64.b64encode(f"x-access-token:{token}".encode()).decode()
+    index = int(env.get("GIT_CONFIG_COUNT", "0") or "0")
+    env[f"GIT_CONFIG_KEY_{index}"] = "http.https://github.com/.extraheader"
+    env[f"GIT_CONFIG_VALUE_{index}"] = f"AUTHORIZATION: basic {basic}"
+    env["GIT_CONFIG_COUNT"] = str(index + 1)
+    return env
+
+
+def _git(repo: Path, *args: str, check: bool = True, env=None) -> str:
+    result = subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True, env=env)
     if check and result.returncode != 0:
         raise Refused(f"`git {' '.join(args)}` failed: {result.stderr.strip()}")
     return result.stdout.strip()
@@ -226,7 +250,7 @@ def decide(
         )
 
     if fetch:
-        _git(repo, "fetch", "--prune", "--quiet", remote)
+        _git(repo, "fetch", "--prune", "--quiet", remote, env=fetch_env())
 
     resolved = _git(repo, "rev-parse", "--verify", "--quiet", f"{target}^{{commit}}", check=False)
     if not resolved:

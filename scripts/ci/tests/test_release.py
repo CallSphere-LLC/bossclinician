@@ -284,6 +284,47 @@ class DecideTests(unittest.TestCase):
         self.assertEqual(self.s.server_head(), self.s.base)
 
 
+class FetchAuthTests(unittest.TestCase):
+    """The production runner has no GitHub credential of its own; the first live
+    deploy was refused on `git fetch` for exactly that. The job's token is how it
+    fetches now."""
+
+    def test_token_becomes_an_extraheader_via_environment_config(self):
+        import base64
+
+        env = release.fetch_env({"GIT_FETCH_TOKEN": "ghs_example", "PATH": "/bin"})
+        self.assertNotIn("GIT_FETCH_TOKEN", env, "the raw token must not be passed on")
+        self.assertEqual(env["GIT_CONFIG_COUNT"], "1")
+        self.assertEqual(env["GIT_CONFIG_KEY_0"], "http.https://github.com/.extraheader")
+        scheme, _, encoded = env["GIT_CONFIG_VALUE_0"].partition("basic ")
+        self.assertEqual(scheme, "AUTHORIZATION: ")
+        self.assertEqual(base64.b64decode(encoded).decode(), "x-access-token:ghs_example")
+        self.assertEqual(env["GIT_TERMINAL_PROMPT"], "0")
+
+    def test_existing_environment_config_is_appended_to_not_replaced(self):
+        env = release.fetch_env({
+            "GIT_FETCH_TOKEN": "t", "GIT_CONFIG_COUNT": "1",
+            "GIT_CONFIG_KEY_0": "core.autocrlf", "GIT_CONFIG_VALUE_0": "false",
+        })
+        self.assertEqual(env["GIT_CONFIG_COUNT"], "2")
+        self.assertEqual(env["GIT_CONFIG_KEY_0"], "core.autocrlf")
+        self.assertEqual(env["GIT_CONFIG_KEY_1"], "http.https://github.com/.extraheader")
+
+    def test_without_a_token_git_never_prompts(self):
+        env = release.fetch_env({"PATH": "/bin"})
+        self.assertNotIn("GIT_CONFIG_COUNT", env)
+        self.assertEqual(env["GIT_TERMINAL_PROMPT"], "0")
+
+    def test_decide_still_fetches_with_a_token_set(self):
+        from unittest import mock
+
+        s = Scenario()
+        self.addCleanup(s.cleanup)
+        sha = s.commit({"README.md": "fetched with a token\n"})
+        with mock.patch.dict("os.environ", {"GIT_FETCH_TOKEN": "ghs_example"}):
+            self.assertEqual(decide(s.server, sha, "push", min_free_gb=0).action, "deploy")
+
+
 class EmitTests(unittest.TestCase):
     def test_output_is_safe_to_source_in_bash(self):
         import io

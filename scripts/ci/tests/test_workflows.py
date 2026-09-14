@@ -109,6 +109,11 @@ class WorkflowContractTests(unittest.TestCase):
         deploy_step = next(s for s in steps(jobs["deploy"]) if "deploy-release.sh" in s.get("run", ""))
         self.assertEqual(deploy_step["env"]["TARGET_SHA"], "${{ needs.resolve.outputs.sha }}")
 
+    def test_server_fetches_with_the_jobs_own_short_lived_token(self):
+        deploy_step = next(s for s in steps(self.deploy["jobs"]["deploy"]) if "deploy-release.sh" in s.get("run", ""))
+        self.assertEqual(deploy_step["env"]["GIT_FETCH_TOKEN"], "${{ github.token }}")
+        self.assertNotIn("secrets.", str(deploy_step["env"]), "no long-lived secret should reach the server")
+
     def test_deploy_job_waits_for_ci_and_is_main_only(self):
         job = self.deploy["jobs"]["deploy"]
         self.assertTrue({"ci", "resolve"} <= set(job["needs"]))

@@ -95,4 +95,7 @@ jobs:
           TARGET_SHA: ${{ needs.resolve.outputs.sha }}
           EVENT_NAME: ${{ github.event_name }}
           FORCE_REBUILD: ${{ inputs.force_rebuild == true }}
+          # The server's checkout fetches with this job's read-only token, which
+          # expires when the job ends. No GitHub credential is stored on the host.
+          GIT_FETCH_TOKEN: ${{ github.token }}
         run: scripts/ci/deploy-release.sh

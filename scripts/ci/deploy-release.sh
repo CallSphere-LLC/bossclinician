@@ -71,6 +71,9 @@ K8S_CHANGED="" MIGRATIONS_CHANGED="" ROLLBACK=""
 # shellcheck source=/dev/null
 . "$decision"
 echo "$REASON"
+# Only the fetch above needed it. Builds and containers started below inherit
+# this environment, and have no business holding a GitHub token.
+unset GIT_FETCH_TOKEN
 
 summary "### Production deploy" "" \
   "| | |" "|---|---|" \
