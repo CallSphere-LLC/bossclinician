@@ -178,14 +178,14 @@ const RECOVERY_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
 const RECOVERY_CODE_COUNT = 10;
 const RECOVERY_GROUP = 4;
 
-function randomRecoveryCode(): string {
+export function randomRecoveryCode(): string {
   const chars: string[] = [];
-  // Rejection-free because 31 does not divide 256 evenly — but the bias from a
-  // plain modulo is under 1% per character and these are 8 characters of a
-  // single-use code, so uniformity is bought the cheap way here rather than
-  // with a loop that can in principle spin.
-  for (const byte of crypto.randomBytes(RECOVERY_GROUP * 2)) {
-    chars.push(RECOVERY_ALPHABET[byte % RECOVERY_ALPHABET.length]);
+  // crypto.randomInt, not a random byte reduced modulo 31. 31 does not divide
+  // 256, so the modulo made the first eight letters of the alphabet a ninth
+  // likelier than the rest; randomInt rejects and redraws internally, which is
+  // the uniform answer without a hand-written loop.
+  for (let i = 0; i < RECOVERY_GROUP * 2; i += 1) {
+    chars.push(RECOVERY_ALPHABET[crypto.randomInt(RECOVERY_ALPHABET.length)]);
   }
   return `${chars.slice(0, RECOVERY_GROUP).join("")}-${chars.slice(RECOVERY_GROUP).join("")}`;
 }

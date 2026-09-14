@@ -1,3 +1,4 @@
+import { execFileSync } from "child_process";
 import fs from "fs";
 import os from "os";
 import path from "path";
@@ -59,5 +60,19 @@ describe("receipt logo", () => {
     ]) {
       expect(await loadReceiptLogo(reference, uploads)).toBeNull();
     }
+  });
+
+  it("does not follow a symlink planted in the upload directory", async () => {
+    // The name passes the pattern and the directory check; what it points at
+    // is outside. The file is opened once, without following links.
+    fs.symlinkSync(path.join(root, "secret.png"), path.join(uploads, "linked.png"));
+    expect(await loadReceiptLogo("/uploads/linked.png", uploads)).toBeNull();
+  });
+
+  it("refuses a FIFO rather than waiting on it", async () => {
+    // Opening a pipe for reading blocks until a writer arrives; a receipt
+    // request must not.
+    execFileSync("mkfifo", [path.join(uploads, "pipe.png")]);
+    expect(await loadReceiptLogo("/uploads/pipe.png", uploads)).toBeNull();
   });
 });

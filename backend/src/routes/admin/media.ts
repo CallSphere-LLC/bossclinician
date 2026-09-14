@@ -163,10 +163,15 @@ adminMediaRouter.post("/", (req, res, next) => {
       return;
     }
 
-    const discard = (): Promise<void> =>
-      fs.promises
-        .unlink(path.join(storageDir(visibility), file.filename))
-        .catch(() => undefined);
+    // multer named the file (random hex, see `storage`), so this cannot leave the
+    // directory today. The containment check keeps it that way if the naming
+    // ever changes: unlink is the one call in this handler that removes things.
+    const discard = async (): Promise<void> => {
+      const directory = path.resolve(storageDir(visibility));
+      const target = path.resolve(directory, file.filename);
+      if (!target.startsWith(directory + path.sep)) return;
+      await fs.promises.unlink(target).catch(() => undefined);
+    };
 
     const url =
       visibility === "protected" ? protectedRef(file.filename) : `/uploads/${file.filename}`;

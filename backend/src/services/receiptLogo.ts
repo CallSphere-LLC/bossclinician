@@ -1,4 +1,4 @@
-import fs from "fs/promises";
+import fs, { type FileHandle } from "fs/promises";
 import path from "path";
 import { env } from "../config/env";
 
@@ -61,14 +61,32 @@ export async function loadReceiptLogo(
   // The pattern already forbids a separator; this is the belt to that brace.
   if (path.dirname(file) !== root) return null;
 
+  let handle: FileHandle | undefined;
   try {
-    const stat = await fs.stat(file);
+    // One descriptor for the size check and the read. Checking the path and then
+    // reading the path gave it two chances to be different files: replaced or
+    // grown in between, the cap was measured on one and the bytes came from the
+    // other. O_NOFOLLOW because the confinement above is to the directory, and a
+    // symlink planted in it would otherwise be read wherever it points;
+    // O_NONBLOCK so that a FIFO fails the isFile check instead of hanging here.
+    handle = await fs.open(
+      file,
+      fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW | fs.constants.O_NONBLOCK
+    );
+    const stat = await handle.stat();
     if (!stat.isFile() || stat.size === 0 || stat.size > MAX_RECEIPT_LOGO_BYTES) return null;
-    const bytes = await fs.readFile(file);
+    // One byte more than was measured: if it arrives, the file grew after the
+    // stat and is no longer the file that passed the cap.
+    const buffer = Buffer.alloc(stat.size + 1);
+    const { bytesRead } = await handle.read(buffer, 0, buffer.length, 0);
+    if (bytesRead === 0 || bytesRead > stat.size) return null;
+    const bytes = buffer.subarray(0, bytesRead);
     const mime = sniffLogoMime(bytes);
     if (mime === null) return null;
     return { mime, bytes, dataUri: `data:${mime};base64,${bytes.toString("base64")}` };
   } catch {
     return null;
+  } finally {
+    await handle?.close().catch(() => undefined);
   }
 }

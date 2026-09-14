@@ -16,6 +16,20 @@ async function ensureAdminUser(): Promise<void> {
   const existing = await pool.query("SELECT id FROM admin_users WHERE email = $1", [email]);
   if (existing.rows.length > 0) return;
 
+  if (!env.adminPassword && env.nodeEnv === "production") {
+    // The generated password below is printed, which is how a local install is
+    // signed into at all. In production that print would put the owner's
+    // credential into retained container logs, so production never generates
+    // one: it sets ADMIN_PASSWORD (DEPLOY.md), and a boot without it says so and
+    // carries on without creating the account.
+    // eslint-disable-next-line no-console
+    console.warn(
+      "[seed] ADMIN_PASSWORD is not set; not creating admin user %s. Set it in backend/.env and restart.",
+      JSON.stringify(email)
+    );
+    return;
+  }
+
   const password = env.adminPassword || crypto.randomBytes(9).toString("base64url");
   const hash = await bcrypt.hash(password, 12);
 
