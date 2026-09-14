@@ -37,7 +37,7 @@ jobs:
     outputs:
       sha: ${{ steps.sha.outputs.sha }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
       - id: sha
@@ -83,7 +83,7 @@ jobs:
       group: production
       cancel-in-progress: false
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           # The pipeline's own scripts come from the commit that defines this
           # run; the application comes from the target, checked out on the

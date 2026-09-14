@@ -48,9 +48,12 @@ if [ "${SKIP_PRUNE:-0}" = "1" ]; then
   exit 0
 fi
 
-# Docker retains every image referenced by an existing container. The shared
-# helper also protects Kubernetes workloads/CronJobs and rollback images; it
-# never prunes volumes, networks or database data.
+# Docker retains every image referenced by an existing container, and nothing
+# else: any image no container uses is removed, including this app's
+# `:rollback` tags. That is why the pipeline passes SKIP_PRUNE and prunes only
+# after its health gate. The helper protects Kubernetes workloads/CronJobs and
+# their previous ReplicaSet images; it never prunes volumes, networks or
+# database data.
 sudo -n /usr/local/sbin/callsphere-image-prune reclaim --post-deploy \
   || echo "WARN: image retention failed; deployment remains healthy" >&2
 
