@@ -5,5 +5,5 @@ openai==2.37.0
 python-dotenv==1.0.1
 
 # dev/test only (not needed at runtime; harmless in the image)
-pytest==8.3.4
+pytest==9.1.1
 httpx==0.28.1
