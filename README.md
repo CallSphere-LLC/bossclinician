@@ -76,9 +76,9 @@ flowchart LR
 
 | Service | Stack | Port | Role |
 |---|---|---|---|
-| `nginx` | nginx 1.27 | 8088 on the host bridge | TLS terminates upstream in k3s Traefik; routes by path |
+| `nginx` | nginx 1.31 | 8088 on the host bridge | TLS terminates upstream in k3s Traefik; routes by path |
 | `frontend` | React 18, Vite, TypeScript, Tailwind, Motion, Radix | 80 in-network | Public marketing site + `/admin` CMS + member area |
-| `backend` | Node 20, Express 4, TypeScript, `pg`, Stripe, nodemailer, pdfkit, zod | 4000 | REST API, auth, jobs, SSR of marketing pages |
+| `backend` | Node 24, Express 4, TypeScript, `pg`, Stripe, nodemailer, pdfkit, zod | 4000 | REST API, auth, jobs, SSR of marketing pages |
 | `ai` | Python, FastAPI, OpenAI | 8000 | Coaching chatbot, blog generation, lead qualification |
 | `db` | Postgres 16 | 5432 in-network | Everything. Not published to the host. |
 
@@ -186,7 +186,7 @@ bossclinician/
 
 ### Prerequisites
 
-Node 20+, Python 3.11+, Docker (or a local Postgres 16), and Stripe **test** keys.
+Node 24+, Python 3.11+, Docker (or a local Postgres 16), and Stripe **test** keys.
 
 ### The fast path — everything in Docker
 
