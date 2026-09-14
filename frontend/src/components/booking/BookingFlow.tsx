@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 import { CheckCircle2, ChevronLeft, Clock, Info, Loader2, Video } from "lucide-react";
 import { GlassCard } from "@/components/luxe/GlassCard";
 import { LuxeButton, LuxePill } from "@/components/luxe/LuxeButton";

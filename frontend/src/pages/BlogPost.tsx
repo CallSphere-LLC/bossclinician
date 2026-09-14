@@ -1,4 +1,4 @@
-import { useParams } from "react-router-dom";
+import { useParams } from "react-router";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { motion, useReducedMotion, useScroll, useSpring } from "motion/react";

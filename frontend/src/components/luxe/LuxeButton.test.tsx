@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import { StaticRouter } from "react-router-dom/server";
+import { StaticRouter } from "react-router";
 import { LuxeButton } from "./LuxeButton";
 
 function render(node: ReactNode): string {
@@ -10,9 +10,10 @@ function render(node: ReactNode): string {
 
 /**
  * A course's link, a session's meeting URL and the footer's Instagram all reach
- * this component as admin-typed strings. React 18 renders `javascript:` in an
- * href as given, and react-router's Link passes any schemed `to` straight
- * through, so the button itself is where a stored script has to stop.
+ * this component as admin-typed strings. React 19 only swaps a `javascript:`
+ * href for one that throws, which still ships a dead link carrying the scheme,
+ * and react-router's Link passes any schemed `to` straight through, so the
+ * button itself is where a stored script has to stop.
  */
 describe("LuxeButton", () => {
   it("keeps an ordinary external address", () => {

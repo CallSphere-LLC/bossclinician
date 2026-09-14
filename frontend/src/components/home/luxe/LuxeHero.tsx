@@ -224,11 +224,13 @@ export function LuxeHero() {
                   width={960}
                   height={1440}
                   decoding="async"
-                  // React 18 does not map the camelCase `fetchPriority` prop to
-                  // the DOM attribute — it warns and drops it. The lowercase
-                  // spelling is passed through verbatim, which is what the
-                  // preload scanner actually reads.
-                  {...{ fetchpriority: "high" }}
+                  // The camelCase prop, not the lowercase attribute React 18
+                  // needed smuggling through a spread: React 19 maps
+                  // `fetchPriority` itself, warns about the lowercase spelling,
+                  // and on the server also emits a matching high-priority
+                  // `<link rel="preload">` for this image, which is what the
+                  // preload scanner acts on before layout.
+                  fetchPriority="high"
                   className="h-full w-full object-cover object-top"
                 />
               </motion.div>

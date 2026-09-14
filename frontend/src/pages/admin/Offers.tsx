@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import type { ColumnDef } from "@tanstack/react-table";
 import {

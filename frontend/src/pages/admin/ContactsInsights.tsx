@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 import { Activity, ArrowLeft, MailCheck, ShieldAlert, ShoppingBag, Users } from "lucide-react";
 import { contactsApi, type ContactInsights } from "@/lib/contactsApi";
 import { Card, ErrorNotice, PageHeader, Skeleton } from "@/pages/admin/ui/primitives";

@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState, type MouseEvent, type PointerEvent } from "react";
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { cn } from "@/lib/cn";
 import type { NavBadgeTone, NavMenu } from "@/content/site";

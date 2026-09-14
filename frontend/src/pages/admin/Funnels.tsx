@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent, type RefObject } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router";
 import { motion } from "motion/react";
 import {
   ArrowDown,
@@ -146,7 +146,7 @@ function FormattingToolbar({
   textareaRef,
   onChange,
 }: {
-  textareaRef: RefObject<HTMLTextAreaElement>;
+  textareaRef: RefObject<HTMLTextAreaElement | null>;
   onChange: (value: string) => void;
 }) {
   function run(kind: FormatKind) {

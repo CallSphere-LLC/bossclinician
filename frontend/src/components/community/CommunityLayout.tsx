@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 import { Hash, Loader2, Lock, MessageSquare, Radio, Users } from "lucide-react";
 import { Seo } from "@/components/Seo";
 import { MemberShell } from "@/components/member/MemberShell";

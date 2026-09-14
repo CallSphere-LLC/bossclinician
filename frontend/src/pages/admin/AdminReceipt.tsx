@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams } from "react-router";
 import { ArrowLeft, Download, Printer } from "lucide-react";
 import { toast } from "sonner";
 import { Button, ErrorNotice, PageHeader } from "@/pages/admin/ui/primitives";

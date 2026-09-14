@@ -1,7 +1,7 @@
 import { MemberPreviewBridge } from "@/components/admin/MemberPreviewBridge";
 import { AdminOriginBoundary } from "@/components/admin/AdminOriginBoundary";
 import { lazy, Suspense } from "react";
-import { Outlet, Route, Routes } from "react-router-dom";
+import { Outlet, Route, Routes } from "react-router";
 import { Layout } from "@/components/layout/Layout";
 import { AuthProvider } from "@/hooks/useAuth";
 import { MemberAuthProvider, RequireMember } from "@/hooks/useMember";

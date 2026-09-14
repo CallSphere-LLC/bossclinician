@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 import { Container } from "@/components/ui/Container";
 import { RevealGroup, RevealItem } from "@/components/ui/Reveal";
 import { cn } from "@/lib/cn";

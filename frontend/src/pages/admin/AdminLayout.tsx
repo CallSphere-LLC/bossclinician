@@ -1,6 +1,6 @@
 import { publicSiteUrl } from "@/lib/siteOrigins";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Link, NavLink, useLocation } from "react-router-dom";
+import { Link, NavLink, useLocation } from "react-router";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import {

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, Navigate, useParams } from "react-router-dom";
+import { Link, Navigate, useParams } from "react-router";
 import { ArrowRight, Loader2, MessagesSquare, Users } from "lucide-react";
 import { Seo } from "@/components/Seo";
 import { MemberShell } from "@/components/member/MemberShell";

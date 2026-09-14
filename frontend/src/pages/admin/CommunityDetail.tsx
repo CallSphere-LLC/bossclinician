@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams } from "react-router";
 import * as Tabs from "@radix-ui/react-tabs";
 import { motion } from "motion/react";
 import {

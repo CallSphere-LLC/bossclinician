@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams } from "react-router";
 import { toast } from "sonner";
 import { ArrowLeft, Check, Copy, Plus, Trash2 } from "lucide-react";
 import { formatCurrency, formatDate } from "@/lib/format";

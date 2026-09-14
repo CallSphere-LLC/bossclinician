@@ -18,10 +18,13 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true,
+    // TypeScript 6 stopped loading every installed @types package by default.
+    // The unit tests read fixtures with node:fs, so Node's types are named here
+    // rather than silently no longer checked.
+    "types": ["node"],
 
-    "baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": ["./src/*"]
     }
   },
   "include": ["src"]

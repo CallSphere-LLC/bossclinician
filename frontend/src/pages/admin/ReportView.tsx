@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
-import { Link, useParams, useSearchParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { ArrowLeft, Bookmark, Download, TrendingDown, TrendingUp } from "lucide-react";
 import type { ColumnDef } from "@tanstack/react-table";

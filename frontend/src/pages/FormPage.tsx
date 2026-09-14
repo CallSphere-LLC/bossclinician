@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useRef, useState, type FormEvent } from "react";
-import { useParams } from "react-router-dom";
+import { useParams } from "react-router";
 import { motion, useReducedMotion } from "motion/react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";

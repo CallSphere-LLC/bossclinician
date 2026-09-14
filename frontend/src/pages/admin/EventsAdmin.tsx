@@ -1,6 +1,6 @@
 import { publicSiteUrl } from "@/lib/siteOrigins";
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
   AlertTriangle,

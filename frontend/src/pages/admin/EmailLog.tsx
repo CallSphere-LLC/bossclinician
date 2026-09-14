@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 import { ArrowLeft } from "lucide-react";
 import { PageHeader } from "@/pages/admin/ui/primitives";
 import { EmailDeliveryCard } from "@/pages/admin/SettingsGroup";

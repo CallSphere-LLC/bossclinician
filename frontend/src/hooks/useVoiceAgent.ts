@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 import { api } from "@/lib/api";
 import { chatSessionId } from "@/lib/chatSession";
 import { runAssistantTool } from "@/lib/siteNavigation";

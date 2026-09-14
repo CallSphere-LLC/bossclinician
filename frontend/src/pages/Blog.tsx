@@ -1,5 +1,5 @@
 import { Fragment, useMemo } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router";
 import { motion } from "motion/react";
 import { useEntranceMotion } from "@/hooks/useEntranceMotion";
 import { Seo } from "@/components/Seo";

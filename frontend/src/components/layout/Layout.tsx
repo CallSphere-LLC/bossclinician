@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation } from "react-router";
 import { useEffect } from "react";
 import { Header } from "./Header";
 import { Footer } from "./Footer";

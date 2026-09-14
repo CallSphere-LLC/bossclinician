@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 import { motion } from "motion/react";
 import { useEntranceMotion } from "@/hooks/useEntranceMotion";
 import { Section, SectionTitle } from "@/components/luxe/Section";
