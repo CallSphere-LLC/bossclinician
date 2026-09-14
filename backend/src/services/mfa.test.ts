@@ -1,5 +1,38 @@
-import { describe, expect, it } from "vitest";
-import { base32Decode, base32Encode, codeForTime, generateSecret, otpauthUrl, verifyCode } from "./mfa";
+import crypto from "crypto";
+import { describe, expect, it, vi } from "vitest";
+import {
+  base32Decode,
+  base32Encode,
+  codeForTime,
+  generateSecret,
+  otpauthUrl,
+  randomRecoveryCode,
+  verifyCode,
+} from "./mfa";
+
+describe("recovery codes", () => {
+  const ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+
+  it("are two groups of four from the unambiguous alphabet", () => {
+    for (let i = 0; i < 200; i += 1) {
+      expect(randomRecoveryCode()).toMatch(/^[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{4}-[ABCDEFGHJKMNPQRSTUVWXYZ23456789]{4}$/);
+    }
+  });
+
+  it("draw every character uniformly over the whole alphabet", () => {
+    // A byte modulo 31 favoured the first eight letters by a ninth. randomInt
+    // over exactly the alphabet's length is uniform by construction, and every
+    // index it can return has to map to a character.
+    const draws = vi.spyOn(crypto, "randomInt");
+    try {
+      randomRecoveryCode();
+      expect(draws).toHaveBeenCalledTimes(8);
+      for (const call of draws.mock.calls) expect(call).toEqual([ALPHABET.length]);
+    } finally {
+      draws.mockRestore();
+    }
+  });
+});
 
 /**
  * RFC 6238's published test vectors.

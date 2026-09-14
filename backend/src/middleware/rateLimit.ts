@@ -1,5 +1,5 @@
 import { Request } from "express";
-import { rateLimit, ipKeyGenerator } from "express-rate-limit";
+import { rateLimit, ipKeyGenerator, type Options } from "express-rate-limit";
 
 const GENERIC_RATE_LIMIT_MESSAGE = { error: "Too many requests. Please try again later." };
 const GENERIC_LOGIN_RATE_LIMIT_MESSAGE = { error: "Too many login attempts. Please try again later." };
@@ -190,3 +190,74 @@ export const adminTestEmailLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: "Too many test emails. Please try again later." },
 });
+
+/**
+ * The site-wide backstop, mounted in app.ts ahead of every router.
+ *
+ * Not a substitute for the limiters above, which are tight where one request
+ * costs something specific — a password guess, an email, a Stripe call. This
+ * one exists so that nothing that reaches the database is unlimited: a runaway
+ * client loop, a script walking the admin's list endpoints, a flood aimed at
+ * whichever route has no limiter of its own.
+ *
+ * How it is sized. req.ip is a constant in production (the `trust proxy` note
+ * in app.ts), so every visitor shares one key and a limit sized for one visitor
+ * would throttle the whole site. It is sized for the whole site instead, from
+ * the nginx access log for 7–14 Sep 2026 — 13,355 API requests and 838
+ * server-rendered pages across both hosts:
+ *
+ *   - the busiest minute on any surface was 523 requests, on the admin, and it
+ *     was one scripted headless browser, not a person;
+ *   - members peaked at 121 a minute, the public API at 32, rendered pages at
+ *     158, the Stripe and SES webhooks at 5;
+ *   - the 99th-percentile minute of the week was 22 requests, the busiest
+ *     single second 57.
+ *
+ * 6,000 a minute per surface is more than ten times the busiest minute seen.
+ * The key is split by surface so a flood on the public API cannot lock the
+ * owner out of her admin, and a burst of SES delivery events after a broadcast
+ * cannot throttle checkout. When PROXY protocol restores the visitor's address
+ * (docs/bugs/infra.md), the same key becomes per visitor per surface with no
+ * change here, and the ceiling becomes generous rather than tight. In memory,
+ * so it resets on deploy — acceptable for a backstop nothing relies on for
+ * correctness.
+ */
+export const API_REQUESTS_PER_MINUTE = 6000;
+
+export type RateLimitSurface = "admin" | "member" | "integrations" | "webhooks" | "public";
+
+const within = (path: string, prefix: string): boolean =>
+  path === prefix || path.startsWith(`${prefix}/`);
+
+/**
+ * Which bucket a request counts against, or null for the two paths the
+ * backstop leaves alone: `/api/health`, which the deploy's health gate polls
+ * through the public URL — a flood must not also fail the gate and roll back a
+ * good release — and `/uploads`, static files that never touch the database.
+ */
+export function rateLimitSurface(path: string): RateLimitSurface | null {
+  if (path === "/api/health" || within(path, "/uploads")) return null;
+  if (within(path, "/api/admin")) return "admin";
+  if (within(path, "/api/member") || within(path, "/api/auth") || within(path, "/account")) {
+    return "member";
+  }
+  if (within(path, "/api/v1")) return "integrations";
+  if (within(path, "/api/stripe/webhook") || within(path, "/api/email/webhook")) return "webhooks";
+  return "public";
+}
+
+/** Exported apart from the instance so a test can exercise it with a small ceiling. */
+export function apiLimiterOptions(limit: number): Partial<Options> {
+  return {
+    windowMs: 60 * 1000,
+    max: limit,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: GENERIC_RATE_LIMIT_MESSAGE,
+    skip: (req: Request): boolean => rateLimitSurface(req.path) === null,
+    keyGenerator: (req: Request): string =>
+      `${rateLimitSurface(req.path)}:${ipKeyGenerator(req.ip ?? "")}`,
+  };
+}
+
+export const apiLimiter = rateLimit(apiLimiterOptions(API_REQUESTS_PER_MINUTE));

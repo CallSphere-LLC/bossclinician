@@ -208,13 +208,15 @@ export async function sendMail(input: SendMailInput): Promise<SendMailOutcome> {
   const messageId = await openMailRecord(input);
   try {
     const { messageId: providerMessageId } = await sendMailStrict(input);
+    // Subjects and addresses can carry what a visitor typed into a form, so they
+    // are JSON-quoted arguments: a newline in one cannot forge a second log line.
     if (!env.smtp.host) {
       // jsonTransport puts the whole message in info.message (a Buffer)
       // eslint-disable-next-line no-console
-      console.log(`[mailer:console] to=${input.to} subject="${input.subject}"`);
+      console.log("[mailer:console] to=%s subject=%s", JSON.stringify(input.to), JSON.stringify(input.subject));
     } else {
       // eslint-disable-next-line no-console
-      console.log(`[mailer] sent messageId=${providerMessageId} to=${input.to}`);
+      console.log("[mailer] sent messageId=%s to=%s", JSON.stringify(providerMessageId), JSON.stringify(input.to));
     }
     await closeMailRecord(messageId, { sent: true, providerMessageId, error: "" });
     return { messageId, sent: true, providerMessageId, error: "" };

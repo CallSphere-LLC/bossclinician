@@ -355,11 +355,15 @@ emailWebhookRouter.post(
     const svixSignature = header("svix-signature");
     const plainSignature = header("x-webhook-signature");
 
-    const verified = svixSignature
-      ? verifySvix(raw, { id: svixId, timestamp: svixTimestamp, signature: svixSignature }, webhookSecret)
-      : plainSignature
-        ? verifyPlain(raw, plainSignature, webhookSecret)
-        : false;
+    // Both schemes are always evaluated, and a header that was not sent simply
+    // fails its own check. Picking the verifier from whichever header the caller
+    // chose to send put the caller in charge of the branch: it could not skip
+    // verification that way, since each scheme needs the secret, but nothing is
+    // gained by letting it choose.
+    const verified = [
+      verifySvix(raw, { id: svixId, timestamp: svixTimestamp, signature: svixSignature }, webhookSecret),
+      verifyPlain(raw, plainSignature, webhookSecret),
+    ].includes(true);
 
     if (!verified) {
       res.status(401).json({ error: "Signature does not match" });
@@ -409,21 +413,102 @@ emailWebhookRouter.post(
  * whose certificate SNS names in the body itself, which means the URL in the
  * body decides which public key we verify against — and a caller who could
  * point that at a certificate they control could forge a bounce for any address
- * on the list and have it suppressed. `certUrlAllowed` is therefore the load-
- * bearing check in this whole section, and it is applied before the fetch, not
- * after.
+ * on the list and have it suppressed. `snsCertificateUrl` is therefore the
+ * load-bearing check in this whole section, and it is applied before the fetch,
+ * not after.
+ *
+ * The rule for every outbound request in this section: the host comes from
+ * configuration, never from the body. SES_SNS_TOPIC_ARN names the topic, the
+ * topic names its region, and the region names the one SNS endpoint this
+ * deployment will talk to. A URL in a notification is only ever *checked
+ * against* that endpoint — and then the request is rebuilt on it, so there is no
+ * spelling of a hostname, port, userinfo or scheme that reaches `fetch` as sent.
  */
-const SNS_CERT_HOST = /^sns\.[a-z0-9-]+\.amazonaws\.com(\.cn)?$/;
 
-function certUrlAllowed(url: string): boolean {
+export interface SnsEndpoint {
+  topicArn: string;
+  /** e.g. `sns.us-east-1.amazonaws.com` */
+  host: string;
+  /** e.g. `https://sns.us-east-1.amazonaws.com` */
+  origin: string;
+}
+
+const SNS_TOPIC_ARN = /^arn:(aws|aws-cn|aws-us-gov):sns:([a-z0-9-]+):\d{12}:[A-Za-z0-9_.-]+$/;
+
+/**
+ * The regional SNS endpoint for the configured topic, or null when there is no
+ * usable topic. China regions live under their own domain; GovCloud does not.
+ */
+export function snsEndpoint(topicArn: string): SnsEndpoint | null {
+  const match = SNS_TOPIC_ARN.exec(topicArn);
+  if (!match) return null;
+  const [, partition, region] = match;
+  const host = `sns.${region}.${partition === "aws-cn" ? "amazonaws.com.cn" : "amazonaws.com"}`;
+  return { topicArn, host, origin: `https://${host}` };
+}
+
+/** SNS serves its signing certificates as `SimpleNotificationService-<id>.pem` at the root. */
+const SNS_CERT_PATH = /^\/[A-Za-z0-9_-]+\.pem$/;
+
+/**
+ * Where to fetch the certificate a notification names, or null if it names
+ * anywhere but the configured topic's own SNS endpoint.
+ *
+ * A regional pattern (`sns.<anything>.amazonaws.com`) is what this used to
+ * accept. It was sound as far as it went, but a topic in us-east-1 has no
+ * business presenting a certificate from another region, and "the host matches
+ * a pattern" is a weaker statement than "the host is the one we derived".
+ */
+export function snsCertificateUrl(candidate: string, endpoint: SnsEndpoint): URL | null {
   let parsed: URL;
   try {
-    parsed = new URL(url);
+    parsed = new URL(candidate);
   } catch {
-    return false;
+    return null;
   }
-  return parsed.protocol === "https:" && SNS_CERT_HOST.test(parsed.hostname);
+  if (
+    parsed.protocol !== "https:" ||
+    parsed.hostname !== endpoint.host ||
+    parsed.port !== "" ||
+    parsed.username !== "" ||
+    parsed.password !== "" ||
+    !SNS_CERT_PATH.test(parsed.pathname)
+  ) {
+    return null;
+  }
+  // Rebuilt on the configured origin: only the validated path survives, and the
+  // query string and fragment, which no certificate needs, do not.
+  const url = new URL(endpoint.origin);
+  url.pathname = parsed.pathname;
+  return url;
 }
+
+/**
+ * The ConfirmSubscription request, built rather than followed.
+ *
+ * SubscribeURL is nothing more than this — `Action=ConfirmSubscription` with
+ * the topic and the token on the topic's regional endpoint — so constructing it
+ * from the configured topic and the signed token loses nothing, and means the
+ * one request this endpoint makes *because a body asked it to* cannot be
+ * pointed anywhere else. UnsubscribeURL is never requested at all.
+ */
+export function snsConfirmationUrl(endpoint: SnsEndpoint, token: string): URL {
+  const url = new URL(endpoint.origin);
+  url.searchParams.set("Action", "ConfirmSubscription");
+  url.searchParams.set("TopicArn", endpoint.topicArn);
+  url.searchParams.set("Token", token);
+  return url;
+}
+
+/**
+ * How every SNS request is made. `redirect: "error"` because the host checks
+ * above are only worth anything if the answer comes from that host: a redirect
+ * followed silently would let the certificate — the thing that decides whose
+ * signature is accepted — come from wherever a Location header pointed. The
+ * timeout keeps a slow endpoint from holding the request open; SNS retries.
+ */
+const SNS_FETCH_OPTIONS = { redirect: "error" } as const;
+const SNS_FETCH_TIMEOUT_MS = 10_000;
 
 /**
  * Certificates keyed by URL. SNS rotates rarely and posts constantly, so
@@ -432,38 +517,62 @@ function certUrlAllowed(url: string): boolean {
  */
 const snsCertCache = new Map<string, string>();
 
-async function fetchSigningCert(url: string): Promise<string | null> {
-  const cached = snsCertCache.get(url);
-  if (cached !== undefined) return cached;
-  if (!certUrlAllowed(url)) return null;
+async function fetchSigningCert(candidate: string, endpoint: SnsEndpoint): Promise<string | null> {
+  const url = snsCertificateUrl(candidate, endpoint);
+  if (url === null) return null;
 
-  const response = await fetch(url);
+  const cached = snsCertCache.get(url.href);
+  if (cached !== undefined) return cached;
+
+  const response = await fetch(url, {
+    ...SNS_FETCH_OPTIONS,
+    signal: AbortSignal.timeout(SNS_FETCH_TIMEOUT_MS),
+  });
   if (!response.ok) return null;
   const pem = await response.text();
   if (!pem.includes("BEGIN CERTIFICATE")) return null;
 
-  // Bounded so a caller cycling through query strings on a legitimate SNS host
+  // Bounded so a caller cycling through certificate names on the real SNS host
   // cannot grow this map without limit.
   if (snsCertCache.size > 32) snsCertCache.clear();
-  snsCertCache.set(url, pem);
+  snsCertCache.set(url.href, pem);
   return pem;
 }
 
-/** The exact fields SNS signs, in the exact order, per message type. */
-const SNS_SIGNED_FIELDS: Record<string, string[]> = {
-  Notification: ["Message", "MessageId", "Subject", "Timestamp", "TopicArn", "Type"],
-  SubscriptionConfirmation: [
-    "Message", "MessageId", "SubscribeURL", "Timestamp", "Token", "TopicArn", "Type",
+/**
+ * The exact fields SNS signs, in the exact order, per message type. A Map, so a
+ * `Type` of `__proto__` or `constructor` finds nothing rather than something.
+ */
+const SNS_SIGNED_FIELDS = new Map<string, string[]>([
+  ["Notification", ["Message", "MessageId", "Subject", "Timestamp", "TopicArn", "Type"]],
+  [
+    "SubscriptionConfirmation",
+    ["Message", "MessageId", "SubscribeURL", "Timestamp", "Token", "TopicArn", "Type"],
   ],
-  UnsubscribeConfirmation: [
-    "Message", "MessageId", "SubscribeURL", "Timestamp", "Token", "TopicArn", "Type",
+  [
+    "UnsubscribeConfirmation",
+    ["Message", "MessageId", "SubscribeURL", "Timestamp", "Token", "TopicArn", "Type"],
   ],
-};
+]);
 
-async function verifySns(body: Record<string, unknown>): Promise<boolean> {
-  const type = String(body.Type ?? "");
-  const fields = SNS_SIGNED_FIELDS[type];
+/**
+ * The two signature versions SNS defines. Anything else used to fall through
+ * to SHA-1; it is refused now, so a version this code does not know cannot be
+ * verified as one it does.
+ */
+const SNS_SIGNATURE_ALGORITHMS = new Map<string, string>([
+  ["1", "RSA-SHA1"],
+  ["2", "RSA-SHA256"],
+]);
+
+export async function verifySns(
+  body: Record<string, unknown>,
+  endpoint: SnsEndpoint
+): Promise<boolean> {
+  const fields = SNS_SIGNED_FIELDS.get(String(body.Type ?? ""));
   if (!fields) return false;
+  const algorithm = SNS_SIGNATURE_ALGORITHMS.get(String(body.SignatureVersion ?? "1"));
+  if (!algorithm) return false;
 
   const parts: string[] = [];
   for (const field of fields) {
@@ -475,10 +584,9 @@ async function verifySns(body: Record<string, unknown>): Promise<boolean> {
   }
   const canonical = `${parts.join("\n")}\n`;
 
-  const pem = await fetchSigningCert(String(body.SigningCertURL ?? ""));
+  const pem = await fetchSigningCert(String(body.SigningCertURL ?? ""), endpoint);
   if (pem === null) return false;
 
-  const algorithm = String(body.SignatureVersion ?? "1") === "2" ? "RSA-SHA256" : "RSA-SHA1";
   try {
     return crypto
       .createVerify(algorithm)
@@ -571,11 +679,25 @@ function fromSesNotification(
  * subscription on first contact, which is what makes the topic live without a
  * console visit — but only for the topic this deployment was told to expect, so
  * a stranger's topic cannot enlist this endpoint as a listener.
+ *
+ * In order, and nothing is acted on before all three pass: the topic is the
+ * configured one, the certificate comes from that topic's own SNS endpoint, and
+ * the signature over the signed fields verifies against it.
  */
 emailWebhookRouter.post(
   "/email/webhook/ses",
   express.raw({ type: () => true, limit: "1mb" }),
   asyncHandler(async (req, res) => {
+    const endpoint = snsEndpoint(env.ses.snsTopicArn);
+    if (endpoint === null) {
+      // Refused, the same stance as the signed-webhook route above. Without a
+      // topic to hold notifications to, all that is left to trust is the
+      // signature — and any AWS account can sign a notification for a topic of
+      // its own, subscribe this URL to it, and post bounces for our list.
+      res.status(503).json({ error: "SES notifications are not configured yet" });
+      return;
+    }
+
     const raw = Buffer.isBuffer(req.body) ? req.body : Buffer.from(JSON.stringify(req.body ?? {}));
 
     let body: Record<string, unknown>;
@@ -586,13 +708,12 @@ emailWebhookRouter.post(
       return;
     }
 
-    const topicArn = String(body.TopicArn ?? "");
-    if (env.ses.snsTopicArn && topicArn !== env.ses.snsTopicArn) {
+    if (String(body.TopicArn ?? "") !== endpoint.topicArn) {
       res.status(401).json({ error: "Unexpected topic" });
       return;
     }
 
-    if (!(await verifySns(body))) {
+    if (!(await verifySns(body, endpoint))) {
       res.status(401).json({ error: "Signature does not match" });
       return;
     }
@@ -600,19 +721,24 @@ emailWebhookRouter.post(
     const type = String(body.Type ?? "");
 
     if (type === "SubscriptionConfirmation") {
-      const subscribeUrl = String(body.SubscribeURL ?? "");
-      // The same host rule as the certificate: the confirmation is a GET this
-      // server makes because a body told it to, and an unchecked URL there is a
-      // request forgery with AWS credentials sitting in the environment.
-      if (!certUrlAllowed(subscribeUrl)) {
-        res.status(400).json({ error: "Unexpected confirmation URL" });
+      // The body's SubscribeURL is signed, but it is not what gets requested:
+      // the confirmation is rebuilt on the configured endpoint from the signed
+      // token (see snsConfirmationUrl), because a GET this server makes on a
+      // body's say-so is a request forgery waiting for one mistake upstream.
+      const token = String(body.Token ?? "");
+      if (!token) {
+        res.status(400).json({ error: "Confirmation has no token" });
         return;
       }
-      const confirmed = await fetch(subscribeUrl);
+      const confirmed = await fetch(snsConfirmationUrl(endpoint, token), {
+        ...SNS_FETCH_OPTIONS,
+        signal: AbortSignal.timeout(SNS_FETCH_TIMEOUT_MS),
+      });
       res.json({ confirmed: confirmed.ok });
       return;
     }
 
+    // UnsubscribeConfirmation lands here: acknowledged, and its URLs never fetched.
     if (type !== "Notification") {
       res.json({ ignored: type });
       return;

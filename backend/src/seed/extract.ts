@@ -280,7 +280,9 @@ export function extractCoursesFromAllCourses(page: ContentPage): CourseSeed[] {
         if (texts[i].tag === "p") ps.push(texts[i].text.trim());
         i++;
       }
-      const contentPs = ps.filter((p) => !/inside you.*get|you.?ll get:?$/i.test(p));
+      // Two tests rather than `a|b$`: the anchor belongs only to the second, which
+      // is what is meant, but one alternation reads as though both were anchored.
+      const contentPs = ps.filter((p) => !(/inside you.*get/i.test(p) || /you.?ll get:?$/i.test(p)));
 
       let bestImage: ContentImage | undefined;
       let bestScore = 0;

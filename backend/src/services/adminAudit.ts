@@ -63,9 +63,15 @@ export async function recordAdminAction(input: AdminActionInput): Promise<void> 
   try {
     await writeAuditRow(input);
   } catch (err) {
+    // The entity id is often a route parameter. Arguments rather than the format
+    // string, and JSON-quoted, so a `%s` or a newline in it cannot rewrite the
+    // line that says an audit record went missing.
     // eslint-disable-next-line no-console
     console.error(
-      `[audit] failed to record ${input.action} on ${input.entityType}:${input.entityId} (continuing):`,
+      "[audit] failed to record %s on %s:%s (continuing):",
+      JSON.stringify(input.action),
+      JSON.stringify(input.entityType),
+      JSON.stringify(String(input.entityId)),
       err
     );
   }

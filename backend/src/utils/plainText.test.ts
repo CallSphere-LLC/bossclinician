@@ -32,4 +32,42 @@ describe("plainText", () => {
   it("trims, so an all-whitespace body is empty rather than blank", () => {
     expect(plainText("   \n  ")).toBe("");
   });
+
+  it("keeps ordinary prose, attributes of removed tags gone", () => {
+    expect(plainText('Hello <a href="x">there</a>, see <b>this</b>')).toBe("Hello there, see this");
+    expect(plainText("a<b")).toBe("ab");
+    expect(plainText("x << y")).toBe("x << y");
+  });
+
+  /*
+   * The old chain of replaces could build markup out of what it removed: the
+   * whole-tag pass took `<b>` out of `<<b>script` and left `<script`, and a
+   * control character between `<` and `script` was only removed after the
+   * pass that would have caught the `<`.
+   */
+  it("cannot be made to assemble a tag out of the pieces it removes", () => {
+    const bel = String.fromCharCode(7);
+    const nul = String.fromCharCode(0);
+    for (const attack of [
+      "<<b>script>alert(1)",
+      "<<ascript",
+      "<</b>/script>",
+      `<${bel}script>alert(1)</script>`,
+      `<${nul}img src=x onerror=alert(1)>`,
+      "<<<<b>>>script",
+      "<!<b>--x-->",
+      "<?<i>xml",
+    ]) {
+      expect(plainText(attack), JSON.stringify(attack)).not.toMatch(/<[a-zA-Z/!?]/);
+    }
+  });
+
+  it("stays linear on a body of unclosed tags", () => {
+    // Quadratic before: every `<A` scanned to the end of the string for a `>`.
+    // At this size that was minutes of CPU on a single request.
+    const hostile = "<A".repeat(200_000);
+    const started = performance.now();
+    expect(plainText(hostile)).toBe("A".repeat(200_000));
+    expect(performance.now() - started).toBeLessThan(1_000);
+  });
 });
