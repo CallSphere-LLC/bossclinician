@@ -65,6 +65,12 @@ COPY backend/scripts ./scripts
 # root, and the `node` user below could not write an upload into it.
 RUN mkdir -p /app/uploads /app/uploads-protected && chown -R node:node /app
 
+# The commit this image was built from, reported by /api/health so a deploy can
+# prove the live API is the build it just rolled out. Declared last: a new value
+# every commit then costs one metadata layer, not a rebuild of the layers above.
+ARG APP_RELEASE=dev
+ENV APP_RELEASE=${APP_RELEASE}
+
 # Run as the built-in non-root `node` user (uid 1000). CMD invokes the node
 # binary directly (on PATH), so the non-root HOME change doesn't break startup.
 USER node

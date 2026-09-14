@@ -1,0 +1,98 @@
+name: Deploy
+
+# Push to main → the full CI suite → production.
+#
+# The deploy job runs on this repository's own runner on the production host,
+# and only after every CI job passed for the exact commit being deployed. It
+# cannot run for any other branch or event: the job's `if` says so here, and a
+# job-started hook installed on the runner (scripts/ci/runner-job-guard.sh)
+# enforces it where a commit cannot edit it.
+#
+# Manual runs (Actions → Deploy → Run workflow, on main) redeploy main, rebuild
+# everything, or roll back to an older commit on main. The usual rollback is
+# still `git revert` and a push. See docs/CI-CD.md.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Commit on main to deploy. "main" is the latest; an older SHA from main rolls back to it.
+        required: true
+        default: main
+      force_rebuild:
+        description: Rebuild and restart every service even if nothing changed.
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  resolve:
+    name: Resolve the commit
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: github.ref == 'refs/heads/main'
+    outputs:
+      sha: ${{ steps.sha.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: sha
+        name: Pin a full SHA that is on main
+        env:
+          REQUESTED: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.sha }}
+        run: |
+          set -euo pipefail
+          sha=$(git rev-parse --verify --quiet "origin/${REQUESTED}^{commit}" \
+             || git rev-parse --verify --quiet "${REQUESTED}^{commit}" \
+             || true)
+          if [ -z "$sha" ]; then
+            echo "::error::'$REQUESTED' is not a commit in this repository."
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor "$sha" origin/main; then
+            echo "::error::$sha is not on main. Only commits on main are deployed."
+            exit 1
+          fi
+          echo "Deploying $sha"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
+  ci:
+    name: CI
+    needs: resolve
+    uses: ./.github/workflows/ci.yml
+    with:
+      ref: ${{ needs.resolve.outputs.sha }}
+
+  deploy:
+    name: Deploy to production
+    needs: [resolve, ci]
+    if: github.repository == 'shankasf/bossclinician' && github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, bossclinician]
+    timeout-minutes: 75
+    environment:
+      name: production
+      url: https://bossclinician.callsphere.site
+    concurrency:
+      # One deploy at a time, and never cancel one halfway: a build interrupted
+      # mid-rollout is exactly what the rollback logic exists to avoid. A newer
+      # push waiting here replaces an older one that has not started.
+      group: production
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # The pipeline's own scripts come from the commit that defines this
+          # run; the application comes from the target, checked out on the
+          # server by deploy-release.sh. For a push the two are the same commit.
+          ref: ${{ github.sha }}
+          clean: true
+      - name: Roll out, verify through the public URL, roll back on failure
+        env:
+          TARGET_SHA: ${{ needs.resolve.outputs.sha }}
+          EVENT_NAME: ${{ github.event_name }}
+          FORCE_REBUILD: ${{ inputs.force_rebuild == true }}
+        run: scripts/ci/deploy-release.sh

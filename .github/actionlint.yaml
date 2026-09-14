@@ -1,0 +1,5 @@
+self-hosted-runner:
+  # The production host's runner (scripts/ci/install-runner.sh). Only the
+  # deploy job in deploy.yml may use it.
+  labels:
+    - bossclinician

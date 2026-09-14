@@ -106,6 +106,8 @@ services:
       args:
         VITE_API_BASE: /api
         VITE_STRIPE_PUBLISHABLE_KEY: ${VITE_STRIPE_PUBLISHABLE_KEY:-}
+        # The git commit, reported by /api/health. scripts/deploy.sh sets it.
+        APP_RELEASE: ${APP_RELEASE:-dev}
     restart: unless-stopped
     logging: *logging
     security_opt: ["no-new-privileges:true"]
@@ -186,6 +188,9 @@ services:
       args:
         VITE_API_BASE: /api
         VITE_STRIPE_PUBLISHABLE_KEY: ${VITE_STRIPE_PUBLISHABLE_KEY:-}
+        # Consumed only by the api stage; listed so the two services keep
+        # identical args, as the comment above requires.
+        APP_RELEASE: ${APP_RELEASE:-dev}
     restart: unless-stopped
     logging: *logging
     security_opt: ["no-new-privileges:true"]

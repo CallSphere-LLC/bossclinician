@@ -1,0 +1,8 @@
+# CI-only override: the production compose file, minus what only the production
+# host has. Used as COMPOSE_FILE=docker-compose.yml:.github/ci/docker-compose.ci.yml.
+services:
+  nginx:
+    # Production binds the k3s cni0 gateway, 10.42.0.1, which exists only on the
+    # production host. A GitHub runner has loopback.
+    ports: !override
+      - "127.0.0.1:8088:80"

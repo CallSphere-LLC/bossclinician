@@ -1,0 +1,205 @@
+name: CI
+
+# Every change runs this suite. Pull requests and pushes to any branch other
+# than main trigger it directly. Main runs it through deploy.yml, which calls
+# this file and deploys only when every job below passed for that exact commit.
+#
+# Nothing here runs on the production host: every job is on a GitHub-hosted
+# runner, and scripts/ci/tests/test_workflows.py fails the build if one is not.
+on:
+  pull_request:
+  push:
+    branches-ignore: [main]
+  workflow_call:
+    inputs:
+      ref:
+        description: Full SHA of the commit to test. Defaults to the triggering commit.
+        type: string
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  # A newer push to a branch makes the older run pointless. Each run on main is
+  # part of a deploy, and deploy.yml decides which deploy wins, so those never
+  # cancel each other here.
+  group: ci-${{ github.ref == 'refs/heads/main' && github.run_id || github.ref }}
+  cancel-in-progress: true
+
+env:
+  CHECKOUT_REF: ${{ inputs.ref || github.sha }}
+
+jobs:
+  pipeline:
+    name: Pipeline, scripts and secrets
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CHECKOUT_REF }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install test dependency
+        run: python -m pip install --disable-pip-version-check pyyaml==6.0.2
+      - name: Deploy pipeline tests (deciding, rolling out, rolling back)
+        run: python -m unittest discover -s scripts/ci/tests -v
+      - name: Shell scripts pass shellcheck
+        run: shellcheck --severity=warning scripts/*.sh scripts/ci/*.sh backend/scripts/*.sh .github/ci/*.sh
+      - name: Workflows pass actionlint
+        run: docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.7 -color
+      - name: No secrets or .env files committed
+        run: scripts/ci/secret-scan.sh
+
+  backend:
+    name: Backend — typecheck, unit, integration, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: boss
+          POSTGRES_PASSWORD: ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U boss"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CHECKOUT_REF }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - name: Install (fails if package-lock.json is out of sync)
+        run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Unit tests
+        run: npm test
+      - name: Integration tests (real Postgres, every migration applied from scratch)
+        env:
+          TEST_DATABASE_URL: postgres://boss:ci@localhost:5432/postgres
+          JWT_SECRET: integration-test-secret
+          NODE_ENV: test
+          WORKER_ENABLED: 'false'
+        # Selected by file name, not test name, so a DB-backed suite whose
+        # describe() forgets the word "integration" still runs. One fork, as
+        # backend/scripts/test-integration.sh does.
+        run: npx vitest run integration.test --poolOptions.forks.minForks=1 --poolOptions.forks.maxForks=1
+      - name: Build
+        run: npm run build
+
+  frontend:
+    name: Frontend — typecheck, unit
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CHECKOUT_REF }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install (fails if package-lock.json is out of sync)
+        run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Unit tests
+        run: npm test
+
+  ai:
+    name: AI service — tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: ai
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CHECKOUT_REF }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: ai/requirements.txt
+      - name: Install
+        run: python -m pip install --disable-pip-version-check -r requirements.txt
+      - name: Tests (no OpenAI key, so the fallback paths)
+        env:
+          OPENAI_API_KEY: ''
+        run: python -m pytest -q
+
+  stack:
+    # The job that catches what unit tests cannot: a Dockerfile that no longer
+    # builds, a file .dockerignore drops, a migration that fails on an empty
+    # database, an nginx config that does not load, SSR that crashes at boot.
+    name: Production images — build, boot on an empty database, smoke test
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      COMPOSE_FILE: docker-compose.yml:.github/ci/docker-compose.ci.yml
+      COMPOSE_PROJECT_NAME: bossclinician-ci
+      APP_RELEASE: ${{ inputs.ref || github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CHECKOUT_REF }}
+      - name: Throwaway secrets
+        run: .github/ci/write-env.sh
+      - name: Compose file resolves
+        run: docker compose config --quiet
+      - name: Build with the production Dockerfiles
+        run: COMPOSE_PARALLEL_LIMIT=1 docker compose build
+      - name: Boot on an empty database (schema, every migration, first-boot seed)
+        run: docker compose up -d --wait --wait-timeout 600 nginx
+      - name: nginx accepts the configuration
+        run: docker compose exec -T nginx nginx -t
+      - name: Smoke test
+        env:
+          SMOKE_SKIP_HOST_CHECKS: '1'
+          SMOKE_REDIRECT_ORIGIN: https://localhost
+          SMOKE_ADMIN_BASE: ''
+        run: scripts/smoke-test.sh http://localhost:8088
+      - name: Admin origin serves the admin app
+        run: |
+          status=$(curl -s -o /dev/null -w '%{http_code}' -H 'Host: admin.bossclinician.callsphere.site' http://localhost:8088/admin)
+          echo "admin origin /admin -> $status"
+          test "$status" = 200
+      - name: /api/health reports this commit
+        run: |
+          release=$(curl -fsS http://localhost:8088/api/health | jq -r .release)
+          echo "release=$release expected=$APP_RELEASE"
+          test "$release" = "$APP_RELEASE"
+      - name: Every migration on disk was applied
+        run: |
+          applied=$(docker compose exec -T db psql -U boss -d bossclinician -tAc 'SELECT count(*) FROM schema_migrations')
+          ondisk=$(find backend/src/db/migrations -name '*.sql' | wc -l)
+          echo "applied=$applied on-disk=$ondisk"
+          test "$applied" -ge "$ondisk"
+      - name: Container state and logs
+        if: failure()
+        run: |
+          docker compose ps -a
+          docker compose logs --no-color --tail=300
+      - name: Tear down
+        if: always()
+        run: docker compose down -v --remove-orphans

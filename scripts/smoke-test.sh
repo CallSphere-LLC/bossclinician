@@ -10,9 +10,21 @@
 # Read-only. Creates nothing, charges nothing, sends nothing.
 #
 #   ./scripts/smoke-test.sh [base-url]
+#
+# SMOKE_SKIP_HOST_CHECKS=1  HTTP checks only. Skips the database, job-queue and
+#                           TURN checks, which need this host's containers. The
+#                           deploy pipeline's rollback gate runs in this mode.
+# SMOKE_REDIRECT_ORIGIN     where legacy redirects should point (default: base-url)
+# SMOKE_ADMIN_BASE          admin origin to check; set it empty to skip
+# DEPLOY_DIR                checkout holding .env, docker-compose.yml and the
+#                           migrations (default: the one this script lives in)
 set -uo pipefail
 
 BASE="${1:-https://bossclinician.callsphere.site}"
+REDIRECT_ORIGIN="${SMOKE_REDIRECT_ORIGIN:-$BASE}"
+ADMIN_BASE="${SMOKE_ADMIN_BASE-https://admin.bossclinician.callsphere.site}"
+ROOT="${DEPLOY_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+cd "$ROOT" || exit 1
 PASS=0
 FAIL=0
 
@@ -48,7 +60,7 @@ fi
 echo
 echo "Legacy redirects — the 125 indexed bossclinician.com URLs"
 REDIR=$(curl -s -o /dev/null -w '%{http_code} %{redirect_url}' --max-time 15 "$BASE/about_yvette")
-check "/about_yvette redirects" "301 $BASE/about" "$REDIR"
+check "/about_yvette redirects" "301 $REDIRECT_ORIGIN/about" "$REDIR"
 # Kajabi URLs are mixed case; nginx map keys match case-insensitively.
 check "mixed-case legacy URL" 301 "$(code "$BASE/Practice-Protection-Pack")"
 
@@ -64,11 +76,20 @@ echo "Paywall"
 check "forged file token refused" 404 "$(code "$BASE/api/files/not.a.real.token")"
 
 echo
+echo "Admin origin — admin APIs answer only on their own host"
+check "/api/admin/ closed on the public origin" 401 "$(code "$BASE/api/admin/members")"
+if [ -n "$ADMIN_BASE" ]; then
+  check "admin app loads on the admin origin" 200 "$(code "$ADMIN_BASE/admin")"
+fi
+
+echo
 echo "Database"
-if command -v docker >/dev/null 2>&1; then
+if [ "${SMOKE_SKIP_HOST_CHECKS:-0}" = "1" ]; then
+  echo "  (SMOKE_SKIP_HOST_CHECKS=1 — skipping database checks)"
+elif command -v docker >/dev/null 2>&1; then
   APPLIED=$(docker exec bossclinician-db-1 psql -U boss -d bossclinician -t -A \
     -c "SELECT count(*) FROM schema_migrations;" 2>/dev/null | tr -d '[:space:]')
-  ONDISK=$(ls "$(dirname "${BASH_SOURCE[0]}")/../backend/src/db/migrations"/*.sql 2>/dev/null | wc -l | tr -d '[:space:]')
+  ONDISK=$(ls backend/src/db/migrations/*.sql 2>/dev/null | wc -l | tr -d '[:space:]')
   if [ -n "$APPLIED" ] && [ "$APPLIED" -ge "$ONDISK" ]; then
     ok "migrations applied ($APPLIED recorded, $ONDISK on disk)"
   else
@@ -108,7 +129,9 @@ fi
 
 echo
 echo "TURN relay — the community live room's own coturn, not the telehealth one"
-if command -v docker >/dev/null 2>&1 && [ -f .env ]; then
+if [ "${SMOKE_SKIP_HOST_CHECKS:-0}" = "1" ]; then
+  echo "  (SMOKE_SKIP_HOST_CHECKS=1 — skipping relay checks)"
+elif command -v docker >/dev/null 2>&1 && [ -f .env ]; then
   TPORT=$(grep -E '^TURN_PORT=' .env | cut -d= -f2)
   THOST=$(grep -E '^TURN_HOST=' .env | cut -d= -f2)
   TSECRET=$(grep -E '^TURN_STATIC_AUTH_SECRET=' .env | cut -d= -f2)

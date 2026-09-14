@@ -50,6 +50,15 @@ tells you that work finished — `docker compose up -d --wait`.
 
 ## Deploying a change (read this before typing a command)
 
+**Normal path: push to `main`.** GitHub Actions tests the commit and deploys it,
+rebuilding only what changed and rolling back if the live site fails its checks.
+It also regenerates `nginx/redirects.map` and reloads nginx on every deploy. See
+[docs/CI-CD.md](docs/CI-CD.md). Do not edit this checkout on the server: the
+pipeline refuses to deploy over a hand edit.
+
+Everything below is the **break-glass** path, for when the pipeline itself is
+unavailable, and a reference for what the pipeline does.
+
 - **Code or image change:** `./scripts/deploy.sh`. It builds serially, waits
   for every changed service to become healthy, then removes only superseded
   images and excess build cache. To deploy a subset, pass service names, for
