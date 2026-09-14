@@ -45,7 +45,7 @@ class Settings:
 
 def load_settings() -> Settings:
     api_key = os.environ.get("OPENAI_API_KEY") or None
-    model = os.environ.get("OPENAI_MODEL", DEFAULT_MODEL)
+    model = os.environ.get("OPENAI_MODEL") or DEFAULT_MODEL
     realtime_model = os.environ.get("OPENAI_REALTIME_MODEL", DEFAULT_REALTIME_MODEL)
     realtime_voice = os.environ.get("OPENAI_REALTIME_VOICE", DEFAULT_REALTIME_VOICE)
     base_url = os.environ.get("OPENAI_BASE_URL") or None

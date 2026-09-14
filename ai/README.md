@@ -83,8 +83,12 @@ canned fallbacks) — useful for `docker-compose up` in dev.
 pytest tests/ -q
 ```
 
-These are smoke tests against the no-API-key fallback paths (deterministic,
-no network/cost). Before shipping a **prompt change** (`app/prompts/*.md`),
+`tests/test_api.py` smoke-tests the no-API-key fallback paths.
+`tests/test_live_paths.py` covers the with-key paths against a mocked OpenAI
+(an httpx2 `MockTransport`): the request each endpoint sends, parsing the
+structured reply, retry-then-fallback on a refusal or API error, and minting
+a Realtime client secret. Both are deterministic, with no network or cost, and
+neither checks what the model actually says. Before shipping a **prompt change** (`app/prompts/*.md`),
 manually exercise the live endpoints with a real `OPENAI_API_KEY` and sanity
 check a handful of representative inputs per endpoint — e.g.:
 
@@ -109,5 +113,6 @@ See `.env.example`:
 - `OPENAI_API_KEY` — required for live responses; omitted → graceful fallbacks.
 - `OPENAI_MODEL` — default `gpt-5.5-2026-04-23`.
 - `OPENAI_BASE_URL` — optional, only for a proxy/gateway in front of OpenAI.
+  Blank means the default `https://api.openai.com/v1`.
 - `AI_KB_PATH`, `AI_KB_MAX_CHARS`, `CORS_ALLOW_ORIGINS` — optional overrides,
   sensible defaults in `app/config.py`.

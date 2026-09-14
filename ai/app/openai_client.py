@@ -14,13 +14,18 @@ from app.config import settings
 
 logger = logging.getLogger("bossclinician.ai")
 
+DEFAULT_BASE_URL = "https://api.openai.com/v1"
+
 
 @functools.lru_cache(maxsize=1)
 def get_client() -> AsyncOpenAI:
-    kwargs: dict[str, Any] = {"api_key": settings.openai_api_key}
-    if settings.openai_base_url:
-        kwargs["base_url"] = settings.openai_base_url
-    return AsyncOpenAI(**kwargs)
+    # Always pass base_url. Left unset, the SDK reads OPENAI_BASE_URL itself,
+    # and the blank `OPENAI_BASE_URL=` line from .env.example would give it an
+    # empty base URL and break every call.
+    return AsyncOpenAI(
+        api_key=settings.openai_api_key,
+        base_url=settings.openai_base_url or DEFAULT_BASE_URL,
+    )
 
 
 @dataclass
