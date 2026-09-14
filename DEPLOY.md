@@ -142,8 +142,15 @@ worked, and it was wrong on three counts, all of which the split fixes:
 - The relay range must not overlap 49160-49200, and one allocation consumes
   one relay port — so the range width and `--total-quota` are the same number
   (200) by intent.
-- `--alt-listening-port=0` is deliberate: coturn otherwise also binds
-  `listening-port + 1`, which is how you collide with the neighbouring relay.
+- Nothing may bind `listening-port + 1` (coturn's RFC 5780 alternate port),
+  which is how you collide with the neighbouring relay. `--alt-listening-port=0`
+  does not prevent that — 0 means "default", i.e. `listening-port + 1`. What
+  does is that RFC 5780 never starts: it is off unless `--rfc5780` is given
+  (coturn 4.7+), and coturn refuses it whenever `--external-ip` is set. Never
+  add `--rfc5780`.
+- The coturn image is pinned to a full release (`4.18.0-r0-alpine`). A bump is
+  a change to review, not a tag edit: 4.18 exits on flags 4.6 accepted
+  (`--no-tlsv1_1`). Run the command on the new image before merging.
 - The `--denied-peer-ip` list is what stops this being an open proxy into the
   host's private networks — including `10.42/16`, the k3s pod network, i.e.
   every telehealth service. Do not trim it.
@@ -158,8 +165,9 @@ sudo ss -lunp | grep -c :3479 && sudo ss -ltnp | grep -c :3479
 
 # 2. mint a credential the way the API does, and allocate for real.
 #    Expect "Received relay addr: 192.99.63.81:<49210-49409>".
-#    A "403 Forbidden IP" *after* that line is correct — coturn refuses to
-#    relay to its own address, and every other local address is denied.
+#    A 403 *after* that line is correct — coturn refuses to relay to its own
+#    address, and every other local address is denied. Since coturn 4.10 it
+#    prints as "error 403 ()": the reason phrase is no longer sent.
 SECRET=$(grep '^TURN_STATIC_AUTH_SECRET=' .env | cut -d= -f2)
 read -r U C <<<"$(python3 -c "
 import hmac,hashlib,base64,time
