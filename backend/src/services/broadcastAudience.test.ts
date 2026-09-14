@@ -13,8 +13,8 @@ describe("campaign tag targeting and exclusions", () => {
     (pool.query as unknown as Mock)
       .mockResolvedValueOnce({
         rows: [
-          { id: 1, email: "one@example.com", name: "One", first_name: "One" },
-          { id: 2, email: "two@example.com", name: "Two", first_name: "Two" },
+          { id: 1, email: "success+one@simulator.amazonses.com", name: "One", first_name: "One" },
+          { id: 2, email: "success+two@simulator.amazonses.com", name: "Two", first_name: "Two" },
         ],
       })
       .mockResolvedValueOnce({ rows: [{ contact_id: 2 }] });
@@ -33,7 +33,7 @@ describe("campaign tag targeting and exclusions", () => {
 
   it("uses the exact resolved list for the displayed count", async () => {
     (pool.query as unknown as Mock).mockResolvedValueOnce({
-      rows: [{ id: 1, email: "one@example.com", name: "One", first_name: "One" }],
+      rows: [{ id: 1, email: "success+one@simulator.amazonses.com", name: "One", first_name: "One" }],
     });
 
     await expect(

@@ -174,9 +174,9 @@ memberCommunityLiveRouter.get(
     await resolveRoom(member, req.params.slug);
 
     const iceServers: RTCIceServerConfig[] = [];
-    const { host, staticAuthSecret, stunFallback } = env.turn;
+    const { host, port, staticAuthSecret, stunFallback } = env.turn;
 
-    if (host) iceServers.push({ urls: [`stun:${host}:3478`] });
+    if (host) iceServers.push({ urls: [`stun:${host}:${port}`] });
     else if (stunFallback) iceServers.push({ urls: [stunFallback] });
 
     let turn = false;
@@ -187,7 +187,10 @@ memberCommunityLiveRouter.get(
         .update(username)
         .digest("base64");
       iceServers.push({
-        urls: [`turn:${host}:3478?transport=udp`, `turn:${host}:3478?transport=tcp`],
+        urls: [
+          `turn:${host}:${port}?transport=udp`,
+          `turn:${host}:${port}?transport=tcp`,
+        ],
         username,
         credential,
       });

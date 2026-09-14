@@ -1,3 +1,4 @@
+import { useNewProductRequest } from "./ui/useNewProductRequest";
 import {
   useCallback,
   useEffect,
@@ -268,6 +269,7 @@ export default function Newsletters() {
   const [plans, setPlans] = useState<Plan[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [nlDraft, setNlDraft] = useState<Partial<Newsletter> | null>(null);
+  useNewProductRequest(() => setNlDraft({ access: "free", published: true }));
   const [editionDraft, setEditionDraft] = useState<Partial<NewsletterIssue> | null>(null);
   const [confirm, confirmDialog] = useConfirm();
 

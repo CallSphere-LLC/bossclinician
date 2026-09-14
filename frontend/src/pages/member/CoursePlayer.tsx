@@ -195,14 +195,14 @@ export default function CoursePlayer() {
     if (!lessonSlug) return;
     const passed = (event: MessageEvent) => {
       if (event.origin !== window.location.origin) return;
-      if ((event.data as { type?: string } | null)?.type !== "boss-assessment-passed") return;
+      if (!["boss-assessment-passed", "boss-assessment-completed"].includes((event.data as { type?: string } | null)?.type ?? "")) return;
       void Promise.all([
         libraryApi.getProduct(productSlug),
         libraryApi.getLesson(productSlug, lessonSlug),
       ]).then(([freshProduct, freshLesson]) => {
         setProduct(freshProduct);
         setLessonData(freshLesson);
-        toast.success("Test passed — the next lesson is unlocked.");
+        toast.success("Assessment saved. Your lesson progress is up to date.");
       }).catch(() => undefined);
     };
     window.addEventListener("message", passed);
@@ -749,11 +749,12 @@ function NonCourseProduct({ product }: { product: LibraryProduct }) {
     return (
       <div className="flex flex-col gap-6">
         <ProductIntro title={product.title} description={product.description} />
+        {product.instructions && <section className="rounded-xl border border-white/10 p-5"><h2 className="mb-2 font-semibold text-white">Instructions</h2><p className="whitespace-pre-wrap text-sm text-orchid-dim">{product.instructions}</p></section>}
         {product.files.length > 0 ? (
           <Attachments files={product.files} kind="product" heading="Your files" />
         ) : (
           <p className="text-sm text-orchid-dim">
-            The files for this are being prepared. You will get an email as soon as they are ready.
+            The files for this are being prepared. Contact support if you need help accessing your purchase.
           </p>
         )}
       </div>

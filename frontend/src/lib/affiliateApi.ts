@@ -1,5 +1,5 @@
+import { sessionFetch } from "@/lib/adminTransport";
 import { memberRequest } from "@/lib/memberApi";
-import { getToken } from "@/lib/api";
 
 /**
  * The partner program's client, across all three surfaces it touches.
@@ -11,7 +11,7 @@ import { getToken } from "@/lib/api";
  *
  * The three helpers differ only in who they authenticate as: the partner portal
  * rides the member session, the application form is anonymous, and the console
- * carries the admin token. None of them re-implements refresh or error parsing;
+ * uses the admin session cookie. None of them re-implements refresh or error parsing;
  * the member side delegates to `memberRequest` for exactly that reason.
  *
  * Every money field is cents, and every `percent` is a real percentage (30, not
@@ -46,22 +46,20 @@ async function publicRequest<T>(path: string, init: RequestInit = {}): Promise<T
   if (!headers.has("Content-Type") && !(init.body instanceof FormData)) {
     headers.set("Content-Type", "application/json");
   }
-  const res = await fetch(`${API_BASE}${path}`, { ...init, headers });
+  const res = await sessionFetch(`${API_BASE}${path}`, { ...init, headers });
   if (!res.ok) throw await parseError(res);
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
 }
 
-/** The admin console's token, read from the same place lib/api.ts keeps it. */
+/** Admin requests share cookie transport with the rest of the console. */
 async function adminRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
   if (!headers.has("Content-Type") && !(init.body instanceof FormData)) {
     headers.set("Content-Type", "application/json");
   }
-  const token = getToken();
-  if (token) headers.set("Authorization", `Bearer ${token}`);
 
-  const res = await fetch(`${API_BASE}${path}`, { ...init, headers });
+  const res = await sessionFetch(`${API_BASE}${path}`, { ...init, headers });
   if (!res.ok) throw await parseError(res);
   if (res.status === 204) return undefined as T;
   return (await res.json()) as T;
@@ -413,15 +411,10 @@ export const adminAffiliateApi = {
   /**
    * The payment file.
    *
-   * Fetched with the admin token and turned into a download here rather than
-   * linked directly: a plain `<a href>` carries no Authorization header, so the
-   * link would answer 401 and hand the owner a file full of an error message.
+   * Cookie transport refreshes before fetching the spreadsheet bytes.
    */
   exportPayments: async (): Promise<void> => {
-    const token = getToken();
-    const res = await fetch(`${API_BASE}/admin/affiliates/payouts/export.csv`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    });
+    const res = await sessionFetch(`${API_BASE}/admin/affiliates/payouts/export.csv`);
     if (!res.ok) throw await parseError(res);
 
     const blob = await res.blob();

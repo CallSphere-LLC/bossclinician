@@ -75,6 +75,10 @@ export function hasMemberSessionHint(): boolean {
 export function MemberAuthProvider({ children }: { children: ReactNode }) {
   const [member, setMemberState] = useState<MemberProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [previewToken] = useState(() => {
+    if (typeof window === "undefined") return null;
+    return sessionStorage.getItem("bc_member_impersonation");
+  });
   const refreshTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const applySession = useCallback((profile: MemberProfile, token: string) => {
@@ -95,6 +99,14 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let cancelled = false;
 
+    if (previewToken) {
+      sessionStorage.removeItem("bc_member_impersonation");
+      setAccessToken(previewToken);
+      void memberApi.me().then((profile) => {
+        if (!cancelled) applySession(profile, previewToken);
+      }).catch(() => { if (!cancelled) clearSession(); }).finally(() => { if (!cancelled) setLoading(false); });
+      return () => { cancelled = true; };
+    }
     if (!hasMemberSessionHint()) {
       setLoading(false);
       return;
@@ -113,12 +125,12 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [applySession]);
+  }, [applySession, clearSession, previewToken]);
 
   // Refresh a couple of minutes before the 15-minute access token expires, so a
   // member reading a long lesson never gets bounced mid-scroll.
   useEffect(() => {
-    if (!member) return;
+    if (!member || member.impersonatedBy) return;
     refreshTimer.current = setInterval(
       () => {
         void memberApi

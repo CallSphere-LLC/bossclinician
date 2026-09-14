@@ -1,177 +1,36 @@
 import { z } from "zod";
-import { env } from "../config/env";
 import { pool } from "../db/pool";
-import { renderMarkdown, sendEmail } from "../email/provider";
 import { applyTags } from "../services/contacts";
-import { describeSession, signRegistration } from "../services/events";
+import { runReminderTick } from "../services/eventReminders";
 import { PRIORITY, enqueue } from "./queue";
 import { registerHandler } from "./worker";
 
 /**
  * Event reminders and the post-event split.
  *
- * `events.reminders` is already named by a row in `job_schedules` (every 15
- * minutes), so the kind is not free to change: a rename shows up as a job
- * failing rather than as reminders quietly never going out again.
+ * `events.reminders` is already named by a row in `job_schedules`, so the kind
+ * is not free to change: a rename shows up as a job failing rather than as
+ * reminders quietly never going out again.
  *
- * Every reminder is claimed before it is sent — the stamp goes down in its own
- * statement, and only a row this worker actually stamped is mailed. Two workers
- * ticking at the same second, or a redelivered job, then produce one email
- * rather than two. A send that fails puts the stamp back, so the next tick
- * retries instead of the reminder being silently lost, which is the failure
- * mode the other ordering has.
- */
-
-/** How many of each reminder one tick will send. */
-const BATCH = 200;
-
-type ReminderStep = "24h" | "1h" | "start";
-
-interface ReminderCopy {
-  column: string;
-  /** SQL predicate selecting the sessions this step is due for. */
-  due: string;
-  subject: (title: string) => string;
-  lead: (when: string) => string;
-}
-
-/**
- * The three reminders, and the windows that make them mean what they say.
+ * The reminders themselves used to live here as three hard-coded steps — 24
+ * hours, 1 hour, and the start — with their state held in three timestamp
+ * columns on the registration. That worked, but it was invisible: nothing in
+ * the event editor mentioned reminders, nothing recorded what went to whom, and
+ * a stamped column could not tell a reminder that reached somebody from one the
+ * provider refused. They now live in `services/eventReminders.ts`, configured
+ * per event and recorded per registrant, and the same three steps ship as
+ * defaults so no event loses the reminders it was already getting.
  *
- * The windows have a floor as well as a ceiling. Without one, somebody
- * registering for an evergreen session fifteen minutes out would be sent the
- * day-before reminder, the hour-before reminder and the it-is-starting one
- * inside a quarter of an hour — three emails saying three different things
- * about the same session.
+ * What stays here is the post-event split, which is about tags rather than mail.
  */
-const REMINDERS: Record<ReminderStep, ReminderCopy> = {
-  "24h": {
-    column: "reminder_24h_sent_at",
-    due: "r.session_at > now() + interval '12 hours' AND r.session_at <= now() + interval '24 hours'",
-    subject: (title) => `Tomorrow: ${title}`,
-    lead: (when) =>
-      `Your seat is booked for **${when}**. Nothing to prepare — bring a notebook and whatever is on your mind about your practice.`,
-  },
-  "1h": {
-    column: "reminder_1h_sent_at",
-    due: "r.session_at > now() + interval '25 minutes' AND r.session_at <= now() + interval '1 hour'",
-    subject: (title) => `Starting in an hour: ${title}`,
-    lead: (when) => `We start at **${when}**. Here is your link — it opens ten minutes early.`,
-  },
-  start: {
-    column: "reminder_start_sent_at",
-    due: "r.session_at <= now() + interval '5 minutes' AND r.session_at > now() - interval '15 minutes'",
-    subject: (title) => `We're live: ${title}`,
-    lead: () => `We are starting now. Come on in.`,
-  },
-};
-
-interface DueRow {
-  id: string;
-  email: string;
-  name: string;
-  contact_id: number | null;
-  session_at: Date;
-  event_id: number;
-  slug: string;
-  title: string;
-  timezone: string;
-}
-
-/**
- * Claims the reminders of one step that have come due.
- *
- * The stamp and the selection are one statement: a row this returns is a row
- * nothing else can also claim. `SKIP LOCKED` keeps two workers from queueing
- * behind each other on the same batch rather than each taking their own.
- */
-async function claimDue(step: ReminderStep): Promise<DueRow[]> {
-  const copy = REMINDERS[step];
-  // The column and predicate come from the fixed record above, keyed by a union
-  // type, so nothing a caller passes can reach the statement.
-  const res = await pool.query<DueRow>(
-    `WITH due AS (
-       SELECT r.id
-         FROM event_registrations r
-         JOIN events e ON e.id = r.event_id
-        WHERE r.${copy.column} IS NULL
-          AND e.published
-          AND ${copy.due}
-        ORDER BY r.session_at
-        LIMIT $1
-        FOR UPDATE OF r SKIP LOCKED
-     )
-     UPDATE event_registrations r
-        SET ${copy.column} = now()
-       FROM due, events e
-      WHERE r.id = due.id AND e.id = r.event_id
-      RETURNING r.id, r.email::text AS email, r.name, r.contact_id, r.session_at,
-                e.id AS event_id, e.slug::text AS slug, e.title, e.timezone`,
-    [BATCH]
-  );
-  return res.rows;
-}
-
-/** Puts a claimed reminder back, so the next tick retries it. */
-async function releaseClaim(step: ReminderStep, registrationId: string): Promise<void> {
-  await pool.query(
-    `UPDATE event_registrations SET ${REMINDERS[step].column} = NULL WHERE id = $1`,
-    [registrationId]
-  );
-}
-
-async function sendReminder(step: ReminderStep, row: DueRow): Promise<void> {
-  const copy = REMINDERS[step];
-  const when = describeSession(row.session_at, row.timezone);
-  const link = `${env.publicSiteUrl}/events/${row.slug}/room?ticket=${signRegistration(Number(row.id))}`;
-  const greeting = row.name.trim().split(/\s+/)[0] || "there";
-
-  const body = [
-    `Hi ${greeting},`,
-    ``,
-    copy.lead(when),
-    ``,
-    `[Join ${row.title}](${link})`,
-  ].join("\n");
-
-  await sendEmail({
-    to: row.email,
-    subject: copy.subject(row.title),
-    text: body,
-    html: renderMarkdown(body),
-    contactId: row.contact_id,
-    // Transactional: they asked for this session, and a reminder they opted
-    // out of receiving is a seat they booked and were never told about.
-    sourceType: "transactional",
-    sourceId: row.event_id,
-  });
-}
 
 /**
  * Sends every reminder that has come due, and queues the split for sessions
  * that have finished.
  */
 export async function sweepEventReminders(): Promise<Record<string, number>> {
-  const sent: Record<string, number> = { "24h": 0, "1h": 0, start: 0, splitsQueued: 0 };
-
-  for (const step of Object.keys(REMINDERS) as ReminderStep[]) {
-    for (const row of await claimDue(step)) {
-      try {
-        await sendReminder(step, row);
-        sent[step] += 1;
-      } catch (err) {
-        await releaseClaim(step, row.id).catch(() => undefined);
-        // One bad address must not cost the rest of the batch its reminders.
-        console.error(
-          `[events] ${step} reminder to ${row.email} failed:`,
-          err instanceof Error ? err.message : err
-        );
-      }
-    }
-  }
-
-  sent.splitsQueued = await queueFinishedEvents();
-  return sent;
+  const reminders = await runReminderTick();
+  return { ...reminders, splitsQueued: await queueFinishedEvents() };
 }
 
 /**

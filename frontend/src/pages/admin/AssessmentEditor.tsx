@@ -980,17 +980,25 @@ export default function AssessmentEditor() {
         ),
       },
       {
+        id: "responses",
+        header: "Answers",
+        cell: ({ row }) => <details className="max-w-sm whitespace-normal text-xs"><summary className="cursor-pointer">View responses</summary>{(row.original.responses ?? []).map(response => {
+          const question = detail?.questions.find(question => question.id === response.questionId);
+          return <p className="mt-2" key={response.questionId}><strong>{question?.prompt ?? "Question"}</strong>: {response.text || question?.answers.filter(answer => response.answerIds?.includes(answer.id)).map(answer => answer.label).join(", ") || "No answer"}</p>;
+        })}</details>,
+      },
+      {
         accessorKey: "resultTitle",
         header: "What they were shown",
         cell: ({ row }) =>
           row.original.resultTitle ? (
             <span className="text-sm text-ink">{row.original.resultTitle}</span>
           ) : (
-            <span className="text-sm text-red-300">No result matched their score</span>
+            <span className="text-sm text-ink-soft">{detail?.kind === "quiz" ? "No result matched their score" : "Response saved"}</span>
           ),
       },
     ],
-    [],
+    [detail],
   );
 
   if (error) {
@@ -1014,11 +1022,12 @@ export default function AssessmentEditor() {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow={graded ? "Graded test" : "Quiz"}
+        eyebrow={graded ? "Graded test" : detail.kind === "survey" ? "Survey" : "Quiz"}
         title={detail.title}
-        description={`People take it at ${webAddress("quiz", detail.slug)}`}
+        description={detail.lessonId ? "Students take this inside their course lesson." : `People take it at ${webAddress("quiz", detail.slug)}`}
         actions={
           <>
+            {detail.courseId && <Button asChild size="sm" variant="secondary"><Link to={`/admin/courses/${detail.courseId}/curriculum`}><ArrowLeft />Back to course</Link></Button>}
             <Badge tone={detail.published ? "green" : "slate"}>
               {publishLabel(detail.published)}
             </Badge>
@@ -1038,6 +1047,9 @@ export default function AssessmentEditor() {
                   requireEmail: detail.requireEmail,
                   showFeedback: detail.showFeedback,
                   passMark: detail.passMark,
+                  requirePass: detail.requirePass,
+                  passMessage: detail.passMessage,
+                  failMessage: detail.failMessage,
                   maxAttempts: detail.maxAttempts,
                   published: detail.published,
                 })
@@ -1050,11 +1062,12 @@ export default function AssessmentEditor() {
         }
       />
 
+      {detail.courseId && !detail.lessonPublished && <Card className="p-4 text-sm text-ink-soft">This lesson is still a draft. After finishing and publishing this assessment in Settings, use Back to course to publish the lesson.</Card>}
+
       <Card className="flex flex-wrap items-center gap-3 border-gold/25 p-4">
         <p className="min-w-0 flex-1 text-sm leading-relaxed text-ink-soft">
-          Every answer is worth some points. Add up the points from everything somebody picks and
-          that total is their score — and their score is what decides which result they are shown.
-          Text saves after you pause typing and immediately when you move to the next box.
+          {detail.kind === "survey" ? "Collect feedback with choice, rating and written questions. Surveys save responses without a pass mark." : graded ? "Mark the correct answers, then choose a pass mark and whether passing is required in Settings." : "Every answer is worth some points. The total score decides which result someone sees."}
+          {" "}Text saves after you pause typing and immediately when you move to the next box.
         </p>
         <Badge
           tone={inlineSaveState === "error" ? "red" : inlineSaveState === "saving" ? "blue" : "green"}
@@ -1072,7 +1085,7 @@ export default function AssessmentEditor() {
       <Card>
         <CardHeader
           title="Questions"
-          subtitle="People answer these in order. Set the points each answer is worth."
+          subtitle={detail.kind === "survey" ? "Choose the questions and response options." : graded ? "Add questions and mark the correct answers." : "People answer these in order. Set the points each answer is worth."}
           icon={<ClipboardList />}
           action={
             <Button size="sm" onClick={() => void addQuestion()}>
@@ -1185,16 +1198,16 @@ export default function AssessmentEditor() {
         {report && (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <StatTile label="Finished it" value={String(report.attempts)} />
-            <StatTile label="Average score" value={`${report.averagePercent}%`} />
-            <StatTile
+            {detail.kind !== "survey" && <StatTile label="Average score" value={`${report.averagePercent}%`} />}
+            {detail.kind !== "survey" && <StatTile
               label={graded ? "Passed" : "Shown a result"}
               value={String(graded ? report.passed : report.attempts - report.unmatched)}
-            />
-            <StatTile label="Shown nothing" value={String(report.unmatched)} />
+            />}
+            {detail.kind === "quiz" && <StatTile label="Shown nothing" value={String(report.unmatched)} />}
           </div>
         )}
 
-        {report && report.unmatched > 0 && (
+        {detail.kind === "quiz" && report && report.unmatched > 0 && (
           <div
             role="alert"
             className="flex items-start gap-3 rounded-xl border border-red-400/30 bg-red-500/10 px-4 py-3 text-sm leading-relaxed text-red-200"
@@ -1303,6 +1316,13 @@ export default function AssessmentEditor() {
               </div>
             )}
 
+            {graded && <div className="space-y-4">
+              <label className="flex items-center gap-3 text-sm"><input type="checkbox" checked={settings.requirePass !== false} onChange={event => setSettings(current => ({...current,requirePass:event.target.checked}))} />Require a pass before the next lesson unlocks</label>
+              <Field label="Message after passing"><Textarea value={settings.passMessage ?? ""} onChange={event => setSettings(current => ({...current,passMessage:event.target.value}))} /></Field>
+              <Field label="Message after failing"><Textarea value={settings.failMessage ?? ""} onChange={event => setSettings(current => ({...current,failMessage:event.target.value}))} /></Field>
+              <p className="text-xs text-ink-soft">A failed attempt can be retried while attempts remain. With this off, submitting completes the assessment lesson; the next lesson follows its own prerequisite setting.</p>
+            </div>}
+
             <label className="flex cursor-pointer items-start gap-2.5 text-sm text-ink">
               <input
                 type="checkbox"
@@ -1350,7 +1370,7 @@ export default function AssessmentEditor() {
                 Live on your site
                 <span className="mt-0.5 block text-xs text-ink-soft">
                   {settings.published
-                    ? `Anyone can take it at ${webAddress("quiz", detail.slug)}.`
+                    ? detail.lessonId ? "Enrolled students can take it when its course lesson is published and unlocked." : `Anyone can take it at ${webAddress("quiz", detail.slug)}.`
                     : "Nobody can take it yet."}
                 </span>
               </span>

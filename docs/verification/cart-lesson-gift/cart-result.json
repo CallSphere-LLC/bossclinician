@@ -1,0 +1,10 @@
+{
+  "errors": [],
+  "persistedItems": 3,
+  "subtotal": "$171.00",
+  "orderId": 2,
+  "requiresPayment": false,
+  "cartCleared": true,
+  "finalPath": "/checkout/success",
+  "recipientLibraryCount": 3
+}

@@ -11,8 +11,10 @@ import {
   Tag,
   Trash2,
 } from "lucide-react";
+import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { adminApi } from "@/lib/api";
+import { downloadAdminDocument } from "@/lib/adminReceipt";
 import { adminCommerceApi, PRODUCT_KIND, type Offer, type Product } from "@/lib/adminCommerceApi";
 import type { Coupon, Invoice, Payment, Plan, Subscription } from "@/types/admin";
 import { formatCurrency, formatDate } from "@/lib/format";
@@ -829,7 +831,27 @@ export function InvoicesPage() {
         accessorKey: "email",
         header: "Who",
         cell: ({ row }) => (
-          <span className="font-semibold text-ink">{row.original.email || "No email given"}</span>
+          <div className="min-w-0">
+            <span className="block font-semibold text-ink">
+              {row.original.memberName || row.original.email || "No email given"}
+            </span>
+            {row.original.memberName && row.original.email && (
+              <span className="block text-xs text-ink-soft">{row.original.email}</span>
+            )}
+          </div>
+        ),
+      },
+      {
+        accessorKey: "description",
+        header: "What for",
+        cell: ({ row }) => (
+          <div className="min-w-0">
+            <span className="block text-sm text-ink">{row.original.description || "Purchase"}</span>
+            <span className="block text-xs text-ink-soft">
+              {row.original.kindLabel || "Subscription"}
+              {row.original.number ? ` · ${row.original.number}` : ""}
+            </span>
+          </div>
         ),
       },
       {
@@ -859,17 +881,42 @@ export function InvoicesPage() {
         id: "actions",
         header: "",
         enableSorting: false,
-        cell: ({ row }) =>
-          row.original.hostedInvoiceUrl ? (
-            <RowActions>
+        cell: ({ row }) => (
+          <RowActions>
+            {/* Our own copy of what the member holds. It exists for every
+                payment now, including the one-off purchases that used to have
+                no receipt document at all. */}
+            {/* A link to the receipt's own admin page, in this tab; the PDF
+                is saved by the browser's download, not opened in a window. */}
+            {row.original.receiptUrl && (
+              <Button asChild variant="ghost" size="sm">
+                <Link to={`/admin/sales/invoices/${row.original.id}/receipt`}>See the receipt</Link>
+              </Button>
+            )}
+            {row.original.receiptPdfUrl && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  void downloadAdminDocument(
+                    `/admin/sales/invoices/${row.original.id}/receipt.pdf`,
+                    `receipt-${row.original.id}.pdf`,
+                  ).catch(() => toast.error("We could not download that receipt just now."));
+                }}
+              >
+                PDF
+              </Button>
+            )}
+            {row.original.hostedInvoiceUrl && (
               <Button asChild variant="ghost" size="sm">
                 <a href={row.original.hostedInvoiceUrl} target="_blank" rel="noreferrer">
-                  See the receipt
+                  Open in Stripe
                   <ExternalLink />
                 </a>
               </Button>
-            </RowActions>
-          ) : null,
+            )}
+          </RowActions>
+        ),
       },
     ],
     [],
@@ -879,8 +926,8 @@ export function InvoicesPage() {
     <div className="space-y-6">
       <PageHeader
         eyebrow="Sales"
-        title="Invoices"
-        description="A receipt for every payment a member has made towards one of your plans."
+        title="Invoices & receipts"
+        description="A receipt for every payment a member has made — one-off purchases as well as plan renewals."
       />
       <StripeBanner />
       {error && <ErrorNotice message={error} />}
@@ -892,8 +939,8 @@ export function InvoicesPage() {
         emptyState={
           <EmptyState
             icon={<Receipt />}
-            title="No invoices yet"
-            description="Each time a member's payment goes through, their receipt lands here."
+            title="No payments yet"
+            description="Every purchase and every renewal lands here with the receipt the member was sent."
           />
         }
       />

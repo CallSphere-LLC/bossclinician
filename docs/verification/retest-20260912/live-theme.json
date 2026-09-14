@@ -1,0 +1,2702 @@
+[
+  {
+    "path": "/",
+    "width": 390,
+    "expectedMode": "light",
+    "mode": "light",
+    "overflow": false,
+    "sections": [
+      {
+        "tag": "HEADER",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "FOOTER",
+        "bg": "rgb(255, 255, 255)"
+      }
+    ],
+    "headings": [
+      {
+        "text": "Own your practice.Build your legacy.",
+        "color": "rgb(30, 24, 40)"
+      },
+      {
+        "text": "You need three things, and they're all here.",
+        "color": "rgb(30, 24, 40)"
+      },
+      {
+        "text": "You built your practice to create freedom.So why d",
+        "color": "rgb(30, 24, 40)"
+      }
+    ],
+    "grain": "-1",
+    "images": [
+      {
+        "src": "https://bossclinician.callsphere.site/images/yvette-hero-portrait.jpg",
+        "alt": "Yvette Howard, LCSW, Private Practice Strategist and founder of Boss Clinician",
+        "loaded": true,
+        "effects": [],
+        "overlays": []
+      },
+      {
+        "src": "https://bossclinician.callsphere.site/images/yvette-meet-portrait.jpg",
+        "alt": "Yvette Howard, LCSW, founder of Boss Clinician, holding a mug",
+        "loaded": true,
+        "effects": [],
+        "overlays": []
+      },
+      {
+        "src": "https://lightwidget.com/widgets/06ef2db14840566cbcf395b4a422fe14.html",
+        "alt": "Latest posts from @bossclinician on Instagram",
+        "loaded": true,
+        "effects": [],
+        "overlays": []
+      }
+    ],
+    "errors": []
+  },
+  {
+    "path": "/about",
+    "width": 390,
+    "expectedMode": "light",
+    "mode": "light",
+    "overflow": false,
+    "sections": [
+      {
+        "tag": "HEADER",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "FOOTER",
+        "bg": "rgb(255, 255, 255)"
+      }
+    ],
+    "headings": [
+      {
+        "text": "I'm Yvette Howard.I've been exactly where you are.",
+        "color": "rgb(30, 24, 40)"
+      },
+      {
+        "text": "I wasn't supposed to become a therapist.",
+        "color": "rgb(30, 24, 40)"
+      },
+      {
+        "text": "So I took the leap nervous, unprepared, and pregna",
+        "color": "rgb(30, 24, 40)"
+      }
+    ],
+    "grain": "-1",
+    "images": [
+      {
+        "src": "https://bossclinician.callsphere.site/images/af3deab11f02.jpg",
+        "alt": "Yvette Howard, LCSW, Private Practice Strategist and founder of Boss Clinician",
+        "loaded": true,
+        "effects": [],
+        "overlays": []
+      },
+      {
+        "src": "https://bossclinician.callsphere.site/images/yvette-hero-seated.jpg",
+        "alt": "Yvette Howard, LCSW, away from the therapy room",
+        "loaded": true,
+        "effects": [],
+        "overlays": []
+      }
+    ],
+    "errors": []
+  },
+  {
+    "path": "/work-with-me",
+    "width": 390,
+    "expectedMode": "light",
+    "mode": "light",
+    "overflow": false,
+    "sections": [
+      {
+        "tag": "HEADER",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "FOOTER",
+        "bg": "rgb(255, 255, 255)"
+      }
+    ],
+    "headings": [
+      {
+        "text": "Built to heal others.Now let's build something tha",
+        "color": "rgb(30, 24, 40)"
+      },
+      {
+        "text": "You did everything they told you to do. And you're",
+        "color": "rgb(30, 24, 40)"
+      },
+      {
+        "text": "This work is for the clinician who is ready — not ",
+        "color": "rgb(30, 24, 40)"
+      }
+    ],
+    "grain": "-1",
+    "images": [
+      {
+        "src": "https://bossclinician.callsphere.site/images/758479b0818b.png",
+        "alt": "Yvette Howard, private practice strategist for therapists and clinicians",
+        "loaded": true,
+        "effects": [],
+        "overlays": []
+      }
+    ],
+    "errors": []
+  },
+  {
+    "path": "/resource-hub",
+    "width": 390,
+    "expectedMode": "light",
+    "mode": "light",
+    "overflow": false,
+    "sections": [
+      {
+        "tag": "HEADER",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "FOOTER",
+        "bg": "rgb(255, 255, 255)"
+      }
+    ],
+    "headings": [
+      {
+        "text": "Everything you need to build your practice— wherev",
+        "color": "rgb(30, 24, 40)"
+      },
+      {
+        "text": "Every clinician is at a different stage.",
+        "color": "rgb(30, 24, 40)"
+      },
+      {
+        "text": "Just starting — or starting over.",
+        "color": "rgb(30, 24, 40)"
+      }
+    ],
+    "grain": "-1",
+    "images": [
+      {
+        "src": "https://bossclinician.callsphere.site/images/yvette-hero-portrait.jpg",
+        "alt": "Yvette Howard, LCSW — Private Practice Strategist at her desk",
+        "loaded": true,
+        "effects": [],
+        "overlays": []
+      },
+      {
+        "src": "https://bossclinician.callsphere.site/images/yvette-meet-portrait.jpg",
+        "alt": "Yvette Howard, LCSW — Private Practice Strategist, Boss Clinician",
+        "loaded": true,
+        "effects": [],
+        "overlays": []
+      }
+    ],
+    "errors": []
+  },
+  {
+    "path": "/contact",
+    "width": 390,
+    "expectedMode": "light",
+    "mode": "light",
+    "overflow": false,
+    "sections": [
+      {
+        "tag": "HEADER",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "FOOTER",
+        "bg": "rgb(255, 255, 255)"
+      }
+    ],
+    "headings": [
+      {
+        "text": "Hey There!",
+        "color": "rgb(30, 24, 40)"
+      },
+      {
+        "text": "Ask me here",
+        "color": "rgb(30, 24, 40)"
+      },
+      {
+        "text": "Write to me from your own inbox.",
+        "color": "rgb(30, 24, 40)"
+      }
+    ],
+    "grain": "-1",
+    "images": [
+      {
+        "src": "https://bossclinician.callsphere.site/images/f5f2cec6b858.jpg",
+        "alt": "Yvette Howard",
+        "loaded": true,
+        "effects": [],
+        "overlays": []
+      }
+    ],
+    "errors": []
+  },
+  {
+    "path": "/blog",
+    "width": 390,
+    "expectedMode": "light",
+    "mode": "light",
+    "overflow": false,
+    "sections": [
+      {
+        "tag": "HEADER",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "FOOTER",
+        "bg": "rgb(255, 255, 255)"
+      }
+    ],
+    "headings": [
+      {
+        "text": "BEST OF",
+        "color": "rgb(30, 24, 40)"
+      },
+      {
+        "text": "Test",
+        "color": "rgb(30, 24, 40)"
+      },
+      {
+        "text": "Why Your Private Practice Marketing Isn’t Working ",
+        "color": "rgb(30, 24, 40)"
+      }
+    ],
+    "grain": "-1",
+    "images": [
+      {
+        "src": "https://bossclinician.callsphere.site/images/yvette-hero-portrait.jpg",
+        "alt": "Yvette Howard private practice consultant and therapist business strategist",
+        "loaded": true,
+        "effects": [],
+        "overlays": []
+      }
+    ],
+    "errors": []
+  },
+  {
+    "path": "/courses",
+    "width": 390,
+    "expectedMode": "light",
+    "mode": "light",
+    "overflow": false,
+    "sections": [
+      {
+        "tag": "HEADER",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "FOOTER",
+        "bg": "rgb(255, 255, 255)"
+      }
+    ],
+    "headings": [
+      {
+        "text": "Ready to Start, Grow, & ScaleYour Private Practice",
+        "color": "rgb(30, 24, 40)"
+      },
+      {
+        "text": "Boss ClinicianMission",
+        "color": "rgb(30, 24, 40)"
+      },
+      {
+        "text": "Explore the Boss Clinician Training Library →",
+        "color": "rgb(30, 24, 40)"
+      }
+    ],
+    "grain": "-1",
+    "images": [
+      {
+        "src": "https://bossclinician.callsphere.site/images/faff351d997d.png",
+        "alt": "Yvette Howard, private practice strategist for therapists and clinicians",
+        "loaded": true,
+        "effects": [],
+        "overlays": []
+      }
+    ],
+    "errors": []
+  },
+  {
+    "path": "/retreats",
+    "width": 390,
+    "expectedMode": "light",
+    "mode": "light",
+    "overflow": false,
+    "sections": [
+      {
+        "tag": "HEADER",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "FOOTER",
+        "bg": "rgb(255, 255, 255)"
+      }
+    ],
+    "headings": [
+      {
+        "text": "You have been taking care of everyone.When was the",
+        "color": "rgb(30, 24, 40)"
+      },
+      {
+        "text": "Designed for the women who hold space for everyone",
+        "color": "rgb(30, 24, 40)"
+      },
+      {
+        "text": "This is not a training.This is a retreat.",
+        "color": "rgb(30, 24, 40)"
+      }
+    ],
+    "grain": "-1",
+    "images": [
+      {
+        "src": "https://bossclinician.callsphere.site/images/migrated-9f074ef824a3.png",
+        "alt": "Yvette Howard, LCSW",
+        "loaded": true,
+        "effects": [],
+        "overlays": []
+      }
+    ],
+    "errors": []
+  },
+  {
+    "path": "/login",
+    "width": 390,
+    "expectedMode": "light",
+    "mode": "light",
+    "overflow": false,
+    "sections": [],
+    "headings": [
+      {
+        "text": "Welcome back",
+        "color": "rgb(30, 24, 40)"
+      }
+    ],
+    "grain": "-1",
+    "images": [],
+    "errors": []
+  },
+  {
+    "path": "/quiz/zz-test-practice-quiz",
+    "width": 390,
+    "expectedMode": "light",
+    "mode": "light",
+    "overflow": false,
+    "sections": [
+      {
+        "tag": "HEADER",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "FOOTER",
+        "bg": "rgb(255, 255, 255)"
+      }
+    ],
+    "headings": [
+      {
+        "text": "ZZ Test — practice quiz",
+        "color": "rgb(30, 24, 40)"
+      }
+    ],
+    "grain": "-1",
+    "images": [],
+    "errors": []
+  },
+  {
+    "path": "/",
+    "width": 390,
+    "expectedMode": "dark",
+    "mode": "dark",
+    "overflow": false,
+    "sections": [
+      {
+        "tag": "HEADER",
+        "bg": "rgba(6, 4, 11, 0.94)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(6, 4, 11)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(10, 7, 19)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(6, 4, 11)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(10, 7, 19)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(16, 11, 28)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(6, 4, 11)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(16, 11, 28)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(10, 7, 19)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(6, 4, 11)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(10, 7, 19)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(6, 4, 11)"
+      },
+      {
+        "tag": "FOOTER",
+        "bg": "rgb(6, 4, 11)"
+      }
+    ],
+    "headings": [
+      {
+        "text": "Own your practice.Build your legacy.",
+        "color": "rgb(255, 255, 255)"
+      },
+      {
+        "text": "You need three things, and they're all here.",
+        "color": "rgb(255, 255, 255)"
+      },
+      {
+        "text": "You built your practice to create freedom.So why d",
+        "color": "rgb(255, 255, 255)"
+      }
+    ],
+    "grain": "-1",
+    "images": [
+      {
+        "src": "https://bossclinician.callsphere.site/images/yvette-hero-portrait.jpg",
+        "alt": "Yvette Howard, LCSW, Private Practice Strategist and founder of Boss Clinician",
+        "loaded": true,
+        "effects": [],
+        "overlays": []
+      },
+      {
+        "src": "https://bossclinician.callsphere.site/images/yvette-meet-portrait.jpg",
+        "alt": "Yvette Howard, LCSW, founder of Boss Clinician, holding a mug",
+        "loaded": true,
+        "effects": [],
+        "overlays": []
+      },
+      {
+        "src": "https://lightwidget.com/widgets/06ef2db14840566cbcf395b4a422fe14.html",
+        "alt": "Latest posts from @bossclinician on Instagram",
+        "loaded": true,
+        "effects": [],
+        "overlays": []
+      }
+    ],
+    "errors": []
+  },
+  {
+    "path": "/about",
+    "width": 390,
+    "expectedMode": "dark",
+    "mode": "dark",
+    "overflow": false,
+    "sections": [
+      {
+        "tag": "HEADER",
+        "bg": "rgba(6, 4, 11, 0.94)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(6, 4, 11)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(10, 7, 19)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(16, 11, 28)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(10, 7, 19)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(16, 11, 28)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(10, 7, 19)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(6, 4, 11)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(10, 7, 19)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(16, 11, 28)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(10, 7, 19)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(6, 4, 11)"
+      },
+      {
+        "tag": "FOOTER",
+        "bg": "rgb(6, 4, 11)"
+      }
+    ],
+    "headings": [
+      {
+        "text": "I'm Yvette Howard.I've been exactly where you are.",
+        "color": "rgb(255, 255, 255)"
+      },
+      {
+        "text": "I wasn't supposed to become a therapist.",
+        "color": "rgb(255, 255, 255)"
+      },
+      {
+        "text": "So I took the leap nervous, unprepared, and pregna",
+        "color": "rgb(255, 255, 255)"
+      }
+    ],
+    "grain": "-1",
+    "images": [
+      {
+        "src": "https://bossclinician.callsphere.site/images/af3deab11f02.jpg",
+        "alt": "Yvette Howard, LCSW, Private Practice Strategist and founder of Boss Clinician",
+        "loaded": true,
+        "effects": [],
+        "overlays": []
+      },
+      {
+        "src": "https://bossclinician.callsphere.site/images/yvette-hero-seated.jpg",
+        "alt": "Yvette Howard, LCSW, away from the therapy room",
+        "loaded": true,
+        "effects": [],
+        "overlays": []
+      }
+    ],
+    "errors": []
+  },
+  {
+    "path": "/work-with-me",
+    "width": 390,
+    "expectedMode": "dark",
+    "mode": "dark",
+    "overflow": false,
+    "sections": [
+      {
+        "tag": "HEADER",
+        "bg": "rgba(6, 4, 11, 0.94)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(6, 4, 11)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(10, 7, 19)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(16, 11, 28)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(6, 4, 11)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(10, 7, 19)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(16, 11, 28)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(10, 7, 19)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(6, 4, 11)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(16, 11, 28)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(10, 7, 19)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(16, 11, 28)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(6, 4, 11)"
+      },
+      {
+        "tag": "FOOTER",
+        "bg": "rgb(6, 4, 11)"
+      }
+    ],
+    "headings": [
+      {
+        "text": "Built to heal others.Now let's build something tha",
+        "color": "rgb(255, 255, 255)"
+      },
+      {
+        "text": "You did everything they told you to do. And you're",
+        "color": "rgb(255, 255, 255)"
+      },
+      {
+        "text": "This work is for the clinician who is ready — not ",
+        "color": "rgb(255, 255, 255)"
+      }
+    ],
+    "grain": "-1",
+    "images": [
+      {
+        "src": "https://bossclinician.callsphere.site/images/758479b0818b.png",
+        "alt": "Yvette Howard, private practice strategist for therapists and clinicians",
+        "loaded": true,
+        "effects": [],
+        "overlays": []
+      }
+    ],
+    "errors": []
+  },
+  {
+    "path": "/resource-hub",
+    "width": 390,
+    "expectedMode": "dark",
+    "mode": "dark",
+    "overflow": false,
+    "sections": [
+      {
+        "tag": "HEADER",
+        "bg": "rgba(6, 4, 11, 0.94)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(6, 4, 11)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(10, 7, 19)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(16, 11, 28)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(6, 4, 11)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(10, 7, 19)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(16, 11, 28)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(10, 7, 19)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(6, 4, 11)"
+      },
+      {
+        "tag": "FOOTER",
+        "bg": "rgb(6, 4, 11)"
+      }
+    ],
+    "headings": [
+      {
+        "text": "Everything you need to build your practice— wherev",
+        "color": "rgb(255, 255, 255)"
+      },
+      {
+        "text": "Every clinician is at a different stage.",
+        "color": "rgb(255, 255, 255)"
+      },
+      {
+        "text": "Just starting — or starting over.",
+        "color": "rgb(255, 255, 255)"
+      }
+    ],
+    "grain": "-1",
+    "images": [
+      {
+        "src": "https://bossclinician.callsphere.site/images/yvette-hero-portrait.jpg",
+        "alt": "Yvette Howard, LCSW — Private Practice Strategist at her desk",
+        "loaded": true,
+        "effects": [],
+        "overlays": []
+      },
+      {
+        "src": "https://bossclinician.callsphere.site/images/yvette-meet-portrait.jpg",
+        "alt": "Yvette Howard, LCSW — Private Practice Strategist, Boss Clinician",
+        "loaded": true,
+        "effects": [],
+        "overlays": []
+      }
+    ],
+    "errors": []
+  },
+  {
+    "path": "/contact",
+    "width": 390,
+    "expectedMode": "dark",
+    "mode": "dark",
+    "overflow": false,
+    "sections": [
+      {
+        "tag": "HEADER",
+        "bg": "rgba(6, 4, 11, 0.94)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(6, 4, 11)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(16, 11, 28)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(10, 7, 19)"
+      },
+      {
+        "tag": "FOOTER",
+        "bg": "rgb(6, 4, 11)"
+      }
+    ],
+    "headings": [
+      {
+        "text": "Hey There!",
+        "color": "rgb(255, 255, 255)"
+      },
+      {
+        "text": "Ask me here",
+        "color": "rgb(255, 255, 255)"
+      },
+      {
+        "text": "Write to me from your own inbox.",
+        "color": "rgb(255, 255, 255)"
+      }
+    ],
+    "grain": "-1",
+    "images": [
+      {
+        "src": "https://bossclinician.callsphere.site/images/f5f2cec6b858.jpg",
+        "alt": "Yvette Howard",
+        "loaded": true,
+        "effects": [],
+        "overlays": []
+      }
+    ],
+    "errors": []
+  },
+  {
+    "path": "/blog",
+    "width": 390,
+    "expectedMode": "dark",
+    "mode": "dark",
+    "overflow": false,
+    "sections": [
+      {
+        "tag": "HEADER",
+        "bg": "rgba(6, 4, 11, 0.94)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(6, 4, 11)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(10, 7, 19)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(16, 11, 28)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(10, 7, 19)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(6, 4, 11)"
+      },
+      {
+        "tag": "FOOTER",
+        "bg": "rgb(6, 4, 11)"
+      }
+    ],
+    "headings": [
+      {
+        "text": "BEST OF",
+        "color": "rgb(255, 255, 255)"
+      },
+      {
+        "text": "Test",
+        "color": "rgb(255, 255, 255)"
+      },
+      {
+        "text": "Why Your Private Practice Marketing Isn’t Working ",
+        "color": "rgb(255, 255, 255)"
+      }
+    ],
+    "grain": "-1",
+    "images": [
+      {
+        "src": "https://bossclinician.callsphere.site/images/yvette-hero-portrait.jpg",
+        "alt": "Yvette Howard private practice consultant and therapist business strategist",
+        "loaded": true,
+        "effects": [],
+        "overlays": []
+      }
+    ],
+    "errors": []
+  },
+  {
+    "path": "/courses",
+    "width": 390,
+    "expectedMode": "dark",
+    "mode": "dark",
+    "overflow": false,
+    "sections": [
+      {
+        "tag": "HEADER",
+        "bg": "rgba(6, 4, 11, 0.94)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(6, 4, 11)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(16, 11, 28)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(10, 7, 19)"
+      },
+      {
+        "tag": "FOOTER",
+        "bg": "rgb(6, 4, 11)"
+      }
+    ],
+    "headings": [
+      {
+        "text": "Ready to Start, Grow, & ScaleYour Private Practice",
+        "color": "rgb(255, 255, 255)"
+      },
+      {
+        "text": "Boss ClinicianMission",
+        "color": "rgb(255, 255, 255)"
+      },
+      {
+        "text": "Explore the Boss Clinician Training Library →",
+        "color": "rgb(255, 255, 255)"
+      }
+    ],
+    "grain": "-1",
+    "images": [
+      {
+        "src": "https://bossclinician.callsphere.site/images/faff351d997d.png",
+        "alt": "Yvette Howard, private practice strategist for therapists and clinicians",
+        "loaded": true,
+        "effects": [],
+        "overlays": []
+      }
+    ],
+    "errors": []
+  },
+  {
+    "path": "/retreats",
+    "width": 390,
+    "expectedMode": "dark",
+    "mode": "dark",
+    "overflow": false,
+    "sections": [
+      {
+        "tag": "HEADER",
+        "bg": "rgba(6, 4, 11, 0.94)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(6, 4, 11)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(16, 11, 28)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(10, 7, 19)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(16, 11, 28)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(6, 4, 11)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(10, 7, 19)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(16, 11, 28)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(6, 4, 11)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(10, 7, 19)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(16, 11, 28)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(6, 4, 11)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(10, 7, 19)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(16, 11, 28)"
+      },
+      {
+        "tag": "FOOTER",
+        "bg": "rgb(6, 4, 11)"
+      }
+    ],
+    "headings": [
+      {
+        "text": "You have been taking care of everyone.When was the",
+        "color": "rgb(255, 255, 255)"
+      },
+      {
+        "text": "Designed for the women who hold space for everyone",
+        "color": "rgb(255, 255, 255)"
+      },
+      {
+        "text": "This is not a training.This is a retreat.",
+        "color": "rgb(255, 255, 255)"
+      }
+    ],
+    "grain": "-1",
+    "images": [
+      {
+        "src": "https://bossclinician.callsphere.site/images/migrated-9f074ef824a3.png",
+        "alt": "Yvette Howard, LCSW",
+        "loaded": true,
+        "effects": [],
+        "overlays": []
+      }
+    ],
+    "errors": []
+  },
+  {
+    "path": "/login",
+    "width": 390,
+    "expectedMode": "dark",
+    "mode": "dark",
+    "overflow": false,
+    "sections": [],
+    "headings": [
+      {
+        "text": "Welcome back",
+        "color": "rgb(255, 255, 255)"
+      }
+    ],
+    "grain": "-1",
+    "images": [],
+    "errors": []
+  },
+  {
+    "path": "/quiz/zz-test-practice-quiz",
+    "width": 390,
+    "expectedMode": "dark",
+    "mode": "dark",
+    "overflow": false,
+    "sections": [
+      {
+        "tag": "HEADER",
+        "bg": "rgba(6, 4, 11, 0.94)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(6, 4, 11)"
+      },
+      {
+        "tag": "FOOTER",
+        "bg": "rgb(6, 4, 11)"
+      }
+    ],
+    "headings": [
+      {
+        "text": "ZZ Test — practice quiz",
+        "color": "rgb(255, 255, 255)"
+      }
+    ],
+    "grain": "-1",
+    "images": [],
+    "errors": []
+  },
+  {
+    "path": "/",
+    "width": 1440,
+    "expectedMode": "light",
+    "mode": "light",
+    "overflow": false,
+    "sections": [
+      {
+        "tag": "HEADER",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "FOOTER",
+        "bg": "rgb(255, 255, 255)"
+      }
+    ],
+    "headings": [
+      {
+        "text": "Own your practice.Build your legacy.",
+        "color": "rgb(30, 24, 40)"
+      },
+      {
+        "text": "You need three things, and they're all here.",
+        "color": "rgb(30, 24, 40)"
+      },
+      {
+        "text": "You built your practice to create freedom.So why d",
+        "color": "rgb(30, 24, 40)"
+      }
+    ],
+    "grain": "-1",
+    "images": [
+      {
+        "src": "https://bossclinician.callsphere.site/images/yvette-hero-portrait.jpg",
+        "alt": "Yvette Howard, LCSW, Private Practice Strategist and founder of Boss Clinician",
+        "loaded": true,
+        "effects": [],
+        "overlays": []
+      },
+      {
+        "src": "https://bossclinician.callsphere.site/images/yvette-meet-portrait.jpg",
+        "alt": "Yvette Howard, LCSW, founder of Boss Clinician, holding a mug",
+        "loaded": true,
+        "effects": [],
+        "overlays": []
+      },
+      {
+        "src": "https://lightwidget.com/widgets/06ef2db14840566cbcf395b4a422fe14.html",
+        "alt": "Latest posts from @bossclinician on Instagram",
+        "loaded": true,
+        "effects": [],
+        "overlays": []
+      }
+    ],
+    "errors": []
+  },
+  {
+    "path": "/about",
+    "width": 1440,
+    "expectedMode": "light",
+    "mode": "light",
+    "overflow": false,
+    "sections": [
+      {
+        "tag": "HEADER",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "FOOTER",
+        "bg": "rgb(255, 255, 255)"
+      }
+    ],
+    "headings": [
+      {
+        "text": "I'm Yvette Howard.I've been exactly where you are.",
+        "color": "rgb(30, 24, 40)"
+      },
+      {
+        "text": "I wasn't supposed to become a therapist.",
+        "color": "rgb(30, 24, 40)"
+      },
+      {
+        "text": "So I took the leap nervous, unprepared, and pregna",
+        "color": "rgb(30, 24, 40)"
+      }
+    ],
+    "grain": "-1",
+    "images": [
+      {
+        "src": "https://bossclinician.callsphere.site/images/af3deab11f02.jpg",
+        "alt": "Yvette Howard, LCSW, Private Practice Strategist and founder of Boss Clinician",
+        "loaded": true,
+        "effects": [],
+        "overlays": []
+      },
+      {
+        "src": "https://bossclinician.callsphere.site/images/yvette-hero-seated.jpg",
+        "alt": "Yvette Howard, LCSW, away from the therapy room",
+        "loaded": true,
+        "effects": [],
+        "overlays": []
+      }
+    ],
+    "errors": []
+  },
+  {
+    "path": "/work-with-me",
+    "width": 1440,
+    "expectedMode": "light",
+    "mode": "light",
+    "overflow": false,
+    "sections": [
+      {
+        "tag": "HEADER",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "FOOTER",
+        "bg": "rgb(255, 255, 255)"
+      }
+    ],
+    "headings": [
+      {
+        "text": "Built to heal others.Now let's build something tha",
+        "color": "rgb(30, 24, 40)"
+      },
+      {
+        "text": "You did everything they told you to do. And you're",
+        "color": "rgb(30, 24, 40)"
+      },
+      {
+        "text": "This work is for the clinician who is ready — not ",
+        "color": "rgb(30, 24, 40)"
+      }
+    ],
+    "grain": "-1",
+    "images": [
+      {
+        "src": "https://bossclinician.callsphere.site/images/758479b0818b.png",
+        "alt": "Yvette Howard, private practice strategist for therapists and clinicians",
+        "loaded": true,
+        "effects": [],
+        "overlays": []
+      }
+    ],
+    "errors": []
+  },
+  {
+    "path": "/resource-hub",
+    "width": 1440,
+    "expectedMode": "light",
+    "mode": "light",
+    "overflow": false,
+    "sections": [
+      {
+        "tag": "HEADER",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "FOOTER",
+        "bg": "rgb(255, 255, 255)"
+      }
+    ],
+    "headings": [
+      {
+        "text": "Everything you need to build your practice— wherev",
+        "color": "rgb(30, 24, 40)"
+      },
+      {
+        "text": "Every clinician is at a different stage.",
+        "color": "rgb(30, 24, 40)"
+      },
+      {
+        "text": "Just starting — or starting over.",
+        "color": "rgb(30, 24, 40)"
+      }
+    ],
+    "grain": "-1",
+    "images": [
+      {
+        "src": "https://bossclinician.callsphere.site/images/yvette-hero-portrait.jpg",
+        "alt": "Yvette Howard, LCSW — Private Practice Strategist at her desk",
+        "loaded": true,
+        "effects": [],
+        "overlays": []
+      },
+      {
+        "src": "https://bossclinician.callsphere.site/images/yvette-meet-portrait.jpg",
+        "alt": "Yvette Howard, LCSW — Private Practice Strategist, Boss Clinician",
+        "loaded": true,
+        "effects": [],
+        "overlays": []
+      }
+    ],
+    "errors": []
+  },
+  {
+    "path": "/contact",
+    "width": 1440,
+    "expectedMode": "light",
+    "mode": "light",
+    "overflow": false,
+    "sections": [
+      {
+        "tag": "HEADER",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "FOOTER",
+        "bg": "rgb(255, 255, 255)"
+      }
+    ],
+    "headings": [
+      {
+        "text": "Hey There!",
+        "color": "rgb(30, 24, 40)"
+      },
+      {
+        "text": "Ask me here",
+        "color": "rgb(30, 24, 40)"
+      },
+      {
+        "text": "Write to me from your own inbox.",
+        "color": "rgb(30, 24, 40)"
+      }
+    ],
+    "grain": "-1",
+    "images": [
+      {
+        "src": "https://bossclinician.callsphere.site/images/f5f2cec6b858.jpg",
+        "alt": "Yvette Howard",
+        "loaded": true,
+        "effects": [],
+        "overlays": []
+      }
+    ],
+    "errors": []
+  },
+  {
+    "path": "/blog",
+    "width": 1440,
+    "expectedMode": "light",
+    "mode": "light",
+    "overflow": false,
+    "sections": [
+      {
+        "tag": "HEADER",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "FOOTER",
+        "bg": "rgb(255, 255, 255)"
+      }
+    ],
+    "headings": [
+      {
+        "text": "BEST OF",
+        "color": "rgb(30, 24, 40)"
+      },
+      {
+        "text": "Test",
+        "color": "rgb(30, 24, 40)"
+      },
+      {
+        "text": "Why Your Private Practice Marketing Isn’t Working ",
+        "color": "rgb(30, 24, 40)"
+      }
+    ],
+    "grain": "-1",
+    "images": [
+      {
+        "src": "https://bossclinician.callsphere.site/images/yvette-hero-portrait.jpg",
+        "alt": "Yvette Howard private practice consultant and therapist business strategist",
+        "loaded": true,
+        "effects": [],
+        "overlays": []
+      }
+    ],
+    "errors": []
+  },
+  {
+    "path": "/courses",
+    "width": 1440,
+    "expectedMode": "light",
+    "mode": "light",
+    "overflow": false,
+    "sections": [
+      {
+        "tag": "HEADER",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "FOOTER",
+        "bg": "rgb(255, 255, 255)"
+      }
+    ],
+    "headings": [
+      {
+        "text": "Ready to Start, Grow, & ScaleYour Private Practice",
+        "color": "rgb(30, 24, 40)"
+      },
+      {
+        "text": "Boss ClinicianMission",
+        "color": "rgb(30, 24, 40)"
+      },
+      {
+        "text": "Explore the Boss Clinician Training Library →",
+        "color": "rgb(30, 24, 40)"
+      }
+    ],
+    "grain": "-1",
+    "images": [
+      {
+        "src": "https://bossclinician.callsphere.site/images/faff351d997d.png",
+        "alt": "Yvette Howard, private practice strategist for therapists and clinicians",
+        "loaded": true,
+        "effects": [],
+        "overlays": []
+      }
+    ],
+    "errors": []
+  },
+  {
+    "path": "/retreats",
+    "width": 1440,
+    "expectedMode": "light",
+    "mode": "light",
+    "overflow": false,
+    "sections": [
+      {
+        "tag": "HEADER",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "FOOTER",
+        "bg": "rgb(255, 255, 255)"
+      }
+    ],
+    "headings": [
+      {
+        "text": "You have been taking care of everyone.When was the",
+        "color": "rgb(30, 24, 40)"
+      },
+      {
+        "text": "Designed for the women who hold space for everyone",
+        "color": "rgb(30, 24, 40)"
+      },
+      {
+        "text": "This is not a training.This is a retreat.",
+        "color": "rgb(30, 24, 40)"
+      }
+    ],
+    "grain": "-1",
+    "images": [
+      {
+        "src": "https://bossclinician.callsphere.site/images/migrated-9f074ef824a3.png",
+        "alt": "Yvette Howard, LCSW",
+        "loaded": true,
+        "effects": [],
+        "overlays": []
+      }
+    ],
+    "errors": []
+  },
+  {
+    "path": "/login",
+    "width": 1440,
+    "expectedMode": "light",
+    "mode": "light",
+    "overflow": false,
+    "sections": [],
+    "headings": [
+      {
+        "text": "Welcome back",
+        "color": "rgb(30, 24, 40)"
+      }
+    ],
+    "grain": "-1",
+    "images": [],
+    "errors": []
+  },
+  {
+    "path": "/quiz/zz-test-practice-quiz",
+    "width": 1440,
+    "expectedMode": "light",
+    "mode": "light",
+    "overflow": false,
+    "sections": [
+      {
+        "tag": "HEADER",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(255, 255, 255)"
+      },
+      {
+        "tag": "FOOTER",
+        "bg": "rgb(255, 255, 255)"
+      }
+    ],
+    "headings": [
+      {
+        "text": "ZZ Test — practice quiz",
+        "color": "rgb(30, 24, 40)"
+      }
+    ],
+    "grain": "-1",
+    "images": [],
+    "errors": []
+  },
+  {
+    "path": "/",
+    "width": 1440,
+    "expectedMode": "dark",
+    "mode": "dark",
+    "overflow": false,
+    "sections": [
+      {
+        "tag": "HEADER",
+        "bg": "rgba(6, 4, 11, 0.94)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(6, 4, 11)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(10, 7, 19)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(6, 4, 11)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(10, 7, 19)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(16, 11, 28)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(6, 4, 11)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(16, 11, 28)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(10, 7, 19)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(6, 4, 11)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(10, 7, 19)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(6, 4, 11)"
+      },
+      {
+        "tag": "FOOTER",
+        "bg": "rgb(6, 4, 11)"
+      }
+    ],
+    "headings": [
+      {
+        "text": "Own your practice.Build your legacy.",
+        "color": "rgb(255, 255, 255)"
+      },
+      {
+        "text": "You need three things, and they're all here.",
+        "color": "rgb(255, 255, 255)"
+      },
+      {
+        "text": "You built your practice to create freedom.So why d",
+        "color": "rgb(255, 255, 255)"
+      }
+    ],
+    "grain": "-1",
+    "images": [
+      {
+        "src": "https://bossclinician.callsphere.site/images/yvette-hero-portrait.jpg",
+        "alt": "Yvette Howard, LCSW, Private Practice Strategist and founder of Boss Clinician",
+        "loaded": true,
+        "effects": [],
+        "overlays": []
+      },
+      {
+        "src": "https://bossclinician.callsphere.site/images/yvette-meet-portrait.jpg",
+        "alt": "Yvette Howard, LCSW, founder of Boss Clinician, holding a mug",
+        "loaded": true,
+        "effects": [],
+        "overlays": []
+      },
+      {
+        "src": "https://lightwidget.com/widgets/06ef2db14840566cbcf395b4a422fe14.html",
+        "alt": "Latest posts from @bossclinician on Instagram",
+        "loaded": true,
+        "effects": [],
+        "overlays": []
+      }
+    ],
+    "errors": []
+  },
+  {
+    "path": "/about",
+    "width": 1440,
+    "expectedMode": "dark",
+    "mode": "dark",
+    "overflow": false,
+    "sections": [
+      {
+        "tag": "HEADER",
+        "bg": "rgba(6, 4, 11, 0.94)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(6, 4, 11)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(10, 7, 19)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(16, 11, 28)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(10, 7, 19)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(16, 11, 28)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(10, 7, 19)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(6, 4, 11)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(10, 7, 19)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(16, 11, 28)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(10, 7, 19)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(6, 4, 11)"
+      },
+      {
+        "tag": "FOOTER",
+        "bg": "rgb(6, 4, 11)"
+      }
+    ],
+    "headings": [
+      {
+        "text": "I'm Yvette Howard.I've been exactly where you are.",
+        "color": "rgb(255, 255, 255)"
+      },
+      {
+        "text": "I wasn't supposed to become a therapist.",
+        "color": "rgb(255, 255, 255)"
+      },
+      {
+        "text": "So I took the leap nervous, unprepared, and pregna",
+        "color": "rgb(255, 255, 255)"
+      }
+    ],
+    "grain": "-1",
+    "images": [
+      {
+        "src": "https://bossclinician.callsphere.site/images/af3deab11f02.jpg",
+        "alt": "Yvette Howard, LCSW, Private Practice Strategist and founder of Boss Clinician",
+        "loaded": true,
+        "effects": [],
+        "overlays": []
+      },
+      {
+        "src": "https://bossclinician.callsphere.site/images/yvette-hero-seated.jpg",
+        "alt": "Yvette Howard, LCSW, away from the therapy room",
+        "loaded": true,
+        "effects": [],
+        "overlays": []
+      }
+    ],
+    "errors": []
+  },
+  {
+    "path": "/work-with-me",
+    "width": 1440,
+    "expectedMode": "dark",
+    "mode": "dark",
+    "overflow": false,
+    "sections": [
+      {
+        "tag": "HEADER",
+        "bg": "rgba(6, 4, 11, 0.94)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(6, 4, 11)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(10, 7, 19)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(16, 11, 28)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(6, 4, 11)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(10, 7, 19)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(16, 11, 28)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(10, 7, 19)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(6, 4, 11)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(16, 11, 28)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(10, 7, 19)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(16, 11, 28)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(6, 4, 11)"
+      },
+      {
+        "tag": "FOOTER",
+        "bg": "rgb(6, 4, 11)"
+      }
+    ],
+    "headings": [
+      {
+        "text": "Built to heal others.Now let's build something tha",
+        "color": "rgb(255, 255, 255)"
+      },
+      {
+        "text": "You did everything they told you to do. And you're",
+        "color": "rgb(255, 255, 255)"
+      },
+      {
+        "text": "This work is for the clinician who is ready — not ",
+        "color": "rgb(255, 255, 255)"
+      }
+    ],
+    "grain": "-1",
+    "images": [
+      {
+        "src": "https://bossclinician.callsphere.site/images/758479b0818b.png",
+        "alt": "Yvette Howard, private practice strategist for therapists and clinicians",
+        "loaded": true,
+        "effects": [],
+        "overlays": []
+      }
+    ],
+    "errors": []
+  },
+  {
+    "path": "/resource-hub",
+    "width": 1440,
+    "expectedMode": "dark",
+    "mode": "dark",
+    "overflow": false,
+    "sections": [
+      {
+        "tag": "HEADER",
+        "bg": "rgba(6, 4, 11, 0.94)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(6, 4, 11)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(10, 7, 19)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(16, 11, 28)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(6, 4, 11)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(10, 7, 19)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(16, 11, 28)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(10, 7, 19)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(6, 4, 11)"
+      },
+      {
+        "tag": "FOOTER",
+        "bg": "rgb(6, 4, 11)"
+      }
+    ],
+    "headings": [
+      {
+        "text": "Everything you need to build your practice— wherev",
+        "color": "rgb(255, 255, 255)"
+      },
+      {
+        "text": "Every clinician is at a different stage.",
+        "color": "rgb(255, 255, 255)"
+      },
+      {
+        "text": "Just starting — or starting over.",
+        "color": "rgb(255, 255, 255)"
+      }
+    ],
+    "grain": "-1",
+    "images": [
+      {
+        "src": "https://bossclinician.callsphere.site/images/yvette-hero-portrait.jpg",
+        "alt": "Yvette Howard, LCSW — Private Practice Strategist at her desk",
+        "loaded": true,
+        "effects": [],
+        "overlays": []
+      },
+      {
+        "src": "https://bossclinician.callsphere.site/images/yvette-meet-portrait.jpg",
+        "alt": "Yvette Howard, LCSW — Private Practice Strategist, Boss Clinician",
+        "loaded": true,
+        "effects": [],
+        "overlays": []
+      }
+    ],
+    "errors": []
+  },
+  {
+    "path": "/contact",
+    "width": 1440,
+    "expectedMode": "dark",
+    "mode": "dark",
+    "overflow": false,
+    "sections": [
+      {
+        "tag": "HEADER",
+        "bg": "rgba(6, 4, 11, 0.94)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(6, 4, 11)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(16, 11, 28)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(10, 7, 19)"
+      },
+      {
+        "tag": "FOOTER",
+        "bg": "rgb(6, 4, 11)"
+      }
+    ],
+    "headings": [
+      {
+        "text": "Hey There!",
+        "color": "rgb(255, 255, 255)"
+      },
+      {
+        "text": "Ask me here",
+        "color": "rgb(255, 255, 255)"
+      },
+      {
+        "text": "Write to me from your own inbox.",
+        "color": "rgb(255, 255, 255)"
+      }
+    ],
+    "grain": "-1",
+    "images": [
+      {
+        "src": "https://bossclinician.callsphere.site/images/f5f2cec6b858.jpg",
+        "alt": "Yvette Howard",
+        "loaded": true,
+        "effects": [],
+        "overlays": []
+      }
+    ],
+    "errors": []
+  },
+  {
+    "path": "/blog",
+    "width": 1440,
+    "expectedMode": "dark",
+    "mode": "dark",
+    "overflow": false,
+    "sections": [
+      {
+        "tag": "HEADER",
+        "bg": "rgba(6, 4, 11, 0.94)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(6, 4, 11)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(10, 7, 19)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(16, 11, 28)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(10, 7, 19)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(6, 4, 11)"
+      },
+      {
+        "tag": "FOOTER",
+        "bg": "rgb(6, 4, 11)"
+      }
+    ],
+    "headings": [
+      {
+        "text": "BEST OF",
+        "color": "rgb(255, 255, 255)"
+      },
+      {
+        "text": "Test",
+        "color": "rgb(255, 255, 255)"
+      },
+      {
+        "text": "Why Your Private Practice Marketing Isn’t Working ",
+        "color": "rgb(255, 255, 255)"
+      }
+    ],
+    "grain": "-1",
+    "images": [
+      {
+        "src": "https://bossclinician.callsphere.site/images/yvette-hero-portrait.jpg",
+        "alt": "Yvette Howard private practice consultant and therapist business strategist",
+        "loaded": true,
+        "effects": [],
+        "overlays": []
+      }
+    ],
+    "errors": []
+  },
+  {
+    "path": "/courses",
+    "width": 1440,
+    "expectedMode": "dark",
+    "mode": "dark",
+    "overflow": false,
+    "sections": [
+      {
+        "tag": "HEADER",
+        "bg": "rgba(6, 4, 11, 0.94)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(6, 4, 11)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(16, 11, 28)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(10, 7, 19)"
+      },
+      {
+        "tag": "FOOTER",
+        "bg": "rgb(6, 4, 11)"
+      }
+    ],
+    "headings": [
+      {
+        "text": "Ready to Start, Grow, & ScaleYour Private Practice",
+        "color": "rgb(255, 255, 255)"
+      },
+      {
+        "text": "Boss ClinicianMission",
+        "color": "rgb(255, 255, 255)"
+      },
+      {
+        "text": "Explore the Boss Clinician Training Library →",
+        "color": "rgb(255, 255, 255)"
+      }
+    ],
+    "grain": "-1",
+    "images": [
+      {
+        "src": "https://bossclinician.callsphere.site/images/faff351d997d.png",
+        "alt": "Yvette Howard, private practice strategist for therapists and clinicians",
+        "loaded": true,
+        "effects": [],
+        "overlays": []
+      }
+    ],
+    "errors": []
+  },
+  {
+    "path": "/retreats",
+    "width": 1440,
+    "expectedMode": "dark",
+    "mode": "dark",
+    "overflow": false,
+    "sections": [
+      {
+        "tag": "HEADER",
+        "bg": "rgba(6, 4, 11, 0.94)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(6, 4, 11)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(16, 11, 28)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(10, 7, 19)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(16, 11, 28)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(6, 4, 11)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(10, 7, 19)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(16, 11, 28)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(6, 4, 11)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(10, 7, 19)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(16, 11, 28)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(6, 4, 11)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(10, 7, 19)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(16, 11, 28)"
+      },
+      {
+        "tag": "FOOTER",
+        "bg": "rgb(6, 4, 11)"
+      }
+    ],
+    "headings": [
+      {
+        "text": "You have been taking care of everyone.When was the",
+        "color": "rgb(255, 255, 255)"
+      },
+      {
+        "text": "Designed for the women who hold space for everyone",
+        "color": "rgb(255, 255, 255)"
+      },
+      {
+        "text": "This is not a training.This is a retreat.",
+        "color": "rgb(255, 255, 255)"
+      }
+    ],
+    "grain": "-1",
+    "images": [
+      {
+        "src": "https://bossclinician.callsphere.site/images/migrated-9f074ef824a3.png",
+        "alt": "Yvette Howard, LCSW",
+        "loaded": true,
+        "effects": [],
+        "overlays": []
+      }
+    ],
+    "errors": []
+  },
+  {
+    "path": "/login",
+    "width": 1440,
+    "expectedMode": "dark",
+    "mode": "dark",
+    "overflow": false,
+    "sections": [],
+    "headings": [
+      {
+        "text": "Welcome back",
+        "color": "rgb(255, 255, 255)"
+      }
+    ],
+    "grain": "-1",
+    "images": [],
+    "errors": []
+  },
+  {
+    "path": "/quiz/zz-test-practice-quiz",
+    "width": 1440,
+    "expectedMode": "dark",
+    "mode": "dark",
+    "overflow": false,
+    "sections": [
+      {
+        "tag": "HEADER",
+        "bg": "rgba(6, 4, 11, 0.94)"
+      },
+      {
+        "tag": "SECTION",
+        "bg": "rgb(6, 4, 11)"
+      },
+      {
+        "tag": "FOOTER",
+        "bg": "rgb(6, 4, 11)"
+      }
+    ],
+    "headings": [
+      {
+        "text": "ZZ Test — practice quiz",
+        "color": "rgb(255, 255, 255)"
+      }
+    ],
+    "grain": "-1",
+    "images": [],
+    "errors": []
+  }
+]

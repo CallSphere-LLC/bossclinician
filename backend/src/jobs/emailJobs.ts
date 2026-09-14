@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { checkoutRecoveryEmail } from "../services/checkoutRecovery";
 import { env } from "../config/env";
 import { pool } from "../db/pool";
 import { renderMarkdown, sendEmail } from "../email/provider";
@@ -9,7 +10,6 @@ import {
   tickBroadcasts,
   tickRegistrationCampaigns,
 } from "../services/broadcasts";
-import { upsertContact } from "../services/contacts";
 import { sendDueEmail, tickDueSubscriptions } from "../services/sequences";
 import { registerHandler } from "./worker";
 import { publishDomainEvent } from "../services/domainEvents";
@@ -32,10 +32,6 @@ const subscriptionPayload = z.object({ subscriptionId: z.coerce.number().int().p
 const broadcastPayload = z.object({
   campaignId: z.coerce.number().int().positive(),
   sendId: z.coerce.number().int().positive(),
-});
-const recoveryPayload = z.object({
-  abandonedCheckoutId: z.coerce.number().int().positive(),
-  step: z.coerce.number().int().min(0).max(2),
 });
 const automationResumePayload = z.object({
   automationId: z.coerce.number().int().positive(),
@@ -91,113 +87,6 @@ async function automationRunAction(payload: Record<string, unknown>): Promise<un
     context,
   });
   return { status: result.status, steps: result.log.length };
-}
-
-/* ------------------------------------------------------- cart recovery */
-
-/**
- * The three abandoned-cart emails, at +1h, +24h and +72h.
- *
- * One template per step rather than one template with a variable, because the
- * three are doing genuinely different jobs: the first assumes something went
- * wrong with the form, the second assumes second thoughts, and the third is the
- * last one they will get. They are marketing emails and carry the unsubscribe
- * footer like every other, which is `sendEmail`'s doing, not this function's.
- */
-const RECOVERY_COPY = [
-  {
-    subject: "Did something go wrong at checkout?",
-    lead: "You were part-way through joining {offer} and the page never finished. If something broke, tell me — I would rather fix it than lose you to a form.",
-    cta: "Pick up where you left off",
-  },
-  {
-    subject: "Still thinking about {offer}?",
-    lead: "No pressure at all. If you were weighing it up, hit reply and tell me what is giving you pause — I answer these myself.",
-    cta: "Take another look",
-  },
-  {
-    subject: "Last note about {offer}",
-    lead: "This is the last email I will send about this one. Your place is still there if you want it, and if the timing is wrong that is completely fine.",
-    cta: "Finish joining",
-  },
-];
-
-async function checkoutRecoveryEmail(payload: Record<string, unknown>): Promise<unknown> {
-  const { abandonedCheckoutId, step } = recoveryPayload.parse(payload);
-
-  const res = await pool.query<{
-    id: number;
-    email: string;
-    first_name: string;
-    emails_sent: number;
-    recovered_at: Date | null;
-    offer_title: string;
-    offer_slug: string;
-  }>(
-    `SELECT a.id, a.email, a.first_name, a.emails_sent, a.recovered_at,
-            COALESCE(o.title, '') AS offer_title, COALESCE(o.slug, '') AS offer_slug
-       FROM abandoned_checkouts a
-       LEFT JOIN offers o ON o.id = a.offer_id
-      WHERE a.id = $1`,
-    [abandonedCheckoutId]
-  );
-  const cart = res.rows[0];
-  if (!cart) return { skipped: "no such cart" };
-  if (cart.recovered_at !== null) return { skipped: "already bought" };
-  // The sweep counts steps, and a redelivered job must not re-send one that has
-  // already gone: `emails_sent` is the authority, not the job's own existence.
-  if (cart.emails_sent !== step) return { skipped: "step already sent" };
-
-  const copy = RECOVERY_COPY[step];
-  const offer = cart.offer_title || "the programme";
-  const url = cart.offer_slug ? `${env.publicSiteUrl}/checkout/${cart.offer_slug}` : env.publicSiteUrl;
-
-  const contactId = await upsertContact({
-    email: cart.email,
-    name: cart.first_name,
-    source: "checkout",
-  });
-
-  const greeting = cart.first_name.trim() || "there";
-  const body = [
-    `Hi ${greeting},`,
-    ``,
-    copy.lead.replace("{offer}", offer),
-    ``,
-    `[${copy.cta}](${url})`,
-  ].join("\n");
-
-  const result = await sendEmail({
-    to: cart.email,
-    subject: copy.subject.replace("{offer}", offer),
-    text: body,
-    html: renderMarkdown(body),
-    contactId,
-    sourceType: "automation",
-    sourceId: cart.id,
-    topic: "marketing",
-  });
-
-  await pool.query(
-    `UPDATE abandoned_checkouts
-        SET emails_sent = emails_sent + 1, last_email_at = now(), updated_at = now()
-      WHERE id = $1 AND emails_sent = $2`,
-    [cart.id, step]
-  );
-
-  // Only the first one fires the trigger: an automation on "someone left
-  // without paying" wants to run once, not three times over three days.
-  if (step === 0) {
-    await publishDomainEvent("abandoned_checkout", {
-      eventKey: `abandoned-checkout:${cart.id}`,
-      contactId,
-      email: cart.email,
-      name: cart.first_name,
-      facts: { offer },
-    });
-  }
-
-  return { outcome: result.outcome, step };
 }
 
 /* ------------------------------------------------------ community digest */

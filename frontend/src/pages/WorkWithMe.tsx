@@ -162,11 +162,7 @@ function Mark({ variant, className }: { variant: "check" | "cross"; className?: 
 /** Held once: the frame renders it and the page's share card points at it. */
 const HERO_PORTRAIT = "/images/758479b0818b.png";
 
-/**
- * Graded to the same recipe as the home page portraits: a daylight photograph
- * dropped straight onto near-black reads as a lit rectangle pasted on the page,
- * so it is dimmed, desaturated, vignetted and then tinted into the page's plum.
- */
+/** Keep the portrait in its original colors. */
 function HeroPortrait() {
   return (
     <div className="relative isolate mx-auto max-w-[19rem] sm:max-w-sm lg:max-w-none">
@@ -186,13 +182,8 @@ function HeroPortrait() {
           width={882}
           height={1440}
           decoding="async"
-          className="aspect-[4/5] w-full max-w-full object-cover object-top brightness-[0.8] contrast-[1.06] saturate-[0.8]"
+          className="aspect-[4/5] w-full max-w-full object-cover object-top"
         />
-        <div
-          aria-hidden
-          className="absolute inset-0 bg-[radial-gradient(112%_78%_at_50%_24%,transparent_24%,rgba(10,7,19,0.5)_66%,rgba(6,4,11,0.9)_100%)]"
-        />
-        <div aria-hidden className="absolute inset-0 bg-glow-violet/20 mix-blend-soft-light" />
       </div>
 
       {/* Offset registration marks — the frame reads as a mounted plate. */}

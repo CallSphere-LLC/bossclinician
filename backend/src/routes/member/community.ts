@@ -14,7 +14,7 @@ import {
   type AuthedMember,
 } from "../../middleware/memberAuth";
 import {
-  CHANNEL_GROUP_VISIBLE,
+  CHANNEL_MEMBER_VISIBLE,
   listEnterableCommunityIds,
   mayEnterCommunity,
   memberAccessGroupIds,
@@ -204,6 +204,27 @@ async function withTransaction<T>(fn: (client: PoolClient) => Promise<T>): Promi
  */
 const MEMBER_NAME_SQL =
   `COALESCE(NULLIF(TRIM(m.first_name || ' ' || m.last_name), ''), NULLIF(m.name, ''), 'Member')`;
+
+/**
+ * How many people are in a community — `$1` is the community.
+ *
+ * One fragment, used by every surface that shows the number, because three
+ * places counting it three ways is exactly what happened: the header counted
+ * every membership row that was not banned, the directory counted only rows
+ * whose member account was still active, and the admin counted every row full
+ * stop. A member header reading "2 MEMBERS" over a directory listing one person
+ * is not a rounding difference, it is two different questions being asked and
+ * only one of them answered honestly.
+ *
+ * The directory's definition wins: the count means "people you could meet in
+ * here", so somebody banned or whose account is closed is not one of them.
+ */
+const COMMUNITY_MEMBER_COUNT_SQL = `(
+  SELECT COUNT(*)::int
+    FROM community_memberships cmc
+    JOIN members mc ON mc.id = cmc.member_id
+   WHERE cmc.community_id = $1 AND cmc.banned_at IS NULL AND mc.status = 'active'
+)`;
 
 interface CommunityContext {
   id: number;
@@ -416,36 +437,46 @@ interface ChannelRow {
   visibility: string;
   view_modes: string[];
   default_view_mode: string;
+  /** `feed | forum | gallery` — how the channel is laid out (044). */
+  view_mode: string;
 }
 
 /**
  * A channel inside a community the member is already inside.
  *
- * `visibility = 'private'` means invite-only, and there is no per-channel invite
- * table — so the only people who can be shown one are the moderators and admins
- * of the community. A plain member gets the same 404 as a stranger.
+ * Two independent restrictions, both enforced here rather than only in the
+ * listing: the overview simply omits a channel the member may not see, which
+ * hides it, and hiding is not access control. This is what stops a URL reaching
+ * it.
+ *
+ * `visibility = 'private'` is invite-only — a row in
+ * `community_channel_members`. `access_group_id` is a tier, derived from a live
+ * grant. A channel may be both, and then both have to hold. Moderators and
+ * admins of the community see every channel in it either way.
  */
 async function loadChannel(
   ctx: CommunityContext,
   channelSlug: string,
   memberId: number
 ): Promise<ChannelRow> {
-  const found = await pool.query<ChannelRow & { access_group_id: number | null }>(
+  const found = await pool.query<
+    ChannelRow & { access_group_id: number | null; invited: boolean }
+  >(
     `SELECT id, slug, name, description, format, visibility, access_group_id,
-            view_modes, default_view_mode
+            view_modes, default_view_mode, view_mode,
+            EXISTS (SELECT 1 FROM community_channel_members ccm
+                     WHERE ccm.channel_id = community_channels.id
+                       AND ccm.member_id = $3) AS invited
        FROM community_channels
       WHERE community_id = $1 AND slug = $2`,
-    [ctx.id, channelSlug]
+    [ctx.id, channelSlug, memberId]
   );
   const channel = found.rows[0];
   if (!channel) throw notFound(CHANNEL_MISSING);
-  if (channel.visibility === "private" && !ctx.moderator) throw notFound(CHANNEL_MISSING);
+  if (channel.visibility === "private" && !ctx.moderator && !channel.invited) {
+    throw notFound(CHANNEL_MISSING);
+  }
 
-  /*
-   * Access groups again, and this is the half that matters: the overview simply
-   * omits a channel the member is not in a tier for, which hides it, and
-   * hiding is not access control. This is what stops a URL reaching it.
-   */
   if (channel.access_group_id !== null && !ctx.moderator) {
     const groups = await memberAccessGroupIds(memberId);
     if (!groups.includes(channel.access_group_id)) throw notFound(CHANNEL_MISSING);
@@ -481,22 +512,36 @@ async function loadPost(
   member: AuthedMember,
   postId: number
 ): Promise<{ post: PostRow; ctx: CommunityContext }> {
-  const found = await pool.query<PostRow>(
+  const found = await pool.query<
+    PostRow & { channel_access_group_id: number | null; channel_invited: boolean }
+  >(
     `SELECT p.id, p.channel_id, p.member_id, p.kind, p.title, p.body, p.media_url,
             p.pinned, p.locked, p.status, p.created_at,
             ch.community_id, ch.slug AS channel_slug, ch.visibility AS channel_visibility,
+            ch.access_group_id AS channel_access_group_id,
+            EXISTS (SELECT 1 FROM community_channel_members ccm
+                     WHERE ccm.channel_id = ch.id AND ccm.member_id = $2) AS channel_invited,
             c.slug AS community_slug
        FROM community_posts p
        JOIN community_channels ch ON ch.id = p.channel_id
        JOIN communities c         ON c.id  = ch.community_id
       WHERE p.id = $1`,
-    [postId]
+    [postId, member.id]
   );
   const post = found.rows[0];
   if (!post || post.status !== "visible") throw notFound(POST_MISSING);
 
   const ctx = await enterCommunity(member, { id: post.community_id });
-  if (post.channel_visibility === "private" && !ctx.moderator) throw notFound(POST_MISSING);
+  // The same two gates `loadChannel` applies, asked of the post's channel: a
+  // post id is a URL too, and a channel the member cannot open must not be
+  // readable one post at a time. Invited members pass the invite-only gate.
+  if (post.channel_visibility === "private" && !ctx.moderator && !post.channel_invited) {
+    throw notFound(POST_MISSING);
+  }
+  if (post.channel_access_group_id !== null && !ctx.moderator) {
+    const groups = await memberAccessGroupIds(member.id);
+    if (!groups.includes(post.channel_access_group_id)) throw notFound(POST_MISSING);
+  }
   return { post, ctx };
 }
 
@@ -521,10 +566,15 @@ export async function loadEntitledPostMedia(
     media_url: string;
     community_id: number;
     channel_visibility: string;
+    channel_access_group_id: number | null;
+    channel_invited: boolean;
     role: string | null;
     banned_at: Date | null;
   }>(
     `SELECT p.media_url, ch.community_id, ch.visibility AS channel_visibility,
+            ch.access_group_id AS channel_access_group_id,
+            EXISTS (SELECT 1 FROM community_channel_members ccm
+                     WHERE ccm.channel_id = ch.id AND ccm.member_id = $2) AS channel_invited,
             cm.role, cm.banned_at
        FROM community_posts p
        JOIN community_channels ch ON ch.id = p.channel_id
@@ -539,8 +589,15 @@ export async function loadEntitledPostMedia(
   if (!row || storageKey === null || row.banned_at !== null) throw notFound(POST_MISSING);
 
   const moderator = row.role === "moderator" || row.role === "admin";
-  if (row.channel_visibility === "private" && !moderator) throw notFound(POST_MISSING);
+  if (row.channel_visibility === "private" && !moderator && !row.channel_invited) {
+    throw notFound(POST_MISSING);
+  }
   if (!(await mayEnterCommunity(memberId, row.community_id))) throw notFound(POST_MISSING);
+  // A tiered channel's files are the tier's, exactly as its posts are.
+  if (row.channel_access_group_id !== null && !moderator) {
+    const groups = await memberAccessGroupIds(memberId);
+    if (!groups.includes(row.channel_access_group_id)) throw notFound(POST_MISSING);
+  }
 
   return { storagePath: row.media_url, filename: path.basename(storageKey), mime: "" };
 }
@@ -582,12 +639,14 @@ memberCommunityRouter.get(
     const found = await pool.query<CommunityListRow>(
       `SELECT c.id, c.slug, c.name, c.description, c.cover_image,
               cm.role, cm.points, cm.joined_at,
-              (SELECT COUNT(*)::int FROM community_memberships x
-                WHERE x.community_id = c.id AND x.banned_at IS NULL) AS member_count,
+              ${COMMUNITY_MEMBER_COUNT_SQL.replaceAll("$1", "c.id")} AS member_count,
               (SELECT COUNT(*)::int
                  FROM community_posts p
                  JOIN community_channels ch ON ch.id = p.channel_id
-                WHERE ch.community_id = c.id AND ch.visibility = 'public'
+                WHERE ch.community_id = c.id
+                  -- The same scoping the community's own page uses, or the card
+                  -- promises unread posts in channels the member cannot open.
+                  AND ${CHANNEL_MEMBER_VISIBLE.replaceAll("$MEMBER$", "$1")}
                   AND p.status = 'visible'
                   -- now() for somebody who has not joined yet: a room they have
                   -- never opened is not 400 things they have failed to read.
@@ -929,6 +988,9 @@ memberCommunityRouter.get(
         // switcher renders without a second request for the overview.
         viewModes: channel.view_modes ?? ["feed"],
         defaultViewMode: channel.default_view_mode ?? "feed",
+        // The single layout the host chose in the channel settings. The member
+        // page renders this; `viewModes` only widens what it may switch to.
+        viewMode: channel.view_mode ?? "feed",
       },
       posts: found.rows.map((row) =>
         toPostJson(row, member.id, reactions.get(row.id) ?? [], polls.get(row.id))
@@ -1871,12 +1933,14 @@ memberCommunityRouter.get(
         cover_image: string;
         view_modes: string[];
         default_view_mode: string;
+        view_mode: string;
         access_group_id: number | null;
         post_count: number;
         unread_count: number;
       }>(
         `SELECT ch.id, ch.slug, ch.name, ch.description, ch.format, ch.visibility,
-                ch.cover_image, ch.view_modes, ch.default_view_mode, ch.access_group_id,
+                ch.cover_image, ch.view_modes, ch.default_view_mode, ch.view_mode,
+                ch.access_group_id,
                 (SELECT COUNT(*)::int FROM community_posts p
                   WHERE p.channel_id = ch.id AND p.status = 'visible') AS post_count,
                 (SELECT COUNT(*)::int FROM community_posts p
@@ -1884,12 +1948,13 @@ memberCommunityRouter.get(
                     AND p.created_at > $2
                     AND (p.member_id IS NULL OR p.member_id <> $3)) AS unread_count
            FROM community_channels ch
-          WHERE ch.community_id = $1 AND (ch.visibility = 'public' OR $4::bool)
-            -- Access groups: a channel scoped to a tier is only listed for
-            -- members of that tier. Null means the whole community, which is
-            -- every channel that existed before groups did, so this widens
-            -- nothing by default. Moderators see all of them.
-            AND ($4::bool OR ${CHANNEL_GROUP_VISIBLE.replaceAll("$MEMBER$", "$3")})
+          WHERE ch.community_id = $1
+            -- Who may see this channel: invited to it if it is invite-only, and
+            -- in its tier if it has one. Null on either means the whole
+            -- community, which is every channel that existed before those
+            -- settings did, so this widens nothing by default. A moderator sees
+            -- all of them, because running the room is a different question.
+            AND ($4::bool OR ${CHANNEL_MEMBER_VISIBLE.replaceAll("$MEMBER$", "$3")})
           ORDER BY ch.sort, ch.id`,
         [ctx.id, since, member.id, ctx.moderator]
       ),
@@ -1903,8 +1968,7 @@ memberCommunityRouter.get(
       ),
       pool.query<{ member_count: number; unread_notifications: number }>(
         `SELECT
-           (SELECT COUNT(*)::int FROM community_memberships
-             WHERE community_id = $1 AND banned_at IS NULL) AS member_count,
+           ${COMMUNITY_MEMBER_COUNT_SQL} AS member_count,
            (SELECT COUNT(*)::int FROM member_notifications
              WHERE member_id = $2 AND read_at IS NULL) AS unread_notifications`,
         [ctx.id, member.id]
@@ -1961,6 +2025,8 @@ memberCommunityRouter.get(
         // The layouts this channel offers, and the one it opens in.
         viewModes: ch.view_modes,
         defaultViewMode: ch.default_view_mode,
+        // The one layout the host set (044); the channel page renders this.
+        viewMode: ch.view_mode ?? "feed",
         postCount: ch.post_count,
         unreadCount: ch.unread_count,
         href: `/community/${ctx.slug}/${ch.slug}`,
@@ -2184,6 +2250,7 @@ memberCommunityRouter.get(
       headline: string;
       points: number;
       rank: string;
+      tied: boolean;
       badge: string | null;
     }>(
       period === "all"
@@ -2191,12 +2258,19 @@ memberCommunityRouter.get(
              SELECT cm.member_id, ${MEMBER_NAME_SQL} AS name,
                     COALESCE(m.avatar_url, '') AS avatar_url, cm.headline, cm.points,
                     RANK() OVER (ORDER BY cm.points DESC) AS rank,
+                    COUNT(*) OVER (PARTITION BY cm.points) > 1 AS tied,
                     (SELECT b.emoji FROM community_badges b
                       WHERE b.community_id = cm.community_id AND b.threshold <= cm.points
                       ORDER BY b.threshold DESC LIMIT 1) AS badge
                FROM community_memberships cm
                JOIN members m ON m.id = cm.member_id
               WHERE cm.community_id = $1 AND cm.banned_at IS NULL AND m.status = 'active'
+                -- Nobody on zero, exactly as the weekly and monthly boards do.
+                -- Every member of a new community has nothing, and RANK() puts
+                -- all of them equal first: a board where two people who have
+                -- never posted are both "1st" is not a leaderboard, it is a
+                -- membership list with a trophy on it.
+                AND cm.points > 0
            )
            SELECT * FROM ranked
             WHERE rank <= 20 OR member_id = $2
@@ -2213,6 +2287,7 @@ memberCommunityRouter.get(
                     COALESCE(m.avatar_url, '') AS avatar_url, cm.headline,
                     COALESCE(e.points, 0) AS points,
                     RANK() OVER (ORDER BY COALESCE(e.points, 0) DESC) AS rank,
+                    COUNT(*) OVER (PARTITION BY COALESCE(e.points, 0)) > 1 AS tied,
                     (SELECT b.emoji FROM community_badges b
                       WHERE b.community_id = cm.community_id AND b.threshold <= cm.points
                       ORDER BY b.threshold DESC LIMIT 1) AS badge
@@ -2237,11 +2312,20 @@ memberCommunityRouter.get(
       headline: row.headline,
       points: row.points,
       rank: Number(row.rank),
+      // Shared with somebody else, so the client can say "1st (tied)" rather
+      // than printing the same number twice with no explanation.
+      tied: row.tied === true,
       badge: row.badge,
       mine: row.member_id === member.id,
     }));
 
     res.json({
+      period,
+      periods: {
+        week: ctx.leaderboardWeekly,
+        month: ctx.leaderboardMonthly,
+        all: ctx.leaderboardAllTime,
+      },
       leaderboard: rows.filter((row) => row.rank <= 20),
       me: rows.find((row) => row.mine) ?? null,
     });
@@ -2435,8 +2519,7 @@ memberCommunityRouter.get(
            FROM community_channels ch
           WHERE ch.community_id = $1
             AND (ch.name ILIKE $2 OR ch.description ILIKE $2)
-            AND (ch.visibility = 'public' OR $4::bool)
-            AND ($4::bool OR ${CHANNEL_GROUP_VISIBLE.replaceAll("$MEMBER$", "$3")})
+            AND ($4::bool OR ${CHANNEL_MEMBER_VISIBLE.replaceAll("$MEMBER$", "$3")})
           ORDER BY ch.sort, ch.id
           LIMIT 8`,
         [ctx.id, term, member.id, ctx.moderator]
@@ -2468,8 +2551,7 @@ memberCommunityRouter.get(
           WHERE ch.community_id = $1
             AND p.status = 'visible'
             AND (p.title ILIKE $2 OR p.body ILIKE $2)
-            AND (ch.visibility = 'public' OR $4::bool)
-            AND ($4::bool OR ${CHANNEL_GROUP_VISIBLE.replaceAll("$MEMBER$", "$3")})
+            AND ($4::bool OR ${CHANNEL_MEMBER_VISIBLE.replaceAll("$MEMBER$", "$3")})
           ORDER BY p.created_at DESC
           LIMIT 12`,
         [ctx.id, term, member.id, ctx.moderator]

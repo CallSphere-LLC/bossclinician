@@ -28,7 +28,7 @@ describe("admin and member tokens are cryptographically separated", () => {
     const { signMemberAccessToken } = await import("./memberSession");
     const { verifyToken } = await import("../utils/jwt");
 
-    const memberToken = signMemberAccessToken({ sub: 42, email: "member@example.com" });
+    const memberToken = signMemberAccessToken({ sub: 42, email: "success+member@simulator.amazonses.com" });
 
     expect(() => verifyToken(memberToken)).toThrow();
   });
@@ -37,7 +37,7 @@ describe("admin and member tokens are cryptographically separated", () => {
     const { signToken } = await import("../utils/jwt");
     const { verifyMemberAccessToken } = await import("./memberSession");
 
-    const adminToken = signToken({ sub: 1, email: "admin@example.com", role: "admin" });
+    const adminToken = signToken({ sub: 1, email: "success+admin@simulator.amazonses.com", role: "admin" });
 
     expect(() => verifyMemberAccessToken(adminToken)).toThrow();
   });
@@ -46,13 +46,13 @@ describe("admin and member tokens are cryptographically separated", () => {
     const { signToken, verifyToken } = await import("../utils/jwt");
     const { signMemberAccessToken, verifyMemberAccessToken } = await import("./memberSession");
 
-    const admin = verifyToken(signToken({ sub: 1, email: "admin@example.com", role: "admin" }));
-    expect(admin).toMatchObject({ sub: 1, email: "admin@example.com", role: "admin" });
+    const admin = verifyToken(signToken({ sub: 1, email: "success+admin@simulator.amazonses.com", role: "admin" }));
+    expect(admin).toMatchObject({ sub: 1, email: "success+admin@simulator.amazonses.com", role: "admin" });
 
     const member = verifyMemberAccessToken(
-      signMemberAccessToken({ sub: 42, email: "member@example.com" }),
+      signMemberAccessToken({ sub: 42, email: "success+member@simulator.amazonses.com" }),
     );
-    expect(member).toMatchObject({ sub: 42, email: "member@example.com" });
+    expect(member).toMatchObject({ sub: 42, email: "success+member@simulator.amazonses.com" });
   });
 
   it("uses a member signing key that is not the configured JWT secret", async () => {
@@ -73,7 +73,7 @@ describe("admin and member tokens are cryptographically separated", () => {
     const { adminTokenSecret } = await import("./secrets");
     const { verifyToken } = await import("../utils/jwt");
 
-    const roleless = jwt.sign({ sub: 1, email: "x@example.com" }, adminTokenSecret(), {
+    const roleless = jwt.sign({ sub: 1, email: "success+x@simulator.amazonses.com" }, adminTokenSecret(), {
       algorithm: "HS256",
       expiresIn: 600,
     });
@@ -86,7 +86,7 @@ describe("admin and member tokens are cryptographically separated", () => {
     const { adminTokenSecret } = await import("./secrets");
     const { verifyToken } = await import("../utils/jwt");
 
-    const empty = jwt.sign({ sub: 1, email: "x@example.com", role: "" }, adminTokenSecret(), {
+    const empty = jwt.sign({ sub: 1, email: "success+x@simulator.amazonses.com", role: "" }, adminTokenSecret(), {
       algorithm: "HS256",
       expiresIn: 600,
     });

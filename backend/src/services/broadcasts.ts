@@ -466,6 +466,97 @@ export async function sendBroadcastOne(input: {
   }
 }
 
+/* ------------------------------------------------ the event-anchor decision */
+
+/**
+ * How late an event-anchored send may be and still go out.
+ *
+ * A reminder that arrives a day after the "one hour before" it promised is
+ * worse than no reminder: the reader has already missed the thing, and the mail
+ * reads as broken software. An hour of slack absorbs a scheduler outage, a
+ * deploy, or a queue backlog without absorbing a mistake.
+ */
+export const EVENT_ANCHOR_LATE_GRACE_MINUTES = 60;
+
+export type EventAnchorDecision =
+  | { action: "send" }
+  | { action: "wait" }
+  | { action: "skip"; reason: string };
+
+export interface EventAnchorInput {
+  /** The event's start, or null when it has none / has been deleted. */
+  eventStartsAt: Date | null;
+  /** Whether the event is published. An unpublished event sends nothing. */
+  published: boolean;
+  /** Signed: negative is before the event, positive is after. */
+  offsetMinutes: number;
+  /** When this campaign was pointed at this event, stamped server-side. */
+  armedAt: Date | null;
+  now: Date;
+}
+
+/**
+ * Whether an event-anchored campaign should go out on this tick.
+ *
+ * Pulled out of the SQL and into a pure function on purpose. The one rule that
+ * matters here — do not send a backlog — is a comparison between two moments,
+ * and a comparison buried in a WHERE clause is a comparison nobody can write a
+ * test for. Every branch below is covered in broadcasts.test.ts.
+ *
+ * The rules, in the order they apply:
+ *
+ *  1. No event, or no start time: skip permanently. The event was deleted or
+ *     had its date cleared, so the send moment can never be computed.
+ *  2. Event not published: wait. Publishing it later is a normal thing to do,
+ *     and the campaign should still be waiting when that happens.
+ *  3. Send moment still ahead: wait.
+ *  4. Send moment earlier than the moment the campaign was armed: skip
+ *     permanently. THIS is the backlog guard. Setting up "24 hours before" for
+ *     an event that starts in twelve hours asks for a send that was already due
+ *     twelve hours ago; the honest answer is "that window has closed", not a
+ *     mailing to the whole list on the next tick.
+ *  5. Send moment more than the grace window in the past: skip permanently —
+ *     see EVENT_ANCHOR_LATE_GRACE_MINUTES.
+ *  6. Otherwise: send.
+ *
+ * Note that 4 and 5 are independent. 4 catches a window that was already closed
+ * when it was set up, which no amount of uptime would have fixed. 5 catches a
+ * window that was open and that we missed.
+ */
+export function decideEventAnchor(input: EventAnchorInput): EventAnchorDecision {
+  const { eventStartsAt, published, offsetMinutes, armedAt, now } = input;
+
+  if (!eventStartsAt || Number.isNaN(eventStartsAt.getTime())) {
+    return {
+      action: "skip",
+      reason: "The event this was scheduled around no longer has a start time.",
+    };
+  }
+  if (!published) return { action: "wait" };
+
+  const sendAt = eventStartsAt.getTime() + offsetMinutes * 60_000;
+
+  if (sendAt > now.getTime()) return { action: "wait" };
+
+  if (armedAt && !Number.isNaN(armedAt.getTime()) && sendAt < armedAt.getTime()) {
+    return {
+      action: "skip",
+      reason:
+        "That send time had already passed when this was scheduled, so it was not sent. " +
+        "Pick a smaller gap before the event, or send it now.",
+    };
+  }
+
+  if (now.getTime() - sendAt > EVENT_ANCHOR_LATE_GRACE_MINUTES * 60_000) {
+    return {
+      action: "skip",
+      reason: "The send time passed more than an hour ago, so it was not sent.",
+    };
+  }
+
+  return { action: "send" };
+}
+
 /* --------------------------------------------------------------- the tick */
 
 /**
@@ -478,7 +569,24 @@ export async function sendBroadcastOne(input: {
 export async function tickBroadcasts(now: Date = new Date()): Promise<{
   started: number;
   finished: number;
+  skipped: number;
 }> {
+  /*
+   * Wall-clock campaigns. The whole condition is expressible in SQL because
+   * there is only one: has the moment arrived.
+   */
+  const due = await pool.query<{ id: number }>(
+    `SELECT c.id
+       FROM email_campaigns c
+      WHERE c.status = 'scheduled'
+        AND c.anchor_kind = 'absolute'
+        AND c.scheduled_at IS NOT NULL
+        AND c.scheduled_at <= $1
+      ORDER BY c.scheduled_at
+      LIMIT 20`,
+    [now]
+  );
+
   /*
    * Event-anchored campaigns are resolved HERE rather than at save time, which
    * is the whole point of them: "24 hours before the CEU" has to follow the
@@ -489,47 +597,86 @@ export async function tickBroadcasts(now: Date = new Date()): Promise<{
    *
    * `anchor_offset_minutes` is signed — negative is before, positive is after —
    * so one column expresses both directions and the arithmetic is the same.
+   *
+   * The query FETCHES; `decideEventAnchor` decides. Nothing is filtered out
+   * here, because a campaign the sweeper will never send needs saying so on the
+   * screen, and a row excluded by a WHERE clause cannot be told anything.
    */
-  const due = await pool.query<{ id: number }>(
-    `SELECT c.id
+  const anchored = await pool.query<{
+    id: number;
+    starts_at: Date | null;
+    published: boolean | null;
+    anchor_offset_minutes: number;
+    anchor_armed_at: Date | null;
+  }>(
+    `SELECT c.id, e.starts_at, e.published, c.anchor_offset_minutes, c.anchor_armed_at
        FROM email_campaigns c
        LEFT JOIN events e ON e.id = c.anchor_event_id
       WHERE c.status = 'scheduled'
-        AND (
-          (c.anchor_kind = 'absolute'
-             AND c.scheduled_at IS NOT NULL
-             AND c.scheduled_at <= $1)
-          OR
-          (c.anchor_kind = 'event_start'
-             AND e.starts_at IS NOT NULL
-             AND e.published
-             AND e.starts_at + make_interval(mins => c.anchor_offset_minutes) <= $1
-             -- Not after the event has been and gone by more than a day: a
-             -- campaign anchored to an event that happened last month must not
-             -- fire the moment somebody re-publishes it.
-             AND e.starts_at + make_interval(mins => c.anchor_offset_minutes) > $1::timestamptz - interval '1 day')
-        )
-      ORDER BY COALESCE(c.scheduled_at, e.starts_at)
-      LIMIT 20`,
-    [now]
+        AND c.anchor_kind = 'event_start'
+      ORDER BY e.starts_at NULLS LAST
+      LIMIT 50`
   );
 
+  const toStart: number[] = due.rows.map((row) => row.id);
+
+  let skipped = 0;
+  for (const row of anchored.rows) {
+    const decision = decideEventAnchor({
+      eventStartsAt: row.starts_at ? new Date(row.starts_at) : null,
+      published: row.published === true,
+      offsetMinutes: row.anchor_offset_minutes,
+      armedAt: row.anchor_armed_at ? new Date(row.anchor_armed_at) : null,
+      now,
+    });
+
+    if (decision.action === "wait") continue;
+
+    if (decision.action === "skip") {
+      /*
+       * Terminal, and it says why. `failed` rather than a new status because
+       * every screen already knows that one ("Didn't send"), and because the
+       * Send button is offered again from it — the owner can still send the
+       * thing by hand, which for a missed reminder is often what she wants.
+       *
+       * Guarded on status = 'scheduled' so a campaign somebody sent manually in
+       * the same second is not dragged backwards.
+       */
+      const marked = await pool.query(
+        `UPDATE email_campaigns
+            SET status = 'failed', anchor_skip_reason = $2, updated_at = now()
+          WHERE id = $1 AND status = 'scheduled'`,
+        [row.id, decision.reason]
+      );
+      if (marked.rowCount) {
+        skipped += 1;
+        // eslint-disable-next-line no-console
+        console.warn(`[broadcasts] campaign ${row.id} skipped: ${decision.reason}`);
+      }
+      continue;
+    }
+
+    toStart.push(row.id);
+  }
+
   let started = 0;
-  for (const row of due.rows) {
+  for (const id of toStart) {
     try {
-      await startBroadcast(row.id, { expectedStatus: "scheduled" });
+      await startBroadcast(id, { expectedStatus: "scheduled" });
       started += 1;
     } catch (err) {
       const detail = (err instanceof Error ? err.message : String(err)).slice(0, 300);
       // A scheduled campaign that cannot go out is marked failed rather than
-      // retried forever: the reasons are all things a person has to fix.
+      // retried forever: the reasons are all things a person has to fix. The
+      // reason is written next to it, because "Didn't send" with no sentence
+      // beside it is the state this whole column exists to avoid.
       await pool.query(
-        `UPDATE email_campaigns SET status = 'failed', updated_at = now()
+        `UPDATE email_campaigns SET status = 'failed', anchor_skip_reason = $2, updated_at = now()
           WHERE id = $1 AND status = 'scheduled'`,
-        [row.id]
+        [id, detail]
       );
       // eslint-disable-next-line no-console
-      console.error(`[broadcasts] campaign ${row.id} could not start: ${detail}`);
+      console.error(`[broadcasts] campaign ${id} could not start: ${detail}`);
     }
   }
 
@@ -537,12 +684,19 @@ export async function tickBroadcasts(now: Date = new Date()): Promise<{
     `UPDATE email_campaigns c
         SET status = 'sent', sent_at = COALESCE(c.sent_at, now()), updated_at = now()
       WHERE c.status = 'sending'
+        -- An "upon registration" campaign is deliberately never finished by
+        -- this sweep. It has no queued sends between registrations, which is
+        -- exactly the condition below — so the sweep used to close it off as
+        -- "sent" within two minutes of being switched on, and it then never
+        -- mailed anybody again. It stays on "sending" for as long as it is
+        -- switched on, because that is what it is doing.
+        AND c.anchor_kind <> 'event_registration'
         AND NOT EXISTS (
           SELECT 1 FROM email_sends s WHERE s.campaign_id = c.id AND s.status = 'queued'
         )`
   );
 
-  return { started, finished: finished.rowCount ?? 0 };
+  return { started, finished: finished.rowCount ?? 0, skipped };
 }
 
 /* ------------------------------------------- upon registration, per person */
@@ -573,34 +727,41 @@ export async function tickRegistrationCampaigns(
    * that already has five hundred registrants sends to all five hundred at
    * once, because every one of them registered more than two hours ago. That
    * is a mailing nobody asked for, going out under Yvette's name, and it
-   * cannot be recalled. `sent_at` is the stamp — unused by this anchor kind
-   * otherwise, since a per-person campaign never reaches a terminal "sent".
+   * cannot be recalled.
    *
-   * The stamp happens in its own statement first, so the very tick that
-   * activates a campaign sends to nobody. A first tick that both stamped and
-   * sent would still catch the backlog it is meant to exclude.
+   * `anchor_armed_at` is the stamp, and the route that switches the campaign on
+   * writes it — server-side, so no client can backdate it and reach the
+   * backlog. This statement is the belt to that braces: it stamps anything that
+   * reached "sending" by some other path, and it runs in its own statement
+   * first, so the very tick that activates a campaign sends to nobody. A first
+   * tick that both stamped and sent would still catch the backlog it is meant
+   * to exclude.
+   *
+   * `sent_at` was the stamp before this column existed, so it is still honoured
+   * as a floor for rows written by the older code.
    */
   await pool.query(
     `UPDATE email_campaigns
-        SET sent_at = now(), updated_at = now()
+        SET anchor_armed_at = COALESCE(sent_at, now()), updated_at = now()
       WHERE status = 'sending'
         AND anchor_kind = 'event_registration'
         AND anchor_event_id IS NOT NULL
-        AND sent_at IS NULL`
+        AND anchor_armed_at IS NULL`
   );
 
   const campaigns = await pool.query<{
     id: number;
     anchor_event_id: number;
     anchor_offset_minutes: number;
-    sent_at: Date;
+    armed_at: Date;
   }>(
-    `SELECT id, anchor_event_id, anchor_offset_minutes, sent_at
+    `SELECT id, anchor_event_id, anchor_offset_minutes,
+            GREATEST(anchor_armed_at, COALESCE(sent_at, anchor_armed_at)) AS armed_at
        FROM email_campaigns
       WHERE status = 'sending'
         AND anchor_kind = 'event_registration'
         AND anchor_event_id IS NOT NULL
-        AND sent_at IS NOT NULL
+        AND anchor_armed_at IS NOT NULL
       LIMIT 10`
   );
 
@@ -637,7 +798,7 @@ export async function tickRegistrationCampaigns(
         campaign.anchor_offset_minutes,
         now,
         campaign.id,
-        campaign.sent_at,
+        campaign.armed_at,
       ]
     );
 

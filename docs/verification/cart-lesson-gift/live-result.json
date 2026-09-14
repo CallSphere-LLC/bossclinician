@@ -1,0 +1,121 @@
+{
+  "errors": [],
+  "widths": [
+    {
+      "width": 320,
+      "path": "/admin/courses/42/curriculum",
+      "overflow": false
+    },
+    {
+      "width": 320,
+      "path": "/admin/offers/15",
+      "overflow": false
+    },
+    {
+      "width": 320,
+      "path": "/",
+      "overflow": false
+    },
+    {
+      "width": 320,
+      "path": "/cart",
+      "overflow": false
+    },
+    {
+      "width": 390,
+      "path": "/admin/courses/42/curriculum",
+      "overflow": false
+    },
+    {
+      "width": 390,
+      "path": "/admin/offers/15",
+      "overflow": false
+    },
+    {
+      "width": 390,
+      "path": "/",
+      "overflow": false
+    },
+    {
+      "width": 390,
+      "path": "/cart",
+      "overflow": false
+    },
+    {
+      "width": 768,
+      "path": "/admin/courses/42/curriculum",
+      "overflow": false
+    },
+    {
+      "width": 768,
+      "path": "/admin/offers/15",
+      "overflow": false
+    },
+    {
+      "width": 768,
+      "path": "/",
+      "overflow": false
+    },
+    {
+      "width": 768,
+      "path": "/cart",
+      "overflow": false
+    },
+    {
+      "width": 1440,
+      "path": "/admin/courses/42/curriculum",
+      "overflow": false
+    },
+    {
+      "width": 1440,
+      "path": "/admin/offers/15",
+      "overflow": false
+    },
+    {
+      "width": 1440,
+      "path": "/",
+      "overflow": false
+    },
+    {
+      "width": 1440,
+      "path": "/cart",
+      "overflow": false
+    },
+    {
+      "width": 1920,
+      "path": "/admin/courses/42/curriculum",
+      "overflow": false
+    },
+    {
+      "width": 1920,
+      "path": "/admin/offers/15",
+      "overflow": false
+    },
+    {
+      "width": 1920,
+      "path": "/",
+      "overflow": false
+    },
+    {
+      "width": 1920,
+      "path": "/cart",
+      "overflow": false
+    }
+  ],
+  "assessments": [
+    {
+      "id": 10,
+      "lessonId": 19,
+      "kind": "graded"
+    },
+    {
+      "id": 11,
+      "lessonId": 20,
+      "kind": "survey"
+    }
+  ],
+  "courseId": 42,
+  "offerId": 15,
+  "giftSettingPersisted": true,
+  "adminIsolation": 401
+}

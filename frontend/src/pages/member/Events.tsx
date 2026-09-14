@@ -1,5 +1,15 @@
 import { useEffect, useState } from "react";
-import { CalendarPlus, Clock, Loader2, PlayCircle, Radio, Video } from "lucide-react";
+import {
+  BellRing,
+  CalendarPlus,
+  Clock,
+  Loader2,
+  MapPin,
+  PlayCircle,
+  Radio,
+  Repeat,
+  Video,
+} from "lucide-react";
 import { Seo } from "@/components/Seo";
 import { MemberShell } from "@/components/member/MemberShell";
 import { GlassCard } from "@/components/luxe/GlassCard";
@@ -19,6 +29,15 @@ import { formatDate } from "@/lib/format";
  * The room link is deliberately absent until the room is actually open. A link
  * that does nothing is worse than no link, because somebody will sit on it
  * waiting for the session to start.
+ *
+ * The header promises "the room link when it opens and the replay while it
+ * lasts", and until recently an upcoming event showed nothing but "Add to
+ * calendar" — technically consistent with that sentence and, to somebody
+ * reading the card, plainly not. So every card now says which of the four
+ * things is true of it right now: the link is here, the link appears at such a
+ * time, the replay is here, or the replay has closed. Alongside it, the emails
+ * still to come, because a page that promises a reminder should be able to name
+ * it.
  */
 
 export default function MemberEvents() {
@@ -107,6 +126,38 @@ export default function MemberEvents() {
   );
 }
 
+/**
+ * The one line that says what this member can actually do right now.
+ *
+ * Five states, and none of them is "nothing here". The empty space where a
+ * button will be is the thing that made the page feel broken: an event eleven
+ * days out showed a calendar link and no explanation, so the promise of a room
+ * link read as unkept rather than early.
+ */
+function accessNote(event: MemberEvent): string {
+  // An in-person session has doors rather than a link.
+  const inPerson = event.locationType === "in_person";
+  switch (event.state) {
+    case "early":
+      return inPerson
+        ? `Doors open at ${event.roomOpensLabel}, ten minutes before we start.`
+        : `The joining link appears here at ${event.roomOpensLabel}, ten minutes before we start.`;
+    case "live":
+      return inPerson && !event.roomUrl ? "It’s happening now." : "The room is open — come on in.";
+    case "replay":
+      return event.replayExpiresAt
+        ? `The replay is up until ${formatDate(event.replayExpiresAt)}.`
+        : "The replay is up for as long as you need it.";
+    case "expired":
+      return event.replayExpiresAt
+        ? `The replay closed on ${formatDate(event.replayExpiresAt)}.`
+        : "The replay has closed.";
+    case "ended":
+    default:
+      return "This one has finished, and there is no recording of it.";
+  }
+}
+
 function EventRow({ event, past = false }: { event: MemberEvent; past?: boolean }) {
   return (
     <li>
@@ -147,9 +198,51 @@ function EventRow({ event, past = false }: { event: MemberEvent; past?: boolean 
             <Clock aria-hidden className="size-3.5 shrink-0" />
             {event.sessionLabel}
           </p>
-          {event.replayExpiresAt && event.replayUrl && (
-            <p className="mt-1 text-xs text-white/50">
-              Replay available until {formatDate(event.replayExpiresAt)}
+          <p className="copy-luxe mt-1 text-xs text-white/50">{accessNote(event)}</p>
+
+          {event.locationAddress && (
+            <p className="mt-1.5 flex items-start gap-1.5 text-xs text-white/60">
+              <MapPin aria-hidden className="mt-0.5 size-3 shrink-0" />
+              <span className="whitespace-pre-line break-words">{event.locationAddress}</span>
+            </p>
+          )}
+
+          {event.recurrenceLabel && (
+            <p className="mt-1.5 flex items-start gap-1.5 text-xs text-white/60">
+              <Repeat aria-hidden className="mt-0.5 size-3 shrink-0" />
+              <span>
+                {event.recurrenceLabel}.
+                {!past && (event.occurrences?.length ?? 0) > 1 && (
+                  <>
+                    {" "}
+                    After this one:{" "}
+                    {(event.occurrences ?? [])
+                      .slice(1, 4)
+                      .map((session) => session.label)
+                      .join("; ")}
+                    {(event.occurrences?.length ?? 0) > 4
+                      ? `; and ${(event.occurrences?.length ?? 0) - 4} more`
+                      : ""}
+                    .
+                  </>
+                )}
+              </span>
+            </p>
+          )}
+
+          {event.reminders.length > 0 && (
+            <p className="mt-1.5 flex items-start gap-1.5 text-xs text-white/50">
+              <BellRing aria-hidden className="mt-0.5 size-3 shrink-0" />
+              <span>
+                I&rsquo;ll email you{" "}
+                {event.reminders.map((reminder, index) => (
+                  <span key={`${reminder.label}-${reminder.at}`}>
+                    {index > 0 && (index === event.reminders.length - 1 ? " and " : ", ")}
+                    {reminder.label}
+                  </span>
+                ))}
+                .
+              </span>
             </p>
           )}
         </div>
@@ -171,13 +264,13 @@ function EventRow({ event, past = false }: { event: MemberEvent; past?: boolean 
               Watch the replay
             </LuxeButton>
           )}
-          {!past && (
+          {!past && event.state === "early" && (
             <a
               href={event.icsUrl}
               className="inline-flex min-h-[44px] items-center gap-2 rounded-full border border-white/15 px-4 text-sm font-semibold text-white/80 transition-colors hover:border-white/30"
             >
               <CalendarPlus aria-hidden className="size-4" />
-              Add to calendar
+              {(event.occurrences?.length ?? 0) > 1 ? "Add every session to calendar" : "Add to calendar"}
             </a>
           )}
         </div>

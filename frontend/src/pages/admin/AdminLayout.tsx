@@ -1,3 +1,4 @@
+import { publicSiteUrl } from "@/lib/siteOrigins";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, NavLink, useLocation } from "react-router-dom";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
@@ -18,6 +19,7 @@ import { adminApi } from "@/lib/api";
 import { pluralize } from "@/pages/admin/ui/friendly";
 import { NAV_GROUPS, groupForPath, type NavGroup } from "@/pages/admin/ui/nav";
 import { UploadTray } from "@/pages/admin/ui/UploadTray";
+import { ConsoleThemeToggle } from "@/pages/admin/ui/ConsoleThemeToggle";
 
 /**
  * Admin shell: dark rail + collapsible nav groups, glass topbar, content well.
@@ -28,6 +30,7 @@ import { UploadTray } from "@/pages/admin/ui/UploadTray";
  */
 export function AdminLayout({ children }: { children: ReactNode }) {
   const { user, logout } = useAuth();
+  const [signOutError, setSignOutError] = useState("");
   const location = useLocation();
   const reduceMotion = useReducedMotion();
 
@@ -179,7 +182,7 @@ export function AdminLayout({ children }: { children: ReactNode }) {
             >
               <DropdownMenu.Item asChild>
                 <a
-                  href="/"
+                  href={publicSiteUrl("/")}
                   target="_blank"
                   rel="noreferrer"
                   className="flex cursor-pointer items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-ink outline-none data-[highlighted]:bg-white/[0.07]"
@@ -192,7 +195,7 @@ export function AdminLayout({ children }: { children: ReactNode }) {
               <DropdownMenu.Item asChild>
                 <button
                   type="button"
-                  onClick={logout}
+                  onClick={() => { void logout().catch(() => setSignOutError("Sign-out did not complete. Check your connection and try again.")); }}
                   className="flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-red-400 outline-none data-[highlighted]:bg-red-500/10"
                 >
                   <LogOut className="size-4" />
@@ -319,7 +322,7 @@ export function AdminLayout({ children }: { children: ReactNode }) {
             </Link>
 
             <a
-              href="/"
+              href={publicSiteUrl("/")}
               target="_blank"
               rel="noreferrer"
               className="hidden items-center gap-1.5 rounded-xl border border-hairline px-3.5 py-2 text-xs font-semibold text-ink-soft transition-colors hover:border-plum/40 hover:text-plum sm:flex"
@@ -327,6 +330,8 @@ export function AdminLayout({ children }: { children: ReactNode }) {
               My website
               <ExternalLink className="size-3.5" />
             </a>
+
+            <ConsoleThemeToggle />
           </div>
         </header>
 
@@ -338,7 +343,8 @@ export function AdminLayout({ children }: { children: ReactNode }) {
             transition={{ duration: 0.15, ease: [0.22, 1, 0.36, 1] }}
             className="mx-auto max-w-[86rem]"
           >
-            {children}
+            {signOutError && <p role="alert" className="p-4 text-red-400">{signOutError}</p>}
+          {children}
           </motion.div>
         </main>
       </div>

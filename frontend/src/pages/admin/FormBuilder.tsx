@@ -13,7 +13,20 @@ import {
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
-import { formatDateTime } from "@/lib/format";
+import { formatBytes, formatDateTime } from "@/lib/format";
+import {
+  DEFAULT_FILE_CATEGORIES,
+  DEFAULT_MAX_SIZE_MB,
+  FILE_CATEGORIES,
+  FILE_CATEGORY_LABEL,
+  FORM_UPLOAD_HARD_CAP_MB,
+  MAX_FILE_QUESTIONS,
+  canTrigger,
+  logicProblem,
+  operatorsFor,
+  type ConditionOperator,
+  type ShowIf,
+} from "@/lib/formLogic";
 import {
   CONTACT_FIELD_CHOICES,
   FIELD_TYPE_LABEL,
@@ -21,6 +34,7 @@ import {
   formsApi,
   needsOptions,
   saveCsv,
+  sinceDaysFrom,
   type FieldType,
   type FormDetail,
   type FormField,
@@ -90,13 +104,248 @@ function answerText(value: unknown): string {
   if (value === null || value === undefined || value === "") return "";
   if (Array.isArray(value)) return value.map((entry) => String(entry)).join(", ");
   if (typeof value === "boolean") return value ? "Yes" : "No";
+  if (typeof value === "object") {
+    // A file answer is stored as a small record; its name is what reads.
+    const name = (value as { name?: unknown }).name;
+    return typeof name === "string" ? name : "";
+  }
   return String(value);
+}
+
+/** The largest-file choices offered. The server caps every one at 10 MB. */
+const FILE_SIZE_CHOICES = [1, 2, 5, 10];
+
+/* ── Showing a question only sometimes ──────────────────────────────────── */
+
+const OPERATOR_WORDS: Record<ConditionOperator, string> = {
+  equals: "is",
+  not_equals: "is not",
+  contains: "contains",
+  answered: "has any answer",
+  one_of: "is any of",
+};
+
+function operatorWords(operator: ConditionOperator, type: FieldType | undefined): string {
+  if (type === "checkbox" && operator === "answered") return "is ticked";
+  if (type === "file" && operator === "answered") return "has a file attached";
+  return OPERATOR_WORDS[operator];
+}
+
+function choicesOf(field: FormField | undefined): string[] {
+  return (field?.options ?? []).map((option) => option.trim()).filter(Boolean);
+}
+
+/** A rule that already makes sense for this trigger, to start from. */
+function startingRule(trigger: FormField): ShowIf {
+  const operator = operatorsFor(trigger.type)[0];
+  if (operator === "answered") return { field: trigger.key, operator };
+  if (trigger.type === "checkbox") return { field: trigger.key, operator, value: "yes" };
+  return { field: trigger.key, operator, value: choicesOf(trigger)[0] ?? "" };
+}
+
+/** The rule read back as a sentence, so she can check it says what she meant. */
+function ruleSummary(rule: ShowIf, trigger: FormField | undefined): string {
+  if (!trigger) return "The question this depended on isn't above it any more — choose another.";
+  const name = `“${trigger.label || "that question"}”`;
+  if (rule.operator === "answered") return `Shows once ${name} ${operatorWords(rule.operator, trigger.type)}.`;
+  if (trigger.type === "checkbox") {
+    return `Shows when ${name} is ${rule.value === "no" ? "not ticked" : "ticked"}.`;
+  }
+  if (rule.operator === "one_of") {
+    const values = (rule.values ?? []).map((entry) => entry.trim()).filter(Boolean);
+    return values.length > 0
+      ? `Shows when ${name} is any of: ${values.join(", ")}.`
+      : "Pick the answers that show this question.";
+  }
+  const value = (rule.value ?? "").trim();
+  return value
+    ? `Shows when ${name} ${operatorWords(rule.operator, trigger.type)} “${value}”.`
+    : "Fill in the answer to compare with.";
+}
+
+/**
+ * "Only show this question when…" — one earlier question, one test, one value.
+ *
+ * Only questions ABOVE this one are offered, because a visitor answers in
+ * order: a question that depended on one further down would appear after they
+ * had already scrolled past where it goes.
+ */
+function ShowIfEditor({
+  field,
+  earlier,
+  onChange,
+}: {
+  field: FormField;
+  earlier: FormField[];
+  onChange: (changes: Partial<FormField>) => void;
+}) {
+  const triggers = earlier.filter(canTrigger);
+  const rule = field.showIf ?? null;
+  const trigger = rule ? triggers.find((candidate) => candidate.key === rule.field) : undefined;
+  const choices = trigger && needsOptions(trigger.type) ? choicesOf(trigger) : [];
+  const label = field.label || "this question";
+
+  const setRule = (changes: Partial<ShowIf>) => {
+    if (rule) onChange({ showIf: { ...rule, ...changes } });
+  };
+
+  return (
+    <div className="rounded-xl border border-hairline bg-white/[0.03] px-4 py-3">
+      <label className="flex w-fit cursor-pointer items-center gap-2.5 text-sm font-semibold text-ink">
+        <input
+          type="checkbox"
+          className={checkboxStyles}
+          checked={rule !== null}
+          disabled={rule === null && triggers.length === 0}
+          onChange={(event) => {
+            // The question right above is the likeliest trigger.
+            const nearest = triggers[triggers.length - 1];
+            onChange({ showIf: event.target.checked && nearest ? startingRule(nearest) : null });
+          }}
+        />
+        Only show this question when…
+      </label>
+
+      {rule === null && triggers.length === 0 && (
+        <p className="mt-1.5 text-xs text-ink-soft">
+          A question can only depend on one above it. Add or move a question above this one first.
+        </p>
+      )}
+
+      {rule !== null && (
+        <>
+          <div className="mt-3 grid gap-3 sm:grid-cols-3">
+            <select
+              className={selectStyles}
+              aria-label={`The question “${label}” depends on`}
+              value={trigger ? rule.field : ""}
+              onChange={(event) => {
+                const next = triggers.find((candidate) => candidate.key === event.target.value);
+                if (next) onChange({ showIf: startingRule(next) });
+              }}
+            >
+              {!trigger && <option value="">Choose a question…</option>}
+              {triggers.map((candidate) => (
+                <option key={candidate.key} value={candidate.key}>
+                  {candidate.label || "Untitled question"}
+                </option>
+              ))}
+            </select>
+
+            <select
+              className={selectStyles}
+              aria-label={`How the answer decides whether “${label}” shows`}
+              value={rule.operator}
+              disabled={!trigger}
+              onChange={(event) => {
+                const operator = event.target.value as ConditionOperator;
+                const seeded = rule.value ?? (trigger?.type === "checkbox" ? "yes" : (choices[0] ?? ""));
+                setRule({
+                  operator,
+                  value: operator === "one_of" || operator === "answered" ? undefined : seeded,
+                  values:
+                    operator === "one_of"
+                      ? rule.values && rule.values.length > 0
+                        ? rule.values
+                        : rule.value
+                          ? [rule.value]
+                          : []
+                      : undefined,
+                });
+              }}
+            >
+              {operatorsFor(trigger?.type).map((operator) => (
+                <option key={operator} value={operator}>
+                  {operatorWords(operator, trigger?.type)}
+                </option>
+              ))}
+            </select>
+
+            {trigger && rule.operator !== "answered" &&
+              (trigger.type === "checkbox" ? (
+                <select
+                  className={selectStyles}
+                  aria-label={`Whether “${trigger.label}” is ticked`}
+                  value={rule.value === "no" ? "no" : "yes"}
+                  onChange={(event) => setRule({ value: event.target.value })}
+                >
+                  <option value="yes">ticked</option>
+                  <option value="no">not ticked</option>
+                </select>
+              ) : choices.length > 0 && rule.operator === "one_of" ? (
+                <div className="grid gap-1.5 rounded-xl border border-hairline bg-white/[0.03] p-3 sm:col-span-3">
+                  {choices.map((choice) => {
+                    const picked = rule.values ?? [];
+                    return (
+                      <label key={choice} className="flex cursor-pointer items-center gap-2.5 text-sm text-ink">
+                        <input
+                          type="checkbox"
+                          className={checkboxStyles}
+                          checked={picked.includes(choice)}
+                          onChange={(event) =>
+                            setRule({
+                              values: event.target.checked
+                                ? [...picked.filter((entry) => entry !== choice), choice]
+                                : picked.filter((entry) => entry !== choice),
+                            })
+                          }
+                        />
+                        {choice}
+                      </label>
+                    );
+                  })}
+                </div>
+              ) : choices.length > 0 ? (
+                <select
+                  className={selectStyles}
+                  aria-label={`The answer to “${trigger.label}” that decides it`}
+                  value={rule.value ?? ""}
+                  onChange={(event) => setRule({ value: event.target.value })}
+                >
+                  {!choices.includes(rule.value ?? "") && (
+                    <option value={rule.value ?? ""}>
+                      {rule.value ? `${rule.value} (not a choice any more)` : "Choose an answer…"}
+                    </option>
+                  )}
+                  {choices.map((choice) => (
+                    <option key={choice} value={choice}>
+                      {choice}
+                    </option>
+                  ))}
+                </select>
+              ) : rule.operator === "one_of" ? (
+                <Textarea
+                  rows={3}
+                  className="sm:col-span-3"
+                  aria-label={`The answers to “${trigger.label}” that show it, one per line`}
+                  value={(rule.values ?? []).join("\n")}
+                  onChange={(event) =>
+                    setRule({ values: event.target.value.split("\n").map((line) => line.trimStart()) })
+                  }
+                  placeholder={"One answer per line"}
+                />
+              ) : (
+                <Input
+                  aria-label={`The answer to “${trigger.label}” that decides it`}
+                  value={rule.value ?? ""}
+                  maxLength={200}
+                  onChange={(event) => setRule({ value: event.target.value })}
+                  placeholder="Type the answer"
+                />
+              ))}
+          </div>
+          <p className="mt-2 text-xs text-ink-soft">{ruleSummary(rule, trigger)}</p>
+        </>
+      )}
+    </div>
+  );
 }
 
 /* ── One question ───────────────────────────────────────────────────────── */
 
 function FieldBlock({
   field,
+  earlier,
   index,
   total,
   onChange,
@@ -104,6 +353,8 @@ function FieldBlock({
   onDelete,
 }: {
   field: FormField;
+  /** The questions above this one — the only ones it may depend on. */
+  earlier: FormField[];
   index: number;
   total: number;
   onChange: (changes: Partial<FormField>) => void;
@@ -164,7 +415,20 @@ function FieldBlock({
               className={selectStyles}
               aria-label={`How people answer “${field.label}”`}
               value={field.type}
-              onChange={(event) => onChange({ type: event.target.value as FieldType })}
+              onChange={(event) => {
+                const type = event.target.value as FieldType;
+                onChange(
+                  type === "file"
+                    ? {
+                        type,
+                        // A file is attached to the contact, never written into a detail.
+                        contactField: "",
+                        fileTypes: field.fileTypes ?? [...DEFAULT_FILE_CATEGORIES],
+                        maxSizeMb: field.maxSizeMb ?? DEFAULT_MAX_SIZE_MB,
+                      }
+                    : { type },
+                );
+              }}
             >
               {FIELD_TYPES.map((type) => (
                 <option key={type} value={type}>
@@ -174,6 +438,13 @@ function FieldBlock({
             </select>
           </Field>
 
+          {field.type === "file" ? (
+            <Field label="Where the file goes">
+              <p className="text-sm leading-relaxed text-ink-soft">
+                Kept privately in your Media Library and attached to the person's contact record.
+              </p>
+            </Field>
+          ) : (
           <Field label="Save this answer to">
             <select
               className={selectStyles}
@@ -206,6 +477,7 @@ function FieldBlock({
               />
             )}
           </Field>
+          )}
 
           <Field label="A note under the question" hint="optional">
             <Input
@@ -216,6 +488,7 @@ function FieldBlock({
             />
           </Field>
 
+          {field.type !== "file" && (
           <Field label="Faint text inside the box" hint="optional">
             <Input
               aria-label={`Faint text inside “${field.label}”`}
@@ -224,6 +497,56 @@ function FieldBlock({
               placeholder="Type your answer here"
             />
           </Field>
+          )}
+
+          {field.type === "file" && (
+            <>
+              <Field label="Files they may send">
+                <div className="space-y-1.5 rounded-xl border border-hairline bg-white/[0.03] p-3">
+                  {FILE_CATEGORIES.map((category) => {
+                    const chosen = field.fileTypes ?? DEFAULT_FILE_CATEGORIES;
+                    return (
+                      <label
+                        key={category}
+                        className="flex cursor-pointer items-center gap-2.5 text-sm text-ink"
+                      >
+                        <input
+                          type="checkbox"
+                          className={checkboxStyles}
+                          checked={chosen.includes(category)}
+                          onChange={(event) =>
+                            onChange({
+                              fileTypes: event.target.checked
+                                ? [...chosen.filter((entry) => entry !== category), category]
+                                : chosen.filter((entry) => entry !== category),
+                            })
+                          }
+                        />
+                        {FILE_CATEGORY_LABEL[category]}
+                      </label>
+                    );
+                  })}
+                </div>
+              </Field>
+              <Field label="Largest file they can send" hint={`${FORM_UPLOAD_HARD_CAP_MB} MB at most`}>
+                <select
+                  className={selectStyles}
+                  aria-label={`Largest file for “${field.label}”`}
+                  value={String(field.maxSizeMb ?? DEFAULT_MAX_SIZE_MB)}
+                  onChange={(event) => onChange({ maxSizeMb: Number(event.target.value) })}
+                >
+                  {FILE_SIZE_CHOICES.map((mb) => (
+                    <option key={mb} value={mb}>
+                      {mb} MB
+                    </option>
+                  ))}
+                  {!FILE_SIZE_CHOICES.includes(field.maxSizeMb ?? DEFAULT_MAX_SIZE_MB) && (
+                    <option value={field.maxSizeMb}>{field.maxSizeMb} MB</option>
+                  )}
+                </select>
+              </Field>
+            </>
+          )}
 
           {needsOptions(field.type) && (
             <Field
@@ -256,6 +579,7 @@ function FieldBlock({
           They have to answer this one
         </label>
 
+        {field.type !== "file" && (
         <details className="rounded-xl border border-hairline bg-white/[0.03] px-4 py-3">
           <summary className="cursor-pointer text-sm font-semibold text-ink">More rules</summary>
           <div className="mt-4 grid gap-4 sm:grid-cols-3">
@@ -302,6 +626,9 @@ function FieldBlock({
             </Field>
           </div>
         </details>
+        )}
+
+        <ShowIfEditor field={field} earlier={earlier} onChange={onChange} />
       </div>
     </li>
   );
@@ -314,6 +641,9 @@ export default function FormBuilder() {
   const navigate = useNavigate();
   const openParam = searchParams.get("form");
   const openId = openParam !== null && /^\d+$/.test(openParam) ? Number(openParam) : null;
+  // `?form=<id>&since=30d` opens the form with only the last 30 days' replies —
+  // how the Marketing Overview links here. Without `since`, every reply.
+  const sinceDays = sinceDaysFrom(searchParams.get("since"));
 
   const [forms, setForms] = useState<FormSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -355,12 +685,15 @@ export default function FormBuilder() {
     marketingApi.sequences().then(setSequences).catch(() => setSequences([]));
   }, []);
 
-  const loadReplies = useCallback((id: number) => {
-    formsApi
-      .submissions(id)
-      .then((page) => setReplies(page.submissions))
-      .catch(() => setReplies([]));
-  }, []);
+  const loadReplies = useCallback(
+    (id: number) => {
+      formsApi
+        .submissions(id, 0, sinceDays)
+        .then((page) => setReplies(page.submissions))
+        .catch(() => setReplies([]));
+    },
+    [sinceDays],
+  );
 
   useEffect(() => {
     if (openId === null) {
@@ -376,8 +709,21 @@ export default function FormBuilder() {
       .get(openId)
       .then(setDraft)
       .catch((err) => setError(friendlyError(err, "form")));
+  }, [openId]);
+
+  // The replies load on their own, so narrowing or clearing `since` refetches
+  // them without throwing away an unsaved draft of the form above.
+  useEffect(() => {
+    if (openId === null) return;
+    setReplies(null);
     loadReplies(openId);
   }, [openId, loadReplies]);
+
+  function clearSince() {
+    const next = new URLSearchParams(searchParams);
+    next.delete("since");
+    setSearchParams(next);
+  }
 
   /* Not losing the draft ------------------------------------------------- */
 
@@ -553,7 +899,16 @@ export default function FormBuilder() {
     change({
       fields: [
         ...draft.fields,
-        { key, label, type: newType, required: false, options: needsOptions(newType) ? [] : undefined },
+        {
+          key,
+          label,
+          type: newType,
+          required: false,
+          options: needsOptions(newType) ? [] : undefined,
+          ...(newType === "file"
+            ? { fileTypes: [...DEFAULT_FILE_CATEGORIES], maxSizeMb: DEFAULT_MAX_SIZE_MB }
+            : {}),
+        },
       ],
     });
     setAskingField(false);
@@ -580,15 +935,27 @@ export default function FormBuilder() {
   async function deleteField(index: number) {
     if (!draft) return;
     const field = draft.fields[index];
+    // Questions that only show depending on this one. Left pointing at a
+    // question that is gone, they could never be saved; said out loud here, and
+    // set back to always showing, they can.
+    const dependents = draft.fields.filter((other) => other.showIf?.field === field.key);
     const ok = await confirm({
       title: `Delete the question “${field.label}”?`,
       description:
-        "It comes off the form straight away. Answers people already gave to it stay in your replies.",
+        dependents.length > 0
+          ? `It comes off the form straight away, and ${dependents
+              .map((other) => `“${other.label}”`)
+              .join(", ")} will always show instead of depending on it. Answers people already gave stay in your replies.`
+          : "It comes off the form straight away. Answers people already gave to it stay in your replies.",
       confirmLabel: "Yes, delete it",
       destructive: true,
     });
     if (!ok) return;
-    change({ fields: draft.fields.filter((_field, at) => at !== index) });
+    change({
+      fields: draft.fields
+        .filter((_field, at) => at !== index)
+        .map((other) => (other.showIf?.field === field.key ? { ...other, showIf: null } : other)),
+    });
   }
 
   /* Saving --------------------------------------------------------------- */
@@ -610,6 +977,44 @@ export default function FormBuilder() {
       }
       return;
     }
+
+    // The questions exactly as they will be stored, so the checks below judge
+    // what the server will see — trimmed choices, not the ones mid-typing.
+    const outgoingFields: FormField[] = snapshot.fields.map((field) => ({
+      ...field,
+      contactField:
+        field.type === "file"
+          ? undefined
+          : !field.contactField ||
+              CONTACT_FIELD_CHOICES.some((choice) => choice.value === field.contactField)
+            ? field.contactField
+            : fieldKey(field.contactField),
+      options: field.options?.map((option) => option.trim()).filter(Boolean),
+      showIf: field.showIf
+        ? {
+            ...field.showIf,
+            value: field.showIf.value?.trim(),
+            values: field.showIf.values?.map((entry) => entry.trim()).filter(Boolean),
+          }
+        : field.showIf,
+    }));
+
+    const noFileKinds = outgoingFields.find(
+      (field) => field.type === "file" && (field.fileTypes ?? DEFAULT_FILE_CATEGORIES).length === 0,
+    );
+    const fileCount = outgoingFields.filter((field) => field.type === "file").length;
+    // Said here, next to the form, rather than left to a save that fails in
+    // the background: the same rules the server applies (formsV2.ts).
+    const problem = noFileKinds
+      ? `“${noFileKinds.label}” doesn't accept any kind of file yet. Tick at least one.`
+      : fileCount > MAX_FILE_QUESTIONS
+        ? `A form can ask for up to ${MAX_FILE_QUESTIONS} files.`
+        : logicProblem(outgoingFields);
+    if (problem) {
+      if (atRevision === revision.current) setSaveProblem(problem);
+      return;
+    }
+
     setSaveProblem(null);
     setSaving(true);
 
@@ -617,15 +1022,7 @@ export default function FormBuilder() {
       formsApi.update(snapshot.id, {
         name: snapshot.name,
         descriptionMd: snapshot.descriptionMd,
-        fields: snapshot.fields.map((field) => ({
-          ...field,
-          contactField:
-            !field.contactField ||
-            CONTACT_FIELD_CHOICES.some((choice) => choice.value === field.contactField)
-              ? field.contactField
-              : fieldKey(field.contactField),
-          options: field.options?.map((option) => option.trim()).filter(Boolean),
-        })),
+        fields: outgoingFields,
         submitLabel: snapshot.submitLabel,
         successMessage: snapshot.successMessage,
         postAction: snapshot.postAction,
@@ -731,11 +1128,29 @@ export default function FormBuilder() {
         id: field.key,
         header: field.label,
         accessorFn: (reply: FormSubmission) => answerText(reply.data?.[field.key]),
-        cell: ({ row }) => (
-          <span className="block max-w-xs truncate text-sm text-ink">
-            {answerText(row.original.data?.[field.key])}
-          </span>
-        ),
+        cell: ({ row }) => {
+          // A file opens through a private link minted when the replies loaded.
+          const file =
+            field.type === "file"
+              ? row.original.files?.find((sent) => sent.fieldKey === field.key)
+              : undefined;
+          return file ? (
+            <a
+              href={file.previewUrl}
+              target="_blank"
+              rel="noreferrer"
+              title="Opens a private link that works for two hours. Reload the page for a fresh one."
+              className="block max-w-xs truncate text-sm font-semibold text-plum hover:underline"
+            >
+              {file.name}
+              <span className="font-normal text-ink-soft"> · {formatBytes(file.sizeBytes)}</span>
+            </a>
+          ) : (
+            <span className="block max-w-xs truncate text-sm text-ink">
+              {answerText(row.original.data?.[field.key])}
+            </span>
+          );
+        },
       })),
       {
         id: "actions",
@@ -1061,6 +1476,7 @@ export default function FormBuilder() {
               <FieldBlock
                 key={field.key}
                 field={field}
+                earlier={draft.fields.slice(0, index)}
                 index={index}
                 total={draft.fields.length}
                 onChange={(changes) => changeField(index, changes)}
@@ -1205,6 +1621,16 @@ export default function FormBuilder() {
             <p className="mt-1 text-sm text-ink-soft">
               Everything people have sent through this form, newest first.
             </p>
+            {sinceDays !== null && (
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <Badge tone="gold">
+                  Showing replies from the last {sinceDays === 1 ? "day" : `${sinceDays} days`}
+                </Badge>
+                <Button size="sm" variant="ghost" onClick={clearSince}>
+                  Show all replies
+                </Button>
+              </div>
+            )}
           </div>
           <Button
             size="sm"
@@ -1226,7 +1652,11 @@ export default function FormBuilder() {
           emptyState={
             <EmptyState
               icon={<Inbox />}
-              title="No replies yet"
+              title={
+                sinceDays !== null
+                  ? `No replies in the last ${sinceDays === 1 ? "day" : `${sinceDays} days`}`
+                  : "No replies yet"
+              }
               description="Once this form is live on your site, everything people send lands here and can be downloaded as a spreadsheet."
             />
           }

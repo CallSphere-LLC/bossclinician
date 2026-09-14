@@ -295,6 +295,7 @@ const optionalRef = (max: number) =>
 /* ------------------------------------------------------------------ products */
 
 const productFields = {
+  instructions: z.string().trim().max(10_000).default(""),
   slug: slugSchema,
   title: z.string().trim().min(1).max(300),
   subtitle: z.string().trim().max(300).default(""),
@@ -413,6 +414,7 @@ const offerFields = {
   // own words, and a limit she can hit while writing a genuine first lesson
   // would push her back to sending it by hand.
   sendWelcomeEmail: z.boolean().default(true),
+  allowGifting: z.boolean().default(true),
   welcomeNextSteps: z.string().trim().max(4000).default(""),
 
   stripePriceId: optionalRef(255).default(null),

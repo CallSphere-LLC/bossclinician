@@ -90,21 +90,8 @@ export function LuxeMeetYvette() {
                   height={1200}
                   loading="lazy"
                   decoding="async"
-                  // Graded to the same recipe as the hero portrait. The source
-                  // is a high-key studio shot: at brightness 0.9 its backdrop
-                  // stays brighter than any surface on the page, so the frame
-                  // reads as a lit rectangle pasted onto the dark rather than a
-                  // photograph sitting in it.
-                  className="aspect-[4/5] w-full object-cover object-top brightness-[0.7] contrast-[1.12] saturate-[0.7]"
+                  className="aspect-[4/5] w-full object-cover object-top"
                 />
-                {/* Seat the daylight photograph into the near-black surface:
-                    a vignette to close the corners, then a violet soft-light
-                    pass so its whites carry the page's plum rather than fight it. */}
-                <div
-                  aria-hidden
-                  className="absolute inset-0 bg-[radial-gradient(112%_78%_at_50%_24%,transparent_24%,rgba(10,7,19,0.55)_66%,rgba(6,4,11,0.92)_100%)]"
-                />
-                <div aria-hidden className="absolute inset-0 bg-glow-violet/20 mix-blend-soft-light" />
               </div>
 
               {/* Offset crop marks — a printer's registration frame, sitting a

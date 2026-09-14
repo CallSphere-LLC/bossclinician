@@ -1,0 +1,23 @@
+[
+  {
+    "productId": 1,
+    "fileId": 1,
+    "recipientDownload": 200,
+    "exactBytes": true,
+    "payerDownload": 404
+  },
+  {
+    "productId": 2,
+    "fileId": 2,
+    "recipientDownload": 200,
+    "exactBytes": true,
+    "payerDownload": 404
+  },
+  {
+    "productId": 3,
+    "fileId": 3,
+    "recipientDownload": 200,
+    "exactBytes": true,
+    "payerDownload": 404
+  }
+]

@@ -3,14 +3,21 @@ import { Link } from "react-router-dom";
 import { motion } from "motion/react";
 import {
   ArrowUpRight,
+  FileDown,
+  Headphones,
+  Mail,
+  Mic,
+  Plus,
   FolderOpen,
   GraduationCap,
   MessagesSquare,
   Package,
   Tag,
 } from "lucide-react";
+import { NewProductPicker } from "./ui/NewProductPicker";
+import { adminCommerceApi, type Product } from "@/lib/adminCommerceApi";
 import { adminApi } from "@/lib/api";
-import type { Community, Plan } from "@/types/admin";
+import type { CoachingOffer, Community, Newsletter, Plan, Podcast } from "@/types/admin";
 import type { Course } from "@/types";
 import { formatCurrency, formatNumber } from "@/lib/format";
 import { Badge, Button, Card, ErrorNotice, PageHeader, Skeleton } from "@/pages/admin/ui/primitives";
@@ -29,14 +36,23 @@ function everyLabel(interval: string): string {
  * away, across courses, communities and the plans people pay for monthly.
  */
 export default function Products() {
+  const [creating, setCreating] = useState(false);
+  const [downloads, setDownloads] = useState<Product[] | null>(null);
+  const [podcasts, setPodcasts] = useState<Podcast[] | null>(null);
+  const [newsletters, setNewsletters] = useState<Newsletter[] | null>(null);
+  const [coaching, setCoaching] = useState<CoachingOffer[] | null>(null);
   const [courses, setCourses] = useState<Course[] | null>(null);
   const [communities, setCommunities] = useState<Community[] | null>(null);
   const [plans, setPlans] = useState<Plan[] | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    Promise.all([adminApi.coursesList(), adminApi.communities(), adminApi.plans()])
-      .then(([c, comm, p]) => {
+    Promise.all([adminApi.coursesList(), adminApi.communities(), adminApi.plans(), adminCommerceApi.productList({ kind: "download" }), adminApi.growthList<Podcast>("podcasts"), adminApi.growthList<Newsletter>("newsletters"), adminApi.growthList<CoachingOffer>("coaching/offers")])
+      .then(([c, comm, p, dl, shows, letters, coaches]) => {
+        setDownloads(dl.filter((d) => d.status !== "archived"));
+        setPodcasts(shows);
+        setNewsletters(letters);
+        setCoaching(coaches);
         setCourses(c);
         setCommunities(comm);
         setPlans(p);
@@ -44,19 +60,26 @@ export default function Products() {
       .catch(() => setError("We couldn't load what you're selling. Try refreshing the page."));
   }, []);
 
-  const loading = courses === null || communities === null || plans === null;
+  const loading = courses === null || communities === null || plans === null || downloads === null || podcasts === null || newsletters === null || coaching === null;
 
   return (
     <div className="space-y-6">
       <PageHeader
         eyebrow="Products"
         title="All Products"
-        description="Everything you sell or give away — your courses, your communities and the plans people subscribe to."
+        description="Everything you sell or give away — courses, downloads, communities, coaching, podcasts and newsletters."
+        actions={<Button size="sm" onClick={() => setCreating(true)}><Plus />New product</Button>}
       />
+
+      <NewProductPicker open={creating} onOpenChange={setCreating} />
 
       {error && <ErrorNotice message={error} />}
 
       <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
+        <SummaryTile label="Downloads" value={downloads?.length} icon={<FileDown className="size-4" />} to="/admin/downloads" loading={loading} />
+        <SummaryTile label="Coaching" value={coaching?.length} icon={<Headphones className="size-4" />} to="/admin/coaching" loading={loading} />
+        <SummaryTile label="Podcasts" value={podcasts?.length} icon={<Mic className="size-4" />} to="/admin/podcasts" loading={loading} />
+        <SummaryTile label="Newsletters" value={newsletters?.length} icon={<Mail className="size-4" />} to="/admin/newsletters" loading={loading} />
         <SummaryTile
           label="Courses"
           value={courses?.length}
@@ -88,6 +111,14 @@ export default function Products() {
         />
       </div>
 
+      <Section title="Downloads" to="/admin/downloads" empty="No downloads yet — create your first file collection." loading={loading}
+        items={(downloads ?? []).map((item) => ({ id: `download-${item.id}`, title: item.title, subtitle: item.description || item.subtitle || "No description yet", meta: pluralize(item.fileCount, "file"), published: item.status === "published", href: "/admin/downloads" }))} />
+      <Section title="Coaching" to="/admin/coaching" empty="No coaching packages yet." loading={loading}
+        items={(coaching ?? []).map((item) => ({ id: `coaching-${item.id}`, title: item.title, subtitle: item.description || "No description yet", meta: formatCurrency(item.priceCents, "usd"), published: item.published, href: "/admin/coaching" }))} />
+      <Section title="Podcasts" to="/admin/podcasts" empty="No podcasts yet." loading={loading}
+        items={(podcasts ?? []).map((item) => ({ id: `podcast-${item.id}`, title: item.title, subtitle: item.description || "No description yet", meta: "Podcast", published: item.published, href: "/admin/podcasts" }))} />
+      <Section title="Newsletters" to="/admin/newsletters" empty="No newsletters yet." loading={loading}
+        items={(newsletters ?? []).map((item) => ({ id: `newsletter-${item.id}`, title: item.name, subtitle: item.description || "No description yet", meta: item.access === "paid" ? "Paid" : "Free", published: item.published, href: "/admin/newsletters" }))} />
       <Section
         title="Courses"
         to="/admin/courses"

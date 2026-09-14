@@ -44,6 +44,39 @@
   font-variant-numeric: tabular-nums;
 }
 
+/*
+ * "Dark" appearance — a graphite step up from the default ("Black", above).
+ * Chosen in the topbar (ui/ConsoleThemeToggle.tsx), which sets
+ * <html data-console-theme>; the second selector lets a shell carry the
+ * attribute itself. Same gold accent and status meanings; text is WCAG AA on
+ * every layer up to --bg-elevated (danger is lifted slightly to stay there).
+ */
+:root[data-console-theme="dark"] .theme-console,
+.theme-console[data-console-theme="dark"] {
+  --bg-base: #1a1a1f;
+  --bg-surface: #222228;
+  --bg-surface-2: #29292f;
+  --bg-elevated: #303037;
+  --border-subtle: #36363f;
+  --border-strong: #48484f;
+  --text-primary: #f2efe9;
+  --text-secondary: #b5b1a9;
+  --text-muted: #a19d95;
+  --danger: #ea7a7a;
+
+  --c-ink: 242 239 233;
+  --c-ink-soft: 181 177 169;
+  --c-cream: 26 26 31;
+  --c-sand: 41 41 47;
+  --c-surface: 34 34 40;
+  --c-surface-raised: 48 48 55;
+  --c-hairline: 54 54 63;
+  --c-lilac-soft: 181 177 169;
+  --c-lilac-tint: 41 41 47;
+  --c-lilac: 181 177 169;
+  --c-dark: 20 20 24;
+}
+
 .theme-console h2:not(.font-display),
 .theme-console h3:not(.font-display),
 .theme-console h4:not(.font-display) {
@@ -64,4 +97,16 @@
 
 .theme-console :focus-visible {
   outline-color: var(--accent);
+}
+
+/* Keep desktop row actions inside the pane when content has a large intrinsic width. */
+@media (min-width: 1024px) {
+  .admin-data-table { table-layout: fixed; min-width: 0 !important; }
+  .admin-data-table th, .admin-data-table td {
+    padding-left: 0.75rem; padding-right: 0.75rem;
+    overflow-wrap: anywhere; white-space: normal;
+  }
+  .admin-data-table th > button { max-width: 100%; text-align: left; white-space: normal; }
+  .admin-data-table td > * { max-width: 100%; }
+  .admin-data-table td .whitespace-nowrap { white-space: normal; }
 }

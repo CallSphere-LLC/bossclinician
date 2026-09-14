@@ -1,0 +1,9 @@
+{
+  "normalMotionRoutes": [
+    "/",
+    "/blog",
+    "/about"
+  ],
+  "errors": [],
+  "secondTabTheme": "light"
+}

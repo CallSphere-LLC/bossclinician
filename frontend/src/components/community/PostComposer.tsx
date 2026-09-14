@@ -1,6 +1,8 @@
 import { useState } from "react";
 import {
   BarChart3,
+  CalendarClock,
+  Clock,
   Film,
   Image as ImageIcon,
   Link2,
@@ -15,6 +17,12 @@ import { LuxeButton } from "@/components/luxe/LuxeButton";
 import { luxeControlClass } from "@/components/luxe/LuxeField";
 import { MemberAvatar } from "@/components/member/MemberShell";
 import { communityApi, safeLink, type NewPostInput, type PostKind } from "@/lib/communityApi";
+import {
+  defaultScheduleWallClock,
+  readScheduleWallClock,
+  scheduleTimeZone,
+  timeZoneLabel,
+} from "@/components/community/scheduleTime";
 import { MemberApiError } from "@/lib/memberApi";
 import { cn } from "@/lib/cn";
 
@@ -57,6 +65,14 @@ interface PostComposerProps {
   authorAvatarUrl: string;
   /** Resolves true when the post was accepted, which is what clears the draft. */
   onSubmit: (input: NewPostInput) => Promise<boolean>;
+  /**
+   * Offers "Post at a time". Hosts only — moderators and admins of the
+   * community — because the endpoint refuses anybody else, and a control that
+   * always answers "not allowed" is worse than no control.
+   */
+  canSchedule?: boolean;
+  /** The member's own timezone, which the picked time is read in. */
+  timeZone?: string;
 }
 
 export function PostComposer({
@@ -66,7 +82,12 @@ export function PostComposer({
   authorEmail,
   authorAvatarUrl,
   onSubmit,
+  canSchedule = false,
+  timeZone,
 }: PostComposerProps) {
+  const zone = scheduleTimeZone(timeZone);
+  /** The wall clock in the member's timezone. Empty means "post it now". */
+  const [publishAt, setPublishAt] = useState("");
   const [kind, setKind] = useState<PostKind>("text");
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("");
@@ -93,6 +114,7 @@ export function PostComposer({
     setOptions(["", ""]);
     setError("");
     setKind("text");
+    setPublishAt("");
     setOpen(false);
   };
 
@@ -119,6 +141,18 @@ export function PostComposer({
     setError(problem);
     if (problem || sending) return;
 
+    // Read in the member's own timezone, and refused here with the reason
+    // rather than bounced by the endpoint.
+    let when: string | undefined;
+    if (canSchedule && publishAt !== "") {
+      const reading = readScheduleWallClock(publishAt, zone);
+      if (!reading.ok) {
+        setError(reading.error);
+        return;
+      }
+      when = reading.iso;
+    }
+
     setSending(true);
     const ok = await onSubmit({
       kind,
@@ -127,6 +161,7 @@ export function PostComposer({
       ...(needsMedia ? { mediaUrl: mediaUrl.trim() } : {}),
       ...(mediaLabel ? { mediaLabel } : {}),
       ...(kind === "poll" ? { pollOptions: filledOptions } : {}),
+      ...(when ? { publishAt: when } : {}),
     });
     setSending(false);
     if (ok) reset();
@@ -305,17 +340,68 @@ export function PostComposer({
             )}
           </div>
 
+          {canSchedule && publishAt !== "" && (
+            <div className="flex flex-col gap-1.5">
+              <label
+                htmlFor="composer-publish-at"
+                className="text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-orchid"
+              >
+                Goes out at
+              </label>
+              <input
+                id="composer-publish-at"
+                type="datetime-local"
+                value={publishAt}
+                onChange={(e) => {
+                  setPublishAt(e.target.value);
+                  setError("");
+                }}
+                aria-describedby="composer-publish-at-hint"
+                className={luxeControlClass}
+              />
+              <p id="composer-publish-at-hint" className="text-xs text-white/45">
+                Your timezone — {zone.replace(/_/g, " ")} ({timeZoneLabel(zone)}). Nobody sees
+                it until then; you can change your timezone on your account page.
+              </p>
+            </div>
+          )}
+
           <div className="flex flex-wrap gap-2.5">
             <LuxeButton type="submit" size="sm" disabled={sending}>
               {sending ? (
                 <>
                   <Loader2 aria-hidden className="size-4 animate-spin" />
-                  Posting…
+                  {publishAt !== "" && canSchedule ? "Scheduling…" : "Posting…"}
+                </>
+              ) : publishAt !== "" && canSchedule ? (
+                <>
+                  <CalendarClock aria-hidden className="size-4" />
+                  Schedule it
                 </>
               ) : (
                 "Post"
               )}
             </LuxeButton>
+            {canSchedule && (
+              <LuxeButton
+                type="button"
+                variant="glass"
+                size="sm"
+                aria-pressed={publishAt !== ""}
+                disabled={sending}
+                onClick={() => {
+                  setError("");
+                  // An hour out rather than an empty box: "in a bit" is what
+                  // "post at a time" almost always means.
+                  setPublishAt((current) =>
+                    current === "" ? defaultScheduleWallClock(zone) : "",
+                  );
+                }}
+              >
+                <Clock aria-hidden className="size-4" />
+                {publishAt === "" ? "Post at a time" : "Post it now instead"}
+              </LuxeButton>
+            )}
             <LuxeButton type="button" variant="glass" size="sm" onClick={reset} disabled={sending}>
               Cancel
             </LuxeButton>

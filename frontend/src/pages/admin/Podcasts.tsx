@@ -1,3 +1,5 @@
+import { publicSiteUrl } from "@/lib/siteOrigins";
+import { useNewProductRequest } from "./ui/useNewProductRequest";
 import {
   useCallback,
   useEffect,
@@ -293,6 +295,7 @@ export default function Podcasts() {
   const [members, setMembers] = useState<Member[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [showDraft, setShowDraft] = useState<Partial<Podcast> | null>(null);
+  useNewProductRequest(() => setShowDraft({ ...EMPTY_SHOW }));
   const [episodeDraft, setEpisodeDraft] = useState<Partial<PodcastEpisode> | null>(null);
   // Which box the file picker is filling in — the episode's audio or the
   // show's cover art. The kind is held separately so the picker doesn't flip
@@ -335,7 +338,7 @@ export default function Podcasts() {
   }, [active, loadDetail]);
 
   const listeningLink = active
-    ? `${window.location.origin}/api/podcast/${active.slug}/rss.xml`
+    ? publicSiteUrl(`/api/podcast/${active.slug}/rss.xml`)
     : "";
   /** The same link, personalised so one listener can be cut off on their own. */
   const privateLink = (token: string) => `${listeningLink}?token=${token}`;
@@ -464,7 +467,7 @@ export default function Podcasts() {
           />
         </Card>
       ) : (
-        <div className="grid gap-5 lg:grid-cols-[17rem_minmax(0,1fr)]">
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-[17rem_minmax(0,1fr)]">
           <Card className="h-fit">
             <CardHeader title="Your shows" />
             <ul className="space-y-0.5 p-2">
@@ -493,7 +496,7 @@ export default function Podcasts() {
             </ul>
           </Card>
 
-          <div className="space-y-5">
+          <div className="min-w-0 space-y-5">
             {active && (
               <Card>
                 <CardHeader
@@ -513,21 +516,25 @@ export default function Podcasts() {
                       ? "This show is members only, so this link won't play on its own — each listener needs their own private link. Create one for each person below."
                       : "Paste this into Apple Podcasts, Spotify or any other listening app to list your show."}
                   </p>
-                  {/* The address itself is never printed. It isn't one she'd
-                      recognise or ever type, and reading it back only invites
-                      the question "what's that?" — copying is the only thing
-                      anyone does with it, so that's all the row offers. */}
                   <div className="mt-2.5 flex items-center gap-2 rounded-xl border border-hairline bg-cream/60 px-3 py-2">
-                    <span className="min-w-0 flex-1 truncate text-xs text-ink-soft">
-                      Your show's address
-                    </span>
+                    <input
+                      aria-label="Your show's listening link"
+                      readOnly
+                      value={listeningLink}
+                      onFocus={(event) => event.currentTarget.select()}
+                      className="min-w-0 flex-1 bg-transparent text-xs text-ink"
+                    />
                     <Button
                       variant="secondary"
                       size="sm"
                       onClick={async () => {
-                        await navigator.clipboard.writeText(listeningLink);
-                        setCopied(true);
-                        window.setTimeout(() => setCopied(false), 1500);
+                        try {
+                          await navigator.clipboard.writeText(listeningLink);
+                          setCopied(true);
+                          window.setTimeout(() => setCopied(false), 1500);
+                        } catch {
+                          setError("Copy wasn't available. Select the listening link and copy it manually.");
+                        }
                       }}
                     >
                       {copied ? <Check /> : <Copy />}

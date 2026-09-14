@@ -1,3 +1,4 @@
+import { publicSiteUrl } from "@/lib/siteOrigins";
 /**
  * Plain-English helpers shared by every admin screen.
  *
@@ -222,15 +223,15 @@ function joinPath(...parts: string[]): string {
  *   webAddress("blog", "raising-your-rates") → "yoursite.com/blog/raising-your-rates"
  *   webAddress("", "about")                 → "yoursite.com/about"
  *
- * This is what replaces the slug field on screen. The host comes from wherever
- * the admin is actually open, so on the live domain she reads her own domain
- * back; only local development falls through to the neutral placeholder.
+ * Use the public origin even when the editor is on the isolated admin host.
+ * Local development falls through to the neutral placeholder.
  */
 export function webAddress(prefix: string, slug: string): string {
+  const publicHost = new URL(publicSiteUrl("/"), "https://localhost").host;
   const host =
-    typeof window === "undefined" || !window.location.host || isLocalHost(window.location.host)
+    !publicHost || isLocalHost(publicHost)
       ? "yoursite.com"
-      : window.location.host.replace(/^www\./i, "");
+      : publicHost.replace(/^www\./i, "");
   return joinPath(host, prefix, slug);
 }
 
@@ -252,7 +253,7 @@ export const WEB_ADDRESS_HINT = webAddress;
  * what goes behind a Copy button or an "Open" link.
  */
 export function shareLink(prefix: string, slug: string): string {
-  const origin = typeof window === "undefined" ? "https://yoursite.com" : window.location.origin;
+  const origin = publicSiteUrl("");
   return `${origin.replace(/\/+$/, "")}/${joinPath(prefix, slug)}`;
 }
 

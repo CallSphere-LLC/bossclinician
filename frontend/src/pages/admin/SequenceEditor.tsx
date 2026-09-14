@@ -42,6 +42,13 @@ import {
 import { Modal, useConfirm } from "@/pages/admin/ui/Dialog";
 import { friendlyError } from "@/pages/admin/ui/friendly";
 import EmailComposer from "@/components/admin/EmailComposer";
+import {
+  SEQUENCE_EMAIL_FIELDS,
+  SEQUENCE_EMAIL_FIELD_IDS,
+  orderedErrors,
+  saveBlockedSummary,
+  validateSequenceEmailDraft,
+} from "@/components/admin/emailDraftValidation";
 
 /**
  * One sequence: its emails, its sending rules, and who is going through it.
@@ -91,9 +98,11 @@ export default function SequenceEditor() {
   const [stats, setStats] = useState<SequenceEmailStats[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<EmailDraft | null>(null);
+  const [showEmailErrors, setShowEmailErrors] = useState(false);
   const [saving, setSaving] = useState(false);
   const [testingId, setTestingId] = useState<number | null>(null);
   const [testAddress, setTestAddress] = useState("");
+  const [testAddressError, setTestAddressError] = useState<string | null>(null);
   const [confirm, confirmDialog] = useConfirm();
 
   const load = useCallback(() => {
@@ -131,8 +140,16 @@ export default function SequenceEditor() {
   async function saveEmail(event: FormEvent) {
     event.preventDefault();
     if (!sequence || !editing) return;
-    if (!editing.subject.trim()) {
-      toast.error("Give this email a subject line first.");
+    // A1 class: `required` on the subject and max={23} on the hours box let
+    // the browser cancel this submit without a word. The form is noValidate
+    // now and every refusal is named next to its field.
+    const fieldErrors = validateSequenceEmailDraft(editing);
+    const summary = saveBlockedSummary(fieldErrors, SEQUENCE_EMAIL_FIELDS);
+    if (summary) {
+      setShowEmailErrors(true);
+      toast.error(summary);
+      const [first] = orderedErrors(fieldErrors, SEQUENCE_EMAIL_FIELDS);
+      document.getElementById(SEQUENCE_EMAIL_FIELD_IDS[first.field])?.focus();
       return;
     }
 
@@ -199,6 +216,18 @@ export default function SequenceEditor() {
   async function sendTest(event: FormEvent) {
     event.preventDefault();
     if (!sequence || testingId === null) return;
+    // Was `type="email" required`, which the browser enforced in silence.
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(testAddress.trim())) {
+      setTestAddressError(
+        testAddress.trim()
+          ? "That doesn't look like an email address — check it for typos."
+          : "Enter the address to send the test to.",
+      );
+      toast.error("Not sent: enter an email address to send the test to.");
+      document.getElementById("sequence-test-address")?.focus();
+      return;
+    }
+    setTestAddressError(null);
     try {
       await marketingApi.testSequenceEmail(sequence.id, testingId, testAddress.trim());
       toast.success(`Test sent to ${testAddress.trim()}`);
@@ -208,6 +237,14 @@ export default function SequenceEditor() {
       toast.error(friendlyError(err, "email"));
     }
   }
+
+  // Messages show from the first refused Save and clear as each field is
+  // fixed; closing the dialog starts the next email clean.
+  const emailErrors = editing && showEmailErrors ? validateSequenceEmailDraft(editing) : {};
+  const editorOpen = editing !== null;
+  useEffect(() => {
+    if (!editorOpen) setShowEmailErrors(false);
+  }, [editorOpen]);
 
   if (error) return <ErrorNotice message={error} />;
   if (!sequence) return <Skeleton className="h-96 rounded-2xl" />;
@@ -570,21 +607,31 @@ export default function SequenceEditor() {
         }
       >
         {editing && (
-          <form id="sequence-email-form" onSubmit={saveEmail} className="grid gap-4 sm:grid-cols-2">
-            <Field label="Subject line" className="sm:col-span-2">
+          <form
+            id="sequence-email-form"
+            onSubmit={saveEmail}
+            noValidate
+            className="grid gap-4 sm:grid-cols-2"
+          >
+            <Field label="Subject line" className="sm:col-span-2" error={emailErrors.subject}>
               <Input
+                id={SEQUENCE_EMAIL_FIELD_IDS.subject}
                 value={editing.subject}
                 onChange={(event) =>
                   setEditing((draft) => draft && { ...draft, subject: event.target.value })
                 }
                 placeholder="The one thing I wish I'd known"
-                required
                 autoFocus
               />
             </Field>
 
-            <Field label="Wait this many days" hint="Counted from the email before it">
+            <Field
+              label="Wait this many days"
+              hint="Counted from the email before it"
+              error={emailErrors.waitDays}
+            >
               <Input
+                id={SEQUENCE_EMAIL_FIELD_IDS.waitDays}
                 type="number"
                 min={0}
                 max={365}
@@ -597,8 +644,9 @@ export default function SequenceEditor() {
               />
             </Field>
 
-            <Field label="…and this many hours">
+            <Field label="…and this many hours" error={emailErrors.waitHours}>
               <Input
+                id={SEQUENCE_EMAIL_FIELD_IDS.waitHours}
                 type="number"
                 min={0}
                 max={23}
@@ -671,14 +719,17 @@ export default function SequenceEditor() {
           </>
         }
       >
-        <form id="sequence-test-form" onSubmit={sendTest}>
-          <Field label="Send to">
+        <form id="sequence-test-form" onSubmit={sendTest} noValidate>
+          <Field label="Send to" error={testAddressError ?? undefined}>
             <Input
+              id="sequence-test-address"
               type="email"
               value={testAddress}
-              onChange={(event) => setTestAddress(event.target.value)}
+              onChange={(event) => {
+                setTestAddress(event.target.value);
+                setTestAddressError(null);
+              }}
               placeholder="you@yourdomain.com"
-              required
               autoFocus
             />
           </Field>

@@ -1,0 +1,50 @@
+{
+  "paymentAllowed": true,
+  "allowedOrigins": [
+    "https://bossclinician.callsphere.site",
+    "https://hooks.stripe.com",
+    "https://js.stripe.com"
+  ],
+  "frames": [
+    {
+      "title": "Secure express checkout frame",
+      "allow": "payment *",
+      "src": "https://js.stripe.com/v3/elements-inner-accessory-target-c2a0d7ddb6a5b3a0d491ea670906c63f.html"
+    },
+    {
+      "title": "Secure payment input frame",
+      "allow": "payment *; publickey-credentials-get *",
+      "src": "https://js.stripe.com/v3/elements-inner-accessory-target-c2a0d7ddb6a5b3a0d491ea670906c63f.html"
+    },
+    {
+      "title": "",
+      "allow": "payment *",
+      "src": "https://js.stripe.com/v3/controller-with-preconnect-5560e9b31ae6fda5edb680c73d861578.html"
+    },
+    {
+      "title": "",
+      "allow": "payment *",
+      "src": "https://js.stripe.com/v3/elements-inner-loader-ui-303ddb11b2ce4edc4cc33c3389fe1628.html"
+    },
+    {
+      "title": "",
+      "allow": "payment *",
+      "src": "https://js.stripe.com/v3/payment-request-inner-google-pay-acae283bf3066c604394b5efcfa88222.html"
+    },
+    {
+      "title": "",
+      "allow": "payment *; publickey-credentials-get *",
+      "src": "https://js.stripe.com/v3/universal-link-modal-inner-1222b3bc90525b9fd5452d9f5ff61128.html"
+    },
+    {
+      "title": "",
+      "allow": "",
+      "src": "https://js.stripe.com/v3/hcaptcha-invisible-67ecf066629acc18856692a22718e670.html"
+    },
+    {
+      "title": "",
+      "allow": "payment *",
+      "src": "https://js.stripe.com/v3/m-outer-3437aaddcdf6922d623e172c2d6f9278.html"
+    }
+  ]
+}

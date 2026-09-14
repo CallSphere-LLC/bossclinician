@@ -178,7 +178,7 @@ describeDb("affiliate commission ledger (integration)", () => {
 
   it("pays nothing to a partner whose member account placed the order", async () => {
     const sale = await seedSale({ label: "selfmember", amountCents: 50_000 });
-    const memberId = await insertMember(client, "selfmember-buyer@example.test");
+    const memberId = await insertMember(client, "success+selfmember-buyer@simulator.amazonses.com");
     await client.query(`UPDATE orders SET member_id = $2 WHERE id = $1`, [sale.orderId, memberId]);
     await client.query(`UPDATE affiliates SET member_id = $2 WHERE id = $1`, [
       sale.affiliateId,

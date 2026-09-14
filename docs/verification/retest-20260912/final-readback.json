@@ -1,0 +1,11 @@
+{
+  "contacts": 8,
+  "attemptCount": 2,
+  "removedContactIds": [
+    68,
+    69,
+    70,
+    71
+  ],
+  "quizText": "MARKETING\n\nQuizzes\n\nAsk people a few questions, add up their answers, and send each of them the result that fits.\n\nAdd a quiz\n1 quiz\nQuiz\n\tWhat it is\n\tQuestions\n\tResults\n\tTaken by\n\tOn your site\n\tWeb address\n\t\n\nZZ Test — practice quiz\nPoints add up to a score, and the score decides which result page they see.\n\tQUIZ\t1 question\t1 result\t2 people\tLIVE ON YOUR SITE\tbossclinician.callsphere.site/quiz/zz-test-practice-quiz\t"
+}

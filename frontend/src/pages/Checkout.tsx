@@ -1,7 +1,8 @@
+import { addToCart, writeCart } from "@/lib/cart";
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { Elements, PaymentElement, useElements, useStripe } from "@stripe/react-stripe-js";
-import type { StripeElementsOptions } from "@stripe/stripe-js";
+import { Elements, ExpressCheckoutElement, PaymentElement, useElements, useStripe } from "@stripe/react-stripe-js";
+import type { StripeElementsOptions, StripeExpressCheckoutElementConfirmEvent } from "@stripe/stripe-js";
 import { motion, useReducedMotion } from "motion/react";
 import { AlertCircle, Check, Loader2, ShieldCheck } from "lucide-react";
 import { Seo } from "@/components/Seo";
@@ -34,6 +35,8 @@ import {
 } from "@/lib/commerceApi";
 import { formatCurrency } from "@/lib/format";
 import { cn } from "@/lib/cn";
+import { api } from "@/lib/api";
+import { checkoutButtonStyle } from "@/components/checkout/checkoutStyle";
 
 const EASE_LUXE: [number, number, number, number] = [0.22, 1, 0.36, 1];
 
@@ -189,7 +192,7 @@ function elementsModeFor(offer: PublicOffer): ElementsMode {
  * option, and the form needs `useStripe`/`useElements`, which only exist inside
  * `Elements`.
  */
-function CheckoutExperience({ offer }: { offer: PublicOffer }) {
+export function CheckoutExperience({ offer }: { offer: PublicOffer }) {
   const [pricingOptionId, setPricingOptionId] = useState<number | null>(offer.selectedPricingOptionId);
   const selectedPricing = offer.pricingOptions.find((option) => option.id === pricingOptionId)
     ?? offer.pricingOptions[0];
@@ -293,10 +296,15 @@ function CheckoutForm({ offer, pricingOption, mode, onAmountChange }: CheckoutFo
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
+  const [isGift, setIsGift] = useState(false);
+  const [giftRecipientEmail, setGiftRecipientEmail] = useState("");
+  const [giftMessage, setGiftMessage] = useState("");
+  const [checkoutSettings, setCheckoutSettings] = useState<Record<string, unknown>>({});
+  useEffect(() => { void api.settings().then(settings => setCheckoutSettings((settings.checkout ?? {}) as Record<string, unknown>)).catch(() => undefined); }, []);
   const [address, setAddress] = useState<AddressValue>(EMPTY_ADDRESS);
   const [customValues, setCustomValues] = useState<Record<string, string>>({});
   const [acceptedTerms, setAcceptedTerms] = useState(false);
-  const [couponCode, setCouponCode] = useState("");
+  const [couponCode, setCouponCode] = useState(offer.initialCouponCode ?? "");
   const [selectedBumps, setSelectedBumps] = useState<number[]>([]);
   const [pwywInput, setPwywInput] = useState(() =>
     billing.pricingType === "pwyw" ? centsToInput(billing.minAmountCents ?? 0) : ""
@@ -322,6 +330,7 @@ function CheckoutForm({ offer, pricingOption, mode, onAmountChange }: CheckoutFo
   const pwywAmountCents = billing.pricingType === "pwyw" ? inputToCents(pwywInput) : undefined;
 
   const quoteState = useOfferQuote(offer.slug, offer.quote, {
+    cartItems: offer.cartItems,
     pricingOptionId: pricingOption.id,
     couponCode,
     bumpProductIds: selectedBumps,
@@ -360,7 +369,7 @@ function CheckoutForm({ offer, pricingOption, mode, onAmountChange }: CheckoutFo
     if (captured.current || !EMAIL_PATTERN.test(value)) return;
     captured.current = true;
     // Fire and forget, in every sense: it cannot reject, and nothing waits on it.
-    void commerceApi.captureAbandoned(offer.slug, value, name.trim().split(/\s+/)[0] || undefined);
+    for (const item of offer.cartItems ?? [{slug:offer.slug}]) void commerceApi.captureAbandoned(item.slug, value, name.trim().split(/\s+/)[0] || undefined);
   }
 
   /* ---- editing ---- */
@@ -389,6 +398,7 @@ function CheckoutForm({ offer, pricingOption, mode, onAmountChange }: CheckoutFo
     if (!EMAIL_PATTERN.test(email.trim())) {
       next.email = "Enter the email address your access should go to.";
     }
+    if (isGift && !EMAIL_PATTERN.test(giftRecipientEmail.trim())) next.giftRecipientEmail = "Enter the recipient's email address.";
     if (name.trim() === "") {
       next.name = "Enter your name.";
     }
@@ -426,9 +436,11 @@ function CheckoutForm({ offer, pricingOption, mode, onAmountChange }: CheckoutFo
   /* ---- submission ---- */
 
   const payload: CheckoutInput = {
+    cartItems: offer.cartItems,
     pricingOptionId: pricingOption.id,
     email: email.trim(),
     name: name.trim(),
+    ...(isGift && !recurring ? { giftRecipientEmail: giftRecipientEmail.trim(), giftMessage: giftMessage.trim() } : {}),
     ...(orderForm.collectPhone || phone.trim() ? { phone: phone.trim() } : {}),
     ...(orderForm.collectAddress
       ? {
@@ -459,12 +471,13 @@ function CheckoutForm({ offer, pricingOption, mode, onAmountChange }: CheckoutFo
   const opened = useRef<{ signature: string; result: CheckoutResult } | null>(null);
   const signature = JSON.stringify([payload, quote.totalCents]);
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (submitting) return;
+  async function handleSubmit(event?: FormEvent<HTMLFormElement>, wallet?: StripeExpressCheckoutElementConfirmEvent) {
+    event?.preventDefault();
+    if (submitting) { wallet?.paymentFailed({reason:"fail"}); return; }
 
-    if (quoteState.pending) {
-      setFormNotice("One moment — we're updating your total.");
+    if (quoteState.pending || quoteState.error) {
+      setFormNotice(quoteState.error || "One moment — we're updating your total.");
+      wallet?.paymentFailed({reason:"fail"});
       return;
     }
     setFormNotice(null);
@@ -553,10 +566,13 @@ function CheckoutForm({ offer, pricingOption, mode, onAmountChange }: CheckoutFo
         }
       }
 
+      wallet = undefined;
+      if (offer.cartItems) writeCart([]);
       finish(checkout);
     } catch (err) {
       setPaymentError(commerceErrorMessage(err));
     } finally {
+      wallet?.paymentFailed({ reason: "fail" });
       setSubmitting(false);
     }
   }
@@ -614,6 +630,12 @@ function CheckoutForm({ offer, pricingOption, mode, onAmountChange }: CheckoutFo
           {offer.checkoutHeadline || offer.title}
         </h1>
         {offer.description && <p className="copy-luxe mt-4 max-w-xl text-pretty">{offer.description}</p>}
+        {!offer.cartItems && ["one_time","free"].includes(billing.pricingType) && <div className="mt-4 flex flex-wrap gap-4 text-sm text-gold">
+          <button type="button" className="underline underline-offset-4" onClick={()=>{addToCart({slug:offer.slug,pricingOptionId:pricingOption.id,bumpProductIds:selectedBumps});navigate('/cart');}}>Add to cart</button>
+          <Link to="/cart" className="underline underline-offset-4">View cart</Link>
+        </div>}
+        {offer.cartItems && <Link to="/cart" onClick={()=>window.location.assign('/cart')} className="mt-4 inline-block text-sm text-gold underline">Edit cart</Link>}
+
 
         {offer.alreadyOwned && (
           <Notice tone="gold" className="mt-6">
@@ -697,6 +719,14 @@ function CheckoutForm({ offer, pricingOption, mode, onAmountChange }: CheckoutFo
             )}
           </Fieldset>
 
+          {orderForm.allowGifting !== false && !recurring && <Fieldset legend="Send as a gift">
+            <label className="flex items-center gap-3 text-sm text-orchid"><input type="checkbox" checked={isGift} disabled={locked} onChange={e => setIsGift(e.target.checked)} />Buy this for someone else</label>
+            {isGift && <div className="mt-4 space-y-4">
+              <LuxeInput label="Recipient's email" type="email" required value={giftRecipientEmail} error={errors.giftRecipientEmail} disabled={locked} onChange={e => setGiftRecipientEmail(e.target.value)} hint="They receive access after payment. Your receipt stays with you." />
+              <label className="block text-sm text-orchid">Gift message (optional)<textarea value={giftMessage} maxLength={2000} disabled={locked} onChange={e => setGiftMessage(e.target.value)} className="mt-2 min-h-24 w-full rounded-lg border border-white/20 bg-white/5 p-3" /></label>
+            </div>}
+          </Fieldset>}
+
           {orderForm.customFields.length > 0 && (
             <Fieldset legend="A few questions">
               <CustomFieldInputs
@@ -741,7 +771,7 @@ function CheckoutForm({ offer, pricingOption, mode, onAmountChange }: CheckoutFo
                 />
               )}
 
-              <CouponField
+              {checkoutSettings.showCoupons !== false && <CouponField
                 value={couponCode}
                 onChange={setCouponCode}
                 pending={quoteState.pending}
@@ -749,11 +779,21 @@ function CheckoutForm({ offer, pricingOption, mode, onAmountChange }: CheckoutFo
                 error={quoteState.couponError}
                 discount={quote.discountCents > 0 ? quote.formatted.discount : null}
                 disabled={locked}
-              />
+              />}
 
               {paymentRequired ? (
                 stripeConfigured() && (
                   <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-4 sm:p-5">
+                    <ExpressCheckoutElement
+                      options={{buttonHeight: 48, layout: {maxColumns: 2, maxRows: 2}, paymentMethods: {applePay: "auto", googlePay: "auto"}}}
+                      onClick={(event) => {
+                        if (submitting || quoteState.pending || !validate()) {
+                          setFormNotice("Complete your details and accept any required terms before opening your wallet.");
+                          event.reject();
+                        } else event.resolve();
+                      }}
+                      onConfirm={(event) => { void handleSubmit(undefined, event); }}
+                    />
                     <PaymentElement
                       options={paymentElementOptions(orderForm.collectAddress)}
                       onChange={() => setPaymentError(null)}
@@ -771,6 +811,9 @@ function CheckoutForm({ offer, pricingOption, mode, onAmountChange }: CheckoutFo
                 </Notice>
               )}
 
+              {offer.cartTerms && offer.cartTerms.length > 0 && <ul className="space-y-2 text-sm text-orchid">
+                {offer.cartTerms.map((term,i)=><li key={i}><a className="underline" href={term.url || "/terms"} target="_blank" rel="noreferrer">{term.title}: terms</a></li>)}
+              </ul>}
               {orderForm.requireTerms && (
                 <TermsCheckbox
                   checked={acceptedTerms}
@@ -800,11 +843,13 @@ function CheckoutForm({ offer, pricingOption, mode, onAmountChange }: CheckoutFo
               type="submit"
               disabled={submitting || paymentUnavailable}
               className="w-full min-h-[52px]"
+              style={checkoutButtonStyle(checkoutSettings)}
             >
               {submitting && <Loader2 aria-hidden className="h-4 w-4 animate-spin" />}
               {buttonLabel}
             </LuxeButton>
 
+            {typeof checkoutSettings.termsUrl === "string" && /^https?:\/\//.test(checkoutSettings.termsUrl) && <p className="mt-3 text-center text-xs text-orchid"><a href={checkoutSettings.termsUrl} target="_blank" rel="noreferrer">Terms and conditions</a></p>}
             {/* The commitment restated at the point of no return, because this is
                 where someone actually reads it. */}
             {wording.commitment && (
@@ -815,7 +860,7 @@ function CheckoutForm({ offer, pricingOption, mode, onAmountChange }: CheckoutFo
 
             <p className="mt-3 flex items-center justify-center gap-2 text-xs text-orchid-faint">
               <ShieldCheck aria-hidden className="h-3.5 w-3.5" />
-              Secured by Stripe. Questions before you buy? We're one email away.
+              Secured by Stripe. {typeof checkoutSettings.supportEmail === "string" && checkoutSettings.supportEmail ? <a href={`mailto:${checkoutSettings.supportEmail}`}>Questions? Email us.</a> : "Questions before you buy? We're one email away."}
             </p>
 
             <p aria-live="polite" className="sr-only">

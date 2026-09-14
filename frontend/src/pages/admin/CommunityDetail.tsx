@@ -4,23 +4,33 @@ import * as Tabs from "@radix-ui/react-tabs";
 import { motion } from "motion/react";
 import {
   ArrowLeft,
+  ArrowUpDown,
   Award,
+  CalendarClock,
   CalendarDays,
   Check,
+  ChevronDown,
+  ChevronUp,
   Clock,
   Hash,
   Layers,
+  Lock,
   MessageSquare,
+  Paperclip,
   Pin,
   Plus,
   ScrollText,
   Send,
+  Settings,
   ShieldAlert,
   Sparkles,
   Target,
   Trash2,
   Trophy,
+  UserPlus,
   Users,
+  Video,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { adminApi } from "@/lib/api";
@@ -36,7 +46,12 @@ import type {
   LeaderboardEntry,
   Member,
   AdminAccessGroup,
+  AdminAccessGroupGrants,
+  AdminAccessGroupMember,
+  AdminChannelInvite,
+  AdminCommunityOffer,
   AdminCommunityReport,
+  AdminLiveVisit,
   AdminPointRule,
   AdminScheduledPost,
   CommunityDetail as CommunityDetailShape,
@@ -65,6 +80,7 @@ import {
   fromDateInput,
   fromDateTimeInput,
   pluralize,
+  toDateTimeInput,
 } from "@/pages/admin/ui/friendly";
 
 const TAB_LIST = [
@@ -183,7 +199,12 @@ export default function CommunityDetail() {
 
         <div className="mt-5">
           <Tabs.Content value="channels">
-            <ChannelsTab communityId={communityId} channels={community?.channels ?? null} onChange={load} />
+            <ChannelsTab
+              communityId={communityId}
+              community={community}
+              channels={community?.channels ?? null}
+              onChange={load}
+            />
           </Tabs.Content>
           <Tabs.Content value="members">
             <MembersTab communityId={communityId} />
@@ -220,41 +241,588 @@ export default function CommunityDetail() {
 
 /* ---------------------------------------------------------------- Channels */
 
+/**
+ * The live room, from the admin's side.
+ *
+ * Members see this at the top of their channel list under whatever it is
+ * called — "JOIN OFFICE HOURS" on the live site — and the admin console had no
+ * screen for it at all. The result read as a missing channel: a member listed
+ * three things, the admin listed two, and the third was a room its owner could
+ * not see, name, close or check the attendance of. It is not a channel, so it
+ * is not in the channel table; it belongs here, in the same list and the same
+ * position the member sees it in, so the two views agree.
+ */
+const LIVE_ROOM_ACCESS = [
+  { value: "always", label: "Always open", help: "Members can gather in there whenever they like." },
+  {
+    value: "hosted",
+    label: "Only when you're in",
+    help: "Shut until you or a moderator joins — nobody sits in an empty room all week.",
+  },
+] as const;
+
+function LiveRoomPanel({
+  communityId,
+  community,
+  onChange,
+}: {
+  communityId: number;
+  community: CommunityDetailType;
+  onChange: () => void;
+}) {
+  const [form, setForm] = useState({
+    liveRoomEnabled: community.liveRoomEnabled === true,
+    liveRoomAccess: community.liveRoomAccess ?? "always",
+    liveRoomAlias: community.liveRoomAlias ?? "",
+    liveRoomCapacity: community.liveRoomCapacity ?? 8,
+  });
+  const [saving, setSaving] = useState(false);
+  const [visits, setVisits] = useState<AdminLiveVisit[] | null>(null);
+
+  useEffect(() => {
+    adminApi.communityLiveVisits(communityId).then(setVisits).catch(() => setVisits([]));
+  }, [communityId]);
+
+  const label = form.liveRoomAlias.trim() || "Live room";
+
+  async function save(e: FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      await adminApi.communityUpdate(communityId, form);
+      toast.success("Live room saved");
+      onChange();
+    } catch (err) {
+      toast.error(friendlyError(err, "community"));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader
+        title={label}
+        subtitle={
+          form.liveRoomEnabled
+            ? "Members reach this from the top of their channel list."
+            : "Switched off — nobody sees it."
+        }
+        icon={<Video className="size-4" />}
+        action={
+          <Button asChild variant="secondary" size="sm">
+            <Link to={`/community/${community.slug}/live`} target="_blank" rel="noreferrer">
+              Open the room
+            </Link>
+          </Button>
+        }
+      />
+
+      <form onSubmit={save} className="space-y-4 px-5 py-5">
+        <Field label="Is it open?">
+          <div className="flex gap-2">
+            {[
+              { value: true, label: "On" },
+              { value: false, label: "Off" },
+            ].map((option) => (
+              <button
+                key={String(option.value)}
+                type="button"
+                onClick={() => setForm((f) => ({ ...f, liveRoomEnabled: option.value }))}
+                className={cn(
+                  "min-h-11 flex-1 rounded-xl px-3 py-2.5 text-sm font-semibold transition-colors",
+                  form.liveRoomEnabled === option.value
+                    ? "bg-brand-gradient text-white"
+                    : "border border-hairline text-ink-soft hover:border-plum/40",
+                )}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        </Field>
+
+        <Field
+          label="What do you call it?"
+          hint="members see your words, not ours"
+          htmlFor="live-alias"
+        >
+          <Input
+            id="live-alias"
+            value={form.liveRoomAlias}
+            maxLength={60}
+            onChange={(e) => setForm((f) => ({ ...f, liveRoomAlias: e.target.value }))}
+            placeholder="Office Hours"
+          />
+        </Field>
+
+        <Field label="When can they get in?">
+          <div className="grid gap-2 sm:grid-cols-2">
+            {LIVE_ROOM_ACCESS.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => setForm((f) => ({ ...f, liveRoomAccess: option.value }))}
+                className={cn(
+                  "rounded-xl px-3.5 py-3 text-left text-sm transition-colors",
+                  form.liveRoomAccess === option.value
+                    ? "bg-brand-gradient text-white"
+                    : "border border-hairline text-ink-soft hover:border-plum/40",
+                )}
+              >
+                <span className="block font-semibold">{option.label}</span>
+                <span className="mt-0.5 block text-xs opacity-80">{option.help}</span>
+              </button>
+            ))}
+          </div>
+        </Field>
+
+        <Field
+          label="How many people at once?"
+          hint="between 2 and 16 — every camera is sent to every other person, so a big room is a slow one"
+          htmlFor="live-capacity"
+        >
+          <Input
+            id="live-capacity"
+            type="number"
+            min={2}
+            max={16}
+            className="w-28"
+            value={form.liveRoomCapacity}
+            onChange={(e) => setForm((f) => ({ ...f, liveRoomCapacity: Number(e.target.value) }))}
+          />
+        </Field>
+
+        <Button type="submit" size="sm" disabled={saving}>
+          {saving ? "Saving…" : "Save live room"}
+        </Button>
+      </form>
+
+      <div className="border-t border-hairline/60 px-5 py-5">
+        <p className="text-[0.8rem] font-semibold text-ink">Who's been in</p>
+        {visits === null ? (
+          <Skeleton className="mt-3 h-16 w-full" />
+        ) : visits.length === 0 ? (
+          <p className="mt-2 text-xs text-ink-soft">
+            Nobody yet. "Did anyone come to office hours on Tuesday" is answered
+            here once they have.
+          </p>
+        ) : (
+          <ul className="mt-3 space-y-1.5">
+            {visits.slice(0, 20).map((visit) => (
+              <li key={String(visit.id)} className="flex flex-wrap items-center gap-2 text-sm">
+                <span className="min-w-0 flex-1 truncate text-ink">
+                  {visit.memberName || visit.email}
+                </span>
+                <span className="text-xs text-ink-soft">{formatRelative(visit.joinedAt)}</span>
+                {visit.seconds === null ? (
+                  <Badge tone="green">In there now</Badge>
+                ) : (
+                  <Badge tone="neutral">{Math.max(1, Math.round(visit.seconds / 60))} min</Badge>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </Card>
+  );
+}
+
+/**
+ * The fields a channel has.
+ *
+ * One shape, one set of controls, used by the create dialog and by the settings
+ * screen — because the two have to offer the same choices. They did not: the
+ * dialog grew the tier, the cover and the view modes, and there was no settings
+ * screen at all, so a channel created with the wrong visibility (or pointed at
+ * no tier when it should have been) could never be put right. A create form
+ * without an edit form is a one-way door.
+ */
+interface ChannelForm {
+  name: string;
+  description: string;
+  format: string;
+  visibility: string;
+  coverImage: string;
+  /** "" is the empty <select> option, meaning the whole community. */
+  accessGroupId: string;
+  viewModes: string[];
+  defaultViewMode: string;
+}
+
+const BLANK_CHANNEL: ChannelForm = {
+  name: "",
+  description: "",
+  format: "feed",
+  visibility: "public",
+  coverImage: "",
+  accessGroupId: "",
+  viewModes: ["feed"],
+  defaultViewMode: "feed",
+};
+
+function channelToForm(channel: CommunityChannel): ChannelForm {
+  return {
+    name: channel.name,
+    description: channel.description ?? "",
+    format: channel.format,
+    visibility: channel.visibility,
+    coverImage: channel.coverImage ?? "",
+    accessGroupId: channel.accessGroupId == null ? "" : String(channel.accessGroupId),
+    viewModes: channel.viewModes?.length ? channel.viewModes : ["feed"],
+    defaultViewMode:
+      channel.viewMode || channel.defaultViewMode || channel.viewModes?.[0] || "feed",
+  };
+}
+
+/** What the endpoint wants, from what she picked. */
+function channelToPayload(form: ChannelForm): Record<string, unknown> {
+  return {
+    ...form,
+    accessGroupId: form.accessGroupId === "" ? null : Number(form.accessGroupId),
+    // The layout the member side renders (`view_mode`): the one it opens in.
+    viewMode: form.defaultViewMode,
+  };
+}
+
+function ChannelFields({
+  form,
+  onChange,
+  groups,
+  idPrefix,
+}: {
+  form: ChannelForm;
+  onChange: (next: ChannelForm) => void;
+  groups: AdminAccessGroup[];
+  idPrefix: string;
+}) {
+  const set = (patch: Partial<ChannelForm>) => onChange({ ...form, ...patch });
+
+  return (
+    <div className="space-y-4">
+      <Field label="What's it called?" htmlFor={`${idPrefix}-name`}>
+        <Input
+          id={`${idPrefix}-name`}
+          value={form.name}
+          onChange={(e) => set({ name: e.target.value })}
+          placeholder="Wins & Wednesdays"
+          required
+        />
+      </Field>
+      <Field label="What's it for?" hint="shown under the channel name" htmlFor={`${idPrefix}-desc`}>
+        <Input
+          id={`${idPrefix}-desc`}
+          value={form.description}
+          onChange={(e) => set({ description: e.target.value })}
+          placeholder="Share the win you're proudest of this week."
+        />
+      </Field>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="How should it work?">
+          <div className="flex gap-2">
+            {CHANNEL_FORMATS.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => set({ format: option.value })}
+                className={cn(
+                  "min-h-11 flex-1 rounded-xl px-3 py-2.5 text-sm font-semibold transition-colors",
+                  form.format === option.value
+                    ? "bg-brand-gradient text-white"
+                    : "border border-hairline text-ink-soft hover:border-plum/40",
+                )}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        </Field>
+        <Field label="Who can see it?">
+          <div className="flex gap-2">
+            {CHANNEL_VISIBILITY.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => set({ visibility: option.value })}
+                className={cn(
+                  "min-h-11 flex-1 rounded-xl px-3 py-2.5 text-sm font-semibold transition-colors",
+                  form.visibility === option.value
+                    ? "bg-brand-gradient text-white"
+                    : "border border-hairline text-ink-soft hover:border-plum/40",
+                )}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        </Field>
+      </div>
+
+      {/* Said here rather than discovered later. "Invited members only" used to
+          hide a channel from everybody — including its author — because there
+          was nowhere to record an invitation; now there is, and the person
+          choosing it needs to know that picking somebody is the next step. */}
+      {form.visibility === "private" && (
+        <p className="rounded-xl bg-lilac-tint/60 px-3.5 py-2.5 text-xs text-plum-deep">
+          Nobody sees this channel until you invite them. You and anyone who
+          helps run this community can always see it. Invite people from this
+          channel's settings once it exists.
+        </p>
+      )}
+
+      <Field
+        label="Which members?"
+        hint="leave open to the whole community unless you have a tier for it"
+        htmlFor={`${idPrefix}-group`}
+      >
+        <select
+          id={`${idPrefix}-group`}
+          className={selectStyles}
+          value={form.accessGroupId}
+          onChange={(e) => set({ accessGroupId: e.target.value })}
+        >
+          <option value="">Everyone in this community</option>
+          {groups.map((group) => (
+            <option key={group.id} value={String(group.id)}>
+              {group.name} only
+            </option>
+          ))}
+        </select>
+      </Field>
+
+      <Field
+        label="How can members read it?"
+        hint="pick at least one — the default is what they see first"
+      >
+        <div className={chipRowStyles}>
+          {CHANNEL_VIEW_MODES.map((mode) => {
+            const on = form.viewModes.includes(mode.value);
+            return (
+              <Chip
+                key={mode.value}
+                selected={on}
+                title={mode.help}
+                onClick={() => {
+                  // Never empty: turning the last one off would leave a channel
+                  // with no way to read it, which the database refuses anyway.
+                  const next = on
+                    ? form.viewModes.filter((v) => v !== mode.value)
+                    : [...form.viewModes, mode.value];
+                  if (next.length === 0) return;
+                  set({
+                    viewModes: next,
+                    // Keep the default inside the set she just chose.
+                    defaultViewMode: next.includes(form.defaultViewMode)
+                      ? form.defaultViewMode
+                      : next[0],
+                  });
+                }}
+              >
+                {mode.label}
+              </Chip>
+            );
+          })}
+        </div>
+        {form.viewModes.length > 1 && (
+          <select
+            className={cn(selectStyles, "mt-3")}
+            aria-label="Which one members see first"
+            value={form.defaultViewMode}
+            onChange={(e) => set({ defaultViewMode: e.target.value })}
+          >
+            {form.viewModes.map((mode) => (
+              <option key={mode} value={mode}>
+                Opens as {CHANNEL_VIEW_MODES.find((m) => m.value === mode)?.label ?? mode}
+              </option>
+            ))}
+          </select>
+        )}
+      </Field>
+
+      <Field
+        label="Cover image"
+        hint="optional — a link to a picture, 1280x720 looks best"
+        htmlFor={`${idPrefix}-cover`}
+      >
+        <Input
+          id={`${idPrefix}-cover`}
+          value={form.coverImage}
+          onChange={(e) => set({ coverImage: e.target.value })}
+          placeholder="https://…/cover.jpg"
+        />
+      </Field>
+    </div>
+  );
+}
+
+/**
+ * Who is allowed into one invite-only channel.
+ *
+ * Only people already in the community can be picked, and the endpoint enforces
+ * that too: a channel invitation to somebody who cannot open the community is a
+ * row that grants nothing.
+ */
+function ChannelInvites({
+  channel,
+  members,
+}: {
+  channel: CommunityChannel;
+  members: CommunityMembership[];
+}) {
+  const [invites, setInvites] = useState<AdminChannelInvite[] | null>(null);
+  const [selected, setSelected] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(() => {
+    adminApi
+      .channelInvites(Number(channel.id))
+      .then(setInvites)
+      .catch(() => setInvites([]));
+  }, [channel.id]);
+
+  useEffect(load, [load]);
+
+  const invited = new Set((invites ?? []).map((row) => String(row.memberId)));
+  const addable = members.filter((m) => !invited.has(String(m.memberId)));
+
+  return (
+    <div className="space-y-3 rounded-xl border border-hairline/70 p-4">
+      <p className="text-[0.8rem] font-semibold text-ink">Who's invited</p>
+      {invites === null ? (
+        <Skeleton className="h-10 w-full" />
+      ) : invites.length === 0 ? (
+        <p className="text-xs text-ink-soft">
+          Nobody yet — only you and the people who help run this community can
+          see it.
+        </p>
+      ) : (
+        <ul className="space-y-1.5">
+          {invites.map((row) => (
+            <li key={String(row.memberId)} className="flex items-center gap-2 text-sm">
+              <span className="min-w-0 flex-1 truncate text-ink">{row.name || row.email}</span>
+              <Button
+                variant="dangerGhost"
+                size="iconSm"
+                aria-label={`Remove ${row.name || row.email} from this channel`}
+                disabled={busy}
+                onClick={async () => {
+                  setBusy(true);
+                  try {
+                    await adminApi.channelInviteRemove(Number(channel.id), Number(row.memberId));
+                    load();
+                  } catch (err) {
+                    toast.error(friendlyError(err, "invite"));
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+              >
+                <X />
+              </Button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <div className="flex flex-wrap items-end gap-2">
+        <Field label="Invite someone" className="min-w-[12rem] flex-1">
+          <select
+            className={selectStyles}
+            value={selected}
+            onChange={(e) => setSelected(e.target.value)}
+          >
+            <option value="">Choose someone…</option>
+            {addable.map((m) => (
+              <option key={String(m.memberId)} value={String(m.memberId)}>
+                {m.name ? `${m.name} — ${m.email}` : m.email}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Button
+          type="button"
+          size="sm"
+          variant="secondary"
+          disabled={!selected || busy}
+          onClick={async () => {
+            setBusy(true);
+            try {
+              await adminApi.channelInviteAdd(Number(channel.id), Number(selected));
+              setSelected("");
+              load();
+              toast.success("They can see this channel now.");
+            } catch (err) {
+              toast.error(friendlyError(err, "invite"));
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          <UserPlus />
+          Invite
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function ChannelsTab({
   communityId,
+  community,
   channels,
   onChange,
 }: {
   communityId: number;
+  community: CommunityDetailType | null;
   channels: CommunityChannel[] | null;
   onChange: () => void;
 }) {
   const [active, setActive] = useState<CommunityChannel | null>(null);
+  /**
+   * Whether the right pane is showing the live room instead of a channel.
+   *
+   * The room is not a channel, but a member meets it in the same list, so this
+   * is the same picker rather than a tab somewhere else — which is how it came
+   * to be invisible from here in the first place.
+   */
+  const [showLive, setShowLive] = useState(false);
   const [posts, setPosts] = useState<CommunityPost[] | null>(null);
   const [creating, setCreating] = useState(false);
-  const [form, setForm] = useState({
-    name: "",
-    description: "",
-    format: "feed",
-    visibility: "public",
-    coverImage: "",
-    accessGroupId: "",
-    viewModes: ["feed"] as string[],
-    defaultViewMode: "feed",
-  });
+  const [createForm, setCreateForm] = useState<ChannelForm>(BLANK_CHANNEL);
+  /** The channel whose settings are open, and the edits made to it so far. */
+  const [editing, setEditing] = useState<CommunityChannel | null>(null);
+  const [editForm, setEditForm] = useState<ChannelForm>(BLANK_CHANNEL);
+  const [savingChannel, setSavingChannel] = useState(false);
+  /** Whether the list is showing move up/down controls instead of settings. */
+  const [reordering, setReordering] = useState(false);
+  const [moving, setMoving] = useState(false);
   /** Offered in the tier picker. Empty is fine — it just means no tiers yet. */
   const [groups, setGroups] = useState<AdminAccessGroup[]>([]);
+  /** Who can be invited to an invite-only channel: this community's members. */
+  const [members, setMembers] = useState<CommunityMembership[]>([]);
 
   useEffect(() => {
     adminApi.accessGroups(communityId).then(setGroups).catch(() => setGroups([]));
+    adminApi.communityMembers(communityId).then(setMembers).catch(() => setMembers([]));
   }, [communityId]);
-  const [composer, setComposer] = useState("");
+
+  const [composer, setComposer] = useState({ body: "", mediaUrl: "", mediaLabel: "" });
+  const [attaching, setAttaching] = useState(false);
+  /** "" is "post it now"; anything else is the local time she picked. */
+  const [publishAt, setPublishAt] = useState("");
+  const [posting, setPosting] = useState(false);
   const [confirm, confirmDialog] = useConfirm();
 
-  // Select the first channel once they load.
+  // Select the first channel once they load, and follow the same channel across
+  // a reload so saving its settings does not bounce the reader to the top.
   useEffect(() => {
-    if (channels?.length && !active) setActive(channels[0]);
-  }, [channels, active]);
+    if (!channels?.length) return;
+    setActive((current) => {
+      if (!current) return channels[0];
+      return channels.find((ch) => ch.id === current.id) ?? channels[0];
+    });
+  }, [channels]);
 
   const loadPosts = useCallback((channelId: number) => {
     setPosts(null);
@@ -265,53 +833,129 @@ function ChannelsTab({
   }, []);
 
   useEffect(() => {
-    if (active) loadPosts(active.id);
+    if (active) loadPosts(Number(active.id));
   }, [active, loadPosts]);
 
   async function createChannel(e: FormEvent) {
     e.preventDefault();
-    if (!form.name.trim()) return;
+    if (!createForm.name.trim()) return;
     try {
-      await adminApi.channelCreate(communityId, {
-        ...form,
-        // "" is the empty option in a <select>; the endpoint wants null for
-        // "the whole community".
-        accessGroupId: form.accessGroupId === "" ? null : Number(form.accessGroupId),
-      });
-      toast.success("Channel created");
+      await adminApi.channelCreate(communityId, channelToPayload(createForm));
+      toast.success(
+        createForm.visibility === "private"
+          ? "Channel created — invite people to it from its settings."
+          : "Channel created",
+      );
       setCreating(false);
-      setForm({
-        name: "",
-        description: "",
-        format: "feed",
-        visibility: "public",
-        coverImage: "",
-        accessGroupId: "",
-        viewModes: ["feed"],
-        defaultViewMode: "feed",
-      });
+      setCreateForm(BLANK_CHANNEL);
       onChange();
     } catch (err) {
       toast.error(friendlyError(err, "channel"));
     }
   }
 
+  async function saveChannel(e: FormEvent) {
+    e.preventDefault();
+    if (!editing || !editForm.name.trim()) return;
+    setSavingChannel(true);
+    try {
+      await adminApi.channelUpdate(Number(editing.id), channelToPayload(editForm));
+      toast.success("Channel saved");
+      setEditing(null);
+      onChange();
+    } catch (err) {
+      toast.error(friendlyError(err, "channel"));
+    } finally {
+      setSavingChannel(false);
+    }
+  }
+
+  async function removeChannel(channel: CommunityChannel) {
+    const ok = await confirm({
+      title: `Delete “${channel.name}”?`,
+      description:
+        "Every post, comment and reaction in it goes too, and you can't get them back.",
+      confirmLabel: "Delete channel",
+      destructive: true,
+    });
+    if (!ok) return;
+    try {
+      await adminApi.channelDelete(Number(channel.id));
+      setEditing(null);
+      if (active?.id === channel.id) setActive(null);
+      toast.success("Channel deleted");
+      onChange();
+    } catch (err) {
+      toast.error(friendlyError(err, "channel"));
+    }
+  }
+
+  /**
+   * Swap one channel with its neighbour and save the whole order.
+   *
+   * The server takes every channel at once, so a save can never leave two
+   * channels sharing a position; the list is then re-read rather than trusted
+   * from here, so what she sees is what members get.
+   */
+  async function moveChannel(index: number, direction: -1 | 1) {
+    if (!channels) return;
+    const target = index + direction;
+    if (target < 0 || target >= channels.length) return;
+    const ids = channels.map((ch) => Number(ch.id));
+    [ids[index], ids[target]] = [ids[target], ids[index]];
+    setMoving(true);
+    try {
+      await adminApi.channelReorder(communityId, ids);
+      onChange();
+    } catch (err) {
+      toast.error(friendlyError(err, "channel order"));
+      onChange();
+    } finally {
+      setMoving(false);
+    }
+  }
+
   async function post(e: FormEvent) {
     e.preventDefault();
-    if (!active || !composer.trim()) return;
+    if (!active || !composer.body.trim()) return;
+    // A time she picked in her own timezone → the instant the server stores.
+    const when = publishAt ? fromDateTimeInput(publishAt) : "";
+    if (publishAt && !when) {
+      toast.error("We couldn't read that time. Pick it again?");
+      return;
+    }
+    setPosting(true);
     try {
-      const created = await adminApi.postCreate(active.id, { body: composer, authorName: "Host" });
-      setPosts((prev) => (prev ? [created, ...prev] : [created]));
-      setComposer("");
-      toast.success("Posted — your members can see it now");
+      const created = await adminApi.postCreate(Number(active.id), {
+        body: composer.body,
+        authorName: "Host",
+        mediaUrl: composer.mediaUrl,
+        mediaLabel: composer.mediaLabel,
+        publishAt: when || undefined,
+      });
+      setComposer({ body: "", mediaUrl: "", mediaLabel: "" });
+      setAttaching(false);
+      if (when) {
+        setPublishAt("");
+        // Re-read rather than splice it in at the top: a scheduled post is not
+        // yet in the channel, and the list marks it "waiting to go out" in the
+        // place it will actually appear.
+        loadPosts(Number(active.id));
+        toast.success(`Scheduled for ${formatDateTime(when)} — it's on the Scheduled tab.`);
+      } else {
+        setPosts((prev) => (prev ? [created, ...prev] : [created]));
+        toast.success("Posted — your members can see it now");
+      }
     } catch (err) {
       toast.error(friendlyError(err, "post"));
+    } finally {
+      setPosting(false);
     }
   }
 
   async function togglePin(p: CommunityPost) {
     try {
-      const updated = await adminApi.postUpdate(p.id, { pinned: !p.pinned });
+      const updated = await adminApi.postUpdate(Number(p.id), { pinned: !p.pinned });
       setPosts((prev) => prev?.map((x) => (x.id === p.id ? { ...x, pinned: updated.pinned } : x)) ?? prev);
     } catch (err) {
       toast.error(friendlyError(err, "post"));
@@ -327,7 +971,7 @@ function ChannelsTab({
     });
     if (!ok) return;
     try {
-      await adminApi.postDelete(p.id);
+      await adminApi.postDelete(Number(p.id));
       setPosts((prev) => prev?.filter((x) => x.id !== p.id) ?? prev);
       toast.success("Post deleted");
     } catch (err) {
@@ -340,14 +984,52 @@ function ChannelsTab({
       <Card className="h-fit">
         <CardHeader
           title="Channels"
+          /* Every channel in the community, whatever its visibility and whoever
+             is in it. This list is not a member's view of the room: a channel
+             its owner cannot see is a channel its owner cannot fix. */
+          subtitle={channels ? `${pluralize(channels.length, "channel", "channels")} in here` : undefined}
           action={
-            <Button variant="secondary" size="sm" onClick={() => setCreating(true)}>
-              <Plus />
-              New
-            </Button>
+            <div className="flex gap-1">
+              {channels && channels.length > 1 && (
+                <Button
+                  variant={reordering ? "primary" : "ghost"}
+                  size="sm"
+                  aria-pressed={reordering}
+                  onClick={() => setReordering((v) => !v)}
+                >
+                  <ArrowUpDown />
+                  {reordering ? "Done" : "Reorder"}
+                </Button>
+              )}
+              <Button variant="secondary" size="sm" onClick={() => setCreating(true)}>
+                <Plus />
+                New
+              </Button>
+            </div>
           }
         />
         <div className="p-2">
+          {/* First in the list, because that is where the member meets it. */}
+          {community && (
+            <button
+              type="button"
+              onClick={() => setShowLive(true)}
+              className={cn(
+                "mb-1 flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm transition-colors",
+                showLive
+                  ? "bg-lilac-tint font-semibold text-plum-deep"
+                  : "text-ink-soft hover:bg-cream",
+              )}
+            >
+              <Video className="size-4 shrink-0 opacity-60" />
+              <span className="min-w-0 flex-1 truncate">
+                {community.liveRoomAlias?.trim() || "Live room"}
+              </span>
+              {!community.liveRoomEnabled && (
+                <span className="text-[0.6rem] font-bold uppercase text-ink-soft/60">Off</span>
+              )}
+            </button>
+          )}
           {channels === null ? (
             <div className="space-y-2 p-2">
               {Array.from({ length: 3 }, (_, i) => (
@@ -360,13 +1042,16 @@ function ChannelsTab({
             </p>
           ) : (
             <ul className="space-y-0.5">
-              {channels.map((channel) => (
-                <li key={channel.id}>
+              {channels.map((channel, index) => (
+                <li key={channel.id} className="flex items-center gap-1">
                   <button
                     type="button"
-                    onClick={() => setActive(channel)}
+                    onClick={() => {
+                      setActive(channel);
+                      setShowLive(false);
+                    }}
                     className={cn(
-                      "flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm transition-colors",
+                      "flex min-w-0 flex-1 items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm transition-colors",
                       active?.id === channel.id
                         ? "bg-lilac-tint font-semibold text-plum-deep"
                         : "text-ink-soft hover:bg-cream",
@@ -375,11 +1060,52 @@ function ChannelsTab({
                     <Hash className="size-4 shrink-0 opacity-60" />
                     <span className="min-w-0 flex-1 truncate">{channel.name}</span>
                     {channel.visibility === "private" && (
-                      <span className="text-[0.6rem] font-bold uppercase text-ink-soft/60">
-                        Invite only
-                      </span>
+                      <Lock
+                        aria-label="Invited members only"
+                        className="size-3.5 shrink-0 text-ink-soft/60"
+                      />
+                    )}
+                    {channel.accessGroupName && (
+                      <Layers
+                        aria-label={`${channel.accessGroupName} only`}
+                        className="size-3.5 shrink-0 text-ink-soft/60"
+                      />
                     )}
                   </button>
+                  {reordering ? (
+                    <>
+                      <Button
+                        variant="ghost"
+                        size="iconSm"
+                        aria-label={`Move ${channel.name} up`}
+                        disabled={moving || index === 0}
+                        onClick={() => moveChannel(index, -1)}
+                      >
+                        <ChevronUp />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="iconSm"
+                        aria-label={`Move ${channel.name} down`}
+                        disabled={moving || index === channels.length - 1}
+                        onClick={() => moveChannel(index, 1)}
+                      >
+                        <ChevronDown />
+                      </Button>
+                    </>
+                  ) : (
+                    <Button
+                      variant="ghost"
+                      size="iconSm"
+                      aria-label={`Settings for ${channel.name}`}
+                      onClick={() => {
+                        setEditing(channel);
+                        setEditForm(channelToForm(channel));
+                      }}
+                    >
+                      <Settings />
+                    </Button>
+                  )}
                 </li>
               ))}
             </ul>
@@ -387,111 +1113,217 @@ function ChannelsTab({
         </div>
       </Card>
 
-      <Card>
-        {/* The channel's own name, never its web address — she named it
-            "Wins & Wednesdays", not "wins-wednesdays". */}
-        <CardHeader
-          title={active ? active.name : "No channel picked yet"}
-          subtitle={
-            active ? active.description || channelFormatLabel(active.format) : undefined
-          }
-        />
-
-        {active && (
-          <form onSubmit={post} className="border-b border-hairline/60 p-4">
-            <Textarea
-              rows={3}
-              value={composer}
-              onChange={(e) => setComposer(e.target.value)}
-              placeholder={`Share something with ${active.name}…`}
-              aria-label="Write a post"
-            />
-            <div className="mt-2.5 flex justify-end">
-              <Button type="submit" size="sm" disabled={!composer.trim()}>
-                <Send />
-                Post
-              </Button>
-            </div>
-          </form>
-        )}
-
-        {!active ? (
-          <EmptyState
-            icon={<Hash />}
-            title="Pick a channel"
-            description="Choose one on the left to read it and post in it."
-          />
-        ) : posts === null ? (
-          <div className="space-y-3 p-5">
-            {Array.from({ length: 3 }, (_, i) => (
-              <Skeleton key={i} className="h-20 w-full" />
-            ))}
-          </div>
-        ) : posts.length === 0 ? (
-          <EmptyState
-            icon={<MessageSquare />}
-            title="No posts yet"
-            description="Kick things off with a welcome post."
-          />
-        ) : (
-          <ul className="divide-y divide-hairline/60">
-            {posts.map((p) => (
-              <motion.li
-                key={p.id}
-                layout
-                initial={{ opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="p-4"
-              >
-                <div className="flex items-start gap-3">
-                  <span className="grid size-9 shrink-0 place-items-center rounded-full bg-lilac-tint text-xs font-bold text-plum-deep">
-                    {(p.authorName || "H").slice(0, 1).toUpperCase()}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="flex flex-wrap items-center gap-2 text-sm">
-                      <span className="font-semibold text-ink">{p.authorName || "Host"}</span>
-                      <span className="text-xs text-ink-soft">{formatRelative(p.createdAt)}</span>
-                      {p.pinned && (
-                        <Badge tone="gold">
-                          <Pin className="size-3" />
-                          Pinned
-                        </Badge>
-                      )}
-                      {p.status === "hidden" && <Badge tone="slate">Hidden from members</Badge>}
-                    </p>
-                    {p.title && <p className="mt-1 font-semibold text-ink">{p.title}</p>}
-                    <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-ink-soft">
-                      {p.body}
-                    </p>
-                    <p className="mt-2 flex gap-4 text-xs text-ink-soft/80">
-                      <span>{pluralize(p.commentCount, "comment")}</span>
-                      <span>{pluralize(p.reactionCount, "reaction")}</span>
-                    </p>
-                  </div>
-                  <div className="flex shrink-0 gap-1">
-                    <Button
-                      variant="ghost"
-                      size="iconSm"
-                      aria-label={p.pinned ? "Unpin post" : "Pin post"}
-                      onClick={() => togglePin(p)}
-                    >
-                      <Pin className={p.pinned ? "text-gold" : undefined} />
-                    </Button>
-                    <Button
-                      variant="dangerGhost"
-                      size="iconSm"
-                      aria-label="Delete post"
-                      onClick={() => removePost(p)}
-                    >
-                      <Trash2 />
-                    </Button>
-                  </div>
+      {showLive && community ? (
+        <LiveRoomPanel communityId={communityId} community={community} onChange={onChange} />
+      ) : (
+        <Card>
+          {/* The channel's own name, never its web address — she named it
+              "Wins & Wednesdays", not "wins-wednesdays". */}
+          <CardHeader
+            title={active ? active.name : "No channel picked yet"}
+            subtitle={
+              active ? active.description || channelFormatLabel(active.format) : undefined
+            }
+            action={
+              active && (
+                <div className="flex flex-wrap items-center gap-2">
+                  {active.visibility === "private" && (
+                    <Badge tone="slate">
+                      <Lock className="size-3" />
+                      {active.invitedCount
+                        ? `Invited: ${pluralize(active.invitedCount, "person", "people")}`
+                        : "Invite only — nobody yet"}
+                    </Badge>
+                  )}
+                  {active.accessGroupName && <Badge tone="plum">{active.accessGroupName} only</Badge>}
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => {
+                      setEditing(active);
+                      setEditForm(channelToForm(active));
+                    }}
+                  >
+                    <Settings />
+                    Settings
+                  </Button>
                 </div>
-              </motion.li>
-            ))}
-          </ul>
-        )}
-      </Card>
+              )
+            }
+          />
+
+          {active && (
+            <form onSubmit={post} className="border-b border-hairline/60 p-4">
+              <Textarea
+                rows={3}
+                value={composer.body}
+                onChange={(e) => setComposer((c) => ({ ...c, body: e.target.value }))}
+                placeholder={`Share something with ${active.name}…`}
+                aria-label="Write a post"
+              />
+
+              {attaching && (
+                <div className="mt-2.5 grid gap-2.5 sm:grid-cols-2">
+                  <Field label="Link to a picture, video or file" htmlFor="post-media">
+                    <Input
+                      id="post-media"
+                      value={composer.mediaUrl}
+                      onChange={(e) => setComposer((c) => ({ ...c, mediaUrl: e.target.value }))}
+                      placeholder="https://…/worksheet.pdf"
+                    />
+                  </Field>
+                  <Field
+                    label="What to call it"
+                    hint="optional"
+                    htmlFor="post-media-label"
+                  >
+                    <Input
+                      id="post-media-label"
+                      value={composer.mediaLabel}
+                      onChange={(e) => setComposer((c) => ({ ...c, mediaLabel: e.target.value }))}
+                      placeholder="This week's worksheet"
+                    />
+                  </Field>
+                </div>
+              )}
+
+              {publishAt !== "" && (
+                <div className="mt-2.5">
+                  <Field
+                    label="Goes out at"
+                    hint="your timezone — nobody sees it until then"
+                    htmlFor="post-when"
+                  >
+                    <Input
+                      id="post-when"
+                      type="datetime-local"
+                      value={publishAt}
+                      onChange={(e) => setPublishAt(e.target.value)}
+                    />
+                  </Field>
+                </div>
+              )}
+
+              <div className="mt-2.5 flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-wrap gap-1">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    aria-pressed={attaching}
+                    onClick={() => setAttaching((v) => !v)}
+                  >
+                    <Paperclip />
+                    {attaching ? "No attachment" : "Attach something"}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    aria-pressed={publishAt !== ""}
+                    onClick={() =>
+                      // Defaults to an hour from now rather than to an empty box:
+                      // "in a bit" is what "post at a time" almost always means,
+                      // and a past time is refused by the endpoint anyway.
+                      setPublishAt((current) => (current === "" ? defaultScheduleTime() : ""))
+                    }
+                  >
+                    <Clock />
+                    {publishAt === "" ? "Post at a time" : "Post it now instead"}
+                  </Button>
+                </div>
+                <Button type="submit" size="sm" disabled={!composer.body.trim() || posting}>
+                  {publishAt === "" ? <Send /> : <CalendarClock />}
+                  {posting ? "Saving…" : publishAt === "" ? "Post" : "Schedule it"}
+                </Button>
+              </div>
+            </form>
+          )}
+
+          {!active ? (
+            <EmptyState
+              icon={<Hash />}
+              title="Pick a channel"
+              description="Choose one on the left to read it and post in it."
+            />
+          ) : posts === null ? (
+            <div className="space-y-3 p-5">
+              {Array.from({ length: 3 }, (_, i) => (
+                <Skeleton key={i} className="h-20 w-full" />
+              ))}
+            </div>
+          ) : posts.length === 0 ? (
+            <EmptyState
+              icon={<MessageSquare />}
+              title="No posts yet"
+              description="Kick things off with a welcome post."
+            />
+          ) : (
+            <ul className="divide-y divide-hairline/60">
+              {posts.map((p) => (
+                <motion.li
+                  key={p.id}
+                  layout
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="p-4"
+                >
+                  <div className="flex items-start gap-3">
+                    <span className="grid size-9 shrink-0 place-items-center rounded-full bg-lilac-tint text-xs font-bold text-plum-deep">
+                      {(p.authorName || "H").slice(0, 1).toUpperCase()}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="flex flex-wrap items-center gap-2 text-sm">
+                        <span className="font-semibold text-ink">{p.authorName || "Host"}</span>
+                        <span className="text-xs text-ink-soft">{formatRelative(p.createdAt)}</span>
+                        {p.pinned && (
+                          <Badge tone="gold">
+                            <Pin className="size-3" />
+                            Pinned
+                          </Badge>
+                        )}
+                        {p.status === "hidden" && <Badge tone="slate">Hidden from members</Badge>}
+                        {p.status === "scheduled" && (
+                          <Badge tone="blue">
+                            <Clock className="size-3" />
+                            Waiting to go out
+                          </Badge>
+                        )}
+                      </p>
+                      {p.title && <p className="mt-1 font-semibold text-ink">{p.title}</p>}
+                      <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-ink-soft">
+                        {p.body}
+                      </p>
+                      <p className="mt-2 flex gap-4 text-xs text-ink-soft/80">
+                        <span>{pluralize(p.commentCount, "comment")}</span>
+                        <span>{pluralize(p.reactionCount, "reaction")}</span>
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 gap-1">
+                      <Button
+                        variant="ghost"
+                        size="iconSm"
+                        aria-label={p.pinned ? "Unpin post" : "Pin post"}
+                        onClick={() => togglePin(p)}
+                      >
+                        <Pin className={p.pinned ? "text-gold" : undefined} />
+                      </Button>
+                      <Button
+                        variant="dangerGhost"
+                        size="iconSm"
+                        aria-label="Delete post"
+                        onClick={() => removePost(p)}
+                      >
+                        <Trash2 />
+                      </Button>
+                    </div>
+                  </div>
+                </motion.li>
+              ))}
+            </ul>
+          )}
+        </Card>
+      )}
 
       <Modal
         open={creating}
@@ -509,161 +1341,72 @@ function ChannelsTab({
           </>
         }
       >
-        <form id="new-channel" onSubmit={createChannel} className="space-y-4">
-          <Field label="What's it called?" htmlFor="channel-name">
-            <Input
-              id="channel-name"
-              value={form.name}
-              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-              placeholder="Wins & Wednesdays"
-              required
-              autoFocus
-            />
-          </Field>
-          <Field
-            label="What's it for?"
-            hint="shown under the channel name"
-            htmlFor="channel-desc"
-          >
-            <Input
-              id="channel-desc"
-              value={form.description}
-              onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
-              placeholder="Share the win you're proudest of this week."
-            />
-          </Field>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="How should it work?">
-              <div className="flex gap-2">
-                {CHANNEL_FORMATS.map((option) => (
-                  <button
-                    key={option.value}
-                    type="button"
-                    onClick={() => setForm((f) => ({ ...f, format: option.value }))}
-                    className={cn(
-                      "flex-1 rounded-xl px-3 py-2.5 text-sm font-semibold transition-colors",
-                      form.format === option.value
-                        ? "bg-brand-gradient text-white"
-                        : "border border-hairline text-ink-soft hover:border-plum/40",
-                    )}
-                  >
-                    {option.label}
-                  </button>
-                ))}
-              </div>
-            </Field>
-            <Field label="Who can see it?">
-              <div className="flex gap-2">
-                {CHANNEL_VISIBILITY.map((option) => (
-                  <button
-                    key={option.value}
-                    type="button"
-                    onClick={() => setForm((f) => ({ ...f, visibility: option.value }))}
-                    className={cn(
-                      "flex-1 rounded-xl px-3 py-2.5 text-sm font-semibold transition-colors",
-                      form.visibility === option.value
-                        ? "bg-brand-gradient text-white"
-                        : "border border-hairline text-ink-soft hover:border-plum/40",
-                    )}
-                  >
-                    {option.label}
-                  </button>
-                ))}
-              </div>
-            </Field>
-          </div>
+        <form id="new-channel" onSubmit={createChannel}>
+          <ChannelFields
+            form={createForm}
+            onChange={setCreateForm}
+            groups={groups}
+            idPrefix="new-channel"
+          />
+        </form>
+      </Modal>
 
-          <Field
-            label="Which members?"
-            hint="leave open to the whole community unless you have a tier for it"
-            htmlFor="channel-group"
-          >
-            <select
-              id="channel-group"
-              className={selectStyles}
-              value={form.accessGroupId}
-              onChange={(e) => setForm((f) => ({ ...f, accessGroupId: e.target.value }))}
+      <Modal
+        open={editing !== null}
+        onOpenChange={(open) => !open && setEditing(null)}
+        title={editing ? `${editing.name} settings` : "Channel settings"}
+        description="Rename it, change who can see it, or take it down."
+        footer={
+          <>
+            <Button
+              variant="dangerGhost"
+              size="sm"
+              onClick={() => editing && removeChannel(editing)}
             >
-              <option value="">Everyone in this community</option>
-              {groups.map((group) => (
-                <option key={group.id} value={String(group.id)}>
-                  {group.name} only
-                </option>
-              ))}
-            </select>
-          </Field>
-
-          <Field
-            label="How can members read it?"
-            hint="pick at least one — the default is what they see first"
-          >
-            <div className={chipRowStyles}>
-              {CHANNEL_VIEW_MODES.map((mode) => {
-                const on = form.viewModes.includes(mode.value);
-                return (
-                  <Chip
-                    key={mode.value}
-                    selected={on}
-                    title={mode.help}
-                    onClick={() =>
-                      setForm((f) => {
-                        // Never empty: turning the last one off would leave a
-                        // channel with no way to read it, which the database
-                        // refuses anyway.
-                        const next = on
-                          ? f.viewModes.filter((v) => v !== mode.value)
-                          : [...f.viewModes, mode.value];
-                        if (next.length === 0) return f;
-                        return {
-                          ...f,
-                          viewModes: next,
-                          // Keep the default inside the set she just chose.
-                          defaultViewMode: next.includes(f.defaultViewMode)
-                            ? f.defaultViewMode
-                            : next[0],
-                        };
-                      })
-                    }
-                  >
-                    {mode.label}
-                  </Chip>
-                );
-              })}
-            </div>
-            {form.viewModes.length > 1 && (
-              <select
-                className={cn(selectStyles, "mt-3")}
-                aria-label="Which one members see first"
-                value={form.defaultViewMode}
-                onChange={(e) => setForm((f) => ({ ...f, defaultViewMode: e.target.value }))}
-              >
-                {form.viewModes.map((mode) => (
-                  <option key={mode} value={mode}>
-                    Opens as {CHANNEL_VIEW_MODES.find((m) => m.value === mode)?.label ?? mode}
-                  </option>
-                ))}
-              </select>
-            )}
-          </Field>
-
-          <Field
-            label="Cover image"
-            hint="optional — a link to a picture, 1280x720 looks best"
-            htmlFor="channel-cover"
-          >
-            <Input
-              id="channel-cover"
-              value={form.coverImage}
-              onChange={(e) => setForm((f) => ({ ...f, coverImage: e.target.value }))}
-              placeholder="https://…/cover.jpg"
-            />
-          </Field>
+              <Trash2 />
+              Delete channel
+            </Button>
+            <Button variant="secondary" size="sm" onClick={() => setEditing(null)}>
+              Cancel
+            </Button>
+            <Button size="sm" type="submit" form="edit-channel" disabled={savingChannel}>
+              {savingChannel ? "Saving…" : "Save channel"}
+            </Button>
+          </>
+        }
+      >
+        <form id="edit-channel" onSubmit={saveChannel} className="space-y-4">
+          <ChannelFields
+            form={editForm}
+            onChange={setEditForm}
+            groups={groups}
+            idPrefix="edit-channel"
+          />
+          {editing && editForm.visibility === "private" && (
+            <ChannelInvites channel={editing} members={members} />
+          )}
+          <p className="text-xs text-ink-soft">
+            The channel's web address stays as it is when you rename it, so links
+            your members already have keep working.
+          </p>
         </form>
       </Modal>
 
       {confirmDialog}
     </div>
   );
+}
+
+/**
+ * An hour from now, as a `datetime-local` value in her own timezone.
+ *
+ * "In a bit" is what "post at a time" almost always means, and an empty box is
+ * a worse starting point than a wrong-but-obvious one. `toDateTimeInput` owns
+ * the timezone arithmetic — doing it again here is how a scheduled post ends up
+ * going out on the wrong day.
+ */
+function defaultScheduleTime(): string {
+  return toDateTimeInput(new Date(Date.now() + 60 * 60 * 1000).toISOString());
 }
 
 /** Kajabi's three, with its own words for what each is good for. */
@@ -675,19 +1418,54 @@ const CHANNEL_VIEW_MODES = [
 
 /* ----------------------------------------------------------------- Members */
 
+/**
+ * The three boards, in her words.
+ *
+ * The same set the member sidebar offers (2.7). "All time" alone cannot answer
+ * "who turned up this week", which is the question that decides who gets a
+ * shout-out — and it was the only board either surface had.
+ */
+const LEADERBOARD_PERIODS = [
+  { value: "week", label: "This week" },
+  { value: "month", label: "This month" },
+  { value: "all", label: "All time" },
+] as const;
+
+type LeaderboardPeriod = (typeof LEADERBOARD_PERIODS)[number]["value"];
+
+/**
+ * Somebody's standing in this community, in one line.
+ *
+ * A membership row is kept when a member is banned or their account closes —
+ * points and history are a record of what they did — so the list has to say
+ * which of the people on it are actually in the room. The headline count is the
+ * ones who are, which is the same number the members themselves are shown.
+ */
+function membershipIsPresent(m: CommunityMembership): boolean {
+  return !m.bannedAt && (m.status === "active" || m.status === undefined);
+}
+
 function MembersTab({ communityId }: { communityId: number }) {
   const [memberships, setMemberships] = useState<CommunityMembership[] | null>(null);
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[] | null>(null);
+  const [period, setPeriod] = useState<LeaderboardPeriod>("all");
   const [allMembers, setAllMembers] = useState<Member[]>([]);
+  const [groups, setGroups] = useState<AdminAccessGroup[]>([]);
   const [adding, setAdding] = useState(false);
   const [selected, setSelected] = useState("");
+  /** The person whose tiers are being changed. */
+  const [tiersFor, setTiersFor] = useState<CommunityMembership | null>(null);
 
   const load = useCallback(() => {
     adminApi.communityMembers(communityId).then(setMemberships).catch(() => undefined);
-    adminApi.leaderboard(communityId).then(setLeaderboard).catch(() => undefined);
+    adminApi.accessGroups(communityId).then(setGroups).catch(() => setGroups([]));
   }, [communityId]);
 
   useEffect(load, [load]);
+  useEffect(() => {
+    setLeaderboard(null);
+    adminApi.leaderboard(communityId, period).then(setLeaderboard).catch(() => setLeaderboard([]));
+  }, [communityId, period]);
   useEffect(() => {
     adminApi.membersList().then(setAllMembers).catch(() => undefined);
   }, []);
@@ -717,13 +1495,15 @@ function MembersTab({ communityId }: { communityId: number }) {
     });
     if (!ok) return;
     try {
-      await adminApi.membershipDelete(membership.id);
+      await adminApi.membershipDelete(Number(membership.id));
       setMemberships((prev) => prev?.filter((m) => m.id !== membership.id) ?? prev);
       toast.success("Removed from this community");
     } catch (err) {
       toast.error(friendlyError(err, "member"));
     }
   }
+
+  const present = memberships?.filter(membershipIsPresent).length ?? 0;
 
   return (
     <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_20rem]">
@@ -732,7 +1512,7 @@ function MembersTab({ communityId }: { communityId: number }) {
           title="Members"
           subtitle={
             memberships
-              ? `${pluralize(memberships.length, "person", "people")} in this community`
+              ? `${pluralize(present, "person", "people")} in this community`
               : undefined
           }
           action={
@@ -765,10 +1545,31 @@ function MembersTab({ communityId }: { communityId: number }) {
                   <p className="truncate text-sm font-semibold text-ink">{m.name || m.email}</p>
                   <p className="truncate text-xs text-ink-soft">{m.email}</p>
                 </div>
+                {/* Why they are not one of the people counted above. */}
+                {m.bannedAt && <Badge tone="red">Banned from here</Badge>}
+                {!m.bannedAt && m.status && m.status !== "active" && (
+                  <Badge tone="slate">Account {m.status}</Badge>
+                )}
+                {(m.groups ?? []).map((group) => (
+                  <Badge key={String(group.id)} tone="plum">
+                    {group.name}
+                  </Badge>
+                ))}
                 <Badge tone={m.role === "member" ? "neutral" : "plum"}>
                   {ROLE_LABEL[m.role] ?? "Member"}
                 </Badge>
                 <Badge tone="gold">{formatNumber(m.points)} points</Badge>
+                {groups.length > 0 && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    aria-label={`Change which tiers ${m.name || m.email} is in`}
+                    onClick={() => setTiersFor(m)}
+                  >
+                    <Layers />
+                    Tiers
+                  </Button>
+                )}
                 <Button
                   variant="dangerGhost"
                   size="iconSm"
@@ -789,6 +1590,19 @@ function MembersTab({ communityId }: { communityId: number }) {
           subtitle="Your 20 most active members"
           icon={<Trophy className="size-4" />}
         />
+        <div className="px-5 pt-4">
+          <div className={chipRowStyles}>
+            {LEADERBOARD_PERIODS.map((option) => (
+              <Chip
+                key={option.value}
+                selected={period === option.value}
+                onClick={() => setPeriod(option.value)}
+              >
+                {option.label}
+              </Chip>
+            ))}
+          </div>
+        </div>
         {leaderboard === null ? (
           <div className="space-y-2 p-5">
             {Array.from({ length: 5 }, (_, i) => (
@@ -798,34 +1612,45 @@ function MembersTab({ communityId }: { communityId: number }) {
         ) : leaderboard.length === 0 ? (
           <EmptyState
             icon={<Trophy />}
-            title="No points yet"
-            description="Points add up as members post and finish your challenges."
+            title={period === "all" ? "No points yet" : "Nothing earned yet"}
+            description={
+              period === "all"
+                ? "Points add up as members post and finish your challenges."
+                : "Nobody has earned points in this window. Try all time."
+            }
           />
         ) : (
           <ol className="divide-y divide-hairline/60">
-            {leaderboard.map((entry, i) => (
-              <li key={entry.email} className="flex items-center gap-3 px-5 py-3">
-                <span
-                  className={cn(
-                    "grid size-7 shrink-0 place-items-center rounded-full text-xs font-bold",
-                    i === 0
-                      ? "bg-gold text-ink"
-                      : i < 3
-                        ? "bg-lilac-tint text-plum-deep"
-                        : "bg-cream text-ink-soft",
-                  )}
-                >
-                  {i + 1}
-                </span>
-                <span className="min-w-0 flex-1 truncate text-sm text-ink">
-                  {entry.badge && <span className="mr-1">{entry.badge}</span>}
-                  {entry.name || entry.email}
-                </span>
-                <span className="shrink-0 text-sm font-bold tabular-nums text-plum">
-                  {entry.points}
-                </span>
-              </li>
-            ))}
+            {leaderboard.map((entry, i) => {
+              // The server's rank, which shares a number on a tie. Falling back
+              // to the row position would print 1, 2 for two people on equal
+              // points and invent a winner.
+              const rank = entry.rank ?? i + 1;
+              return (
+                <li key={entry.email || String(entry.memberId)} className="flex items-center gap-3 px-5 py-3">
+                  <span
+                    className={cn(
+                      "grid size-7 shrink-0 place-items-center rounded-full text-xs font-bold",
+                      rank === 1
+                        ? "bg-gold text-ink"
+                        : rank <= 3
+                          ? "bg-lilac-tint text-plum-deep"
+                          : "bg-cream text-ink-soft",
+                    )}
+                    title={entry.tied ? `Joint ${rank}` : undefined}
+                  >
+                    {entry.tied ? `=${rank}` : rank}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-sm text-ink">
+                    {entry.badge && <span className="mr-1">{entry.badge}</span>}
+                    {entry.name || entry.email}
+                  </span>
+                  <span className="shrink-0 text-sm font-bold tabular-nums text-plum">
+                    {entry.points}
+                  </span>
+                </li>
+              );
+            })}
           </ol>
         )}
       </Card>
@@ -865,8 +1690,127 @@ function MembersTab({ communityId }: { communityId: number }) {
         </form>
       </Modal>
 
+      <MemberTiersModal
+        communityId={communityId}
+        membership={tiersFor}
+        groups={groups}
+        onClose={() => setTiersFor(null)}
+        onSaved={load}
+      />
+
       {confirmDialog}
     </div>
+  );
+}
+
+/**
+ * Which tiers one person is in, by hand.
+ *
+ * This is the half of access groups that had no controls anywhere: a group
+ * could be created and named and then had nothing that could be put in it, so
+ * every group read "0 MEMBERS · 0 CHANNELS" for ever.
+ *
+ * Only hand-picked membership is editable here. A tier somebody has because
+ * they bought something is derived from the live purchase and is deliberately
+ * not a row anybody can delete — taking it away by hand would leave them paying
+ * for a tier they are no longer in.
+ */
+function MemberTiersModal({
+  communityId,
+  membership,
+  groups,
+  onClose,
+  onSaved,
+}: {
+  communityId: number;
+  membership: CommunityMembership | null;
+  groups: AdminAccessGroup[];
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [busy, setBusy] = useState<number | null>(null);
+  const inGroup = new Set((membership?.groups ?? []).map((g) => String(g.id)));
+
+  return (
+    <Modal
+      open={membership !== null}
+      onOpenChange={(open) => !open && onClose()}
+      title={membership ? `Tiers for ${membership.name || membership.email}` : "Tiers"}
+      description="Turning one on lets them into every channel limited to it."
+      footer={
+        <Button variant="secondary" size="sm" onClick={onClose}>
+          Done
+        </Button>
+      }
+    >
+      {groups.length === 0 ? (
+        <p className="text-sm text-ink-soft">
+          No tiers in this community yet — make one on the Access groups tab.
+        </p>
+      ) : (
+        <ul className="space-y-2">
+          {groups.map((group) => {
+            const on = inGroup.has(String(group.id));
+            return (
+              <li
+                key={group.id}
+                className="flex flex-wrap items-center gap-3 rounded-xl border border-hairline/70 px-3.5 py-3"
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold text-ink">{group.name}</p>
+                  {group.description && (
+                    <p className="truncate text-xs text-ink-soft">{group.description}</p>
+                  )}
+                </div>
+                <Button
+                  size="sm"
+                  variant={on ? "dangerGhost" : "secondary"}
+                  disabled={busy === Number(group.id) || membership === null}
+                  onClick={async () => {
+                    if (!membership) return;
+                    setBusy(Number(group.id));
+                    try {
+                      if (on) {
+                        await adminApi.accessGroupRemoveMember(
+                          communityId,
+                          Number(group.id),
+                          Number(membership.memberId),
+                        );
+                      } else {
+                        await adminApi.accessGroupAddMember(
+                          communityId,
+                          Number(group.id),
+                          Number(membership.memberId),
+                        );
+                      }
+                      onSaved();
+                      onClose();
+                      toast.success(on ? "Taken out of the tier." : "Added to the tier.");
+                    } catch (err) {
+                      toast.error(friendlyError(err, "access group"));
+                    } finally {
+                      setBusy(null);
+                    }
+                  }}
+                >
+                  {on ? (
+                    <>
+                      <X />
+                      Take out
+                    </>
+                  ) : (
+                    <>
+                      <Check />
+                      Put in
+                    </>
+                  )}
+                </Button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </Modal>
   );
 }
 
@@ -1448,17 +2392,26 @@ function BadgesTab({ communityId }: { communityId: number }) {
 /**
  * The tier layer.
  *
+ * A group used to be a name and nothing else: it could be created and deleted,
+ * and there was no control anywhere that put a person or a channel into one, so
+ * every group read "0 members · 0 channels" for ever and the tab's own promise
+ * — "channels can be limited to one, and an offer can grant it" — was
+ * unreachable. Both halves are here now: people go in from this panel or from
+ * the Members tab, channels from a channel's settings, and what an offer grants
+ * is read back below so it is visible whether one does.
+ *
  * Deleting a group deliberately opens its channels to the whole community
  * rather than orphaning them — the database does that with ON DELETE SET NULL,
  * and it is the safe direction: nobody loses access they already had. The
- * dialog says so, because "delete" that quietly widens access is worse than
- * one that says it will.
+ * dialog says so, because "delete" that quietly widens access is worse than one
+ * that says it will.
  */
 function AccessGroupsTab({ communityId }: { communityId: number }) {
   const [groups, setGroups] = useState<AdminAccessGroup[] | null>(null);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [saving, setSaving] = useState(false);
+  const [openGroup, setOpenGroup] = useState<number | null>(null);
   const [confirm, confirmDialog] = useConfirm();
 
   const load = useCallback(() => {
@@ -1528,51 +2481,359 @@ function AccessGroupsTab({ communityId }: { communityId: number }) {
         />
       ) : (
         <div className="space-y-3">
-          {groups.map((group) => (
-            <Card key={group.id} className="flex flex-wrap items-center gap-4 px-5 py-4">
-              <div className="min-w-0 flex-1">
-                <p className="font-semibold text-ink">{group.name}</p>
-                {group.description && (
-                  <p className="truncate text-sm text-ink-soft">{group.description}</p>
+          {groups.map((group) => {
+            const open = openGroup === Number(group.id);
+            return (
+              <Card key={group.id}>
+                <div className="flex flex-wrap items-center gap-4 px-5 py-4">
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold text-ink">{group.name}</p>
+                    {group.description && (
+                      <p className="truncate text-sm text-ink-soft">{group.description}</p>
+                    )}
+                  </div>
+                  <Badge tone="neutral">
+                    {pluralize(group.memberCount, "member", "members")}
+                  </Badge>
+                  <Badge tone="neutral">
+                    {pluralize(group.channelCount, "channel", "channels")}
+                  </Badge>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setOpenGroup(open ? null : Number(group.id))}
+                  >
+                    <Settings />
+                    {open ? "Close" : "Manage"}
+                  </Button>
+                  <Button
+                    variant="dangerGhost"
+                    size="sm"
+                    onClick={async () => {
+                      const ok = await confirm({
+                        title: `Delete ${group.name}?`,
+                        description:
+                          group.channelCount > 0
+                            ? `Its ${pluralize(group.channelCount, "channel", "channels")} will become open to everyone in the community. Nobody loses access.`
+                            : "Members of this group keep their community access.",
+                        confirmLabel: "Yes, delete it",
+                        destructive: true,
+                      });
+                      if (!ok) return;
+                      try {
+                        await adminApi.accessGroupDelete(communityId, Number(group.id));
+                        load();
+                        toast.success("Group deleted.");
+                      } catch (err) {
+                        toast.error(friendlyError(err, "access group"));
+                      }
+                    }}
+                  >
+                    <Trash2 />
+                    Delete
+                  </Button>
+                </div>
+                {open && (
+                  <AccessGroupPanel
+                    communityId={communityId}
+                    group={group}
+                    onChanged={load}
+                  />
                 )}
-              </div>
-              <Badge tone="neutral">
-                {pluralize(group.memberCount, "member", "members")}
-              </Badge>
-              <Badge tone="neutral">
-                {pluralize(group.channelCount, "channel", "channels")}
-              </Badge>
-              <Button
-                variant="dangerGhost"
-                size="sm"
-                onClick={async () => {
-                  const ok = await confirm({
-                    title: `Delete ${group.name}?`,
-                    description:
-                      group.channelCount > 0
-                        ? `Its ${pluralize(group.channelCount, "channel", "channels")} will become open to everyone in the community. Nobody loses access.`
-                        : "Members of this group keep their community access.",
-                    confirmLabel: "Yes, delete it",
-                    destructive: true,
-                  });
-                  if (!ok) return;
-                  try {
-                    await adminApi.accessGroupDelete(communityId, Number(group.id));
-                    load();
-                    toast.success("Group deleted.");
-                  } catch (err) {
-                    toast.error(friendlyError(err, "access group"));
-                  }
-                }}
-              >
-                <Trash2 />
-                Delete
-              </Button>
-            </Card>
-          ))}
+              </Card>
+            );
+          })}
         </div>
       )}
       {confirmDialog}
+    </div>
+  );
+}
+
+/** One tier, opened up: its name, its people, and what sells it. */
+function AccessGroupPanel({
+  communityId,
+  group,
+  onChanged,
+}: {
+  communityId: number;
+  group: AdminAccessGroup;
+  onChanged: () => void;
+}) {
+  const [members, setMembers] = useState<AdminAccessGroupMember[] | null>(null);
+  const [grants, setGrants] = useState<AdminAccessGroupGrants | null>(null);
+  const [candidates, setCandidates] = useState<CommunityMembership[]>([]);
+  const [selected, setSelected] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [name, setName] = useState(group.name);
+  const [description, setDescription] = useState(group.description);
+  const [renaming, setRenaming] = useState(false);
+  /** Offers that sell this community — the only ones that can grant its tiers. */
+  const [offers, setOffers] = useState<AdminCommunityOffer[] | null>(null);
+  const [offerPick, setOfferPick] = useState("");
+  const [granting, setGranting] = useState(false);
+
+  const load = useCallback(() => {
+    adminApi
+      .accessGroupMembers(communityId, Number(group.id))
+      .then(setMembers)
+      .catch(() => setMembers([]));
+    adminApi
+      .accessGroupGrants(communityId, Number(group.id))
+      .then(setGrants)
+      .catch(() => setGrants({ offers: [], products: [], plans: [] }));
+    adminApi
+      .communityOffers(communityId)
+      .then(setOffers)
+      .catch(() => setOffers([]));
+  }, [communityId, group.id]);
+
+  /** Point an offer at this tier, or (null) stop it granting one. */
+  async function setOfferGrant(offerId: number, accessGroupId: number | null) {
+    setGranting(true);
+    try {
+      await adminApi.offerAccessGroupSave(offerId, accessGroupId);
+      setOfferPick("");
+      load();
+      onChanged();
+      toast.success(
+        accessGroupId === null
+          ? "That offer no longer grants this tier."
+          : "Buying that offer puts people in this tier now.",
+      );
+    } catch (err) {
+      toast.error(friendlyError(err, "offer"));
+    } finally {
+      setGranting(false);
+    }
+  }
+
+  useEffect(load, [load]);
+  useEffect(() => {
+    // Only people already in the community: a tier is a subset of the room,
+    // not a way into it.
+    adminApi.communityMembers(communityId).then(setCandidates).catch(() => setCandidates([]));
+  }, [communityId]);
+
+  const inGroup = new Set((members ?? []).map((row) => String(row.memberId)));
+  const addable = candidates.filter((m) => !inGroup.has(String(m.memberId)));
+  const soldBy =
+    (grants?.offers.length ?? 0) + (grants?.products.length ?? 0) + (grants?.plans.length ?? 0);
+
+  return (
+    <div className="grid gap-5 border-t border-hairline/60 px-5 py-5 lg:grid-cols-2">
+      <div className="space-y-3">
+        <p className="text-[0.8rem] font-semibold text-ink">Who's in it</p>
+        {members === null ? (
+          <Skeleton className="h-16 w-full" />
+        ) : members.length === 0 ? (
+          <p className="text-xs text-ink-soft">
+            Nobody by hand yet. Anyone who buys something that grants this tier
+            is in it automatically, and drops out again if they're refunded.
+          </p>
+        ) : (
+          <ul className="space-y-1.5">
+            {members.map((row) => (
+              <li key={String(row.memberId)} className="flex items-center gap-2 text-sm">
+                <span className="min-w-0 flex-1 truncate text-ink">{row.name || row.email}</span>
+                {row.source === "purchase" && <Badge tone="neutral">Bought it</Badge>}
+                <Button
+                  variant="dangerGhost"
+                  size="iconSm"
+                  aria-label={`Take ${row.name || row.email} out of ${group.name}`}
+                  disabled={busy}
+                  onClick={async () => {
+                    setBusy(true);
+                    try {
+                      await adminApi.accessGroupRemoveMember(
+                        communityId,
+                        Number(group.id),
+                        Number(row.memberId),
+                      );
+                      load();
+                      onChanged();
+                    } catch (err) {
+                      toast.error(friendlyError(err, "access group"));
+                    } finally {
+                      setBusy(false);
+                    }
+                  }}
+                >
+                  <X />
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <div className="flex flex-wrap items-end gap-2">
+          <Field label="Put someone in" className="min-w-[12rem] flex-1">
+            <select
+              className={selectStyles}
+              value={selected}
+              onChange={(e) => setSelected(e.target.value)}
+            >
+              <option value="">Choose someone…</option>
+              {addable.map((m) => (
+                <option key={String(m.memberId)} value={String(m.memberId)}>
+                  {m.name ? `${m.name} — ${m.email}` : m.email}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            disabled={!selected || busy}
+            onClick={async () => {
+              setBusy(true);
+              try {
+                await adminApi.accessGroupAddMember(
+                  communityId,
+                  Number(group.id),
+                  Number(selected),
+                );
+                setSelected("");
+                load();
+                onChanged();
+                toast.success("They're in this tier now.");
+              } catch (err) {
+                toast.error(friendlyError(err, "access group"));
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            <UserPlus />
+            Add
+          </Button>
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        <div className="space-y-2">
+          <p className="text-[0.8rem] font-semibold text-ink">What grants it</p>
+          {grants === null ? (
+            <Skeleton className="h-12 w-full" />
+          ) : soldBy === 0 ? (
+            <p className="text-xs text-ink-soft">
+              Nothing sells this tier yet. Pick it on an offer, a product or a
+              plan and buying that puts people in here — and a refund takes them
+              back out, because the tier is read from the purchase rather than
+              copied out of it.
+            </p>
+          ) : (
+            <ul className="flex flex-wrap gap-2">
+              {grants.offers.map((offer) => (
+                <li key={`offer-${offer.id}`} className="flex items-center gap-1">
+                  <Badge tone="gold">Offer: {offer.title}</Badge>
+                  <Button
+                    variant="dangerGhost"
+                    size="iconSm"
+                    aria-label={`Stop ${offer.title} granting ${group.name}`}
+                    disabled={granting}
+                    onClick={() => setOfferGrant(Number(offer.id), null)}
+                  >
+                    <X />
+                  </Button>
+                </li>
+              ))}
+              {grants.products.map((product) => (
+                <li key={`product-${product.id}`}>
+                  <Badge tone="plum">Product: {product.title}</Badge>
+                </li>
+              ))}
+              {grants.plans.map((plan) => (
+                <li key={`plan-${plan.id}`}>
+                  <Badge tone="blue">Plan: {plan.name}</Badge>
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {/* "An offer can grant it" — the half that had no control anywhere.
+              Only offers that sell this community are offered, because the
+              save refuses any other: a tier in a room the offer doesn't unlock
+              is a tier the buyer could never use. */}
+          {offers === null ? null : offers.length === 0 ? (
+            <p className="text-xs text-ink-soft">
+              No offer sells this community yet, so none can grant this tier. Add
+              the community to an offer first, then come back here.
+            </p>
+          ) : (
+            <div className="flex flex-wrap items-end gap-2">
+              <Field label="Let an offer grant it" className="min-w-[12rem] flex-1">
+                <select
+                  className={selectStyles}
+                  value={offerPick}
+                  onChange={(e) => setOfferPick(e.target.value)}
+                >
+                  <option value="">Choose an offer…</option>
+                  {offers
+                    .filter((offer) => String(offer.accessGroupId) !== String(group.id))
+                    .map((offer) => (
+                      <option key={String(offer.id)} value={String(offer.id)}>
+                        {offer.accessGroupName
+                          ? `${offer.title} (grants ${offer.accessGroupName} now)`
+                          : offer.title}
+                      </option>
+                    ))}
+                </select>
+              </Field>
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                disabled={!offerPick || granting}
+                onClick={() => setOfferGrant(Number(offerPick), Number(group.id))}
+              >
+                <Check />
+                {granting ? "Saving…" : "Grant it"}
+              </Button>
+            </div>
+          )}
+        </div>
+
+        <div className="space-y-2">
+          <p className="text-[0.8rem] font-semibold text-ink">Rename it</p>
+          <div className="flex flex-wrap items-end gap-2">
+            <Field label="Name" className="min-w-[10rem] flex-1">
+              <Input value={name} onChange={(e) => setName(e.target.value)} maxLength={120} />
+            </Field>
+            <Field label="What it is" className="min-w-[12rem] flex-[2]">
+              <Input
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                maxLength={600}
+              />
+            </Field>
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              disabled={renaming || !name.trim()}
+              onClick={async () => {
+                setRenaming(true);
+                try {
+                  await adminApi.accessGroupSave(communityId, Number(group.id), {
+                    name,
+                    description,
+                  });
+                  onChanged();
+                  toast.success("Saved.");
+                } catch (err) {
+                  toast.error(friendlyError(err, "access group"));
+                } finally {
+                  setRenaming(false);
+                }
+              }}
+            >
+              {renaming ? "Saving…" : "Save"}
+            </Button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1880,39 +3141,108 @@ function ScheduledPostsTab({ communityId }: { communityId: number }) {
       ) : (
         <div className="space-y-3">
           {posts.map((post) => (
-            <Card key={post.id} className="flex flex-wrap items-center gap-4 px-5 py-4">
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold text-ink">
-                  {post.title || post.body.slice(0, 70) || "(no words yet)"}
-                </p>
-                <p className="text-xs text-ink-soft">
-                  {post.channelName} · by {post.authorName} · goes out{" "}
-                  {formatDateTime(post.publishAt)}
-                </p>
-              </div>
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={async () => {
-                  try {
-                    await adminApi.communityScheduledPostSave(communityId, Number(post.id), {
-                      publishNow: true,
-                    });
-                    load();
-                    toast.success("Published.");
-                  } catch (err) {
-                    toast.error(friendlyError(err, "scheduled post"));
-                  }
-                }}
-              >
-                <Send />
-                Send it now
-              </Button>
-            </Card>
+            <ScheduledPostRow
+              key={post.id}
+              communityId={communityId}
+              post={post}
+              onChanged={load}
+            />
           ))}
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * One waiting post: what it is, when it goes out, and the two things worth
+ * doing to it.
+ *
+ * Moving the time and sending it now are the same edit to a moderator — "the
+ * webinar moved" and "actually, publish that" are the only two reasons to open
+ * this screen — so they sit together rather than behind separate affordances.
+ */
+function ScheduledPostRow({
+  communityId,
+  post,
+  onChanged,
+}: {
+  communityId: number;
+  post: AdminScheduledPost;
+  onChanged: () => void;
+}) {
+  const [when, setWhen] = useState(() => toDateTimeInput(post.publishAt));
+  const [busy, setBusy] = useState(false);
+  const moved = when !== toDateTimeInput(post.publishAt);
+
+  return (
+    <Card className="flex flex-wrap items-end gap-4 px-5 py-4">
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-semibold text-ink">
+          {post.title || post.body.slice(0, 70) || "(no words yet)"}
+        </p>
+        <p className="text-xs text-ink-soft">
+          {post.channelName} · by {post.authorName} · goes out{" "}
+          {formatDateTime(post.publishAt)}
+        </p>
+      </div>
+      <Field label="Move it to" htmlFor={`scheduled-${post.id}`} className="w-56">
+        <Input
+          id={`scheduled-${post.id}`}
+          type="datetime-local"
+          value={when}
+          onChange={(e) => setWhen(e.target.value)}
+        />
+      </Field>
+      <Button
+        variant="secondary"
+        size="sm"
+        disabled={!moved || busy}
+        onClick={async () => {
+          const iso = fromDateTimeInput(when);
+          if (!iso) {
+            toast.error("We couldn't read that time. Pick it again?");
+            return;
+          }
+          setBusy(true);
+          try {
+            await adminApi.communityScheduledPostSave(communityId, Number(post.id), {
+              publishAt: iso,
+            });
+            onChanged();
+            toast.success("Moved.");
+          } catch (err) {
+            toast.error(friendlyError(err, "scheduled post"));
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        <Clock />
+        Move it
+      </Button>
+      <Button
+        size="sm"
+        disabled={busy}
+        onClick={async () => {
+          setBusy(true);
+          try {
+            await adminApi.communityScheduledPostSave(communityId, Number(post.id), {
+              publishNow: true,
+            });
+            onChanged();
+            toast.success("Published.");
+          } catch (err) {
+            toast.error(friendlyError(err, "scheduled post"));
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        <Send />
+        Send it now
+      </Button>
+    </Card>
   );
 }
 

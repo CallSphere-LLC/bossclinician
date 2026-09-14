@@ -470,16 +470,8 @@ function MeetYvette() {
                   height={1440}
                   loading="lazy"
                   decoding="async"
-                  className="aspect-[4/5] w-full max-w-full object-cover object-top brightness-[0.74] contrast-[1.1] saturate-[0.74]"
+                  className="aspect-[4/5] w-full max-w-full object-cover object-top"
                 />
-                {/* Seat the daylight photograph into the near-black surface: a
-                    vignette closes the corners, then a violet soft-light pass
-                    carries its whites into the page's plum. */}
-                <div
-                  aria-hidden
-                  className="absolute inset-0 bg-[radial-gradient(112%_78%_at_50%_24%,transparent_24%,rgba(10,7,19,0.55)_66%,rgba(6,4,11,0.92)_100%)]"
-                />
-                <div aria-hidden className="absolute inset-0 bg-glow-violet/20 mix-blend-soft-light" />
               </div>
 
               {/* Offset crop marks — a printer's registration frame sitting a

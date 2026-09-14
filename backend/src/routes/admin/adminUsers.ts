@@ -7,7 +7,6 @@ import { badRequest, forbidden, notFound, unauthorized } from "../../utils/httpE
 import { rowsToCamel } from "../../utils/case";
 import { expiresIn, generateToken, hashToken } from "../../auth/tokens";
 import { checkPasswordStrength, hashPassword } from "../../auth/password";
-import { signToken } from "../../utils/jwt";
 import { sendMail } from "../../email/mailer";
 import { escapeHtml } from "../../email/templates";
 import { recordAdminAction } from "../../services/adminAudit";
@@ -202,7 +201,7 @@ adminUsersRouter.post(
       client.release();
     }
 
-    const link = `${env.publicSiteUrl}/admin/invite/${token}`;
+    const link = `${env.adminOrigin || env.publicSiteUrl}/admin/invite/${token}`;
     await sendMail({
       to: email,
       subject: "You've been given access to Boss Clinician",
@@ -318,10 +317,10 @@ adminInviteRouter.post(
 
       const updated = await client.query<AdminRow>(
         `UPDATE admin_users
-            SET password_hash = $2, name = $3, role = $4, status = 'active', updated_at = now()
+            SET password_hash = $2, name = $3, status = 'active', updated_at = now()
           WHERE lower(email) = $1
           RETURNING ${ADMIN_COLUMNS}`,
-        [invite.email.toLowerCase(), passwordHash, parsed.data.name, invite.role]
+        [invite.email.toLowerCase(), passwordHash, parsed.data.name]
       );
       admin = updated.rows[0] ?? null;
 
@@ -385,10 +384,13 @@ adminUsersRouter.patch(
     await assertMayChange(req, target, { removesOwner: demotesAnOwner });
 
     const updated = await pool.query(
-      `UPDATE admin_users
+      `WITH person AS (UPDATE admin_users
           SET name = COALESCE($2, name), role = COALESCE($3, role), updated_at = now()
         WHERE id = $1
-        RETURNING ${ADMIN_COLUMNS}`,
+        RETURNING ${ADMIN_COLUMNS}), invitations AS (
+          UPDATE admin_invites i SET role=p.role FROM person p
+          WHERE lower(i.email)=lower(p.email) AND i.accepted_at IS NULL AND p.status='invited'
+        ) SELECT * FROM person`,
       [id, parsed.data.name ?? null, newRole ?? null]
     );
 
@@ -415,6 +417,9 @@ adminUsersRouter.post(
     const target = await loadAdmin(id);
     if (!target) throw notFound("We couldn't find that person.");
     if (target.id === actorId(req)) throw badRequest("You can't suspend your own account.");
+    if (target.status === "invited") {
+      throw badRequest("Withdraw their invitation to prevent access before they join.");
+    }
 
     await assertMayChange(req, target, { removesOwner: true });
 
@@ -451,6 +456,9 @@ adminUsersRouter.post(
 
     const target = await loadAdmin(id);
     if (!target) throw notFound("We couldn't find that person.");
+    if (target.status === "invited") {
+      throw badRequest("They must accept their invitation before they can sign in.");
+    }
     if (target.role === "owner" && !actorIsOwner(req)) {
       throw forbidden("Only an owner can change another owner's account.");
     }
@@ -720,63 +728,5 @@ adminUsersRouter.post(
   })
 );
 
-/**
- * Issued at sign-in so that a session exists to revoke.
- *
- * Lives here rather than in the login route because it is the same record the
- * list and the revoke buttons above read, and the shape of it should change in
- * one place. Returns the JWT that the browser holds.
- */
-export async function issueAdminSession(input: {
-  adminUserId: number;
-  email: string;
-  role: string;
-  userAgent: string;
-  ip: string;
-  ttlSeconds: number;
-}): Promise<string> {
-  const token = signToken({ sub: input.adminUserId, email: input.email, role: input.role });
-  const userAgent = input.userAgent.slice(0, 400);
-  const ip = input.ip.slice(0, 64);
-  const interactive =
-    !["127.0.0.1", "::1", "::ffff:127.0.0.1"].includes(ip) &&
-    !/^(node|curl|wget|codex)/i.test(userAgent.trim());
-
-  const client = await pool.connect();
-  try {
-    await client.query("BEGIN");
-    // One recognisable browser/device fingerprint gets one live row. Logging
-    // in again replaces the old token rather than filling the panel with
-    // indistinguishable copies.
-    if (interactive) {
-      await client.query(
-        `UPDATE admin_sessions SET revoked_at = now()
-          WHERE admin_user_id = $1 AND user_agent = $2 AND ip = $3
-            AND interactive = true AND revoked_at IS NULL`,
-        [input.adminUserId, userAgent, ip],
-      );
-    }
-    await client.query(
-      `INSERT INTO admin_sessions
-         (admin_user_id, token_hash, user_agent, ip, expires_at, last_used_at, interactive)
-       VALUES ($1, $2, $3, $4, $5, now(), $6)`,
-      [input.adminUserId, hashToken(token), userAgent, ip, expiresIn(input.ttlSeconds), interactive],
-    );
-    await client.query("COMMIT");
-  } catch (error) {
-    await client.query("ROLLBACK");
-    throw error;
-  } finally {
-    client.release();
-  }
-
-  return token;
-}
-
-/** Ends the session a token belongs to. Used by sign-out. */
-export async function revokeAdminSessionByToken(token: string): Promise<void> {
-  await pool.query(
-    `UPDATE admin_sessions SET revoked_at = now() WHERE token_hash = $1 AND revoked_at IS NULL`,
-    [hashToken(token)]
-  );
-}
+// Kept as exports for existing internal callers; session lifecycle lives in auth.
+export { issueAdminSession, revokeAdminSessionByToken } from "../../auth/adminSession";

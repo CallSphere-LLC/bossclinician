@@ -1,0 +1,302 @@
+[
+  {
+    "role": "owner",
+    "path": "/admin/contacts",
+    "method": "GET",
+    "status": 200
+  },
+  {
+    "role": "owner",
+    "path": "/admin/offers",
+    "method": "GET",
+    "status": 200
+  },
+  {
+    "role": "owner",
+    "path": "/admin/settings",
+    "method": "GET",
+    "status": 200
+  },
+  {
+    "role": "owner",
+    "path": "/admin/settings-v2/groups",
+    "method": "GET",
+    "status": 200
+  },
+  {
+    "role": "owner",
+    "path": "/admin/growth/coaching/sessions",
+    "method": "GET",
+    "status": 200
+  },
+  {
+    "role": "owner",
+    "path": "/admin/reports",
+    "method": "GET",
+    "status": 200
+  },
+  {
+    "role": "owner",
+    "path": "/admin/admins",
+    "method": "GET",
+    "status": 200
+  },
+  {
+    "role": "owner",
+    "path": "/admin/products",
+    "method": "POST invalid payload",
+    "status": 400
+  },
+  {
+    "role": "owner",
+    "path": "/admin/offers",
+    "method": "POST invalid payload",
+    "status": 400
+  },
+  {
+    "role": "owner",
+    "path": "/admin/admins",
+    "method": "POST invalid payload",
+    "status": 404
+  },
+  {
+    "role": "admin",
+    "path": "/admin/contacts",
+    "method": "GET",
+    "status": 200
+  },
+  {
+    "role": "admin",
+    "path": "/admin/offers",
+    "method": "GET",
+    "status": 200
+  },
+  {
+    "role": "admin",
+    "path": "/admin/settings",
+    "method": "GET",
+    "status": 200
+  },
+  {
+    "role": "admin",
+    "path": "/admin/settings-v2/groups",
+    "method": "GET",
+    "status": 200
+  },
+  {
+    "role": "admin",
+    "path": "/admin/growth/coaching/sessions",
+    "method": "GET",
+    "status": 200
+  },
+  {
+    "role": "admin",
+    "path": "/admin/reports",
+    "method": "GET",
+    "status": 200
+  },
+  {
+    "role": "admin",
+    "path": "/admin/admins",
+    "method": "GET",
+    "status": 200
+  },
+  {
+    "role": "admin",
+    "path": "/admin/products",
+    "method": "POST invalid payload",
+    "status": 400
+  },
+  {
+    "role": "admin",
+    "path": "/admin/offers",
+    "method": "POST invalid payload",
+    "status": 400
+  },
+  {
+    "role": "admin",
+    "path": "/admin/admins",
+    "method": "POST invalid payload",
+    "status": 404
+  },
+  {
+    "role": "marketing",
+    "path": "/admin/contacts",
+    "method": "GET",
+    "status": 200
+  },
+  {
+    "role": "marketing",
+    "path": "/admin/offers",
+    "method": "GET",
+    "status": 200
+  },
+  {
+    "role": "marketing",
+    "path": "/admin/settings",
+    "method": "GET",
+    "status": 403
+  },
+  {
+    "role": "marketing",
+    "path": "/admin/settings-v2/groups",
+    "method": "GET",
+    "status": 403
+  },
+  {
+    "role": "marketing",
+    "path": "/admin/growth/coaching/sessions",
+    "method": "GET",
+    "status": 403
+  },
+  {
+    "role": "marketing",
+    "path": "/admin/reports",
+    "method": "GET",
+    "status": 200
+  },
+  {
+    "role": "marketing",
+    "path": "/admin/admins",
+    "method": "GET",
+    "status": 403
+  },
+  {
+    "role": "marketing",
+    "path": "/admin/products",
+    "method": "POST invalid payload",
+    "status": 403
+  },
+  {
+    "role": "marketing",
+    "path": "/admin/offers",
+    "method": "POST invalid payload",
+    "status": 403
+  },
+  {
+    "role": "marketing",
+    "path": "/admin/admins",
+    "method": "POST invalid payload",
+    "status": 403
+  },
+  {
+    "role": "support",
+    "path": "/admin/contacts",
+    "method": "GET",
+    "status": 200
+  },
+  {
+    "role": "support",
+    "path": "/admin/offers",
+    "method": "GET",
+    "status": 200
+  },
+  {
+    "role": "support",
+    "path": "/admin/settings",
+    "method": "GET",
+    "status": 403
+  },
+  {
+    "role": "support",
+    "path": "/admin/settings-v2/groups",
+    "method": "GET",
+    "status": 403
+  },
+  {
+    "role": "support",
+    "path": "/admin/growth/coaching/sessions",
+    "method": "GET",
+    "status": 403
+  },
+  {
+    "role": "support",
+    "path": "/admin/reports",
+    "method": "GET",
+    "status": 403
+  },
+  {
+    "role": "support",
+    "path": "/admin/admins",
+    "method": "GET",
+    "status": 403
+  },
+  {
+    "role": "support",
+    "path": "/admin/products",
+    "method": "POST invalid payload",
+    "status": 403
+  },
+  {
+    "role": "support",
+    "path": "/admin/offers",
+    "method": "POST invalid payload",
+    "status": 403
+  },
+  {
+    "role": "support",
+    "path": "/admin/admins",
+    "method": "POST invalid payload",
+    "status": 403
+  },
+  {
+    "role": "coach",
+    "path": "/admin/contacts",
+    "method": "GET",
+    "status": 403
+  },
+  {
+    "role": "coach",
+    "path": "/admin/offers",
+    "method": "GET",
+    "status": 403
+  },
+  {
+    "role": "coach",
+    "path": "/admin/settings",
+    "method": "GET",
+    "status": 403
+  },
+  {
+    "role": "coach",
+    "path": "/admin/settings-v2/groups",
+    "method": "GET",
+    "status": 403
+  },
+  {
+    "role": "coach",
+    "path": "/admin/growth/coaching/sessions",
+    "method": "GET",
+    "status": 200
+  },
+  {
+    "role": "coach",
+    "path": "/admin/reports",
+    "method": "GET",
+    "status": 403
+  },
+  {
+    "role": "coach",
+    "path": "/admin/admins",
+    "method": "GET",
+    "status": 403
+  },
+  {
+    "role": "coach",
+    "path": "/admin/products",
+    "method": "POST invalid payload",
+    "status": 403
+  },
+  {
+    "role": "coach",
+    "path": "/admin/offers",
+    "method": "POST invalid payload",
+    "status": 403
+  },
+  {
+    "role": "coach",
+    "path": "/admin/admins",
+    "method": "POST invalid payload",
+    "status": 403
+  }
+]

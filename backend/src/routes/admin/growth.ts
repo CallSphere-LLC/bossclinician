@@ -359,11 +359,118 @@ adminGrowthRouter.post(
 
     const updated = await pool.query(
       `UPDATE email_campaigns
-          SET status = 'scheduled', scheduled_at = $2, timezone = $3, updated_at = now()
+          SET status = 'scheduled', scheduled_at = $2, timezone = $3,
+              -- Back to a wall-clock schedule, which is what this route means.
+              -- Without the reset, switching an event-anchored campaign to a
+              -- fixed time left the anchor in place and the sweeper went on
+              -- resolving it against the event.
+              anchor_kind = 'absolute', anchor_event_id = NULL,
+              anchor_offset_minutes = 0, anchor_armed_at = NULL,
+              anchor_skip_reason = '',
+              updated_at = now()
         WHERE id = $1 AND status IN ('draft', 'scheduled', 'failed')
           AND btrim(subject) <> ''
         RETURNING *`,
       [campaignId, scheduledAt, parsed.data.timezone],
+    );
+    if (!updated.rows[0]) {
+      const found = await pool.query<{ id: number }>("SELECT id FROM email_campaigns WHERE id = $1", [campaignId]);
+      if (!found.rows[0]) throw notFound("Campaign not found");
+      throw badRequest("Add a subject first, or wait for the current send to finish.");
+    }
+    res.json(rowToCamel(updated.rows[0]));
+  }),
+);
+
+/**
+ * Arms an event-relative schedule: "24 hours before the CEU", or "upon
+ * registration, plus two hours".
+ *
+ * Its own route rather than columns on the CRUD update, for one reason:
+ * `anchor_armed_at`. That stamp is what stops a backlog blast — the sweeper
+ * refuses any send whose moment was already past when the campaign was armed —
+ * and a stamp a client can choose is not a guard at all. So it is written here,
+ * from the server clock, and it is not in the repo's column whitelist.
+ *
+ * The two kinds land in different statuses, because they are different things:
+ *
+ *   * `event_start` is still one broadcast to one list at one moment; the
+ *     moment is simply computed from the event. It waits on `scheduled`.
+ *   * `event_registration` is per person, on their own clock, and never
+ *     finishes. It runs on `sending` for as long as it is switched on.
+ */
+const campaignEventScheduleSchema = z.object({
+  anchorKind: z.enum(["event_start", "event_registration"]),
+  anchorEventId: z.number().int().positive(),
+  // Signed for `event_start` (negative is before the event, which is the common
+  // case); clamped to zero for `event_registration`, where "before they
+  // register" is not a moment that exists. A year either side is plenty and
+  // keeps an accidental 1e9 out of make_interval.
+  anchorOffsetMinutes: z.number().int().min(-525_600).max(525_600),
+});
+
+adminGrowthRouter.post(
+  "/campaigns/:id/schedule-event",
+  asyncHandler(async (req, res) => {
+    const campaignId = Number(req.params.id);
+    if (!Number.isInteger(campaignId) || campaignId <= 0) throw notFound("Campaign not found");
+    const parsed = campaignEventScheduleSchema.safeParse(req.body);
+    if (!parsed.success) throw badRequest("Choose an event and when to send.");
+    const { anchorKind, anchorEventId } = parsed.data;
+    const offset =
+      anchorKind === "event_registration"
+        ? Math.max(0, parsed.data.anchorOffsetMinutes)
+        : parsed.data.anchorOffsetMinutes;
+
+    const event = await pool.query<{ starts_at: Date | null; published: boolean; title: string }>(
+      "SELECT starts_at, published, title FROM events WHERE id = $1",
+      [anchorEventId],
+    );
+    if (!event.rows[0]) throw badRequest("That event no longer exists.");
+    if (anchorKind === "event_start" && !event.rows[0].starts_at) {
+      throw badRequest(
+        "That event has no start date, so there is nothing to count back from. Give it a date first, or send when people register instead.",
+      );
+    }
+
+    /*
+     * Refuse a window that has already closed, here, at the moment she asks for
+     * it — rather than accepting it and having the sweeper quietly mark it
+     * skipped later. Same comparison the sweeper makes; saying it now is the
+     * difference between a sentence she can act on and a mystery on the list.
+     */
+    if (anchorKind === "event_start") {
+      const sendAt = new Date(event.rows[0].starts_at!).getTime() + offset * 60_000;
+      if (sendAt <= Date.now()) {
+        throw badRequest(
+          `That moment has already passed — “${event.rows[0].title}” starts too soon for this much notice. Choose a smaller gap, or send it now.`,
+        );
+      }
+    }
+
+    const updated = await pool.query(
+      `UPDATE email_campaigns
+          SET status = CASE WHEN $2 = 'event_registration' THEN 'sending' ELSE 'scheduled' END,
+              anchor_kind = $2,
+              anchor_event_id = $3,
+              anchor_offset_minutes = $4,
+              -- The arming stamp, from the database clock.
+              anchor_armed_at = now(),
+              anchor_skip_reason = '',
+              -- A wall-clock time left over from an earlier schedule would show
+              -- on the list as "Sends <the old time>".
+              scheduled_at = NULL,
+              -- "Upon registration" reads sent_at as a legacy arming floor.
+              -- A campaign that was sent once as a normal broadcast and is now
+              -- being switched to per-person must not inherit that old date as
+              -- its cutoff, or every registrant since then is a backlog.
+              sent_at = NULL,
+              updated_at = now()
+        WHERE id = $1
+          AND status IN ('draft', 'scheduled', 'failed', 'sent')
+          AND btrim(subject) <> ''
+        RETURNING *`,
+      [campaignId, anchorKind, anchorEventId, offset],
     );
     if (!updated.rows[0]) {
       const found = await pool.query<{ id: number }>("SELECT id FROM email_campaigns WHERE id = $1", [campaignId]);
@@ -381,8 +488,19 @@ adminGrowthRouter.post(
     if (!Number.isInteger(campaignId) || campaignId <= 0) throw notFound("Campaign not found");
     const updated = await pool.query(
       `UPDATE email_campaigns
-          SET status = 'draft', scheduled_at = NULL, updated_at = now()
-        WHERE id = $1 AND status = 'scheduled'
+          SET status = 'draft', scheduled_at = NULL,
+              anchor_kind = 'absolute', anchor_event_id = NULL,
+              anchor_offset_minutes = 0, anchor_armed_at = NULL,
+              anchor_skip_reason = '',
+              updated_at = now()
+        WHERE id = $1
+          AND (
+            status = 'scheduled'
+            -- Switching off an "upon registration" campaign. It sits on
+            -- "sending" while it is live, so without this it could be armed and
+            -- never turned off from any screen.
+            OR (status = 'sending' AND anchor_kind = 'event_registration')
+          )
         RETURNING *`,
       [campaignId],
     );

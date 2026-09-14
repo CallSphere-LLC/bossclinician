@@ -117,6 +117,16 @@ services:
       PROTECTED_UPLOAD_DIR: /app/uploads-protected
       # Keep in sync with nginx client_max_body_size in nginx/site.conf.
       MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-512}
+      # From the root .env, the same values the coturn service below is
+      # started with. Here rather than in backend/.env because two services
+      # need them to agree: the API mints the credentials this relay checks,
+      # and a mismatch is a room that gathers no relay candidates and fails
+      # only for the users behind symmetric NAT — the hardest failure here to
+      # notice. `environment:` wins over `env_file:`, so this is the value
+      # that reaches the process.
+      TURN_HOST: ${TURN_HOST:-}
+      TURN_PORT: ${TURN_PORT:-3478}
+      TURN_STATIC_AUTH_SECRET: ${TURN_STATIC_AUTH_SECRET:-}
     volumes:
       # Named volumes, not bind mounts: uploaded media must survive
       # `docker compose build` / container replacement.
@@ -233,6 +243,85 @@ services:
         condition: service_healthy
       backend:
         condition: service_healthy
+
+  coturn:
+    # This app's own TURN relay, deliberately separate from the telehealth
+    # coturn that also runs on this box (a k3s deployment in the
+    # callsphere-health namespace, realm health.callsphere.ai, port 3478).
+    #
+    # The two shared one relay and one --static-auth-secret for a while. That
+    # worked, and it was still wrong on three counts:
+    #   - The secret is a bearer key to the relay. Holding the clinical app's
+    #     secret in this app's .env meant a leak here was a leak there, for an
+    #     app under a different compliance story.
+    #   - Rotating it for one app silently broke the other.
+    #   - coturn's quotas are per-server, not per-realm. --total-quota was one
+    #     shared pool, so a busy community room could refuse allocations to a
+    #     telehealth consult. That is the wrong way round for which of these
+    #     two is allowed to degrade.
+    # Separate relay, separate secret, separate quotas fixes all three.
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+        reservations:
+          memory: 32M
+    image: coturn/coturn:4.6-alpine
+    restart: unless-stopped
+    logging: *logging
+    security_opt: ["no-new-privileges:true"]
+    # Host networking, not published ports. A relay hands out its own address
+    # in ICE candidates and needs the whole --min-port/--max-port range
+    # reachable; mapping 200 UDP ports through docker-proxy would both cost a
+    # process per port and rewrite the source addresses the relay reports.
+    network_mode: host
+    command:
+      - --log-file=stdout
+      - --listening-port=${TURN_PORT:?TURN_PORT is required}
+      # coturn otherwise also binds listening-port+1 for RFC 5780 probing.
+      # Nothing here uses it, and on this host an unrequested extra bind is
+      # how you collide with the neighbouring relay.
+      - --alt-listening-port=0
+      - --listening-ip=0.0.0.0
+      # The address handed out in candidates. Without it the relay advertises
+      # whatever it sees locally, which on this box is a docker/flannel
+      # address no browser can reach.
+      - --external-ip=192.99.63.81
+      - --relay-ip=0.0.0.0
+      # Disjoint from the telehealth relay's 49160-49200, with a gap. One
+      # relay port per allocation, so this range and --total-quota below are
+      # the same number by intent, not coincidence.
+      - --min-port=49210
+      - --max-port=49409
+      - --realm=bossclinician.callsphere.site
+      # TURN REST API: the browser never sees this secret, only a short-lived
+      # HMAC of a timestamped username minted from it by the API. Must match
+      # TURN_STATIC_AUTH_SECRET in backend/.env.
+      - --use-auth-secret
+      - --static-auth-secret=${TURN_STATIC_AUTH_SECRET:?TURN_STATIC_AUTH_SECRET is required}
+      - --fingerprint
+      - --no-cli
+      - --no-tlsv1
+      - --no-tlsv1_1
+      - --no-multicast-peers
+      # A live room caps at 16 (communities.live_room_capacity, 2..16), and a
+      # browser in a mesh allocates per peer connection, so one member in a
+      # full room can want ~15. 20 gives that headroom without letting a
+      # single member take the server.
+      - --user-quota=20
+      - --total-quota=200
+      - --max-bps=1500000
+      # An open relay is an open proxy. Without these, anyone holding a minted
+      # credential could ask this server to reach the host's own private
+      # networks — which on this box means the k3s pod network (10.42/16, so
+      # every telehealth service), both docker bridges and localhost.
+      - --denied-peer-ip=0.0.0.0-0.255.255.255
+      - --denied-peer-ip=10.0.0.0-10.255.255.255
+      - --denied-peer-ip=100.64.0.0-100.127.255.255
+      - --denied-peer-ip=127.0.0.0-127.255.255.255
+      - --denied-peer-ip=169.254.0.0-169.254.255.255
+      - --denied-peer-ip=172.16.0.0-172.31.255.255
+      - --denied-peer-ip=192.168.0.0-192.168.255.255
 
 volumes:
   db_data:

@@ -4,6 +4,7 @@ import { pool } from "../db/pool";
 import { env } from "../config/env";
 import { generateToken, hashToken, expiresIn } from "./tokens";
 import { memberTokenSecret } from "./secrets";
+import { clearDocumentCookie } from "./memberDocumentCookie";
 
 /**
  * Member session handling: a short-lived access JWT the browser holds in
@@ -96,6 +97,10 @@ export function setRefreshCookie(res: Response, rawToken: string): void {
 
 export function clearRefreshCookie(res: Response): void {
   res.clearCookie(REFRESH_COOKIE, { ...cookieOptions(0), maxAge: undefined });
+  // The receipt-download cookie lives and dies with the session (see
+  // auth/memberDocumentCookie.ts). Clearing it here covers every path that ends
+  // one: logout, a failed refresh, a password reset, "sign out this device".
+  clearDocumentCookie(res);
   res.clearCookie(SESSION_HINT_COOKIE, {
     httpOnly: false,
     secure: env.nodeEnv === "production",

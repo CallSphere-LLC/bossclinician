@@ -1,0 +1,77 @@
+{
+  "ids": {
+    "members": [
+      57,
+      58,
+      56,
+      59
+    ],
+    "contacts": [
+      56,
+      59,
+      61,
+      55
+    ],
+    "offers": [
+      8,
+      9,
+      10,
+      11,
+      12,
+      13
+    ],
+    "orders": [
+      10,
+      11,
+      12,
+      13,
+      14,
+      15
+    ],
+    "products": [
+      30,
+      31,
+      32,
+      33,
+      34,
+      35,
+      36,
+      37
+    ],
+    "carts": [
+      1,
+      2,
+      3
+    ],
+    "automations": [
+      4,
+      5
+    ]
+  },
+  "jobs": 15,
+  "email_messages": 9,
+  "suppressions": 1,
+  "download_events": 4,
+  "tax_records": 0,
+  "invoices": 3,
+  "transactions": 4,
+  "orders": 6,
+  "offers": 6,
+  "products": 8,
+  "assessments": 2,
+  "courses": 1,
+  "communities": 1,
+  "automations": 2,
+  "tags": 2,
+  "coupons": 1,
+  "members": 4,
+  "contacts": 4,
+  "remaining": {
+    "members": "4",
+    "contacts": "8",
+    "zzproducts": "0",
+    "zzoffers": "0",
+    "zzorders": "0",
+    "zzemails": "0"
+  }
+}

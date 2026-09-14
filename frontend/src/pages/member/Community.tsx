@@ -151,9 +151,14 @@ function CommunityCard({ community }: { community: CommunitySummary }) {
           <p className="copy-luxe mt-2 line-clamp-3 text-sm">{community.description}</p>
         )}
 
-        <p className="mt-auto flex items-center gap-1.5 pt-5 text-xs text-orchid-faint">
+        <p className="mt-auto flex items-center gap-1.5 pt-5 text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-orchid-faint">
           <Users aria-hidden className="size-3.5" />
-          {formatNumber(community.memberCount)} members
+          {/* Same words, same case and same count as the community's own
+              header. This card said "1 members" in sentence case while the
+              header said "2 MEMBERS": two labels, two definitions of a member,
+              and neither of them agreeing with the other. */}
+          {formatNumber(community.memberCount)}{" "}
+          {community.memberCount === 1 ? "member" : "members"}
           <ArrowRight aria-hidden className="ml-auto size-4 text-gold" />
         </p>
       </Link>

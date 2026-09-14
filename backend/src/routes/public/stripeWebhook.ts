@@ -36,6 +36,13 @@ import { dispatchEvent } from "../../services/webhooksOut";
 import { upsertContactWithStatus } from "../../services/contacts";
 import { readSetting } from "../../services/settings";
 import { withStoredTemplate } from "../../email/templateStore";
+import {
+  closeDunning,
+  pauseAccessForFailedPayment,
+  restoreAccessAfterPayment,
+  scheduleRetryAfterFailure,
+} from "../../services/dunning";
+import { cancellationFromStripe, parseCancelReasons } from "../../services/cancellationReasons";
 
 /**
  * Stripe webhook receiver — the only place money becomes access.
@@ -1536,7 +1543,13 @@ async function handleInvoicePaid(invoice: Stripe.Invoice): Promise<void> {
         WHERE id = $1`,
       [subscriptionId, toDate(invoice.period_start), toDate(invoice.period_end)]
     );
+    // Access paused by "stop access on the first failed payment" comes back
+    // with the payment — only what that pause took, never a refund's revoke.
+    const restored = await restoreAccessAfterPayment(subscriptionId);
+    if (restored > 0) log(`invoice ${invoice.id} paid: restored ${restored} paused grant(s)`);
   }
+  // Any retries booked on this invoice are over.
+  await closeDunning(invoice.id, "paid");
 
   // Money that actually moved. Stripe marks a $0 invoice `paid` — a trial's
   // opening invoice is exactly that — so `paid` and `charged` are separate
@@ -1800,21 +1813,12 @@ async function handleInvoicePaymentFailed(invoice: Stripe.Invoice): Promise<void
     );
     attempt = bumped.rows[0]?.failed_payment_count ?? attempt;
 
-    const paymentSettings = await readSetting("customer_payments");
-    if (paymentSettings.revokeOnFirstFailedPayment === true) {
-      const owner = await pool.query<{ member_id: number | null; offer_id: number | null }>(
-        `SELECT member_id, offer_id FROM subscriptions WHERE id = $1`,
-        [subscriptionId],
-      );
-      const linked = owner.rows[0];
-      if (linked?.member_id && linked.offer_id) {
-        await revokeOfferAccess({
-          memberId: linked.member_id,
-          offerId: linked.offer_id,
-          reason: "recurring payment failed",
-        });
-      }
-    }
+    // "Stop access as soon as the first recurring payment fails" (the service
+    // reads the setting). Only this subscription's grants, under a reason the
+    // invoice.paid handler restores from — revoking by offer used to take away
+    // the same course bought outright, and nothing ever gave it back.
+    const paused = await pauseAccessForFailedPayment(subscriptionId);
+    if (paused > 0) log(`invoice ${invoice.id} failed: paused ${paused} grant(s) until it is paid`);
   }
 
   if (plan !== null) {
@@ -1840,6 +1844,11 @@ async function handleInvoicePaymentFailed(invoice: Stripe.Invoice): Promise<void
   // A declined one-time PaymentIntent is the different case: there is no invoice
   // to carry the record, which is what recordFailedAttempt exists for.
 
+  // With the owner's own retry schedule, the next try is ours to book and ours
+  // to quote; Stripe's next_payment_attempt is empty once its retries are off.
+  const retry = await scheduleRetryAfterFailure({ stripeInvoiceId: invoice.id });
+  const nextAttemptAt = retry.managed ? retry.nextAttemptAt : toDate(invoice.next_payment_attempt);
+
   const buyerEmail = invoice.customer_email ?? order?.email ?? plan?.email ?? "";
   if (buyerEmail) {
     void sendMail({
@@ -1854,7 +1863,9 @@ async function handleInvoicePaymentFailed(invoice: Stripe.Invoice): Promise<void
         currency: invoice.currency,
         attempt,
         payInvoiceUrl: invoice.hosted_invoice_url ?? "",
-        nextAttemptAt: toDate(invoice.next_payment_attempt),
+        // The date worked out above, not Stripe's: with this site retrying,
+        // Stripe's is empty and the email used to say no retry was coming.
+        nextAttemptAt,
       }),
     });
   }
@@ -2224,6 +2235,29 @@ async function handleSubscriptionChange(
   // unlinked is a membership that is never taken back.
   if (subscriptionId !== null && order !== null) {
     await linkGrantsToSubscription(order.id, subscriptionId);
+  }
+
+  // Why they left, when they left from Stripe's side — its hosted portal or the
+  // dashboard — rather than from our billing page, which records the answer on
+  // its own form first. Only a blank is filled, so that answer always stands.
+  const leaving =
+    deleted || sub.cancel_at_period_end || sub.cancel_at != null || sub.status === "canceled";
+  if (subscriptionId !== null && leaving) {
+    const paymentSettings = await readSetting("customer_payments");
+    const said = cancellationFromStripe(
+      sub.cancellation_details,
+      parseCancelReasons(paymentSettings.cancellationReasons)
+    );
+    if (said) {
+      await pool.query(
+        `UPDATE subscriptions
+            SET cancel_reason   = CASE WHEN cancel_reason = '' THEN $2 ELSE cancel_reason END,
+                cancel_feedback = CASE WHEN cancel_feedback = '' THEN $3 ELSE cancel_feedback END,
+                updated_at      = now()
+          WHERE id = $1`,
+        [subscriptionId, said.reason, said.feedback]
+      );
+    }
   }
 
 

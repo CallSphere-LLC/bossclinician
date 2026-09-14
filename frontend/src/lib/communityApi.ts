@@ -93,6 +93,8 @@ export interface CommunityChannel {
   viewModes: string[];
   /** Which of them it opens in. */
   defaultViewMode: string;
+  /** How the host set this channel to be laid out (`community_channels.view_mode`). */
+  viewMode: ChannelViewMode;
   postCount: number;
   unreadCount: number;
   href: string;
@@ -189,6 +191,9 @@ export interface CommunityPost {
   lastActivityAt: string | null;
 }
 
+/** The three channel layouts (`community_channels.view_mode`). */
+export type ChannelViewMode = "feed" | "forum" | "gallery";
+
 export interface ChannelFeedPage {
   community: { id: number; slug: string; name: string };
   channel: {
@@ -200,6 +205,8 @@ export interface ChannelFeedPage {
     visibility: string;
     viewModes: string[];
     defaultViewMode: string;
+    /** The layout the host set. Older APIs omit it, so it is optional here. */
+    viewMode?: ChannelViewMode;
   };
   posts: CommunityPost[];
   /** The server's allowlist. The reaction row is drawn from this, not a const. */
@@ -227,6 +234,27 @@ export interface NewPostInput {
   /** What to call an attachment — a stored filename is often a hash. */
   mediaLabel?: string;
   pollOptions?: string[];
+  /**
+   * An ISO instant to publish at instead of now. Hosts only; the server refuses
+   * it from anybody else, and refuses a time that is not in the future.
+   */
+  publishAt?: string;
+}
+
+/**
+ * What creating a post answers when it was scheduled: there is nothing in the
+ * feed to show yet, so the server sends a receipt rather than a post.
+ */
+export interface ScheduledPostReceipt {
+  id: number;
+  scheduled: true;
+  publishAt: string;
+}
+
+export function isScheduledReceipt(
+  result: CommunityPost | ScheduledPostReceipt,
+): result is ScheduledPostReceipt {
+  return (result as ScheduledPostReceipt).scheduled === true;
 }
 
 /* -------------------------------------------------------------- comments */
@@ -348,11 +376,26 @@ export interface LeaderboardRow {
   headline: string;
   points: number;
   rank: number;
+  /**
+   * Somebody else holds this rank too.
+   *
+   * Standard competition ranking shares a number on a tie, which is right — but
+   * printing "1" twice with nothing to explain it reads as a bug, and did: two
+   * members on nothing were both shown as first.
+   */
+  tied: boolean;
   badge: string | null;
   mine: boolean;
 }
 
+/** Which of the three boards a community lets its members see (2.7). */
+export type LeaderboardPeriod = "week" | "month" | "all";
+
 export interface LeaderboardResponse {
+  /** Which board this is — echoed back, so a stale request cannot mislabel one. */
+  period: LeaderboardPeriod;
+  /** Which boards are switched on. A member is only offered these. */
+  periods: Record<LeaderboardPeriod, boolean>;
   leaderboard: LeaderboardRow[];
   /** This member's own row, wherever it sits. Null if they are not ranked. */
   me: LeaderboardRow | null;
@@ -570,8 +613,9 @@ export const communityApi = {
       `/member/community/${seg(slug)}/channels/${seg(channelSlug)}/posts${query({ page, perPage })}`,
     ),
 
+  /** A post, or — when `publishAt` was sent — a receipt for a scheduled one. */
   createPost: (slug: string, channelSlug: string, input: NewPostInput) =>
-    memberRequest<CommunityPost>(
+    memberRequest<CommunityPost | ScheduledPostReceipt>(
       `/member/community/${seg(slug)}/channels/${seg(channelSlug)}/posts`,
       { method: "POST", body: JSON.stringify(input) },
     ),
@@ -663,8 +707,10 @@ export const communityApi = {
   profile: (slug: string, memberId: number) =>
     memberRequest<CommunityMemberProfile>(`/member/community/${seg(slug)}/members/${memberId}`),
 
-  leaderboard: (slug: string) =>
-    memberRequest<LeaderboardResponse>(`/member/community/${seg(slug)}/leaderboard`),
+  leaderboard: (slug: string, period: LeaderboardPeriod = "all") =>
+    memberRequest<LeaderboardResponse>(
+      `/member/community/${seg(slug)}/leaderboard?period=${period}`,
+    ),
 
   // ---- challenges ----
 

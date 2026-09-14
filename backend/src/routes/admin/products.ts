@@ -41,6 +41,7 @@ type ProductRow = {
   title: string;
   subtitle: string;
   description: string;
+  instructions: string;
   thumbnail_url: string;
   kind: ProductKind;
   course_id: number | null;
@@ -54,7 +55,7 @@ type ProductRow = {
   updated_at: string;
 };
 
-const PRODUCT_COLUMNS = `p.id, p.slug, p.title, p.subtitle, p.description, p.thumbnail_url,
+const PRODUCT_COLUMNS = `p.id, p.slug, p.title, p.subtitle, p.description, p.instructions, p.thumbnail_url,
        p.kind, p.course_id, p.community_id, p.podcast_id, p.newsletter_id,
        p.coaching_offer_id, p.status, p.sort, p.created_at, p.updated_at`;
 
@@ -251,8 +252,8 @@ adminProductsRouter.post(
       const result = await pool.query<ProductRow>(
         `INSERT INTO products AS p
            (slug, title, subtitle, description, thumbnail_url, kind, course_id,
-            community_id, podcast_id, newsletter_id, coaching_offer_id, status, sort)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+            community_id, podcast_id, newsletter_id, coaching_offer_id, status, sort, instructions)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
          RETURNING ${PRODUCT_COLUMNS}`,
         [
           data.slug,
@@ -268,6 +269,7 @@ adminProductsRouter.post(
           data.coachingOfferId,
           data.status,
           data.sort,
+          data.instructions,
         ],
       );
       created = result.rows[0];
@@ -341,6 +343,7 @@ adminProductsRouter.put(
                 coaching_offer_id = $11,
                 status            = $12,
                 sort              = $13,
+                instructions      = $15,
                 updated_at        = now()
           WHERE p.id = $14
          RETURNING ${PRODUCT_COLUMNS}`,
@@ -359,6 +362,7 @@ adminProductsRouter.put(
           patched(patch.status, before.status),
           patched(patch.sort, before.sort),
           id,
+          patched(patch.instructions, before.instructions),
         ],
       );
       after = result.rows[0];

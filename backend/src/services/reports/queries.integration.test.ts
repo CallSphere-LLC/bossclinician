@@ -38,7 +38,7 @@ describeDb("report queries (integration)", () => {
     await client.query(
       `INSERT INTO orders (id, offer_id, email, status, total_cents, currency,
                            stripe_session_id, created_at)
-       VALUES (1, 1, 'a@example.com', 'paid', 49700, 'usd', 'cs_1', '2026-03-10T15:00:00Z')`
+       VALUES (1, 1, 'success+a@simulator.amazonses.com', 'paid', 49700, 'usd', 'cs_1', '2026-03-10T15:00:00Z')`
     );
     await client.query(
       `INSERT INTO order_items (order_id, offer_id, title, kind, quantity, unit_cents, amount_cents)
@@ -48,17 +48,17 @@ describeDb("report queries (integration)", () => {
       `INSERT INTO transactions (order_id, email, kind, status, amount_cents, currency,
                                  payment_method_type, country, state,
                                  stripe_payment_intent_id, occurred_at)
-       VALUES (1, 'a@example.com', 'payment', 'succeeded', 49700, 'usd', 'card', 'US', 'NY',
+       VALUES (1, 'success+a@simulator.amazonses.com', 'payment', 'succeeded', 49700, 'usd', 'card', 'US', 'NY',
                'pi_1', '2026-03-10T15:00:00Z')`
     );
     await client.query(
       `INSERT INTO contacts (email, email_marketing_status, lifetime_value_cents, order_count, created_at)
-       VALUES ('a@example.com', 'subscribed', 49700, 1, '2026-03-10T15:00:00Z')`
+       VALUES ('success+a@simulator.amazonses.com', 'subscribed', 49700, 1, '2026-03-10T15:00:00Z')`
     );
     await client.query(
       `INSERT INTO subscriptions (email, status, amount_cents, currency, "interval",
                                   interval_count, offer_id, created_at)
-       VALUES ('a@example.com', 'active', 9900, 'usd', 'month', 1, 1, '2026-03-10T15:00:00Z')`
+       VALUES ('success+a@simulator.amazonses.com', 'active', 9900, 'usd', 'month', 1, 1, '2026-03-10T15:00:00Z')`
     );
 
     await rollup.runRollup({ from: FROM, to: TO });

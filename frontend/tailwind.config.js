@@ -18,15 +18,15 @@ export default {
         // below keep rendering the not-yet-migrated pages unchanged.
         // ────────────────────────────────────────────────────────────────
         night: {
-          DEFAULT: "#0A0713",
-          deep: "#06040B",
-          raised: "#100B1C",
-          veil: "#171026",
+          DEFAULT: "rgb(var(--c-night, 10 7 19) / <alpha-value>)",
+          deep: "rgb(var(--c-night-deep, 6 4 11) / <alpha-value>)",
+          raised: "rgb(var(--c-night-raised, 16 11 28) / <alpha-value>)",
+          veil: "rgb(var(--c-night-veil, 23 16 38) / <alpha-value>)",
         },
         orchid: {
-          DEFAULT: "#B9A2D6", // primary body copy on dark
-          dim: "#8B79A8", // secondary copy
-          faint: "#635473", // tertiary / captions
+          DEFAULT: "rgb(var(--c-orchid, 185 162 214) / <alpha-value>)", // primary body copy on dark
+          dim: "rgb(var(--c-orchid-dim, 139 121 168) / <alpha-value>)", // secondary copy
+          faint: "rgb(var(--c-orchid-faint, 99 84 115) / <alpha-value>)", // tertiary / captions
         },
         glow: {
           plum: "#7B5EA7",

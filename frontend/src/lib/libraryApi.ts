@@ -165,7 +165,7 @@ interface ProductBase {
 
 export type LibraryProduct =
   | (ProductBase & { kind: "course"; course: CourseOutlineData })
-  | (ProductBase & { kind: "download"; files: ProductFile[] })
+  | (ProductBase & { kind: "download"; instructions?: string; files: ProductFile[] })
   | (ProductBase & { kind: "bundle"; contents: BundleEntry[] })
   | (ProductBase & {
       kind: "community" | "coaching" | "podcast" | "newsletter" | "access_group";

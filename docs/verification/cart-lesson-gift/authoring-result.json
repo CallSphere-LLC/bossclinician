@@ -1,0 +1,19 @@
+{
+  "courseId": 1,
+  "assessments": [
+    {
+      "id": 1,
+      "lessonId": 1,
+      "slug": "zz-authored-quiz",
+      "kind": "graded"
+    },
+    {
+      "id": 2,
+      "lessonId": 2,
+      "slug": "zz-authored-survey",
+      "kind": "survey"
+    }
+  ],
+  "errors": [],
+  "giftingSettingPersisted": true
+}

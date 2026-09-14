@@ -1,4 +1,5 @@
 import { NextFunction, Request, Response, Router } from "express";
+import { adminCsrf } from "../../auth/adminSession";
 import { requireAuth } from "../../middleware/auth";
 import { requirePermission, type Module } from "../../services/permissions";
 import { authRouter } from "./auth";
@@ -42,8 +43,11 @@ import { adminAssessmentsRouter } from "./assessments";
 import { adminEventsRouter } from "./events";
 import { adminFormsRouter as adminFormsV2Router } from "./formsV2";
 import { adminAvailabilityRouter } from "./availability";
+import { adminMarketingOverviewRouter } from "./marketingOverview";
 
 export const adminRouter = Router();
+adminRouter.use(adminCsrf);
+adminRouter.use((_req, res, next) => { res.setHeader("Cache-Control", "no-store"); next(); });
 
 /**
  * Every mount carries a permission as well as authentication.
@@ -163,6 +167,9 @@ adminRouter.use("/assessments", requireAuth, moduleGate("marketing"), adminAsses
 adminRouter.use("/events", requireAuth, moduleGate("marketing"), adminEventsRouter);
 adminRouter.use("/forms-v2", requireAuth, moduleGate("marketing"), adminFormsV2Router);
 adminRouter.use("/availability", requireAuth, moduleGate("settings"), adminAvailabilityRouter);
+// Read-only summary for Marketing → Overview: GET only, so the plain view
+// permission is the whole gate (as for /dashboard above).
+adminRouter.use("/marketing-overview", requireAuth, requirePermission("marketing.view"), adminMarketingOverviewRouter);
 // Accepting an invite happens BEFORE the invitee has an account, so this one
 // router deliberately sits outside requireAuth. Its own token is the credential.
 adminRouter.use("/", adminInviteRouter);

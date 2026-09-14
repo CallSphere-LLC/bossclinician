@@ -10,11 +10,13 @@ import {
   ViewModeSwitch,
 } from "@/components/community/ChannelViews";
 import { PostComposer } from "@/components/community/PostComposer";
+import { formatScheduled, scheduleTimeZone } from "@/components/community/scheduleTime";
 import { useMember } from "@/hooks/useMember";
 import { MemberApiError } from "@/lib/memberApi";
 import {
   canModerate,
   communityApi,
+  isScheduledReceipt,
   type ChannelFeedPage,
   type CommunityPost,
   type CommunityRole,
@@ -45,6 +47,9 @@ interface ChannelFeedProps {
 }
 
 const PER_PAGE = 20;
+
+/** The layouts this page can draw; anything else falls back to the feed. */
+const KNOWN_VIEW_MODES = new Set(["feed", "forum", "gallery"]);
 
 export function ChannelFeed({ communitySlug, channelSlug, role }: ChannelFeedProps) {
   const { member } = useMember();
@@ -157,6 +162,31 @@ export function ChannelFeed({ communitySlug, channelSlug, role }: ChannelFeedPro
 
   const createPost = useCallback(
     async (input: NewPostInput): Promise<boolean> => {
+      /*
+       * A scheduled post is not in the channel yet, so there is nothing to
+       * insert optimistically — and splicing one in would show every reader a
+       * post that is not there. The confirmation says when it goes out, in the
+       * host's own timezone, and where it is waiting until then.
+       */
+      if (input.publishAt) {
+        try {
+          const receipt = await communityApi.createPost(communitySlug, channelSlug, input);
+          const when = isScheduledReceipt(receipt) ? receipt.publishAt : input.publishAt;
+          toast.success(
+            `Scheduled for ${formatScheduled(when, scheduleTimeZone(member?.timezone))}. ` +
+              "It appears here then — until it does, it's on the admin's Scheduled tab.",
+          );
+          return true;
+        } catch (err) {
+          toast.error(
+            err instanceof MemberApiError
+              ? err.message
+              : "Your post was not scheduled. Please try again.",
+          );
+          return false;
+        }
+      }
+
       const tempId = nextTempId.current--;
       const optimistic: CommunityPost = {
         id: tempId,
@@ -209,6 +239,12 @@ export function ChannelFeed({ communitySlug, channelSlug, role }: ChannelFeedPro
 
       try {
         const saved = await communityApi.createPost(communitySlug, channelSlug, input);
+        if (isScheduledReceipt(saved)) {
+          // Not asked for, but answered: nothing is in the channel yet, so the
+          // placeholder goes rather than standing in for a post nobody can see.
+          setPosts((current) => current.filter((p) => p.id !== tempId));
+          return true;
+        }
         setPosts((current) => current.map((p) => (p.id === tempId ? saved : p)));
         return true;
       } catch (err) {
@@ -252,10 +288,20 @@ export function ChannelFeed({ communitySlug, channelSlug, role }: ChannelFeedPro
    * back to a mode the channel actually offers — a host who removes "gallery"
    * must not leave anybody stranded in it.
    */
-  const offered = channel?.viewModes ?? ["feed"];
-  const mode = viewMode !== null && offered.includes(viewMode)
-    ? viewMode
+  /*
+   * `viewMode` is the layout the host set in the channel settings (044), and it
+   * is where every member starts. `viewModes` can only widen what a member may
+   * switch to — it can never take the host's choice away, which is how a
+   * channel set to "gallery" used to open as a feed.
+   */
+  const hostMode = KNOWN_VIEW_MODES.has(channel?.viewMode ?? "")
+    ? (channel?.viewMode as string)
     : (channel?.defaultViewMode ?? "feed");
+  const offered = [
+    hostMode,
+    ...(channel?.viewModes ?? []).filter((m) => m !== hostMode && KNOWN_VIEW_MODES.has(m)),
+  ];
+  const mode = viewMode !== null && offered.includes(viewMode) ? viewMode : hostMode;
 
   return (
     <div className="flex flex-col gap-5">
@@ -278,6 +324,9 @@ export function ChannelFeed({ communitySlug, channelSlug, role }: ChannelFeedPro
           authorEmail={member?.email ?? ""}
           authorAvatarUrl={member?.avatarUrl ?? ""}
           onSubmit={createPost}
+          // Hosts schedule; the endpoint refuses everybody else.
+          canSchedule={canModerate(role)}
+          timeZone={member?.timezone}
         />
       ) : (
         <GlassCard spotlight={false} interactive={false} className="p-5">

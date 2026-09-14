@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd" xmlns:content="http://purl.org/rss/1.0/modules/content/">
+  <channel>
+    <title>The Boss Clinician Show</title>
+    <link>https://bossclinician.callsphere.site</link>
+    <description><![CDATA[Show description]]></description>
+    <language>en-us</language>
+    <itunes:author>Yvette Howard, LCSW</itunes:author>
+    <itunes:explicit>false</itunes:explicit>
+    <itunes:category text="Business"/>
+    <itunes:image href="https://bossclinician.callsphere.site/uploads/f0884621265b705d.png"/>
+    <itunes:type>episodic</itunes:type>
+
+  </channel>
+</rss>

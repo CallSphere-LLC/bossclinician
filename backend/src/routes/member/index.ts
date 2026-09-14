@@ -9,6 +9,7 @@ import { memberCommunityRouter } from "./community";
 import { memberCommunityLiveRouter } from "./communityLive";
 import { memberCommunityDmRouter } from "./communityDm";
 import { memberCommunityUploadsRouter } from "./communityUploads";
+import { memberCommunityProfileRouter } from "./communityMemberProfile";
 import { memberCoachingRouter } from "./coaching";
 import { memberEventsRouter } from "./events";
 import { memberPublishingRouter } from "./publishing";
@@ -35,6 +36,11 @@ memberRouter.use("/downloads", memberDownloadsRouter);
 memberRouter.use("/community", memberCommunityLiveRouter);
 memberRouter.use("/community", memberCommunityDmRouter);
 memberRouter.use("/community", memberCommunityUploadsRouter);
+// Ahead of the general community router, whose own `/:slug/members/:memberId`
+// handler resolves a profile through `community_memberships` alone — and so
+// answers "We couldn't find that member" for anybody entitled to the room who
+// has never joined it, which is everybody in a free or plan-unlocked one.
+memberRouter.use("/community", memberCommunityProfileRouter);
 memberRouter.use("/community", memberCommunityRouter);
 memberRouter.use("/coaching", memberCoachingRouter);
 memberRouter.use("/events", memberEventsRouter);

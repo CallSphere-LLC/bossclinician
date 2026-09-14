@@ -1,3 +1,4 @@
+import { sessionFetch } from "@/lib/adminTransport";
 import type {
   AdminStats,
   AdminUser,
@@ -43,8 +44,12 @@ import type {
   StripeStatus,
   Subscription,
   AdminAccessGroup,
+  AdminAccessGroupGrants,
   AdminAccessGroupMember,
+  AdminChannelInvite,
   AdminCommunityReport,
+  AdminOfferAccessGroup,
+  AdminCommunityOffer,
   AdminLiveVisit,
   AdminPointRule,
   AdminScheduledPost,
@@ -58,19 +63,6 @@ import type {
  * (fetch reports no upload progress) and so cannot go through `request` below.
  */
 export const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? "/api";
-const TOKEN_KEY = "bc_admin_token";
-
-export function getToken(): string | null {
-  return localStorage.getItem(TOKEN_KEY);
-}
-
-export function setToken(token: string): void {
-  localStorage.setItem(TOKEN_KEY, token);
-}
-
-export function clearToken(): void {
-  localStorage.removeItem(TOKEN_KEY);
-}
 
 class ApiError extends Error {
   status: number;
@@ -121,16 +113,12 @@ async function request<T>(
   path: string,
   options: RequestInit = {},
 ): Promise<T> {
-  const token = getToken();
   const headers = new Headers(options.headers);
   if (!headers.has("Content-Type") && !(options.body instanceof FormData)) {
     headers.set("Content-Type", "application/json");
   }
-  if (token) {
-    headers.set("Authorization", `Bearer ${token}`);
-  }
 
-  const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+  const res = await sessionFetch(`${API_BASE}${path}`, { ...options, headers });
 
   if (!res.ok) {
     // The status travels on the error; screens turn it into something the
@@ -275,7 +263,7 @@ function withSplitName<T extends { name?: string; firstName?: string; lastName?:
 
 export const adminApi = {
   login: (email: string, password: string, code?: string) =>
-    request<{ token: string; user: AdminUser }>("/admin/login", {
+    request<{ user: AdminUser }>("/admin/login", {
       method: "POST",
       body: JSON.stringify({ email, password, ...(code ? { code } : {}) }),
     }),
@@ -467,6 +455,25 @@ export const adminApi = {
     }),
   memberResetPassword: (id: number) =>
     request<{ ok: true }>(`/admin/members/${id}/reset-password`, { method: "POST" }),
+  /**
+   * Confirm a member's email address on their behalf, and send the confirmation
+   * email again.
+   *
+   * Confirmation gates posting, commenting and every point a member can earn,
+   * and the only key was a link in an email — so while mail is not arriving,
+   * nobody can use the social half of the product and nobody could help them.
+   * Both are audited on the server.
+   */
+  memberConfirmEmail: (id: number) =>
+    request<{ changed: boolean; confirmation: { label: string; confirmed: boolean } }>(
+      `/admin/members/${id}/confirm-email`,
+      { method: "POST" },
+    ),
+  memberResendConfirmation: (id: number) =>
+    request<{ state: "sent" | "throttled" | "failed"; to: string; error: string }>(
+      `/admin/members/${id}/resend-confirmation`,
+      { method: "POST" },
+    ),
   memberSuspend: (id: number) => request<void>(`/admin/members/${id}/suspend`, { method: "POST" }),
   memberReactivate: (id: number) =>
     request<void>(`/admin/members/${id}/reactivate`, { method: "POST" }),
@@ -476,10 +483,7 @@ export const adminApi = {
    * shared helper would try to parse it and throw away the file.
    */
   membersExportCsv: async () => {
-    const token = getToken();
-    const res = await fetch(`${API_BASE}/admin/members/export.csv`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-    });
+    const res = await sessionFetch(`${API_BASE}/admin/members/export.csv`);
     if (!res.ok) {
       throw new ApiError("That download didn't finish. Please try again in a moment.", res.status);
     }
@@ -606,6 +610,12 @@ export const adminApi = {
       body: JSON.stringify(data),
     }),
 
+  accessGroupSave: (communityId: number, groupId: number, data: Record<string, unknown>) =>
+    request<AdminAccessGroup>(`/admin/community/${communityId}/access-groups/${groupId}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+
   accessGroupDelete: (communityId: number, groupId: number) =>
     request<void>(`/admin/community/${communityId}/access-groups/${groupId}`, {
       method: "DELETE",
@@ -675,6 +685,46 @@ export const adminApi = {
     }),
   channelDelete: (id: number) =>
     request<void>(`/admin/community/channels/${id}`, { method: "DELETE" }),
+  /** Every channel in the community, in the order members should see them. */
+  channelReorder: (communityId: number, channelIds: number[]) =>
+    request<{ channelIds: number[] }>(`/admin/community/${communityId}/channels/order`, {
+      method: "PUT",
+      body: JSON.stringify({ channelIds }),
+    }),
+  /** The offers that sell this community, and the tier each one grants. */
+  communityOffers: (communityId: number) =>
+    request<AdminCommunityOffer[]>(`/admin/community/${communityId}/offers`),
+
+  /** Who has been let into an invite-only channel. */
+  channelInvites: (channelId: number) =>
+    request<AdminChannelInvite[]>(`/admin/community/channels/${channelId}/invites`),
+  channelInviteAdd: (channelId: number, memberId: number) =>
+    request<{ ok: true }>(`/admin/community/channels/${channelId}/invites`, {
+      method: "POST",
+      body: JSON.stringify({ memberId }),
+    }),
+  channelInviteRemove: (channelId: number, memberId: number) =>
+    request<void>(`/admin/community/channels/${channelId}/invites/${memberId}`, {
+      method: "DELETE",
+    }),
+
+  /** What sells a tier: the offers, products and plans that name it. */
+  accessGroupGrants: (communityId: number, groupId: number) =>
+    request<AdminAccessGroupGrants>(
+      `/admin/community/${communityId}/access-groups/${groupId}/grants`,
+    ),
+  /**
+   * The tier an offer grants. Its own endpoint so the offer editor can set it
+   * with one call; the grant itself is derived from a live purchase, so a
+   * refund takes the tier away with the access.
+   */
+  offerAccessGroup: (offerId: number) =>
+    request<AdminOfferAccessGroup>(`/admin/community/offers/${offerId}/access-group`),
+  offerAccessGroupSave: (offerId: number, accessGroupId: number | null) =>
+    request<AdminOfferAccessGroup>(`/admin/community/offers/${offerId}/access-group`, {
+      method: "PUT",
+      body: JSON.stringify({ accessGroupId }),
+    }),
 
   channelPosts: (channelId: number) =>
     request<CommunityPost[]>(`/admin/community/channels/${channelId}/posts`),
@@ -708,7 +758,8 @@ export const adminApi = {
     }),
   membershipDelete: (id: number) =>
     request<void>(`/admin/community/memberships/${id}`, { method: "DELETE" }),
-  leaderboard: (id: number) => request<LeaderboardEntry[]>(`/admin/community/${id}/leaderboard`),
+  leaderboard: (id: number, period: "week" | "month" | "all" = "all") =>
+    request<LeaderboardEntry[]>(`/admin/community/${id}/leaderboard?period=${period}`),
 
   challenges: (communityId: number) =>
     request<Challenge[]>(`/admin/community/${communityId}/challenges`),
@@ -853,6 +904,26 @@ export const adminApi = {
     request<import("@/types/admin").Campaign>(`/admin/growth/campaigns/${id}/schedule`, {
       method: "POST",
       body: JSON.stringify({ scheduledAt, timezone }),
+    }),
+  /**
+   * Arms an event-relative schedule: "24 hours before the CEU", or "upon
+   * registration, plus two hours".
+   *
+   * Its own call rather than fields on the campaign save, because the server
+   * stamps the arming moment as part of it — that stamp is what stops an
+   * already-closed window mailing the whole list on the next scheduler tick.
+   */
+  campaignScheduleEvent: (
+    id: number,
+    input: {
+      anchorKind: "event_start" | "event_registration";
+      anchorEventId: number;
+      anchorOffsetMinutes: number;
+    },
+  ) =>
+    request<import("@/types/admin").Campaign>(`/admin/growth/campaigns/${id}/schedule-event`, {
+      method: "POST",
+      body: JSON.stringify(input),
     }),
   campaignCancelSchedule: (id: number) =>
     request<import("@/types/admin").Campaign>(

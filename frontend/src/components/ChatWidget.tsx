@@ -359,14 +359,12 @@ export function ChatWidget() {
        */}
       {!open && (
         <div className="relative">
-          {!prefersReducedMotion && (
             <motion.span
               aria-hidden="true"
-              className="absolute inset-0 -z-10 rounded-full bg-gold"
-              animate={{ scale: [1, 1.4, 1], opacity: [0.35, 0, 0.35] }}
+              className="absolute inset-0 -z-10 rounded-full bg-gold motion-reduce:hidden"
+              animate={prefersReducedMotion ? undefined : { scale: [1, 1.4, 1], opacity: [0.35, 0, 0.35] }}
               transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
             />
-          )}
           <motion.button
             type="button"
             onClick={() => setOpen(true)}

@@ -7,6 +7,7 @@ import { MemberAvatar } from "@/components/member/MemberShell";
 import { MemberApiError } from "@/lib/memberApi";
 import { communityApi, type CommunityNotification } from "@/lib/communityApi";
 import { formatRelative } from "@/lib/format";
+import { NOTIFICATIONS_CHANGED_EVENT } from "@/lib/notificationSignal";
 import { cn } from "@/lib/cn";
 
 /**
@@ -64,7 +65,14 @@ export function NotificationBell() {
   useEffect(() => {
     void load();
     const timer = setInterval(() => void load(), POLL_MS);
-    return () => clearInterval(timer);
+    // A screen that just changed the count (opening a DM reads its entries)
+    // says so, rather than leaving the bell stale until the next poll.
+    const onChanged = () => void load();
+    window.addEventListener(NOTIFICATIONS_CHANGED_EVENT, onChanged);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener(NOTIFICATIONS_CHANGED_EVENT, onChanged);
+    };
   }, [load]);
 
   const markRead = async (ids: number[]) => {

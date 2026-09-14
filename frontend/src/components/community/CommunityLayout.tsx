@@ -261,7 +261,12 @@ function ChannelStrip({
           )}
         >
           <Users aria-hidden className="size-4" />
-          {formatNumber(overview.community.memberCount)} members
+          {/* Pluralised, because the chrome renders this uppercase and "1
+              MEMBERS" is the first thing a member of a new community reads.
+              The number itself now comes from one definition shared with the
+              directory and the admin, so the two cannot disagree. */}
+          {formatNumber(overview.community.memberCount)}{" "}
+          {overview.community.memberCount === 1 ? "member" : "members"}
         </Link>
       </div>
     </nav>

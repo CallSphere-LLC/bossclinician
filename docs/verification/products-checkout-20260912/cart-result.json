@@ -1,0 +1,78 @@
+{
+  "persistedItems": 3,
+  "subtotal": "$181.00 (three offers + $10 bump)",
+  "checkout": {
+    "status": 201,
+    "body": {
+      "orderId": 11,
+      "offerSlug": "zz-products-cart-0",
+      "billing": {
+        "pricingType": "one_time",
+        "interval": null,
+        "intervalCount": 1,
+        "installmentCount": null,
+        "trialDays": 0,
+        "installmentCents": null,
+        "planTotalCents": null,
+        "minAmountCents": null
+      },
+      "selectedPricingOptionId": null,
+      "redirectUrl": null,
+      "thankYouPageSlug": null,
+      "lines": [
+        {
+          "kind": "offer",
+          "offerId": 10,
+          "productId": null,
+          "title": "ZZ Products Cart 1",
+          "quantity": 1,
+          "unitCents": 2700,
+          "amountCents": 2700
+        },
+        {
+          "kind": "bump",
+          "offerId": 10,
+          "productId": 35,
+          "title": "ZZ Extra guide",
+          "quantity": 1,
+          "unitCents": 1000,
+          "amountCents": 1000
+        },
+        {
+          "kind": "offer",
+          "offerId": 11,
+          "productId": null,
+          "title": "ZZ Products Cart 2",
+          "quantity": 1,
+          "unitCents": 4700,
+          "amountCents": 4700
+        },
+        {
+          "kind": "offer",
+          "offerId": 12,
+          "productId": null,
+          "title": "ZZ Products Cart 3",
+          "quantity": 1,
+          "unitCents": 9700,
+          "amountCents": 9700
+        }
+      ],
+      "subtotalCents": 18100,
+      "discountCents": 18100,
+      "taxableCents": 0,
+      "taxCents": 0,
+      "totalCents": 0,
+      "currency": "usd",
+      "formatted": {
+        "subtotal": "$181.00",
+        "discount": "$181.00",
+        "tax": "$0.00",
+        "total": "$0.00"
+      },
+      "status": "paid",
+      "requiresPayment": false,
+      "clientSecretType": null,
+      "memberCreated": false
+    }
+  }
+}

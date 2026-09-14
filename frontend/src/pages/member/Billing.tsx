@@ -15,6 +15,7 @@ import { MemberShell } from "@/components/member/MemberShell";
 import { CancelSubscriptionDialog } from "@/components/member/CancelSubscriptionDialog";
 import { GlassCard } from "@/components/luxe/GlassCard";
 import { LuxeButton, LuxePill } from "@/components/luxe/LuxeButton";
+import { ReceiptPdfLink } from "@/components/member/ReceiptPdfLink";
 import { getStripe, luxeAppearance, stripeConfigured } from "@/components/checkout/stripeClient";
 import { useMember } from "@/hooks/useMember";
 import { formatCurrency, formatDate } from "@/lib/format";
@@ -23,7 +24,7 @@ import {
   billingErrorMessage,
   describePlanShape,
   describeRecurringPrice,
-  showReceipt,
+  receiptPaths,
   type CancelReasonOption,
   type MemberInvoice,
   type MemberPaymentPlan,
@@ -56,6 +57,27 @@ export default function Billing() {
   const plans = useResource(loadPaymentPlans, "We could not load your payment plans just now.");
   const card = useResource(loadLastCardUsed, "We could not load your card just now.");
   const invoices = useResource(loadInvoices, "We could not load your receipts just now.");
+
+  // A card that needed a bank check (3-D Secure) comes back here through a
+  // redirect rather than finishing in the form, so the card update is completed
+  // from the address Stripe returns to.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const setupIntentId = params.get("setup_intent");
+    if (!setupIntentId || params.get("redirect_status") !== "succeeded" || viewingAsAdmin) return;
+    window.history.replaceState(null, "", window.location.pathname);
+    billingApi
+      .confirmPaymentMethod(setupIntentId)
+      .then((adopted) => toast.success(cardSavedMessage(adopted)))
+      .catch((err: unknown) =>
+        toast.error(
+          billingErrorMessage(
+            err,
+            "Your card is saved, but we could not switch your plans to it just now. Please try again in a moment.",
+          ),
+        ),
+      );
+  }, [viewingAsAdmin]);
 
   // Someone with nothing recurring and nothing yet paid has no card to change,
   // and offering the button anyway only leads to a refusal they cannot act on.
@@ -267,6 +289,19 @@ function SubscriptionsPanel({
     }
   };
 
+  /** Takes back a cancellation before the date it would take effect. */
+  const keep = async (subscription: MemberSubscription) => {
+    setBusyId(subscription.id);
+    try {
+      replace(await billingApi.keepSubscription(subscription.id));
+      toast.success("You're staying on. Nothing changes, and it renews as normal.");
+    } catch (err) {
+      toast.error(billingErrorMessage(err, "We could not keep your plan just now. Please try again in a moment."));
+    } finally {
+      setBusyId(null);
+    }
+  };
+
   return (
     <BillingPanel
       icon={Repeat}
@@ -337,6 +372,25 @@ function SubscriptionsPanel({
                       </LuxeButton>
                     </div>
                   )}
+
+                  {/* Set to end but not ended: changing their mind is one click. */}
+                  {subscription.cancelAtPeriodEnd &&
+                    subscription.endedAt === null &&
+                    subscription.status !== "canceled" &&
+                    !readOnly && (
+                      <div className="flex shrink-0 flex-wrap items-center gap-3">
+                        <LuxeButton
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={busy}
+                          onClick={() => void keep(subscription)}
+                        >
+                          {busy && <Loader2 aria-hidden className="size-4 animate-spin" />}
+                          Keep my plan
+                        </LuxeButton>
+                      </div>
+                    )}
                 </li>
               );
             })}
@@ -730,10 +784,27 @@ function NewCardFields({ onDone }: { onDone: () => void }) {
       return;
     }
 
-    // Saved, and deliberately no promise about which payment it will be used
-    // for: the card is on the account from here, and what it is charged for is
-    // decided when the next payment is taken.
-    toast.success("Your new card is saved.");
+    // Saving the card only attaches it. This makes it the card every plan
+    // charges, and tries an overdue payment on it now — without it the next
+    // renewal still went to the card being replaced.
+    const setupIntentId = outcome.setupIntent?.id;
+    if (setupIntentId) {
+      try {
+        const adopted = await billingApi.confirmPaymentMethod(setupIntentId);
+        toast.success(cardSavedMessage(adopted));
+      } catch (err) {
+        setError(
+          billingErrorMessage(
+            err,
+            "Your card is saved, but we could not switch your plans to it just now. Please try again in a moment.",
+          ),
+        );
+        setSaving(false);
+        return;
+      }
+    } else {
+      toast.success("Your new card is saved.");
+    }
     setSaving(false);
     onDone();
   };
@@ -780,14 +851,6 @@ function NewCardFields({ onDone }: { onDone: () => void }) {
 function InvoicesPanel({ resource }: { resource: Resource<MemberInvoice[]> }) {
   const rows = resource.data ?? [];
 
-  // Not awaited before the window is claimed: `showReceipt` opens the tab
-  // first, and anything awaited ahead of it costs the click its permission.
-  const open = (invoice: MemberInvoice) => {
-    void showReceipt(invoice.receiptUrl).catch((err: unknown) => {
-      toast.error(billingErrorMessage(err, "We could not open that receipt just now."));
-    });
-  };
-
   return (
     <BillingPanel
       icon={FileText}
@@ -799,7 +862,8 @@ function InvoicesPanel({ resource }: { resource: Resource<MemberInvoice[]> }) {
       {rows.length === 0 ? (
         <>
           <EmptyNote>
-            Nothing here yet — your invoices and receipts will appear here after your first purchase.
+            Nothing here yet — every purchase and renewal will appear here with a receipt you can
+            open or download.
           </EmptyNote>
           <LuxeButton to="/courses" variant="glass" size="sm" className="mt-5">
             Browse the courses
@@ -829,15 +893,32 @@ function InvoicesPanel({ resource }: { resource: Resource<MemberInvoice[]> }) {
                 </div>
 
                 <div className="flex shrink-0 flex-wrap items-center gap-5">
+                  {/* A declined renewal can be paid straight away on Stripe's
+                      hosted invoice page, without waiting for the next retry. */}
+                  {(invoice.status === "failed" || invoice.status === "open") &&
+                    invoice.hostedInvoiceUrl && (
+                      <LuxeButton
+                        href={invoice.hostedInvoiceUrl}
+                        variant="outline"
+                        size="sm"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        Pay now
+                      </LuxeButton>
+                    )}
+                  {/* The receipt's own address, opened in this tab. */}
                   <LuxeButton
-                    type="button"
+                    to={receiptPaths({ invoiceId: invoice.id }).page}
                     variant="quiet"
                     className={QUIET_LINK}
-                    onClick={() => open(invoice)}
                   >
                     View receipt
                   </LuxeButton>
-                  {invoice.pdfUrl && (
+                  {/* Stripe's own PDF where Stripe raised the invoice, ours
+                      where we did — a one-off purchase has no Stripe invoice
+                      and used to have no document of any kind. */}
+                  {invoice.pdfUrl ? (
                     <LuxeButton
                       href={invoice.pdfUrl}
                       variant="quiet"
@@ -847,6 +928,12 @@ function InvoicesPanel({ resource }: { resource: Resource<MemberInvoice[]> }) {
                     >
                       Download
                     </LuxeButton>
+                  ) : (
+                    invoice.receiptPdfUrl && (
+                      <ReceiptPdfLink target={{ invoiceId: invoice.id }} className={QUIET_LINK}>
+                        Download PDF
+                      </ReceiptPdfLink>
+                    )
                   )}
                 </div>
               </li>
@@ -858,7 +945,22 @@ function InvoicesPanel({ resource }: { resource: Resource<MemberInvoice[]> }) {
   );
 }
 
+/** What happened to the plans once a new card was saved, in one sentence. */
+function cardSavedMessage(adopted: { updated: number; retried: number; paid: number }): string {
+  const plans =
+    adopted.updated > 0
+      ? `Your new card is saved and ${adopted.updated === 1 ? "your plan now uses it" : "all your plans now use it"}.`
+      : "Your new card is saved.";
+  if (adopted.retried === 0) return plans;
+  if (adopted.paid === adopted.retried) {
+    return `${plans} The payment that didn't go through has now been paid.`;
+  }
+  return `${plans} We tried the overdue payment on it, but it didn't go through — you'll get an email about what happens next.`;
+}
+
 function describeInvoice(invoice: MemberInvoice): StatePill | null {
+  // Written by the payment-failed webhook; the card on file was declined.
+  if (invoice.status === "failed") return { label: "Didn't go through", accent: "gold" };
   if (invoice.status === "open") return { label: "Not paid yet", accent: "gold" };
   if (invoice.status === "uncollectible") return { label: "Payment outstanding", accent: "gold" };
   if (invoice.status === "void") return { label: "Cancelled", accent: "neutral" };

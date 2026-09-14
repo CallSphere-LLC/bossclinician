@@ -1,4 +1,5 @@
-import { API_BASE, getToken } from "@/lib/api";
+import { sessionFetch, refreshAdminSession } from "@/lib/adminTransport";
+import { API_BASE } from "@/lib/api";
 import type { MediaAsset, MediaVisibility } from "@/types/admin";
 
 /**
@@ -36,8 +37,7 @@ export interface ServerUploadSession {
 }
 
 function authHeaders(extra: Record<string, string> = {}): Record<string, string> {
-  const token = getToken();
-  return token ? { ...extra, Authorization: `Bearer ${token}` } : extra;
+  return extra;
 }
 
 async function readError(res: Response): Promise<UploadHttpError> {
@@ -67,7 +67,7 @@ export async function createUploadSession(input: {
 }): Promise<
   { duplicate: true; asset: MediaAsset } | { duplicate: false; session: ServerUploadSession }
 > {
-  const res = await fetch(`${API_BASE}/admin/media/uploads`, {
+  const res = await sessionFetch(`${API_BASE}/admin/media/uploads`, {
     method: "POST",
     headers: authHeaders({ "Content-Type": "application/json" }),
     body: JSON.stringify({
@@ -89,14 +89,14 @@ export async function createUploadSession(input: {
 
 /** Everything this administrator started and never finished, from any device. */
 export async function fetchUploadSessions(): Promise<ServerUploadSession[]> {
-  const res = await fetch(`${API_BASE}/admin/media/uploads`, { headers: authHeaders() });
+  const res = await sessionFetch(`${API_BASE}/admin/media/uploads`, { headers: authHeaders() });
   if (!res.ok) throw await readError(res);
   return (await res.json()) as ServerUploadSession[];
 }
 
 /** Where the server says this upload has got to. The client's own count never wins. */
 export async function fetchUploadSession(uploadId: string): Promise<ServerUploadSession> {
-  const res = await fetch(`${API_BASE}/admin/media/uploads/${uploadId}`, {
+  const res = await sessionFetch(`${API_BASE}/admin/media/uploads/${uploadId}`, {
     headers: authHeaders(),
   });
   if (!res.ok) throw await readError(res);
@@ -110,19 +110,27 @@ export interface ChunkResult {
 }
 
 /** One chunk, with progress and a working cancel. */
-export function putChunk(input: {
+type ChunkInput = {
   uploadId: string;
   offset: number;
   body: Blob;
   onProgress: (sentBytes: number) => void;
   signal: AbortSignal;
-}): Promise<ChunkResult> {
+};
+export async function putChunk(input: ChunkInput): Promise<ChunkResult> {
+  try { return await sendChunk(input); }
+  catch (error) {
+    if (!(error instanceof UploadHttpError) || error.status !== 401 || input.signal.aborted || !(await refreshAdminSession())) throw error;
+    return sendChunk(input);
+  }
+}
+function sendChunk(input: ChunkInput): Promise<ChunkResult> {
+  if (input.signal.aborted) return Promise.reject(new UploadHttpError("Stopped.", 0));
   return new Promise<ChunkResult>((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("PUT", `${API_BASE}/admin/media/uploads/${input.uploadId}?offset=${input.offset}`);
     xhr.setRequestHeader("Content-Type", "application/octet-stream");
-    const token = getToken();
-    if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+    xhr.withCredentials = true;
 
     const onAbort = (): void => xhr.abort();
     input.signal.addEventListener("abort", onAbort);
@@ -179,7 +187,7 @@ export function putChunk(input: {
 
 /** Turns a finished session into a library asset. Safe to call twice. */
 export async function finishUpload(uploadId: string): Promise<MediaAsset> {
-  const res = await fetch(`${API_BASE}/admin/media/uploads/${uploadId}/complete`, {
+  const res = await sessionFetch(`${API_BASE}/admin/media/uploads/${uploadId}/complete`, {
     method: "POST",
     headers: authHeaders(),
   });
@@ -189,7 +197,7 @@ export async function finishUpload(uploadId: string): Promise<MediaAsset> {
 
 /** Throws the half-file away, on the server as well as here. */
 export async function discardUpload(uploadId: string): Promise<void> {
-  const res = await fetch(`${API_BASE}/admin/media/uploads/${uploadId}`, {
+  const res = await sessionFetch(`${API_BASE}/admin/media/uploads/${uploadId}`, {
     method: "DELETE",
     headers: authHeaders(),
   });

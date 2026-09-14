@@ -1,4 +1,5 @@
-import { ApiError, getToken } from "@/lib/api";
+import { sessionFetch } from "@/lib/adminTransport";
+import { ApiError } from "@/lib/api";
 
 /**
  * Email sequences, automations and system templates — the marketing console's
@@ -18,10 +19,8 @@ const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? "/api"
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const headers = new Headers(options.headers);
   if (!headers.has("Content-Type")) headers.set("Content-Type", "application/json");
-  const token = getToken();
-  if (token) headers.set("Authorization", `Bearer ${token}`);
 
-  const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+  const res = await sessionFetch(`${API_BASE}${path}`, { ...options, headers });
 
   if (!res.ok) {
     let message = "";
@@ -52,6 +51,11 @@ export interface SequenceSummary {
   activeCount: number;
   completedCount: number;
   updatedAt: string;
+  /** 3.1 folders; present on every row since 034. */
+  folder?: string;
+  /** A3: emails that actually go out, and the sum of their waits in minutes. */
+  enabledEmailCount?: number;
+  totalDelayMinutes?: number;
 }
 
 export interface SequenceEmail {
@@ -228,11 +232,70 @@ export interface EmailTemplate {
   updatedAt: string;
 }
 
+/* ── Marketing overview ─────────────────────────────────────────────────── */
+
+/** GET /api/admin/marketing-overview — see backend routes/admin/marketingOverview.ts. */
+export interface MarketingOverview {
+  windowDays: number;
+  generatedAt: string;
+  emails: {
+    sent: number;
+    bySource: { broadcast: number; sequence: number; automation: number };
+    broadcastUnlisted: number;
+    opened: number;
+    clicked: number;
+    openRate: number | null;
+    clickRate: number | null;
+    notSent: number;
+    notSentBySource: { broadcast: number; sequence: number; automation: number };
+    notSentPeople: number;
+    notSentEmails: number;
+    notSentLaterSent: number;
+    queued: number;
+    campaignsSent: number;
+    campaignsScheduled: number;
+    trackingSeen: boolean;
+  };
+  sequences: {
+    active: number;
+    total: number;
+    enrolled: number;
+    people: number;
+    top: { id: number; name: string; enrolled: number }[];
+  };
+  forms: {
+    replies: number;
+    previousReplies: number;
+    formsWithReplies: number;
+    top: { id: number; name: string; replies: number }[];
+  };
+  automations: {
+    active: number;
+    ran: number;
+    runs: number;
+    problemRuns: number;
+    failedRuns: number;
+    withProblems: number;
+    skippedRuns: number;
+    problemAutomations: { id: number; name: string; problemRuns: number }[];
+  };
+  events: {
+    upcoming: number;
+    upcomingPublished: number;
+    upcomingDrafts: number;
+    alwaysOn: number;
+    registrations: number;
+    communityUpcoming: number;
+    next: { id: number; title: string; startsAt: string; published: boolean; registrations: number }[];
+  };
+}
+
 /* ── The client ─────────────────────────────────────────────────────────── */
 
 const body = (data: unknown): RequestInit["body"] => JSON.stringify(data);
 
 export const marketingApi = {
+  overview: () => request<MarketingOverview>("/admin/marketing-overview"),
   sequences: () => request<SequenceSummary[]>("/admin/sequences"),
   sequence: (id: number) => request<Sequence>(`/admin/sequences/${id}`),
   createSequence: (draft: SequenceDraft & { name: string }) =>

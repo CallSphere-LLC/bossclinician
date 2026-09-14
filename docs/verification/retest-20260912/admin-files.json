@@ -1,0 +1,66 @@
+{
+  "responses": [
+    {
+      "path": "/api/admin/media/uploads",
+      "status": 200
+    },
+    {
+      "path": "/api/admin/members/export.csv",
+      "status": 200
+    },
+    {
+      "path": "/api/admin/sales/invoices/7/receipt",
+      "status": 200
+    },
+    {
+      "path": "/api/admin/media/uploads",
+      "status": 200
+    },
+    {
+      "path": "/api/admin/sales/invoices/7/receipt.pdf",
+      "status": 200
+    },
+    {
+      "path": "/api/admin/media",
+      "status": 200
+    },
+    {
+      "path": "/api/admin/media/uploads",
+      "status": 200
+    },
+    {
+      "path": "/api/admin/media/uploads",
+      "status": 201
+    },
+    {
+      "path": "/api/admin/media/uploads/8bcb133c-38ea-4d52-bb1f-14c16a1d37aa",
+      "status": 200
+    },
+    {
+      "path": "/api/admin/media/uploads/8bcb133c-38ea-4d52-bb1f-14c16a1d37aa/complete",
+      "status": 201
+    },
+    {
+      "path": "/api/admin/media",
+      "status": 200
+    },
+    {
+      "path": "/api/admin/media/uploads",
+      "status": 200
+    }
+  ],
+  "csv": {
+    "name": "members-2026-09-12.csv",
+    "bytes": 935
+  },
+  "pdf": {
+    "name": "receipt-R-2026-00009.pdf",
+    "prefix": "%PDF-"
+  },
+  "upload": {
+    "id": 19,
+    "name": "ZZ-origin-cookie-upload.txt",
+    "status": 201,
+    "persistedAfterReload": true
+  }
+}

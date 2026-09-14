@@ -1,0 +1,17 @@
+{
+  "csv": {
+    "bytes": 935
+  },
+  "pdf": {
+    "bytes": 2560,
+    "prefix": "%PDF-"
+  },
+  "upload": {
+    "id": 18,
+    "name": "ZZ-bughunt-cookie-upload.txt",
+    "bytes": "50",
+    "status": 201,
+    "persistedAfterReload": true
+  },
+  "harnessNotes": "Initial harness expected upload200; actual201 is correct. Second attempt duplicate detection returned existing asset; final reload verifies it."
+}

@@ -1,3 +1,4 @@
+import { cartRouter } from "./cart";
 import { Router } from "express";
 import { healthRouter } from "./health";
 import { pagesRouter } from "./pages";
@@ -24,6 +25,7 @@ import { emailWebhookRouter } from "./emailWebhook";
 import { emailPrefsRouter } from "./emailPrefs";
 import { redirectsRouter } from "./redirects";
 import { verifyRouter } from "./verify";
+import { receiptLinkRouter } from "./receiptLink";
 
 export const publicRouter = Router();
 
@@ -43,6 +45,7 @@ publicRouter.use(communityLiveStreamRouter);
 publicRouter.use(checkoutRouter);
 publicRouter.use(offersRouter);
 publicRouter.use(checkoutOfferRouter);
+publicRouter.use(cartRouter);
 publicRouter.use(stripeWebhookRouter);
 publicRouter.use(growthPublicRouter);
 publicRouter.use(assessmentsPublicRouter);
@@ -52,4 +55,6 @@ publicRouter.use(affiliateSignupRouter);
 publicRouter.use(emailWebhookRouter);
 publicRouter.use(emailPrefsRouter);
 publicRouter.use(verifyRouter);
+// Signed, expiring receipt PDF downloads: see services/receiptLinks.ts.
+publicRouter.use(receiptLinkRouter);
 publicRouter.use(redirectsRouter);

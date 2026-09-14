@@ -1,4 +1,5 @@
 @import "./admin-theme.css";
+@import "./site-theme.css";
 
 @tailwind base;
 @tailwind components;
@@ -235,12 +236,17 @@
 /* ── Film grain ───────────────────────────────────────────────────────────
    A flat near-black page reads as "cheap dark mode"; a low-opacity noise
    field over it reads as printed matter. Fixed + pointer-events-none so it
-   costs one composited layer and never intercepts input. */
+   costs one composited layer and never intercepts input. Keep it behind
+   content so photographs retain their original colors. */
+.grain-overlay {
+  isolation: isolate;
+}
+
 .grain-overlay::after {
   content: "";
   position: fixed;
   inset: 0;
-  z-index: 60;
+  z-index: -1;
   pointer-events: none;
   opacity: 0.5;
   mix-blend-mode: overlay;
@@ -395,30 +401,6 @@
 }
 .sheen-host:hover::after {
   animation: sheen 0.9s cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-/* ── Portrait treatment ───────────────────────────────────────────────────
-   Bright studio photography dropped onto near-black looks pasted on. Fading
-   the image's own edges to transparent lets it sit *in* the dark instead. */
-.portrait-fade {
-  -webkit-mask-image: linear-gradient(
-      to bottom,
-      transparent 0%,
-      #000 16%,
-      #000 72%,
-      transparent 99%
-    ),
-    linear-gradient(to right, transparent 0%, #000 18%, #000 100%);
-  -webkit-mask-composite: source-in;
-  mask-image: linear-gradient(
-      to bottom,
-      transparent 0%,
-      #000 16%,
-      #000 72%,
-      transparent 99%
-    ),
-    linear-gradient(to right, transparent 0%, #000 18%, #000 100%);
-  mask-composite: intersect;
 }
 
 /* ── Marquee ──────────────────────────────────────────────────────────── */

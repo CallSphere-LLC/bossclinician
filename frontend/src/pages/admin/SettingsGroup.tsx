@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link, useParams } from "react-router-dom";
-import { ArrowLeft, CreditCard, ExternalLink, Receipt, Send } from "lucide-react";
+import { AlertTriangle, ArrowLeft, CheckCircle2, CreditCard, ExternalLink, Receipt, Send } from "lucide-react";
 import { toast } from "sonner";
 import { adminApi } from "@/lib/api";
+import { downloadAdminDocument, fetchAdminDocument } from "@/lib/adminReceipt";
+import { ReceiptFrame } from "@/components/receipt/ReceiptFrame";
 import type { SendingDomainReport } from "@/types/admin";
 import {
   settingsApi,
   type EmailLogRow,
+  type SendingIdentityReport,
   type SettingCard as SettingCardShape,
   type SettingField,
   type SettingGroup,
@@ -28,6 +31,10 @@ import {
 } from "@/pages/admin/ui/primitives";
 import { friendlyError } from "@/pages/admin/ui/friendly";
 import { formatDateTime } from "@/lib/format";
+import { CancelReasonsEditor } from "@/components/admin/CancelReasonsEditor";
+import { paymentFieldProblem } from "@/lib/paymentSettingsRules";
+import { CheckoutPreview } from "@/components/admin/CheckoutPreview";
+import { logoFileProblem } from "@/lib/receiptLogo";
 
 /**
  * One group of settings, as plain boxes with plain labels.
@@ -114,6 +121,17 @@ function FieldInput({
         </label>
       );
 
+    case "reasonlist":
+      return (
+        <CancelReasonsEditor
+          id={id}
+          label={field.label}
+          help={field.help}
+          value={typeof value === "string" ? value : ""}
+          onChange={onChange}
+        />
+      );
+
     case "longtext":
       return (
         <Field label={field.label} hint={field.help} htmlFor={id}>
@@ -128,6 +146,30 @@ function FieldInput({
       );
 
     case "choice":
+      if (field.locked) {
+        // The server decides this one. A live dropdown here read "Your own mail
+        // server" while every message went out through Amazon SES, so the box
+        // shows what is really in use, can't be changed, and says why.
+        const current = typeof value === "string" ? value : "";
+        const shown = (field.choices ?? []).find((choice) => choice.value === current);
+        return (
+          <Field label={field.label} htmlFor={id}>
+            <select
+              id={id}
+              className={selectStyles}
+              value={current}
+              disabled
+              aria-describedby={`${id}-locked`}
+            >
+              <option value={current}>{shown?.label ?? current}</option>
+            </select>
+            <p id={`${id}-locked`} className="mt-1.5 flex flex-wrap items-center gap-2 text-xs text-ink-soft">
+              {field.source === "server" && <Badge tone="neutral">Set on the server</Badge>}
+              <span>{field.help}</span>
+            </p>
+          </Field>
+        );
+      }
       return (
         <Field label={field.label} hint={field.help} htmlFor={id}>
           <select
@@ -241,6 +283,9 @@ function FieldInput({
         </Field>
       );
 
+    case "image":
+      return <ImageFieldInput id={id} field={field} value={value} onChange={onChange} />;
+
     default:
       return (
         <Field label={field.label} hint={field.help} htmlFor={id}>
@@ -254,6 +299,146 @@ function FieldInput({
         </Field>
       );
   }
+}
+
+/**
+ * A logo box: upload a PNG or JPEG into the public media library, see it, or
+ * take it away. The value is the upload's own `/uploads/<file>` reference, and
+ * it only reaches receipts when the card is saved — the card already says when
+ * there are unsaved changes.
+ *
+ * A file that can't be used is refused here, next to the box, with the reason:
+ * a logo that silently failed to appear on a receipt is the kind of thing nobody
+ * notices until a customer's accountant does.
+ */
+export function ImageFieldInput({
+  id,
+  field,
+  value,
+  onChange,
+}: {
+  id: string;
+  field: SettingField;
+  value: unknown;
+  onChange: (value: unknown) => void;
+}) {
+  const [uploading, setUploading] = useState(false);
+  const [problem, setProblem] = useState("");
+  const current = typeof value === "string" ? value : "";
+
+  async function pick(file: File | undefined) {
+    if (!file) return;
+    const refused = logoFileProblem(file);
+    setProblem(refused);
+    if (refused) return;
+    setUploading(true);
+    try {
+      const asset = await adminApi.uploadMedia(file, "public");
+      onChange(asset.url);
+    } catch (err) {
+      setProblem(friendlyError(err, "logo"));
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  return (
+    <Field label={field.label} hint={field.help} htmlFor={id}>
+      <div className="flex flex-wrap items-center gap-3">
+        {current ? (
+          <img
+            src={current}
+            alt="Your receipt logo"
+            className="h-14 max-w-[12rem] rounded-lg border border-hairline bg-white object-contain p-1.5"
+          />
+        ) : (
+          <span className="text-sm text-ink-soft">No logo — your business name heads the receipt.</span>
+        )}
+        <input
+          id={id}
+          type="file"
+          accept="image/png,image/jpeg"
+          disabled={uploading}
+          onChange={(e) => {
+            void pick(e.target.files?.[0]);
+            e.target.value = "";
+          }}
+          className="block max-w-full text-sm text-ink-soft file:mr-3 file:cursor-pointer file:rounded-full file:border-0 file:bg-plum file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white"
+        />
+        {current && !uploading && (
+          <Button type="button" variant="ghost" size="sm" onClick={() => onChange("")}>
+            Remove the logo
+          </Button>
+        )}
+      </div>
+      {uploading && <p className="mt-1.5 text-xs text-ink-soft">Uploading…</p>}
+      {problem && (
+        <p role="alert" className="mt-1.5 text-xs font-medium text-red-400">
+          {problem}
+        </p>
+      )}
+    </Field>
+  );
+}
+
+/**
+ * The receipt customiser's proof, under the receipt details on the General page.
+ *
+ * Shows a made-up receipt dressed in whatever is saved — the same renderers a
+ * customer's receipt and PDF use — so she can see the logo, address, tax ID and
+ * footer note in place without waiting for a sale. Both documents are
+ * Bearer-authenticated, so the receipt is fetched and shown right here in the
+ * card, and the PDF is saved through the browser's download; no window opens.
+ */
+export function ReceiptPreviewCard() {
+  const [opening, setOpening] = useState<"" | "html" | "pdf">("");
+  const [previewHtml, setPreviewHtml] = useState<string | null>(null);
+
+  async function open(kind: "html" | "pdf") {
+    setOpening(kind);
+    try {
+      if (kind === "html") {
+        setPreviewHtml(await fetchAdminDocument("/admin/sales/receipt-preview"));
+      } else {
+        await downloadAdminDocument("/admin/sales/receipt-preview.pdf", "receipt-sample.pdf");
+      }
+    } catch {
+      toast.error("We couldn't open the sample receipt just now. Try again in a moment.");
+    } finally {
+      setOpening("");
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader
+        title="See a sample receipt"
+        subtitle="A made-up $19.00 purchase in the details you've saved above — exactly how a customer's receipt and its PDF look."
+      />
+      <div className="flex flex-wrap items-center gap-3 px-5 py-5">
+        <Button type="button" size="sm" disabled={opening !== ""} onClick={() => void open("html")}>
+          <Receipt />
+          {opening === "html" ? "Opening…" : "Open a sample receipt"}
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          disabled={opening !== ""}
+          onClick={() => void open("pdf")}
+        >
+          <ExternalLink />
+          {opening === "pdf" ? "Opening…" : "Sample PDF"}
+        </Button>
+        <span className="text-xs text-ink-soft">Save your changes first — the sample shows what's saved.</span>
+      </div>
+      {previewHtml !== null && (
+        <div className="border-t border-hairline px-5 py-5">
+          <ReceiptFrame html={previewHtml} title="Sample receipt" />
+        </div>
+      )}
+    </Card>
+  );
 }
 
 function SettingCard({ card, onSaved }: { card: SettingCardShape; onSaved: () => void }) {
@@ -279,10 +464,24 @@ function SettingCard({ card, onSaved }: { card: SettingCardShape; onSaved: () =>
 
   async function save(e: FormEvent) {
     e.preventDefault();
+
+    // The payment fields with rules are checked here first, so a refused save
+    // says which rule rather than "Something in that form needs fixing".
+    for (const field of card.fields) {
+      const problem = paymentFieldProblem(field.type, draft[field.name]);
+      if (problem) {
+        toast.error(problem, { duration: 10000 });
+        return;
+      }
+    }
+
     setSaving(true);
 
     const values: Record<string, unknown> = {};
     for (const field of card.fields) {
+      // A locked field is the server's to decide: sending it back would either be
+      // refused or store a stale copy of something this screen cannot change.
+      if (field.locked) continue;
       const value = draft[field.name];
       if (field.type === "secret") {
         if (typeof value === "string" && value.trim()) values[field.name] = value.trim();
@@ -314,6 +513,7 @@ function SettingCard({ card, onSaved }: { card: SettingCardShape; onSaved: () =>
             onChange={(value) => setDraft((d) => ({ ...d, [field.name]: value }))}
           />
         ))}
+        {card.key === "checkout" && <CheckoutPreview settings={draft} />}
         <div className="flex items-center gap-3 border-t border-hairline/60 pt-4">
           <Button type="submit" size="sm" disabled={!dirty || saving}>
             {saving ? "Saving…" : "Save"}
@@ -327,6 +527,125 @@ function SettingCard({ card, onSaved }: { card: SettingCardShape; onSaved: () =>
   );
 }
 
+/**
+ * Whether this site can send at all — first thing on the email screen.
+ *
+ * It exists because the broken state was invisible. On the live site "Name in
+ * the inbox", "Sent from" and "Your postal address" were all blank, and an empty
+ * box looks exactly like a box somebody meant to leave empty: nothing said that
+ * every campaign would be refused, or that a marketing email without a postal
+ * address is illegal, or that mail was going out under an address from the
+ * server's own configuration that appears nowhere on this screen.
+ *
+ * The verdict is the same one email/provider.ts enforces on the send itself, read
+ * from the same endpoint, so this card cannot say "ready" about a send that would
+ * be refused.
+ */
+function SendingIdentityCard({ refreshToken }: { refreshToken: number }) {
+  const [report, setReport] = useState<SendingIdentityReport | null>(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let live = true;
+    settingsApi
+      .sendingIdentity()
+      .then((next) => {
+        if (!live) return;
+        setReport(next);
+        setError("");
+      })
+      .catch((err) => {
+        if (!live) return;
+        setReport(null);
+        setError(friendlyError(err, "email settings"));
+      });
+    return () => {
+      live = false;
+    };
+  }, [refreshToken]);
+
+  return (
+    <Card>
+      <CardHeader
+        title="Can you send email?"
+        subtitle="What your emails say they come from, and whether that is enough to send one."
+        action={
+          report && <Badge tone={report.ready ? "green" : "red"}>{report.summary}</Badge>
+        }
+      />
+      <div className="space-y-4 px-5 py-5">
+        {error && <ErrorNotice message={error} />}
+        {report === null && !error && <Skeleton className="h-24 w-full" />}
+
+        {report && report.problems.length > 0 && (
+          <div
+            role="alert"
+            className="space-y-3 rounded-xl border border-red-400/30 bg-red-500/10 px-4 py-3.5 text-sm text-red-100"
+          >
+            <p className="flex items-start gap-2.5 font-semibold">
+              <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+              Marketing email is being refused until these are filled in. Nothing is sent, and
+              nothing pretends to have been.
+            </p>
+            <ul className="space-y-2.5">
+              {report.problems.map((problem) => (
+                <li key={problem.field} className="leading-relaxed">
+                  <span className="font-semibold text-white">{problem.label}</span> is empty.{" "}
+                  <span className="text-red-100/85">{problem.message}</span>
+                </li>
+              ))}
+            </ul>
+            <p className="text-xs text-red-100/80">
+              The boxes are below on this page. Fill them in, press Save, and this turns green.
+            </p>
+          </div>
+        )}
+
+        {report && report.problems.length === 0 && (
+          <p className="flex items-start gap-2.5 text-sm text-ink">
+            <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-green-bright" />
+            <span>
+              Your emails go out as{" "}
+              <span className="font-semibold">{report.marketingFrom}</span>, with your postal
+              address at the bottom.
+            </span>
+          </p>
+        )}
+
+        {report && report.warnings.length > 0 && (
+          <ul className="space-y-2.5">
+            {report.warnings.map((warning) => (
+              <li
+                key={`${warning.field}-${warning.label}`}
+                className="rounded-xl border border-gold/30 bg-gold/[0.10] px-4 py-3 text-sm leading-relaxed text-ink"
+              >
+                <span className="font-semibold">{warning.label}:</span>{" "}
+                <span className="text-ink-soft">{warning.message}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {report?.transport && (
+          <p className="text-sm text-ink">
+            Sending through <span className="font-semibold">{report.transport.label}</span>
+            {report.transport.source === "server" ? " — set on the server." : " — chosen here."}
+          </p>
+        )}
+
+        {report && (
+          <p className="text-xs text-ink-soft">
+            Receipts, password links and email confirmations are separate — they go out as{" "}
+            <span className="font-mono">{report.transactionalFrom || "nothing configured"}</span>{" "}
+            and are never held back for the fields above, because a confirmation link is what lets
+            a customer post in your community at all.
+          </p>
+        )}
+      </div>
+    </Card>
+  );
+}
+
 /** Sits on the email group, because that is where she goes when mail looks wrong. */
 function TestEmailCard() {
   const [sending, setSending] = useState(false);
@@ -335,7 +654,16 @@ function TestEmailCard() {
     setSending(true);
     try {
       const result = await settingsApi.sendTestEmail();
-      if (result.sent) {
+      if (result.sent && !result.identity.ready) {
+        // The test message is transactional, so it goes out under the server's
+        // own identity even when the marketing one is blank. Saying only "Sent"
+        // here is what let somebody believe email was working while every
+        // campaign was being refused.
+        toast.warning(
+          `Sent to ${result.to} — but that only proves receipts work. ${result.identity.summary}`,
+          { duration: 12000 },
+        );
+      } else if (result.sent) {
         toast.success(`Sent — check ${result.to}`);
       } else if (!result.configured) {
         toast.error(
@@ -533,7 +861,7 @@ function deliveryStatus(row: EmailLogRow): { text: string; tone: "green" | "red"
  * this one answers it about real customers rather than about Yvette. Before it
  * existed the only signal for a receipt was the checkout saying it had sent one.
  */
-function EmailDeliveryCard() {
+export function EmailDeliveryCard() {
   const [rows, setRows] = useState<EmailLogRow[] | null>(null);
   const [tally, setTally] = useState<Record<string, number>>({});
   const [filter, setFilter] = useState<string>("all");
@@ -679,6 +1007,8 @@ export default function SettingsGroupPage() {
   const { group: groupKey } = useParams<{ group: string }>();
   const [group, setGroup] = useState<SettingGroup | null | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
+  /** Bumped on every save, so the sending-identity verdict re-reads with it. */
+  const [savedCount, setSavedCount] = useState(0);
 
   const load = useCallback(() => {
     settingsApi
@@ -721,12 +1051,22 @@ export default function SettingsGroupPage() {
       ) : (
         <div className="space-y-5">
           {group.key === "payments" && <BillingPortalCard />}
+          {/* First, because it is the answer to "why did nothing arrive?" */}
+          {group.key === "email" && <SendingIdentityCard refreshToken={savedCount} />}
           {group.settings.map((card) => (
-            <SettingCard key={card.key} card={card} onSaved={load} />
+            <SettingCard
+              key={card.key}
+              card={card}
+              onSaved={() => {
+                load();
+                setSavedCount((count) => count + 1);
+              }}
+            />
           ))}
           {group.key === "email" && <TestEmailCard />}
           {group.key === "email" && <EmailDeliveryCard />}
           {group.key === "email" && <SendingDomainCard />}
+          {group.key === "general" && <ReceiptPreviewCard />}
         </div>
       )}
     </div>

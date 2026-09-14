@@ -29,11 +29,13 @@ import { friendlyError, pluralize, publishLabel, webAddress } from "@/pages/admi
 const KIND_LABEL: Record<QuizKind, string> = {
   quiz: "Quiz",
   graded: "Graded test",
+  survey: "Survey",
 };
 
 const KIND_HINT: Record<QuizKind, string> = {
   quiz: "Points add up to a score, and the score decides which result page they see.",
   graded: "Questions have right answers, and a pass mark decides who passes.",
+  survey: "Collect responses without a score or pass mark.",
 };
 
 export default function Assessments() {
@@ -280,7 +282,7 @@ export default function Assessments() {
             <legend className="mb-1.5 text-[0.8rem] font-semibold text-ink">
               What sort of quiz is it?
             </legend>
-            {(["quiz", "graded"] as const).map((choice) => (
+            {(["quiz", "graded", "survey"] as const).map((choice) => (
               <label
                 key={choice}
                 className={`flex cursor-pointer gap-3 rounded-xl border p-3.5 transition-colors ${

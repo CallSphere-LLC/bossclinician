@@ -1,3 +1,4 @@
+import { useNewProductRequest } from "./ui/useNewProductRequest";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { motion } from "motion/react";
@@ -51,6 +52,7 @@ export default function CommunityList() {
   }, []);
 
   useEffect(load, [load]);
+  useNewProductRequest(() => setCreating(true));
 
   async function handleCreate(e: FormEvent) {
     e.preventDefault();

@@ -1,5 +1,33 @@
 import { describe, it, expect } from "vitest";
-import { describeStart } from "./eventsApi";
+import {
+  REMINDER_CHOICES,
+  describeRecurrence,
+  describeReminderOffset,
+  describeStart,
+} from "./eventsApi";
+
+/**
+ * The repeat rule in words, held to the same assertions as the server's
+ * `describeRecurrence` in `services/events.test.ts`, so the create dialog's
+ * preview and the saved event never name two different rules.
+ */
+describe("describeRecurrence", () => {
+  it("matches the server's wording", () => {
+    expect(describeRecurrence({ freq: "weekly", interval: 1, until: null, count: 6 })).toBe(
+      "Every week, 6 sessions",
+    );
+    expect(describeRecurrence({ freq: "weekly", interval: 2, until: "2026-10-31", count: null })).toBe(
+      "Every 2 weeks until October 31, 2026",
+    );
+    expect(describeRecurrence({ freq: "daily", interval: 1, until: null, count: 1 })).toBe(
+      "Every day, 1 session",
+    );
+    expect(describeRecurrence({ freq: "monthly", interval: 3, until: null, count: 4 })).toBe(
+      "Every 3 months, 4 sessions",
+    );
+    expect(describeRecurrence(null)).toBe("");
+  });
+});
 
 /**
  * P0-4 regression: the events list rendered every start time in the viewer's
@@ -70,5 +98,45 @@ describe("describeStart", () => {
   it("says so plainly when there is no date, rather than printing an epoch", () => {
     expect(describeStart(null, "America/New_York")).toBe("No date yet");
     expect(describeStart("not a date", "America/New_York")).toBe("No date yet");
+  });
+});
+
+/**
+ * The reminder wording, which is duplicated on purpose.
+ *
+ * The server writes a `label` on every reminder it sends down, and the browser
+ * needs the same sentence for a choice that does not exist on the server yet —
+ * the "add another reminder" dropdown, before anything has been saved. Two
+ * copies of a sentence is a drift risk, so these assertions are the same ones
+ * `services/events.test.ts` makes of `describeReminderOffset`. If the two ever
+ * disagree, the editor will offer "1 day before" and the saved reminder will
+ * come back calling itself something else.
+ */
+describe("describeReminderOffset", () => {
+  it("matches the server's wording for every offset", () => {
+    expect(describeReminderOffset("registration", 0)).toBe("as soon as they sign up");
+    expect(describeReminderOffset("before", 0)).toBe("when it starts");
+    expect(describeReminderOffset("before", 15)).toBe("15 minutes before");
+    expect(describeReminderOffset("before", 60)).toBe("1 hour before");
+    expect(describeReminderOffset("before", 180)).toBe("3 hours before");
+    expect(describeReminderOffset("before", 1440)).toBe("1 day before");
+    expect(describeReminderOffset("before", 2880)).toBe("2 days before");
+    expect(describeReminderOffset("before", 7 * 1440)).toBe("7 days before");
+  });
+
+  it("labels every dropdown choice the way the server will name it back", () => {
+    for (const choice of REMINDER_CHOICES) {
+      const asServerWillSayIt = describeReminderOffset(choice.kind, choice.offsetMinutes);
+      // The dropdown is allowed friendlier capitalisation and "1 week" for
+      // seven days; what it may not do is name a different moment.
+      expect(choice.label.toLowerCase().replace("1 week before", "7 days before")).toBe(
+        asServerWillSayIt,
+      );
+    }
+  });
+
+  it("offers no two choices at the same moment", () => {
+    const slots = REMINDER_CHOICES.map((c) => `${c.kind}:${c.offsetMinutes}`);
+    expect(new Set(slots).size).toBe(slots.length);
   });
 });

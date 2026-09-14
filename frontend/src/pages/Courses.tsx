@@ -298,15 +298,7 @@ function MissionPortrait() {
           height={867}
           loading="lazy"
           decoding="async"
-          className={cn("aspect-square w-full max-w-full object-cover", PLATE_GRADE)}
-        />
-        <div
-          aria-hidden
-          className="absolute inset-0 rounded-full bg-[radial-gradient(78%_78%_at_50%_38%,transparent_42%,rgba(10,7,19,0.34)_82%,rgba(6,4,11,0.62)_100%)]"
-        />
-        <div
-          aria-hidden
-          className="absolute inset-0 rounded-full bg-glow-violet/20 mix-blend-soft-light"
+          className="aspect-square w-full max-w-full object-cover"
         />
       </div>
     </div>

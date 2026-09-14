@@ -99,11 +99,11 @@ describeDb("Kajabi parity admin workflows (integration)", () => {
          (email, name, email_marketing_status, opted_in_at, consent_source,
           order_count, last_ordered_at, created_at)
        VALUES
-         ('maya.thompson@example.test', 'Maya Thompson', 'subscribed', now(), 'course checkout', 2, now(), now()),
-         ('jordan.lee@example.test', 'Jordan Lee', 'subscribed', now() - interval '120 days', 'newsletter', 0, null, now() - interval '120 days'),
-         ('priya.shah@example.test', 'Priya Shah', 'bounced', now() - interval '20 days', 'event signup', 0, null, now() - interval '20 days'),
-         ('theo.martin@example.test', 'Theo Martin', 'unconfirmed', null, 'form', 0, null, now() - interval '10 days'),
-         ('formula.guard@example.test', '=HYPERLINK(""https://invalid.test"",""click"")', 'subscribed', now(), 'manual', 0, null, now())
+         ('success+maya.thompson@simulator.amazonses.com', 'Maya Thompson', 'subscribed', now(), 'course checkout', 2, now(), now()),
+         ('success+jordan.lee@simulator.amazonses.com', 'Jordan Lee', 'subscribed', now() - interval '120 days', 'newsletter', 0, null, now() - interval '120 days'),
+         ('bounce+priya.shah@simulator.amazonses.com', 'Priya Shah', 'bounced', now() - interval '20 days', 'event signup', 0, null, now() - interval '20 days'),
+         ('success+theo.martin@simulator.amazonses.com', 'Theo Martin', 'unconfirmed', null, 'form', 0, null, now() - interval '10 days'),
+         ('success+formula.guard@simulator.amazonses.com', '=HYPERLINK(""https://invalid.test"",""click"")', 'subscribed', now(), 'manual', 0, null, now())
        RETURNING id, email::text`,
     );
 
@@ -117,14 +117,14 @@ describeDb("Kajabi parity admin workflows (integration)", () => {
       engagement: { healthy: 3, passive: 1 },
     });
 
-    const formula = inserted.rows.find((row) => row.email === "formula.guard@example.test")!;
+    const formula = inserted.rows.find((row) => row.email === "success+formula.guard@simulator.amazonses.com")!;
     const exported = await request("/contacts/bulk/export.csv", {
       method: "POST",
       body: JSON.stringify({ contactIds: [formula.id] }),
     });
     expect(exported.response.status).toBe(200);
     expect(exported.body).toContain("'=HYPERLINK");
-    expect(exported.body).toContain("formula.guard@example.test");
+    expect(exported.body).toContain("success+formula.guard@simulator.amazonses.com");
 
     const passive = await request("/contacts?engagement=passive");
     expect(passive.response.status).toBe(200);
@@ -304,7 +304,7 @@ describeDb("Kajabi parity admin workflows (integration)", () => {
     });
 
     const { validateCoupon } = await import("../../services/coupons");
-    const accepted = await validateCoupon("clinicalceo50", offers.rows[0].id, "maya.thompson@example.test");
+    const accepted = await validateCoupon("clinicalceo50", offers.rows[0].id, "success+maya.thompson@simulator.amazonses.com");
     expect(accepted).toMatchObject({ ok: true, coupon: { amountOffCents: 5000, duration: "forever" } });
     expect(await validateCoupon("clinicalceo50", offers.rows[1].id)).toEqual({
       ok: false,
@@ -405,7 +405,7 @@ describeDb("Kajabi parity admin workflows (integration)", () => {
       method: "POST",
       body: JSON.stringify({
         pricingOptionId: optionId,
-        email: "maya.thompson@example.test",
+        email: "success+maya.thompson@simulator.amazonses.com",
         name: "Maya Thompson",
       }),
     });
@@ -490,11 +490,11 @@ describeDb("Kajabi parity admin workflows (integration)", () => {
 
     const contact = await client.query<{ id: number }>(
       `INSERT INTO contacts (email, name, email_marketing_status)
-       VALUES ('amara.williams@example.test', 'Amara Williams', 'subscribed') RETURNING id`,
+       VALUES ('success+amara.williams@simulator.amazonses.com', 'Amara Williams', 'subscribed') RETURNING id`,
     );
     const member = await client.query<{ id: number }>(
       `INSERT INTO members (email, name, status, contact_id)
-       VALUES ('amara.williams@example.test', 'Amara Williams', 'active', $1) RETURNING id`,
+       VALUES ('success+amara.williams@simulator.amazonses.com', 'Amara Williams', 'active', $1) RETURNING id`,
       [contact.rows[0].id],
     );
     const product = await client.query<{ id: number }>(
@@ -553,7 +553,7 @@ describeDb("Kajabi parity admin workflows (integration)", () => {
     );
     const member = await client.query<{ id: number }>(
       `INSERT INTO members (email, name, status)
-       VALUES ('ceu.student@example.test', 'Casey Student', 'active') RETURNING id`,
+       VALUES ('success+ceu.student@simulator.amazonses.com', 'Casey Student', 'active') RETURNING id`,
     );
     const product = await client.query<{ id: number }>(
       `INSERT INTO products (slug, title, kind, course_id, status)
@@ -568,7 +568,7 @@ describeDb("Kajabi parity admin workflows (integration)", () => {
     const before = await loadCourseForMember(member.rows[0].id, course.rows[0].id);
     expect(before?.modules[0].lessons[1]).toMatchObject({ unlocked: false });
 
-    const token = signMemberAccessToken({ sub: member.rows[0].id, email: "ceu.student@example.test" });
+    const token = signMemberAccessToken({ sub: member.rows[0].id, email: "success+ceu.student@simulator.amazonses.com" });
     const passed = await request("/api/assessments/ethics-final-test/submit", {
       method: "POST",
       headers: { Authorization: `Bearer ${token}` },

@@ -52,7 +52,7 @@ describe("sendMail delivery log", () => {
     transportSend.mockResolvedValue({ response: "250 Ok 010001a06d1d2e09abcdef", messageId: "<local@host>" });
 
     const outcome = await sendMail({
-      to: "Buyer@Example.com",
+      to: "Success+Buyer@Simulator.AmazonSES.com",
       subject: "Your receipt",
       text: "Thanks",
       topic: "purchase_receipt",
@@ -65,7 +65,7 @@ describe("sendMail delivery log", () => {
     const insert = query.mock.calls.find((c) => sqlOf(c).includes("INSERT INTO email_messages"));
     expect(insert).toBeDefined();
     // Lower-cased, because the suppression list and every later event key on it.
-    expect(insert?.[1]).toContain("buyer@example.com");
+    expect(insert?.[1]).toContain("success+buyer@simulator.amazonses.com");
     expect(insert?.[1]).toContain("purchase_receipt");
     expect(sqlOf(insert!)).toContain("'transactional'");
 
@@ -79,7 +79,7 @@ describe("sendMail delivery log", () => {
   it("writes a failure down instead of only logging it, and does not throw", async () => {
     transportSend.mockRejectedValue(new Error("535 Authentication Credentials Invalid"));
 
-    const outcome = await sendMail({ to: "buyer@example.com", subject: "Your receipt", text: "Thanks" });
+    const outcome = await sendMail({ to: "success+buyer@simulator.amazonses.com", subject: "Your receipt", text: "Thanks" });
 
     expect(outcome.sent).toBe(false);
     expect(outcome.error).toContain("535");
@@ -94,7 +94,7 @@ describe("sendMail delivery log", () => {
     query.mockRejectedValue(new Error("relation email_messages does not exist"));
     transportSend.mockResolvedValue({ response: "250 Ok 010001a0deadbeefcafe", messageId: "x" });
 
-    const outcome = await sendMail({ to: "buyer@example.com", subject: "Hi", text: "Hi" });
+    const outcome = await sendMail({ to: "success+buyer@simulator.amazonses.com", subject: "Hi", text: "Hi" });
 
     expect(outcome.sent).toBe(true);
     expect(outcome.messageId).toBeNull();

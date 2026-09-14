@@ -11,6 +11,24 @@ function required(name: string, fallback?: string): string {
   return v;
 }
 
+/**
+ * The relay port, validated. An unparseable or out-of-range TURN_PORT falls
+ * back to 3478 instead of propagating: the value ends up inside a `turn:` URL
+ * handed to a browser, and a browser given an unreachable relay does not fail
+ * fast — it stalls the whole ICE gathering timeout before the room gives up,
+ * which looks like a broken call rather than a mistyped variable.
+ */
+function turnPort(): number {
+  const raw = process.env.TURN_PORT;
+  if (!raw) return 3478;
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 1 || n > 65535) {
+    console.warn(`Ignoring invalid TURN_PORT=${raw}; using 3478`);
+    return 3478;
+  }
+  return n;
+}
+
 /** Served verbatim at /uploads: blog covers, testimonial photos, member avatars. */
 const uploadDir = path.resolve(process.cwd(), process.env.UPLOAD_DIR ?? "uploads");
 
@@ -54,7 +72,7 @@ export const env = {
   ),
 
   jwtSecret: required("JWT_SECRET"),
-  jwtExpiresIn: "7d" as const,
+  jwtExpiresIn: "5m" as const,
 
   adminEmail: process.env.ADMIN_EMAIL ?? "admin@bossclinician.com",
   adminPassword: process.env.ADMIN_PASSWORD ?? "",
@@ -62,6 +80,7 @@ export const env = {
   aiBaseUrl: process.env.AI_BASE_URL ?? "http://localhost:8000",
 
   frontendOrigin: process.env.FRONTEND_ORIGIN ?? "*",
+  adminOrigin: process.env.ADMIN_ORIGIN ?? (process.env.NODE_ENV === "production" ? "https://admin.bossclinician.callsphere.site" : ""),
 
   smtp: {
     host: process.env.SMTP_HOST ?? "",
@@ -91,9 +110,14 @@ export const env = {
   /**
    * STUN/TURN for the community live room.
    *
-   * Same scheme the telehealth app on this host uses: coturn started with a
+   * Same scheme the telehealth app on this host uses — coturn started with a
    * `--static-auth-secret`, and the browser handed a short-lived credential
-   * minted from it (TURN REST API) rather than a standing password.
+   * minted from it (TURN REST API) rather than a standing password — but a
+   * separate relay with a separate secret. The two apps shared one coturn
+   * briefly; that made this secret a key to the clinical relay and coupled
+   * the two apps' rate limits, so this app now runs its own (see the coturn
+   * service in docker-compose.yml). Hence the port: the telehealth relay
+   * already holds 3478 on this host.
    *
    * Both blank is a supported configuration, not a broken one — the room still
    * connects over host and STUN candidates, which covers most home and office
@@ -103,6 +127,15 @@ export const env = {
    */
   turn: {
     host: process.env.TURN_HOST ?? "",
+    /**
+     * The port this app's own relay listens on, for both STUN and TURN.
+     *
+     * Defaults to 3478 because that is what a lone coturn uses, but on this
+     * host the telehealth relay already has it, so the deployed value is not
+     * the default. A bad value falls back rather than serving a browser an
+     * unreachable `turn:` URL it would spend the whole ICE timeout on.
+     */
+    port: turnPort(),
     /** Never sent to a browser. Only HMACs of a timestamped username are. */
     staticAuthSecret: process.env.TURN_STATIC_AUTH_SECRET ?? "",
     /** A public STUN fallback so a room works with no TURN deployed at all. */

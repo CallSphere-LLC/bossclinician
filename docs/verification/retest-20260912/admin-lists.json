@@ -1,0 +1,882 @@
+[
+  {
+    "path": "/admin",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Welcome back, ZZ.",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/products",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "All Products",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/catalogue",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Your catalogue",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/courses",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Courses",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/downloads",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Downloads",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/community",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Community",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/media",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Media Library",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/coaching",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Coaching",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/podcasts",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Podcasts",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/newsletters",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Newsletters",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/offers",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Offers",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/sales/payments",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Payments",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/sales/plans",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Plans & Pricing",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/sales/subscriptions",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Subscriptions",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/sales/invoices",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Invoices & receipts",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/sales/coupons",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Coupons",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/sales/payouts",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Payouts",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/partners",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Partners",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/blog",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Blog Posts",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/testimonials",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Testimonials",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/resources",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Resources",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/pages",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Pages",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/marketing/overview",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Overview",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/marketing/events",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Events",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/marketing/campaigns",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Email Campaigns",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/marketing/funnels",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Funnels",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/marketing/sequences",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Email sequences",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/marketing/automations-v2",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Automations",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/marketing/emails",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Automatic emails",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/marketing/quizzes",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Quizzes",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/marketing/events-v2",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Events",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/marketing/forms-v2",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Forms",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/marketing/forms",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Forms",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/contacts/insights",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Insights",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/contacts",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "People",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/segments",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Groups",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/tags",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Tags",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/leads",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Enquiries",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/conversations",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Conversations",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/members",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Members",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/subscribers",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Subscribers",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/analytics",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Overview",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/analytics/reports",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Your numbers",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/settings",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Settings",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Welcome back, ZZ.",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/products",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "All Products",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/catalogue",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Your catalogue",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/courses",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Courses",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/downloads",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Downloads",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/community",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Community",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/media",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Media Library",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/coaching",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Coaching",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/podcasts",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Podcasts",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/newsletters",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Newsletters",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/offers",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Offers",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/sales/payments",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Payments",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/sales/plans",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Plans & Pricing",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/sales/subscriptions",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Subscriptions",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/sales/invoices",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Invoices & receipts",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/sales/coupons",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Coupons",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/sales/payouts",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Payouts",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/partners",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Partners",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/blog",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Blog Posts",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/testimonials",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Testimonials",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/resources",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Resources",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/pages",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Pages",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/marketing/overview",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Overview",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/marketing/events",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Events",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/marketing/campaigns",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Email Campaigns",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/marketing/funnels",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Funnels",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/marketing/sequences",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Email sequences",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/marketing/automations-v2",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Automations",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/marketing/emails",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Automatic emails",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/marketing/quizzes",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Quizzes",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/marketing/events-v2",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Events",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/marketing/forms-v2",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Forms",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/marketing/forms",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Forms",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/contacts/insights",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Insights",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/contacts",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "People",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/segments",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Groups",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/tags",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Tags",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/leads",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Enquiries",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/conversations",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Conversations",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/members",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Members",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/subscribers",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Subscribers",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/analytics",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Overview",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/analytics/reports",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Your numbers",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/settings",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Settings",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  }
+]

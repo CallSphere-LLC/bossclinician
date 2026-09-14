@@ -1,3 +1,4 @@
+import { SiteThemeToggle } from "@/components/layout/SiteThemeToggle";
 import { useState, type ReactNode } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
@@ -157,6 +158,8 @@ export function MemberShell({ title, description, actions, children }: MemberShe
             >
               Boss <em className="text-foil italic">Clinician</em>
             </Link>
+
+            <SiteThemeToggle />
 
             {member && (
               <DropdownMenu.Root>

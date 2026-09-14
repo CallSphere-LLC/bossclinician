@@ -1,4 +1,5 @@
-import { ApiError, getToken } from "@/lib/api";
+import { sessionFetch } from "@/lib/adminTransport";
+import { ApiError } from "@/lib/api";
 
 /**
  * The reports and dashboard client.
@@ -17,12 +18,10 @@ import { ApiError, getToken } from "@/lib/api";
 const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? "/api";
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const token = getToken();
   const headers = new Headers(options.headers);
   if (!headers.has("Content-Type")) headers.set("Content-Type", "application/json");
-  if (token) headers.set("Authorization", `Bearer ${token}`);
 
-  const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+  const res = await sessionFetch(`${API_BASE}${path}`, { ...options, headers });
 
   if (!res.ok) {
     let message = "Something went wrong. Please try again in a moment.";
@@ -263,15 +262,13 @@ export const reportsApi = {
   /**
    * Downloads the spreadsheet.
    *
-   * Fetched rather than linked because the API wants an Authorization header,
-   * and an <a href> cannot carry one. The blob is released immediately after the
-   * click so a morning of exports does not hold every file in memory.
+   * Cookie transport refreshes before downloading. The blob is released after
+   * the click so repeated exports do not hold every file in memory.
    */
   async downloadCsv(id: string, name: string, options: RunOptions = {}): Promise<void> {
-    const token = getToken();
-    const res = await fetch(
+    const res = await sessionFetch(
       `${API_BASE}/admin/reports/${encodeURIComponent(id)}/export.csv${runQuery(options)}`,
-      { headers: token ? { Authorization: `Bearer ${token}` } : {} },
+      {},
     );
     if (!res.ok) throw new ApiError("That download didn't work.", res.status);
 

@@ -34,7 +34,7 @@ function step(actionType: string, config: Record<string, unknown>, id = 1): Fake
 const CONTEXT: RunContext = {
   trigger: "offer_purchased",
   contactId: 7,
-  email: "someone@example.com",
+  email: "success+someone@simulator.amazonses.com",
   name: "Someone",
   subjectId: null,
   facts: {},

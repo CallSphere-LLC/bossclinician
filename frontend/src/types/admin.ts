@@ -136,12 +136,49 @@ export interface CommunityChannel {
   visibility: "public" | "private" | string;
   sort: number;
   postCount?: number;
+  coverImage?: string;
+  /** The tier this channel is limited to; null means the whole community. */
+  accessGroupId?: Id | null;
+  accessGroupName?: string | null;
+  /** How many people have been invited, for an invite-only channel. */
+  invitedCount?: number;
+  /** Kajabi's available view modes, and the one the channel opens in. */
+  viewModes?: string[];
+  defaultViewMode?: string;
+  /** The layout the member side renders the channel in (`view_mode`). */
+  viewMode?: "feed" | "forum" | "gallery" | string;
+}
+
+/** An offer that sells a community, and the tier (if any) buying it grants. */
+export interface AdminCommunityOffer {
+  id: Id;
+  title: string;
+  status: string;
+  accessGroupId: Id | null;
+  accessGroupName: string | null;
+}
+
+/** Somebody let into an invite-only channel. */
+export interface AdminChannelInvite {
+  memberId: Id;
+  name: string;
+  email: string;
+  addedAt: string;
 }
 
 export interface CommunityDetail extends Omit<Community, "channelCount" | "memberCount" | "postCount"> {
   /** Long-form markdown members must accept before posting. */
   guidelinesMd?: string;
   channels: CommunityChannel[];
+  /**
+   * The always-open video room. Members see it at the top of their channel
+   * list under whatever it is called — Yvette's is "Office Hours" — so the
+   * admin has to be able to see and change it in the same place.
+   */
+  liveRoomEnabled?: boolean;
+  liveRoomAccess?: "always" | "hosted" | string;
+  liveRoomAlias?: string;
+  liveRoomCapacity?: number;
 }
 
 export interface CommunityPost {
@@ -177,13 +214,22 @@ export interface CommunityMembership {
   email: string;
   name: string;
   status: string;
+  /** Set when they have been banned from this community, not deleted from it. */
+  bannedAt?: string | null;
+  /** The tiers they are in by hand. Purchased tiers are derived, not listed. */
+  groups?: { id: Id; name: string }[];
 }
 
 export interface LeaderboardEntry {
+  memberId?: Id;
   name: string;
   email: string;
   points: number;
   badge: string | null;
+  /** Standard competition rank, so a tie shares a number. */
+  rank?: number;
+  /** True when somebody else holds the same rank. */
+  tied?: boolean;
 }
 
 export interface Challenge {
@@ -302,6 +348,18 @@ export interface Invoice {
   status: string;
   hostedInvoiceUrl: string;
   createdAt: string;
+  /** 'stripe' for an invoice Stripe raised, 'order' for a one-off purchase. */
+  origin?: string;
+  number?: string | null;
+  paidAt?: string | null;
+  orderId?: number | null;
+  memberName?: string | null;
+  description?: string | null;
+  /** "One-off purchase" or "Subscription", as the list column prints it. */
+  kindLabel?: string | null;
+  /** Our own copy of the receipt the member holds. */
+  receiptUrl?: string | null;
+  receiptPdfUrl?: string | null;
 }
 
 export interface Coupon {
@@ -487,6 +545,19 @@ export interface Campaign {
   status: "draft" | "scheduled" | "sending" | "sent" | "failed" | string;
   scheduledAt: string | null;
   timezone: string;
+  /**
+   * How the send time is worked out. "absolute" is a wall-clock time in
+   * `scheduledAt`; the other two are resolved against an event when the
+   * scheduler runs, so a rescheduled event carries its emails with it.
+   */
+  anchorKind: "absolute" | "event_start" | "event_registration" | string;
+  anchorEventId: number | null;
+  /** Signed: negative is before the event, positive is after. */
+  anchorOffsetMinutes: number;
+  /** When the anchor was switched on. Stamped server-side; the backlog guard. */
+  anchorArmedAt: string | null;
+  /** Why an anchored send was passed over, in words, or "". */
+  anchorSkipReason: string;
   sentAt: string | null;
   recipientCount: number;
   deliveredCount: number;
@@ -726,6 +797,22 @@ export interface AdminAccessGroup {
   memberCount: number;
   channelCount: number;
   createdAt: string;
+}
+
+/** What sells a tier: everything that names it. */
+export interface AdminAccessGroupGrants {
+  offers: { id: Id; title: string; slug: string; status: string }[];
+  products: { id: Id; title: string; slug: string; status: string }[];
+  plans: { id: Id; name: string; slug: string }[];
+}
+
+/** The tier an offer grants, read and written on its own endpoint. */
+export interface AdminOfferAccessGroup {
+  offerId: Id;
+  offerTitle?: string;
+  accessGroupId: Id | null;
+  accessGroupName?: string | null;
+  communityId?: Id | null;
 }
 
 export interface AdminAccessGroupMember {

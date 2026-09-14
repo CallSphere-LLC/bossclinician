@@ -1,0 +1,22 @@
+{
+  "id": "1a096d2c6685b77e",
+  "headers": [
+    {
+      "name": "Authentication-Results",
+      "value": "mx.google.com;       dkim=pass header.i=@callsphere.site header.s=xhlmok7ewejxgkimtsbrtayvdwvspfxd header.b=\"afOr/JJE\";       dkim=pass header.i=@amazonses.com header.s=224i4yxa5dv7c2xz3womw6peuasteono header.b=\"Iy/gBjXy\";       spf=pass (google.com: domain of 010001a096d2c5dc-153ed4c2-9e94-47d8-b45d-77c5830592af-000000@bounce.callsphere.site designates 54.240.48.122 as permitted sender) smtp.mailfrom=010001a096d2c5dc-153ed4c2-9e94-47d8-b45d-77c5830592af-000000@bounce.callsphere.site;       dmarc=pass (p=NONE sp=NONE dis=NONE) header.from=callsphere.site"
+    },
+    {
+      "name": "From",
+      "value": "Yvette at Boss Clinician <yvette@bossclinician.callsphere.site>"
+    },
+    {
+      "name": "To",
+      "value": "sagar+zz-products-mail@callsphere.ai"
+    },
+    {
+      "name": "Subject",
+      "value": "Your email settings are working"
+    }
+  ],
+  "body": "This is a test message from your Boss Clinician admin.\r\nIf it reached you, your email settings are working.\r\nYour emails go out as: Yvette at Boss Clinician"
+}

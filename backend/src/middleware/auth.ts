@@ -3,6 +3,7 @@ import { verifyToken } from "../utils/jwt";
 import { unauthorized } from "../utils/httpError";
 import { pool } from "../db/pool";
 import { hashToken } from "../auth/tokens";
+import { adminAccessToken } from "../auth/adminSession";
 
 /**
  * How often a session's `last_used_at` is worth writing.
@@ -14,9 +15,9 @@ import { hashToken } from "../auth/tokens";
 const TOUCH_INTERVAL_MS = 5 * 60 * 1000;
 
 /**
- * Requires a valid `Authorization: Bearer <token>` header. Attaches req.user.
+ * Requires a valid admin session cookie or explicit API bearer. Attaches req.user.
  *
- * The signature check alone is not enough. An admin JWT lives for seven days
+ * The signature check alone is not enough. An admin JWT lives for five minutes
  * and cannot be withdrawn, so "sign this laptop out" and "suspend this person"
  * would both be advisory until it expired. The session row is what makes them
  * real, and it is checked here rather than per-router because a route that
@@ -28,12 +29,11 @@ const TOUCH_INTERVAL_MS = 5 * 60 * 1000;
  * second round trip.
  */
 export function requireAuth(req: Request, _res: Response, next: NextFunction): void {
-  const header = req.headers.authorization;
-  if (!header || !header.startsWith("Bearer ")) {
-    next(unauthorized("Missing bearer token"));
+  const token = adminAccessToken(req);
+  if (!token) {
+    next(unauthorized("Missing admin session"));
     return;
   }
-  const token = header.slice("Bearer ".length).trim();
 
   let payload;
   try {
@@ -50,8 +50,9 @@ export function requireAuth(req: Request, _res: Response, next: NextFunction): v
               u.role, u.status
          FROM admin_sessions s
          JOIN admin_users u ON u.id = s.admin_user_id
-        WHERE s.token_hash = $1 AND s.revoked_at IS NULL AND s.expires_at > now()`,
-      [hashToken(token), TOUCH_INTERVAL_MS / 1000]
+        WHERE (s.token_hash = $1 OR ($3::bigint IS NOT NULL AND s.id = $3 AND s.admin_user_id = $4))
+          AND s.revoked_at IS NULL AND s.expires_at > now()`,
+      [hashToken(token), TOUCH_INTERVAL_MS / 1000, payload.sessionId ?? null, payload.sub]
     )
     .then((result) => {
       const session = result.rows[0];
@@ -60,9 +61,9 @@ export function requireAuth(req: Request, _res: Response, next: NextFunction): v
         return;
       }
 
-      // The role comes from the row, not from the claim. A JWT lives for seven
-      // days, so trusting the claim would leave a demoted manager with a
-      // manager's permissions for a week after the demotion — and the person
+      // The role comes from the row, not from the claim. A JWT lives for five
+      // minutes, so trusting the claim would leave a demoted manager with a
+      // manager's permissions until refresh after the demotion — and the person
       // who demoted them would have every reason to believe otherwise.
       payload.role = session.role;
 

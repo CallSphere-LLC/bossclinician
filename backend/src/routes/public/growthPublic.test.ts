@@ -101,11 +101,11 @@ describe("contactFromSubmission", () => {
     // to produce a submission with no address on it, and so no lead at all.
     const contact = contactFromSubmission(
       [{ key: "work_address", contactField: "email" }],
-      { work_address: "  Yvette@Example.COM " },
+      { work_address: "  Success+Yvette@Simulator.AmazonSES.COM " },
       "",
     );
 
-    expect(contact.email).toBe("yvette@example.com");
+    expect(contact.email).toBe("success+yvette@simulator.amazonses.com");
   });
 
   it("drops an answer that is not an address at all", () => {
@@ -118,8 +118,8 @@ describe("contactFromSubmission", () => {
   });
 
   it("falls back to the envelope address when no question claims one", () => {
-    const contact = contactFromSubmission([{ key: "q1" }], { q1: "hello" }, "Someone@Example.com");
-    expect(contact.email).toBe("someone@example.com");
+    const contact = contactFromSubmission([{ key: "q1" }], { q1: "hello" }, "Success+Someone@Simulator.AmazonSES.com");
+    expect(contact.email).toBe("success+someone@simulator.amazonses.com");
   });
 
   it("reads a plain name field, which the starter questions do not map", () => {
@@ -128,7 +128,7 @@ describe("contactFromSubmission", () => {
     // through the default form would be a contact with an address and no name.
     const contact = contactFromSubmission(
       [{ key: "name" }, { key: "email", contactField: "email" }],
-      { name: "Yvette Howard", email: "y@example.com" },
+      { name: "Yvette Howard", email: "success+y@simulator.amazonses.com" },
       "",
     );
 
@@ -157,7 +157,7 @@ describe("contactFromSubmission", () => {
         { key: "note", contactField: "biggest_bottleneck" },
       ],
       { mobile: "", note: undefined },
-      "y@example.com",
+      "success+y@simulator.amazonses.com",
     );
 
     expect(contact.phone).toBe("");
@@ -167,10 +167,10 @@ describe("contactFromSubmission", () => {
   it("survives a fields column that is not a list of questions", () => {
     // jsonb, written by successive versions of the builder. A row that is null
     // or an object must not throw on a public endpoint.
-    expect(contactFromSubmission(null, { name: "Yvette" }, "y@example.com").email).toBe(
-      "y@example.com",
+    expect(contactFromSubmission(null, { name: "Yvette" }, "success+y@simulator.amazonses.com").email).toBe(
+      "success+y@simulator.amazonses.com",
     );
-    expect(contactFromSubmission({}, {}, "y@example.com").name).toBe("");
+    expect(contactFromSubmission({}, {}, "success+y@simulator.amazonses.com").name).toBe("");
     expect(contactFromSubmission([{ contactField: "phone" }, 7, null], {}, "").phone).toBe("");
   });
 

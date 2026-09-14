@@ -24,7 +24,7 @@ const PUBLIC_FIELDS: Record<string, readonly string[] | "all"> = {
   contact: "all",
   branding: "all",
 
-  checkout: ["brandColor", "supportEmail", "termsUrl", "showCoupons"],
+  checkout: ["brandColor", "buttonLabelColor", "buttonOutlineColor", "buttonBorderRadius", "supportEmail", "termsUrl", "showCoupons"],
   seo: ["defaultTitle", "defaultDescription", "ogImage"],
   // The site key belongs in the page; the secret verifies the token server-side.
   form_settings: ["spamProtection", "turnstileSiteKey", "recaptchaSiteKey"],

@@ -1,0 +1,75 @@
+{
+  "styles": [
+    {
+      "bg": "rgb(22, 86, 168)",
+      "color": "rgb(255, 255, 255)",
+      "border": "rgb(242, 193, 78)",
+      "radius": "24px"
+    },
+    {
+      "bg": "rgb(22, 86, 168)",
+      "color": "rgb(255, 255, 255)",
+      "border": "rgb(242, 193, 78)",
+      "radius": "24px"
+    }
+  ],
+  "checkout": true,
+  "cart": true,
+  "report": {
+    "id": "cart-recovery",
+    "name": "Money brought back by reminder emails",
+    "group": "Sales",
+    "description": "Carts left behind, and the ones your reminder emails rescued.",
+    "dimensions": [],
+    "dimension": null,
+    "from": "2026-09-12",
+    "to": "2026-09-12",
+    "series": [
+      {
+        "label": "Money brought back",
+        "format": "money",
+        "points": [
+          {
+            "date": "2026-09-12",
+            "value": 2700
+          }
+        ]
+      }
+    ],
+    "totals": {
+      "total": {
+        "label": "Money brought back",
+        "value": 2700,
+        "format": "money"
+      },
+      "secondary": {
+        "label": "Carts brought back",
+        "value": 1,
+        "format": "count"
+      },
+      "abandoned": {
+        "label": "Carts left behind",
+        "value": 1,
+        "format": "count"
+      },
+      "rate": {
+        "label": "Brought back",
+        "value": 100,
+        "format": "percent"
+      }
+    },
+    "breakdown": [
+      {
+        "label": "ZZ Products recovery",
+        "value": 2700,
+        "count": 1
+      }
+    ],
+    "breakdownLabel": "What they came back for",
+    "breakdownValueLabel": "Money back",
+    "breakdownCountLabel": "Carts",
+    "breakdownFormat": "money",
+    "currency": "usd",
+    "note": "Only purchases after a tracked reminder link count as recovered revenue, attributed to the last reminder followed. Recorded on the day of purchase."
+  }
+}

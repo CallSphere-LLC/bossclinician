@@ -308,6 +308,7 @@ function pickLibraryContinue(items: LibraryItem[]): ContinueLessonJson | null {
 /* --------------------------------------------------------------- one product */
 
 interface ProductRow {
+  instructions: string;
   id: number;
   slug: string;
   title: string;
@@ -332,7 +333,7 @@ interface ProductRow {
  */
 async function loadOwnedProduct(memberId: number, slug: string): Promise<ProductRow> {
   const found = await pool.query<ProductRow>(
-    `SELECT id, slug, title, subtitle, description, thumbnail_url, kind, course_id,
+    `SELECT id, slug, title, subtitle, description, instructions, thumbnail_url, kind, course_id,
             community_id, podcast_id, newsletter_id, coaching_offer_id
        FROM products
       WHERE slug = $1 AND status <> 'archived'`,
@@ -508,7 +509,7 @@ memberLibraryRouter.get(
     }
 
     if (product.kind === "download") {
-      res.json({ ...base, files: await loadProductFiles(product.id) });
+      res.json({ ...base, instructions: product.instructions, files: await loadProductFiles(product.id) });
       return;
     }
 
@@ -645,7 +646,7 @@ memberLibraryRouter.get(
            FROM course_lessons l
            LEFT JOIN LATERAL (
              SELECT slug FROM assessments
-              WHERE lesson_id = l.id AND kind = 'graded' AND published
+              WHERE lesson_id = l.id AND kind IN ('graded','survey') AND published
               ORDER BY id LIMIT 1
            ) a ON true
           WHERE l.id = $1`,

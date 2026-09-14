@@ -31,11 +31,11 @@ describe("compileSegment", () => {
   it("binds a text value rather than writing it into the SQL", () => {
     const compiled = compileSegment({
       match: "all",
-      rules: [{ field: "email", op: "contains", value: "Yvette@Example.com" }],
+      rules: [{ field: "email", op: "contains", value: "Success+Yvette@Simulator.AmazonSES.com" }],
     });
 
     expect(compiled.where).toBe("(lower(c.email::text) LIKE $1)");
-    expect(compiled.params).toEqual(["%yvette@example.com%"]);
+    expect(compiled.params).toEqual(["%success+yvette@simulator.amazonses.com%"]);
   });
 
   it("escapes the characters LIKE treats as wildcards", () => {

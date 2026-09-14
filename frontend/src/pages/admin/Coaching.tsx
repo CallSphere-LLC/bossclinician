@@ -1,3 +1,4 @@
+import { useNewProductRequest } from "./ui/useNewProductRequest";
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import * as Tabs from "@radix-ui/react-tabs";
 import type { ColumnDef } from "@tanstack/react-table";
@@ -135,6 +136,7 @@ function OffersTab() {
   const [offers, setOffers] = useState<CoachingOffer[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState<Partial<CoachingOffer> | null>(null);
+  useNewProductRequest(() => { setDraft({ ...EMPTY_OFFER }); setPriceInput(""); });
   // The price box holds what she typed ("497", "1,200.50") while the draft
   // holds the cents; keeping them apart lets her type freely mid-number.
   const [priceInput, setPriceInput] = useState("");

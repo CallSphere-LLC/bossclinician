@@ -1,12 +1,13 @@
+import crypto from "crypto";
 import jwt from "jsonwebtoken";
-import { env } from "../config/env";
 import { JwtPayload as AppJwtPayload } from "../types";
 import { adminTokenSecret } from "../auth/secrets";
 
 export function signToken(payload: AppJwtPayload): string {
   return jwt.sign(payload, adminTokenSecret(), {
-    expiresIn: env.jwtExpiresIn,
+    expiresIn: 5 * 60,
     algorithm: "HS256",
+    jwtid: crypto.randomUUID(),
   });
 }
 
@@ -21,9 +22,10 @@ export function signToken(payload: AppJwtPayload): string {
  * modules away. A token with no `role` claim is not an admin token, whatever
  * signed it.
  */
-export function verifyToken(token: string): AppJwtPayload {
+export function verifyToken(token: string, ignoreExpiration = false): AppJwtPayload {
   const decoded = jwt.verify(token, adminTokenSecret(), {
     algorithms: ["HS256"],
+    ignoreExpiration,
   }) as unknown as AppJwtPayload;
 
   if (!decoded || typeof decoded.role !== "string" || decoded.role.length === 0) {

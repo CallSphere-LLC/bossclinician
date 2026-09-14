@@ -1,0 +1,19 @@
+ attempt_id |                       email                       | contact_id |               responses               |       name       |      result_tag      
+------------+---------------------------------------------------+------------+---------------------------------------+------------------+----------------------
+         10 | sagar+zz-bughunt-quiz-origin-after@callsphere.ai  |         70 | [{"answerIds": [1], "questionId": 1}] | ZZ Bug Hunt Quiz | Quiz — Steady Grower
+         11 | sagar+zz-bughunt-quiz-origin-normal@callsphere.ai |         71 | [{"answerIds": [1], "questionId": 1}] | ZZ Bug Hunt Quiz | Quiz — Steady Grower
+(2 rows)
+
+ count 
+-------
+     5
+(1 row)
+
+ id |                       email                       
+----+---------------------------------------------------
+ 68 | sagar+footersep12@callsphere.ai
+ 69 | sagar+zz-bughunt-quiz-retest-fast@callsphere.ai
+ 70 | sagar+zz-bughunt-quiz-origin-after@callsphere.ai
+ 71 | sagar+zz-bughunt-quiz-origin-normal@callsphere.ai
+(4 rows)
+

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { useParams } from "react-router-dom";
 import { motion, useReducedMotion } from "motion/react";
 import ReactMarkdown from "react-markdown";
@@ -6,11 +6,28 @@ import remarkGfm from "remark-gfm";
 import { Seo } from "@/components/Seo";
 import { GlassCard } from "@/components/luxe/GlassCard";
 import { LuxeButton } from "@/components/luxe/LuxeButton";
-import { LuxeInput, LuxeSelect, LuxeTextarea } from "@/components/luxe/LuxeField";
+import {
+  LuxeInput,
+  LuxeSelect,
+  LuxeTextarea,
+  luxeControlClass,
+} from "@/components/luxe/LuxeField";
 import { LuxePageHero } from "@/components/luxe/LuxePageHero";
 import { GoldRule, Section } from "@/components/luxe/Section";
 import { ApiError, api } from "@/lib/api";
 import { cn } from "@/lib/cn";
+import { formatBytes } from "@/lib/format";
+import {
+  FILE_CATEGORY_LABEL,
+  acceptAttribute,
+  fileCategoriesOf,
+  fileProblem,
+  maxSizeMbOf,
+  ruleProblem,
+  visibleQuestionKeys,
+  type ShowIf,
+} from "@/lib/formLogic";
+import { submitFormWithFiles } from "@/lib/publicFormUpload";
 import { contactPage } from "@/content/site";
 import NotFound from "@/pages/NotFound";
 import type { PublicForm, PublicFormField } from "@/types";
@@ -20,11 +37,41 @@ const IDENTITY_NAME = "__contact_name";
 const IDENTITY_EMAIL = "__contact_email";
 
 /**
- * The answers, keyed by the admin's own field keys. Only the checkbox holds a
- * boolean; every other control the builder offers is a string, so the shape is
- * known even though the keys are not.
+ * The answers, keyed by the admin's own field keys. The single tick box holds a
+ * boolean, "tick any that apply" a list of the ticked choices, and every other
+ * control a string. Files are held apart, in their own state.
  */
-type FormValues = Record<string, string | boolean>;
+type FormValues = Record<string, string | boolean | string[]>;
+
+/**
+ * A question as the builder stores it. The public endpoint passes every stored
+ * property through; `PublicFormField` names only the original few.
+ */
+type RenderedField = PublicFormField & {
+  placeholder?: string;
+  helpText?: string;
+  minLength?: number | null;
+  maxLength?: number | null;
+  pattern?: string;
+  showIf?: ShowIf | null;
+  fileTypes?: string[];
+  maxSizeMb?: number;
+};
+
+const CAPTION = "text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-orchid";
+const TICK =
+  "mt-0.5 h-4 w-4 shrink-0 accent-gold outline-none focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold/70";
+
+/** One tappable row for a tick box or a radio choice. */
+function choiceRow(invalid: boolean): string {
+  return cn(
+    "flex min-h-[2.75rem] cursor-pointer items-start gap-3 rounded-xl border px-4 py-3.5",
+    "transition-colors duration-300",
+    invalid
+      ? "border-red-400/60 bg-red-500/[0.06]"
+      : "border-white/12 bg-white/[0.04] hover:border-white/20",
+  );
+}
 
 /**
  * The three columns the public endpoint now serves that `PublicForm` does not
@@ -35,7 +82,8 @@ type FormValues = Record<string, string | boolean>;
  * of them lands first — and a missing `postAction` has to mean "show the
  * message", which is what every form did before the choice was honoured at all.
  */
-type PublicFormDelivery = PublicForm & {
+type PublicFormDelivery = Omit<PublicForm, "fields"> & {
+  fields: RenderedField[];
   descriptionMd?: string;
   postAction?: "message" | "redirect" | "download";
   redirectUrl?: string;
@@ -105,6 +153,12 @@ export default function FormPage() {
   // re-runs the effect.
   const [loadError, setLoadError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  // Chosen files, held apart from the typed answers: a File can't be trimmed,
+  // compared or sent as JSON. A question with nothing chosen has no entry.
+  const [files, setFiles] = useState<Record<string, File | null>>({});
+  const [fileErrors, setFileErrors] = useState<Record<string, string>>({});
+  const fileInputs = useRef<Record<string, HTMLInputElement | null>>({});
+  const fieldIds = useId();
 
   const retry = useCallback(() => setReloadKey((n) => n + 1), []);
 
@@ -113,6 +167,8 @@ export default function FormPage() {
     setForm(undefined);
     setLoadError(null);
     setValues({});
+    setFiles({});
+    setFileErrors({});
     api
       .publicForm(slug)
       .then((result) => {
@@ -143,20 +199,68 @@ export default function FormPage() {
   // would only be a way for the two to disagree.
   function textOf(field: PublicFormField): string {
     const value = values[field.key];
-    return typeof value === "string" ? value : "";
+    if (typeof value === "string") return value;
+    // A hidden question is "filled in for them" by the link that brought them
+    // here: /f/<slug>?<key>=<value>, the way a campaign link carries its source.
+    if (field.type === "hidden" && typeof window !== "undefined") {
+      return new URLSearchParams(window.location.search).get(field.key) ?? "";
+    }
+    return "";
   }
 
   function checkedOf(field: PublicFormField): boolean {
     return values[field.key] === true;
   }
 
-  function isMissing(field: PublicFormField): boolean {
-    if (!field.required) return false;
-    return field.type === "checkbox" ? !checkedOf(field) : !textOf(field).trim();
+  function listOf(field: PublicFormField): string[] {
+    const value = values[field.key];
+    return Array.isArray(value) ? value : [];
   }
 
-  function setValue(key: string, value: string | boolean) {
+  function fileOf(field: PublicFormField): File | null {
+    return files[field.key] ?? null;
+  }
+
+  function isMissing(field: PublicFormField): boolean {
+    // Nobody can fill in a box they can't see, so it never blocks the reply.
+    if (!field.required || field.type === "hidden") return false;
+    if (field.type === "checkbox") return !checkedOf(field);
+    if (field.type === "checkboxes") return listOf(field).length === 0;
+    if (field.type === "file") return fileOf(field) === null;
+    return !textOf(field).trim();
+  }
+
+  function setValue(key: string, value: string | boolean | string[]) {
     setValues((prev) => ({ ...prev, [key]: value }));
+  }
+
+  /**
+   * The answers as the show rules read them: what was typed or ticked, and a
+   * marker for each question a file has been chosen for.
+   */
+  function answersForRules(): Record<string, unknown> {
+    const answers: Record<string, unknown> = { ...values };
+    for (const [key, file] of Object.entries(files)) if (file) answers[key] = { file: true };
+    return answers;
+  }
+
+  /**
+   * A file picked (or removed). The kind and size are checked here from the
+   * name and the size, so a 30MB photo is refused before a slow upload rather
+   * than after it; the server checks the bytes themselves either way.
+   */
+  function chooseFile(field: RenderedField, file: File | null) {
+    const problem = file ? fileProblem(field, file) : null;
+    setFileErrors((prev) => {
+      const next = { ...prev };
+      if (problem) next[field.key] = problem;
+      else delete next[field.key];
+      return next;
+    });
+    setFiles((prev) => ({ ...prev, [field.key]: problem ? null : file }));
+    // A refused or removed file must not stay in the picker looking chosen.
+    const input = fileInputs.current[field.key];
+    if (input && (problem || !file)) input.value = "";
   }
 
   async function handleSubmit(e: FormEvent) {
@@ -164,12 +268,17 @@ export default function FormPage() {
     if (!form) return;
     setError(null);
 
-    // Required-ness is the only rule the builder can express, so one message
-    // covers the whole set and the offending controls are flagged individually
-    // for assistive tech below.
+    // Only the questions this person is actually shown count: one whose show
+    // rule isn't met is neither required nor sent. The server decides the same
+    // thing again from the same rules (services/formLogic.ts).
+    const visible = visibleQuestionKeys(form.fields, answersForRules());
+    const shown = form.fields.filter((field) => !isIdentityField(field) && visible.has(field.key));
+
+    // Required-ness gets one message for the whole set, and the offending
+    // controls are flagged individually for assistive tech below.
     const name = String(values[IDENTITY_NAME] ?? "").trim();
     const email = String(values[IDENTITY_EMAIL] ?? "").trim().toLowerCase();
-    if (!name || !email || form.fields.some((field) => !isIdentityField(field) && isMissing(field))) {
+    if (!name || !email || shown.some((field) => isMissing(field))) {
       setError("Please fill in the fields marked with a star before submitting.");
       return;
     }
@@ -186,20 +295,51 @@ export default function FormPage() {
       return;
     }
 
-    // Every field is sent, including the untouched optional ones: the
+    // The "More rules" on each question, and each chosen file, get a sentence
+    // of their own: "fill in the starred fields" is no help when the problem is
+    // a ZIP code with four digits in it.
+    for (const field of shown) {
+      const file = field.type === "file" ? fileOf(field) : null;
+      const problem =
+        field.type === "file"
+          ? file && fileProblem(field, file)
+          : field.type === "hidden"
+            ? null
+            : ruleProblem(field, values[field.key]);
+      if (problem) {
+        setError(problem);
+        return;
+      }
+    }
+
+    // Every shown field is sent, including the untouched optional ones: the
     // submissions inbox lists whatever keys arrive, and a form whose columns
-    // change from row to row is unreadable there.
+    // change from row to row is unreadable there. Files travel separately.
     const data: Record<string, unknown> = {};
-    for (const field of form.fields) {
-      if (isIdentityField(field)) continue;
-      data[field.key] = field.type === "checkbox" ? checkedOf(field) : textOf(field).trim();
+    const attached: Record<string, File> = {};
+    for (const field of shown) {
+      if (field.type === "file") {
+        const file = fileOf(field);
+        if (file) attached[field.key] = file;
+        continue;
+      }
+      data[field.key] =
+        field.type === "checkbox"
+          ? checkedOf(field)
+          : field.type === "checkboxes"
+            ? listOf(field)
+            : textOf(field).trim();
     }
     data.name = name;
     data.email = email;
 
     setStatus("loading");
     try {
-      const result = await api.submitForm(form.slug, data, email);
+      // JSON exactly as before unless a file is actually attached.
+      const result =
+        Object.keys(attached).length > 0
+          ? await submitFormWithFiles(form.slug, data, email, attached)
+          : await api.submitForm(form.slug, data, email);
 
       // What the admin chose should happen next. A form built to send people to
       // a booking page, a checkout or a download used to end on the thank-you
@@ -215,8 +355,20 @@ export default function FormPage() {
 
       setSuccessMessage(result.message || form.successMessage);
       setStatus("success");
-    } catch {
+    } catch (err) {
       setStatus("error");
+      // A refusal the server explains — a required answer, a file of the wrong
+      // kind or size, too many uploads in an hour — is shown in its own words,
+      // because "email us instead" is no help when the fix is on this page.
+      if (
+        err instanceof ApiError &&
+        (err.status === 400 || err.status === 413 || err.status === 429) &&
+        err.message &&
+        err.message !== "Invalid submission"
+      ) {
+        setError(err.message);
+        return;
+      }
       setError(
         `Something went wrong submitting this form. Please email ${contactPage.email} directly.`,
       );
@@ -277,8 +429,11 @@ export default function FormPage() {
   const invalidSubmit = error !== null && status !== "error";
   const name = String(values[IDENTITY_NAME] ?? "");
   const email = String(values[IDENTITY_EMAIL] ?? "");
+  // Worked out on every render, so a question appears the moment the answer it
+  // depends on is given and goes again the moment it is changed.
+  const visible = visibleQuestionKeys(form.fields, answersForRules());
 
-  function renderField(field: PublicFormField) {
+  function renderField(field: RenderedField) {
     const invalid = invalidSubmit && isMissing(field);
     // LuxeField applies its own aria-invalid before spreading props, so these
     // win — the same arrangement the lead form relies on.
@@ -286,6 +441,15 @@ export default function FormPage() {
       "aria-invalid": invalid ? true : undefined,
       "aria-describedby": invalid ? errorId : undefined,
     } as const;
+    // The builder's "note under the question" and "faint text inside the box".
+    const hint = field.helpText?.trim() || undefined;
+    const placeholder = field.placeholder?.trim() || undefined;
+    const options = (field.options ?? []).map((option) => option.trim()).filter(Boolean);
+    const star = field.required ? (
+      <span aria-hidden className="ml-1 text-gold">
+        *
+      </span>
+    ) : null;
 
     switch (field.type) {
       case "textarea":
@@ -293,6 +457,8 @@ export default function FormPage() {
           <LuxeTextarea
             key={field.key}
             label={field.label}
+            hint={hint}
+            placeholder={placeholder}
             name={field.key}
             rows={5}
             required={field.required}
@@ -307,6 +473,7 @@ export default function FormPage() {
           <LuxeSelect
             key={field.key}
             label={field.label}
+            hint={hint}
             name={field.key}
             required={field.required}
             value={textOf(field)}
@@ -328,8 +495,8 @@ export default function FormPage() {
         // A checkbox has no field shell: the label belongs beside the box, not
         // above it as an uppercase caption, and the whole row is the tap target.
         return (
+          <div key={field.key} className="flex flex-col gap-2">
           <label
-            key={field.key}
             className={cn(
               "flex min-h-[2.75rem] cursor-pointer items-start gap-3 rounded-xl border px-4 py-3.5",
               "transition-colors duration-300",
@@ -355,15 +522,134 @@ export default function FormPage() {
               )}
             </span>
           </label>
+          {hint && <p className="text-xs text-orchid-faint">{hint}</p>}
+          </div>
         );
+
+      case "radio":
+      case "checkboxes": {
+        // Choices as choices. Drawn as a free-text box before, which made a
+        // "choose one" question something people had to spell exactly.
+        const multiple = field.type === "checkboxes";
+        const ticked = listOf(field);
+        return (
+          <fieldset key={field.key} className="flex flex-col gap-2">
+            <legend className={cn(CAPTION, "mb-2")}>
+              {field.label}
+              {star}
+            </legend>
+            <div className="grid gap-2">
+              {options.map((option) => (
+                <label key={option} className={choiceRow(invalid)}>
+                  <input
+                    type={multiple ? "checkbox" : "radio"}
+                    name={field.key}
+                    value={option}
+                    checked={multiple ? ticked.includes(option) : textOf(field) === option}
+                    onChange={(e) =>
+                      multiple
+                        ? setValue(
+                            field.key,
+                            e.target.checked
+                              ? [...ticked.filter((entry) => entry !== option), option]
+                              : ticked.filter((entry) => entry !== option),
+                          )
+                        : setValue(field.key, option)
+                    }
+                    className={TICK}
+                    aria-describedby={a11y["aria-describedby"]}
+                  />
+                  <span className="text-[0.95rem] leading-relaxed text-white/85">{option}</span>
+                </label>
+              ))}
+            </div>
+            {hint && <p className="text-xs text-orchid-faint">{hint}</p>}
+          </fieldset>
+        );
+      }
+
+      case "file": {
+        const chosen = fileOf(field);
+        const inputId = `${fieldIds}-${field.key}`;
+        const refusal = fileErrors[field.key];
+        const kinds = fileCategoriesOf(field)
+          .map((category) => FILE_CATEGORY_LABEL[category])
+          .join(", ");
+        return (
+          <div key={field.key} className="flex flex-col gap-2">
+            <label htmlFor={inputId} className={CAPTION}>
+              {field.label}
+              {star}
+            </label>
+            <input
+              id={inputId}
+              ref={(element) => {
+                fileInputs.current[field.key] = element;
+              }}
+              type="file"
+              name={field.key}
+              accept={acceptAttribute(field)}
+              onChange={(e) => chooseFile(field, e.target.files?.[0] ?? null)}
+              className={cn(
+                luxeControlClass,
+                "cursor-pointer file:mr-3 file:cursor-pointer file:rounded-lg file:border-0 file:bg-gold/15 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-gold",
+                (invalid || refusal) && "border-red-400/60",
+              )}
+              aria-invalid={invalid || refusal ? true : undefined}
+              aria-describedby={invalid ? errorId : undefined}
+            />
+            <p className="text-xs text-orchid-faint">
+              {hint ? `${hint} ` : ""}
+              {kinds}, up to {maxSizeMbOf(field)} MB.
+            </p>
+            {chosen && (
+              <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-white/75">
+                <span className="min-w-0 break-all">
+                  {chosen.name} · {formatBytes(chosen.size)}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => chooseFile(field, null)}
+                  className="font-semibold text-gold underline-offset-2 hover:underline"
+                >
+                  Remove
+                </button>
+              </p>
+            )}
+            {refusal && (
+              <p role="alert" className="text-xs font-medium text-red-400">
+                {refusal}
+              </p>
+            )}
+          </div>
+        );
+      }
+
+      // "Filled in for them": carried with the reply, never shown as a box the
+      // reader is left wondering whether to type into.
+      case "hidden":
+        return <input key={field.key} type="hidden" name={field.key} value={textOf(field)} />;
 
       default:
         return (
           <LuxeInput
             key={field.key}
             label={field.label}
+            hint={hint}
+            placeholder={placeholder}
             name={field.key}
-            type={field.type === "email" ? "email" : "text"}
+            type={
+              field.type === "email"
+                ? "email"
+                : field.type === "phone"
+                  ? "tel"
+                  : field.type === "number"
+                    ? "number"
+                    : field.type === "date"
+                      ? "date"
+                      : "text"
+            }
+            inputMode={field.type === "number" ? "decimal" : undefined}
             autoComplete={autoCompleteFor(field)}
             required={field.required}
             value={textOf(field)}
@@ -462,7 +748,9 @@ export default function FormPage() {
                 aria-invalid={invalidSubmit && !email.trim() ? true : undefined}
                 aria-describedby={invalidSubmit && !email.trim() ? errorId : undefined}
               />
-              {form.fields.filter((field) => !isIdentityField(field)).map(renderField)}
+              {form.fields
+                .filter((field) => !isIdentityField(field) && visible.has(field.key))
+                .map(renderField)}
 
               {error && (
                 <motion.p

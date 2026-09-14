@@ -1,3 +1,4 @@
+import { sweepAbandonedCheckouts } from "../services/checkoutRecovery";
 import { pool } from "../db/pool";
 import { sweepExpiredGrants } from "../services/access";
 import { sweepUploadSessions } from "../services/resumableUploads";
@@ -163,49 +164,6 @@ async function sweepDefaultedPlans(): Promise<{ defaulted: number }> {
   return { defaulted };
 }
 
-/**
- * Recovery emails for abandoned carts, at +1h, +24h and +72h.
- *
- * The schedule is the brief's, and the report in Phase 9 measures against it.
- * `emails_sent` is the step counter rather than a timestamp comparison so a
- * schedule change does not retroactively re-send to everyone.
- */
-const RECOVERY_STEPS = [
-  { after: 1, step: 0 },
-  { after: 24, step: 1 },
-  { after: 72, step: 2 },
-];
-
-async function sweepAbandonedCheckouts(): Promise<{ queued: number }> {
-  const { enqueue, PRIORITY } = await import("./queue");
-  let queued = 0;
-
-  for (const { after, step } of RECOVERY_STEPS) {
-    const due = await pool.query<{ id: number }>(
-      `SELECT id FROM abandoned_checkouts
-        WHERE recovered_at IS NULL
-          AND emails_sent = $1
-          AND created_at < now() - make_interval(hours => $2)
-        LIMIT 500`,
-      [step, after]
-    );
-
-    for (const row of due.rows) {
-      // Dedupe on the cart and the step, so a tick that overlaps the previous
-      // one cannot queue the same email twice.
-      const id = await enqueue({
-        kind: "checkout.recoveryEmail",
-        payload: { abandonedCheckoutId: row.id, step },
-        priority: PRIORITY.bulk,
-        dedupeKey: `cart-recovery:${row.id}:${step}`,
-      });
-      if (id) queued += 1;
-    }
-  }
-
-  return { queued };
-}
-
 /** Keeps the jobs table from growing without bound. */
 async function jobRetention(): Promise<{ removed: number }> {
   const [jobs, events, deliveries] = await Promise.all([
@@ -241,6 +199,10 @@ async function jobRetention(): Promise<{ removed: number }> {
  * happened to reference its module.
  */
 export function registerCoreHandlers(): void {
+  registerHandler("purchase.gift", async (payload) => {
+    const { deliverGiftById } = await import("../services/purchaseGift");
+    await deliverGiftById(Number((payload as { orderId: number }).orderId));
+  });
   registerHandler("orders.sweepStale", () => sweepStaleOrders());
   registerHandler("plans.sweepDefaulted", () => sweepDefaultedPlans());
   registerHandler("checkout.abandoned", () => sweepAbandonedCheckouts());

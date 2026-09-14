@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, useSyncExternalStore, type ReactNode } from "react";
 import { enableEntrances } from "@/hooks/useEntranceMotion";
 import type { HeadDescriptor } from "@/seo/types";
 
@@ -48,6 +48,7 @@ const SsrContext = createContext<SsrRuntime | null>(null);
  * rather than replaying whatever the document was born with.
  */
 let payloadLive = true;
+const subscribeToPayload = () => () => {};
 
 export function SsrProvider({
   runtime,
@@ -73,8 +74,11 @@ export interface SsrSeed<T> {
 /** Reads one loader result, once, for the mount that is happening now. */
 export function useSsrSeed<T>(key: string): SsrSeed<T> {
   const runtime = useContext(SsrContext);
+  // Suspense can hydrate this route after the provider's first effect.
+  // Keep its server data for that hydration; later SPA mounts fetch afresh.
+  const live = useSyncExternalStore(subscribeToPayload, () => payloadLive, () => true);
   const [seed] = useState<SsrSeed<T>>(() => {
-    if (!payloadLive || !runtime || !(key in runtime.payload.data)) {
+    if (!live || !runtime || !(key in runtime.payload.data)) {
       return { seeded: false, value: undefined };
     }
     return { seeded: true, value: runtime.payload.data[key] as T | null };

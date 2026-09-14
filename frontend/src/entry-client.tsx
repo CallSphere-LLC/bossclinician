@@ -1,3 +1,5 @@
+import { initializeSiteTheme } from "./lib/siteTheme";
+import { clearLegacyAdminToken } from "./lib/adminTransport";
 import { StrictMode, type ReactNode } from "react";
 import { createRoot, hydrateRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
@@ -6,6 +8,9 @@ import { enableEntrances } from "./hooks/useEntranceMotion";
 import { SSR_PAYLOAD_ID, SsrProvider, type SsrPayload, type SsrRuntime } from "./ssr/context";
 import { preloadPublicRoute } from "./ssr/preload";
 import "./index.css";
+
+clearLegacyAdminToken();
+initializeSiteTheme();
 
 const container = document.getElementById("root");
 if (!container) {

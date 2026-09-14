@@ -107,5 +107,58 @@ else
 fi
 
 echo
+echo "TURN relay — the community live room's own coturn, not the telehealth one"
+if command -v docker >/dev/null 2>&1 && [ -f .env ]; then
+  TPORT=$(grep -E '^TURN_PORT=' .env | cut -d= -f2)
+  THOST=$(grep -E '^TURN_HOST=' .env | cut -d= -f2)
+  TSECRET=$(grep -E '^TURN_STATIC_AUTH_SECRET=' .env | cut -d= -f2)
+
+  # It must be OUR relay on OUR port. 3478 is the telehealth relay; pointing
+  # this app back at it is the regression this check exists to catch.
+  if [ "$TPORT" = "3478" ]; then
+    bad "TURN_PORT is 3478 — that is the telehealth relay, not this app's"
+  else
+    ok "TURN_PORT is $TPORT (not the telehealth relay's 3478)"
+  fi
+
+  UDP=$(ss -lun 2>/dev/null | grep -c ":$TPORT\b")
+  [ "${UDP:-0}" -gt 0 ] && ok "relay listening on UDP $TPORT" \
+                        || bad "nothing listening on UDP $TPORT"
+
+  # A real allocation, with a credential minted exactly as the ICE endpoint
+  # does. Proves the secret coturn runs with and the secret the API signs with
+  # are still the same one — a mismatch fails only for users behind symmetric
+  # NAT, so nothing else here would notice it.
+  if [ -n "$TSECRET" ]; then
+    CREDS=$(python3 -c "
+import hmac,hashlib,base64,time
+u=f'{int(time.time())+7200}:smoketest'
+print(u, base64.b64encode(hmac.new('$TSECRET'.encode(),u.encode(),hashlib.sha1).digest()).decode())
+" 2>/dev/null)
+    RELAY=$(docker compose exec -T coturn turnutils_uclient -v \
+              -u "$(echo "$CREDS" | cut -d' ' -f1)" \
+              -w "$(echo "$CREDS" | cut -d' ' -f2)" \
+              -p "$TPORT" -e "$THOST" -n 1 "$THOST" 2>/dev/null \
+            | grep -oE 'Received relay addr: [0-9.]+:[0-9]+' | head -1)
+    if [ -n "$RELAY" ]; then
+      RPORT=${RELAY##*:}
+      # Read the range out of docker-compose.yml rather than repeating it, so
+      # this check follows the relay's configuration instead of drifting from it.
+      RMIN=$(grep -oE '\-\-min-port=[0-9]+' docker-compose.yml | head -1 | cut -d= -f2)
+      RMAX=$(grep -oE '\-\-max-port=[0-9]+' docker-compose.yml | head -1 | cut -d= -f2)
+      if [ -n "$RMIN" ] && [ "$RPORT" -ge "$RMIN" ] && [ "$RPORT" -le "$RMAX" ]; then
+        ok "allocated a relay port in this app's range ($RPORT of $RMIN-$RMAX)"
+      else
+        bad "relay port $RPORT is outside this app's $RMIN-$RMAX range"
+      fi
+    else
+      bad "the API's own credential could not allocate — secret mismatch?"
+    fi
+  fi
+else
+  echo "  (docker or .env not available — skipping relay checks)"
+fi
+
+echo
 printf 'passed %d, failed %d\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ] || exit 1

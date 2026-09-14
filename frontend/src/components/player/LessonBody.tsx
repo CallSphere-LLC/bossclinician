@@ -1,3 +1,4 @@
+import { LessonAssessment } from "./LessonAssessment";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ExternalLink, FileDown } from "lucide-react";
@@ -86,14 +87,10 @@ export function LessonBody({ lesson, courseImage, onSaved }: LessonBodyProps) {
       return (
         <div className="flex flex-col gap-6">
           {lesson.assessmentSlug ? (
-            <iframe
-              src={`/quiz/${encodeURIComponent(lesson.assessmentSlug)}`}
-              title={`${lesson.title} graded test`}
-              className="h-[46rem] max-h-[85vh] w-full rounded-2xl border border-white/10 bg-night-raised"
-            />
+            <LessonAssessment slug={lesson.assessmentSlug} />
           ) : (
             <p className="rounded-2xl border border-gold/25 bg-gold/[0.06] px-5 py-6 text-sm text-orchid">
-              This graded test is not live yet. Please check back shortly.
+              This assessment is not live yet. Please check back shortly.
             </p>
           )}
           {notes}

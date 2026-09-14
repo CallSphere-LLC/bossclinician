@@ -1,5 +1,9 @@
 {
   "permissions": {
+    "allow": [
+      "Bash(git fetch *)",
+      "Bash(sudo ss -lnup 2>/dev/null | grep -cE ':3479 ' ; echo \"^ count of listeners on 3479 \\(0 = free\\)\"; sudo ss -lnup 2>/dev/null | grep -oE ':492[0-9][0-9]' | sort -u | head -5; echo \"^ listeners in 49200-49299 \\(empty = free\\)\"; echo \"=== compose services ===\"; grep -nE \"^  [a-z]+:\" docker-compose.yml)"
+    ],
     "defaultMode": "bypassPermissions"
   }
 }

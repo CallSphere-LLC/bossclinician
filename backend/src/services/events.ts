@@ -29,6 +29,8 @@ export interface EventSchedule {
   evergreenIntervalMinutes: number | null;
   /** Null means the replay never expires. */
   replayExpiresAfterHours: number | null;
+  /** A live event that repeats. Absent or null for a single session. */
+  recurrence?: RecurrenceRule | null;
 }
 
 /**
@@ -77,6 +79,202 @@ function readInZone(date: Date, timeZone: string): ZonedReading {
   };
 }
 
+/* -------------------------------------------------------------- recurrence */
+
+/**
+ * A live event that repeats: daily, weekly or monthly, every N, until a date or
+ * for a number of sessions.
+ *
+ * Sessions are generated on the wall clock in the event's own zone, never by
+ * adding milliseconds. A 6:00 PM Eastern weekly session stays at 6:00 PM on
+ * both sides of the November fall-back; seven times 86,400,000 would move it to
+ * 5:00 PM for every week after the change. This is also why the calendar file
+ * carries each session as its own entry rather than a UTC RRULE — a UTC rule
+ * expands in UTC and drifts by the same hour in every calendar that reads it.
+ *
+ * A rule always ends. An open-ended series cannot be written out as sessions,
+ * and a registration that never finishes cannot be reported on.
+ */
+
+export type RecurrenceFreq = "daily" | "weekly" | "monthly";
+
+export interface RecurrenceRule {
+  freq: RecurrenceFreq;
+  /** Every N days, weeks or months. */
+  interval: number;
+  /** The last calendar date a session may fall on, YYYY-MM-DD in the event's zone (inclusive). */
+  until: string | null;
+  /** How many sessions in all, the first included. */
+  count: number | null;
+}
+
+/** The most sessions one series may have — enough for a daily event for half a year. */
+export const MAX_OCCURRENCES = 200;
+
+const DATE_ONLY = /^(\d{4})-(\d{2})-(\d{2})$/;
+
+function dateKey(year: number, month: number, day: number): string {
+  return `${String(year).padStart(4, "0")}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
+function expandOccurrences(
+  startsAt: Date,
+  timeZone: string,
+  rule: RecurrenceRule,
+  cap: number
+): Date[] {
+  const first = readInZone(startsAt, timeZone);
+  const interval = Number.isInteger(rule.interval) && rule.interval > 0 ? rule.interval : 1;
+  const limit = Math.min(rule.count ?? cap, cap);
+  const until = rule.until && DATE_ONLY.test(rule.until) ? rule.until : null;
+
+  const out: Date[] = [];
+  // A monthly rule on the 31st skips the months that do not have one — the
+  // same answer RRULE gives — so the loop allows for misses.
+  const maxSteps = limit * 12 + 12;
+  for (let step = 0; step < maxSteps && out.length < limit; step += 1) {
+    let year: number;
+    let month: number;
+    const day = first.day;
+
+    if (rule.freq === "monthly") {
+      const probe = new Date(Date.UTC(first.year, first.month - 1 + step * interval, 1, 12));
+      year = probe.getUTCFullYear();
+      month = probe.getUTCMonth() + 1;
+      if (until && dateKey(year, month, 1) > until) break;
+      const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+      if (day > daysInMonth) continue;
+      if (until && dateKey(year, month, day) > until) break;
+      out.push(
+        step === 0 ? startsAt : zonedWallClockToUtc(year, month, day, first.minuteOfDay, timeZone)
+      );
+      continue;
+    }
+
+    const days = (rule.freq === "weekly" ? 7 : 1) * step * interval;
+    // Anchored at midday so the calendar arithmetic cannot be moved by a
+    // transition, then read back as a date.
+    const probe = new Date(Date.UTC(first.year, first.month - 1, first.day + days, 12));
+    year = probe.getUTCFullYear();
+    month = probe.getUTCMonth() + 1;
+    const probeDay = probe.getUTCDate();
+    if (until && dateKey(year, month, probeDay) > until) break;
+    out.push(
+      step === 0 ? startsAt : zonedWallClockToUtc(year, month, probeDay, first.minuteOfDay, timeZone)
+    );
+  }
+  return out.length > 0 ? out : [startsAt];
+}
+
+/**
+ * Every session of an event, in order. A single-session event is a series of
+ * one, so callers never need a second code path.
+ */
+export function occurrencesFor(
+  startsAt: Date,
+  timeZone: string,
+  rule: RecurrenceRule | null | undefined
+): Date[] {
+  if (!rule || (rule.count === null && rule.until === null)) return [startsAt];
+  return expandOccurrences(startsAt, timeZone, rule, MAX_OCCURRENCES);
+}
+
+/**
+ * The session a registration is about at `now`: the first one that has not yet
+ * finished, or the last one once the whole series is over.
+ *
+ * `notBefore` is the registration's own first session, so somebody who joined
+ * a series half way through is never shown — or reminded about — the sessions
+ * that happened before they signed up.
+ */
+export function occurrenceAt(
+  occurrences: Date[],
+  durationMinutes: number,
+  now: Date,
+  notBefore?: Date | null
+): Date | null {
+  const eligible = notBefore
+    ? occurrences.filter((at) => at.getTime() >= notBefore.getTime())
+    : occurrences;
+  const series = eligible.length > 0 ? eligible : occurrences;
+  if (series.length === 0) return null;
+  const length = durationMinutes * 60_000;
+  return series.find((at) => at.getTime() + length >= now.getTime()) ?? series[series.length - 1];
+}
+
+const FREQ_UNIT: Record<RecurrenceFreq, string> = { daily: "day", weekly: "week", monthly: "month" };
+
+/** "Every week, 6 sessions" / "Every 2 weeks until October 31, 2026". */
+export function describeRecurrence(rule: RecurrenceRule | null | undefined): string {
+  if (!rule) return "";
+  const unit = FREQ_UNIT[rule.freq] ?? "week";
+  const head = rule.interval > 1 ? `Every ${rule.interval} ${unit}s` : `Every ${unit}`;
+  if (rule.count !== null) {
+    return `${head}, ${rule.count} ${rule.count === 1 ? "session" : "sessions"}`;
+  }
+  const match = rule.until ? DATE_ONLY.exec(rule.until) : null;
+  if (match) {
+    const label = new Intl.DateTimeFormat("en-US", {
+      timeZone: "UTC",
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+    }).format(new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]), 12)));
+    return `${head} until ${label}`;
+  }
+  return head;
+}
+
+/**
+ * What is wrong with a repeat rule, in words about the event, or null.
+ *
+ * The table has a CHECK constraint as a backstop; this is the sentence the
+ * editor shows instead of a constraint name.
+ */
+export function recurrenceProblem(input: {
+  kind: string;
+  startsAt: Date | null;
+  timezone: string;
+  rule: RecurrenceRule | null;
+}): string | null {
+  const { rule } = input;
+  if (!rule) return null;
+  if (input.kind !== "live") {
+    return "Only a live event can repeat. An always-on event already runs on its own cadence.";
+  }
+  if (!input.startsAt) return "A repeating event needs the date and time of its first session.";
+  if (!Number.isInteger(rule.interval) || rule.interval < 1 || rule.interval > 99) {
+    return "Repeat every 1 to 99 days, weeks or months.";
+  }
+  if (rule.until !== null && rule.count !== null) {
+    return "Choose an end date or a number of sessions, not both.";
+  }
+  if (rule.until === null && rule.count === null) {
+    return "Say when the repeats stop: an end date, or a number of sessions.";
+  }
+  if (rule.count !== null && (!Number.isInteger(rule.count) || rule.count < 1 || rule.count > MAX_OCCURRENCES)) {
+    return `A series can have between 1 and ${MAX_OCCURRENCES} sessions.`;
+  }
+  if (rule.until !== null) {
+    const match = DATE_ONLY.exec(rule.until);
+    const probe = match
+      ? new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])))
+      : null;
+    if (!match || !probe || probe.getUTCDate() !== Number(match[3])) {
+      return "The end date isn't a real date.";
+    }
+    const first = readInZone(input.startsAt, input.timezone);
+    if (rule.until < dateKey(first.year, first.month, first.day)) {
+      return "The end date is before the first session.";
+    }
+    const expanded = expandOccurrences(input.startsAt, input.timezone, rule, MAX_OCCURRENCES + 1);
+    if (expanded.length > MAX_OCCURRENCES) {
+      return `That end date makes more than ${MAX_OCCURRENCES} sessions. Pick an earlier date, or a number of sessions instead.`;
+    }
+  }
+  return null;
+}
+
 /**
  * The instant this registrant's session starts.
  *
@@ -97,7 +295,17 @@ export function sessionTimeFor(event: EventSchedule, registeredAt: Date): Date {
   if (event.kind === "live") {
     // The `event_shape` constraint guarantees a live event has a start; the
     // fallback only keeps a half-written draft from producing an invalid date.
-    return event.startsAt ?? registeredAt;
+    if (!event.startsAt) return registeredAt;
+    if (!event.recurrence) return event.startsAt;
+    // A series: the next session that has not finished yet, so signing up in
+    // week three books week three rather than a Tuesday that has gone.
+    return (
+      occurrenceAt(
+        occurrencesFor(event.startsAt, event.timezone, event.recurrence),
+        event.durationMinutes,
+        registeredAt
+      ) ?? event.startsAt
+    );
   }
   if (event.kind === "replay") return registeredAt;
 
@@ -230,38 +438,69 @@ export interface CalendarInvite {
   durationMinutes: number;
   /** Stamped as DTSTAMP. Passed in so the output is reproducible in a test. */
   generatedAt?: Date;
+  /** A physical address, written as LOCATION. Empty for an online event. */
+  location?: string;
+  /**
+   * Every session of a repeating event. When there is more than one, each is
+   * written as its own VEVENT; `startsAt` is ignored in favour of the list.
+   */
+  occurrences?: Date[];
+}
+
+/** "event-7-registration-42@bossclinician" → "event-7-registration-42-s3@bossclinician". */
+function occurrenceUid(uid: string, index: number): string {
+  const at = uid.lastIndexOf("@");
+  return at === -1 ? `${uid}-s${index + 1}` : `${uid.slice(0, at)}-s${index + 1}${uid.slice(at)}`;
 }
 
 /**
- * A one-event .ics file.
+ * A calendar file: one VEVENT, or one per session of a repeating event.
  *
  * Times are written in UTC rather than with a VTIMEZONE block: the instant is
  * unambiguous, every calendar client renders it in the reader's own zone, and
  * shipping a timezone definition is a way to be wrong in a client nobody here
  * can test against.
+ *
+ * A series is written as separate VEVENTs rather than an RRULE for the same
+ * reason. A rule anchored on a UTC DTSTART expands in UTC, so a weekly 6:00 PM
+ * Eastern session would show at 5:00 PM in every calendar after the clocks go
+ * back. The sessions here are already computed on the event's own wall clock,
+ * so writing each one out is exactly right in every client.
  */
 export function buildIcs(invite: CalendarInvite): string {
-  const endsAt = new Date(invite.startsAt.getTime() + invite.durationMinutes * 60_000);
+  const sessions =
+    invite.occurrences && invite.occurrences.length > 0 ? invite.occurrences : [invite.startsAt];
+  const stamp = icsStamp(invite.generatedAt ?? invite.startsAt);
+  const location = invite.location?.trim() ?? "";
+
+  const events = sessions.flatMap((startsAt, index) => {
+    const endsAt = new Date(startsAt.getTime() + invite.durationMinutes * 60_000);
+    return [
+      "BEGIN:VEVENT",
+      `UID:${sessions.length === 1 ? invite.uid : occurrenceUid(invite.uid, index)}`,
+      `DTSTAMP:${stamp}`,
+      `DTSTART:${icsStamp(startsAt)}`,
+      `DTEND:${icsStamp(endsAt)}`,
+      `SUMMARY:${icsEscape(invite.title)}`,
+      `DESCRIPTION:${icsEscape(invite.description)}`,
+      ...(location ? [`LOCATION:${icsEscape(location)}`] : []),
+      `URL:${icsEscape(invite.url)}`,
+      "BEGIN:VALARM",
+      "TRIGGER:-PT15M",
+      "ACTION:DISPLAY",
+      `DESCRIPTION:${icsEscape(invite.title)}`,
+      "END:VALARM",
+      "END:VEVENT",
+    ];
+  });
+
   const lines = [
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
     "PRODID:-//Boss Clinician//Events//EN",
     "CALSCALE:GREGORIAN",
     "METHOD:PUBLISH",
-    "BEGIN:VEVENT",
-    `UID:${invite.uid}`,
-    `DTSTAMP:${icsStamp(invite.generatedAt ?? invite.startsAt)}`,
-    `DTSTART:${icsStamp(invite.startsAt)}`,
-    `DTEND:${icsStamp(endsAt)}`,
-    `SUMMARY:${icsEscape(invite.title)}`,
-    `DESCRIPTION:${icsEscape(invite.description)}`,
-    `URL:${icsEscape(invite.url)}`,
-    "BEGIN:VALARM",
-    "TRIGGER:-PT15M",
-    "ACTION:DISPLAY",
-    `DESCRIPTION:${icsEscape(invite.title)}`,
-    "END:VALARM",
-    "END:VEVENT",
+    ...events,
     "END:VCALENDAR",
   ];
   // CRLF, which the spec requires and several clients enforce.
@@ -355,3 +594,178 @@ export function describeSession(sessionAt: Date, timeZone: string): string {
     timeZoneName: "short",
   }).format(sessionAt);
 }
+
+/* --------------------------------------------------------------- reminders */
+
+/**
+ * Event reminders: when one fires, and whether it may still be sent.
+ *
+ * The page has always promised these — "I'll hold you a place and remind you
+ * before we start" — and until now the only reminders that existed were three
+ * hard-coded steps buried in a job file, with no configuration, no record of
+ * what went, and no way to tell a reminder that was sent from one that was
+ * rejected by the mail provider. The configuration now lives on the event; the
+ * arithmetic that decides *when* lives here, pure, because the two ways to get
+ * it wrong are both unreproducible after the fact: a reminder that lands an
+ * hour out across a DST boundary, and a reminder that fires for a webinar which
+ * finished last week because the scheduler was restarted.
+ */
+
+export type ReminderKind = "registration" | "before";
+
+export interface ReminderSpec {
+  kind: ReminderKind;
+  /** Minutes before the session starts. Always 0 for a registration reminder. */
+  offsetMinutes: number;
+}
+
+/**
+ * How late a reminder may be and still be worth sending.
+ *
+ * The scheduler ticks every few minutes, so a minute or two of lateness is
+ * ordinary. An hour is not: it means the worker was down, and the whole point
+ * of a cap is that coming back up must not fire a backlog of reminders whose
+ * moment has gone. They are recorded as skipped instead, which is a fact
+ * somebody can look at rather than an email somebody has to apologise for.
+ */
+export const REMINDER_MAX_LATENESS_MINUTES = 60;
+
+/**
+ * The same cap for a registration confirmation, which is more forgiving.
+ *
+ * A confirmation three hours late is still the answer to "did that go
+ * through?", whereas a reminder three hours late for a webinar that started two
+ * hours ago is noise. The blast hazard is handled elsewhere and by
+ * construction: confirmations are only ever scheduled for registrations taken
+ * *after* the reminder was configured, so switching one on cannot mail the
+ * back catalogue.
+ */
+export const REGISTRATION_REMINDER_MAX_LATENESS_MINUTES = 360;
+
+/** Whole days, so "2 days before" is a wall-clock question rather than 2880 minutes. */
+function isWholeDays(offsetMinutes: number): boolean {
+  return offsetMinutes >= 1440 && offsetMinutes % 1440 === 0;
+}
+
+/**
+ * The same wall-clock time, N calendar days earlier, in `timeZone`.
+ *
+ * Subtracting 86,400,000 milliseconds is not the same question. A 6:00 PM
+ * Eastern webinar on 8 November wants its day-before reminder at 6:00 PM on the
+ * 7th — but the clocks go back on the 1st in some years and forward in March,
+ * and any pair of dates that straddles a transition is an hour out under
+ * millisecond arithmetic. An hour out is exactly the error that makes somebody
+ * distrust every time the platform ever shows them.
+ */
+function sameTimeDaysEarlier(at: Date, days: number, timeZone: string): Date {
+  const reading = readInZone(at, timeZone);
+  // Anchored at midday so the day arithmetic cannot itself be moved by a
+  // transition, then read back as a calendar date.
+  const shifted = new Date(Date.UTC(reading.year, reading.month - 1, reading.day - days, 12));
+  return zonedWallClockToUtc(
+    shifted.getUTCFullYear(),
+    shifted.getUTCMonth() + 1,
+    shifted.getUTCDate(),
+    reading.minuteOfDay,
+    timeZone
+  );
+}
+
+/**
+ * The instant a reminder is due.
+ *
+ * A registration confirmation is due when they registered. Everything else is
+ * measured back from *this registrant's own* session — which for an evergreen
+ * event is their session and nobody else's — in the event's own zone.
+ */
+export function reminderFireTime(
+  spec: ReminderSpec,
+  input: { sessionAt: Date; registeredAt: Date; timezone: string }
+): Date {
+  if (spec.kind === "registration") return input.registeredAt;
+  if (spec.offsetMinutes <= 0) return input.sessionAt;
+  if (isWholeDays(spec.offsetMinutes)) {
+    return sameTimeDaysEarlier(input.sessionAt, spec.offsetMinutes / 1440, input.timezone);
+  }
+  return new Date(input.sessionAt.getTime() - spec.offsetMinutes * 60_000);
+}
+
+/**
+ * "send" now, "wait" for later, or "skip" because the moment has gone.
+ *
+ * One function, two callers, on purpose. The scheduler asks it when it writes
+ * the plan — so a reminder configured after its own moment has passed is
+ * recorded as skipped rather than queued — and asks it again immediately before
+ * sending, because a row can sit in the queue across a restart that lasts
+ * longer than the reminder means anything for. Two copies of this rule would be
+ * two chances to send yesterday's reminders today.
+ */
+export type ReminderVerdict = "send" | "wait" | "skip";
+
+export function reminderVerdict(input: {
+  kind: ReminderKind;
+  offsetMinutes: number;
+  scheduledFor: Date;
+  sessionAt: Date;
+  durationMinutes: number;
+  now: Date;
+}): ReminderVerdict {
+  const now = input.now.getTime();
+  const due = input.scheduledFor.getTime();
+  const session = input.sessionAt.getTime();
+
+  if (now < due) return "wait";
+
+  // The session is over. Nothing that says "before we start" or "you're
+  // registered" is true any more, whatever the queue still holds.
+  if (now >= session + input.durationMinutes * 60_000) return "skip";
+
+  // A reminder that promises time to prepare must not arrive after the start.
+  // The one deliberately scheduled *at* the start is exempt: "we're live, come
+  // on in" is still true five minutes in.
+  if (input.kind === "before" && input.offsetMinutes > 0 && now >= session) return "skip";
+
+  const cap =
+    input.kind === "registration"
+      ? REGISTRATION_REMINDER_MAX_LATENESS_MINUTES
+      : REMINDER_MAX_LATENESS_MINUTES;
+  if (now - due > cap * 60_000) return "skip";
+
+  return "send";
+}
+
+/**
+ * The offset in words — the label the editor, the public page and the member's
+ * own list all read, so the promise made at signup and the promise shown later
+ * are the same sentence.
+ */
+export function describeReminderOffset(spec: ReminderSpec): string {
+  if (spec.kind === "registration") return "as soon as they sign up";
+  const minutes = spec.offsetMinutes;
+  if (minutes <= 0) return "when it starts";
+  if (minutes % 1440 === 0) {
+    const days = minutes / 1440;
+    return days === 1 ? "1 day before" : `${days} days before`;
+  }
+  if (minutes % 60 === 0) {
+    const hours = minutes / 60;
+    return hours === 1 ? "1 hour before" : `${hours} hours before`;
+  }
+  return `${minutes} minutes before`;
+}
+
+/**
+ * The reminder set a new event starts with.
+ *
+ * Chosen to match what the platform's copy already promises and what the
+ * hard-coded job used to do — the day before, the hour before, and the moment
+ * the doors open — plus the confirmation that was promised and never actually
+ * sent. Defaults rather than requirements: every one of them can be turned off
+ * or removed on the event.
+ */
+export const DEFAULT_EVENT_REMINDERS: ReminderSpec[] = [
+  { kind: "registration", offsetMinutes: 0 },
+  { kind: "before", offsetMinutes: 1440 },
+  { kind: "before", offsetMinutes: 60 },
+  { kind: "before", offsetMinutes: 0 },
+];

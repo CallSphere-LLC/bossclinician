@@ -1,0 +1,138 @@
+{
+  "at": "2026-09-12T19:28:47.202Z",
+  "responses": [
+    {
+      "at": 1789241327357,
+      "path": "/api/admin/me",
+      "status": 401
+    },
+    {
+      "at": 1789241327363,
+      "path": "/api/admin/refresh",
+      "status": 401
+    },
+    {
+      "at": 1789241327795,
+      "path": "/api/admin/login",
+      "status": 200
+    },
+    {
+      "at": 1789241327856,
+      "path": "/api/admin/me",
+      "status": 200
+    },
+    {
+      "path": "/api/admin/me",
+      "status": 401
+    },
+    {
+      "path": "/api/admin/refresh",
+      "status": 204
+    },
+    {
+      "path": "/api/admin/me",
+      "status": 200
+    },
+    {
+      "path": "/api/admin/me",
+      "status": 200
+    },
+    {
+      "path": "/api/admin/logout",
+      "status": 204
+    }
+  ],
+  "errors": [],
+  "login": {
+    "status": 200,
+    "jsonKeys": [
+      "user"
+    ],
+    "accessSeconds": 300,
+    "cookies": [
+      {
+        "name": "bc_admin_session",
+        "domain": "bossclinician.callsphere.site",
+        "path": "/api/admin",
+        "expires": 1789241627.793993,
+        "httpOnly": true,
+        "secure": true,
+        "sameSite": "Lax"
+      },
+      {
+        "name": "bc_admin_refresh",
+        "domain": "bossclinician.callsphere.site",
+        "path": "/api/admin",
+        "expires": 1789270127.794077,
+        "httpOnly": true,
+        "secure": true,
+        "sameSite": "Lax"
+      }
+    ]
+  },
+  "reload": {
+    "url": "https://bossclinician.callsphere.site/admin",
+    "storage": null,
+    "scriptCookie": ""
+  },
+  "public": {
+    "storage": null,
+    "scriptCookie": ""
+  },
+  "csrf": [
+    {
+      "headers": {
+        "Origin": "https://hostile.invalid",
+        "Sec-Fetch-Site": "cross-site"
+      },
+      "status": 403
+    },
+    {
+      "headers": {},
+      "status": 403
+    },
+    {
+      "headers": {
+        "Origin": "https://bossclinician.callsphere.site",
+        "Sec-Fetch-Site": "same-origin"
+      },
+      "status": 400
+    }
+  ],
+  "naturalExpiry": {
+    "elapsedSeconds": 324.756,
+    "oldExpiry": 1789241627,
+    "newExpiry": 1789241952,
+    "refreshExpiryDeltaSeconds": -0.33455586433410645,
+    "responses": [
+      {
+        "path": "/api/admin/me",
+        "status": 401
+      },
+      {
+        "path": "/api/admin/refresh",
+        "status": 204
+      },
+      {
+        "path": "/api/admin/me",
+        "status": 200
+      },
+      {
+        "path": "/api/admin/me",
+        "status": 200
+      },
+      {
+        "path": "/api/admin/logout",
+        "status": 204
+      }
+    ],
+    "note": "First harness rejected a 0.113-second browser Expires clock adjustment after successful refresh. Repeated using original expired session, with a one-second clock tolerance; no time or database expiry manipulation."
+  },
+  "logout": {
+    "url": "https://bossclinician.callsphere.site/admin/login",
+    "cookies": [],
+    "replayRead": 401,
+    "replayRefresh": 401,
+    "secondTabUrl": "https://bossclinician.callsphere.site/admin/login?next=%2Fadmin%2Fcontacts"
+  }
+}

@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { Activity, ArrowLeft, MailCheck, ShoppingBag, Users } from "lucide-react";
+import { Activity, ArrowLeft, MailCheck, ShieldAlert, ShoppingBag, Users } from "lucide-react";
 import { contactsApi, type ContactInsights } from "@/lib/contactsApi";
 import { Card, ErrorNotice, PageHeader, Skeleton } from "@/pages/admin/ui/primitives";
 
@@ -51,8 +51,21 @@ export default function ContactsInsights() {
           <Metric label="Customers" value={data.customers} detail={`${data.newCustomers.toLocaleString()} bought in the last 30 days`} icon={<ShoppingBag className="size-5" />} to="/admin/contacts?audience=customer" />
         </div>
         <div className="grid gap-5 lg:grid-cols-2">
-          <Card className="p-5"><h2 className="font-display text-xl text-ink">People no longer receiving marketing</h2><div className="mt-3"><Row label="Unsubscribed by you" value={data.manuallyUnsubscribed} to="/admin/contacts?optOut=manual" /><Row label="Opted out themselves" value={data.optedOut} to="/admin/contacts?optOut=self" /><Row label="Email bounced" value={data.bounced} to="/admin/contacts?status=bounced" /><Row label="Marked as spam" value={data.complained} to="/admin/contacts?status=complained" /><Row label="Never confirmed" value={data.neverSubscribed} to="/admin/contacts?status=unconfirmed" /></div></Card>
+          <Card className="p-5"><h2 className="font-display text-xl text-ink">People no longer receiving marketing</h2><div className="mt-3"><Row label="Unsubscribed by you" value={data.manuallyUnsubscribed} to="/admin/contacts?optOut=manual" /><Row label="Opted out themselves" value={data.optedOut} to="/admin/contacts?optOut=self" /><Row label="Email bounced" value={data.bounced} to="/admin/contacts?status=bounced" /><Row label="Marked as spam" value={data.complained} to="/admin/contacts?status=complained" /></div></Card>
           <Card className="p-5"><div className="flex items-center gap-2"><Activity className="size-5 text-plum" /><h2 className="font-display text-xl text-ink">Subscriber engagement</h2></div><div className="mt-3"><Row label="Healthy" hint="Opened or clicked in the last 90 days" value={data.engagement.healthy} to="/admin/contacts?engagement=healthy" /><Row label="Passive" hint="Last engaged 91–180 days ago" value={data.engagement.passive} to="/admin/contacts?engagement=passive" /><Row label="Unengaged" hint="Last engaged 181–270 days ago" value={data.engagement.unengaged} to="/admin/contacts?engagement=unengaged" /><Row label="Inactive" hint="No engagement for more than 270 days" value={data.engagement.inactive} to="/admin/contacts?engagement=inactive" /></div></Card>
+        </div>
+        {/*
+          * Its own card, because it is not a marketing fact.
+          *
+          * This counts everybody who hasn't confirmed their email in EITHER
+          * store — the mailing list's double opt-in and the account's own
+          * confirmation — and the second of those is what blocks somebody from
+          * posting, commenting and earning points. It used to count only the
+          * first, which is why the tile said 0 while members sat locked out. The
+          * People list this opens uses the same predicate, so the two agree.
+          */}
+        <div className="grid gap-5 lg:grid-cols-2">
+          <Card className="p-5"><div className="flex items-center gap-2"><ShieldAlert className="size-5 text-gold" /><h2 className="font-display text-xl text-ink">Email confirmation</h2></div><div className="mt-3"><Row label="Hasn't confirmed their email" hint="Anyone with an account can't post, comment or earn points until they do — you can confirm it for them on their card" value={data.neverSubscribed} to="/admin/contacts?status=unconfirmed" /></div></Card>
         </div>
       </>}
     </div>

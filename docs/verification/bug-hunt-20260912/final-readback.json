@@ -1,0 +1,124 @@
+{
+  "marketing": {
+    "sent": [
+      3,
+      3
+    ],
+    "notSent": [
+      0,
+      0
+    ],
+    "sequenceEnrolled": [
+      0,
+      0
+    ],
+    "formReplies": [
+      3,
+      3
+    ],
+    "problemRuns": [
+      2,
+      2
+    ],
+    "upcomingEvents": [
+      2,
+      2
+    ]
+  },
+  "overview": {
+    "windowDays": 30,
+    "generatedAt": "2026-09-12T19:33:24.245Z",
+    "emails": {
+      "sent": 3,
+      "bySource": {
+        "broadcast": 1,
+        "sequence": 2,
+        "automation": 0
+      },
+      "broadcastUnlisted": 1,
+      "opened": 0,
+      "clicked": 0,
+      "openRate": 0,
+      "clickRate": 0,
+      "notSent": 0,
+      "notSentBySource": {
+        "broadcast": 0,
+        "sequence": 0,
+        "automation": 0
+      },
+      "notSentPeople": 0,
+      "notSentEmails": 0,
+      "notSentLaterSent": 0,
+      "queued": 0,
+      "campaignsSent": 0,
+      "campaignsScheduled": 0,
+      "trackingSeen": false
+    },
+    "sequences": {
+      "active": 1,
+      "total": 1,
+      "enrolled": 0,
+      "people": 0,
+      "top": [
+        {
+          "id": 1,
+          "name": "ZZ Test — welcome sequence",
+          "enrolled": 0
+        }
+      ]
+    },
+    "forms": {
+      "replies": 3,
+      "previousReplies": 0,
+      "formsWithReplies": 1,
+      "top": [
+        {
+          "id": 4,
+          "name": "ZZ Test — waitlist form",
+          "replies": 3
+        }
+      ]
+    },
+    "automations": {
+      "active": 1,
+      "ran": 1,
+      "runs": 4,
+      "problemRuns": 2,
+      "failedRuns": 0,
+      "withProblems": 1,
+      "skippedRuns": 0,
+      "problemAutomations": [
+        {
+          "id": 2,
+          "name": "ZZ Test — buyer welcome",
+          "problemRuns": 2
+        }
+      ]
+    },
+    "events": {
+      "upcoming": 2,
+      "upcomingPublished": 1,
+      "upcomingDrafts": 1,
+      "alwaysOn": 0,
+      "registrations": 2,
+      "communityUpcoming": 0,
+      "next": [
+        {
+          "id": 1,
+          "title": "ZZ Test — live webinar",
+          "startsAt": "2026-09-15T22:00:00.000Z",
+          "published": true,
+          "registrations": 2
+        },
+        {
+          "id": 2,
+          "title": "ZZ Verify — tz check",
+          "startsAt": "2026-10-10T22:00:00.000Z",
+          "published": false,
+          "registrations": 0
+        }
+      ]
+    }
+  },
+  "removedFunnelsAbsentAfterReload": true
+}

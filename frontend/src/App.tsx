@@ -1,3 +1,5 @@
+import { MemberPreviewBridge } from "@/components/admin/MemberPreviewBridge";
+import { AdminOriginBoundary } from "@/components/admin/AdminOriginBoundary";
 import { lazy, Suspense } from "react";
 import { Outlet, Route, Routes } from "react-router-dom";
 import { Layout } from "@/components/layout/Layout";
@@ -22,6 +24,7 @@ const MemberProfile = lazy(() => import("@/pages/member/Profile"));
 const MemberSecurity = lazy(() => import("@/pages/member/Security"));
 const MemberBilling = lazy(() => import("@/pages/member/Billing"));
 const MemberPurchases = lazy(() => import("@/pages/member/Purchases"));
+const MemberReceipt = lazy(() => import("@/pages/member/Receipt"));
 const MemberLibrary = lazy(() => import("@/pages/member/Library"));
 const MemberCoursePlayer = lazy(() => import("@/pages/member/CoursePlayer"));
 const MemberCommunity = lazy(() => import("@/pages/member/Community"));
@@ -35,6 +38,7 @@ const MemberCoachingSession = lazy(() => import("@/pages/member/CoachingSession"
 const MemberPodcasts = lazy(() => import("@/pages/member/Podcasts"));
 const MemberNewsletters = lazy(() => import("@/pages/member/Newsletters"));
 const MemberAffiliatePortal = lazy(() => import("@/pages/member/AffiliatePortal"));
+const Cart = lazy(() => import("@/pages/Cart"));
 const Checkout = lazy(() => import("@/pages/Checkout"));
 const CheckoutUpsell = lazy(() => import("@/pages/CheckoutUpsell"));
 
@@ -156,6 +160,15 @@ function memberRoutes() {
         <Route path="/account/security" element={<MemberSecurity />} />
         <Route path="/account/billing" element={<MemberBilling />} />
         <Route path="/account/purchases" element={<MemberPurchases />} />
+        {/* A receipt's permanent address, and its PDF's. Inside RequireMember,
+            so a signed-out visit goes to /login and returns here. */}
+        <Route path="/account/purchases/:orderId/receipt" element={<MemberReceipt />} />
+        <Route path="/account/purchases/:orderId/receipt.pdf" element={<MemberReceipt download />} />
+        <Route path="/account/billing/invoices/:invoiceId/receipt" element={<MemberReceipt />} />
+        <Route
+          path="/account/billing/invoices/:invoiceId/receipt.pdf"
+          element={<MemberReceipt download />}
+        />
 
         <Route path="/library" element={<MemberLibrary />} />
         <Route path="/library/:productSlug" element={<MemberCoursePlayer />} />
@@ -217,6 +230,8 @@ export default function App() {
     // "My library" to someone already signed in. It costs nothing for a
     // stranger: with no session-hint cookie present it skips the refresh call
     // entirely rather than discovering the absence over the network.
+    <AdminOriginBoundary>
+    <MemberPreviewBridge>
     <MemberAuthProvider>
       <Routes>
         <Route
@@ -253,6 +268,7 @@ export default function App() {
             guest buying without an account must not meet a sign-in wall. It is
             wrapped in Suspense of its own because it is not part of either
             existing bundle. */}
+        <Route path="/cart" element={<Suspense fallback={<MemberFallback />}><Cart /></Suspense>} />
         <Route
           path="/checkout/:offerSlug"
           element={
@@ -273,6 +289,8 @@ export default function App() {
         <Route path="/*" element={<PublicRoutes />} />
       </Routes>
     </MemberAuthProvider>
+    </MemberPreviewBridge>
+    </AdminOriginBoundary>
   );
 }
 

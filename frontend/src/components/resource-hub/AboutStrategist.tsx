@@ -99,10 +99,7 @@ export function AboutStrategist() {
           </motion.div>
         </div>
 
-        {/* ── Portrait ──────────────────────────────────────────────────────
-            Graded to the same recipe as the home page: dimmed, desaturated,
-            vignetted, then passed under a violet soft-light so the photograph
-            sits *in* the dark instead of on top of it. */}
+        {/* Portrait — original photograph colors. */}
         <motion.div
           initial={reduce ? false : { opacity: 0, scale: 0.96 }}
           whileInView={{ opacity: 1, scale: 1 }}
@@ -125,13 +122,8 @@ export function AboutStrategist() {
               alt="Yvette Howard, LCSW — Private Practice Strategist, Boss Clinician"
               loading="lazy"
               decoding="async"
-              className="aspect-[4/5] w-full max-w-full object-cover object-top brightness-[0.8] contrast-[1.06] saturate-[0.8]"
+              className="aspect-[4/5] w-full max-w-full object-cover object-top"
             />
-            <div
-              aria-hidden
-              className="absolute inset-0 bg-[radial-gradient(112%_78%_at_50%_24%,transparent_24%,rgba(10,7,19,0.5)_66%,rgba(6,4,11,0.9)_100%)]"
-            />
-            <div aria-hidden className="absolute inset-0 bg-glow-violet/20 mix-blend-soft-light" />
           </div>
 
           <span

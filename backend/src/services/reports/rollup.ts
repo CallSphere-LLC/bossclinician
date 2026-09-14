@@ -314,6 +314,10 @@ const METRICS: MetricSource[] = [
                i.amount_paid_cents, i.currency
           FROM invoices i
          WHERE i.status = 'paid'
+           -- Invoices Stripe raised. A one-off order carries its own receipt row
+           -- in this table now, and it is already counted by the orders and
+           -- gross_revenue metrics above.
+           AND i.origin <> 'order'
            AND ${within("COALESCE(i.paid_at, i.created_at)")}
       )
       SELECT day, '' AS dimension, SUM(amount_paid_cents)::bigint AS value_cents,
@@ -538,11 +542,12 @@ const METRICS: MetricSource[] = [
     sql: `
       WITH base AS (
         SELECT ${day("a.recovered_at")} AS day, a.offer_id,
-               COALESCE(${ORDER_CENTS}, a.amount_cents) AS cents,
+               COALESCE(ot.total_cents, ${ORDER_CENTS}, a.amount_cents) AS cents,
                COALESCE(o.currency, a.currency) AS currency
           FROM abandoned_checkouts a
           LEFT JOIN orders o ON o.id = a.recovered_order_id
-         WHERE a.recovered_at IS NOT NULL AND ${within("a.recovered_at")}
+          LEFT JOIN order_offer_totals ot ON ot.order_id = o.id AND ot.offer_id = a.offer_id
+         WHERE a.recovered_at IS NOT NULL AND a.recovered_reminder_id IS NOT NULL AND ${within("a.recovered_at")}
       )
       SELECT day, '' AS dimension, SUM(cents)::bigint AS value_cents,
              COUNT(*)::int AS value_count, ${currencyOf} AS currency

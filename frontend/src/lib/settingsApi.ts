@@ -1,4 +1,5 @@
-import { ApiError, getToken } from "@/lib/api";
+import { sessionFetch } from "@/lib/adminTransport";
+import { ApiError } from "@/lib/api";
 
 /**
  * Client for the settings, team and connections screens.
@@ -17,10 +18,8 @@ const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? "/api"
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const headers = new Headers(options.headers);
   if (!headers.has("Content-Type")) headers.set("Content-Type", "application/json");
-  const token = getToken();
-  if (token) headers.set("Authorization", `Bearer ${token}`);
 
-  const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+  const res = await sessionFetch(`${API_BASE}${path}`, { ...options, headers });
 
   if (!res.ok) {
     let message = "";
@@ -53,7 +52,15 @@ export type SettingFieldType =
   | "timezone"
   | "choice"
   | "color"
-  | "secret";
+  | "secret"
+  /** A PNG or JPEG uploaded to the public media library; the value is `/uploads/<file>`. */
+  | "image"
+  /** Cancellation reasons, edited as a list — see components/admin/CancelReasonsEditor. */
+  | "reasonlist"
+  /** A card statement descriptor (5–22 characters). Rendered as a text box. */
+  | "descriptor"
+  /** Days between payment retries, "3, 5, 7". Rendered as a text box. */
+  | "retryschedule";
 
 export interface SettingChoice {
   value: string;
@@ -76,6 +83,14 @@ export interface SettingField {
   value?: unknown;
   hasValue?: boolean;
   hint?: string;
+  /**
+   * The server decides this value and nothing on this screen can change it —
+   * today, the "Sending service" when SMTP_HOST picks the transport. The field
+   * is shown read-only with `help` saying why, and is never sent on save.
+   */
+  locked?: boolean;
+  /** "server" when the value comes from the server's own configuration. */
+  source?: "server" | "settings";
 }
 
 export interface SettingCard {
@@ -92,8 +107,52 @@ export interface SettingGroup {
   settings: SettingCard[];
 }
 
+/**
+ * One thing wrong with the sending identity, in the settings screen's own words.
+ *
+ * `label` is the label on the box she can see, which is what makes the warning
+ * actionable rather than a puzzle about field names.
+ */
+export interface IdentityProblem {
+  field: string;
+  label: string;
+  message: string;
+}
+
+export interface SendingIdentityReport {
+  /** False when a marketing email would be refused. */
+  ready: boolean;
+  /** Receipts and confirmation links, which fall back to the server's identity. */
+  transactionalReady: boolean;
+  marketingFrom: string;
+  transactionalFrom: string;
+  /** Blocking. Marketing sending is refused while any of these stand. */
+  problems: IdentityProblem[];
+  /** Not blocking, but wrong and invisible until somebody says so. */
+  warnings: IdentityProblem[];
+  summary: string;
+  /** The transport really carrying mail — what the "Sending service" field shows. */
+  transport?: SendingTransport;
+  /** The domains a marketing from-address has to be on; empty when the server can't know. */
+  verifiedDomains?: string[];
+}
+
+/** How mail actually leaves this site, as `resolveProvider()` on the server picks it. */
+export interface SendingTransport {
+  /** The same word the delivery log records: "ses", "smtp", "resend" or "console". */
+  key: "ses" | "smtp" | "resend" | "console";
+  label: string;
+  source: "server" | "settings";
+  locked: boolean;
+  detail: string;
+  choices: { value: string; label: string }[];
+}
+
 export const settingsApi = {
   groups: () => request<{ groups: SettingGroup[] }>("/admin/settings-v2/groups"),
+
+  sendingIdentity: () =>
+    request<SendingIdentityReport>("/admin/settings-v2/sending-identity"),
 
   save: (key: string, values: Record<string, unknown>) =>
     request<{ key: string; values: Record<string, unknown> }>(`/admin/settings-v2/${key}`, {
@@ -102,7 +161,14 @@ export const settingsApi = {
     }),
 
   sendTestEmail: (to?: string) =>
-    request<{ to: string; configured: boolean; sent: boolean; failure: string }>(
+    request<{
+      to: string;
+      configured: boolean;
+      sent: boolean;
+      failure: string;
+      /** The state of the sending identity, so a passing test can't imply more than it proved. */
+      identity: SendingIdentityReport;
+    }>(
       "/admin/settings-v2/test-email",
       {
         method: "POST",

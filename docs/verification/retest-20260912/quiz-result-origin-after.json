@@ -1,0 +1,23 @@
+{
+  "email": "sagar+zz-bughunt-quiz-origin-after@callsphere.ai",
+  "status": 201,
+  "result": {
+    "attemptId": 10,
+    "score": 3,
+    "maxScore": 3,
+    "percent": 100,
+    "passed": null,
+    "message": "Review the lesson and try again.",
+    "feedback": [],
+    "result": {
+      "slug": "new-result",
+      "title": "New result",
+      "bodyMd": "",
+      "imageUrl": "",
+      "ctaLabel": "",
+      "ctaUrl": ""
+    }
+  },
+  "body": "YOUR RESULT\nNew result",
+  "errors": []
+}

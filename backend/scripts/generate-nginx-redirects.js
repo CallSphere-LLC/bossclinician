@@ -52,6 +52,7 @@ async function main() {
   const { rows } = await client.query(
     `SELECT from_path, to_path, status_code
        FROM redirects
+      WHERE from_path <> to_path
       ORDER BY from_path`
   );
   await client.end();

@@ -52,6 +52,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { to: "/admin/products", label: "All Products", ready: true },
       { to: "/admin/catalogue", label: "Your Catalogue", ready: true },
       { to: "/admin/courses", label: "Courses", ready: true },
+      { to: "/admin/downloads", label: "Downloads", ready: true },
       { to: "/admin/community", label: "Community", ready: true },
       { to: "/admin/media", label: "Media Library", ready: true },
       { to: "/admin/coaching", label: "Coaching", ready: true },
@@ -90,6 +91,9 @@ export const NAV_GROUPS: NavGroup[] = [
     label: "Marketing",
     icon: Megaphone,
     children: [
+      // At /overview rather than /admin/marketing: child links have no `end`,
+      // so a bare group path would light up on every marketing screen.
+      { to: "/admin/marketing/overview", label: "Overview", ready: true },
       // Two different things were both called "Events": this one schedules an
       // event inside a community, while "Events" below takes registrations for
       // a webinar or a live class. Identical labels meant picking one at random

@@ -1,4 +1,5 @@
-import { ApiError, getToken } from "@/lib/api";
+import { sessionFetch } from "@/lib/adminTransport";
+import { ApiError } from "@/lib/api";
 
 /**
  * The form builder's client.
@@ -12,12 +13,10 @@ import { ApiError, getToken } from "@/lib/api";
 const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? "/api";
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const token = getToken();
   const headers = new Headers(options.headers);
   if (!headers.has("Content-Type")) headers.set("Content-Type", "application/json");
-  if (token) headers.set("Authorization", `Bearer ${token}`);
 
-  const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+  const res = await sessionFetch(`${API_BASE}${path}`, { ...options, headers });
 
   if (!res.ok) {
     let message = "Something went wrong. Please try again in a moment.";
@@ -49,7 +48,10 @@ export type FieldType =
   | "checkbox"
   | "checkboxes"
   | "date"
-  | "hidden";
+  | "hidden"
+  | "file";
+
+export type { ShowIf, ConditionOperator, FileCategory } from "@/lib/formLogic";
 
 export interface FormField {
   /**
@@ -68,6 +70,12 @@ export interface FormField {
   minLength?: number | null;
   maxLength?: number | null;
   pattern?: string;
+  /** Show this question only when an earlier question's answer meets a test. */
+  showIf?: import("@/lib/formLogic").ShowIf | null;
+  /** File questions: the kinds of file accepted. */
+  fileTypes?: import("@/lib/formLogic").FileCategory[];
+  /** File questions: the largest file, in MB (10 at most). */
+  maxSizeMb?: number;
 }
 
 export type PostAction = "message" | "redirect" | "download";
@@ -128,6 +136,28 @@ export interface FormSubmission {
   confirmedAt: string | null;
   contactId: number | null;
   contactName: string | null;
+  /** Files this reply brought in. Absent from a server that predates file questions. */
+  files?: SentFile[];
+}
+
+/**
+ * A file somebody sent through a form. `previewUrl` is a signed link minted for
+ * this administrator; it stops working after two hours, so fetch it fresh
+ * rather than storing it.
+ */
+export interface SentFile {
+  id: number;
+  name: string;
+  mime: string;
+  kind: string;
+  sizeBytes: number;
+  createdAt: string;
+  contactId: number | null;
+  submissionId: number | null;
+  fieldKey: string;
+  formId: number | null;
+  formName: string | null;
+  previewUrl: string;
 }
 
 /**
@@ -150,27 +180,25 @@ export const formsApi = {
     request<SavedForm>(`/admin/forms-v2/${id}`, { method: "PATCH", body: body(draft) }),
   remove: (id: number) => request<void>(`/admin/forms-v2/${id}`, { method: "DELETE" }),
 
-  submissions: (id: number, offset = 0) =>
+  submissions: (id: number, offset = 0, sinceDays: number | null = null) =>
     request<{ total: number; submissions: FormSubmission[] }>(
-      `/admin/forms-v2/${id}/submissions?offset=${offset}`,
+      `/admin/forms-v2/${id}/submissions?offset=${offset}${sinceDays ? `&since=${sinceDays}d` : ""}`,
     ),
   removeSubmission: (id: number, submissionId: number) =>
     request<void>(`/admin/forms-v2/${id}/submissions/${submissionId}`, { method: "DELETE" }),
+
+  /** Every file one contact has sent through any form, newest first. */
+  contactFiles: (contactId: number) =>
+    request<SentFile[]>(`/admin/forms-v2/contacts/${contactId}/files`),
 
   /**
    * Bypasses `request` because the answer is a spreadsheet, not JSON — the
    * shared helper would try to parse it and throw the file away.
    *
-   * A plain `<a href download>` cannot be used here, however obvious it looks:
-   * the route is behind `requireAuth`, which reads an `Authorization` header,
-   * and a browser-initiated download sends none. The link would come back 401
-   * and the owner would get a file containing the word "Unauthorized".
+   * Cookie transport refreshes an expired session before saving the file.
    */
   exportCsv: async (id: number): Promise<Blob> => {
-    const token = getToken();
-    const res = await fetch(`${API_BASE}/admin/forms-v2/${id}/submissions.csv`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-    });
+    const res = await sessionFetch(`${API_BASE}/admin/forms-v2/${id}/submissions.csv`);
     if (!res.ok) {
       throw new ApiError("That download didn't finish. Please try again in a moment.", res.status);
     }
@@ -210,6 +238,7 @@ export const FIELD_TYPE_LABEL: Record<FieldType, string> = {
   checkboxes: "Tick any that apply",
   date: "A date",
   hidden: "Hidden (filled in for them)",
+  file: "Upload a file",
 };
 
 /** The contact details an answer can be saved onto, in her words. */
@@ -227,6 +256,19 @@ export const POST_ACTION_LABEL: Record<PostAction, string> = {
   redirect: "Send them to another page",
   download: "Give them a file to download",
 };
+
+/**
+ * `?since=30d` on the builder's URL → 30, or null for no filter. Same rule as
+ * `parseSinceDays` in backend/src/routes/admin/formsV2.ts.
+ *
+ * The link shape other screens use: /admin/marketing/forms-v2?form=<id>&since=30d
+ */
+export function sinceDaysFrom(value: string | null): number | null {
+  const match = /^(\d{1,4})d$/.exec((value ?? "").trim());
+  if (!match) return null;
+  const days = Number(match[1]);
+  return days >= 1 && days <= 3650 ? days : null;
+}
 
 /** Types that need a list of choices before they mean anything. */
 export function needsOptions(type: FieldType): boolean {

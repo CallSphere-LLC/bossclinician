@@ -214,6 +214,24 @@ memberCommunityDmRouter.get(
       [threadId, member.id]
     );
 
+    // Each of those messages also raised a bell notification when it was sent.
+    // Opening the conversation is reading them, so the bell has to agree with
+    // the thread badge — left alone it kept counting messages already read.
+    // Scoped by sender AND by this room's link (the exact link the send route
+    // writes), so the same person's message in another community stays unread.
+    await pool.query(
+      `UPDATE member_notifications
+          SET read_at = now()
+        WHERE member_id = $1 AND kind = $2 AND actor_id = $3 AND link = $4
+          AND read_at IS NULL`,
+      [
+        member.id,
+        NOTIFICATION_KINDS.directMessage,
+        other,
+        `/community/${community.slug}/messages/${other}`,
+      ]
+    );
+
     const who = await pool.query<{ name: string; avatar_url: string }>(
       `SELECT COALESCE(NULLIF(TRIM(first_name || ' ' || last_name), ''),
                        NULLIF(name, ''), split_part(email::text, '@', 1)) AS name,

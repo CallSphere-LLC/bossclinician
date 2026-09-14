@@ -119,8 +119,13 @@ export interface MemberInvoice {
   orderId: number | null;
   subscriptionId: number | null;
   paymentPlanId: number | null;
-  /** Our own printable receipt. Authenticated — see `showReceipt`. */
+  /** Our own printable receipt (API). Its page is `receiptPaths`. */
   receiptUrl: string;
+  /**
+   * The same receipt as a PDF, for the payments we raised the document for
+   * ourselves. Null for a Stripe renewal, which carries Stripe's own `pdfUrl`.
+   */
+  receiptPdfUrl: string | null;
 }
 
 export interface InvoicesPage {
@@ -156,6 +161,14 @@ export interface MemberOrder {
   source: string;
   createdAt: string;
   items: OrderItem[];
+  /**
+   * The receipt for this purchase, and the same thing as a PDF. Sent with the
+   * order so the page never has to pair an order up with an invoice to find one
+   * — which is what used to leave a purchase saying "ask us if you need a
+   * receipt" under a heading promising a receipt for every purchase.
+   */
+  receiptUrl: string;
+  receiptPdfUrl: string;
 }
 
 export interface OrderTransaction {
@@ -269,29 +282,107 @@ export const billingApi = {
     memberRequest<PaymentMethodSession>("/member/billing/payment-method/session", {
       method: "POST",
     }),
+
+  /** Takes back a cancellation that has not happened yet. */
+  keepSubscription: (id: number) =>
+    memberRequest<MemberSubscription>(`/member/billing/subscriptions/${id}/keep`, {
+      method: "POST",
+    }),
+
+  /**
+   * Finishes a card update: makes the card Stripe just saved the one every plan
+   * charges, and tries any overdue payment on it straight away.
+   */
+  confirmPaymentMethod: (setupIntentId: string) =>
+    memberRequest<CardAdoption>("/member/billing/payment-method/confirm", {
+      method: "POST",
+      body: JSON.stringify({ setupIntentId }),
+    }),
 };
+
+/** What `confirmPaymentMethod` did with the new card. */
+export interface CardAdoption {
+  /** Memberships and payment plans now charging the new card. */
+  updated: number;
+  /** Overdue payments tried on the new card, and how many went through. */
+  retried: number;
+  paid: number;
+}
 
 /* ── Receipts ───────────────────────────────────────────────────────────── */
 
-/** Thrown when the browser refuses the window, so the page can say why. */
-export class PopupBlockedError extends Error {
-  constructor() {
-    super("popup blocked");
-  }
+/*
+ * Every receipt has a real address, and nothing here opens a window.
+ *
+ * Member requests are Bearer-authenticated with a token held in memory, and the
+ * refresh cookie is scoped to /api/auth, so a plain link to the API would arrive
+ * signed out. The receipt's permanent URL is therefore a page of this app —
+ * /account/purchases/:orderId/receipt — which sits behind RequireMember (signed
+ * out, it goes to /login and comes back), fetches the document with the token,
+ * and shows it in the same tab. Its PDF lives at the same address plus `.pdf`,
+ * and that one is served by the server: nginx sends it to the API, which answers
+ * with the PDF as an attachment, authenticated by an HttpOnly cookie scoped to
+ * /account/ (backend/src/auth/memberDocumentCookie.ts). So "Download PDF" is a
+ * plain link. The app's own route for the `.pdf` address is only reached by
+ * in-app navigation (coming back from /login); it downloads through a signed
+ * link that lives for a few minutes — `downloadReceiptPdf` below.
+ */
+
+/** Which receipt: a purchase, by order, or a billing invoice. */
+export type ReceiptTarget = { orderId: number } | { invoiceId: number };
+
+const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? "/api";
+
+/** The receipt's app pages and the API calls behind them. */
+export function receiptPaths(target: ReceiptTarget): {
+  /** Permanent, bookmarkable receipt page. */
+  page: string;
+  /** Permanent PDF address; opening it downloads the PDF. */
+  pdfPage: string;
+  html: string;
+  link: string;
+} {
+  const page =
+    "orderId" in target
+      ? `/account/purchases/${target.orderId}/receipt`
+      : `/account/billing/invoices/${target.invoiceId}/receipt`;
+  const api =
+    "orderId" in target
+      ? `/member/billing/orders/${target.orderId}`
+      : `/member/billing/invoices/${target.invoiceId}`;
+  return { page, pdfPage: `${page}.pdf`, html: `${api}/receipt`, link: `${api}/receipt-link` };
+}
+
+/** The receipt a route names, or null for an id that cannot be one. */
+export function readReceiptTarget(params: {
+  orderId?: string;
+  invoiceId?: string;
+}): ReceiptTarget | null {
+  const parse = (raw: string | undefined): number | null =>
+    raw !== undefined && /^[1-9]\d{0,9}$/.test(raw) && Number(raw) <= 2_147_483_647
+      ? Number(raw)
+      : null;
+  const orderId = parse(params.orderId);
+  if (orderId !== null) return { orderId };
+  const invoiceId = parse(params.invoiceId);
+  return invoiceId === null ? null : { invoiceId };
 }
 
 /**
- * The receipt is a document, not JSON, so it cannot travel through
- * `memberRequest` — but it is Bearer-authenticated like everything else, which
- * rules out a plain link too. One ordinary call through `memberRequest` is what
- * refreshes an expired token: a second refresh implementation here would rotate
- * the cookie behind that one's back, and each would then read the other's
- * rotation as a stolen token.
+ * The receipt document's markup.
+ *
+ * A document, not JSON, so it cannot travel through `memberRequest` — but one
+ * ordinary call through `memberRequest` is what refreshes an expired token: a
+ * second refresh implementation here would rotate the cookie behind that one's
+ * back, and each would then read the other's rotation as a stolen token. A
+ * refresh that fails signs the member out, and RequireMember sends them to log
+ * in and back to this receipt.
  */
-async function fetchReceipt(receiptUrl: string): Promise<string> {
+export async function fetchReceiptHtml(target: ReceiptTarget): Promise<string> {
+  const url = `${API_BASE}${receiptPaths(target).html}`;
   const send = async (): Promise<Response> => {
     const token = getAccessToken();
-    return fetch(receiptUrl, {
+    return fetch(url, {
       credentials: "include",
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
@@ -302,36 +393,26 @@ async function fetchReceipt(receiptUrl: string): Promise<string> {
     await memberRequest<unknown>("/auth/me");
     res = await send();
   }
+  if (res.status === 404) throw new MemberApiError("We couldn't find that receipt.", 404);
   if (!res.ok) throw new MemberApiError("We could not open that receipt.", res.status);
   return res.text();
 }
 
 /**
- * Opens a receipt in its own tab, ready to print or save as a PDF.
+ * Downloads a receipt's PDF from this tab.
  *
- * The window is claimed synchronously, before the fetch: opening it afterwards
- * is not something the browser can attribute to the click, and it gets
- * swallowed as an unsolicited popup. Callers must therefore invoke this
- * straight from the event handler rather than after an await of their own.
+ * Asks for a short-lived signed link with the member's token, then navigates
+ * this tab to it. The response is an attachment, so the browser saves the file
+ * and the page stays where it is — no popup to block, no blob to revoke.
  */
-export async function showReceipt(receiptUrl: string): Promise<void> {
-  const tab = window.open("", "_blank");
-  if (!tab) throw new PopupBlockedError();
-  // A blob URL carries this origin, so the receipt would otherwise be able to
-  // reach back through `opener` into the signed-in app.
-  tab.opener = null;
-
-  try {
-    const html = await fetchReceipt(receiptUrl);
-    const url = URL.createObjectURL(new Blob([html], { type: "text/html" }));
-    tab.location.replace(url);
-    // Long enough for the tab to have loaded it, short enough not to hold the
-    // document in memory for the rest of the session.
-    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
-  } catch (err) {
-    tab.close();
-    throw err;
-  }
+export async function downloadReceiptPdf(target: ReceiptTarget): Promise<void> {
+  const { url } = await memberRequest<{ url: string; expiresAt: string; filename: string }>(
+    receiptPaths(target).link,
+    { method: "POST" },
+  );
+  // The server answers with its own /api path; re-rooted on API_BASE for a
+  // build that talks to the API on another origin.
+  window.location.assign(`${API_BASE}${url.replace(/^\/api(?=\/)/, "")}`);
 }
 
 /* ── Turning the data into English ──────────────────────────────────────── */
@@ -384,8 +465,5 @@ export function describePlanShape(plan: MemberPaymentPlan): string {
  * and it phrases its refusals for the customer rather than for a log.
  */
 export function billingErrorMessage(err: unknown, fallback: string): string {
-  if (err instanceof PopupBlockedError) {
-    return "Your browser blocked the new tab. Allow pop-ups for this site and try again.";
-  }
   return err instanceof MemberApiError && err.message ? err.message : fallback;
 }

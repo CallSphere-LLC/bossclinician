@@ -1,0 +1,109 @@
+{
+  "at": "2026-09-12T23:08:56.764Z",
+  "quiz": [
+    {
+      "reducedMotion": "no-preference",
+      "email": "sagar+zz-round4-late-no-preference@callsphere.ai",
+      "status": 201,
+      "attemptId": 12,
+      "body": "YOUR RESULT\nNew result\nNew result"
+    },
+    {
+      "reducedMotion": "reduce",
+      "email": "sagar+zz-round4-late-reduce@callsphere.ai",
+      "status": 201,
+      "attemptId": 13,
+      "body": "YOUR RESULT\nNew result"
+    }
+  ],
+  "errors": [],
+  "team": {
+    "suspendedRead": 401,
+    "suspendedRefresh": 401,
+    "suspendedLogin": 401,
+    "restoredLogin": true,
+    "oldSessionRemainsRevoked": true,
+    "reloadPreservesSuspension": true
+  },
+  "podcast": {
+    "url": "https://bossclinician.callsphere.site/api/podcast/the-boss-clinician-show/rss.xml",
+    "status": 200,
+    "mime": "application/rss+xml; charset=utf-8",
+    "copied": true,
+    "episodes": 0,
+    "clipboardFailureHandled": true
+  },
+  "layouts": [
+    {
+      "width": 320,
+      "route": "/admin/settings/team",
+      "overflow": false
+    },
+    {
+      "width": 320,
+      "route": "/admin/podcasts",
+      "overflow": false
+    },
+    {
+      "width": 390,
+      "route": "/admin/settings/team",
+      "overflow": false
+    },
+    {
+      "width": 390,
+      "route": "/admin/podcasts",
+      "overflow": false
+    },
+    {
+      "width": 768,
+      "route": "/admin/settings/team",
+      "overflow": false
+    },
+    {
+      "width": 768,
+      "route": "/admin/podcasts",
+      "overflow": false
+    },
+    {
+      "width": 1440,
+      "route": "/admin/settings/team",
+      "overflow": false
+    },
+    {
+      "width": 1440,
+      "route": "/admin/podcasts",
+      "overflow": false
+    },
+    {
+      "width": 1920,
+      "route": "/admin/settings/team",
+      "overflow": false
+    },
+    {
+      "width": 1920,
+      "route": "/admin/podcasts",
+      "overflow": false
+    }
+  ],
+  "finalAt": "2026-09-12T23:12:11.966Z",
+  "newsletterPresent": true,
+  "publicAdminIsolation": [
+    {
+      "path": "contacts",
+      "status": 401
+    },
+    {
+      "path": "settings",
+      "status": 401
+    },
+    {
+      "path": "offers",
+      "status": 401
+    }
+  ],
+  "formSettings": "All settings\n\nSETTINGS\n\nForms\n\nKeeping junk out of your forms.\n\nForms\n\nSpam protection for public forms\n\nHow forms are protected\nInvisible trap — nothing for real people to do\nCloudflare's checkbox — stronger, needs an account\nCloudflare site key\nOnly needed if you picked Cloudflare above.\nCloudflare secret key\n\nNothing saved yet.\n\nSave",
+  "kajabi": {
+    "url": "https://app.kajabi.com/login",
+    "body": "Sorry, you have been blocked\nYou are unable to access kajabi.com\nWhy have I been blocked?\n\nThis website is using a security service to protect itself from online attacks. The action you just performed triggered the security solution. There are several actions that could trigger this block including submitting a certain word or phrase, a SQL command or malformed data.\n\nWhat can I do to resolve this?\n\nYou can email the site owner to let them know you were blocked. Please include what you were doing when this page came up and the Cloudflare Ray ID found at the bottom of this page.\n\nCloudflare Ray ID: a3a298c1093d8f26 • Your IP: Click to reveal • Performance & security by Cloudflare"
+  }
+}

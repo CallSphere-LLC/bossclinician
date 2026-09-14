@@ -79,6 +79,17 @@ function assertChannelValues(body: Record<string, unknown>): void {
       throw badRequest("The default view has to be one of the views you offer.");
     }
   }
+  // `viewMode` is the single layout the member side renders (`view_mode`). It
+  // has to be one of the three, and one of the offered set when both are sent.
+  const view = body.viewMode;
+  if (view !== undefined) {
+    if (!VIEW_MODES.includes(view as (typeof VIEW_MODES)[number])) {
+      throw badRequest("Channels can be shown as a feed, a forum or a gallery.");
+    }
+    if (Array.isArray(modes) && !modes.includes(view)) {
+      throw badRequest("The view members open it in has to be one of the views you offer.");
+    }
+  }
   if (body.format !== undefined && body.format !== "feed" && body.format !== "chat") {
     throw badRequest("A channel is either a feed or a chat.");
   }
@@ -117,9 +128,19 @@ adminCommunityRouter.get(
   "/",
   asyncHandler(async (_req, res) => {
     const result = await pool.query(
+      // Every channel in the room, whatever its visibility or tier and whoever
+      // is in it. The card's CHANNELS figure has to agree with the list on the
+      // community's own page, and both have to agree with what is actually
+      // there: an admin told "1" while a member is reading three of them has
+      // been given a number that cannot be acted on.
       `SELECT c.*,
         (SELECT COUNT(*)::int FROM community_channels ch WHERE ch.community_id = c.id)    AS channel_count,
-        (SELECT COUNT(*)::int FROM community_memberships m WHERE m.community_id = c.id)   AS member_count,
+        -- The same definition of "a member" the member-facing surfaces use:
+        -- somebody banned, or whose account is closed, is not a person in here.
+        (SELECT COUNT(*)::int FROM community_memberships m
+           JOIN members mm ON mm.id = m.member_id
+          WHERE m.community_id = c.id AND m.banned_at IS NULL
+            AND mm.status = 'active')                                                     AS member_count,
         (SELECT COUNT(*)::int FROM community_posts p
            JOIN community_channels ch2 ON ch2.id = p.channel_id
           WHERE ch2.community_id = c.id)                                                  AS post_count
@@ -157,10 +178,27 @@ adminCommunityRouter.get(
     const community = await pool.query("SELECT * FROM communities WHERE id = $1", [req.params.id]);
     if (community.rowCount === 0) throw notFound("Community not found");
 
+    /*
+     * EVERY channel in the community, deliberately unfiltered.
+     *
+     * The admin list is not a member's view of the room and must never be
+     * scoped like one: an invite-only channel, or one limited to a tier the
+     * admin happens not to be in, still has to be visible here or it cannot be
+     * renamed, moderated, re-opened or deleted by the person who owns it. A
+     * channel the owner cannot see is a channel the owner cannot fix.
+     *
+     * The tier's name and the invite count come along so the list can say
+     * *why* a channel is restricted rather than only that it is.
+     */
     const channels = await pool.query(
       `SELECT ch.*,
-        (SELECT COUNT(*)::int FROM community_posts p WHERE p.channel_id = ch.id) AS post_count
-       FROM community_channels ch WHERE ch.community_id = $1 ORDER BY ch.sort, ch.id`,
+        (SELECT COUNT(*)::int FROM community_posts p WHERE p.channel_id = ch.id) AS post_count,
+        (SELECT COUNT(*)::int FROM community_channel_members ccm
+          WHERE ccm.channel_id = ch.id) AS invited_count,
+        g.name AS access_group_name
+       FROM community_channels ch
+       LEFT JOIN community_access_groups g ON g.id = ch.access_group_id
+      WHERE ch.community_id = $1 ORDER BY ch.sort, ch.id`,
       [req.params.id],
     );
 
@@ -520,6 +558,137 @@ adminCommunityRouter.delete(
   }),
 );
 
+/* ------------------------------------------- what grants a tier, and how */
+
+/**
+ * GET /:id/access-groups/:groupId/grants
+ *
+ * Everything that puts somebody in this tier by selling it to them: the offers,
+ * the products and the plans that name it. The tab's own description promises
+ * "an offer can grant it" and there was no way to see whether one did.
+ *
+ * Purchase-derived tier membership is never a row in
+ * `community_access_group_members` — it is read live off the grant, so a refund
+ * takes the tier away with the access rather than leaving a row nobody
+ * remembers to delete. Which is why this screen reads the three tables that
+ * name the group rather than counting members.
+ */
+adminCommunityRouter.get(
+  "/:id/access-groups/:groupId/grants",
+  asyncHandler(async (req, res) => {
+    const owned = await pool.query(
+      `SELECT 1 FROM community_access_groups WHERE id = $1 AND community_id = $2`,
+      [req.params.groupId, req.params.id],
+    );
+    if (owned.rowCount === 0) throw notFound("Access group not found");
+
+    const [offers, products, plans] = await Promise.all([
+      pool.query(
+        `SELECT id, title, slug, status FROM offers
+          WHERE access_group_id = $1 ORDER BY title`,
+        [req.params.groupId],
+      ),
+      pool.query(
+        `SELECT id, title, slug, status FROM products
+          WHERE access_group_id = $1 ORDER BY title`,
+        [req.params.groupId],
+      ),
+      pool.query(
+        `SELECT id, name, slug FROM plans WHERE access_group_id = $1 ORDER BY name`,
+        [req.params.groupId],
+      ),
+    ]);
+
+    res.json({
+      offers: rowsToCamel(offers.rows),
+      products: rowsToCamel(products.rows),
+      plans: rowsToCamel(plans.rows),
+    });
+  }),
+);
+
+/**
+ * GET/PUT /offers/:offerId/access-group
+ *
+ * The tier an offer grants, as its own endpoint.
+ *
+ * Deliberately here and not on the offer editor's own PUT: the offer routes are
+ * owned elsewhere and this is one field with one meaning, so exposing it
+ * separately lets the offer editor wire it up with a single call and lets this
+ * screen read it back without either side reaching into the other's shape.
+ *
+ * The grant is DERIVED, never copied. `access_grants.offer_id` already records
+ * which offer produced a grant, and `services/access.ts` reads the tier through
+ * that live grant — so a refund or a lapsed payment plan removes the tier at the
+ * same instant it removes the access, and nothing has to be swept up afterwards.
+ *
+ *   GET  → { offerId, offerTitle, accessGroupId, accessGroupName, communityId }
+ *   PUT  { accessGroupId: number | null } → the same shape
+ *
+ * `null` clears it. A group id from a community the offer does not sell is
+ * refused: buying an offer that grants a tier in a room the offer does not
+ * unlock is a tier nobody can use.
+ */
+adminCommunityRouter.get(
+  "/offers/:offerId/access-group",
+  asyncHandler(async (req, res) => {
+    const found = await pool.query(
+      `SELECT o.id AS offer_id, o.title AS offer_title, o.access_group_id,
+              g.name AS access_group_name, g.community_id
+         FROM offers o
+         LEFT JOIN community_access_groups g ON g.id = o.access_group_id
+        WHERE o.id = $1`,
+      [req.params.offerId],
+    );
+    if (found.rowCount === 0) throw notFound("Offer not found");
+    res.json(rowToCamel(found.rows[0]));
+  }),
+);
+
+adminCommunityRouter.put(
+  "/offers/:offerId/access-group",
+  asyncHandler(async (req, res) => {
+    const raw = (req.body as Record<string, unknown>).accessGroupId;
+    let groupId: number | null = null;
+    if (raw !== null && raw !== undefined && raw !== "") {
+      groupId = Number(raw);
+      if (!Number.isInteger(groupId) || groupId < 1) throw badRequest("That isn't a group.");
+
+      /*
+       * The offer has to actually unlock the community the tier belongs to,
+       * whether through a product that is that community or one that grants
+       * access to it. A tier in a room the offer does not sell is a tier the
+       * buyer can never use, and nothing downstream would ever say so.
+       */
+      const reachable = await pool.query(
+        `SELECT 1
+           FROM community_access_groups g
+          WHERE g.id = $1
+            AND EXISTS (
+              SELECT 1 FROM offer_products op
+                JOIN products p ON p.id = op.product_id
+               WHERE op.offer_id = $2 AND p.community_id = g.community_id
+            )`,
+        [groupId, req.params.offerId],
+      );
+      if (reachable.rowCount === 0) {
+        throw badRequest(
+          "That group is in a community this offer doesn't sell. Add the community to the offer first.",
+        );
+      }
+    }
+
+    const saved = await pool.query(
+      `UPDATE offers SET access_group_id = $2, updated_at = now()
+        WHERE id = $1
+      RETURNING id AS offer_id, title AS offer_title, access_group_id`,
+      [req.params.offerId, groupId],
+    );
+    if (saved.rowCount === 0) throw notFound("Offer not found");
+    res.json(rowToCamel(saved.rows[0]));
+  }),
+);
+
 /* -------------------------------------------------------- scheduled posts */
 
 /**
@@ -697,6 +866,29 @@ adminCommunityRouter.post(
 
 /* ---------------------------------------------------------------- Channels */
 
+/**
+ * Resolves the tier a channel is being pinned to, refusing one from a different
+ * community.
+ *
+ * A group id is a small integer arriving in a request body: without this check
+ * a channel in one community can be scoped to a tier in another, which is a
+ * channel nobody can ever be in and no screen would explain.
+ */
+async function resolveAccessGroupId(
+  communityId: string,
+  raw: unknown,
+): Promise<number | null> {
+  if (raw === null || raw === undefined || raw === "") return null;
+  const groupId = Number(raw);
+  if (!Number.isInteger(groupId) || groupId < 1) throw badRequest("That isn't a group.");
+  const owned = await pool.query(
+    `SELECT 1 FROM community_access_groups WHERE id = $1 AND community_id = $2`,
+    [groupId, communityId],
+  );
+  if (owned.rowCount === 0) throw badRequest("That group isn't in this community.");
+  return groupId;
+}
+
 adminCommunityRouter.post(
   "/:id/channels",
   asyncHandler(async (req, res) => {
@@ -706,21 +898,24 @@ adminCommunityRouter.post(
     const name = typeof body.name === "string" ? body.name : "";
     if (!name.trim()) throw badRequest("Channel name is required");
 
+    const view = typeof body.viewMode === "string" ? body.viewMode : null;
     const modes = Array.isArray(body.viewModes) && body.viewModes.length > 0
       ? (body.viewModes as string[])
-      : ["feed"];
+      : [view ?? "feed"];
     // Default to a mode that is actually offered, so the CHECK cannot be hit
-    // by a create that named only the default.
+    // by a create that named only the default. An explicit `viewMode` wins, and
+    // is the same value written to `view_mode`, so the two never disagree.
     const preferred =
-      typeof body.defaultViewMode === "string" && modes.includes(body.defaultViewMode)
+      view ??
+      (typeof body.defaultViewMode === "string" && modes.includes(body.defaultViewMode)
         ? body.defaultViewMode
-        : modes[0];
+        : modes[0]);
 
     const result = await pool.query(
       `INSERT INTO community_channels
          (community_id, slug, name, description, format, visibility,
-          cover_image, access_group_id, view_modes, default_view_mode, sort)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::text[], $10,
+          cover_image, access_group_id, view_modes, default_view_mode, view_mode, sort)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::text[], $10, $10,
          (SELECT COALESCE(MAX(sort), -1) + 1 FROM community_channels WHERE community_id = $1))
        RETURNING *`,
       [
@@ -731,7 +926,7 @@ adminCommunityRouter.post(
         body.format === "chat" ? "chat" : "feed",
         body.visibility === "private" ? "private" : "public",
         typeof body.coverImage === "string" ? body.coverImage : "",
-        body.accessGroupId == null ? null : Number(body.accessGroupId),
+        await resolveAccessGroupId(req.params.id, body.accessGroupId),
         modes,
         preferred,
       ],
@@ -740,20 +935,233 @@ adminCommunityRouter.post(
   }),
 );
 
+/**
+ * PUT /channels/:channelId
+ *
+ * The channel settings screen. Everything the create dialog offers is editable
+ * afterwards, which had been the real gap: a channel created invite-only, or
+ * pointed at the wrong tier, or opened as the wrong layout, could not be put
+ * right or removed, so the only fix was to leave it broken.
+ *
+ * Renaming does NOT re-slug. The slug is in every link a member has followed
+ * or bookmarked and in the href of every notification already sent; changing a
+ * channel's display name is not a request to break those.
+ */
 adminCommunityRouter.put(
   "/channels/:channelId",
   asyncHandler(async (req, res) => {
-    assertChannelValues(req.body as Record<string, unknown>);
-    const update = buildUpdate(req.body as Record<string, unknown>, CHANNEL_FIELDS);
-    if (!update) throw badRequest("No updatable fields supplied");
+    const body = { ...(req.body as Record<string, unknown>) };
+    assertChannelValues(body);
+
+    // Scoped by the channel's own community, so a group from somewhere else is
+    // refused with words rather than stored as a channel nobody can enter.
+    if ("accessGroupId" in body) {
+      const owner = await pool.query<{ community_id: number }>(
+        `SELECT community_id FROM community_channels WHERE id = $1`,
+        [req.params.channelId],
+      );
+      if (owner.rowCount === 0) throw notFound("Channel not found");
+      body.accessGroupId = await resolveAccessGroupId(
+        String(owner.rows[0].community_id),
+        body.accessGroupId,
+      );
+    }
+    // The slug is a member's bookmark; only an explicit slug changes it.
+    delete body.communityId;
+
+    /*
+     * `viewMode` → `view_mode`, the one layout the member side renders. It is
+     * kept in step with the older pair (033): the channel opens in it by
+     * default, and it is added to the offered set if missing, so the CHECK on
+     * `default_view_mode = ANY(view_modes)` can never turn a save into a 500.
+     * A save that only names `defaultViewMode` moves `view_mode` with it.
+     */
+    const chosenView = body.viewMode ?? body.defaultViewMode;
+    delete body.viewMode;
+
+    const update = buildUpdate(body, CHANNEL_FIELDS);
+    const sets = update ? [update.clause] : [];
+    const values = update ? [...update.values] : [];
+    if (chosenView !== undefined) {
+      values.push(chosenView);
+      const p = `$${values.length}::text`;
+      sets.push(`view_mode = ${p}`);
+      if (!("defaultViewMode" in body)) sets.push(`default_view_mode = ${p}`);
+      if (!("viewModes" in body)) {
+        sets.push(
+          `view_modes = CASE WHEN ${p} = ANY(view_modes) THEN view_modes
+                             ELSE array_append(view_modes, ${p}) END`,
+        );
+      }
+    }
+    if (sets.length === 0) throw badRequest("No updatable fields supplied");
 
     const result = await pool.query(
-      `UPDATE community_channels SET ${update.clause}
-       WHERE id = $${update.values.length + 1} RETURNING *`,
-      [...update.values, req.params.channelId],
+      `UPDATE community_channels SET ${sets.join(", ")}
+       WHERE id = $${values.length + 1} RETURNING *`,
+      [...values, req.params.channelId],
     );
     if (result.rowCount === 0) throw notFound("Channel not found");
     res.json(rowToCamel(result.rows[0]));
+  }),
+);
+
+/**
+ * PUT /:id/channels/order  { channelIds: number[] }
+ *
+ * The order members see the channels in, set in one go. It has to name every
+ * channel in the community exactly once: a partial list would leave two
+ * channels sharing a position and the order would depend on insertion id,
+ * which is the "I moved it and it moved back" bug in another form. If the list
+ * changed underneath the screen (somebody created or deleted a channel), the
+ * save is refused with a reason rather than applied to a list nobody saw.
+ */
+adminCommunityRouter.put(
+  "/:id/channels/order",
+  asyncHandler(async (req, res) => {
+    const raw = (req.body as Record<string, unknown>).channelIds;
+    if (!Array.isArray(raw) || raw.length === 0) {
+      throw badRequest("Send the channels in the order you want them.");
+    }
+    const ids = raw.map(Number);
+    if (ids.some((id) => !Number.isInteger(id) || id < 1) || new Set(ids).size !== ids.length) {
+      throw badRequest("That order names a channel twice, or one we can't read.");
+    }
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const existing = await client.query<{ id: number }>(
+        `SELECT id FROM community_channels WHERE community_id = $1 FOR UPDATE`,
+        [req.params.id],
+      );
+      const known = new Set(existing.rows.map((row) => row.id));
+      if (known.size === 0) throw notFound("That community has no channels to reorder.");
+      if (ids.length !== known.size || ids.some((id) => !known.has(id))) {
+        throw badRequest(
+          "The channel list changed while you were reordering it. Reload the page and try again.",
+        );
+      }
+      await client.query(
+        `UPDATE community_channels ch
+            SET sort = o.pos::int - 1
+           FROM unnest($2::int[]) WITH ORDINALITY AS o(id, pos)
+          WHERE ch.id = o.id AND ch.community_id = $1`,
+        [req.params.id, ids],
+      );
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+    res.json({ channelIds: ids });
+  }),
+);
+
+/**
+ * GET /:id/offers
+ *
+ * The offers that sell this community, with the tier each one grants. This is
+ * what the Access groups tab offers when "an offer can grant it": only an offer
+ * that actually unlocks the room can grant a tier in it (the PUT on
+ * /offers/:offerId/access-group enforces the same rule), so listing anything
+ * else would be offering a choice that is refused on save.
+ */
+adminCommunityRouter.get(
+  "/:id/offers",
+  asyncHandler(async (req, res) => {
+    const rows = await pool.query(
+      `SELECT DISTINCT o.id, o.title, o.status, o.access_group_id,
+              g.name AS access_group_name
+         FROM offers o
+         JOIN offer_products op ON op.offer_id = o.id
+         JOIN products p        ON p.id = op.product_id
+         LEFT JOIN community_access_groups g ON g.id = o.access_group_id
+        WHERE p.community_id = $1
+        ORDER BY o.title, o.id`,
+      [req.params.id],
+    );
+    res.json(rowsToCamel(rows.rows));
+  }),
+);
+
+/* ------------------------------------------------------- channel invites */
+
+/**
+ * Who has been let into an invite-only channel.
+ *
+ * `visibility = 'private'` has been offered in the admin as "Invited members
+ * only" since the baseline with nowhere to record an invitation, so the
+ * member-side queries could only fall back to "moderators and admins" — a
+ * channel created private was invisible to every member of the community and
+ * there was no way to let anybody in. These three endpoints are the missing
+ * half; `community_channel_members` is the list they read and write.
+ *
+ * Listed for a public channel too, and harmless there: the rows are ignored
+ * while the channel is open to everyone and mean what they say again the moment
+ * it is closed, so switching a channel to invite-only does not silently discard
+ * the people already picked for it.
+ */
+adminCommunityRouter.get(
+  "/channels/:channelId/invites",
+  asyncHandler(async (req, res) => {
+    const rows = await pool.query(
+      `SELECT ccm.member_id, ccm.added_at,
+              COALESCE(NULLIF(TRIM(m.first_name || ' ' || m.last_name), ''),
+                       NULLIF(m.name, ''), m.email::text) AS name,
+              m.email::text AS email
+         FROM community_channel_members ccm
+         JOIN members m ON m.id = ccm.member_id
+        WHERE ccm.channel_id = $1
+        ORDER BY ccm.added_at DESC
+        LIMIT 500`,
+      [req.params.channelId],
+    );
+    res.json(rowsToCamel(rows.rows));
+  }),
+);
+
+adminCommunityRouter.post(
+  "/channels/:channelId/invites",
+  asyncHandler(async (req, res) => {
+    const memberId = Number((req.body as Record<string, unknown>).memberId);
+    if (!Number.isInteger(memberId) || memberId < 1) throw badRequest("Choose someone to invite.");
+
+    /*
+     * They have to be in the community first. A channel invitation to somebody
+     * who cannot open the community is a row that grants nothing, and the
+     * screen that offered it would have said the opposite.
+     */
+    const inRoom = await pool.query(
+      `SELECT 1
+         FROM community_channels ch
+         JOIN community_memberships cm ON cm.community_id = ch.community_id
+        WHERE ch.id = $1 AND cm.member_id = $2`,
+      [req.params.channelId, memberId],
+    );
+    if (inRoom.rowCount === 0) {
+      throw badRequest("Add them to this community first, then invite them to the channel.");
+    }
+
+    await pool.query(
+      `INSERT INTO community_channel_members (channel_id, member_id)
+       VALUES ($1, $2) ON CONFLICT (channel_id, member_id) DO NOTHING`,
+      [req.params.channelId, memberId],
+    );
+    res.status(201).json({ ok: true });
+  }),
+);
+
+adminCommunityRouter.delete(
+  "/channels/:channelId/invites/:memberId",
+  asyncHandler(async (req, res) => {
+    await pool.query(
+      `DELETE FROM community_channel_members WHERE channel_id = $1 AND member_id = $2`,
+      [req.params.channelId, req.params.memberId],
+    );
+    res.status(204).end();
   }),
 );
 
@@ -786,22 +1194,53 @@ adminCommunityRouter.get(
   }),
 );
 
+/**
+ * POST /channels/:channelId/posts
+ *
+ * The host's composer, which can now write a post for later.
+ *
+ * `publishAt` holds the post at `status = 'scheduled'` and the
+ * `community.publishScheduled` sweeper (every two minutes) flips it to visible
+ * when its moment comes, moving `created_at` to the publication time so it does
+ * not appear already buried under everything posted since. Until then it is
+ * inert: invisible in the channel, and listed only on the Scheduled screen.
+ * Without this the Scheduled tab was a page nothing could ever reach — it told
+ * the reader to "choose a time for it" against a composer with no such control.
+ */
 adminCommunityRouter.post(
   "/channels/:channelId/posts",
   asyncHandler(async (req, res) => {
-    const { title, body, mediaUrl, authorName, pinned } = req.body as Record<string, unknown>;
+    const { title, body, mediaUrl, mediaLabel, authorName, pinned, publishAt } =
+      req.body as Record<string, unknown>;
     if (typeof body !== "string" || !body.trim()) throw badRequest("Post body is required");
 
+    let scheduledFor: Date | null = null;
+    if (publishAt !== undefined && publishAt !== null && publishAt !== "") {
+      const when = new Date(String(publishAt));
+      if (!Number.isFinite(when.getTime())) throw badRequest("That isn't a time we can read.");
+      // Publishing a past time immediately would hide what is almost always a
+      // timezone mistake, so it is refused rather than rounded up to now.
+      if (when.getTime() <= Date.now()) {
+        throw badRequest("Choose a time in the future, or post it now.");
+      }
+      scheduledFor = when;
+    }
+
     const result = await pool.query(
-      `INSERT INTO community_posts (channel_id, title, body, media_url, author_name, pinned)
-       VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+      `INSERT INTO community_posts
+         (channel_id, title, body, media_url, media_label, author_name, pinned,
+          status, publish_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
       [
         req.params.channelId,
         typeof title === "string" ? title : "",
         body.trim(),
         typeof mediaUrl === "string" ? mediaUrl : "",
+        typeof mediaLabel === "string" ? mediaLabel : "",
         typeof authorName === "string" && authorName ? authorName : "Host",
         Boolean(pinned),
+        scheduledFor === null ? "visible" : "scheduled",
+        scheduledFor,
       ],
     );
     res.status(201).json(rowToCamel(result.rows[0]));
@@ -865,8 +1304,22 @@ adminCommunityRouter.get(
   "/:id/members",
   asyncHandler(async (req, res) => {
     const result = await pool.query(
-      `SELECT cm.id, cm.role, cm.points, cm.joined_at, cm.member_id,
-              m.email, m.name, m.status
+      // Every row, including the banned and the closed — this is the screen
+      // where a ban is lifted, so hiding them would hide the undo. They carry
+      // `bannedAt` and the account status so the list can mark them, and so the
+      // headline count can be the same number the members themselves see:
+      // "2 people in this community" over a directory listing one was two
+      // different questions being asked and only one of them answered.
+      `SELECT cm.id, cm.role, cm.points, cm.joined_at, cm.member_id, cm.banned_at,
+              m.email, m.name, m.status,
+              (SELECT COALESCE(
+                        json_agg(json_build_object('id', g.id, 'name', g.name)
+                                 ORDER BY g.sort, g.id),
+                        '[]'::json)
+                 FROM community_access_group_members agm
+                 JOIN community_access_groups g ON g.id = agm.group_id
+                WHERE agm.member_id = cm.member_id AND g.community_id = cm.community_id
+              ) AS groups
        FROM community_memberships cm
        JOIN members m ON m.id = cm.member_id
        WHERE cm.community_id = $1
@@ -923,18 +1376,65 @@ adminCommunityRouter.delete(
   }),
 );
 
+/**
+ * GET /:id/leaderboard?period=week|month|all
+ *
+ * The same three boards the member sidebar offers (2.7), because an admin
+ * looking at "who is most active" and a member looking at the same list have to
+ * be shown the same thing — and "all time" alone cannot answer "who turned up
+ * this week", which is the question that decides who gets a shout-out.
+ *
+ * All-time reads the running total on the membership; the two windows sum the
+ * points ledger instead. They have to come from different places: the
+ * membership total is a lifetime figure nothing decrements, so it cannot answer
+ * "this week", and summing the ledger for all time would disagree with the
+ * total the moment anybody's points are adjusted by hand.
+ *
+ * Nobody on zero appears on any of them. Every member of a new community has
+ * nothing, and RANK() makes all of them equal first — a board where two people
+ * who have never posted are both "1st" is a membership list with a trophy on
+ * it, which is exactly how this read on the live site.
+ */
 adminCommunityRouter.get(
   "/:id/leaderboard",
   asyncHandler(async (req, res) => {
+    const asked = String(req.query.period ?? "all");
+    const period = asked === "week" || asked === "month" ? asked : "all";
+    const window = period === "week" ? "7 days" : "30 days";
+
     const result = await pool.query(
-      `SELECT cm.points, m.name, m.email,
-              (SELECT b.emoji FROM community_badges b
-                WHERE b.community_id = cm.community_id AND b.threshold <= cm.points
-                ORDER BY b.threshold DESC LIMIT 1) AS badge
-       FROM community_memberships cm
-       JOIN members m ON m.id = cm.member_id
-       WHERE cm.community_id = $1
-       ORDER BY cm.points DESC LIMIT 20`,
+      period === "all"
+        ? `SELECT cm.points, m.name, m.email, cm.member_id,
+                  RANK() OVER (ORDER BY cm.points DESC)::int AS rank,
+                  COUNT(*) OVER (PARTITION BY cm.points) > 1 AS tied,
+                  (SELECT b.emoji FROM community_badges b
+                    WHERE b.community_id = cm.community_id AND b.threshold <= cm.points
+                    ORDER BY b.threshold DESC LIMIT 1) AS badge
+             FROM community_memberships cm
+             JOIN members m ON m.id = cm.member_id
+            WHERE cm.community_id = $1 AND cm.banned_at IS NULL AND cm.points > 0
+            ORDER BY rank, m.name
+            LIMIT 20`
+        : `WITH earned AS (
+             SELECT e.member_id, SUM(e.points)::int AS points
+               FROM community_point_events e
+              WHERE e.community_id = $1
+                AND e.created_at > now() - interval '${window}'
+              GROUP BY e.member_id
+           )
+           SELECT e.points, m.name, m.email, cm.member_id,
+                  RANK() OVER (ORDER BY e.points DESC)::int AS rank,
+                  COUNT(*) OVER (PARTITION BY e.points) > 1 AS tied,
+                  (SELECT b.emoji FROM community_badges b
+                    WHERE b.community_id = cm.community_id AND b.threshold <= cm.points
+                    ORDER BY b.threshold DESC LIMIT 1) AS badge
+             FROM earned e
+             JOIN community_memberships cm
+               ON cm.community_id = $1 AND cm.member_id = e.member_id
+             JOIN members m ON m.id = cm.member_id
+            WHERE cm.banned_at IS NULL AND e.points > 0
+            ORDER BY rank, m.name
+            LIMIT 20`,
       [req.params.id],
     );
     res.json(rowsToCamel(result.rows));

@@ -3,6 +3,7 @@ import { rateLimit } from "express-rate-limit";
 import { z } from "zod";
 import type { PoolClient } from "pg";
 import { pool } from "../../db/pool";
+import { assertOfferDeliverable } from "../../services/downloadReadiness";
 import { asyncHandler } from "../../utils/asyncHandler";
 import { badRequest, notFound } from "../../utils/httpError";
 import { optionalMember } from "../../middleware/memberAuth";
@@ -56,6 +57,7 @@ export interface OfferRow {
   custom_fields: unknown;
   terms_url: string;
   require_terms: boolean;
+  allow_gifting: boolean;
   redirect_url: string;
   thank_you_page_id: string | null;
   access_expires_after_days: number | null;
@@ -70,7 +72,7 @@ const OFFER_COLUMNS = `id, title, slug, description, checkout_headline, thumbnai
                        currency, pricing_type, amount_cents, min_amount_cents, interval,
                        interval_count, installment_count, trial_days, collect_tax,
                        collect_address, collect_phone, custom_fields, terms_url,
-                       require_terms, redirect_url, thank_you_page_id,
+                       require_terms, allow_gifting, redirect_url, thank_you_page_id,
                        access_expires_after_days, stripe_price_id, stripe_product_id`;
 
 /** Loads an offer by slug, or null. Never returns a draft or archived row. */
@@ -501,6 +503,7 @@ offersRouter.get(
   asyncHandler(async (req, res) => {
     const offer = await loadPublishedOffer(req.params.slug);
     if (!offer) throw notFound("Offer not found");
+    await assertOfferDeliverable(offer.id);
 
     const [products, bumps, upsells, productIds, additionalPricing] = await Promise.all([
       loadOfferProducts(offer.id),
@@ -542,6 +545,7 @@ offersRouter.get(
         collectAddress: offer.collect_address,
         collectPhone: offer.collect_phone,
         requireTerms: offer.require_terms,
+        allowGifting: offer.allow_gifting,
         termsUrl: offer.terms_url,
         customFields: parseCustomFields(offer.custom_fields),
       },
@@ -648,6 +652,7 @@ offersRouter.post(
     const priced = toPricedOffer(offer);
     const bumpRows = await loadOfferBumps(offer.id);
     const bumps = selectBumps(bumpRows, body.bumpProductIds ?? []);
+    await assertOfferDeliverable(offer.id, body.bumpProductIds ?? []);
 
     let coupon: ValidatedCoupon | null = null;
     let couponError: string | null = null;

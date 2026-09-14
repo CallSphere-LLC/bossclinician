@@ -109,7 +109,12 @@ export function DataTable<TData>({
       )}
 
       <div className="overflow-x-auto">
-        <table className="w-full text-left text-sm" style={{ minWidth }}>
+        <table className="admin-data-table w-full text-left text-sm" style={{ minWidth }}>
+          <colgroup>
+            {table.getVisibleLeafColumns().map((column, index, all) => (
+              <col key={column.id} style={column.id === "actions" ? { width: "180px" } : index === 0 && all.length > 2 ? { width: all.length > 5 ? "26%" : "40%" } : undefined} />
+            ))}
+          </colgroup>
           <thead className="sticky top-0 z-[1] bg-sand">
             {table.getHeaderGroups().map((headerGroup) => (
               <tr key={headerGroup.id}>
@@ -232,5 +237,5 @@ export function DataTable<TData>({
 
 /** Right-aligned action cluster used in the trailing column of most tables. */
 export function RowActions({ children }: { children: ReactNode }) {
-  return <div className="flex items-center justify-end gap-1.5">{children}</div>;
+  return <div className="flex flex-wrap items-center justify-end gap-1.5">{children}</div>;
 }

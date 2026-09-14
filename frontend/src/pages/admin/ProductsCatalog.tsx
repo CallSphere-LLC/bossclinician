@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useSearchParams } from "react-router-dom";
 import { motion } from "motion/react";
 import {
   Archive,
@@ -114,6 +115,7 @@ interface Draft {
   title: string;
   subtitle: string;
   description: string;
+  instructions: string;
   thumbnailUrl: string;
   status: CatalogStatus;
   resourceId: number | null;
@@ -126,6 +128,7 @@ function blankDraft(kind: ProductKind): Draft {
     title: "",
     subtitle: "",
     description: "",
+    instructions: "",
     thumbnailUrl: "",
     status: "published",
     resourceId: null,
@@ -139,6 +142,7 @@ function draftFrom(product: Product): Draft {
     title: product.title,
     subtitle: product.subtitle,
     description: product.description,
+    instructions: product.instructions ?? "",
     thumbnailUrl: product.thumbnailUrl,
     status: product.status,
     resourceId:
@@ -150,7 +154,8 @@ function draftFrom(product: Product): Draft {
   };
 }
 
-export default function ProductsCatalog() {
+export default function ProductsCatalog({ downloadOnly = false }: { downloadOnly?: boolean }) {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [products, setProducts] = useState<Product[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showRetired, setShowRetired] = useState(false);
@@ -176,15 +181,16 @@ export default function ProductsCatalog() {
     adminCommerceApi
       .productList()
       .then((list) => {
-        setProducts(list);
+        setProducts(downloadOnly ? list.filter((p) => p.kind === "download") : list);
         setError(null);
       })
       .catch(() => setError("We couldn't load your catalogue. Try refreshing the page."));
-  }, []);
+  }, [downloadOnly]);
 
   useEffect(load, [load]);
 
   useEffect(() => {
+    if (downloadOnly) return;
     adminApi
       .coursesList()
       .then((list) => setCourses(list.map((c: Course) => ({ id: Number(c.id), label: c.title }))))
@@ -206,6 +212,13 @@ export default function ProductsCatalog() {
       .then((list) => setCoaching(list.map((o) => ({ id: o.id, label: o.title }))))
       .catch(() => setCoaching([]));
   }, []);
+
+  useEffect(() => {
+    if (downloadOnly && searchParams.get("new") === "1") {
+      setDraft(blankDraft("download"));
+      setSearchParams({}, { replace: true });
+    }
+  }, [downloadOnly, searchParams, setSearchParams]);
 
   const optionsFor = useCallback(
     (kind: ProductKind): ResourceOption[] => {
@@ -265,6 +278,7 @@ export default function ProductsCatalog() {
         title: draft.title.trim(),
         subtitle: draft.subtitle.trim(),
         description: draft.description.trim(),
+        instructions: draft.instructions.trim(),
         thumbnailUrl: draft.thumbnailUrl,
         status: draft.status,
         ...resource,
@@ -275,7 +289,7 @@ export default function ProductsCatalog() {
         // use, so an existing product never has its own changed underneath it.
         const taken = (products ?? []).map((product) => product.slug);
         const base = slugify(draft.title) || "item";
-        await adminCommerceApi.productCreate({
+        const created = await adminCommerceApi.productCreate({
           slug: uniqueKey(base, taken, "-"),
           kind,
           courseId: null,
@@ -286,6 +300,7 @@ export default function ProductsCatalog() {
           sort: products?.length ?? 0,
           ...shared,
         });
+        if (kind === "download") setFiles({ ...created, fileCount: 0, memberCount: 0, offerCount: 0 });
         toast.success(`“${draft.title.trim()}” is in your catalogue.`);
       } else {
         await adminCommerceApi.productUpdate(draft.id, shared);
@@ -345,17 +360,20 @@ export default function ProductsCatalog() {
     <div className="space-y-6">
       <PageHeader
         eyebrow="Products"
-        title="Your catalogue"
-        description="Everything people can be given access to. Put a price on one of these and you have an offer."
+        title={downloadOnly ? "Downloads" : "Your catalogue"}
+        description={downloadOnly ? "Sell files, guides and toolkits. Buyers can find and download them again in their library." : "Everything people can be given access to. Put a price on one of these and you have an offer."}
         actions={
-          <Button size="sm" onClick={() => setChoosingKind(true)}>
+          <Button size="sm" onClick={() => downloadOnly ? startNew("download") : setChoosingKind(true)}>
             <Plus />
-            Add something to sell
+            {downloadOnly ? "New download" : "Add something to sell"}
           </Button>
         }
       />
 
       {error && <ErrorNotice message={error} />}
+      {products?.some(product => product.kind === "download" && product.fileCount === 0 && product.status !== "archived") && (
+        <ErrorNotice message="Downloads without files cannot be purchased. Add the original files using Add files. Existing customers keep their access, but cannot download anything until those files are attached." />
+      )}
 
       {products === null ? (
         <div className="space-y-5">
@@ -370,7 +388,7 @@ export default function ProductsCatalog() {
             title="Nothing in your catalogue yet"
             description="This is the list of things people can be given — a course, a pack of files, a community, time with you. Add one, then put a price on it and you have something to sell."
             action={
-              <Button size="sm" onClick={() => setChoosingKind(true)}>
+              <Button size="sm" onClick={() => downloadOnly ? startNew("download") : setChoosingKind(true)}>
                 <Plus />
                 Add your first one
               </Button>
@@ -549,7 +567,7 @@ export default function ProductsCatalog() {
       <Modal
         open={draft !== null}
         onOpenChange={(open) => !open && setDraft(null)}
-        title={draft && draft.id === null ? "Add something to sell" : "Edit this"}
+        title={draft?.kind === "download" ? (draft.id === null ? "New download" : "Edit download") : draft && draft.id === null ? "Add something to sell" : "Edit this"}
         description={draft ? PRODUCT_KIND[draft.kind].blurb : undefined}
         size="lg"
         footer={
@@ -625,6 +643,9 @@ export default function ProductsCatalog() {
               />
             </Field>
 
+            {draft.kind === "download" && <Field label="Instructions after purchase" hint="optional — shown in the buyer’s library" error={draftErrors.instructions}>
+              <Textarea rows={4} value={draft.instructions} onChange={(e) => setDraft((d) => d ? { ...d, instructions: e.target.value } : d)} />
+            </Field>}
             <Field label="Picture" error={draftErrors.thumbnailUrl}>
               {draft.thumbnailUrl ? (
                 <div className="flex flex-wrap items-center gap-3 rounded-xl border border-hairline bg-white/[0.03] p-2.5">
@@ -701,16 +722,17 @@ export default function ProductsCatalog() {
 /** The line under a product's name: what it is, who has it, what sells it. */
 function describe(product: Product): string {
   const parts = [PRODUCT_KIND[product.kind].one];
+  const missingFiles = product.kind === "download" && product.fileCount === 0;
   parts.push(
     product.offerCount > 0
-      ? `sold by ${pluralize(product.offerCount, "offer")}`
+      ? `${missingFiles ? "linked to" : "sold by"} ${pluralize(product.offerCount, "offer")}`
       : "not for sale yet",
   );
   if (product.memberCount > 0) {
-    parts.push(`${pluralize(product.memberCount, "person", "people")} can open it`);
+    parts.push(missingFiles ? `${pluralize(product.memberCount, "customer")} awaiting files` : `${pluralize(product.memberCount, "person", "people")} can open it`);
   }
   if (product.kind === "download") {
-    parts.push(product.fileCount > 0 ? pluralize(product.fileCount, "file") : "no files yet");
+    parts.push(product.fileCount > 0 ? pluralize(product.fileCount, "file") : "no files · checkout blocked");
   }
   return parts.join(" · ");
 }
@@ -736,6 +758,11 @@ function FilesModal({
   confirm: Confirm;
 }) {
   const [files, setFiles] = useState<ProductFile[] | null>(null);
+  const [media, setMedia] = useState<MediaAsset[]>([]);
+  const [mediaError, setMediaError] = useState<string | null>(null);
+  const [mediaQuery, setMediaQuery] = useState("");
+  const [selectedMedia, setSelectedMedia] = useState("");
+  const [attaching, setAttaching] = useState(false);
   const productId = product?.id ?? null;
 
   const load = useCallback(() => {
@@ -752,10 +779,14 @@ function FilesModal({
       return;
     }
     load();
+    adminApi.mediaList().then((items) => { setMedia(items.filter((asset) => asset.url.startsWith("protected:"))); setMediaError(null); })
+      .catch(() => setMediaError("Could not load your media library. Try reopening this dialog."));
+    setSelectedMedia("");
   }, [productId, load]);
 
   async function attach(asset: MediaAsset) {
-    if (productId === null) return;
+    if (productId === null || attaching) return;
+    setAttaching(true);
     try {
       await adminCommerceApi.fileAdd(productId, {
         mediaId: asset.id,
@@ -778,7 +809,7 @@ function FilesModal({
       onChanged();
     } catch (err) {
       toast.error(commerceMessage(err, "file"));
-    }
+    } finally { setAttaching(false); setSelectedMedia(""); }
   }
 
   async function rename(file: ProductFile, title: string) {
@@ -825,6 +856,15 @@ function FilesModal({
       }
     >
       <div className="space-y-5">
+        <Field label="Choose from the media library" hint="Files uploaded for buyers only">
+          <Input aria-label="Search media files" placeholder="Search files…" value={mediaQuery} onChange={(e) => setMediaQuery(e.target.value)} />
+          <select className={selectStyles} aria-label="Media library file" value={selectedMedia} onChange={(e) => setSelectedMedia(e.target.value)}>
+            <option value="">Choose a file…</option>
+            {media.filter((asset) => !files?.some((f) => f.mediaId === asset.id) && `${asset.title} ${asset.originalName}`.toLowerCase().includes(mediaQuery.toLowerCase())).slice(0, 100).map((asset) => <option key={asset.id} value={asset.id}>{asset.title || asset.originalName}</option>)}
+          </select>
+          <Button variant="secondary" size="sm" disabled={!selectedMedia || attaching} onClick={() => { const asset = media.find((item) => String(item.id) === selectedMedia); if (asset) void attach(asset); }}>Add selected file</Button>
+          {mediaError && <ErrorNotice message={mediaError} />}
+        </Field>
         <UploadDropzone
           compact
           visibility="protected"
@@ -836,8 +876,8 @@ function FilesModal({
           <Skeleton className="h-24 w-full" />
         ) : files.length === 0 ? (
           <p className="rounded-xl border border-dashed border-hairline px-4 py-6 text-center text-sm text-ink-soft">
-            Nothing in here yet. Drop the files in above and they're delivered the moment somebody
-            buys.
+            No files are attached. Checkout is blocked until you add the original files.
+            Existing customers will be able to download them from their library once added.
           </p>
         ) : (
           <ul className="space-y-2">

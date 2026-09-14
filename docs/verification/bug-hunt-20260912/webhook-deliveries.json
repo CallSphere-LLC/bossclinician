@@ -1,0 +1,38 @@
+{
+  "1": {
+    "deliveries": [
+      {
+        "id": "1",
+        "endpointId": 1,
+        "eventType": "test.ping",
+        "status": "delivered",
+        "attempts": 1,
+        "responseStatus": 200,
+        "error": "",
+        "createdAt": "2026-09-12T19:25:22.502Z",
+        "deliveredAt": "2026-09-12T19:25:24.102Z",
+        "nextAttemptAt": null,
+        "endpointName": "ZZ Bug Hunt Echo",
+        "endpointUrl": "https://httpbin.org/post"
+      }
+    ]
+  },
+  "2": {
+    "deliveries": [
+      {
+        "id": "2",
+        "endpointId": 2,
+        "eventType": "test.ping",
+        "status": "pending",
+        "attempts": 2,
+        "responseStatus": 503,
+        "error": "Endpoint answered 503",
+        "createdAt": "2026-09-12T19:25:22.508Z",
+        "deliveredAt": null,
+        "nextAttemptAt": "2026-09-12T19:27:54.238Z",
+        "endpointName": "ZZ Bug Hunt Retry",
+        "endpointUrl": "https://httpbin.org/status/503"
+      }
+    ]
+  }
+}

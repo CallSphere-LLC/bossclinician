@@ -1,0 +1,136 @@
+import fs from "fs";
+import os from "os";
+import path from "path";
+import type { Server } from "http";
+import type { AddressInfo } from "net";
+import { beforeAll, afterAll, describe, expect, it } from "vitest";
+import { createTestDatabase, hasTestDatabase, insertMember } from "../../testing/db";
+
+const describeDb = hasTestDatabase ? describe : describe.skip;
+describeDb("Download products lifecycle (integration)", () => {
+  let db: Awaited<ReturnType<typeof createTestDatabase>>;
+  let server: Server;
+  let base: string;
+  let admin: string;
+  let buyer: string;
+  let stranger: string;
+  let productId: number;
+  let mediaId: number;
+  let buyerId: number;
+  const storage = fs.mkdtempSync(path.join(os.tmpdir(), "zz-download-products-"));
+  const bytes = "ZZ purchased download contents\n";
+  const email = "sagar+zzdownload@callsphere.ai";
+  const filename = "1234567890abcdef.txt";
+  beforeAll(async () => {
+    db = await createTestDatabase("download_products");
+    process.env.DATABASE_URL = db.url;
+    process.env.JWT_SECRET = "download-integration-secret";
+    process.env.STRIPE_SECRET_KEY = "";
+    process.env.UPLOAD_DIR = path.join(storage, "public");
+    process.env.PROTECTED_UPLOAD_DIR = path.join(storage, "protected");
+    fs.mkdirSync(process.env.PROTECTED_UPLOAD_DIR, { recursive: true });
+    fs.writeFileSync(path.join(process.env.PROTECTED_UPLOAD_DIR, filename), bytes);
+    const { createApp } = await import("../../app");
+    const { signToken } = await import("../../utils/jwt");
+    const { hashToken } = await import("../../auth/tokens");
+    const { signMemberAccessToken } = await import("../../auth/memberSession");
+    const owner = await db.client.query(`INSERT INTO admin_users (email,password_hash,name,role) VALUES ('sagar+zzadmin@callsphere.ai','unused','ZZ Admin','owner') RETURNING id`);
+    admin = signToken({ sub: owner.rows[0].id, email: "sagar+zzadmin@callsphere.ai", role: "owner" });
+    await db.client.query(`INSERT INTO admin_sessions (admin_user_id,token_hash,expires_at) VALUES ($1,$2,now()+interval '1 hour')`, [owner.rows[0].id, hashToken(admin)]);
+    buyerId = await insertMember(db.client, email, { name: "ZZ Download Buyer" });
+    const strangerId = await insertMember(db.client, "sagar+zzstranger@callsphere.ai", { name: "ZZ Stranger" });
+    buyer = signMemberAccessToken({ sub: buyerId, email });
+    stranger = signMemberAccessToken({ sub: strangerId, email: "sagar+zzstranger@callsphere.ai" });
+    const media = await db.client.query(`INSERT INTO media_assets (filename,original_name,url,mime,kind,size_bytes,title) VALUES ($1,'ZZ-guide.txt',$2,'text/plain','document',$3,'ZZ Guide') RETURNING id`, [filename, `protected:${filename}`, bytes.length]);
+    mediaId = media.rows[0].id;
+    server = createApp().listen(0);
+    await new Promise((resolve) => server.once("listening", resolve));
+    base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  }, 60000);
+  afterAll(async () => {
+    await new Promise<void>((resolve) => server?.close(() => resolve()));
+    const { pool } = await import("../../db/pool");
+    await pool.end();
+    await db?.drop();
+    fs.rmSync(storage, { recursive: true, force: true });
+  });
+  async function call(url: string, token: string, method = "GET", body?: unknown) {
+    return fetch(`${base}${url}`, { method, headers: { authorization: `Bearer ${token}`, "Content-Type": "application/json" }, ...(body ? { body: JSON.stringify(body) } : {}) });
+  }
+  it("creates, edits, reloads, attaches media, checks out, redownloads, enforces access and safely deletes", async () => {
+    const created = await call("/api/admin/products", admin, "POST", { slug: "zz-download", title: "ZZ Download", kind: "download", status: "published", description: "ZZ description", instructions: "Read the guide first.", thumbnailUrl: "/uploads/zz-cover.jpg" });
+    expect(created.status).toBe(201);
+    productId = ((await created.json()) as { id: number }).id;
+    expect((await call(`/api/admin/products/${productId}`, admin, "PUT", { instructions: "Start on page two." })).status).toBe(200);
+    expect(((await (await call(`/api/admin/products/${productId}`, admin)).json()) as { instructions: string }).instructions).toBe("Start on page two.");
+    const attached = await call(`/api/admin/products/${productId}/files`, admin, "POST", { mediaId, title: "ZZ Guide", storagePath: `protected:${filename}`, filename: "ZZ-guide.txt", mime: "text/plain", sizeBytes: bytes.length });
+    expect(attached.status).toBe(201);
+    const fileId = ((await attached.json()) as { id: number }).id;
+    const offer = await call("/api/admin/offers", admin, "POST", { slug: "zz-download-offer", title: "ZZ Download Offer", pricingType: "free", status: "published" });
+    expect(offer.status).toBe(201);
+    const offerId = ((await offer.json()) as { id: number }).id;
+    await db.client.query(`INSERT INTO offer_products (offer_id,product_id) VALUES ($1,$2)`, [offerId, productId]);
+    const checkout = await call("/api/checkout/offer/zz-download-offer", buyer, "POST", { email, name: "ZZ Download Buyer", acceptedTerms: true });
+    expect(checkout.status).toBe(201);
+    expect((await db.client.query(`SELECT status FROM access_grants WHERE member_id=$1 AND product_id=$2`, [buyerId, productId])).rows[0].status).toBe("active");
+    const delivery = await call("/api/member/library/zz-download", buyer);
+    expect(delivery.status).toBe(200);
+    const detail = await delivery.json() as { instructions: string; files: unknown[] };
+    expect(detail.instructions).toBe("Start on page two.");
+    expect(detail.files).toHaveLength(1);
+    expect((await call("/api/member/library/zz-download", stranger)).status).toBe(404);
+    expect((await call(`/api/member/downloads/product/${fileId}/link`, stranger, "POST")).status).toBe(404);
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const link = await call(`/api/member/downloads/product/${fileId}/link`, buyer, "POST");
+      expect(link.status).toBe(200);
+      const signed = await link.json() as { url: string };
+      const downloaded = await fetch(new URL(signed.url, base));
+      expect(downloaded.status).toBe(200);
+      expect(await downloaded.text()).toBe(bytes);
+    }
+    expect((await call(`/api/admin/products/${productId}`, admin, "DELETE")).status).toBe(400);
+    const unused = await call("/api/admin/products", admin, "POST", { slug: "zz-unused-download", title: "ZZ Unused", kind: "download" });
+    const unusedId = ((await unused.json()) as { id: number }).id;
+    expect((await call(`/api/admin/products/${unusedId}`, admin, "DELETE")).status).toBe(204);
+    expect((await call(`/api/admin/products/${unusedId}`, admin)).status).toBe(404);
+  }, 30000);
+
+  it("blocks empty, missing and zero-byte deliverables before orders, including bundles, bumps and carts; recovers when real bytes exist", async () => {
+    const p = (await db.client.query(`INSERT INTO products(slug,title,kind,status) VALUES('zz-empty-download','ZZ Empty Download','download','published') RETURNING id`)).rows[0].id;
+    const o = (await db.client.query(`INSERT INTO offers(slug,title,status,pricing_type,amount_cents) VALUES('zz-empty-offer','ZZ Empty Offer','published','one_time',1500) RETURNING id`)).rows[0].id;
+    await db.client.query(`INSERT INTO offer_products(offer_id,product_id) VALUES($1,$2)`, [o,p]);
+    const before = (await db.client.query('SELECT count(*)::int AS n FROM orders')).rows[0].n;
+    async function blocked(url: string, method="POST", body: unknown = {}) {
+      const response = await call(url, buyer, method, method === "GET" ? undefined : body);
+      expect(response.status).toBe(503);
+      expect((await response.json() as {error: string}).error).toContain('download files are missing');
+    }
+    await blocked('/api/offers/zz-empty-offer', 'GET', undefined);
+    await blocked('/api/offers/zz-empty-offer/quote');
+    await blocked('/api/checkout/offer/zz-empty-offer', 'POST', {email,acceptedTerms:true});
+    await blocked('/api/cart/quote','POST',{cartItems:[{slug:'zz-empty-offer'}]});
+    const bundle = (await db.client.query(`INSERT INTO products(slug,title,kind,status) VALUES('zz-empty-bundle','ZZ Empty Bundle','bundle','published') RETURNING id`)).rows[0].id;
+    await db.client.query(`INSERT INTO product_bundle_items(bundle_product_id,product_id) VALUES($1,$2)`,[bundle,p]);
+    await db.client.query(`UPDATE offer_products SET product_id=$2 WHERE offer_id=$1`,[o,bundle]);
+    await blocked('/api/checkout/offer/zz-empty-offer','POST',{email});
+    const readyOffer = (await db.client.query(`SELECT id FROM offers WHERE slug='zz-download-offer'`)).rows[0].id;
+    await db.client.query(`INSERT INTO offer_bumps(offer_id,product_id,amount_cents) VALUES($1,$2,500)`,[readyOffer,p]);
+    await blocked('/api/offers/zz-download-offer/quote','POST',{bumpProductIds:[p]});
+    await blocked('/api/checkout/offer/zz-download-offer','POST',{email,bumpProductIds:[p]});
+    await blocked('/api/checkout/offer/zz-download-offer','POST',{email,pricingOptionId:null,cartItems:[{slug:'zz-download-offer',pricingOptionId:null},{slug:'zz-empty-offer',pricingOptionId:null}]});
+    await db.client.query(`INSERT INTO offer_upsells(offer_id,step,upsell_offer_id) VALUES($1,1,$2)`,[readyOffer,o]);
+    const parent = (await db.client.query(`SELECT id FROM orders WHERE member_id=$1 AND status='paid' ORDER BY id LIMIT 1`,[buyerId])).rows[0].id;
+    await blocked('/api/checkout/offer/zz-download-offer/upsell/1','POST',{parentOrderId:parent});
+    await db.client.query(`INSERT INTO product_files(product_id,title,storage_path,filename,mime,size_bytes) VALUES($1,'ZZ absent','protected:abcdef1234567890.txt','absent.txt','text/plain',20)`,[p]);
+    await blocked('/api/checkout/offer/zz-empty-offer','POST',{email});
+    const file = path.join(process.env.PROTECTED_UPLOAD_DIR!, 'abcdef1234567890.txt');
+    fs.writeFileSync(file, '');
+    await blocked('/api/checkout/offer/zz-empty-offer','POST',{email});
+    expect((await db.client.query('SELECT count(*)::int AS n FROM orders')).rows[0].n).toBe(before);
+    fs.writeFileSync(file, 'Actual download bytes');
+    expect((await call('/api/offers/zz-empty-offer',buyer)).status).toBe(200);
+    expect((await call('/api/offers/zz-empty-offer/quote',buyer,'POST',{})).status).toBe(200);
+    fs.unlinkSync(file);
+    await blocked('/api/checkout/offer/zz-empty-offer','POST',{email});
+  });
+});

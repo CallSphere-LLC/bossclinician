@@ -1,3 +1,4 @@
+import { stopCheckoutRecovery } from "./checkoutRecovery";
 import type { PoolClient } from "pg";
 import { pool } from "../db/pool";
 import { enqueue, PRIORITY } from "../jobs/queue";
@@ -124,9 +125,10 @@ export async function fulfillPayment(input: FulfillPaymentInput): Promise<Fulfil
       currency: string;
       total_cents: number;
       affiliate_id: number | null;
+      gift_recipient_email: string;
     }>(
       `SELECT id, offer_id, member_id, email, billing_name, status, currency, total_cents,
-              affiliate_id
+              affiliate_id, gift_recipient_email
          FROM orders WHERE id = $1 FOR UPDATE`,
       [input.orderId]
     );
@@ -244,22 +246,29 @@ export async function fulfillPayment(input: FulfillPaymentInput): Promise<Fulfil
       });
     }
 
+    let accessMemberId = memberId;
+    let giftCreatedMember = false;
+    if (order.gift_recipient_email) {
+      const recipient = await resolveMember(client, order.gift_recipient_email, "");
+      accessMemberId = recipient.memberId;
+      giftCreatedMember = recipient.created;
+      await client.query(`UPDATE orders SET gift_member_id = $2, gift_created_member = $3 WHERE id = $1`,
+        [order.id, accessMemberId, giftCreatedMember]);
+      await enqueue({ kind: "purchase.gift", payload: { orderId: order.id }, dedupeKey: `purchase-gift:${order.id}`, client });
+    }
+
     let grantedProductIds: number[] = [];
     const activatedProductIds: number[] = [];
-    if (memberId && order.offer_id) {
-      grantedProductIds = await grantOfferAccess({
-        memberId,
-        offerId: order.offer_id,
-        orderId: order.id,
-        source: "purchase",
-        client,
-        activatedProductIds,
-      });
+    const purchasedOffers = await client.query<{offer_id:number}>(`SELECT DISTINCT offer_id FROM order_items WHERE order_id=$1 AND kind IN ('offer','upsell') AND offer_id IS NOT NULL UNION SELECT $2::int WHERE $2::int IS NOT NULL`,[order.id,order.offer_id]);
+    if (accessMemberId) {
+      for (const purchased of purchasedOffers.rows) {
+        grantedProductIds.push(...await grantOfferAccess({memberId:accessMemberId,offerId:purchased.offer_id,orderId:order.id,source:"purchase",client,activatedProductIds}));
+      }
     }
 
     // Bumps are separate order_items pointing straight at a product, so they
     // are granted here rather than through the offer's product list.
-    if (memberId) {
+    if (accessMemberId) {
       const bumpItems = await client.query<{ product_id: number }>(
         `SELECT DISTINCT product_id FROM order_items
           WHERE order_id = $1 AND kind = 'bump' AND product_id IS NOT NULL`,
@@ -267,7 +276,7 @@ export async function fulfillPayment(input: FulfillPaymentInput): Promise<Fulfil
       );
       for (const item of bumpItems.rows) {
         const grant = await grantAccess({
-          memberId,
+          memberId: accessMemberId,
           productId: item.product_id,
           orderId: order.id,
           source: "purchase",
@@ -278,15 +287,10 @@ export async function fulfillPayment(input: FulfillPaymentInput): Promise<Fulfil
       }
     }
 
-    // A cart that was abandoned and later paid is the numerator of the
-    // "revenue recovered" report.
-    if (email && order.offer_id) {
-      await client.query(
-        `UPDATE abandoned_checkouts
-            SET recovered_order_id = $1, recovered_at = now(), updated_at = now()
-          WHERE offer_id = $2 AND email = $3 AND recovered_at IS NULL`,
-        [order.id, order.offer_id, email]
-      );
+    // Completing any purchase stops reminders. Only a followed reminder link
+    // receives recovered-revenue attribution.
+    if (email) {
+      for (const purchased of purchasedOffers.rows) await stopCheckoutRecovery(client, {orderId: order.id, offerId: purchased.offer_id, email});
     }
 
     if (contactId) {
@@ -334,12 +338,12 @@ export async function fulfillPayment(input: FulfillPaymentInput): Promise<Fulfil
         source: "purchase",
       });
     }
-    if (memberId !== null) {
+    if (accessMemberId !== null) {
       for (const productId of activatedProductIds) {
         await dispatchEvent("member.granted_access", {
           id: `grant:order:${order.id}:product:${productId}`,
-          memberId,
-          contactId,
+          memberId: accessMemberId,
+          contactId: order.gift_recipient_email ? null : contactId,
           productId,
           offerId: order.offer_id,
           orderId: order.id,
@@ -626,12 +630,12 @@ export async function recordRefund(input: {
       order.refunded_cents >= order.collected_cents;
 
     let revokedCount = 0;
-    if (fullyRefunded && input.revokeAccessOnFullRefund && order?.member_id) {
+    if (fullyRefunded && input.revokeAccessOnFullRefund) {
       const revoked = await client.query(
         `UPDATE access_grants
             SET status = 'revoked', revoked_at = now(), revoke_reason = 'refunded', updated_at = now()
-          WHERE member_id = $1 AND order_id = $2 AND status = 'active'`,
-        [order.member_id, input.orderId]
+          WHERE order_id = $1 AND status = 'active'`,
+        [input.orderId]
       );
       revokedCount = revoked.rowCount ?? 0;
       await client.query(`UPDATE refunds SET revoked_access = true WHERE id = $1`, [refundId]);

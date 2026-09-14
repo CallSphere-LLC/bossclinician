@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from "react";
 import { useParams } from "react-router-dom";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { motion, useReducedMotion } from "motion/react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Seo } from "@/components/Seo";
@@ -212,6 +212,9 @@ export default function Quiz() {
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         ...honeypot(),
       });
+      if (!Number.isSafeInteger(result.attemptId) || result.attemptId <= 0) {
+        throw new Error("Your answers were not saved. Please try again.");
+      }
       if (!alive.current) return;
       setOutcome(result);
       setStage("result");
@@ -377,7 +380,6 @@ export default function Quiz() {
   const swap = {
     initial: reduce ? false : { opacity: 0, x: direction * 28 },
     animate: { opacity: 1, x: 0 },
-    exit: reduce ? { opacity: 0 } : { opacity: 0, x: direction * -28 },
     transition: { duration: reduce ? 0 : 0.34, ease: EASE },
   };
 
@@ -555,7 +557,9 @@ export default function Quiz() {
         </div>
 
         <div className="mt-7">
-          <AnimatePresence mode="wait" initial={false}>
+          {/* Mount the current step in the same commit as its header. Exit
+              presence retains the old panel (and its old handlers) while the
+              header advances, and can strand the flow if animation stalls. */}
             <motion.div key={stage === "questions" ? `q${index}` : stage} {...swap}>
               {stage === "intro" && (
                 <GlassCard accent="gold" interactive={false} spotlight={false} className="p-6 sm:p-9">
@@ -855,7 +859,6 @@ export default function Quiz() {
                 </GlassCard>
               )}
             </motion.div>
-          </AnimatePresence>
         </div>
       </Section>
     </>

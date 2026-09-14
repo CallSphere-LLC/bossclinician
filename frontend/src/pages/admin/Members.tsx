@@ -1,3 +1,4 @@
+import { publicSiteUrl } from "@/lib/siteOrigins";
 import {
   useCallback,
   useEffect,
@@ -11,12 +12,14 @@ import {
 import type { ColumnDef } from "@tanstack/react-table";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import {
+  BadgeCheck,
   BookOpen,
   Check,
   Download,
   Eye,
   KeyRound,
   MoreHorizontal,
+  Send,
   Pause,
   Pencil,
   Play,
@@ -406,6 +409,55 @@ export default function Members() {
     }
   }
 
+  /**
+   * Confirm a member's address by hand.
+   *
+   * The unblock. `requireVerifiedEmail` gates posting, commenting and every
+   * point a member can earn, and the only key was a link in an email — so a
+   * member whose confirmation email never arrives is locked out of the social
+   * half of the product for good, with nothing anybody can do about it. Recorded
+   * against the administrator who decides it.
+   */
+  async function confirmEmail(member: Member) {
+    const ok = await confirm({
+      title: `Confirm ${memberName(member)}'s email yourself?`,
+      description:
+        "You're vouching that this address really is theirs. They'll be able to post, comment and " +
+        "earn points straight away, without clicking a link. It's recorded against your name.",
+      confirmLabel: "Yes, confirm it",
+    });
+    if (!ok) return;
+    try {
+      const result = await adminApi.memberConfirmEmail(member.id);
+      toast.success(
+        result.changed
+          ? "Confirmed — they can post and comment now"
+          : "That address was already confirmed",
+      );
+      reload();
+    } catch (err) {
+      toast.error(friendlyError(err, "member"));
+    }
+  }
+
+  /** Send the confirmation email again, and say what actually happened to it. */
+  async function resendConfirmation(member: Member) {
+    try {
+      const result = await adminApi.memberResendConfirmation(member.id);
+      if (result.state === "sent") {
+        toast.success(`Confirmation email sent to ${result.to}`);
+      } else if (result.state === "throttled") {
+        toast.warning(
+          "Several have gone out in the last few minutes already. Give the last one a moment to arrive.",
+        );
+      } else {
+        toast.error(`It couldn't be sent: ${result.error}`, { duration: 12000 });
+      }
+    } catch (err) {
+      toast.error(friendlyError(err, "member"));
+    }
+  }
+
   async function viewAsMember(member: Member) {
     const name = memberName(member);
     const ok = await confirm({
@@ -416,14 +468,18 @@ export default function Members() {
     if (!ok) return;
     try {
       const { accessToken } = await adminApi.memberImpersonate(member.id);
-      // A tab opened from here starts life with a copy of this tab's session
-      // storage, which is how the sign-in is handed over — so it has to be
-      // written before the open, and the open can't be told to sever the link
-      // to this tab, which would leave the copy behind.
-      // TODO: the member app reads bc_member_impersonation on boot and signs in
-      // with it; that half is wired up with the member session work.
-      sessionStorage.setItem("bc_member_impersonation", accessToken);
-      const opened = window.open("/library", "_blank");
+      const publicOrigin = new URL(publicSiteUrl("/")).origin;
+      const opened = window.open(publicSiteUrl("/library#admin-preview"), "_blank");
+      if (opened) {
+        const receive = (event: MessageEvent) => {
+          if (event.origin !== publicOrigin || event.source !== opened || event.data?.type !== "bc-member-preview-ready") return;
+          opened.postMessage({ type: "bc-member-preview", accessToken }, publicOrigin);
+          window.removeEventListener("message", receive);
+          window.clearTimeout(timeout);
+        };
+        const timeout = window.setTimeout(() => window.removeEventListener("message", receive), 60_000);
+        window.addEventListener("message", receive);
+      }
       if (!opened) {
         toast.error("Your browser stopped the new tab opening. Allow pop-ups here and try again.");
         return;
@@ -684,6 +740,16 @@ export default function Members() {
                     <MenuItem icon={<KeyRound />} onSelect={() => sendReset(member)}>
                       Email them a new password
                     </MenuItem>
+                    {!member.emailVerifiedAt && (
+                      <>
+                        <MenuItem icon={<BadgeCheck />} onSelect={() => confirmEmail(member)}>
+                          Confirm their email for them
+                        </MenuItem>
+                        <MenuItem icon={<Send />} onSelect={() => resendConfirmation(member)}>
+                          Send the confirmation email again
+                        </MenuItem>
+                      </>
+                    )}
                     <MenuItem icon={<Eye />} onSelect={() => viewAsMember(member)}>
                       View the site as them
                     </MenuItem>
@@ -895,7 +961,8 @@ export default function Members() {
               <p className="mt-1">
                 {editing.emailVerifiedAt
                   ? "They've confirmed that address."
-                  : "They haven't confirmed that address yet, so some emails may not reach them."}
+                  : "They haven't confirmed that address yet, so they can't post, comment or earn " +
+                    "points. You can confirm it for them from the menu on their row."}
               </p>
             </div>
           </form>

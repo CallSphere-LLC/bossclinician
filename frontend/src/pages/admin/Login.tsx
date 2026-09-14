@@ -1,10 +1,11 @@
 import { useState, type FormEvent } from "react";
-import { Navigate } from "react-router-dom";
+import { Navigate, useSearchParams } from "react-router-dom";
 import { motion } from "motion/react";
 import { ArrowLeft, ArrowRight, Eye, EyeOff, Loader2, ShieldCheck } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { isMfaRequiredError } from "@/lib/api";
 import { Button, ErrorNotice, Field, Input } from "@/pages/admin/ui/primitives";
+import { RETURN_PARAM, safeReturnPath } from "@/pages/admin/adminReturnTo";
 
 const HIGHLIGHTS = [
   "Courses, community and media in one place",
@@ -21,9 +22,11 @@ export default function Login() {
   const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [searchParams] = useSearchParams();
 
   if (!loading && user) {
-    return <Navigate to="/admin" replace />;
+    // Back to the page that sent them here, if it was an admin page.
+    return <Navigate to={safeReturnPath(searchParams.get(RETURN_PARAM))} replace />;
   }
 
   async function handleSubmit(e: FormEvent) {

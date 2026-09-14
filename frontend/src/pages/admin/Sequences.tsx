@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { motion } from "motion/react";
 import { CheckCircle2, Mails, Plus, Trash2, Users } from "lucide-react";
 import { toast } from "sonner";
@@ -20,6 +20,7 @@ import {
 } from "@/pages/admin/ui/primitives";
 import { Modal, useConfirm } from "@/pages/admin/ui/Dialog";
 import { friendlyError, pluralize } from "@/pages/admin/ui/friendly";
+import { readSequenceStatusParam, sequenceSpan } from "@/pages/admin/emailProgramme";
 
 /**
  * The list of email sequences.
@@ -50,6 +51,7 @@ export default function Sequences() {
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [nameError, setNameError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [confirm, confirmDialog] = useConfirm();
 
@@ -65,9 +67,38 @@ export default function Sequences() {
 
   useEffect(load, [load]);
 
+  // A3: "New sequence" on the combined email list lands here with ?new=1, and
+  // opens the same dialog this page's own button does.
+  const [searchParams, setSearchParams] = useSearchParams();
+  // `?status=active` / `?folder=Launch` — the same link shape as the combined
+  // list, so a Marketing Overview tile can open this page already narrowed.
+  const statusParam = readSequenceStatusParam(searchParams);
+  const folderParam = searchParams.get("folder") ?? "";
+  const shown =
+    sequences?.filter(
+      (sequence) =>
+        (!statusParam || sequence.status === statusParam) &&
+        (!folderParam || (sequence.folder ?? "") === folderParam),
+    ) ?? null;
+  useEffect(() => {
+    if (searchParams.get("new") !== "1") return;
+    setCreating(true);
+    const next = new URLSearchParams(searchParams);
+    next.delete("new");
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
+
   async function create(event: FormEvent) {
     event.preventDefault();
-    if (!name.trim()) return;
+    // A1 class: this used to `return` in silence on a blank name, behind a
+    // `required` the browser never showed from a Save button in the footer.
+    if (!name.trim()) {
+      setNameError("Give the sequence a name — only you see it.");
+      toast.error("Not created yet: give the sequence a name.");
+      document.getElementById("sequence-name")?.focus();
+      return;
+    }
+    setNameError(null);
 
     setSaving(true);
     try {
@@ -110,22 +141,55 @@ export default function Sequences() {
         title="Email sequences"
         description="A set of emails that goes out one after another, on your schedule, once somebody joins it."
         actions={
-          <Button size="sm" onClick={() => setCreating(true)}>
-            <Plus />
-            New sequence
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button asChild size="sm" variant="ghost">
+              <Link to="/admin/marketing/campaigns?type=sequence">See them with your broadcasts</Link>
+            </Button>
+            <Button size="sm" onClick={() => setCreating(true)}>
+              <Plus />
+              New sequence
+            </Button>
+          </div>
         }
       />
 
       {error && <ErrorNotice message={error} />}
 
-      {sequences === null ? (
+      {(statusParam || folderParam) && (
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-hairline bg-white/[0.03] px-4 py-3 text-sm">
+          <span className="text-ink-soft">
+            Showing only
+            {statusParam && <strong className="ml-1 text-ink">{STATUS_LABEL[statusParam]}</strong>}
+            {statusParam && folderParam && " in "}
+            {folderParam && <strong className="ml-1 text-ink">{folderParam}</strong>}
+            {shown ? ` — ${pluralize(shown.length, "sequence")}` : ""}
+          </span>
+          <Button asChild size="sm" variant="ghost">
+            <Link to="/admin/marketing/sequences">Show all</Link>
+          </Button>
+        </div>
+      )}
+
+      {shown === null ? (
         <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
           {[0, 1, 2].map((key) => (
             <Skeleton key={key} className="h-44 rounded-2xl" />
           ))}
         </div>
-      ) : sequences.length === 0 ? (
+      ) : shown.length === 0 && (statusParam || folderParam) ? (
+        <Card>
+          <EmptyState
+            icon={<Mails />}
+            title="No sequences match that"
+            description="Nothing here is in that state right now."
+            action={
+              <Button asChild size="sm" variant="secondary">
+                <Link to="/admin/marketing/sequences">Show all sequences</Link>
+              </Button>
+            }
+          />
+        </Card>
+      ) : shown.length === 0 ? (
         <Card>
           <EmptyState
             icon={<Mails />}
@@ -141,7 +205,7 @@ export default function Sequences() {
         </Card>
       ) : (
         <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-          {sequences.map((sequence, index) => (
+          {shown.map((sequence, index) => (
             <motion.div
               key={sequence.id}
               initial={{ opacity: 0, y: 12 }}
@@ -160,6 +224,7 @@ export default function Sequences() {
                     <p className="mt-1 text-sm text-ink-soft">
                       {sequence.description || "No description yet."}
                     </p>
+                    <p className="mt-1 text-xs text-ink-soft">{sequenceSpan(sequence)}</p>
                   </div>
                   <Badge tone={STATUS_TONE[sequence.status] ?? "neutral"}>
                     {STATUS_LABEL[sequence.status] ?? sequence.status}
@@ -230,13 +295,20 @@ export default function Sequences() {
           </>
         }
       >
-        <form id="sequence-form" onSubmit={create} className="grid gap-4">
-          <Field label="What is this sequence called?" hint="Only you see this">
+        <form id="sequence-form" onSubmit={create} noValidate className="grid gap-4">
+          <Field
+            label="What is this sequence called?"
+            hint="Only you see this"
+            error={nameError ?? undefined}
+          >
             <Input
+              id="sequence-name"
               value={name}
-              onChange={(event) => setName(event.target.value)}
+              onChange={(event) => {
+                setName(event.target.value);
+                if (event.target.value.trim()) setNameError(null);
+              }}
               placeholder="Welcome emails"
-              required
               autoFocus
             />
           </Field>

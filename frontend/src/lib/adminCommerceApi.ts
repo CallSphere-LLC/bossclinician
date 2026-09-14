@@ -1,4 +1,5 @@
-import { ApiError, getToken } from "@/lib/api";
+import { sessionFetch } from "@/lib/adminTransport";
+import { ApiError } from "@/lib/api";
 import { formatCurrency } from "@/lib/format";
 import { PUBLISH_LABEL, friendlyError } from "@/pages/admin/ui/friendly";
 
@@ -62,10 +63,8 @@ function firstPerField(fieldErrors: Record<string, string[]> | undefined): Recor
 async function commerceRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
   const headers = new Headers(options.headers);
   if (!headers.has("Content-Type")) headers.set("Content-Type", "application/json");
-  const token = getToken();
-  if (token) headers.set("Authorization", `Bearer ${token}`);
 
-  const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+  const res = await sessionFetch(`${API_BASE}${path}`, { ...options, headers });
 
   if (!res.ok) {
     let body: ErrorBody = {};
@@ -131,6 +130,7 @@ export type CustomFieldType = "text" | "textarea" | "select" | "checkbox" | "num
 /* ── Products ───────────────────────────────────────────────────────────── */
 
 interface ProductCore {
+  instructions?: string;
   id: number;
   slug: string;
   title: string;
@@ -203,6 +203,7 @@ export interface ProductDetail extends ProductCore {
 }
 
 export interface ProductInput {
+  instructions?: string;
   slug: string;
   title: string;
   subtitle: string;
@@ -307,6 +308,7 @@ export interface Offer {
   thankYouPageId: string | null;
   accessExpiresAfterDays: number | null;
   sendWelcomeEmail: boolean;
+  allowGifting?: boolean;
   welcomeNextSteps: string;
   createdAt: string;
   updatedAt: string;
@@ -364,6 +366,7 @@ export interface OfferInput {
   thankYouPageId: string | null;
   accessExpiresAfterDays: number | null;
   sendWelcomeEmail: boolean;
+  allowGifting?: boolean;
   welcomeNextSteps: string;
 }
 

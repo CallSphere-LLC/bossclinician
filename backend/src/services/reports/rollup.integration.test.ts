@@ -67,9 +67,9 @@ describeDb("report rollup (integration)", () => {
     await client.query(
       `INSERT INTO orders (id, offer_id, email, status, total_cents, amount_cents,
                            currency, stripe_session_id, created_at)
-       VALUES (1, 1, 'a@example.com', 'paid', 49700, 0, 'usd', 'cs_1', $1),
-              (2, 2, 'b@example.com', 'paid', 19700, 0, 'usd', 'cs_2', $2),
-              (3, 1, 'c@example.com', 'paid', 49700, 0, 'usd', 'cs_3', $3)`,
+       VALUES (1, 1, 'success+a@simulator.amazonses.com', 'paid', 49700, 0, 'usd', 'cs_1', $1),
+              (2, 2, 'success+b@simulator.amazonses.com', 'paid', 19700, 0, 'usd', 'cs_2', $2),
+              (3, 1, 'success+c@simulator.amazonses.com', 'paid', 49700, 0, 'usd', 'cs_3', $3)`,
       [morningOf(DAY_ONE), eveningOf(DAY_TWO), morningOf(DAY_TWO)]
     );
 
@@ -77,9 +77,9 @@ describeDb("report rollup (integration)", () => {
       `INSERT INTO transactions (order_id, email, kind, status, amount_cents, currency,
                                  payment_method_type, country, state,
                                  stripe_payment_intent_id, occurred_at)
-       VALUES (1, 'a@example.com', 'payment', 'succeeded', 49700, 'usd', 'card', 'US', 'NY', 'pi_1', $1),
-              (2, 'b@example.com', 'payment', 'succeeded', 19700, 'usd', 'card', 'US', 'CA', 'pi_2', $2),
-              (3, 'c@example.com', 'payment', 'succeeded', 49700, 'usd', 'link', 'GB', '',   'pi_3', $3)`,
+       VALUES (1, 'success+a@simulator.amazonses.com', 'payment', 'succeeded', 49700, 'usd', 'card', 'US', 'NY', 'pi_1', $1),
+              (2, 'success+b@simulator.amazonses.com', 'payment', 'succeeded', 19700, 'usd', 'card', 'US', 'CA', 'pi_2', $2),
+              (3, 'success+c@simulator.amazonses.com', 'payment', 'succeeded', 49700, 'usd', 'link', 'GB', '',   'pi_3', $3)`,
       [morningOf(DAY_ONE), eveningOf(DAY_TWO), morningOf(DAY_TWO)]
     );
 
@@ -91,9 +91,9 @@ describeDb("report rollup (integration)", () => {
 
     await client.query(
       `INSERT INTO contacts (email, email_marketing_status, created_at)
-       VALUES ('a@example.com', 'subscribed', $1),
-              ('b@example.com', 'subscribed', $2),
-              ('d@example.com', 'opted_out',  $2)`,
+       VALUES ('success+a@simulator.amazonses.com', 'subscribed', $1),
+              ('success+b@simulator.amazonses.com', 'subscribed', $2),
+              ('success+d@simulator.amazonses.com', 'opted_out',  $2)`,
       [morningOf(DAY_ONE), morningOf(DAY_TWO)]
     );
   }
@@ -177,13 +177,13 @@ describeDb("report rollup (integration)", () => {
     await client.query(
       `INSERT INTO orders (id, offer_id, email, status, total_cents, amount_cents,
                            currency, stripe_session_id, created_at)
-       VALUES (9, 2, 'late@example.com', 'paid', 19700, 0, 'usd', 'cs_9', $1)`,
+       VALUES (9, 2, 'success+late@simulator.amazonses.com', 'paid', 19700, 0, 'usd', 'cs_9', $1)`,
       [morningOf(DAY_ONE)]
     );
     await client.query(
       `INSERT INTO transactions (order_id, email, kind, status, amount_cents, currency,
                                  payment_method_type, country, stripe_payment_intent_id, occurred_at)
-       VALUES (9, 'late@example.com', 'payment', 'succeeded', 19700, 'usd', 'card', 'US', 'pi_9', $1)`,
+       VALUES (9, 'success+late@simulator.amazonses.com', 'payment', 'succeeded', 19700, 'usd', 'card', 'US', 'pi_9', $1)`,
       [morningOf(DAY_ONE)]
     );
 
@@ -227,7 +227,7 @@ describeDb("report rollup (integration)", () => {
     await client.query(
       `INSERT INTO transactions (order_id, email, kind, status, amount_cents, currency,
                                  payment_method_type, country, stripe_payment_intent_id, occurred_at)
-       VALUES (NULL, 'e@example.com', 'payment', 'succeeded', 20000, 'gbp', 'card', 'GB', 'pi_gbp', $1)`,
+       VALUES (NULL, 'success+e@simulator.amazonses.com', 'payment', 'succeeded', 20000, 'gbp', 'card', 'GB', 'pi_gbp', $1)`,
       [morningOf(DAY_ONE)]
     );
 
@@ -243,9 +243,9 @@ describeDb("report rollup (integration)", () => {
     await client.query(
       `INSERT INTO subscriptions (email, status, amount_cents, currency, "interval",
                                   interval_count, created_at, canceled_at)
-       VALUES ('sub@example.com', 'active',   9900,  'usd', 'month', 1, $1, NULL),
-              ('year@example.com','active',   120000,'usd', 'year',  1, $1, NULL),
-              ('gone@example.com','canceled', 5000,  'usd', 'month', 1, $1, $2)`,
+       VALUES ('success+sub@simulator.amazonses.com', 'active',   9900,  'usd', 'month', 1, $1, NULL),
+              ('success+year@simulator.amazonses.com','active',   120000,'usd', 'year',  1, $1, NULL),
+              ('success+gone@simulator.amazonses.com','canceled', 5000,  'usd', 'month', 1, $1, $2)`,
       [morningOf(DAY_ONE), morningOf(DAY_TWO)]
     );
 

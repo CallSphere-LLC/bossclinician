@@ -1,0 +1,115 @@
+{
+  "at": "2026-09-12T23:07:50.819Z",
+  "downloads": [
+    {
+      "id": 2,
+      "title": "FULLY BOOKED TOOLKIT",
+      "files": 0,
+      "grants": 0
+    },
+    {
+      "id": 7,
+      "title": "THERAPIST NICHE CLARITY ACCELERATOR",
+      "files": 0,
+      "grants": 0
+    },
+    {
+      "id": 9,
+      "title": "FROM PROFILE TO PROFIT",
+      "files": 0,
+      "grants": 0
+    },
+    {
+      "id": 14,
+      "title": "PROVIDER PARTNERSHIP GUIDE",
+      "files": 0,
+      "grants": 0
+    },
+    {
+      "id": 15,
+      "title": "MARKETING MASTERY FOR THERAPISTS",
+      "files": 0,
+      "grants": 0
+    },
+    {
+      "id": 17,
+      "title": "CLIENT CONSULTATION CALL SCRIPT",
+      "files": 0,
+      "grants": 0
+    },
+    {
+      "id": 25,
+      "title": "The Profitable Private Practice Boss Builders Collective",
+      "files": 0,
+      "grants": 1
+    }
+  ],
+  "team": [
+    {
+      "id": 1,
+      "name": "Yvette Howard",
+      "role": "owner",
+      "status": "active"
+    }
+  ],
+  "media": [
+    {
+      "id": 6,
+      "original_name": "Video_generation_prompt_s_.mp4",
+      "url": "protected:a2335d6b5b7b8f39.mp4",
+      "mime": "video/mp4"
+    },
+    {
+      "id": 7,
+      "original_name": "IMNxMa8FvUKa4.png",
+      "url": "/uploads/f0884621265b705d.png",
+      "mime": "image/png"
+    },
+    {
+      "id": 8,
+      "original_name": "zz-test-image.jpg",
+      "url": "/uploads/ed0d136e4a7d7b9c.jpg",
+      "mime": "image/jpeg"
+    },
+    {
+      "id": 10,
+      "original_name": "practice-reset-worksheet.txt",
+      "url": "protected:283d1063f51455c9.txt",
+      "mime": "text/plain"
+    },
+    {
+      "id": 11,
+      "original_name": "pdfcoffee.com_hindi-book-pantjali-yog-pradip-pdf-free.pdf",
+      "url": "/uploads/28eac30ead0a12db.pdf",
+      "mime": "application/pdf"
+    },
+    {
+      "id": 12,
+      "original_name": "callsphere.pdf",
+      "url": "/uploads/ea7edc52a61d2d73.pdf",
+      "mime": "application/pdf"
+    },
+    {
+      "id": 13,
+      "original_name": "output_progressive_54030ca1-5962-40b7-b6ed-b5a0a23fd3e8.mp4",
+      "url": "/uploads/2062d16c4029b5bd.mp4",
+      "mime": "video/mp4"
+    },
+    {
+      "id": 14,
+      "original_name": "WhatsApp Video 2026-03-05 at 14.55.49.mp4",
+      "url": "/uploads/03601dd0b257e0e6.mp4",
+      "mime": "video/mp4"
+    }
+  ],
+  "podcasts": [
+    {
+      "id": 3,
+      "title": "The Boss Clinician Show",
+      "slug": "the-boss-clinician-show",
+      "published": true,
+      "visibility": "public",
+      "published_episodes": 0
+    }
+  ]
+}

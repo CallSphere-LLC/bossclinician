@@ -1,0 +1,698 @@
+====================================================================
+CLAUDE PROMPT - BOSS CLINICIAN, THREE SYNCHRONISED SURFACES
+Community build-out + member dashboard + email campaign completion
+====================================================================
+
+Read section 0 before anything else. It defines the three surfaces and the rule
+that every feature must exist on all the surfaces it touches. Most of the gaps in
+this document are not "a missing feature" - they are a feature that exists on one
+surface and is missing on another.
+
+Everything below was read off the live Kajabi account, the live
+www.bossclinician.com, and the live bossclinician.callsphere.site on 4 Sep 2026.
+Labels, point values, counters and route shapes are quoted as they actually appear.
+
+
+====================================================================
+0. THE THREE SURFACES
+====================================================================
+
+SURFACE 1 - ADMIN PORTAL  ("admin portal")
+  bossclinician.callsphere.site/admin/*
+  Where Yvette and her team run the business. Mature: products, offers,
+  sales, marketing, contacts, analytics, settings, roles.
+
+SURFACE 2 - MEMBER PORTAL  ("admin user portal" / the signed-up user's dashboard)
+  bossclinician.callsphere.site/library and everything behind member auth.
+  Where a customer who signed up or bought lands.
+  VERIFIED IN A REAL MEMBER SESSION, 4 Sep 2026 - more of this exists than the
+  earlier drafts of this document assumed:
+    /signup  - First name*, Last name, Email*, Password* (min 10 chars),
+               "A few details and your library is ready."
+    /login   - email + password, "Forgot your password?", and
+               "EMAIL ME A SIGN-IN LINK INSTEAD" (magic link)
+    /library - "Your library / Everything you own, in one place - courses,
+               downloads and the rest, exactly where you left them."
+               Left nav: LIBRARY, COMMUNITY, COACHING, ACCOUNT.
+               Empty state: "Your shelf is waiting" with BROWSE THE COURSES and
+               WORK WITH YVETTE.
+    /library/:slug - a course home showing modules, lesson counts and progress
+               ("0 OF 1 LESSONS").
+  ALREADY WORKING, DO NOT REBUILD:
+    - purchase grants entitlement instantly and the product appears in /library
+      with progress ("Practice Reset Intensive - 0 / 1 LESSONS")
+    - DRIP IS ENFORCED MEMBER-SIDE. The admin's per-section release date really
+      does gate the member: the course home showed
+      "0 OF 1 DONE - UNLOCKS MONDAY, SEPTEMBER 7" and the lesson row read
+      "Locked. Unlocks Monday, September 7."
+      (Earlier drafts listed member-side drip as a gap - that was wrong.)
+  FULLY VERIFIED LATER THE SAME DAY - the member portal is far more complete than
+  any earlier draft of this document assumed. Routes confirmed:
+    /library  /library/:course  /library/:course/lessons/:lesson
+    /community  /community/:slug  /community/:slug/:channel
+    /community/:slug/members  /community/:slug/members/:id
+    /coaching  /account
+
+  THE LESSON PLAYER IS BUILT AND IS GOOD. Verified by setting the section to
+  "as soon as they buy", making the lesson a Reading, attaching a download and
+  leaving comments on:
+    - breadcrumb "Practice Reset Intensive - ZZ Test - Module 1"
+    - section sidebar with per-module progress ("1 OF 1 DONE") and lesson type
+    - the reading body rendered
+    - DOWNLOADS: the attached file listed with name and size, and a working
+      "Download practice-reset-worksheet.txt" action
+    - MARK COMPLETE works; progress rolled up to "1 OF 1 LESSONS - FINISHED" and
+      the button became "COMPLETED - Ticked off. Press again if you want to come
+      back to it."
+    - auto-complete is wired: "This ticks itself once you have watched 90%."
+    - PRIVATE PER-LESSON NOTES, which Kajabi does not have: "Your notes -
+      Private to you. Nobody else - including Yvette - can read these." Typed a
+      note and it showed "Saved".
+    - DISCUSSION with a post box and a good empty state ("Nothing here yet. Be
+      the first - the questions asked here are the ones Yvette answers.")
+
+  THE MEMBER COMMUNITY IS BUILT. Earlier drafts said there was "no member-facing
+  community at all" - that was wrong. Confirmed at /community/the-boss:
+    - channel chip ("# WINS AND WEDNESDAY"), member count, channel description
+    - post feed with per-post reactions, Reply, and a per-post actions menu
+    - a notifications bell
+    - right rail with four live panels:
+        "Your standing" - points total, a progress bar, and the next title
+          ("25 more points to ZZ Badge - Test")
+        "Coming up" - events ("Nothing on the calendar right now.")
+        "Challenges" - "10-Day Client Attraction Sprint", 10 PTS, close date,
+          entry count, and "This one has closed."
+        "Leaderboard" - ranked members
+    - a members directory and individual member profile pages
+  So gamification, challenges, leaderboard and events all already have member
+  surfaces. Sections 2.4, 2.5 and 2.7 below should be read as "extend and
+  complete", not "build from nothing".
+
+  COACHING IS BUILT member-side: /coaching shows the package state, a timezone
+  line ("Times shown in Pacific Daylight Time (PDT)") with a CHANGE control, and
+  a proper empty state explaining that calls are booked there once a package
+  exists.
+
+  ACCOUNT IS BUILT: /account has the profile card ("WITH US SINCE SEP 4, 2026"),
+  EDIT DETAILS, and four sections - Your details (name, photo, time zone,
+  language), Password & devices (change password, see active sessions), Billing
+  (payment method and plan), Purchases (everything bought, with receipts). Plus
+  the email-confirmation banner with a SEND IT AGAIN action.
+
+  WHAT IS STILL GENUINELY MISSING ON THE MEMBER COMMUNITY, measured against
+  Kajabi: multiple channels with a switcher (only one channel is reachable), a
+  rich composer (image / video / file / poll), meetups with RSVP and a meetups
+  page, scheduled posts, a review-feed moderation queue, direct messages,
+  Cmd-K search, access groups, and the guidelines-accept gate.
+
+SURFACE 3 - THE PUBLIC WEBSITE
+  Today this is www.bossclinician.com, and it is Kajabi-hosted. Critically,
+  Kajabi serves BOTH the marketing pages AND the entire logged-in member
+  experience on the customer's own domain:
+    /                      marketing home
+    /blog  /blog/:slug     blog
+    /about  /aboutyvette  /contact
+    /boss-clinician-club  /boss-clinician-lounge  /boss-clinician-boardroom
+    /all-courses  /work-with-me  /masterclass  /retreats  /resourcehub
+    /offer-quiz  /practice-quiz            quizzes
+    /practice-reset-planner                lead magnet
+    /login  /logout  /settings/account     member auth + account
+    /library                               member product library
+    /products/:slug                        member course home
+    /products/:slug/categories/:id/posts/:id   member lesson player
+    /products/communities/v2/:slug/*        the community
+  External today: tidycal.com for booking, mykajabi.com for the privacy policy.
+
+THE RULE
+  When we replace Kajabi we replace all three surfaces on one domain. So:
+  - No admin toggle ships without its member-facing counterpart in the same PR.
+  - No member feature ships without the admin screen that configures it.
+  - Anything a visitor can reach (checkout, forms, quizzes, events, community
+    invites) must work signed out AND signed in, and must hand off cleanly to
+    account creation.
+
+
+====================================================================
+0b. BLOCKER FOUND BY A REAL END-TO-END PURCHASE  (4 Sep 2026)
+====================================================================
+
+A real purchase was completed as a signed-in member and traced all the way to the
+inbox. Fix these two before anything else in this document.
+
+BLOCKER 1 - ALL OUTBOUND MEMBER EMAIL IS SILENTLY FAILING. REGRESSION.
+  SCOPE IS WIDER THAN RECEIPTS. Two separate sends were triggered and traced to
+  the inbox; both reported success in the UI and neither was delivered:
+    (a) the purchase receipt and access email for order #9 - see below
+    (b) the email-confirmation resend from /account, which printed
+        "Sent. Give it a minute, and do check your spam folder."
+        A search of in:anywhere newer_than:1h returned NOTHING.
+  The pattern is the dangerous one: the send path returns success and renders a
+  confident confirmation, so no one - not Yvette, not the customer - has any
+  signal that mail is dead. Treat this as the top priority and fix the transport
+  or the queue, then add real delivery reporting (provider message id, accepted /
+  bounced / failed per message, and a visible failure state instead of "Sent").
+
+  THIS ALSO BLOCKS A MEMBER FEATURE. Posting in the community and commenting on
+  a lesson are both gated behind email confirmation:
+      "Confirm your email address and you can post here. Everything below is
+       yours to read in the meantime."
+      "Please confirm your email address first. Check your inbox for the link."
+  Because the confirmation email never arrives, a new member can never post or
+  comment. The gate itself is well designed and degrades gracefully - the bug is
+  purely that the email does not send.
+
+BLOCKER 1a - THE PURCHASE EMAIL, SPECIFICALLY. REGRESSION.
+  What was done: created coupon MADHAVFREE at 100% off; bought the live offer
+  "ZZ Test - checkout probe" ($19, sells Practice Reset Intensive) as member
+  sagarshankaranm@gmail.com. Order #9 completed at $0.00.
+  What worked: the checkout adapted correctly to a free order - total $0.00, the
+  payment section relabelled to "Finish up", the copy changed to "There's nothing
+  to pay - finish below and your access is granted straight away", and the button
+  became "GET INSTANT ACCESS" instead of "PAY". Entitlement was granted
+  instantly. The coupon incremented to "Used 1 time". The success page said:
+      "You're in. We charged $0.00 and sent a receipt to
+       sagarshankaranm@gmail.com. Access details are on their way to your inbox."
+  What failed: NO EMAIL WAS EVER SENT. Checked the inbox, spam and
+  in:anywhere newer_than:1d - seven messages in the last day, none from Boss
+  Clinician. No receipt, no access details, nothing.
+  Why this is a bug and not a setting: Settings -> Payments & checkout has
+  "Email customers a receipt" = ON and "Which payments get a receipt" =
+  "Every payment, including renewals" (value "every"), NOT the
+  "Only payments with a value above zero" option.
+  Why this is a REGRESSION: order #7 on 18 Aug was also $0.00 via a 100% coupon
+  and it delivered a correct, fully itemised receipt WITH a PDF attachment
+  (receipt-2026-08-18-7.pdf) to the other account. So this pipeline worked before
+  and has broken since - most likely in this week's receipt/billing changes.
+  ACCEPTANCE: repeat the same 100%-off purchase and receive both the receipt
+  (with PDF) and the access email. Then repeat with a real paid order. Then set
+  the rule to "Only payments with a value above zero" and confirm a $0.00 order
+  still gets its ACCESS email even when the receipt is intentionally suppressed -
+  access details and receipts are different messages and must not share a switch.
+
+BLOCKER 2 - THE PAYMENTS LIST DOES NOT SAY WHAT WAS BOUGHT.
+  /admin/sales/payments shows both orders as "A one-off purchase" under the
+  "What they bought" column, with only the buyer's email to distinguish them.
+  FIX: show the offer name, and the products it granted. This column is the whole
+  point of the screen.
+
+
+====================================================================
+1. MEMBER PORTAL - THE SIGNED-UP USER'S DASHBOARD
+====================================================================
+
+This is the biggest hole. Build it to match what Kajabi gives a member today.
+
+1.1 SIGN-UP AND FIRST RUN
+  Already there: /signup and /login with magic-link fallback. Add:
+  - Post-purchase account creation that skips re-entering details (the admin's
+    offer settings should also gain "skip account creation page" - buyers who
+    just paid should not be asked to type their email again).
+  - Email confirmation flow, and a resend action.
+  - A first-run experience: what did I just buy, where do I start, one clear CTA.
+  - Password reset end to end.
+
+1.2 THE LIBRARY  (/library)
+  Kajabi shows every product the member owns as a card with a title, a short
+  description and a "View Product" action - courses, downloads and the community
+  all appear together. Build:
+  - a card per owned product with progress ("3 of 12 lessons"), thumbnail and
+    last-opened
+  - separate or filterable groupings for Courses / Downloads / Community /
+    Coaching / Podcasts / Newsletters
+  - locked and drip states shown honestly: "Opens 3 days after you buy",
+    "Unlocks when you finish X"
+  - an empty state that points at what is for sale
+
+1.3 THE COURSE HOME  (/products/:slug)
+  Kajabi's member course home has: a welcome video, a long description, a
+  "START COURSE" button, then the module list with each lesson's title and an
+  excerpt. Top nav is COURSES / MY LIBRARY / SEARCH. Build all of that, plus:
+  - resume-where-you-left-off
+  - overall progress
+  - the certificate, once earned, downloadable from here
+
+1.4 THE LESSON PLAYER  (/products/:slug/categories/:id/posts/:id)
+  This is the single most important member screen. Kajabi's has:
+  - breadcrumb: Product / Modules / Section / Lesson
+  - the video player with duration, and a keyboard hint ("Press O for more
+    options")
+  - a section sidebar: section title, "7 LESSONS", each lesson numbered with its
+    completion state, current lesson highlighted
+  - "MARK AS COMPLETE" and "NEXT MODULE"
+  - a completion state: "Great Job! Keep Going!" plus a "Next Lesson" link naming
+    the next lesson
+  - the lesson body rendered below the player
+  Build all of the above, and wire in the lesson features the admin already
+  supports but the member cannot yet use:
+  - audio lessons, PDF lessons, reading lessons, embedded lessons
+  - DOWNLOADS - the multiple attachments per lesson the admin can already upload
+  - per-lesson COMMENTS with the admin's Visible / Hidden / Locked setting
+    honoured, plus replies and @mentions
+  - PREREQUISITES - the admin's "require the previous lesson to be completed
+    first" must actually gate the member, with a clear locked message
+  - DRIP - the admin's per-section and per-lesson release dates must show as
+    "Opens on 7 September" rather than a broken link
+
+1.5 MEMBER ACCOUNT  (/settings/account)
+  - name, email, password, profile photo, timezone
+  - EMAIL PREFERENCES - the topic-level preference centre (see 3.8)
+  - BILLING: payment method, invoices and receipt PDFs, pause, resume, cancel
+    with reason. The admin side of this shipped this week (portal link, receipt
+    rules, statement descriptor, trial and payment reminders, cancellation
+    reasons in key|label form) - the member surface it points at must exist and
+    must use the configured reasons list.
+  - sign out, and sign out everywhere
+  - data export / delete request
+
+1.6 MEMBER SURFACES FOR THINGS THE ADMIN ALREADY BUILDS
+  Each of these is configured in the admin today with no member view:
+  - COACHING: see my upcoming sessions, the agenda Yvette wrote, the meeting
+    link, reschedule and cancel within the policy, and BOOK a session against
+    the availability grid that already exists in Settings -> Coaching
+    availability. Today only an admin can create a session.
+  - EVENTS: my registrations, the join link, add-to-calendar, and the replay
+    while it is still inside its window.
+  - PODCASTS: a member-facing player and the private feed URL for members-only
+    shows.
+  - NEWSLETTERS: an archive of past editions for subscribers.
+  - QUIZZES: my past results.
+  - DOWNLOADS: a place to re-download what I bought.
+
+
+====================================================================
+2. COMMUNITY - FULL FEATURE SET, BOTH SURFACES
+====================================================================
+
+Reference: Kajabi community "The Lounge" (slug bclounge), access group
+"Boss Clinician Lounge" (4 members), channels "Boss Clinician Lounge" (Chat,
+public, 8 posts) and "Q&A" (Feed, public), meetup "Monthly Coaching Calls"
+9 Sep 10:00 AM PDT, challenge series "Fill Your Caseload In 10 Days".
+
+Today the .site app has a reasonable community ADMIN - channels, challenges,
+events, badges, members - and NO member-facing community whatsoever. A community
+with no member surface is not a community, so member-side comes first.
+
+2.1 OBJECT MODEL
+  COMMUNITY (a sellable product that appears in the member library)
+    -> ACCESS GROUPS   the tier/cohort layer; channels, meetups and leaderboards
+                       are all scoped to it, and offers grant it
+    -> CHANNELS ("circles")
+    -> CHALLENGES      one-time or recurring, grouped into SERIES
+    -> MEETUPS         scheduled, with RSVP
+    -> LIVE ROOM       always-open video room
+    -> ANNOUNCEMENTS
+    -> LEADERBOARD     weekly / monthly / all-time, plus per-challenge
+    -> MEMBER PROFILES /profile/:memberId, role badge, points, timezone
+  Add ACCESS GROUPS - they are the missing scoping layer.
+
+2.2 CHANNELS
+  Admin list columns Kajabi shows: NAME, OWNER, POSTS, MEMBERS, PRIVACY, TYPE,
+  CREATED AT, with sorting and More Filters.
+  Create/edit fields, verbatim:
+  - Add image (cover, "Recommended size: 1280x720px")
+  - Title* with a 0/100 counter
+  - Description* with a 0/200 counter, "Describe the purpose of this channel"
+  - Access Group
+  - Type: FEED ("a continuous stream of posts published by the members of the
+    access group") or CHAT
+  - Available View Modes, multi-select, at least one required:
+      Feed    - "social card layout for scrolling through text and media posts"
+      Forum   - "compact table layout for scanning topics, replies, and activity"
+      Gallery - "responsive image grid for showcasing photos, designs, and
+                 visual content"
+  - Default View Mode - "the layout members see when they first open this channel"
+  - Privacy: Public / Private. Public "will add all N members of the selected
+    access group to this channel", run in the background.
+  Today: name and description only.
+
+2.3 FEED AND POSTS - build the member side first
+  Member feed at /home and per channel at /circle/:id:
+  - composer supporting text, IMAGE, VIDEO, FILE ATTACHMENT and POLL
+    (today's admin composer is plain text only)
+  - cover photos on posts
+  - PINNED POSTS as its own section; admin empty state reads "Members won't see
+    this unless you pin something"
+  - a sort control ("Newest first")
+  - reactions, comments, threaded replies, @mentions
+  - the three render modes per channel from 2.2
+  - SCHEDULED POSTS - write now, publish later; own admin page at
+    /scheduled-posts
+  - REVIEW FEED - moderation queue at /review-feed
+  - admin actions on any post: pin, hide, delete, reply as host
+  Today the admin can post plain text and see counters, and cannot reply, react,
+  moderate, pin, schedule or attach anything.
+
+2.4 CHALLENGES
+  - one-time ("e.g. Make New Year's resolutions") or recurring
+    ("e.g. 7 days of meditation")
+  - duration in days or weeks (the UI offered "14 days" and "4 weeks")
+  - grouped into a SERIES with "+ Create New Series"
+  - "Visible to members" toggle
+  - member entries, comments on entries, reactions, mentions
+  - a challenge leaderboard, toggled separately from the global one
+  Today: points and a date range, no series, no entries, no member participation.
+
+2.5 MEETUPS
+  - admin create at .../admin/settings/meetups/create
+  - member list /meetups, detail /meetup/:id, per group
+    /access-group/:id/meetups
+  - date/time with timezone, rendered in the member's own timezone
+  - RSVP (the community dashboard counts "Meetup RSVPs"; gamification awards 25)
+  - upcoming meetups in the feed's right rail, e.g. "9 SEP - Monthly Coaching
+    Calls - 10:00 AM PDT", with an inline "Add meetup"
+  Today: admin-only events with a title and time; no RSVP, no member view.
+
+2.6 LIVE ROOM
+  - route /live
+  - Customization -> "Enable Live Room", "Live Room access: Always open"
+    ("the live room is accessible for members to join at any time")
+  - renameable via feature alias
+  This is how Office Hours runs today per the published guidelines.
+
+2.7 GAMIFICATION - copy the model exactly
+  Kajabi's Gamification tab has POINTS and TITLES. The rules table, with editable
+  POINTS and MAXIMUM per rule, ships with:
+
+    RULE                                  POINTS   MAXIMUM
+    Completed a challenge                   100      -
+    Commented on a challenge                  3      -
+    Reacted to a challenge                    1      -
+    Received a reaction to a challenge        1      -
+    Posted a message in channel               1      5
+    Reacted to a message in channel           1      5
+    Responded to poll                         1      -
+    Earned a title                            -      -
+    RSVPed to event                          25      -
+
+  Note MAXIMUM - a per-period cap so members cannot farm points. Today's badges
+  are threshold-only with no rule engine and no caps.
+  - TITLES earned at thresholds (keep today's badges, align the naming, and award
+    points for earning one)
+  - Leaderboards: global weekly / monthly / all-time, plus per-challenge, each
+    independently "Visible to members"
+  - Member profile shows role badge ("Admin") and total points
+  - Keep the empty-state copy: "Get points when you engage with your community",
+    "Members with the most points in this period will appear here"
+
+2.8 COMMUNITY EMAIL NOTIFICATIONS  (Email Controls + Email Customization tabs)
+  Per-feature master switch plus per-event toggles. Kajabi's set:
+    CHANNELS - master "Send Channels email notifications"
+      Channel message replies / Direct message / Channel message mention
+    CHALLENGE - master "Send Challenge email notifications"
+      Challenge ends (admins) / Comment / Comment mentions / Entry mentions
+  This implies DIRECT MESSAGES between members - build DMs.
+
+2.9 CUSTOMIZATION
+  - Features tab: enable/disable each feature globally and rename it via
+    "Feature alias (singular)" / "Feature alias (plural)" - offered for
+    Announcements, Challenges, Channels, Live Room and the Global Feed
+  - Global Feed: Enable Feed, Feed Title, available view modes, default view mode
+  - Gamification visibility toggles
+  - Branding tab, Reactions tab (which reactions exist), Others
+  - dark mode for members
+  - community cover image and description with "Show more" truncation
+  - GUIDELINES: long-form rich text shown in a modal members must accept
+    ("I Accept"), reachable later from a "Guidelines" link. Yvette's live
+    guidelines use headings, emoji and an email address, so this needs a real
+    rich-text editor.
+
+2.10 ACCESS, OFFERS, MEMBERSHIP
+  - access groups CRUD with member counts and date added
+  - an Offers tab on the community: "Add an offer to promote to your members" -
+    promoting an offer INSIDE the feed's right rail, not just selling the
+    community
+  - buying an offer grants the access group (extend the existing entitlement
+    selector, which now covers courses, downloads and communities)
+  - member directory "All Members" with count and search
+  - member profiles at /profile/:memberId
+  - per-member timezone, with Kajabi's "your device timezone differs from your
+    profile, update it?" prompt
+  - community admin dashboard over 7 days / 30 days / 3 months: Active Users,
+    Challenges joined, Meetup RSVPs, New members, Messages sent, with a
+    "Last updated" stamp
+
+2.11 SEARCH AND CHROME
+  - community search with a Cmd-K shortcut
+  - left nav: Feed, Challenges, Meetups, Leaderboard, Scheduled Posts,
+    Review Feed, then the access group and its channels
+  - right rail: All Members, Offers, Meetups (upcoming), Challenges
+  - a "Submit feedback" affordance
+
+
+====================================================================
+3. EMAIL CAMPAIGNS - WHAT IS STILL MISSING
+====================================================================
+
+Verified working, do not rebuild: audience = presets + saved groups + any tag,
+exclusions, live recipient count, Send later with timezone, Send me a test, the
+block composer (Text / Heading / Button / Image / Divider) with templates and
+preview, and the Image block now opening the media picker and inserting a real
+uploaded URL.
+
+3.1 FOLDERS for campaigns and sequences.
+3.2 SAVED TEMPLATE LIBRARY. Kajabi has "Manage Templates" and a "Select a
+    template" step listing 22 saved custom templates plus ~10 stock ones. Today
+    there are three fixed starters that cannot be saved to, duplicated or
+    renamed. Build save-as-template, name, duplicate, delete, and pick-on-create.
+3.3 EVENT-RELATIVE SCHEDULING - the highest-value item, and it also fixes event
+    reminders. Live Kajabi campaigns are scheduled as:
+      "24 hours before 'The Do's & Don'ts CEU' event on September 25, 2026"
+      "2 hours before ...", "7 days before ...", "9 hours after ..."
+      "Upon 'The Do's & Don'ts Educational' event registration"
+    Build: offset (N minutes/hours/days) + direction (before/after) + anchor
+    (an event's start, or registration for it).
+3.4 SUBJECT-LINE A/B with automatic winner selection.
+3.5 MERGE-TAG PICKER. Only {{firstName}} is documented. Expose lastName, email,
+    offerName, courseName, communityName, unsubscribeUrl, loginUrl and global
+    custom fields.
+3.6 PER-EMAIL INLINE STATS on sequences - Sent / Opened / Clicked / Unsubscribed
+    per email, subscribe and unsubscribe trigger counts, Duplicate Email, and a
+    Report tab.
+3.7 SEQUENCE EXCLUDE, made specific. Today one global "stop the moment they buy
+    something"; Kajabi has "don't email subscribers who have purchased THESE
+    OFFERS" and "...who have submitted THESE FORMS".
+3.8 TOPIC-LEVEL EMAIL PREFERENCES. Kajabi's categories: General marketing,
+    Product information, Event information, Responsive marketing, Notifications.
+    Needs the preference-centre page on the MEMBER portal (1.5) and enforcement
+    at send time - a clear example of one feature spanning two surfaces.
+3.9 SENDING IDENTITY - a logo on marketing emails, and a guided custom sending
+    domain flow with SPF/DKIM/DMARC verification (Kajabi shows a "Strict DMARC"
+    state and a from/reply-to preview).
+    URGENT AND CONCRETE: real delivered mail was inspected in the customer's
+    Gmail on 4 Sep. The app currently sends as
+        Yvette at Boss Clinician <yvette@bossclinician.callsphere.site>
+    i.e. from the staging subdomain, while Kajabi sends from the customer's own
+    domain. Before any migration, sending must move to bossclinician.com with
+    SPF/DKIM/DMARC verified, or deliverability and trust both suffer. Amazon SES
+    is already wired (a "Boss Clinician - SES transport test" message confirmed
+    "SES is wired to the Boss Clinician app and the sending domain
+    authenticates"), so this is a domain and DNS task, not a provider task.
+3.10 SEQUENCE DEFAULTS - default send time and timezone for new sequences.
+3.11 DESKTOP AND MOBILE PREVIEW in the composer.
+
+
+====================================================================
+4. THE CROSS-SURFACE MATRIX - WHERE THINGS ARE OUT OF SYNC TODAY
+====================================================================
+Each row is one feature and the surfaces it needs. "gap" is what to build.
+
+FEATURE                 ADMIN            MEMBER            PUBLIC
+ALL OUTBOUND EMAIL      "Sent" is a lie  BROKEN (0b-1)      -
+Purchase -> entitlement built            WORKS              built
+Purchase -> email       built (settings)  BROKEN (0b-1a)     -
+Email confirmation      built            BROKEN (0b-1)      -
+Course drip             built            WORKS              -
+Lesson player           n/a              WORKS              -
+Lesson downloads        built            WORKS              -
+Mark complete/progress  n/a              WORKS              -
+Private lesson notes    n/a              WORKS (beats Kajabi) -
+Lesson comments         toggle built     built, gated by 0b-1 -
+Lesson prerequisites    built            gap: verify gating -
+Graded test in lesson   built (new)      gap: verify        -
+Certificates            gap              gap                -
+Coaching availability   built            gap: booking page  gap: book CTA
+Coaching sessions       built            gap: my sessions   -
+Events                  built            gap: my events     built (registration)
+Event reminders         gap (3.3)        gap                -
+Billing portal settings built this week   gap: the portal    -
+Cancellation reasons    built this week   gap: cancel flow   -
+Email preferences       gap (3.8)        gap: pref centre   -
+Community feed          built            BUILT (verified)   gap: join/invite
+Community reactions     n/a              WORKS              -
+Community challenges    partial          built (right rail) -
+Community meetups       partial          gap: RSVP + page   -
+Leaderboard/points      partial          BUILT (verified)   -
+Member titles/badges    built            BUILT ("25 more to")  -
+Multiple channels       built            gap: switcher      -
+Rich composer           gap              gap                -
+Direct messages         gap              gap                -
+Coaching (member view)  built            BUILT (verified)   -
+Account/profile         n/a              BUILT (verified)   -
+Direct messages         gap              gap                -
+Library                 n/a              built, verified    -
+Payments list naming    BROKEN (0b-2)    -                  -
+Quizzes                 built            gap: my results    built
+Podcasts                built            gap: player/feed   partial
+Newsletters             built            gap: archive       gap
+Downloads               built            gap: re-download   -
+
+
+====================================================================
+5. SEQUENCE OF WORK
+====================================================================
+
+WAVE 0 - the blocker, before anything else
+  0b-1 the purchase receipt and access email (regression - a customer can buy
+       today and receive nothing at all, while the screen promises otherwise)
+  0b-2 name the offer and products in the payments list
+
+WAVE 1 - finish the member portal (much less left than previously thought)
+  The library, course home, lesson player, downloads, mark-complete, progress
+  roll-up, private notes, community feed with reactions and leaderboard, coaching
+  view and account sections are ALL BUILT AND VERIFIED. What remains:
+  1.4 verify prerequisite gating actually blocks a member (only drip gating was
+      provable with one lesson), and verify the new "Graded test" lesson type
+      end to end - pass mark, attempts stored in Quizzes, completion gated
+  1.3 resume-where-you-left-off, and the certificate once 3a exists
+  1.2 library grouping by type and last-opened
+  1.5 confirm Billing and Purchases actually reach the Stripe portal and show
+      receipt PDFs (the admin settings for these shipped last week)
+  1.6 the member surfaces that genuinely do not exist yet: booking a coaching
+      call against the availability grid, my events, podcast player,
+      newsletter archive, quiz results, downloads re-download
+
+WAVE 2 - community for members (feed, reactions, leaderboard and profiles exist)
+  2.3 the RICH COMPOSER - image, video, file, poll. This is the real gap; the
+      text feed, reactions and replies already work
+  2.2 multiple channels with a switcher, plus channel types and view modes
+      (only one channel is currently reachable member-side)
+  2.5 meetups: a member meetups page and RSVP
+  2.10 access groups as the scoping layer
+  2.8 direct messages
+
+WAVE 3 - community engagement
+  2.7 gamification rule engine with caps, titles, leaderboards
+  2.4 challenges with series and entries
+  2.5 meetups with RSVP and timezone-correct rendering
+  2.8 notification matrix + direct messages
+
+WAVE 4 - community polish and email
+  2.9 customization, aliases, guidelines with accept, dark mode
+  2.6 live room; 2.11 search and chrome; 2.3 scheduled posts and review feed
+  3.3 event-relative scheduling first, then 3.2 templates, 3.1 folders,
+  3.6 per-email stats, 3.7 specific excludes, 3.8 preference centre,
+  then 3.4, 3.5, 3.9, 3.10, 3.11
+
+WAVE 5 - member surfaces for the rest
+  1.6 coaching booking, my events, podcast player, newsletter archive,
+      quiz results, downloads
+
+
+====================================================================
+6. NON-NEGOTIABLES
+====================================================================
+1. Every PR touches every surface the feature needs. An admin toggle with no
+   member screen, or a member screen with no admin control, is not done.
+2. Reuse what exists: the media picker (now wired into the email composer), the
+   tag picker, the offer/plan entitlement selector (now covering courses,
+   downloads and communities), the segment rule builder, the global automation
+   trigger/action registry, and the report shell.
+3. Add these community and member events to the automation trigger list so they
+   can drive sequences: posted in a channel (exists), commented, reacted, joined
+   a challenge, completed a challenge, RSVPed to a meetup, attended a meetup,
+   earned a title, reached a point threshold, joined an access group, completed a
+   lesson (exists), completed a course (exists), earned a certificate, booked a
+   coaching session, cancelled a subscription with a reason.
+4. Timezone correctness everywhere: meetups, live rooms, scheduled posts,
+   coaching slots, event-relative emails, and the member profile timezone with
+   the device-mismatch prompt.
+5. Keep the empty-state copy quality. The live products explain what a feature is
+   for before there is any data - "Challenges are a great way to engage your
+   community and encourage participation", "Members won't see this unless you pin
+   something", "Get points when you engage with your community". This app is
+   already good at this; hold the standard.
+6. For every item, state the acceptance test you ran and what you saw. Test the
+   member surface as a MEMBER, in a separate session from the admin.
+
+VERIFICATION NOTES
+- This app's rendered text can read stale immediately after an interaction. Twice
+  during testing an action had actually succeeded while the page still showed the
+  old state. Confirm with a fresh load or a screenshot, never one text read.
+- Small controls still need a near-centre click; several apparent failures during
+  testing were off-centre clicks. Hit targets should be at least 40x40px with the
+  whole label clickable.
+- A test member account is needed to verify Wave 1 and 2 at all. Create one and
+  put its credentials somewhere the test process can reach.
+
+
+====================================================================
+APPENDIX - CURRENT STATE, 4 SEP 2026
+====================================================================
+Fixed and verified this week: coupon rejection gives distinct reasons ("That
+discount code is no longer active"); the email Image block opens a real media
+picker and inserts the uploaded URL; "Send me a test email" reports
+"Sent - check yvette@bossclinician.com"; plans unlock courses, downloads and
+communities; /admin/community/1 returns a proper not-found; phantom localhost
+admin sessions gone; coupons editable without losing redemption history; Insights
+tiles deep-link with working filters.
+
+Newly built and verified: the customer billing portal settings and dunning set -
+portal link, receipt rules (every / first only / value above zero), refund
+confirmation emails, statement descriptor, receipt title, refund policy printed on
+receipts, trial-ending and upcoming-payment warnings in days, stop-access-on-
+first-failure with automatic restore, and an editable cancellation-reasons list in
+"key|label" form. Both the reasons list and the refund policy persist across
+reload. NOTE: these settings currently configure a member-facing portal that does
+not exist yet - see 1.5.
+
+Still missing at the admin level, carried forward: course certificates and
+paywall, offer gifting / checkout-abandonment emails / per-offer affiliate
+commission, funnel blueprints that actually scaffold, event recurrence, analytics
+retention cohorts, and the global custom-field library.
+
+
+APPENDIX B - WHAT REAL DELIVERED EMAIL PROVES  (customer's Gmail, 4 Sep 2026)
+Eleven messages were inspected in sagarshankaranusa@gmail.com. This is the only
+verification of the app's outbound mail that does not depend on the admin UI, and
+it confirms several things are genuinely working in production:
+
+  1. TRANSACTIONAL RECEIPTS WORK, INCLUDING THE PDF.
+     Subject "Your receipt (order #7) - $0.00", with a real attachment
+     receipt-2026-08-18-7.pdf. Body itemised correctly:
+         The Profitable Private Practice Boss Builders Collective  $3,997.00
+         Subtotal                                                  $3,997.00
+         Discount (4SAGAR)                                        -$3,997.00
+         Total paid                                                    $0.00
+     So coupon application is correct on a real purchase, not just in the
+     checkout preview, and the receipt PDF pipeline is live.
+  2. The receipt CTA is "Open my library" - the member library is already being
+     linked from transactional mail, which makes section 1.2 urgent: the emails
+     point at a surface that is thin or unverified.
+  3. EMAIL CONFIRMATION WORKS. "Confirm your email address ... The link works for
+     24 hours. If you didn't create an account at Boss Clinician, you can ignore
+     this." So the signup/confirm flow in 1.1 partly exists - verify it rather
+     than rebuilding it.
+  4. SES IS WIRED AND AUTHENTICATING (see 3.9).
+  5. Reply-to routes to Yvette: "If anything looks wrong, just reply - it comes
+     to me."
+
+  The same inbox also holds Kajabi's own mail for comparison - Week 1 / Week 2 /
+  Week 3 sequence emails, a Kajabi receipt with its own PDF, and nurture emails
+  with an "Unsubscribe | Sent by Yvette Howard's First Site" footer and the
+  Las Vegas postal address. Useful as a reference for the footer, unsubscribe and
+  postal-address compliance our marketing mail must match.
+
+  UPDATE - A MEMBER SESSION WAS OBTAINED LATER THE SAME DAY, and a full purchase
+  was run end to end. See section 0b for the blocker it exposed, and Surface 2 in
+  section 0 for what is confirmed working. Summary of that test:
+    - coupon MADHAVFREE (100% off) created in admin
+    - bought the live offer as member sagarshankaranm@gmail.com
+    - checkout correctly became a $0.00 "GET INSTANT ACCESS" flow, no card asked
+    - order #9 recorded, coupon incremented to "Used 1 time"
+    - entitlement granted instantly, product appeared in /library with progress
+    - drip enforced member-side: "Locked. Unlocks Monday, September 7"
+    - AND NO EMAIL WAS SENT, despite the success page promising a receipt and
+      access details, and despite the receipt rule being "Every payment"
+  Contrast: the 18 Aug $0.00 order to the other account produced a correct
+  itemised receipt with a PDF. So the pipeline regressed between 18 Aug and
+  4 Sep.

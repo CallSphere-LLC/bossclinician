@@ -21,7 +21,7 @@ describe("admin MFA login transport", () => {
       ),
     );
 
-    const error = await adminApi.login("owner@example.com", "right-password").catch((err) => err);
+    const error = await adminApi.login("success+owner@simulator.amazonses.com", "right-password").catch((err) => err);
     expect(isMfaRequiredError(error)).toBe(true);
   });
 
@@ -30,18 +30,18 @@ describe("admin MFA login transport", () => {
       new Response(
         JSON.stringify({
           token: "session-token",
-          user: { id: 1, email: "owner@example.com", name: "Owner", role: "owner" },
+          user: { id: 1, email: "success+owner@simulator.amazonses.com", name: "Owner", role: "owner" },
         }),
         { status: 200, headers: { "Content-Type": "application/json" } },
       ),
     );
     vi.stubGlobal("fetch", fetchMock);
 
-    await adminApi.login("owner@example.com", "right-password", "123456");
+    await adminApi.login("success+owner@simulator.amazonses.com", "right-password", "123456");
 
     const options = fetchMock.mock.calls[0]?.[1];
     expect(JSON.parse(String(options?.body))).toEqual({
-      email: "owner@example.com",
+      email: "success+owner@simulator.amazonses.com",
       password: "right-password",
       code: "123456",
     });

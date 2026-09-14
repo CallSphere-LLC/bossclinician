@@ -1,5 +1,7 @@
 import { pool } from "../../db/pool";
 import { REPORT_TIMEZONE, daysBetween, shiftDay } from "./rollup";
+import { readSetting } from "../settings";
+import { cancelReasonLabel, parseCancelReasons } from "../cancellationReasons";
 
 /**
  * Every report, in one shape.
@@ -311,6 +313,12 @@ interface BreakdownOptions {
   /** `count` orders by the count column; money reports order by money. */
   by?: "money" | "count";
   limit?: number;
+  /**
+   * Words for a dimension the generic labeller has none for. Cancellation
+   * reasons use it: their wording belongs to the owner's own list, and "Too
+   * expensive" guessed from the key is not what the customer was shown.
+   */
+  labeller?: () => Promise<(dimension: string) => string | undefined>;
 }
 
 async function readBreakdown(opts: BreakdownOptions): Promise<ReportBreakdownRow[]> {
@@ -330,8 +338,9 @@ async function readBreakdown(opts: BreakdownOptions): Promise<ReportBreakdownRow
   );
 
   const labels = await labelDimensions(res.rows.map((r) => r.dimension));
+  const own = opts.labeller ? await opts.labeller() : undefined;
   return res.rows.map((r) => ({
-    label: labels.get(r.dimension) ?? r.dimension,
+    label: own?.(r.dimension) ?? labels.get(r.dimension) ?? r.dimension,
     value: opts.by === "count" ? r.count : Number(r.cents),
     count: opts.by === "count" ? Number(r.cents) : r.count,
   }));
@@ -357,6 +366,8 @@ interface MetricReportOptions {
     valueLabel: string;
     /** Omit where the second column would only ever be zero — see `free_offers`. */
     countLabel?: string;
+    /** See `BreakdownOptions.labeller`. */
+    labeller?: () => Promise<(dimension: string) => string | undefined>;
   };
   note?: string;
 }
@@ -423,6 +434,7 @@ function metricReport(opts: MetricReportOptions): ReportRunner {
         to: params.to,
         currency: params.currency,
         by: opts.value,
+        labeller: opts.breakdown.labeller,
       });
       result.breakdownLabel = opts.breakdown.label;
       result.breakdownValueLabel = opts.breakdown.valueLabel;
@@ -783,8 +795,7 @@ export const cartRecovery: ReportRunner = async (params) => {
     breakdownFormat: "money",
     currency: currencyOf(recovered),
     note:
-      "A cart counts as brought back on the day the sale finally happened, " +
-      "which may be days after it was left.",
+      "Only purchases after a tracked reminder link count as recovered revenue, attributed to the last reminder followed. Recorded on the day of purchase.",
   };
 
   if (params.compareFrom && params.compareTo) {
@@ -850,8 +861,22 @@ export const canceledSubscriptions = metricReport({
     label: "Why they left",
     valueLabel: "People",
     countLabel: "Each month",
+    // The wording from Settings → Payments, not a guess from the key.
+    labeller: async () => {
+      const reasons = await ownerCancelReasons();
+      return (dimension) =>
+        dimension.startsWith("reason:")
+          ? cancelReasonLabel(dimension.slice("reason:".length), reasons)
+          : undefined;
+    },
   },
 });
+
+/** The owner's current list of cancellation reasons, for report wording. */
+async function ownerCancelReasons() {
+  const settings = await readSetting("customer_payments");
+  return parseCancelReasons(settings.cancellationReasons);
+}
 
 /** The words people typed on their way out. No chart — there is nothing to plot. */
 export const cancellationFeedback: ReportRunner = async (params) => {
@@ -868,6 +893,8 @@ export const cancellationFeedback: ReportRunner = async (params) => {
       LIMIT 200`,
     [params.from, params.to, REPORT_TIMEZONE]
   );
+
+  const reasons = await ownerCancelReasons();
 
   if (res.rows.length === 0) {
     return emptyResult(
@@ -886,7 +913,7 @@ export const cancellationFeedback: ReportRunner = async (params) => {
       },
     },
     breakdown: res.rows.map((r) => ({
-      label: `${r.feedback} (${humanise(r.reason)})`,
+      label: `${r.feedback} (${cancelReasonLabel(r.reason, reasons)})`,
       value: r.count,
       count: r.count,
     })),

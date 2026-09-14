@@ -1,0 +1,81 @@
+{
+  "teamAudit": [
+    {
+      "action": "admin.suspend",
+      "entity_id": "14",
+      "before_state": {
+        "status": "active"
+      },
+      "after_state": {
+        "status": "suspended"
+      }
+    },
+    {
+      "action": "admin.restore",
+      "entity_id": "14",
+      "before_state": {
+        "status": "suspended"
+      },
+      "after_state": {
+        "status": "active"
+      }
+    },
+    {
+      "action": "admin.suspend",
+      "entity_id": "14",
+      "before_state": {
+        "status": "active"
+      },
+      "after_state": {
+        "status": "suspended"
+      }
+    },
+    {
+      "action": "admin.restore",
+      "entity_id": "14",
+      "before_state": {
+        "status": "suspended"
+      },
+      "after_state": {
+        "status": "active"
+      }
+    }
+  ],
+  "attemptsRemoved": [
+    {
+      "id": "12"
+    },
+    {
+      "id": "13"
+    }
+  ],
+  "contactsRemoved": [
+    {
+      "id": 73
+    },
+    {
+      "id": 72
+    }
+  ],
+  "adminsRemoved": [
+    {
+      "id": 13
+    },
+    {
+      "id": 14
+    }
+  ],
+  "remaining": {
+    "admins": 0,
+    "contacts": 0,
+    "attempts": 0
+  },
+  "realTeam": [
+    {
+      "id": 1,
+      "name": "Yvette Howard",
+      "role": "owner",
+      "status": "active"
+    }
+  ]
+}

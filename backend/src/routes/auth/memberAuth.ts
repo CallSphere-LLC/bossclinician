@@ -14,6 +14,7 @@ import {
   setRefreshCookie,
   signMemberAccessToken,
 } from "../../auth/memberSession";
+import { setDocumentCookie } from "../../auth/memberDocumentCookie";
 import { optionalMember } from "../../middleware/memberAuth";
 import {
   memberEmailLinkLimiter,
@@ -34,6 +35,11 @@ import {
   type MemberProfile,
   type MemberProfileRow,
 } from "../../services/memberProfile";
+import {
+  reflectConfirmationOnContact,
+  sendMemberVerificationEmail as sendVerificationEmail,
+  type VerificationSendResult,
+} from "../../services/emailConfirmation";
 import {
   forgotPasswordSchema,
   loginSchema,
@@ -64,7 +70,6 @@ const GENERIC_LINK = "That link has expired or has already been used. Please req
 /** Suspended and deleted accounts are refused everywhere a session can be created. */
 const SIGN_IN_BLOCKED = new Set(["suspended", "deleted"]);
 
-const EMAIL_VERIFICATION_TTL_MINUTES = 24 * 60;
 const PASSWORD_RESET_TTL_MINUTES = 60;
 const MAGIC_LINK_TTL_MINUTES = 15;
 
@@ -149,6 +154,8 @@ async function startSession(
     ip: meta.ip,
   });
   setRefreshCookie(res, raw);
+  // Lets a plain browser GET to /account/.../receipt.pdf arrive signed in.
+  await setDocumentCookie(res, raw);
   return {
     member,
     accessToken: signMemberAccessToken({ sub: member.id, email: member.email }),
@@ -377,78 +384,14 @@ async function sendSetPasswordEmail(member: {
   });
 }
 
-/**
- * What a resend actually did, for the one caller allowed to be told.
- *
- * "throttled" is its own answer rather than a failure: the per-account ceiling
- * is working as designed, and a member pressing the button a fourth time is
- * owed "give the last one a minute" rather than either a lie or an error.
+/*
+ * Minting and mailing a confirmation link now lives in
+ * services/emailConfirmation.ts, alongside the admin override that confirms an
+ * address by hand. There has to be exactly one copy: the resend ceiling, the
+ * retirement of outstanding links and the token's own lifetime are the same
+ * rules whether the member pressed "send it again" or an administrator did, and
+ * two copies of them drift.
  */
-type VerificationSendResult =
-  | { state: "sent" }
-  | { state: "throttled" }
-  | { state: "failed"; error: string };
-
-async function sendVerificationEmail(
-  member: { id: number; email: string; first_name: string },
-  /**
-   * Wait for the transport and report back. Off by default: on signup a slow
-   * SMTP handshake must not decide how long the member waits for the page. The
-   * explicit "Send it again" button is the opposite case — the member is
-   * waiting precisely to find out whether it worked.
-   */
-  options: { awaitDelivery?: boolean } = {}
-): Promise<VerificationSendResult> {
-  // The same durable per-account ceiling forgot-password uses. Without it,
-  // resend-verification is an unauthenticated button that sends mail from this
-  // domain to any unverified address, as often as the caller likes — the
-  // IP+email rate limiter alone is defeated by changing IP.
-  const recent = await pool.query<{ count: string }>(
-    `SELECT count(*) AS count
-       FROM member_email_verifications
-      WHERE member_id = $1
-        AND created_at > now() - make_interval(mins => $2)`,
-    [member.id, RESET_WINDOW_MINUTES]
-  );
-  if (Number(recent.rows[0]?.count ?? 0) >= RESET_MAX_PER_WINDOW) return { state: "throttled" };
-
-  // Supersede outstanding links rather than adding to them: each one lives 24
-  // hours, so a day of resends would otherwise leave a day's worth of
-  // simultaneously-valid tokens for the same address.
-  await pool.query(
-    `UPDATE member_email_verifications SET used_at = now()
-      WHERE member_id = $1 AND used_at IS NULL`,
-    [member.id]
-  );
-
-  const raw = generateToken();
-  await pool.query(
-    `INSERT INTO member_email_verifications (member_id, email, token_hash, expires_at)
-     VALUES ($1, $2, $3, $4)`,
-    [member.id, member.email, hashToken(raw), expiresIn(EMAIL_VERIFICATION_TTL_MINUTES * 60)]
-  );
-  const message = {
-    topic: "email_confirmation",
-    memberId: member.id,
-    to: member.email,
-    ...emails.verifyEmail({
-      firstName: member.first_name,
-      token: raw,
-      expiresInMinutes: EMAIL_VERIFICATION_TTL_MINUTES,
-    }),
-  };
-
-  if (!options.awaitDelivery) {
-    // Fire and forget, as on signup: a slow SMTP handshake must not decide how
-    // long a member waits for their signup to come back. The delivery log in
-    // settings is where this one's fate is read.
-    void sendMail(message);
-    return { state: "sent" };
-  }
-
-  const outcome = await sendMail(message);
-  return outcome.sent ? { state: "sent" } : { state: "failed", error: outcome.error };
-}
 
 /**
  * POST /api/auth/register
@@ -689,6 +632,8 @@ memberAuthRoutes.post(
     }
 
     setRefreshCookie(res, outcome.refreshToken);
+    // Rotation revoked the row the previous document cookie pointed at.
+    await setDocumentCookie(res, outcome.refreshToken);
     res.json({
       member: profile,
       accessToken: signMemberAccessToken({ sub: profile.id, email: profile.email }),
@@ -818,6 +763,10 @@ memberAuthRoutes.post(
       client.release();
     }
 
+    // Same proof, same consequence: the reset link only arrived at that address,
+    // and the UPDATE above set `email_verified_at` on the way past.
+    await reflectConfirmationOnContact(member.id);
+
     await revokeAllMemberSessions(member.id, "password_change");
     clearRefreshCookie(res);
 
@@ -909,6 +858,15 @@ memberAuthRoutes.post(
     } finally {
       client.release();
     }
+
+    /*
+     * The consent row is the OTHER confirmation store, and until now nothing
+     * told it. A contact left at `unconfirmed` by a double opt-in signup stayed
+     * there after the member clicked their link, so the People screen went on
+     * reporting them as never having confirmed. Lifted only out of
+     * `unconfirmed` — see services/emailConfirmation.ts.
+     */
+    await reflectConfirmationOnContact(member.id);
 
     if (member.firstVerification) {
       void sendMail({
@@ -1081,6 +1039,10 @@ memberAuthRoutes.post(
     );
     const row = updated.rows[0];
     if (!row || SIGN_IN_BLOCKED.has(row.status)) throw unauthorized(GENERIC_CREDENTIALS);
+
+    // The statement above proves the address (the link only arrived there), so
+    // the mailing list's own confirmation state is brought with it.
+    await reflectConfirmationOnContact(link.member_id);
 
     const session = await startSession(res, toMemberProfile(row), clientMeta(req));
     res.json(session);

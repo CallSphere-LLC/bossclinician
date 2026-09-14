@@ -1,6 +1,8 @@
 import nodemailer, { Transporter } from "nodemailer";
 import { env } from "../config/env";
 import { pool } from "../db/pool";
+import { transportKeyForHost } from "../services/sendingIdentity";
+import { assertRecipientAllowed } from "./recipientGuard";
 
 let transporter: Transporter;
 
@@ -95,6 +97,9 @@ function sesMessageId(response: unknown): string {
 
 export async function sendMailStrict(input: SendMailInput): Promise<{ messageId: string }> {
   if (!input.to) throw new Error("No recipient address");
+  // Outside production, only allow-listed recipients (see recipientGuard.ts).
+  // Thrown before the transport, so every caller records it as not sent.
+  assertRecipientAllowed(input.to);
 
   // SES emits nothing at all for a message sent without a configuration set, so
   // the default is applied here rather than at each call site: a sender that
@@ -141,7 +146,9 @@ async function openMailRecord(input: SendMailInput): Promise<number | null> {
         input.sourceId ?? null,
         (input.topic ?? "").slice(0, 100),
         input.subject.slice(0, 500),
-        env.smtp.host ? "smtp" : "console",
+        // "ses" when SMTP_HOST is Amazon's SMTP interface, so the delivery log
+        // names the service that carried the message rather than the protocol.
+        transportKeyForHost(env.smtp.host),
       ]
     );
     return Number(res.rows[0].id);

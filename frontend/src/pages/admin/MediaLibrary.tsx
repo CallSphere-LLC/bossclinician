@@ -1,3 +1,4 @@
+import { publicSiteUrl } from "@/lib/siteOrigins";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { motion } from "motion/react";
 import { Check, Copy, ExternalLink, FolderOpen, Pencil, Play, Trash2 } from "lucide-react";
@@ -21,6 +22,7 @@ import {
 } from "@/pages/admin/ui/primitives";
 import { UploadDropzone, iconForKind } from "@/pages/admin/ui/Uploader";
 import { Modal, useConfirm } from "@/pages/admin/ui/Dialog";
+import { Link } from "react-router-dom";
 
 /** `plural` names the group in a sentence: "No images yet — upload your first one." */
 const FILTERS: { key: MediaKind | "all"; label: string; plural: string }[] = [
@@ -86,6 +88,18 @@ function isPaidFile(asset: MediaAsset): boolean {
 const PAID_FILE_NOTE =
   "You're the only one who can see it here. There's no web address to copy — add it from inside the course, product or session it belongs to.";
 
+/**
+ * A file somebody sent through a public form. The library row carries the
+ * contact it belongs to (media_assets.contact_id, migration 049), and the API
+ * already returns every column, so the card can open that person.
+ */
+type FormUploadAsset = MediaAsset & { contactId?: number | null; formSubmissionId?: number | null };
+
+function sentByContact(asset: MediaAsset): number | null {
+  const contactId = (asset as FormUploadAsset).contactId;
+  return typeof contactId === "number" && contactId > 0 ? contactId : null;
+}
+
 export default function MediaLibrary() {
   const [assets, setAssets] = useState<MediaAsset[] | null>(null);
   const [filter, setFilter] = useState<MediaKind | "all">("all");
@@ -141,7 +155,7 @@ export default function MediaLibrary() {
   }
 
   async function copyLink(asset: MediaAsset) {
-    const absolute = `${window.location.origin}${asset.url}`;
+    const absolute = publicSiteUrl(asset.url);
     try {
       await navigator.clipboard.writeText(absolute);
       setCopiedId(asset.id);
@@ -385,6 +399,14 @@ export default function MediaLibrary() {
                         {formatBytes(Number(asset.sizeBytes))} · added{" "}
                         {formatRelative(asset.createdAt)}
                       </p>
+                      {sentByContact(asset) !== null && (
+                        <Link
+                          to={`/admin/contacts/${sentByContact(asset)}`}
+                          className="mt-0.5 block truncate text-[0.68rem] font-semibold text-plum hover:underline"
+                        >
+                          Sent through a form · open their contact
+                        </Link>
+                      )}
 
                       <div className="mt-2.5 flex gap-1.5">
                         {paid ? (

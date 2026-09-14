@@ -1,0 +1,227 @@
+{
+  "at": "2026-09-12T19:30:59.945Z",
+  "member401": [
+    {
+      "path": "/admin/contacts",
+      "status": 401
+    },
+    {
+      "path": "/admin/offers",
+      "status": 401
+    },
+    {
+      "path": "/admin/settings",
+      "status": 401
+    }
+  ],
+  "receipt": {
+    "status": 200,
+    "type": "application/pdf",
+    "disposition": "attachment; filename=\"receipt-R-2026-00009.pdf\"",
+    "prefix": "%PDF-",
+    "length": 2560,
+    "otherStatus": 404
+  },
+  "marketing": {
+    "windowDays": 30,
+    "generatedAt": "2026-09-12T19:31:00.017Z",
+    "emails": {
+      "sent": 6,
+      "bySource": {
+        "broadcast": 2,
+        "sequence": 4,
+        "automation": 0
+      },
+      "broadcastUnlisted": 2,
+      "opened": 2,
+      "clicked": 0,
+      "openRate": 33.3,
+      "clickRate": 0,
+      "notSent": 0,
+      "notSentBySource": {
+        "broadcast": 0,
+        "sequence": 0,
+        "automation": 0
+      },
+      "notSentPeople": 0,
+      "notSentEmails": 0,
+      "notSentLaterSent": 0,
+      "queued": 0,
+      "campaignsSent": 0,
+      "campaignsScheduled": 0,
+      "trackingSeen": true
+    },
+    "sequences": {
+      "active": 1,
+      "total": 3,
+      "enrolled": 0,
+      "people": 0,
+      "top": [
+        {
+          "id": 1,
+          "name": "ZZ Test — welcome sequence",
+          "enrolled": 0
+        }
+      ]
+    },
+    "forms": {
+      "replies": 4,
+      "previousReplies": 0,
+      "formsWithReplies": 2,
+      "top": [
+        {
+          "id": 4,
+          "name": "ZZ Test — waitlist form",
+          "replies": 3
+        },
+        {
+          "id": 19,
+          "name": "ZZ Bug Hunt Double Opt In",
+          "replies": 1
+        }
+      ]
+    },
+    "automations": {
+      "active": 1,
+      "ran": 1,
+      "runs": 4,
+      "problemRuns": 2,
+      "failedRuns": 0,
+      "withProblems": 1,
+      "skippedRuns": 0,
+      "problemAutomations": [
+        {
+          "id": 2,
+          "name": "ZZ Test — buyer welcome",
+          "problemRuns": 2
+        }
+      ]
+    },
+    "events": {
+      "upcoming": 2,
+      "upcomingPublished": 1,
+      "upcomingDrafts": 1,
+      "alwaysOn": 0,
+      "registrations": 2,
+      "communityUpcoming": 0,
+      "next": [
+        {
+          "id": 1,
+          "title": "ZZ Test — live webinar",
+          "startsAt": "2026-09-15T22:00:00.000Z",
+          "published": true,
+          "registrations": 2
+        },
+        {
+          "id": 2,
+          "title": "ZZ Verify — tz check",
+          "startsAt": "2026-10-10T22:00:00.000Z",
+          "published": false,
+          "registrations": 0
+        }
+      ]
+    }
+  },
+  "funnel": {
+    "created": {
+      "funnel": {
+        "id": 13,
+        "slug": "zz-bughunt-v-funnel",
+        "name": "ZZ Bug Hunt V Funnel",
+        "description": "",
+        "kind": "opt_in",
+        "published": false,
+        "createdAt": "2026-09-12T19:29:23.797Z",
+        "updatedAt": "2026-09-12T19:29:23.797Z",
+        "formId": 20,
+        "tagId": 51,
+        "sequenceId": 13,
+        "offerId": null
+      },
+      "stageCount": 3,
+      "emailCount": 1,
+      "formId": 20,
+      "tagId": 51,
+      "sequenceId": 13
+    },
+    "reloaded": {
+      "id": 13,
+      "slug": "zz-bughunt-v-funnel",
+      "name": "ZZ Bug Hunt V Funnel",
+      "description": "",
+      "kind": "opt_in",
+      "published": false,
+      "createdAt": "2026-09-12T19:29:23.797Z",
+      "updatedAt": "2026-09-12T19:29:23.797Z",
+      "formId": 20,
+      "tagId": 51,
+      "sequenceId": 13,
+      "offerId": null
+    },
+    "steps": [
+      {
+        "id": 26,
+        "funnelId": 13,
+        "name": "Landing page",
+        "slug": "zz-bughunt-v-funnel-1",
+        "stepType": "landing",
+        "headline": "A useful free resource",
+        "bodyMd": "Show what they will get and why it helps.",
+        "ctaLabel": "Get it",
+        "ctaUrl": "",
+        "sort": 0,
+        "views": 0,
+        "conversions": 0,
+        "createdAt": "2026-09-12T19:29:23.797Z",
+        "updatedAt": "2026-09-12T19:29:23.797Z"
+      },
+      {
+        "id": 27,
+        "funnelId": 13,
+        "name": "Sign-up",
+        "slug": "zz-bughunt-v-funnel-2",
+        "stepType": "opt_in",
+        "headline": "Where should we send it?",
+        "bodyMd": "Ask for the details you actually need.",
+        "ctaLabel": "Send it to me",
+        "ctaUrl": "/forms/funnel-13-signup",
+        "sort": 1,
+        "views": 0,
+        "conversions": 0,
+        "createdAt": "2026-09-12T19:29:23.797Z",
+        "updatedAt": "2026-09-12T19:29:23.797Z"
+      },
+      {
+        "id": 28,
+        "funnelId": 13,
+        "name": "Thank you",
+        "slug": "zz-bughunt-v-funnel-3",
+        "stepType": "thank_you",
+        "headline": "It is on its way",
+        "bodyMd": "Tell them what to expect next.",
+        "ctaLabel": "Back to the site",
+        "ctaUrl": "/",
+        "sort": 2,
+        "views": 0,
+        "conversions": 0,
+        "createdAt": "2026-09-12T19:29:23.797Z",
+        "updatedAt": "2026-09-12T19:29:23.797Z"
+      }
+    ]
+  },
+  "email": {
+    "sent": true,
+    "note": "Sent by first verification invocation; independent Gmail header check follows."
+  },
+  "coaching": {
+    "privateNotes": "Private: watch cashflow.",
+    "agenda": "Agenda: pricing review."
+  },
+  "dm": {
+    "member40Count": 2,
+    "member53Count": 2,
+    "markupStrippedBeforeStorage": true,
+    "noExecutedMarkup": true,
+    "afterReload": true
+  }
+}

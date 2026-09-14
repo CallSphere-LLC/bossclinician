@@ -75,7 +75,7 @@ const STATUS_TONE: Record<string, "green" | "gold" | "slate"> = {
 const STATUS_LABEL: Record<string, string> = {
   active: "Has access",
   invited: "Waiting to accept",
-  suspended: "Access paused",
+  suspended: "Suspended",
 };
 
 /* ───────────────────────────────────────────────────────── your own account */
@@ -434,19 +434,20 @@ export default function AdminUsers() {
     const pausing = person.status !== "suspended";
     const ok = await confirm({
       title: pausing
-        ? `Pause ${person.name || person.email}'s access?`
+        ? `Suspend ${person.name || person.email}'s access?`
         : `Give ${person.name || person.email} access again?`,
       description: pausing
         ? "They'll be signed out straight away and won't be able to sign back in until you undo this."
         : "They'll be able to sign in again with the password they already have.",
-      confirmLabel: pausing ? "Yes, pause it" : "Yes, give it back",
+      confirmLabel: pausing ? "Suspend access" : "Restore access",
       destructive: pausing,
     });
     if (!ok) return;
 
     try {
       await (pausing ? teamApi.suspend(person.id) : teamApi.restore(person.id));
-      toast.success(pausing ? "Access paused" : "Access restored");
+      toast.success(pausing ? "Access suspended" : "Access restored");
+      setEditing(null);
       load();
     } catch (err) {
       toast.error(friendlyError(err, "person"));
@@ -454,17 +455,19 @@ export default function AdminUsers() {
   }
 
   async function remove(person: AdminPerson) {
+    const pending = person.status === "invited";
     const ok = await confirm({
-      title: `Remove ${person.name || person.email}?`,
-      description: "They lose access immediately. Anything they created stays where it is.",
-      confirmLabel: "Yes, remove them",
+      title: pending ? `Withdraw ${person.name || person.email}'s invitation?` : `Remove ${person.name || person.email}?`,
+      description: pending ? "Their invitation link will stop working. They won't be able to join with it." : "They lose access immediately. Anything they created stays where it is.",
+      confirmLabel: pending ? "Withdraw invitation" : "Yes, remove them",
       destructive: true,
     });
     if (!ok) return;
 
     try {
       await teamApi.remove(person.id);
-      toast.success("Removed");
+      toast.success(pending ? "Invitation withdrawn" : "Removed");
+      setEditing(null);
       load();
     } catch (err) {
       toast.error(friendlyError(err, "person"));
@@ -512,6 +515,9 @@ export default function AdminUsers() {
           <Badge tone={STATUS_TONE[row.original.status] ?? "slate"}>
             {STATUS_LABEL[row.original.status] ?? row.original.status}
           </Badge>
+          {row.original.status === "invited" && (
+            <span className="max-w-[15rem] text-xs text-ink-soft">Can't sign in yet. Suspend access becomes available after acceptance.</span>
+          )}
           {row.original.mfaEnabled && (
             <span className="inline-flex items-center gap-1 text-[0.68rem] text-ink-soft">
               <ShieldCheck className="size-3.5" />
@@ -551,13 +557,19 @@ export default function AdminUsers() {
               <MoreHorizontal />
               Change
             </Button>
+            {person.status !== "invited" && (
+              <Button variant="secondary" size="sm" onClick={() => togglePause(person)}>
+                {person.status === "suspended" ? "Restore access" : "Suspend access"}
+              </Button>
+            )}
             <Button
               variant="dangerGhost"
-              size="iconSm"
+              size={person.status === "invited" ? "sm" : "iconSm"}
               onClick={() => remove(person)}
-              aria-label={`Remove ${person.email}`}
+              aria-label={`${person.status === "invited" ? "Withdraw invitation for" : "Remove"} ${person.email}`}
             >
               <Trash2 />
+              {person.status === "invited" && "Withdraw"}
             </Button>
           </RowActions>
         );
@@ -578,7 +590,7 @@ export default function AdminUsers() {
         <PageHeader
           eyebrow="Settings"
           title="Who can get in"
-          description="The people who can sign in to this admin, and what each of them is allowed to do."
+          description="Manage your team's permissions. Withdraw an invitation before someone joins. After they accept, suspend or restore access while keeping their account and history."
           actions={
             isOwner && (
               <Button size="sm" onClick={() => setInviting(true)}>
@@ -700,7 +712,7 @@ export default function AdminUsers() {
         open={editing !== null}
         onOpenChange={(open) => !open && setEditing(null)}
         title={editing ? `${editing.name || editing.email}` : ""}
-        description="Change what they can do, pause their access, or sign them out everywhere."
+        description={editing?.status === "invited" ? "This invitation hasn't been accepted. Change their role or withdraw the invitation." : "Change their role, suspend or restore access, or sign them out everywhere."}
         footer={
           <Button variant="secondary" size="sm" onClick={() => setEditing(null)}>
             Done
@@ -726,11 +738,21 @@ export default function AdminUsers() {
 
             <RoleExplainer role={roleOf(editing.role)} />
 
+            {editing.status === "invited" && (
+              <p className="rounded-xl border border-hairline p-3 text-sm text-ink-soft">
+                They can't sign in yet. Suspend access and Sign them out everywhere become available after they accept. To prevent them from joining now, withdraw the invitation.
+              </p>
+            )}
+
             <div className="flex flex-wrap gap-2.5 border-t border-hairline/60 pt-4">
-              <Button variant="secondary" size="sm" onClick={() => togglePause(editing)}>
-                {editing.status === "suspended" ? "Give access back" : "Pause their access"}
-              </Button>
-              <Button
+              {editing.status !== "invited" && (
+                <Button variant="secondary" size="sm" onClick={() => togglePause(editing)}>
+                  {editing.status === "suspended" ? "Restore access" : "Suspend access"}
+                </Button>
+              )}
+              {editing.status === "invited" ? (
+                <Button variant="dangerGhost" size="sm" onClick={() => remove(editing)}>Withdraw invitation</Button>
+              ) : <Button
                 variant="ghost"
                 size="sm"
                 onClick={async () => {
@@ -746,7 +768,7 @@ export default function AdminUsers() {
               >
                 <KeyRound />
                 Sign them out everywhere
-              </Button>
+              </Button>}
             </div>
           </div>
         )}

@@ -6,6 +6,14 @@ import { asyncHandler } from "../../utils/asyncHandler";
 import { badRequest, notFound } from "../../utils/httpError";
 import { recordAdminAction } from "../../services/adminAudit";
 import { applyTags, normaliseSlugs, recordActivity, removeTags } from "../../services/contacts";
+import {
+  CONTACT_ACCOUNT_SQL,
+  CONTACT_UNCONFIRMED_SQL,
+  confirmContactListAsAdmin,
+  confirmMemberEmailAsAdmin,
+  confirmationForContact,
+  sendMemberVerificationEmail,
+} from "../../services/emailConfirmation";
 import { MAILABLE_CONTACT_SQL } from "../../services/audience";
 import { dispatchEvent } from "../../services/webhooksOut";
 import { publishDomainEvent } from "../../services/domainEvents";
@@ -34,7 +42,13 @@ const EMAIL_STATUSES = [
 const CONTACT_COLUMNS = `c.id, c.email::text AS email, c.name, c.first_name, c.last_name,
        c.phone, c.timezone, c.email_marketing_status, c.opted_in_at, c.opted_out_at,
        c.consent_source, c.lifetime_value_cents, c.order_count, c.last_activity_at,
-       c.last_ordered_at, c.source, c.custom_fields, c.notes, c.created_at, c.updated_at`;
+       c.last_ordered_at, c.source, c.custom_fields, c.notes, c.created_at, c.updated_at,
+       -- The account behind this person, so no contact read can show a mailing
+       -- list status without the confirmation state that goes with it. The two
+       -- used to be separate reads on separate screens, which is how a member
+       -- blocked from posting appeared on his own card as "Happy to hear from
+       -- you".
+       ${CONTACT_ACCOUNT_SQL}`;
 
 /** The tags on a contact, as names and slugs, without a GROUP BY over the whole list. */
 const CONTACT_TAGS = `COALESCE((SELECT json_agg(json_build_object('slug', t.slug::text, 'name', t.name, 'colour', t.colour)
@@ -108,8 +122,21 @@ function buildFilters(filters: ContactFilters): { where: string; params: unknown
   }
 
   if (filters.status) {
-    params.push(filters.status);
-    clauses.push(`c.email_marketing_status = $${params.length}`);
+    /*
+     * "Hasn't confirmed yet" reads BOTH confirmation stores.
+     *
+     * It used to be `email_marketing_status = 'unconfirmed'` alone, which is the
+     * mailing list's double opt-in flag — so the filter reported "0 people"
+     * while members sat blocked from posting because their ACCOUNT was never
+     * confirmed. Two stores, one question; see services/emailConfirmation.ts.
+     * Every other status is a fact about the address and stays exact.
+     */
+    if (filters.status === "unconfirmed") {
+      clauses.push(CONTACT_UNCONFIRMED_SQL);
+    } else {
+      params.push(filters.status);
+      clauses.push(`c.email_marketing_status = $${params.length}`);
+    }
   }
 
   if (filters.untagged) {
@@ -198,7 +225,9 @@ adminContactsRouter.get(
                                    AND c.consent_source NOT IN ('admin','manual'))::int AS opted_out,
                 COUNT(*) FILTER (WHERE c.email_marketing_status = 'bounced')::int AS bounced,
                 COUNT(*) FILTER (WHERE c.email_marketing_status = 'complained')::int AS complained,
-                COUNT(*) FILTER (WHERE c.email_marketing_status = 'unconfirmed')::int AS never_subscribed
+                -- The same predicate the People filter this tile links to
+                -- uses, or the tile and the list it opens disagree.
+                COUNT(*) FILTER (WHERE ${CONTACT_UNCONFIRMED_SQL})::int AS never_subscribed
            FROM contacts c`,
       ),
       pool.query<{ healthy: number; passive: number; unengaged: number; inactive: number }>(
@@ -1056,6 +1085,12 @@ adminContactsRouter.get(
       activity: rowsToCamel(activity.rows),
       orders: rowsToCamel(orders.rows),
       ...rowToCamel(links.rows[0] ?? {}),
+      /*
+       * Both confirmation states, reconciled into one answer, so the card
+       * cannot say "Happy to hear from you" about somebody who is blocked from
+       * posting because they never confirmed their address.
+       */
+      confirmation: await confirmationForContact(id),
     });
   })
 );
@@ -1241,5 +1276,124 @@ adminContactsRouter.post(
     });
 
     res.status(201).json({ ok: true });
+  })
+);
+
+/* ---------------------------------------------------- email confirmation */
+
+/**
+ * The two admin overrides for email confirmation.
+ *
+ * These exist because confirmation gates the whole social product — posting,
+ * commenting, and every point a member can earn all run through
+ * `requireVerifiedEmail` — and the only way through it was a link in an email.
+ * When mail does not arrive (an unverified sending domain, a provider account
+ * under review, a corporate filter), every member is locked out permanently and
+ * there is nothing anybody can do about it from inside the app.
+ *
+ * Both write an audit row and a timeline entry. Confirming somebody's address on
+ * their behalf is a decision with a consequence — it lets that account post
+ * under a name whose owner has not proved they hold the inbox — so it has to be
+ * attributable afterwards to the administrator who made it.
+ */
+adminContactsRouter.post(
+  "/:id/confirm-email",
+  requireManage,
+  asyncHandler(async (req, res) => {
+    const id = parseId(req.params.id);
+    const contact = rowToCamel<{ email: string }>(await loadContact(id));
+    const state = await confirmationForContact(id);
+
+    if (state.memberId === null && state.contactStatus !== "unconfirmed") {
+      throw badRequest(
+        "There's nothing to confirm: this person has no account, and their mailing list " +
+          "consent isn't waiting on a confirmation."
+      );
+    }
+
+    const result =
+      state.memberId === null
+        ? await confirmContactListAsAdmin(id)
+        : await confirmMemberEmailAsAdmin(state.memberId);
+
+    if (result.changed) {
+      await recordActivity({
+        contactId: id,
+        kind: "email.confirmed",
+        title: "Email confirmed by hand",
+        body: `${req.user?.email ?? "An administrator"} confirmed this address without the link being clicked.`,
+        meta: { by: req.user?.email ?? "", memberId: state.memberId },
+      });
+    }
+
+    await recordAdminAction({
+      req,
+      action: "contact.confirmEmail",
+      entityType: "contact",
+      entityId: id,
+      before: {
+        state: result.before.state,
+        accountConfirmedAt: result.before.accountConfirmedAt,
+        contactStatus: result.before.contactStatus,
+      },
+      after: {
+        state: result.after.state,
+        accountConfirmedAt: result.after.accountConfirmedAt,
+        contactStatus: result.after.contactStatus,
+        email: contact.email,
+      },
+    });
+
+    res.json({ changed: result.changed, confirmation: result.after });
+  })
+);
+
+/**
+ * POST /:id/resend-confirmation
+ *
+ * Sends the confirmation email again and WAITS for the transport, so the answer
+ * is what actually happened rather than "we tried". A refusal comes back with the
+ * mail server's own words, which is the whole reason for pressing the button.
+ */
+adminContactsRouter.post(
+  "/:id/resend-confirmation",
+  requireManage,
+  asyncHandler(async (req, res) => {
+    const id = parseId(req.params.id);
+    await loadContact(id);
+    const state = await confirmationForContact(id);
+
+    if (state.memberId === null) {
+      throw badRequest(
+        "This person doesn't have an account, so there's no confirmation email to send them."
+      );
+    }
+    if (state.accountConfirmedAt !== null) {
+      throw badRequest("They've already confirmed this address — nothing needs sending.");
+    }
+
+    const member = await pool.query<{ id: number; email: string; first_name: string }>(
+      `SELECT id, email::text AS email, first_name FROM members WHERE id = $1`,
+      [state.memberId]
+    );
+    const row = member.rows[0];
+    if (!row) throw notFound("Contact not found");
+
+    const result = await sendMemberVerificationEmail(row, { awaitDelivery: true });
+
+    await recordAdminAction({
+      req,
+      action: "contact.resendConfirmation",
+      entityType: "contact",
+      entityId: id,
+      after: { memberId: row.id, to: row.email, state: result.state },
+    });
+
+    res.json({
+      state: result.state,
+      to: row.email,
+      error: result.state === "failed" ? result.error : "",
+      confirmation: state,
+    });
   })
 );

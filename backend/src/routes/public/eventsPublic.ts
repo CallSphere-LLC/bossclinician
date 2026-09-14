@@ -6,18 +6,23 @@ import { leadsLimiter } from "../../middleware/rateLimit";
 import { applyTags, recordActivity, upsertContactWithStatus } from "../../services/contacts";
 import {
   buildIcs,
+  describeRecurrence,
   describeSession,
   isRoomOpen,
+  occurrenceAt,
+  occurrencesFor,
   replayExpiryFor,
   sessionTimeFor,
   signRegistration,
   verifyRegistration,
   type EventKind,
   type EventSchedule,
+  type RecurrenceRule,
 } from "../../services/events";
 import { asyncHandler } from "../../utils/asyncHandler";
 import { HttpError, badRequest, forbidden, notFound } from "../../utils/httpError";
 import { publishDomainEvent } from "../../services/domainEvents";
+import { reminderPromise, requestReminderTick } from "../../services/eventReminders";
 
 /**
  * Public events: the registration page, the room, and the calendar file.
@@ -53,11 +58,74 @@ interface EventRow {
   replay_expires_after_hours: number | null;
   registration_form_id: number | null;
   apply_tag_ids: number[];
+  recurrence_freq: RecurrenceRule["freq"] | null;
+  recurrence_interval: number;
+  recurrence_until: string | null;
+  recurrence_count: number | null;
+  location_type: "online" | "in_person";
+  location_address: string;
 }
 
+// `recurrence_until` is a DATE, read as text: node-postgres would otherwise turn
+// it into midnight in the server's zone, which is a different calendar day for
+// half the world.
 const EVENT_COLUMNS = `id, slug::text AS slug, title, description_md, cover_image, kind,
   starts_at, duration_minutes, timezone, evergreen_interval_minutes,
-  room_url, replay_url, replay_expires_after_hours, registration_form_id, apply_tag_ids`;
+  room_url, replay_url, replay_expires_after_hours, registration_form_id, apply_tag_ids,
+  recurrence_freq, recurrence_interval, recurrence_until::text AS recurrence_until,
+  recurrence_count, location_type, location_address`;
+
+/** How many upcoming sessions of a series the page and the confirmation list. */
+const SERIES_PREVIEW = 24;
+
+/** The repeat rule on an event, or null for a single session. */
+function ruleOf(event: EventRow): RecurrenceRule | null {
+  if (event.kind !== "live" || !event.recurrence_freq || !event.starts_at) return null;
+  return {
+    freq: event.recurrence_freq,
+    interval: event.recurrence_interval,
+    until: event.recurrence_until,
+    count: event.recurrence_count,
+  };
+}
+
+/** Every session of a live event: one, or the whole series. Empty for the other kinds. */
+function sessionsOf(event: EventRow): Date[] {
+  if (event.kind !== "live" || !event.starts_at) return [];
+  return occurrencesFor(event.starts_at, event.timezone, ruleOf(event));
+}
+
+/** The sessions of a series from `from` on that have not finished, as ISO strings. */
+function sessionsAhead(event: EventRow, now: Date, from?: Date): string[] {
+  if (!ruleOf(event)) return [];
+  const length = event.duration_minutes * 60_000;
+  return sessionsOf(event)
+    .filter((at) => at.getTime() + length >= now.getTime())
+    .filter((at) => !from || at.getTime() >= from.getTime())
+    .slice(0, SERIES_PREVIEW)
+    .map((at) => at.toISOString());
+}
+
+/** The address, and only for an in-person event. */
+function addressOf(event: EventRow): string {
+  return event.location_type === "in_person" ? event.location_address.trim() : "";
+}
+
+/**
+ * The session a registration is about right now.
+ *
+ * A single session is the one they were given. A series moves on to the next
+ * session as each one finishes — never back before the registrant's own first
+ * — using the same `occurrenceAt` the member page and the reminders use, so the
+ * room, the page and the email all mean the same Tuesday.
+ */
+function currentSessionFor(event: EventRow, registeredSession: Date, now: Date): Date {
+  if (!ruleOf(event)) return registeredSession;
+  return (
+    occurrenceAt(sessionsOf(event), event.duration_minutes, now, registeredSession) ??
+    registeredSession
+  );
+}
 
 function scheduleOf(event: EventRow): EventSchedule {
   return {
@@ -67,6 +135,7 @@ function scheduleOf(event: EventRow): EventSchedule {
     timezone: event.timezone,
     evergreenIntervalMinutes: event.evergreen_interval_minutes,
     replayExpiresAfterHours: event.replay_expires_after_hours,
+    recurrence: ruleOf(event),
   };
 }
 
@@ -110,6 +179,8 @@ eventsPublicRouter.get(
       }
     }
 
+    const reminderSchedule = await reminderPromise(event.id);
+
     res.json({
       slug: event.slug,
       title: event.title,
@@ -124,6 +195,20 @@ eventsPublicRouter.get(
       // Everything the copy needs to say when the doors open, without the room
       // address itself — that is only ever handed to a registration.
       hasReplay: event.replay_url !== "",
+      // The reminders this event really sends, so the page can promise those
+      // and nothing else. Empty means the page says nothing about reminders,
+      // which is the honest answer when none are configured.
+      reminderSchedule,
+      // A series says what it is and lists what is still to come, so a visitor
+      // knows they are signing up for "every Tuesday, six of them" rather than
+      // discovering it in the calendar file afterwards.
+      recurrenceLabel: describeRecurrence(ruleOf(event)),
+      occurrences: sessionsAhead(event, now),
+      locationType: event.location_type,
+      locationAddress: addressOf(event),
+      // Whether there is an online link at all. An in-person event usually has
+      // none, and the confirmation should not offer a room that is not there.
+      hasJoinLink: event.room_url !== "",
     });
   })
 );
@@ -153,6 +238,11 @@ eventsPublicRouter.post(
         timezone: event.timezone,
         token: "",
         icsUrl: "",
+        reminderSchedule: [],
+        recurrenceLabel: "",
+        occurrences: [],
+        locationType: event.location_type,
+        locationAddress: "",
       });
       return;
     }
@@ -182,24 +272,14 @@ eventsPublicRouter.post(
                              WHEN event_registrations.session_at > now()
                                THEN event_registrations.replay_expires_at
                              ELSE EXCLUDED.replay_expires_at
-                           END,
-              -- Reminders already sent belong to the old session. Leaving them
-              -- stamped means the new one goes out with no warning at all.
-              reminder_24h_sent_at = CASE
-                             WHEN event_registrations.session_at > now()
-                               THEN event_registrations.reminder_24h_sent_at
-                             ELSE NULL
-                           END,
-              reminder_1h_sent_at = CASE
-                             WHEN event_registrations.session_at > now()
-                               THEN event_registrations.reminder_1h_sent_at
-                             ELSE NULL
-                           END,
-              reminder_start_sent_at = CASE
-                             WHEN event_registrations.session_at > now()
-                               THEN event_registrations.reminder_start_sent_at
-                             ELSE NULL
                            END
+              -- The three reminder_*_sent_at columns are no longer read by
+              -- anything, and are deliberately not touched here. Reminder state
+              -- lives in event_reminder_sends, keyed by (reminder,
+              -- registration, session_at) -- so a registrant who books a later
+              -- session gets a fresh set of reminders because the key changed,
+              -- rather than because three timestamps were blanked. Same intent,
+              -- expressed somewhere that can also record what happened to each.
        RETURNING id, session_at`,
       [
         event.id,
@@ -271,6 +351,13 @@ eventsPublicRouter.post(
       facts: { registrationId, sessionAt: confirmedAt.toISOString(), eventTitle: event.title },
     });
 
+    // Plans this registrant's reminders and sends the confirmation, on the
+    // queue rather than inline: a signup must not wait on SMTP to answer, and a
+    // provider timing out must not turn a successful registration into a 500
+    // the visitor retries. The five-minute schedule is the backstop, and the
+    // tick is idempotent, so doing both sends one email rather than two.
+    await requestReminderTick(registrationId);
+
     const token = signRegistration(registrationId);
     res.status(201).json({
       token,
@@ -280,6 +367,13 @@ eventsPublicRouter.post(
       durationMinutes: event.duration_minutes,
       roomUrl: `${env.publicSiteUrl}/events/${event.slug}/room?ticket=${token}`,
       icsUrl: `${env.publicSiteUrl}/api/events/registrations/${token}/ics`,
+      // What the confirmation screen may truthfully say happens next.
+      reminderSchedule: await reminderPromise(event.id),
+      // A place in a series covers every session from this one on.
+      recurrenceLabel: describeRecurrence(ruleOf(event)),
+      occurrences: sessionsAhead(event, now, confirmedAt),
+      locationType: event.location_type,
+      locationAddress: addressOf(event),
     });
   })
 );
@@ -320,11 +414,16 @@ eventsPublicRouter.get(
     if (!event || event.id !== registration.event_id) throw notFound("Event not found");
 
     const now = new Date();
+    // For a series this is this week's session, not the first one they booked.
+    const sessionAt = currentSessionFor(event, registration.session_at, now);
     const access = isRoomOpen(
       {
-        sessionAt: registration.session_at,
+        sessionAt,
         durationMinutes: event.duration_minutes,
-        replayExpiresAt: registration.replay_expires_at,
+        // A series' replay window runs from the end of each session in turn.
+        replayExpiresAt: ruleOf(event)
+          ? replayExpiryFor(scheduleOf(event), sessionAt)
+          : registration.replay_expires_at,
         hasReplay: event.replay_url !== "",
       },
       now
@@ -339,8 +438,8 @@ eventsPublicRouter.get(
         state: access.state,
         opensAt: access.opensAt?.toISOString() ?? null,
         closedAt: access.state === "expired" ? access.closesAt?.toISOString() ?? null : null,
-        sessionAt: registration.session_at.toISOString(),
-        sessionLabel: describeSession(registration.session_at, event.timezone),
+        sessionAt: sessionAt.toISOString(),
+        sessionLabel: describeSession(sessionAt, event.timezone),
         // The zone travels with the refusal so the door time and the session
         // time are read in the same one. Two clocks side by side in different
         // zones is how somebody arrives three hours late.
@@ -357,8 +456,8 @@ eventsPublicRouter.get(
     if (!url) {
       throw new HttpError(503, "This room does not have a link on it yet", {
         state: access.state,
-        sessionAt: registration.session_at.toISOString(),
-        sessionLabel: describeSession(registration.session_at, event.timezone),
+        sessionAt: sessionAt.toISOString(),
+        sessionLabel: describeSession(sessionAt, event.timezone),
         timezone: event.timezone,
       });
     }
@@ -380,7 +479,7 @@ eventsPublicRouter.get(
           subjectId: event.id,
         });
         await publishDomainEvent("event_attended", {
-          eventKey: `event-attended:${registration.id}:${registration.session_at.toISOString()}`,
+          eventKey: `event-attended:${registration.id}:${sessionAt.toISOString()}`,
           contactId: registration.contact_id,
           email: registration.email,
           name: registration.name,
@@ -395,8 +494,8 @@ eventsPublicRouter.get(
       state: access.state,
       title: event.title,
       url,
-      sessionAt: registration.session_at.toISOString(),
-      sessionLabel: describeSession(registration.session_at, event.timezone),
+      sessionAt: sessionAt.toISOString(),
+      sessionLabel: describeSession(sessionAt, event.timezone),
       timezone: event.timezone,
       durationMinutes: event.duration_minutes,
       closesAt: access.closesAt?.toISOString() ?? null,
@@ -419,13 +518,25 @@ eventsPublicRouter.get(
     const event = eventRes.rows[0];
     if (!event) throw notFound("Event not found");
 
+    // A series goes into the calendar as every session from the registrant's
+    // own first one on. If the series has since been moved earlier than that,
+    // the whole series is better than an empty file.
+    let occurrences: Date[] | undefined;
+    if (ruleOf(event)) {
+      const all = sessionsOf(event);
+      const theirs = all.filter((at) => at.getTime() >= registration.session_at.getTime());
+      occurrences = theirs.length > 0 ? theirs : all;
+    }
+
     const ics = buildIcs({
       uid: `event-${event.id}-registration-${registration.id}@bossclinician`,
       title: event.title,
       description: event.description_md,
       url: `${env.publicSiteUrl}/events/${event.slug}/room?ticket=${req.params.token}`,
       startsAt: registration.session_at,
+      occurrences,
       durationMinutes: event.duration_minutes,
+      location: addressOf(event),
       generatedAt: new Date(),
     });
 

@@ -228,6 +228,12 @@ export function backoffSeconds(attempts: number): number {
  */
 export async function fail(jobId: string, error: unknown): Promise<{ dead: boolean }> {
   const message = (error instanceof Error ? error.message : String(error)).slice(0, 2000);
+  // A refusal by the staging recipient guard will be refused identically on
+  // every retry: retrying only writes four more failed delivery-log rows and
+  // ends in the dead-letter list, which is where real incidents are looked for.
+  // It stops at `failed` instead — terminal, and still revivable by hand once
+  // the address is allow-listed.
+  const permanent = isPermanentFailure(error);
 
   // The delay is computed in SQL from the row's own attempt count. Passing a
   // number from here would have to guess it — the caller does not know how many
@@ -237,9 +243,10 @@ export async function fail(jobId: string, error: unknown): Promise<{ dead: boole
   const res = await pool.query<{ status: string }>(
     `UPDATE jobs
         SET last_error = $2,
-            status     = CASE WHEN attempts >= max_attempts THEN 'dead' ELSE 'queued' END,
+            status     = CASE WHEN $3::boolean THEN 'failed'
+                              WHEN attempts >= max_attempts THEN 'dead' ELSE 'queued' END,
             run_at     = CASE
-                           WHEN attempts >= max_attempts THEN run_at
+                           WHEN $3::boolean OR attempts >= max_attempts THEN run_at
                            ELSE now() + make_interval(secs =>
                                   LEAST(3600, 60 * power(2, GREATEST(attempts - 1, 0)))
                                   -- Jitter, so a batch that failed together does
@@ -248,15 +255,34 @@ export async function fail(jobId: string, error: unknown): Promise<{ dead: boole
                                   + floor(random() * 60)
                                 )
                          END,
-            finished_at = CASE WHEN attempts >= max_attempts THEN now() ELSE NULL END,
+            finished_at = CASE WHEN $3::boolean OR attempts >= max_attempts THEN now() ELSE NULL END,
             locked_by = NULL, locked_at = NULL, lease_expires_at = NULL,
             updated_at = now()
       WHERE id = $1
       RETURNING status`,
-    [jobId, message]
+    [jobId, message, permanent]
   );
 
   return { dead: res.rows[0]?.status === "dead" };
+}
+
+/**
+ * Whether a failure will recur on every retry. Matched by name and by message,
+ * through `cause`, because handlers commonly re-throw a send failure wrapped in
+ * their own sentence and the class does not survive that.
+ */
+export function isPermanentFailure(error: unknown): boolean {
+  for (let current: unknown = error, depth = 0; current && depth < 5; depth += 1) {
+    if (current instanceof Error) {
+      if (current.name === "RecipientGuardError" || /email guard: refused send/.test(current.message)) {
+        return true;
+      }
+      current = (current as { cause?: unknown }).cause;
+    } else {
+      return /email guard: refused send/.test(String(current));
+    }
+  }
+  return false;
 }
 
 /** Puts a dead job back on the queue — the "retry" button on the dead-letter view. */

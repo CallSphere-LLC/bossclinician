@@ -1,0 +1,4 @@
+{
+  "quiz": "Who\n\tWhen\n\tTheir score\n\tANSWERS\tWhat they were shown\n\n\nZZ Products buyer\nsagar+zz-products-buyer@callsphere.ai\n\tSep 12, 6:15 PM\t1 out of 1PASSED\t\nView responses\n\nZZ Which choice is correct?: ZZ Correct answer\n\n\tResponse saved\n\nZZ Products buyer\nsagar+zz-products-buyer@callsphere.ai\n\tSep 12, 6:15 PM\t0 out of 1DID NOT PASS\t\nView responses\n\tResponse saved",
+  "survey": "Who\n\tWhen\n\tTheir score\n\tANSWERS\tWhat they were shown\n\n\nZZ Products buyer\nsagar+zz-products-buyer@callsphere.ai\n\tSep 12, 6:15 PM\t0 out of 0\t\nView responses\n\nZZ Survey single: ZZ Option one\n\nZZ Survey multiple: ZZ Option one\n\nZZ Survey scale: ZZ Option one\n\nZZ Survey text: ZZ My survey response\n\n\tResponse saved"
+}

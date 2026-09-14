@@ -53,7 +53,10 @@ async function freeSlug(table: "assessments" | "events", base: string): Promise<
 const assessmentSchema = z.object({
   title: z.string().trim().min(1, "Give this quiz a name").max(200),
   introMd: z.string().max(20_000).optional(),
-  kind: z.enum(["quiz", "graded"]).optional(),
+  kind: z.enum(["quiz", "graded", "survey"]).optional(),
+  requirePass: z.boolean().optional(),
+  passMessage: z.string().max(2000).optional(),
+  failMessage: z.string().max(2000).optional(),
   lessonId: z.number().int().positive().nullable().optional(),
   passMark: z.number().int().min(0).max(100).nullable().optional(),
   maxAttempts: z.number().int().min(1).max(100).nullable().optional(),
@@ -120,13 +123,13 @@ adminAssessmentsRouter.post(
 
     // A graded test without a pass mark violates the table's own constraint;
     // 70 is the conventional default and she can change it in the editor.
-    const passMark = input.kind === "graded" ? input.passMark ?? 70 : input.passMark ?? null;
+    const passMark = input.kind === "survey" ? null : input.kind === "graded" ? input.passMark ?? 70 : input.passMark ?? null;
 
     const result = await pool.query(
       `INSERT INTO assessments
          (slug, title, intro_md, kind, lesson_id, pass_mark, max_attempts,
-          show_feedback, require_email, published)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+          show_feedback, require_email, published, require_pass, pass_message, fail_message)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
        RETURNING *`,
       [
         slug,
@@ -137,8 +140,11 @@ adminAssessmentsRouter.post(
         passMark,
         input.maxAttempts ?? null,
         input.showFeedback ?? true,
-        input.requireEmail ?? input.kind !== "graded",
+        input.requireEmail ?? (input.kind === undefined || input.kind === "quiz"),
         input.published ?? false,
+        input.kind === "survey" ? false : input.requirePass ?? true,
+        input.passMessage ?? "You passed. Continue to the next lesson.",
+        input.failMessage ?? "Review the lesson and try again.",
       ]
     );
     res.status(201).json(rowToCamel(result.rows[0]));
@@ -149,7 +155,11 @@ adminAssessmentsRouter.get(
   "/:id",
   asyncHandler(async (req, res) => {
     const assessment = await pool.query(
-      `SELECT *, slug::text AS slug FROM assessments WHERE id = $1`,
+      `SELECT a.*, a.slug::text AS slug, m.course_id, l.published AS lesson_published
+         FROM assessments a
+         LEFT JOIN course_lessons l ON l.id = a.lesson_id
+         LEFT JOIN course_modules m ON m.id = l.module_id
+        WHERE a.id = $1`,
       [req.params.id]
     );
     if (assessment.rowCount === 0) throw notFound("Quiz not found");
@@ -200,6 +210,9 @@ adminAssessmentsRouter.get(
 );
 
 const ASSESSMENT_COLUMNS = [
+  "require_pass",
+  "pass_message",
+  "fail_message",
   "title",
   "intro_md",
   "kind",
@@ -215,6 +228,13 @@ adminAssessmentsRouter.patch(
   "/:id",
   asyncHandler(async (req, res) => {
     const input = assessmentSchema.partial().parse(req.body);
+    const stored = await pool.query(`SELECT kind,pass_mark FROM assessments WHERE id=$1`,[req.params.id]);
+    if (!stored.rows[0]) throw notFound("Assessment not found");
+    const kind = input.kind ?? stored.rows[0].kind;
+    if (kind === "survey") { input.passMark = null; input.requirePass = false; }
+    if (kind === "graded" && (input.passMark === null || (input.passMark === undefined && stored.rows[0].pass_mark === null))) {
+      throw badRequest("A graded quiz needs a pass mark from 0 to 100. Choose Survey for ungraded responses.");
+    }
     const update = buildUpdate(input, ASSESSMENT_COLUMNS);
     if (!update) throw badRequest("Nothing to update");
 
@@ -500,10 +520,11 @@ adminAssessmentsRouter.get(
     const limit = Math.min(Number(req.query.limit) || 100, 500);
     const result = await pool.query<{ id: string }>(
       `SELECT t.id, t.email::text AS email, t.score, t.max_score, t.percent, t.passed,
-              t.completed_at, r.title AS result_title, c.name AS contact_name, c.id AS contact_id
+              t.completed_at, t.responses, t.member_id, r.title AS result_title, COALESCE(c.name, m.name) AS contact_name, c.id AS contact_id
          FROM assessment_attempts t
          LEFT JOIN assessment_results r ON r.id = t.result_id
          LEFT JOIN contacts c           ON c.id = t.contact_id
+         LEFT JOIN members m            ON m.id = t.member_id
         WHERE t.assessment_id = $1 AND t.completed_at IS NOT NULL
         ORDER BY t.completed_at DESC
         LIMIT $2`,

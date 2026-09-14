@@ -1,0 +1,10 @@
+{
+  "response": {
+    "status": 200,
+    "body": {
+      "status": "paid",
+      "orderId": 15,
+      "clientSecretType": null
+    }
+  }
+}

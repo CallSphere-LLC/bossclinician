@@ -1,3 +1,4 @@
+import { clearLegacyAdminToken } from "@/lib/adminTransport";
 import {
   createContext,
   useCallback,
@@ -6,7 +7,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { adminApi, clearToken, getToken, setToken } from "@/lib/api";
+import { ApiError, adminApi } from "@/lib/api";
 import { uploadManager } from "@/lib/uploads/manager";
 import type { AdminUser } from "@/types";
 
@@ -14,7 +15,7 @@ interface AuthContextValue {
   user: AdminUser | null;
   loading: boolean;
   login: (email: string, password: string, code?: string) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -26,18 +27,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let cancelled = false;
     async function bootstrap() {
-      if (!getToken()) {
-        setLoading(false);
-        return;
+      clearLegacyAdminToken();
+      // Only the server refusing this session signs the admin out. A
+      // 5xx, a 429 or a dropped connection says nothing about the token, and
+      // clearing it on one of those threw people out mid-session; retry those
+      // briefly instead, and keep the session if they persist so a reload works.
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        try {
+          const me = await adminApi.me();
+          if (!cancelled) setUser(me);
+          break;
+        } catch (err) {
+          if (err instanceof ApiError && (err.status === 401 || err.status === 403)) {
+            clearLegacyAdminToken();
+            break;
+          }
+          if (attempt < 2) await new Promise((resolve) => setTimeout(resolve, 600 * (attempt + 1)));
+        }
       }
-      try {
-        const me = await adminApi.me();
-        if (!cancelled) setUser(me);
-      } catch {
-        clearToken();
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
+      if (!cancelled) setLoading(false);
     }
     void bootstrap();
     return () => {
@@ -46,8 +54,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = useCallback(async (email: string, password: string, code?: string) => {
-    const { token, user: loggedInUser } = await adminApi.login(email, password, code);
-    setToken(token);
+    const { user: loggedInUser } = await adminApi.login(email, password, code);
+    clearLegacyAdminToken();
     setUser(loggedInUser);
     // An upload that stopped because the session expired is holding a file and
     // a place in it. Now there is a token again, it can carry on from the byte
@@ -55,16 +63,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     uploadManager.resumeAfterSignIn();
   }, []);
 
-  const logout = useCallback(() => {
-    // Tell the server first, but do not wait for it and do not let it fail the
-    // sign-out. Forgetting the token locally is the part the person in front of
-    // the screen asked for; revoking the session is the part that stops a copy
-    // of that token still working, and an offline laptop must not be able to
-    // stay signed in just because the call didn't get through. It has to be
-    // started before `clearToken`, because that is where the request picks up
-    // the bearer token it is asking the server to revoke.
-    void adminApi.logout().catch(() => undefined);
-    clearToken();
+  const logout = useCallback(async () => {
+    // HttpOnly cookies cannot be discarded by JavaScript. Do not pretend a
+    // failed request signed this device out; wait for server revocation.
+    await adminApi.logout();
+    clearLegacyAdminToken();
     setUser(null);
   }, []);
 

@@ -33,7 +33,7 @@ export function Aurora({ tone = "plum", intensity = 1, className }: AuroraProps)
   return (
     <div
       aria-hidden
-      className={cn("pointer-events-none absolute inset-0 overflow-hidden", className)}
+      className={cn("site-aurora pointer-events-none absolute inset-0 overflow-hidden", className)}
       style={{ opacity: intensity }}
     >
       <div

@@ -1,0 +1,48 @@
+# Dedicated admin origin. Same isolated stack, separate nginx virtual host.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: boss-admin-https
+  namespace: bossclinician
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: admin.bossclinician.callsphere.site
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: boss-web
+                port:
+                  number: 80
+  tls:
+    - hosts:
+        - admin.bossclinician.callsphere.site
+      secretName: bossclinician-admin-tls
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: boss-admin-http
+  namespace: bossclinician
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: web
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: admin.bossclinician.callsphere.site
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: boss-web
+                port:
+                  number: 80

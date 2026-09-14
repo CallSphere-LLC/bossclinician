@@ -1,3 +1,4 @@
+import { SiteThemeToggle } from "./SiteThemeToggle";
 import { useEffect, useState } from "react";
 import { Link, NavLink, useLocation } from "react-router-dom";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
@@ -6,6 +7,8 @@ import { LuxeButton } from "@/components/luxe/LuxeButton";
 import { NavDropdown, navBadgeClass, navBadgeTone } from "@/components/layout/NavDropdown";
 import { isNavMenu, nav, type NavMenu } from "@/content/site";
 import { cn } from "@/lib/cn";
+import { ShoppingCart } from "lucide-react";
+import { readCart } from "@/lib/cart";
 
 interface HeaderProps {
   /**
@@ -22,6 +25,17 @@ export function Header({ transparentAtTop = false }: HeaderProps) {
   const [open, setOpen] = useState(false);
   const location = useLocation();
   const prefersReducedMotion = useReducedMotion();
+  const [cartCount, setCartCount] = useState(0);
+  useEffect(() => {
+    const refresh = () => setCartCount(readCart().length);
+    refresh();
+    window.addEventListener("storage", refresh);
+    window.addEventListener("bossclinician-cart", refresh);
+    return () => {
+      window.removeEventListener("storage", refresh);
+      window.removeEventListener("bossclinician-cart", refresh);
+    };
+  }, []);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 24);
@@ -113,40 +127,47 @@ export function Header({ transparentAtTop = false }: HeaderProps) {
           )}
         </nav>
 
-        <div className="hidden lg:block">
-          <LuxeButton to="/work-with-me" variant="foil" size="sm">
-            Work With Me
-          </LuxeButton>
-        </div>
+        <div className="flex items-center gap-2 sm:gap-4">
+          <Link to="/cart" aria-label={`Cart (${cartCount} items)`} className="relative inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-gold hover:bg-white/[0.06]">
+            <ShoppingCart className="size-5" />
+            {cartCount > 0 && <span className="absolute right-0 top-0 rounded-full bg-gold px-1.5 text-xs font-bold text-night-deep">{cartCount}</span>}
+          </Link>
+          <SiteThemeToggle />
+          <div className="hidden lg:block">
+            <LuxeButton to="/work-with-me" variant="foil" size="sm">
+              Work With Me
+            </LuxeButton>
+          </div>
 
-        <button
-          type="button"
-          className="-mr-2 inline-flex h-11 w-11 items-center justify-center rounded-full text-white transition-colors hover:bg-white/[0.06] lg:hidden"
-          aria-label={open ? "Close menu" : "Open menu"}
-          aria-expanded={open}
-          onClick={() => setOpen((v) => !v)}
-        >
-          <span className="relative block h-4 w-6">
-            <span
-              className={cn(
-                "absolute left-0 top-0 h-px w-6 bg-gold transition-transform duration-300 ease-luxe",
-                open && "translate-y-[7px] rotate-45",
-              )}
-            />
-            <span
-              className={cn(
-                "absolute left-0 top-[7px] h-px w-6 bg-white transition-opacity duration-300",
-                open && "opacity-0",
-              )}
-            />
-            <span
-              className={cn(
-                "absolute left-0 top-[14px] h-px w-6 bg-gold transition-transform duration-300 ease-luxe",
-                open && "-translate-y-[7px] -rotate-45",
-              )}
-            />
-          </span>
-        </button>
+          <button
+            type="button"
+            className="-mr-2 inline-flex h-11 w-11 items-center justify-center rounded-full text-white transition-colors hover:bg-white/[0.06] lg:hidden"
+            aria-label={open ? "Close menu" : "Open menu"}
+            aria-expanded={open}
+            onClick={() => setOpen((v) => !v)}
+          >
+            <span className="relative block h-4 w-6">
+              <span
+                className={cn(
+                  "absolute left-0 top-0 h-px w-6 bg-gold transition-transform duration-300 ease-luxe",
+                  open && "translate-y-[7px] rotate-45",
+                )}
+              />
+              <span
+                className={cn(
+                  "absolute left-0 top-[7px] h-px w-6 bg-white transition-opacity duration-300",
+                  open && "opacity-0",
+                )}
+              />
+              <span
+                className={cn(
+                  "absolute left-0 top-[14px] h-px w-6 bg-gold transition-transform duration-300 ease-luxe",
+                  open && "-translate-y-[7px] -rotate-45",
+                )}
+              />
+            </span>
+          </button>
+        </div>
       </Container>
 
       <AnimatePresence>

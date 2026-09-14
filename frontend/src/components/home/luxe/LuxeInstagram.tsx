@@ -66,21 +66,6 @@ function InstagramFeed({ reduce }: { reduce: boolean | null }) {
         scrolling="no"
         loading="lazy"
         className="lightwidget-widget block aspect-square w-full border-0"
-        // Daylight phone photography at full saturation sits on top of the dark
-        // theme rather than in it. A light grade on the iframe box (the one
-        // filter that reaches cross-origin content) settles it without dulling
-        // the faces.
-        style={{ filter: "saturate(0.88) brightness(0.92) contrast(1.03)" }}
-      />
-      {/* Feathered edges + a plum wash tie the grid to the section. Click-through
-          so every post stays tappable. */}
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 bg-[radial-gradient(125%_95%_at_50%_50%,transparent_52%,rgba(6,4,11,0.42)_100%)]"
-      />
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 bg-glow-violet/10 mix-blend-soft-light"
       />
     </motion.div>
   );

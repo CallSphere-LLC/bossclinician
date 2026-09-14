@@ -318,7 +318,7 @@ adminCurriculumRouter.get(
        JOIN course_modules m ON m.id = l.module_id
        LEFT JOIN LATERAL (
          SELECT id, slug, title FROM assessments
-          WHERE lesson_id = l.id AND kind = 'graded'
+          WHERE lesson_id = l.id AND kind IN ('graded','survey')
           ORDER BY id LIMIT 1
        ) a ON true
        WHERE m.course_id = $1

@@ -1,4 +1,4 @@
-import { Request, Router } from "express";
+import { Request, Response, Router } from "express";
 import { ipKeyGenerator, rateLimit } from "express-rate-limit";
 import { z } from "zod";
 import type Stripe from "stripe";
@@ -8,9 +8,19 @@ import { stripe } from "../../stripe/client";
 import { asyncHandler } from "../../utils/asyncHandler";
 import { badRequest, notFound, serviceUnavailable, unauthorized } from "../../utils/httpError";
 import { denyImpersonation, type AuthedMember } from "../../middleware/memberAuth";
-import { escapeHtml } from "../../email/templates";
 import { formatAmount } from "../../utils/money";
 import { readSetting } from "../../services/settings";
+import {
+  INVOICE_OWNED_BY_MEMBER,
+  PURCHASED_ORDER_STATUSES as PURCHASED,
+  loadReceiptDocument,
+  renderReceipt,
+  renderReceiptPdf,
+  safeCurrency,
+  type ReceiptDocument,
+} from "../../services/receiptDocument";
+import { CardUpdateError, adoptSavedCard } from "../../services/billingPortal";
+import { signReceiptLink, type ReceiptLinkTarget } from "../../services/receiptLinks";
 
 /**
  * `/api/member/billing` — the customer's own money: what they have bought, what
@@ -33,29 +43,12 @@ export const memberBillingRouter = Router();
 /** Postgres int4 ceiling. An id it cannot hold is a 404, not a failed query. */
 const MAX_INT4 = 2_147_483_647;
 
-/**
- * The statuses that mean money actually moved.
- *
- * A `pending` order is a checkout somebody opened and walked away from, and a
- * `failed` one is a decline; neither is a purchase, and listing them turns a
- * receipt history into a log of everything that ever went wrong.
+/*
+ * `PURCHASED`, `INVOICE_OWNED_BY_MEMBER` and the receipt itself come from
+ * services/receiptDocument: the admin's copy of a receipt has to be the same
+ * document as the member's, and two readers of the same money is how a customer
+ * ends up holding a figure the office cannot reproduce.
  */
-const PURCHASED = `('paid','refunded')`;
-
-/**
- * Ownership for an invoice, which can arrive attached to any of three parents.
- *
- * `invoices.member_id` was added in Phase 2, so a row written by the
- * subscription webhook carries only `subscription_id`. Walking to the parent
- * keeps the check on ids the member provably owns instead of falling back to
- * matching on the email column, which anyone can put anything in.
- */
-const INVOICE_OWNED_BY_MEMBER = `(
-     i.member_id = $1
-  OR EXISTS (SELECT 1 FROM orders o2        WHERE o2.id = i.order_id        AND o2.member_id = $1)
-  OR EXISTS (SELECT 1 FROM subscriptions s2 WHERE s2.id = i.subscription_id AND s2.member_id = $1)
-  OR EXISTS (SELECT 1 FROM payment_plans p2 WHERE p2.id = i.payment_plan_id AND p2.member_id = $1)
-)`;
 
 /* ----------------------------------------------------------------- limiters */
 
@@ -96,18 +89,6 @@ function currentMember(req: Request): AuthedMember {
 function iso(value: Date | string | null | undefined): string | null {
   if (value === null || value === undefined) return null;
   return value instanceof Date ? value.toISOString() : value;
-}
-
-/**
- * A currency code Intl will accept.
- *
- * `offers.currency` is free text an admin can mistype, and
- * `Intl.NumberFormat` throws a RangeError on anything that is not three
- * letters — which would turn one bad offer row into a 500 on every receipt and
- * overview the customer opens.
- */
-function safeCurrency(value: string | null | undefined): string {
-  return typeof value === "string" && /^[A-Za-z]{3}$/.test(value) ? value.toLowerCase() : "usd";
 }
 
 const listQuerySchema = z.object({
@@ -507,6 +488,12 @@ function toOrderJson(row: OrderRow, items: OrderItemJson[]) {
     source: row.source,
     createdAt: iso(row.created_at) ?? "",
     items,
+    // Every purchase on this list has a receipt, and the list carries the links
+    // rather than the page pairing orders up with invoices to find them. That
+    // pairing is what used to leave "Ask us if you need a receipt for this one"
+    // under a heading promising a receipt for every purchase.
+    receiptUrl: `/api/member/billing/orders/${row.id}/receipt`,
+    receiptPdfUrl: `/api/member/billing/orders/${row.id}/receipt.pdf`,
   };
 }
 
@@ -719,6 +706,10 @@ function toInvoiceJson(row: InvoiceRow) {
     subscriptionId: row.subscription_id,
     paymentPlanId: row.payment_plan_id,
     receiptUrl: `/api/member/billing/invoices/${row.id}/receipt`,
+    // Our own PDF, for the payments we raised the document for ourselves. A
+    // Stripe renewal has Stripe's, linked above as `pdfUrl`.
+    receiptPdfUrl:
+      row.order_id === null ? null : `/api/member/billing/invoices/${row.id}/receipt.pdf`,
   };
 }
 
@@ -773,382 +764,168 @@ memberBillingRouter.get(
 
 /* ------------------------------------------------------------------- receipt */
 
-export interface BusinessDetails {
-  name: string;
-  addressLines: string[];
-  email: string;
-  /** EIN or VAT number. Printed only when she has filled it in. */
-  taxId: string;
-}
-
-function asRecord(value: unknown): Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
-}
-
-function asText(value: unknown): string {
-  return typeof value === "string" ? value.trim().slice(0, 200) : "";
-}
-
 /**
- * The business address, however Yvette happened to type it.
+ * The receipt, by invoice or by order.
  *
- * The settings table is free-form JSONB she edits herself, so the address may
- * arrive as one multi-line string, a list of lines, or separate fields. A
- * receipt that renders nothing because the shape was unexpected is worse than
- * one built from whichever of those turned up.
- */
-export function readBusinessDetails(rows: { key: string; value: unknown }[]): BusinessDetails {
-  const byKey = new Map(rows.map((r) => [r.key, asRecord(r.value)]));
-  const business = byKey.get("business") ?? {};
-  const contact = byKey.get("contact") ?? {};
-
-  const address = business.address;
-  let lines: string[] = [];
-  if (typeof address === "string") {
-    lines = address.split(/\r?\n/);
-  } else if (Array.isArray(address)) {
-    lines = address.map(asText);
-  } else {
-    const parts = Object.keys(address ?? {}).length > 0 ? asRecord(address) : business;
-    lines = [
-      asText(parts.line1),
-      asText(parts.line2),
-      [asText(parts.city), asText(parts.state), asText(parts.postalCode) || asText(parts.zip)]
-        .filter((p) => p !== "")
-        .join(", "),
-      asText(parts.country),
-    ];
-  }
-
-  return {
-    name: asText(business.name) || asText(contact.name) || "Boss Clinician",
-    addressLines: lines.map((l) => asText(l)).filter((l) => l !== "").slice(0, 6),
-    email: asText(business.email) || asText(contact.email),
-    // Settings has carried `taxId` since the group was written, and its help
-    // text has always said "Printed on receipts" — nothing read it, so a VAT
-    // number typed in to satisfy an accountant never reached the document.
-    taxId: asText(business.taxId),
-  };
-}
-
-interface ReceiptLine {
-  title: string;
-  quantity: number;
-  amountCents: number;
-}
-
-export interface ReceiptView {
-  business: BusinessDetails;
-  /** Heads the document. "Receipt" unless she has renamed it. */
-  title: string;
-  /** Her refund policy, printed at the foot so the terms travel with the money. */
-  refundPolicy: string;
-  billedToName: string;
-  billedToEmail: string;
-  reference: string;
-  description: string;
-  paid: boolean;
-  paidAt: string | null;
-  issuedAt: string;
-  currency: string;
-  lines: ReceiptLine[];
-  subtotalCents: number;
-  discountCents: number;
-  couponCode: string;
-  taxCents: number;
-  totalCents: number;
-}
-
-function formatDate(value: string | null): string {
-  if (value === null) return "";
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return "";
-  return new Intl.DateTimeFormat("en-US", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-    timeZone: "UTC",
-  }).format(parsed);
-}
-
-/**
- * The receipt as a standalone HTML document.
- *
- * Every interpolated value goes through escapeHtml, including the ones that
- * came from our own tables: an offer title and a billing name are both typed by
- * a person, and this page is served from the site's own origin, so an unescaped
- * one would be script running with the member's session.
- */
-export function renderReceipt(view: ReceiptView): string {
-  const money = (cents: number): string => escapeHtml(formatAmount(cents, view.currency));
-
-  const lines = view.lines
-    .map(
-      (line) => `      <tr>
-        <td>${escapeHtml(line.title)}${
-          line.quantity > 1 ? ` <span class="qty">&times;${escapeHtml(String(line.quantity))}</span>` : ""
-        }</td>
-        <td class="num">${money(line.amountCents)}</td>
-      </tr>`
-    )
-    .join("\n");
-
-  const totals = [
-    `      <tr><td>Subtotal</td><td class="num">${money(view.subtotalCents)}</td></tr>`,
-    view.discountCents > 0
-      ? `      <tr><td>Discount${
-          view.couponCode ? ` (${escapeHtml(view.couponCode)})` : ""
-        }</td><td class="num">&minus;${money(view.discountCents)}</td></tr>`
-      : "",
-    view.taxCents > 0
-      ? `      <tr><td>Tax</td><td class="num">${money(view.taxCents)}</td></tr>`
-      : "",
-    `      <tr class="total"><td>Total</td><td class="num">${money(view.totalCents)}</td></tr>`,
-  ]
-    .filter((row) => row !== "")
-    .join("\n");
-
-  const addressBlock = view.business.addressLines
-    .map((line) => `      <div>${escapeHtml(line)}</div>`)
-    .join("\n");
-
-  const paidLine = view.paid
-    ? `Paid ${escapeHtml(formatDate(view.paidAt) || formatDate(view.issuedAt))}`
-    : "Not yet paid";
-
-  return `<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${escapeHtml(view.title)} ${escapeHtml(view.reference)} &middot; ${escapeHtml(view.business.name)}</title>
-<style>
-  :root { color-scheme: light; }
-  body { margin: 0; padding: 40px 24px; background: #f6f5f2; color: #1c1917;
-         font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
-  .sheet { max-width: 640px; margin: 0 auto; background: #fff; border-radius: 14px;
-           padding: 40px; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
-  header { display: flex; justify-content: space-between; gap: 24px; flex-wrap: wrap;
-           border-bottom: 1px solid #e7e5e4; padding-bottom: 24px; }
-  h1 { font-size: 22px; margin: 0 0 4px; letter-spacing: -.01em; }
-  .muted { color: #78716c; font-size: 14px; }
-  .biz { text-align: right; font-size: 14px; color: #57534e; }
-  .biz strong { display: block; color: #1c1917; font-size: 15px; }
-  .meta { display: flex; gap: 40px; flex-wrap: wrap; margin: 24px 0 8px; font-size: 14px; }
-  .meta h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .08em;
-             color: #a8a29e; margin: 0 0 4px; }
-  table { width: 100%; border-collapse: collapse; margin-top: 24px; font-size: 15px; }
-  td { padding: 10px 0; border-bottom: 1px solid #f0efed; vertical-align: top; }
-  .num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
-  .qty { color: #a8a29e; font-size: 13px; }
-  .totals td { border: none; padding: 6px 0; color: #57534e; }
-  .totals .total td { border-top: 1px solid #e7e5e4; padding-top: 14px;
-                      font-weight: 600; font-size: 17px; color: #1c1917; }
-  .pill { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 13px;
-          background: #ecfdf5; color: #065f46; }
-  .pill.unpaid { background: #fef3c7; color: #92400e; }
-  footer { margin-top: 32px; padding-top: 20px; border-top: 1px solid #e7e5e4;
-           font-size: 13px; color: #78716c; }
-  .policy { margin-top: 10px; white-space: pre-line; }
-  @media print { body { background: #fff; padding: 0; } .sheet { box-shadow: none; padding: 0; } }
-</style>
-</head>
-<body>
-  <div class="sheet">
-    <header>
-      <div>
-        <h1>${escapeHtml(view.title)}</h1>
-        <div class="muted">${escapeHtml(view.reference)}</div>
-        <div style="margin-top:10px"><span class="pill${view.paid ? "" : " unpaid"}">${paidLine}</span></div>
-      </div>
-      <div class="biz">
-        <strong>${escapeHtml(view.business.name)}</strong>
-${addressBlock}
-${view.business.email ? `      <div>${escapeHtml(view.business.email)}</div>` : ""}
-${view.business.taxId ? `      <div>Tax ID ${escapeHtml(view.business.taxId)}</div>` : ""}
-      </div>
-    </header>
-
-    <div class="meta">
-      <div>
-        <h2>Billed to</h2>
-        ${view.billedToName ? `<div>${escapeHtml(view.billedToName)}</div>` : ""}
-        <div>${escapeHtml(view.billedToEmail)}</div>
-      </div>
-      <div>
-        <h2>Date</h2>
-        <div>${escapeHtml(formatDate(view.paidAt) || formatDate(view.issuedAt))}</div>
-      </div>
-      <div>
-        <h2>For</h2>
-        <div>${escapeHtml(view.description)}</div>
-      </div>
-    </div>
-
-    <table>
-${lines}
-    </table>
-
-    <table class="totals">
-${totals}
-    </table>
-
-    <footer>
-      Thank you. Keep this receipt for your records &mdash; ${escapeHtml(view.business.name)}.
-${view.refundPolicy ? `      <div class="policy">${escapeHtml(view.refundPolicy)}</div>` : ""}
-    </footer>
-  </div>
-</body>
-</html>`;
-}
-
-/**
- * GET /api/member/billing/invoices/:id/receipt
+ * Both keys reach the same document, because the same payment can be arrived at
+ * from either side: the invoice list holds an invoice id, and the purchases list
+ * holds an order id. Only the subscription webhook used to write an invoice at
+ * all, so an order-keyed route is what makes a one-off purchase receiptable —
+ * and `loadReceiptDocument` scopes every read to the signed-in member in SQL.
  *
  * Rendered server-side and returned as a document rather than JSON, so it can
- * be printed or saved as a PDF by the browser without the client reassembling
- * a layout. It is a Bearer-authenticated endpoint like every other route here,
- * which means the client has to fetch it and hand the markup to a window
- * itself; a plain link would arrive without the token and be rejected.
+ * be printed or saved without the client reassembling a layout. It is
+ * Bearer-authenticated like every other route here, so a plain link to it would
+ * arrive without the token. The member's permanent receipt address is therefore
+ * the app's own page, /account/purchases/:orderId/receipt (and
+ * /account/billing/invoices/:id/receipt), which fetches this with the token and
+ * shows it in the same tab. The PDF is downloaded through `receipt-link`: a
+ * short-lived signed URL the tab is sent to, served as an attachment by
+ * routes/public/receiptLink.ts — no popup, no blob.
  */
+
+const RECEIPT_MISSING = "We couldn't find that receipt.";
+
+function sendReceiptHtml(res: Response, document: ReceiptDocument): void {
+  // Escaping is what makes the document safe; these headers are the second
+  // line. The page needs nothing but its own inline stylesheet, so everything
+  // else — script, frames, network — is refused outright, and nosniff stops a
+  // browser deciding the response is something other than what it says.
+  res.setHeader(
+    "Content-Security-Policy",
+    "default-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'"
+  );
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Referrer-Policy", "no-referrer");
+  res.setHeader("Cache-Control", "private, no-store");
+  res.type("html").send(renderReceipt(document.view));
+}
+
+async function sendReceiptPdf(res: Response, document: ReceiptDocument): Promise<void> {
+  // A payment with no order behind it is a Stripe renewal, and Stripe's own PDF
+  // is linked beside it as `pdfUrl`. Ours would print "Order no. —".
+  if (document.pdf === null) throw notFound(RECEIPT_MISSING);
+
+  const pdf = await renderReceiptPdf(document);
+  res.setHeader("Content-Type", "application/pdf");
+  // attachment: this is the "Download PDF" document, and the on-screen receipt
+  // is the one read in the browser.
+  res.setHeader("Content-Disposition", `attachment; filename="${document.filename}"`);
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("Cache-Control", "private, no-store");
+  res.send(pdf);
+}
+
+/**
+ * Mints the download link for a receipt PDF the member owns.
+ *
+ * Ownership and "there is a PDF for this" are both decided here, before a link
+ * exists, with the same loader the PDF route uses; delivery proves them again.
+ * Allowed through an impersonated session: it is a read, and the link it
+ * returns serves nothing the session could not already fetch.
+ */
+async function sendReceiptLink(
+  res: Response,
+  member: AuthedMember,
+  target: ReceiptLinkTarget
+): Promise<void> {
+  const document = await loadReceiptDocument(target, {
+    memberId: member.id,
+    billedToEmail: member.email,
+  });
+  if (!document?.pdf) throw notFound(RECEIPT_MISSING);
+
+  const { url, expiresAt } = signReceiptLink({ target, memberId: member.id });
+  res.setHeader("Cache-Control", "private, no-store");
+  res.json({ url, expiresAt: expiresAt.toISOString(), filename: document.filename });
+}
+
+/** POST /api/member/billing/orders/:id/receipt-link */
+memberBillingRouter.post(
+  "/orders/:id/receipt-link",
+  receiptLimiter,
+  asyncHandler(async (req, res) => {
+    const member = currentMember(req);
+    await sendReceiptLink(res, member, { orderId: readId(req, RECEIPT_MISSING) });
+  })
+);
+
+/** POST /api/member/billing/invoices/:id/receipt-link */
+memberBillingRouter.post(
+  "/invoices/:id/receipt-link",
+  receiptLimiter,
+  asyncHandler(async (req, res) => {
+    const member = currentMember(req);
+    await sendReceiptLink(res, member, { invoiceId: readId(req, RECEIPT_MISSING) });
+  })
+);
+
+/** GET /api/member/billing/invoices/:id/receipt */
 memberBillingRouter.get(
   "/invoices/:id/receipt",
   receiptLimiter,
   asyncHandler(async (req, res) => {
     const member = currentMember(req);
-    const invoiceId = readId(req, "We couldn't find that receipt.");
-
-    const found = await pool.query<{
-      id: number;
-      number: string | null;
-      status: string;
-      currency: string;
-      amount_paid_cents: number;
-      tax_cents: number;
-      paid_at: Date | null;
-      created_at: Date;
-      order_id: number | null;
-      description: string;
-      order_subtotal_cents: number | null;
-      order_discount_cents: number | null;
-      order_tax_cents: number | null;
-      order_total_cents: number | null;
-      order_amount_cents: number | null;
-      order_status: string | null;
-      order_paid_at: Date | null;
-      coupon_code: string | null;
-      billing_name: string | null;
-    }>(
-      `SELECT i.id, i.number, i.status, i.currency, i.amount_paid_cents, i.tax_cents,
-              i.paid_at, i.created_at, i.order_id,
-              COALESCE(NULLIF(fo.title, ''), NULLIF(fs.title, ''), NULLIF(pl.name, ''),
-                       NULLIF(o.course_title, ''), 'Purchase') AS description,
-              o.subtotal_cents AS order_subtotal_cents,
-              o.discount_cents AS order_discount_cents,
-              o.tax_cents      AS order_tax_cents,
-              o.total_cents    AS order_total_cents,
-              o.amount_cents   AS order_amount_cents,
-              o.status         AS order_status,
-              o.updated_at     AS order_paid_at,
-              o.coupon_code, o.billing_name
-         FROM invoices i
-         LEFT JOIN orders o        ON o.id  = i.order_id
-         LEFT JOIN offers fo       ON fo.id = o.offer_id
-         LEFT JOIN subscriptions s ON s.id  = i.subscription_id
-         LEFT JOIN offers fs       ON fs.id = s.offer_id
-         LEFT JOIN plans pl        ON pl.id = s.plan_id
-        WHERE i.id = $2 AND ${INVOICE_OWNED_BY_MEMBER}`,
-      [member.id, invoiceId]
-    );
-    const invoice = found.rows[0];
-    if (!invoice) throw notFound("We couldn't find that receipt.");
-
-    const [items, settings] = await Promise.all([
-      invoice.order_id === null
-        ? Promise.resolve({ rows: [] as { title: string; quantity: number; amount_cents: number }[] })
-        : pool.query<{ title: string; quantity: number; amount_cents: number }>(
-            `SELECT title, quantity, amount_cents
-               FROM order_items WHERE order_id = $1 ORDER BY id`,
-            [invoice.order_id]
-          ),
-      pool.query<{ key: string; value: unknown }>(
-        `SELECT key, value FROM settings WHERE key IN ('business','contact','customer_payments')`
-      ),
-    ]);
-
-    const currency = safeCurrency(invoice.currency);
-    const paid = invoice.status === "paid" || invoice.order_status === "paid";
-
-    // An invoice raised against an order has that order's own breakdown, which
-    // is the only place the discount and the per-line figures exist. A renewal
-    // invoice has no order, so the figures come from the invoice itself.
-    const hasOrder = invoice.order_id !== null && invoice.order_total_cents !== null;
-    const orderTotal = invoice.order_total_cents || invoice.order_amount_cents || 0;
-    const totalCents = hasOrder ? orderTotal : invoice.amount_paid_cents;
-    const taxCents = hasOrder ? (invoice.order_tax_cents ?? 0) : invoice.tax_cents;
-    const discountCents = hasOrder ? (invoice.order_discount_cents ?? 0) : 0;
-
-    // A receipt has to add up. The stored subtotal is used where there is one,
-    // and derived from the total otherwise — a renewal invoice never had one,
-    // and an order from the legacy course checkout left it at zero while
-    // recording the money in amount_cents.
-    const storedSubtotal = hasOrder ? (invoice.order_subtotal_cents ?? 0) : 0;
-    const subtotalCents =
-      storedSubtotal > 0 ? storedSubtotal : Math.max(0, totalCents - taxCents + discountCents);
-
-    const lines: ReceiptLine[] =
-      items.rows.length > 0
-        ? items.rows.map((i) => ({
-            title: i.title,
-            quantity: i.quantity,
-            amountCents: i.amount_cents,
-          }))
-        : [{ title: invoice.description, quantity: 1, amountCents: subtotalCents }];
-
-    const payments = asRecord(
-      settings.rows.find((r) => r.key === "customer_payments")?.value
-    );
-    // Trimmed and length-capped rather than trusted: both are free text from
-    // settings, and the first is a page heading.
-    const receiptTitle = asText(payments.receiptTitle).slice(0, 60) || "Receipt";
-    const refundPolicy = asText(payments.refundPolicy).slice(0, 600);
-
-    const html = renderReceipt({
-      business: readBusinessDetails(settings.rows),
-      title: receiptTitle,
-      refundPolicy,
-      billedToName: invoice.billing_name ?? "",
+    const document = await loadReceiptDocument(
+      { invoiceId: readId(req, RECEIPT_MISSING) },
       // The signed-in member's own address, never the order's: this document is
       // only ever shown to them, and it is the one value here that is certain.
-      billedToEmail: member.email,
-      reference: invoice.number ?? `#${invoice.id}`,
-      description: invoice.description,
-      paid,
-      paidAt: iso(invoice.paid_at) ?? (paid ? iso(invoice.order_paid_at) : null),
-      issuedAt: iso(invoice.created_at) ?? "",
-      currency,
-      lines,
-      subtotalCents,
-      discountCents,
-      couponCode: invoice.coupon_code ?? "",
-      taxCents,
-      totalCents,
-    });
-
-    // Escaping is what makes the document safe; these headers are the second
-    // line. The page needs nothing but its own inline stylesheet, so everything
-    // else — script, frames, network — is refused outright, and nosniff stops a
-    // browser deciding the response is something other than what it says.
-    res.setHeader(
-      "Content-Security-Policy",
-      "default-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'"
+      { memberId: member.id, billedToEmail: member.email }
     );
-    res.setHeader("X-Content-Type-Options", "nosniff");
-    res.setHeader("Referrer-Policy", "no-referrer");
-    res.setHeader("Cache-Control", "private, no-store");
-    res.type("html").send(html);
+    if (!document) throw notFound(RECEIPT_MISSING);
+    sendReceiptHtml(res, document);
+  })
+);
+
+/** GET /api/member/billing/invoices/:id/receipt.pdf */
+memberBillingRouter.get(
+  "/invoices/:id/receipt.pdf",
+  receiptLimiter,
+  asyncHandler(async (req, res) => {
+    const member = currentMember(req);
+    const document = await loadReceiptDocument(
+      { invoiceId: readId(req, RECEIPT_MISSING) },
+      { memberId: member.id, billedToEmail: member.email }
+    );
+    if (!document) throw notFound(RECEIPT_MISSING);
+    await sendReceiptPdf(res, document);
+  })
+);
+
+/**
+ * GET /api/member/billing/orders/:id/receipt
+ *
+ * The one the purchases page links. Keyed on the order rather than on the
+ * receipt record so the page never has to hold both ids, and so a receipt that
+ * has somehow not been issued yet is still rendered from the order itself
+ * rather than reported missing.
+ */
+memberBillingRouter.get(
+  "/orders/:id/receipt",
+  receiptLimiter,
+  asyncHandler(async (req, res) => {
+    const member = currentMember(req);
+    const document = await loadReceiptDocument(
+      { orderId: readId(req, RECEIPT_MISSING) },
+      { memberId: member.id, billedToEmail: member.email }
+    );
+    if (!document) throw notFound(RECEIPT_MISSING);
+    sendReceiptHtml(res, document);
+  })
+);
+
+/** GET /api/member/billing/orders/:id/receipt.pdf */
+memberBillingRouter.get(
+  "/orders/:id/receipt.pdf",
+  receiptLimiter,
+  asyncHandler(async (req, res) => {
+    const member = currentMember(req);
+    const document = await loadReceiptDocument(
+      { orderId: readId(req, RECEIPT_MISSING) },
+      { memberId: member.id, billedToEmail: member.email }
+    );
+    if (!document) throw notFound(RECEIPT_MISSING);
+    await sendReceiptPdf(res, document);
   })
 );
 
@@ -1592,5 +1369,81 @@ memberBillingRouter.get(
         installments: installmentsByPlan.get(row.id) ?? [],
       })),
     });
+  })
+);
+
+/* ------------------------------------------- Lane D2: portal additions */
+
+/**
+ * POST /api/member/billing/subscriptions/:id/keep
+ *
+ * Takes back a cancellation that has not happened yet. Somebody who changes
+ * their mind before the period runs out did not leave, so the reason and the
+ * note come off the row as well — otherwise "People who left" counts a member
+ * who is still paying.
+ */
+memberBillingRouter.post(
+  "/subscriptions/:id/keep",
+  denyImpersonation,
+  billingWriteLimiter,
+  asyncHandler(async (req, res) => {
+    const member = currentMember(req);
+    const subscriptionId = readId(req, "We couldn't find that subscription.");
+
+    const row = await loadOwnedSubscription(member.id, subscriptionId);
+    assertStillLive(row);
+    if (!row.cancel_at_period_end) {
+      res.json(await readSubscription(member.id, subscriptionId));
+      return;
+    }
+    assertStripeReachable(row);
+
+    if (row.stripe_subscription_id !== null) {
+      await stripe().subscriptions.update(row.stripe_subscription_id, { cancel_at_period_end: false });
+    }
+
+    await pool.query(
+      `UPDATE subscriptions
+          SET cancel_at_period_end = false, canceled_at = NULL,
+              cancel_reason = '', cancel_feedback = '', updated_at = now()
+        WHERE id = $1 AND member_id = $2 AND ended_at IS NULL`,
+      [subscriptionId, member.id]
+    );
+
+    res.json(await readSubscription(member.id, subscriptionId));
+  })
+);
+
+const confirmCardSchema = z.object({
+  setupIntentId: z.string().trim().max(255).regex(/^seti_[A-Za-z0-9_]+$/),
+});
+
+/**
+ * POST /api/member/billing/payment-method/confirm
+ *
+ * The second half of the SetupIntent card update: makes the saved card the one
+ * every membership and payment plan charges, and tries any overdue invoice on it
+ * now. Called by the billing page once Stripe confirms the card, including after
+ * a 3-D Secure redirect back to /account/billing.
+ */
+memberBillingRouter.post(
+  "/payment-method/confirm",
+  denyImpersonation,
+  billingWriteLimiter,
+  asyncHandler(async (req, res) => {
+    const member = currentMember(req);
+    if (!stripeEnabled()) throw serviceUnavailable("Payments are not configured");
+
+    const parsed = confirmCardSchema.safeParse(req.body);
+    if (!parsed.success) throw notFound("We couldn't find that card update. Please try adding the card again.");
+
+    try {
+      res.json(await adoptSavedCard(member.id, parsed.data.setupIntentId));
+    } catch (err) {
+      if (err instanceof CardUpdateError) {
+        throw err.kind === "not_ready" ? badRequest(err.message) : notFound(err.message);
+      }
+      throw err;
+    }
   })
 );

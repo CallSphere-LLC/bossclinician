@@ -1,0 +1,177 @@
+{
+  "at": "2026-09-12T20:06:57.755Z",
+  "responses": [
+    {
+      "at": 1789243618017,
+      "path": "/api/admin/me",
+      "status": 401
+    },
+    {
+      "at": 1789243618074,
+      "path": "/api/admin/me",
+      "status": 401
+    },
+    {
+      "at": 1789243618086,
+      "path": "/api/admin/refresh",
+      "status": 401
+    },
+    {
+      "at": 1789243618435,
+      "path": "/api/admin/login",
+      "status": 200
+    },
+    {
+      "at": 1789243618531,
+      "path": "/api/admin/me",
+      "status": 200
+    },
+    {
+      "at": 1789243919656,
+      "path": "/api/admin/me",
+      "status": 401
+    },
+    {
+      "at": 1789243919663,
+      "path": "/api/admin/refresh",
+      "status": 204
+    },
+    {
+      "at": 1789243919673,
+      "path": "/api/admin/me",
+      "status": 200
+    },
+    {
+      "at": 1789243932769,
+      "path": "/api/admin/logout",
+      "status": 204
+    }
+  ],
+  "errors": [],
+  "login": {
+    "status": 200,
+    "jsonKeys": [
+      "user"
+    ],
+    "accessSeconds": 300,
+    "cookies": [
+      {
+        "name": "__Host-bc_admin_session",
+        "domain": "admin.bossclinician.callsphere.site",
+        "path": "/",
+        "expires": 1789243918.434247,
+        "httpOnly": true,
+        "secure": true,
+        "sameSite": "Lax"
+      },
+      {
+        "name": "__Host-bc_admin_refresh",
+        "domain": "admin.bossclinician.callsphere.site",
+        "path": "/",
+        "expires": 1789272418.434326,
+        "httpOnly": true,
+        "secure": true,
+        "sameSite": "Lax"
+      }
+    ]
+  },
+  "reload": {
+    "url": "https://admin.bossclinician.callsphere.site/admin",
+    "storage": null,
+    "scriptCookie": ""
+  },
+  "public": [
+    {
+      "path": "/account",
+      "storage": null,
+      "scriptCookie": "",
+      "checks": [
+        {
+          "name": "contacts",
+          "status": 401
+        },
+        {
+          "name": "offers",
+          "status": 401
+        },
+        {
+          "name": "settings",
+          "status": 401
+        }
+      ]
+    },
+    {
+      "path": "/",
+      "storage": null,
+      "scriptCookie": "",
+      "checks": [
+        {
+          "name": "contacts",
+          "status": 401
+        },
+        {
+          "name": "offers",
+          "status": 401
+        },
+        {
+          "name": "settings",
+          "status": 401
+        }
+      ]
+    },
+    {
+      "path": "/quiz/zz-test-practice-quiz",
+      "storage": null,
+      "scriptCookie": "",
+      "checks": [
+        {
+          "name": "contacts",
+          "status": 401
+        },
+        {
+          "name": "offers",
+          "status": 401
+        },
+        {
+          "name": "settings",
+          "status": 401
+        }
+      ]
+    }
+  ],
+  "crossOriginRead": "blocked by CORS",
+  "csrf": [
+    {
+      "headers": {
+        "Origin": "https://bossclinician.callsphere.site",
+        "Sec-Fetch-Site": "same-site"
+      },
+      "status": 403
+    },
+    {
+      "headers": {},
+      "status": 403
+    },
+    {
+      "headers": {
+        "Origin": "https://admin.bossclinician.callsphere.site",
+        "Sec-Fetch-Site": "same-origin"
+      },
+      "status": 400
+    }
+  ],
+  "naturalExpiry": {
+    "elapsedSeconds": 301.245,
+    "oldExpiry": 1789243918,
+    "newExpiry": 1789244219,
+    "refreshExpiryUnchanged": true,
+    "url": "https://admin.bossclinician.callsphere.site/admin"
+  },
+  "logout": {
+    "url": "https://admin.bossclinician.callsphere.site/admin/login",
+    "cookies": [],
+    "replayRead": 401,
+    "replayRefresh": 401,
+    "secondTabUrl": "https://admin.bossclinician.callsphere.site/admin/login?next=%2Fadmin%2Fcontacts"
+  }
+}

@@ -29,14 +29,12 @@ map $uri $redirect_target {
     /coaching-terms /terms;
     /confirmation-boss-clinician-lounge /checkout/success;
     /confirmation-page-1 /checkout/success;
-    /contact /contact;
     /continuing-education-boss-clinician /courses;
     /credential-with-confidencekit-confirmed /checkout/success;
     /credentialingsuccess /courses/credentialing-success-formula;
     /credentialwithconfidencekit /courses/credential-with-confidence;
     /csfgrouppractices /courses/credentialing-success-formula;
     /cwcsolopractice /courses/credential-with-confidence;
-    /disclaimer /disclaimer;
     /evergreen-masterclass-register /resources;
     /financialdisclaimer /financial-disclaimer;
     /fullybooked /courses/fully-booked-toolkit;
@@ -63,7 +61,6 @@ map $uri $redirect_target {
     /offers/z9zxy5pi /retreats;
     /offers/z9zxy5pi/checkout /retreats;
     /on-demand-audit-your-private-practice /resources;
-    /podcasts/lyrical-reflections /podcasts/lyrical-reflections;
     /podcasts/lyrical-reflections/episodes/2148691037 /podcasts/lyrical-reflections;
     /podcasts/lyrical-reflections/episodes/2148691038 /podcasts/lyrical-reflections;
     /podcasts/lyrical-reflections/episodes/2148691039 /podcasts/lyrical-reflections;
@@ -76,12 +73,9 @@ map $uri $redirect_target {
     /practice-planner /courses/prepare-to-profit-journal;
     /practice-planner-thank-you /resources;
     /practice-protection-pack /courses/private-practice-protection-pack;
-    /practice-quiz /practice-quiz;
     /practice-reset-audit-ty /resources;
-    /practice-reset-planner /practice-reset-planner;
     /practice-set-up-quiz /practice-quiz;
     /practice-set-up-quiz-ty /practice-quiz;
-    /privacy-policy /privacy-policy;
     /privacy-policy-8b664a08-e1e5-4f19-8d9a-5cb8f33bf104 /privacy-policy;
     /private-practice-for-you /work-with-me;
     /private-practice-for-you-ty /work-with-me;
@@ -120,7 +114,6 @@ map $uri $redirect_target {
     /startersuitecourse /courses/private-practice-starter-suite;
     /steady-form /practice-quiz;
     /step-by-step-guide-thank-you-page /resources;
-    /store /store;
     /terms-of-service-boss-clinician /terms;
     /terms-of-use /terms;
     /thank-you /checkout/success;
@@ -133,7 +126,6 @@ map $uri $redirect_target {
     /turn-doctor-referrals-into-ideal-client /courses/provider-partnership-guide;
     /visionary-form /practice-quiz;
     /webinar-waitlist-thank-you /resources;
-    /work-with-me /work-with-me;
 }
 
 map $uri $redirect_target_temp {

@@ -1,0 +1,93 @@
+{
+  "at": "2026-09-12T23:29:16.938Z",
+  "errors": [],
+  "layouts": [
+    {
+      "width": 320,
+      "route": "/admin/settings/team",
+      "overflow": false
+    },
+    {
+      "width": 320,
+      "route": "/admin/downloads",
+      "overflow": false
+    },
+    {
+      "width": 390,
+      "route": "/admin/settings/team",
+      "overflow": false
+    },
+    {
+      "width": 390,
+      "route": "/admin/downloads",
+      "overflow": false
+    },
+    {
+      "width": 768,
+      "route": "/admin/settings/team",
+      "overflow": false
+    },
+    {
+      "width": 768,
+      "route": "/admin/downloads",
+      "overflow": false
+    },
+    {
+      "width": 1440,
+      "route": "/admin/settings/team",
+      "overflow": false
+    },
+    {
+      "width": 1440,
+      "route": "/admin/downloads",
+      "overflow": false
+    },
+    {
+      "width": 1920,
+      "route": "/admin/settings/team",
+      "overflow": false
+    },
+    {
+      "width": 1920,
+      "route": "/admin/downloads",
+      "overflow": false
+    }
+  ],
+  "pending": {
+    "explanation": true,
+    "withdrawAvailable": true,
+    "noSignOut": true
+  },
+  "accepted": {
+    "rolePreserved": "marketing",
+    "suspendedLogin": 401,
+    "suspendedRead": 401,
+    "suspendedRefresh": 401,
+    "restoredLogin": true,
+    "oldSessionRevoked": true
+  },
+  "finalAt": "2026-09-12T23:31:04.137Z",
+  "withdrawnLink": 404,
+  "checkout": [
+    {
+      "path": "/api/offers/zz-readiness-check-20260912",
+      "status": 503,
+      "error": "Checkout is unavailable for The Profitable Private Practice Boss Builders Collective because its download files are missing. Please contact us for help."
+    },
+    {
+      "path": "/api/offers/zz-readiness-check-20260912/quote",
+      "status": 503,
+      "error": "Checkout is unavailable for The Profitable Private Practice Boss Builders Collective because its download files are missing. Please contact us for help."
+    },
+    {
+      "path": "/api/cart/quote",
+      "status": 503,
+      "error": "Checkout is unavailable for The Profitable Private Practice Boss Builders Collective because its download files are missing. Please contact us for help."
+    },
+    {
+      "path": "/api/checkout/offer/zz-readiness-check-20260912",
+      "status": 503,
+      "error": "Checkout is unavailable for The Profitable Private Practice Boss Builders Collective because its download files are missing. Please contact us for help."
+    }
+  ]
+}

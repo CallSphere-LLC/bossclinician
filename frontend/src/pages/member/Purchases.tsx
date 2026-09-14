@@ -5,12 +5,13 @@ import { Seo } from "@/components/Seo";
 import { MemberShell } from "@/components/member/MemberShell";
 import { GlassCard } from "@/components/luxe/GlassCard";
 import { LuxeButton, LuxePill } from "@/components/luxe/LuxeButton";
+import { ReceiptPdfLink } from "@/components/member/ReceiptPdfLink";
 import { cn } from "@/lib/cn";
 import { formatCurrency, formatDate } from "@/lib/format";
 import {
   billingApi,
   billingErrorMessage,
-  showReceipt,
+  receiptPaths,
   type MemberOrder,
   type MemberOrderDetail,
 } from "@/lib/billingApi";
@@ -37,8 +38,6 @@ export default function Purchases() {
   const [total, setTotal] = useState(0);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState("");
-  /** Invoice id per order, for the receipt link. Absent until it loads. */
-  const [receipts, setReceipts] = useState<Map<number, string>>(new Map());
 
   useEffect(() => {
     let cancelled = false;
@@ -53,30 +52,6 @@ export default function Purchases() {
         if (!cancelled) {
           setError("We could not load your purchases just now. Please try again in a moment.");
         }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  // Separate on purpose: a receipt that will not load is a missing link on one
-  // row, not a reason to withhold somebody's purchase history.
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const page = await billingApi.invoices({ limit: 100 });
-        if (cancelled) return;
-        const byOrder = new Map<number, string>();
-        for (const invoice of page.invoices) {
-          if (invoice.orderId !== null && !byOrder.has(invoice.orderId)) {
-            byOrder.set(invoice.orderId, invoice.receiptUrl);
-          }
-        }
-        setReceipts(byOrder);
-      } catch {
-        // No receipt links this time round.
       }
     })();
     return () => {
@@ -128,7 +103,7 @@ export default function Purchases() {
             <ul className="grid gap-5">
               {orders.map((order) => (
                 <li key={order.id}>
-                  <PurchaseCard order={order} receiptUrl={receipts.get(order.id) ?? null} />
+                  <PurchaseCard order={order} />
                 </li>
               ))}
             </ul>
@@ -196,7 +171,7 @@ function NothingYet() {
   );
 }
 
-function PurchaseCard({ order, receiptUrl }: { order: MemberOrder; receiptUrl: string | null }) {
+function PurchaseCard({ order }: { order: MemberOrder }) {
   const [detail, setDetail] = useState<MemberOrderDetail | null>(null);
   const [open, setOpen] = useState(false);
   const [loadingDetail, setLoadingDetail] = useState(false);
@@ -223,15 +198,6 @@ function PurchaseCard({ order, receiptUrl }: { order: MemberOrder; receiptUrl: s
     } finally {
       setLoadingDetail(false);
     }
-  };
-
-  // Not awaited before the window is claimed: `showReceipt` opens the tab
-  // first, and anything awaited ahead of it costs the click its permission.
-  const openReceipt = () => {
-    if (receiptUrl === null) return;
-    void showReceipt(receiptUrl).catch((err: unknown) => {
-      toast.error(billingErrorMessage(err, "We could not open that receipt just now."));
-    });
   };
 
   return (
@@ -300,18 +266,20 @@ function PurchaseCard({ order, receiptUrl }: { order: MemberOrder; receiptUrl: s
           </LuxeButton>
         )}
 
-        {receiptUrl !== null ? (
-          <LuxeButton
-            type="button"
-            variant="quiet"
-            className={QUIET_LINK}
-            onClick={openReceipt}
-          >
-            View receipt
-          </LuxeButton>
-        ) : (
-          <span className="text-xs text-orchid-faint">Ask us if you need a receipt for this one</span>
-        )}
+        {/* Every purchase on this page has a receipt, and both are ordinary
+            links to the receipt's own address: the page opens in this tab,
+            and the PDF downloads without leaving it. */}
+        <LuxeButton
+          to={receiptPaths({ orderId: order.id }).page}
+          variant="quiet"
+          className={QUIET_LINK}
+        >
+          View receipt
+        </LuxeButton>
+
+        <ReceiptPdfLink target={{ orderId: order.id }} className={QUIET_LINK}>
+          Download PDF
+        </ReceiptPdfLink>
 
         <button
           type="button"

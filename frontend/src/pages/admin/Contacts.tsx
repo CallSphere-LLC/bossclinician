@@ -422,10 +422,23 @@ export default function Contacts() {
         id: "status",
         accessorFn: (person) => emailStatusLabel(person.emailMarketingStatus),
         header: "Emails",
+        /*
+         * Two badges, because there are two facts and they are independent:
+         * whether we may email somebody, and whether they have confirmed the
+         * address. Somebody can be "Happy to hear from you" and still be locked
+         * out of posting because their account was never confirmed, which is
+         * exactly the pair this list used to show only half of.
+         */
         cell: ({ row }) => (
-          <Badge tone={EMAIL_STATUS_TONE[row.original.emailMarketingStatus] ?? "neutral"}>
-            {emailStatusLabel(row.original.emailMarketingStatus)}
-          </Badge>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <Badge tone={EMAIL_STATUS_TONE[row.original.emailMarketingStatus] ?? "neutral"}>
+              {emailStatusLabel(row.original.emailMarketingStatus)}
+            </Badge>
+            {row.original.accountMemberId !== null &&
+              row.original.accountEmailVerifiedAt === null && (
+                <Badge tone="gold">Not confirmed</Badge>
+              )}
+          </div>
         ),
       },
     ],

@@ -1,0 +1,1452 @@
+[
+  {
+    "path": "/admin",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Welcome back, Yvette.",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/products",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "All Products",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/catalogue",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Your catalogue",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/courses",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Courses",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/downloads",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Downloads",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/community",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Community",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/media",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Media Library",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/coaching",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Coaching",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/podcasts",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Podcasts",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/newsletters",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Newsletters",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/offers",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Offers",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/sales/payments",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Payments",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/sales/plans",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Plans & Pricing",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/sales/subscriptions",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Subscriptions",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/sales/invoices",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Invoices & receipts",
+    "emptyError": false,
+    "outside": [
+      {
+        "tag": "A",
+        "text": "See the receipt",
+        "left": 1152,
+        "right": 1284
+      },
+      {
+        "tag": "BUTTON",
+        "text": "PDF",
+        "left": 1290,
+        "right": 1345
+      },
+      {
+        "tag": "A",
+        "text": "See the receipt",
+        "left": 1152,
+        "right": 1284
+      },
+      {
+        "tag": "BUTTON",
+        "text": "PDF",
+        "left": 1290,
+        "right": 1345
+      },
+      {
+        "tag": "A",
+        "text": "See the receipt",
+        "left": 1152,
+        "right": 1284
+      },
+      {
+        "tag": "BUTTON",
+        "text": "PDF",
+        "left": 1290,
+        "right": 1345
+      }
+    ],
+    "errors": []
+  },
+  {
+    "path": "/admin/sales/coupons",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Coupons",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/sales/payouts",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Payouts",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/partners",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Partners",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/blog",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Blog Posts",
+    "emptyError": false,
+    "outside": [
+      {
+        "tag": "A",
+        "text": "Edit Test",
+        "left": 1297,
+        "right": 1341
+      },
+      {
+        "tag": "BUTTON",
+        "text": "Delete Test",
+        "left": 1347,
+        "right": 1391
+      },
+      {
+        "tag": "A",
+        "text": "Edit Why Your Private Practice Marketing Isn\u2019t Working (And What to Do Instead)",
+        "left": 1297,
+        "right": 1341
+      },
+      {
+        "tag": "BUTTON",
+        "text": "Delete Why Your Private Practice Marketing Isn\u2019t Working (And What to Do Instead)",
+        "left": 1347,
+        "right": 1391
+      },
+      {
+        "tag": "A",
+        "text": "Edit What Auditors Actually Look For (And Why Most Therapists Are Never Told)",
+        "left": 1297,
+        "right": 1341
+      },
+      {
+        "tag": "BUTTON",
+        "text": "Delete What Auditors Actually Look For (And Why Most Therapists Are Never Told)",
+        "left": 1347,
+        "right": 1391
+      },
+      {
+        "tag": "A",
+        "text": "Edit The Peace of Mind Most Therapists Are Quietly Searching For",
+        "left": 1297,
+        "right": 1341
+      },
+      {
+        "tag": "BUTTON",
+        "text": "Delete The Peace of Mind Most Therapists Are Quietly Searching For",
+        "left": 1347,
+        "right": 1391
+      },
+      {
+        "tag": "A",
+        "text": "Edit Afraid to Charge? Ditching the Money Guilt as a Therapist",
+        "left": 1297,
+        "right": 1341
+      },
+      {
+        "tag": "BUTTON",
+        "text": "Delete Afraid to Charge? Ditching the Money Guilt as a Therapist",
+        "left": 1347,
+        "right": 1391
+      },
+      {
+        "tag": "A",
+        "text": "Edit How to Stop Seeing 25+ Clients a Week and Still Hit Your Income Goals",
+        "left": 1297,
+        "right": 1341
+      },
+      {
+        "tag": "BUTTON",
+        "text": "Delete How to Stop Seeing 25+ Clients a Week and Still Hit Your Income Goals",
+        "left": 1347,
+        "right": 1391
+      },
+      {
+        "tag": "A",
+        "text": "Edit Don\u2019t Let Fear Delay the Practice You\u2019re Meant to Build",
+        "left": 1297,
+        "right": 1341
+      },
+      {
+        "tag": "BUTTON",
+        "text": "Delete Don\u2019t Let Fear Delay the Practice You\u2019re Meant to Build",
+        "left": 1347,
+        "right": 1391
+      }
+    ],
+    "errors": []
+  },
+  {
+    "path": "/admin/testimonials",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Testimonials",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/resources",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Resources",
+    "emptyError": false,
+    "outside": [
+      {
+        "tag": "BUTTON",
+        "text": "The 4-Step Blueprint to Building a Profitable Private PracticeThis FREE masterclass breaks",
+        "left": 313,
+        "right": 1704
+      },
+      {
+        "tag": "BUTTON",
+        "text": "Edit The 4-Step Blueprint to Building a Profitable Private Practice",
+        "left": 1884,
+        "right": 1928
+      },
+      {
+        "tag": "BUTTON",
+        "text": "Delete The 4-Step Blueprint to Building a Profitable Private Practice",
+        "left": 1934,
+        "right": 1978
+      },
+      {
+        "tag": "BUTTON",
+        "text": "Edit Free Guide: Want to know if you should take insurance or accept superbills in your pr",
+        "left": 1884,
+        "right": 1928
+      },
+      {
+        "tag": "BUTTON",
+        "text": "Delete Free Guide: Want to know if you should take insurance or accept superbills in your ",
+        "left": 1934,
+        "right": 1978
+      },
+      {
+        "tag": "BUTTON",
+        "text": "Edit Free Starter Guide: Just starting your practice or want to make sure you starter on t",
+        "left": 1884,
+        "right": 1928
+      },
+      {
+        "tag": "BUTTON",
+        "text": "Delete Free Starter Guide: Just starting your practice or want to make sure you starter on",
+        "left": 1934,
+        "right": 1978
+      },
+      {
+        "tag": "BUTTON",
+        "text": "Edit Free Checklist: Grab my must have profitable practice planner now.",
+        "left": 1884,
+        "right": 1928
+      },
+      {
+        "tag": "BUTTON",
+        "text": "Delete Free Checklist: Grab my must have profitable practice planner now.",
+        "left": 1934,
+        "right": 1978
+      }
+    ],
+    "errors": []
+  },
+  {
+    "path": "/admin/pages",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Pages",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/marketing/overview",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Overview",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/marketing/events",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Events",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/marketing/campaigns",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Email Campaigns",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/marketing/funnels",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Funnels",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/marketing/sequences",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Email sequences",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/marketing/automations-v2",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Automations",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/marketing/emails",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Automatic emails",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/marketing/quizzes",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Quizzes",
+    "emptyError": false,
+    "outside": [
+      {
+        "tag": "BUTTON",
+        "text": "Taken by",
+        "left": 1233,
+        "right": 1316
+      },
+      {
+        "tag": "BUTTON",
+        "text": "On your site",
+        "left": 1356,
+        "right": 1464
+      },
+      {
+        "tag": "BUTTON",
+        "text": "Web address",
+        "left": 1504,
+        "right": 1615
+      },
+      {
+        "tag": "A",
+        "text": "Edit ZZ Course Survey",
+        "left": 1761,
+        "right": 1805
+      },
+      {
+        "tag": "BUTTON",
+        "text": "Delete ZZ Course Survey",
+        "left": 1811,
+        "right": 1855
+      },
+      {
+        "tag": "A",
+        "text": "Edit ZZ Knowledge Check",
+        "left": 1761,
+        "right": 1805
+      },
+      {
+        "tag": "BUTTON",
+        "text": "Delete ZZ Knowledge Check",
+        "left": 1811,
+        "right": 1855
+      },
+      {
+        "tag": "A",
+        "text": "Edit ZZ Test \u2014 practice quiz",
+        "left": 1761,
+        "right": 1805
+      },
+      {
+        "tag": "BUTTON",
+        "text": "Delete ZZ Test \u2014 practice quiz",
+        "left": 1811,
+        "right": 1855
+      }
+    ],
+    "errors": []
+  },
+  {
+    "path": "/admin/marketing/events-v2",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Events",
+    "emptyError": false,
+    "outside": [
+      {
+        "tag": "BUTTON",
+        "text": "On your site",
+        "left": 1231,
+        "right": 1339
+      },
+      {
+        "tag": "BUTTON",
+        "text": "Open ZZ Verify \u2014 tz check",
+        "left": 1379,
+        "right": 1423
+      },
+      {
+        "tag": "BUTTON",
+        "text": "Delete ZZ Verify \u2014 tz check",
+        "left": 1429,
+        "right": 1473
+      },
+      {
+        "tag": "BUTTON",
+        "text": "Open ZZ Test \u2014 live webinar",
+        "left": 1379,
+        "right": 1423
+      },
+      {
+        "tag": "BUTTON",
+        "text": "Delete ZZ Test \u2014 live webinar",
+        "left": 1429,
+        "right": 1473
+      }
+    ],
+    "errors": []
+  },
+  {
+    "path": "/admin/marketing/forms-v2",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Forms",
+    "emptyError": false,
+    "outside": [
+      {
+        "tag": "BUTTON",
+        "text": "Delete ZZ Test \u2014 waitlist form",
+        "left": 1265,
+        "right": 1309
+      }
+    ],
+    "errors": []
+  },
+  {
+    "path": "/admin/marketing/forms",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Forms",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/contacts/insights",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Insights",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/contacts",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "People",
+    "emptyError": false,
+    "outside": [
+      {
+        "tag": "BUTTON",
+        "text": "Emails",
+        "left": 1316,
+        "right": 1383
+      }
+    ],
+    "errors": []
+  },
+  {
+    "path": "/admin/segments",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Groups",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/tags",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Tags",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/leads",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Enquiries",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/conversations",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Conversations",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/members",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Members",
+    "emptyError": false,
+    "outside": [
+      {
+        "tag": "BUTTON",
+        "text": "Last signed in",
+        "left": 1177,
+        "right": 1298
+      },
+      {
+        "tag": "BUTTON",
+        "text": "Courses",
+        "left": 1338,
+        "right": 1444
+      },
+      {
+        "tag": "BUTTON",
+        "text": "More you can do for ZZ",
+        "left": 1450,
+        "right": 1494
+      },
+      {
+        "tag": "BUTTON",
+        "text": "Courses",
+        "left": 1338,
+        "right": 1444
+      },
+      {
+        "tag": "BUTTON",
+        "text": "More you can do for ZZ",
+        "left": 1450,
+        "right": 1494
+      },
+      {
+        "tag": "BUTTON",
+        "text": "Courses",
+        "left": 1338,
+        "right": 1444
+      },
+      {
+        "tag": "BUTTON",
+        "text": "More you can do for ZZ",
+        "left": 1450,
+        "right": 1494
+      },
+      {
+        "tag": "BUTTON",
+        "text": "Courses",
+        "left": 1338,
+        "right": 1444
+      },
+      {
+        "tag": "BUTTON",
+        "text": "More you can do for ZZ DM Tester",
+        "left": 1450,
+        "right": 1494
+      },
+      {
+        "tag": "BUTTON",
+        "text": "Courses",
+        "left": 1338,
+        "right": 1444
+      },
+      {
+        "tag": "BUTTON",
+        "text": "More you can do for Madhav Shankaran",
+        "left": 1450,
+        "right": 1494
+      },
+      {
+        "tag": "BUTTON",
+        "text": "Courses",
+        "left": 1338,
+        "right": 1444
+      },
+      {
+        "tag": "BUTTON",
+        "text": "More you can do for Sagar Shankaran",
+        "left": 1450,
+        "right": 1494
+      },
+      {
+        "tag": "BUTTON",
+        "text": "Courses",
+        "left": 1338,
+        "right": 1444
+      },
+      {
+        "tag": "BUTTON",
+        "text": "More you can do for Sagar Shankaran",
+        "left": 1450,
+        "right": 1494
+      }
+    ],
+    "errors": []
+  },
+  {
+    "path": "/admin/subscribers",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Subscribers",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/analytics",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Overview",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/analytics/reports",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Your numbers",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/settings",
+    "width": 1280,
+    "viewport": 1280,
+    "documentWidth": 1280,
+    "title": "Settings",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Welcome back, Yvette.",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/products",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "All Products",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/catalogue",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Your catalogue",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/courses",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Courses",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/downloads",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Downloads",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/community",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Community",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/media",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Media Library",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/coaching",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Coaching",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/podcasts",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Podcasts",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/newsletters",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Newsletters",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/offers",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Offers",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/sales/payments",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Payments",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/sales/plans",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Plans & Pricing",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/sales/subscriptions",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Subscriptions",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/sales/invoices",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Invoices & receipts",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/sales/coupons",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Coupons",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/sales/payouts",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Payouts",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/partners",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Partners",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/blog",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Blog Posts",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/testimonials",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Testimonials",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/resources",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Resources",
+    "emptyError": false,
+    "outside": [
+      {
+        "tag": "BUTTON",
+        "text": "The 4-Step Blueprint to Building a Profitable Private PracticeThis FREE masterclass breaks",
+        "left": 313,
+        "right": 1704
+      },
+      {
+        "tag": "BUTTON",
+        "text": "Edit The 4-Step Blueprint to Building a Profitable Private Practice",
+        "left": 1884,
+        "right": 1928
+      },
+      {
+        "tag": "BUTTON",
+        "text": "Delete The 4-Step Blueprint to Building a Profitable Private Practice",
+        "left": 1934,
+        "right": 1978
+      },
+      {
+        "tag": "BUTTON",
+        "text": "Edit Free Guide: Want to know if you should take insurance or accept superbills in your pr",
+        "left": 1884,
+        "right": 1928
+      },
+      {
+        "tag": "BUTTON",
+        "text": "Delete Free Guide: Want to know if you should take insurance or accept superbills in your ",
+        "left": 1934,
+        "right": 1978
+      },
+      {
+        "tag": "BUTTON",
+        "text": "Edit Free Starter Guide: Just starting your practice or want to make sure you starter on t",
+        "left": 1884,
+        "right": 1928
+      },
+      {
+        "tag": "BUTTON",
+        "text": "Delete Free Starter Guide: Just starting your practice or want to make sure you starter on",
+        "left": 1934,
+        "right": 1978
+      },
+      {
+        "tag": "BUTTON",
+        "text": "Edit Free Checklist: Grab my must have profitable practice planner now.",
+        "left": 1884,
+        "right": 1928
+      },
+      {
+        "tag": "BUTTON",
+        "text": "Delete Free Checklist: Grab my must have profitable practice planner now.",
+        "left": 1934,
+        "right": 1978
+      }
+    ],
+    "errors": []
+  },
+  {
+    "path": "/admin/pages",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Pages",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/marketing/overview",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Overview",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/marketing/events",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Events",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/marketing/campaigns",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Email Campaigns",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/marketing/funnels",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Funnels",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/marketing/sequences",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Email sequences",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/marketing/automations-v2",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Automations",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/marketing/emails",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Automatic emails",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/marketing/quizzes",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Quizzes",
+    "emptyError": false,
+    "outside": [
+      {
+        "tag": "BUTTON",
+        "text": "On your site",
+        "left": 1356,
+        "right": 1464
+      },
+      {
+        "tag": "BUTTON",
+        "text": "Web address",
+        "left": 1504,
+        "right": 1615
+      },
+      {
+        "tag": "A",
+        "text": "Edit ZZ Course Survey",
+        "left": 1761,
+        "right": 1805
+      },
+      {
+        "tag": "BUTTON",
+        "text": "Delete ZZ Course Survey",
+        "left": 1811,
+        "right": 1855
+      },
+      {
+        "tag": "A",
+        "text": "Edit ZZ Knowledge Check",
+        "left": 1761,
+        "right": 1805
+      },
+      {
+        "tag": "BUTTON",
+        "text": "Delete ZZ Knowledge Check",
+        "left": 1811,
+        "right": 1855
+      },
+      {
+        "tag": "A",
+        "text": "Edit ZZ Test \u2014 practice quiz",
+        "left": 1761,
+        "right": 1805
+      },
+      {
+        "tag": "BUTTON",
+        "text": "Delete ZZ Test \u2014 practice quiz",
+        "left": 1811,
+        "right": 1855
+      }
+    ],
+    "errors": []
+  },
+  {
+    "path": "/admin/marketing/events-v2",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Events",
+    "emptyError": false,
+    "outside": [
+      {
+        "tag": "BUTTON",
+        "text": "Delete ZZ Verify \u2014 tz check",
+        "left": 1429,
+        "right": 1473
+      },
+      {
+        "tag": "BUTTON",
+        "text": "Delete ZZ Test \u2014 live webinar",
+        "left": 1429,
+        "right": 1473
+      }
+    ],
+    "errors": []
+  },
+  {
+    "path": "/admin/marketing/forms-v2",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Forms",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/marketing/forms",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Forms",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/contacts/insights",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Insights",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/contacts",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "People",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/segments",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Groups",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/tags",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Tags",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/leads",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Enquiries",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/conversations",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Conversations",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/members",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Members",
+    "emptyError": false,
+    "outside": [
+      {
+        "tag": "BUTTON",
+        "text": "Courses",
+        "left": 1338,
+        "right": 1444
+      },
+      {
+        "tag": "BUTTON",
+        "text": "More you can do for ZZ",
+        "left": 1450,
+        "right": 1494
+      },
+      {
+        "tag": "BUTTON",
+        "text": "Courses",
+        "left": 1338,
+        "right": 1444
+      },
+      {
+        "tag": "BUTTON",
+        "text": "More you can do for ZZ",
+        "left": 1450,
+        "right": 1494
+      },
+      {
+        "tag": "BUTTON",
+        "text": "Courses",
+        "left": 1338,
+        "right": 1444
+      },
+      {
+        "tag": "BUTTON",
+        "text": "More you can do for ZZ",
+        "left": 1450,
+        "right": 1494
+      },
+      {
+        "tag": "BUTTON",
+        "text": "Courses",
+        "left": 1338,
+        "right": 1444
+      },
+      {
+        "tag": "BUTTON",
+        "text": "More you can do for ZZ DM Tester",
+        "left": 1450,
+        "right": 1494
+      },
+      {
+        "tag": "BUTTON",
+        "text": "Courses",
+        "left": 1338,
+        "right": 1444
+      },
+      {
+        "tag": "BUTTON",
+        "text": "More you can do for Madhav Shankaran",
+        "left": 1450,
+        "right": 1494
+      },
+      {
+        "tag": "BUTTON",
+        "text": "Courses",
+        "left": 1338,
+        "right": 1444
+      },
+      {
+        "tag": "BUTTON",
+        "text": "More you can do for Sagar Shankaran",
+        "left": 1450,
+        "right": 1494
+      },
+      {
+        "tag": "BUTTON",
+        "text": "Courses",
+        "left": 1338,
+        "right": 1444
+      },
+      {
+        "tag": "BUTTON",
+        "text": "More you can do for Sagar Shankaran",
+        "left": 1450,
+        "right": 1494
+      }
+    ],
+    "errors": []
+  },
+  {
+    "path": "/admin/subscribers",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Subscribers",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/analytics",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Overview",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/analytics/reports",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Your numbers",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  },
+  {
+    "path": "/admin/settings",
+    "width": 1440,
+    "viewport": 1440,
+    "documentWidth": 1440,
+    "title": "Settings",
+    "emptyError": false,
+    "outside": [],
+    "errors": []
+  }
+]

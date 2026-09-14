@@ -1,0 +1,71 @@
+{
+  "audit": [
+    {
+      "action": "admin.update",
+      "entity_id": "17",
+      "before_state": {
+        "name": "ZZ State accept",
+        "role": "support"
+      },
+      "after_state": {
+        "name": "ZZ State accept",
+        "role": "marketing"
+      }
+    },
+    {
+      "action": "admin.update",
+      "entity_id": "17",
+      "before_state": {
+        "name": "ZZ State accept",
+        "role": "support"
+      },
+      "after_state": {
+        "name": "ZZ State accept",
+        "role": "marketing"
+      }
+    },
+    {
+      "action": "admin.suspend",
+      "entity_id": "17",
+      "before_state": {
+        "status": "active"
+      },
+      "after_state": {
+        "status": "suspended"
+      }
+    },
+    {
+      "action": "admin.restore",
+      "entity_id": "17",
+      "before_state": {
+        "status": "suspended"
+      },
+      "after_state": {
+        "status": "active"
+      }
+    },
+    {
+      "action": "admin.delete",
+      "entity_id": "18",
+      "before_state": {
+        "role": "support",
+        "email": "sagar+zz-state-withdraw@callsphere.ai"
+      },
+      "after_state": null
+    }
+  ],
+  "checkout": {
+    "orders": 0,
+    "contacts": 0
+  },
+  "remaining": {
+    "admins": 0,
+    "invitations": 0,
+    "offers": 0
+  },
+  "download": {
+    "existing_grants": 1,
+    "files": 0,
+    "original_offer_status": "draft"
+  }
+}

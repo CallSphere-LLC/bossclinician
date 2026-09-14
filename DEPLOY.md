@@ -94,6 +94,80 @@ tells you that work finished — `docker compose up -d --wait`.
   and calling that proof the running container has it — those are two different
   questions.
 
+## TURN relay for the community live room
+
+**There are two coturn instances on this box and they must stay separate.**
+
+| | Telehealth | Boss Clinician |
+|---|---|---|
+| Managed by | k3s (`callsphere-health` ns, `deployment/coturn`) | this repo's `docker-compose.yml` |
+| Port | 3478 (UDP+TCP) | **3479** (UDP+TCP) |
+| Relay range | 49160-49200 | **49210-49409** |
+| Realm | `health.callsphere.ai` | `bossclinician.callsphere.site` |
+| Secret | k8s secret `ehr-ui-turn` | root `.env` |
+
+They shared one relay and one `--static-auth-secret` until 2026-09-04. It
+worked, and it was wrong on three counts, all of which the split fixes:
+
+- The secret is a bearer key to a relay. This app's `.env` held the clinical
+  app's secret, so a leak here was a leak there.
+- Rotating it for one app silently broke the other.
+- coturn's quotas are **per-server, not per-realm**. `--total-quota` was one
+  shared pool, so a busy community room could refuse allocations to a
+  telehealth consult — the wrong way round for which of the two may degrade.
+
+### Rules
+
+- `TURN_HOST`, `TURN_PORT` and `TURN_STATIC_AUTH_SECRET` live **only in the
+  root `.env`**. `docker-compose.yml` feeds them both to coturn's flags and to
+  the backend's `environment:` (which overrides `backend/.env`). Do not add a
+  second copy to `backend/.env`: the API mints the credentials this relay
+  validates, and a mismatch produces a room that gathers no relay candidates
+  and fails *only* for users behind symmetric NAT — the hardest failure here
+  to notice, because it looks fine to whoever is testing.
+- Never point `TURN_*` at the telehealth relay again.
+- `network_mode: host`, not published ports: a relay advertises its own
+  address in ICE candidates and needs the whole `--min-port`/`--max-port`
+  range reachable. Mapping 200 UDP ports through docker-proxy would cost a
+  process per port and rewrite the addresses the relay reports.
+- The relay range must not overlap 49160-49200, and one allocation consumes
+  one relay port — so the range width and `--total-quota` are the same number
+  (200) by intent.
+- `--alt-listening-port=0` is deliberate: coturn otherwise also binds
+  `listening-port + 1`, which is how you collide with the neighbouring relay.
+- The `--denied-peer-ip` list is what stops this being an open proxy into the
+  host's private networks — including `10.42/16`, the k3s pod network, i.e.
+  every telehealth service. Do not trim it.
+- A deploy recreates the coturn container, which drops relayed media for any
+  call in progress. Deploy the live room outside office hours if that matters.
+
+### Verifying it after a deploy
+
+```
+# 1. listening on the right port, both transports
+sudo ss -lunp | grep -c :3479 && sudo ss -ltnp | grep -c :3479
+
+# 2. mint a credential the way the API does, and allocate for real.
+#    Expect "Received relay addr: 192.99.63.81:<49210-49409>".
+#    A "403 Forbidden IP" *after* that line is correct — coturn refuses to
+#    relay to its own address, and every other local address is denied.
+SECRET=$(grep '^TURN_STATIC_AUTH_SECRET=' .env | cut -d= -f2)
+read -r U C <<<"$(python3 -c "
+import hmac,hashlib,base64,time
+u=f'{int(time.time())+7200}:42'
+print(u, base64.b64encode(hmac.new('$SECRET'.encode(),u.encode(),hashlib.sha1).digest()).decode())
+")"
+docker compose exec -T coturn turnutils_uclient -v -u "$U" -w "$C" \
+  -p 3479 -e 192.99.63.81 -n 1 192.99.63.81 2>&1 | grep -iE "relay addr|error"
+
+# 3. the separation itself: the telehealth secret must NOT allocate here.
+#    Expect "Cannot complete Allocation".
+```
+
+The end-to-end proof is a browser: two participants in
+`/community/<slug>/live`, at least one on a mobile network, and a
+`relay`-type candidate in `chrome://webrtc-internals`.
+
 ## Go-live checklist
 - [ ] `.env` files populated (OpenAI key, DB pw, JWT secret, admin creds).
       Root `./.env` also needs `DB_PASSWORD` and `VITE_STRIPE_PUBLISHABLE_KEY`

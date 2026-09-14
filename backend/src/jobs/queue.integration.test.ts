@@ -116,6 +116,29 @@ describeDb("job queue (integration)", () => {
     expect(row.rows[0].status).toBe("dead");
   });
 
+  it("stops a staging recipient-guard refusal at failed: no retries, no dead letter", async () => {
+    const id = (await queue.enqueue({ kind: "sequence.sendEmail", maxAttempts: 5 })) as string;
+    await queue.claim("worker-1", 5);
+
+    // Wrapped the way a handler re-throws it, so the class name is lost.
+    const wrapped = new Error("This email wasn't sent", {
+      cause: new Error("email guard: refused send to zz@example.com (not allow-listed in staging)"),
+    });
+    const outcome = await queue.fail(id, wrapped);
+    expect(outcome.dead).toBe(false);
+
+    const row = await client.query<{ status: string; finished_at: Date | null }>(
+      `SELECT status, finished_at FROM jobs WHERE id = $1`,
+      [id]
+    );
+    expect(row.rows[0].status).toBe("failed");
+    expect(row.rows[0].finished_at).not.toBeNull();
+    expect(await queue.claim("worker-1", 5)).toHaveLength(0);
+
+    // Still revivable once the address has been allow-listed.
+    expect(await queue.revive(id)).toBe(true);
+  });
+
   it("backs off further on each successive failure", async () => {
     // The curve has to come from the row's own attempt count. Computing it in
     // JS would mean guessing how many times the job had already run, and a

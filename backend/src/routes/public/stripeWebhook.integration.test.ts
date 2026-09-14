@@ -115,7 +115,7 @@ describeDb("stripe webhook (integration)", () => {
     memberId: number;
     productId: number;
   }> {
-    const email = `${label}@example.test`;
+    const email = `success+${label}@simulator.amazonses.com`;
     const memberId = await insertMember(client, email);
     const { productId } = await insertCourseProduct(client, label);
     const offerId = await insertOffer(client, `offer-${label}`, [productId]);
@@ -282,7 +282,7 @@ describeDb("stripe webhook (integration)", () => {
   });
 
   it("sends one dunning email per decline, not one per delivery", async () => {
-    const email = "dunning@example.test";
+    const email = "success+dunning@simulator.amazonses.com";
     const memberId = await insertMember(client, email);
     const { productId } = await insertCourseProduct(client, "dunning");
     const offerId = await insertOffer(client, "offer-dunning", [productId]);
@@ -411,7 +411,7 @@ describeDb("stripe webhook (integration)", () => {
   }
 
   async function membershipFixture(label: string): Promise<{ orderId: number; email: string }> {
-    const email = `${label}@example.test`;
+    const email = `success+${label}@simulator.amazonses.com`;
     const memberId = await insertMember(client, email);
     const { productId } = await insertCourseProduct(client, label);
     const offerId = await insertOffer(client, `offer-${label}`, [productId]);
@@ -534,8 +534,8 @@ describeDb("stripe webhook (integration)", () => {
         payment_status: "paid",
         status: "complete",
         customer: "cus_plan_catalogue",
-        customer_email: "maya.thompson@example.test",
-        customer_details: { email: "maya.thompson@example.test", address: null },
+        customer_email: "success+maya.thompson@simulator.amazonses.com",
+        customer_details: { email: "success+maya.thompson@simulator.amazonses.com", address: null },
         subscription: "sub_plan_catalogue",
         amount_total: 9700,
         currency: "usd",
@@ -550,7 +550,7 @@ describeDb("stripe webhook (integration)", () => {
          FROM access_grants g
          JOIN products p ON p.id = g.product_id
          JOIN members m ON m.id = g.member_id
-        WHERE m.email = 'maya.thompson@example.test'
+        WHERE m.email = 'success+maya.thompson@simulator.amazonses.com'
         ORDER BY p.title`,
     );
     expect(grants.rows).toEqual([
@@ -586,7 +586,7 @@ describeDb("stripe webhook (integration)", () => {
       `SELECT g.status
          FROM access_grants g
          JOIN members m ON m.id = g.member_id
-        WHERE m.email = 'maya.thompson@example.test'
+        WHERE m.email = 'success+maya.thompson@simulator.amazonses.com'
         ORDER BY g.product_id`,
     );
     expect(afterCancel.rows).toEqual([{ status: "revoked" }, { status: "revoked" }]);
@@ -597,7 +597,7 @@ describeDb("stripe webhook (integration)", () => {
   /** A 2 x $1,250 plan, its order still pending, and its opening invoice. */
   async function planFixture(label: string) {
     const now = Math.floor(Date.now() / 1000);
-    const email = `${label}@example.test`;
+    const email = `success+${label}@simulator.amazonses.com`;
     const memberId = await insertMember(client, email);
     const { productId } = await insertCourseProduct(client, label);
     const offerId = await insertOffer(client, `offer-${label}`, [productId], {

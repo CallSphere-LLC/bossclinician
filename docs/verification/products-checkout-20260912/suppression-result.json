@@ -1,0 +1,16 @@
+[
+  {
+    "email": "sagar+zz-products-unsubscribed@callsphere.ai",
+    "outcome": "suppressed",
+    "step": 0,
+    "reminderId": 2,
+    "messageId": 50
+  },
+  {
+    "email": "sagar+zz-products-suppressed@callsphere.ai",
+    "outcome": "suppressed",
+    "step": 0,
+    "reminderId": 3,
+    "messageId": 51
+  }
+]

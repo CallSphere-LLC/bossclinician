@@ -10,7 +10,9 @@ import {
   type DmThread,
   type DmThreadSummary,
 } from "@/lib/communityApi";
+import { conversationList, conversationPane } from "@/lib/dmConversations";
 import { formatRelative } from "@/lib/format";
+import { announceNotificationsChanged } from "@/lib/notificationSignal";
 import { cn } from "@/lib/cn";
 
 /**
@@ -40,6 +42,7 @@ function Messages({ slug, openWith }: { slug: string; openWith: number | null })
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
+  const [openFailed, setOpenFailed] = useState(false);
 
   const loadThreads = useCallback(async () => {
     try {
@@ -62,17 +65,21 @@ function Messages({ slug, openWith }: { slug: string; openWith: number | null })
       return;
     }
     let cancelled = false;
+    setOpenFailed(false);
     (async () => {
       try {
         const res = await communityApi.dmThread(slug, openWith);
         if (!cancelled) {
           setThread(res);
           // Opening a thread marks it read on the server, so the badge in the
-          // list beside it has to be refreshed or it lies until a reload.
+          // list beside it has to be refreshed or it lies until a reload —
+          // and so does the bell, which counted the same messages.
           void loadThreads();
+          announceNotificationsChanged();
         }
       } catch (err) {
         if (!cancelled) {
+          setOpenFailed(true);
           setError(
             err instanceof MemberApiError
               ? err.message
@@ -117,6 +124,12 @@ function Messages({ slug, openWith }: { slug: string; openWith: number | null })
     );
   }
 
+  // The server lists only conversations somebody has written in; the one open
+  // on the right is listed here too, even before its first message, so the
+  // list never says "No conversations yet" beside a conversation.
+  const rows = conversationList(threads, openWith, thread);
+  const pane = conversationPane(rows, openWith, thread, openFailed);
+
   return (
     <div className="space-y-4">
       <h1 className="font-display text-2xl text-white">Messages</h1>
@@ -129,14 +142,19 @@ function Messages({ slug, openWith }: { slug: string; openWith: number | null })
           interactive={false}
           className={cn("p-2", openWith !== null && "hidden lg:block")}
         >
-          {threads.length === 0 ? (
+          {pane === "opening" ? (
+            <div className="grid place-items-center py-6">
+              <Loader2 aria-hidden className="size-5 animate-spin text-gold" />
+              <span className="sr-only">Opening the conversation</span>
+            </div>
+          ) : pane === "empty" ? (
             <p className="px-3 py-4 text-sm text-white/55">
               No conversations yet. Open somebody's profile from the members list
               to start one.
             </p>
           ) : (
             <ul className="space-y-0.5">
-              {threads.map((t) => (
+              {rows.map((t) => (
                 <li key={t.id}>
                   <button
                     type="button"
@@ -160,7 +178,9 @@ function Messages({ slug, openWith }: { slug: string; openWith: number | null })
                       <span className="block truncate text-sm font-semibold text-white">
                         {t.otherName}
                       </span>
-                      <span className="block truncate text-xs text-white/50">{t.preview}</span>
+                      <span className="block truncate text-xs text-white/50">
+                        {t.preview || (t.lastMessageAt === null ? "No messages yet" : "")}
+                      </span>
                     </span>
                     {t.unread > 0 && (
                       <span className="grid min-w-[1.15rem] shrink-0 place-items-center rounded-full bg-gold px-1 text-[0.6rem] font-bold leading-[1.15rem] text-night-deep">

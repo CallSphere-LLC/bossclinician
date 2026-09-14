@@ -5,8 +5,7 @@ import { purchaseReceipt, purchaseWelcome, type ReceiptLine } from "../email/com
 import { sendMail, type MailAttachment } from "../email/mailer";
 import { withStoredTemplate } from "../email/templateStore";
 import { orderPaidNotification } from "../email/templates";
-import { loadBusinessDetails } from "./businessIdentity";
-import { invoiceFilename, renderInvoicePdf } from "./invoicePdf";
+import { ensureOrderReceipt, loadReceiptDocument, renderReceiptPdf } from "./receiptDocument";
 import { issueSetPasswordLink } from "./setPasswordLink";
 import { exitContactOnPurchase } from "./sequences";
 import { readSetting } from "./settings";
@@ -81,12 +80,16 @@ interface DeliveryOrderRow {
   welcome_next_steps: string | null;
   send_welcome_email: boolean | null;
   course_title: string | null;
+  gift_recipient_email: string;
+  gift_message: string;
+  gift_member_id: number | null;
+  gift_created_member: boolean;
 }
 
 const DELIVERY_ORDER_SELECT = `
   SELECT o.id, o.offer_id, o.contact_id, o.member_id, o.email, o.billing_name, o.billing_address,
          o.currency, o.subtotal_cents, o.discount_cents, o.coupon_code, o.tax_cents,
-         o.total_cents, o.created_at,
+         o.total_cents, o.created_at, o.gift_recipient_email, o.gift_message, o.gift_member_id, o.gift_created_member,
          f.title       AS offer_title,
          f.slug        AS offer_slug,
          f.welcome_next_steps,
@@ -103,39 +106,6 @@ function describe(order: DeliveryOrderRow): string {
 }
 
 /**
- * The buyer's own address, as lines to print.
- *
- * `billing_address` is JSONB written by the checkout from whatever the offer
- * asked for, so any of its fields may be absent — a receipt is not the place to
- * discover that an offer did not collect a postcode.
- */
-function addressLines(value: unknown): string[] {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return [];
-  const address = value as Record<string, unknown>;
-  const text = (key: string): string => {
-    const field = address[key];
-    return typeof field === "string" ? field.trim() : "";
-  };
-
-  const cityLine = [text("city"), text("state"), text("postalCode") || text("postal_code")]
-    .filter((part) => part !== "")
-    .join(", ");
-
-  return [text("line1"), text("line2"), cityLine, text("country")].filter(
-    (line) => line !== ""
-  );
-}
-
-/** "Visa ending 4242", or empty when the payment carried no card detail. */
-function describePaymentMethod(brand: string, last4: string): string {
-  const name = brand.trim();
-  const digits = last4.trim();
-  if (name === "" && digits === "") return "";
-  const label = name === "" ? "Card" : name.charAt(0).toUpperCase() + name.slice(1);
-  return digits === "" ? label : `${label} ending ${digits}`;
-}
-
-/**
  * Sends the receipt, with the PDF attached.
  *
  * The PDF is rendered inside its own try: a receipt that arrives without its
@@ -145,8 +115,7 @@ function describePaymentMethod(brand: string, last4: string): string {
  */
 async function sendReceiptEmail(
   order: DeliveryOrderRow,
-  lines: ReceiptLine[],
-  payment: { reference: string; method: string }
+  lines: ReceiptLine[]
 ): Promise<boolean> {
   if (!order.email) return false;
 
@@ -164,33 +133,23 @@ async function sendReceiptEmail(
 
   let attachments: MailAttachment[] | undefined;
   try {
-    const business = await loadBusinessDetails();
-    const issuedAt = order.created_at ?? new Date();
-    const pdf = await renderInvoicePdf({
-      business,
-      orderId: order.id,
-      transactionReference: payment.reference,
-      issuedAt,
-      buyerName: order.billing_name,
-      buyerEmail: order.email,
-      buyerAddressLines: addressLines(order.billing_address),
-      paymentMethod: payment.method,
-      lines,
-      subtotalCents: order.subtotal_cents,
-      discountCents: order.discount_cents,
-      couponCode: order.coupon_code,
-      taxCents: order.tax_cents,
-      totalCents: order.total_cents,
-      currency: order.currency,
-    });
-    attachments = [
-      {
-        filename: invoiceFilename(order.id, issuedAt),
-        content: pdf.toString("base64"),
-        contentType: "application/pdf",
-        encoding: "base64",
-      },
-    ];
+    // The same document the member can reopen from their purchases page and the
+    // same one the office can print, loaded from the receipt record rather than
+    // rebuilt from the row this function happens to be holding. Two builders is
+    // how an emailed PDF and an on-screen receipt start disagreeing about one
+    // payment.
+    const document = await loadReceiptDocument({ orderId: order.id }, { admin: true });
+    if (document?.pdf) {
+      const pdf = await renderReceiptPdf(document);
+      attachments = [
+        {
+          filename: document.filename,
+          content: pdf.toString("base64"),
+          contentType: "application/pdf",
+          encoding: "base64",
+        },
+      ];
+    }
   } catch (err) {
     // eslint-disable-next-line no-console
     console.error(
@@ -260,25 +219,18 @@ export async function deliverPurchase(
           // the only line there is.
           [{ title: describe(order), quantity: 1, amountCents: order.total_cents }];
 
-    // Card detail lives on the transaction, not the order — an order can have
-    // several (a payment plan has one per installment), so the opening one is
-    // what a receipt for this purchase describes.
-    const paymentRes = await pool.query<{
-      payment_method_brand: string;
-      payment_method_last4: string;
-      stripe_payment_intent_id: string | null;
-    }>(
-      `SELECT payment_method_brand, payment_method_last4, stripe_payment_intent_id
-         FROM transactions
-        WHERE order_id = $1 AND kind = 'payment'
-        ORDER BY id LIMIT 1`,
-      [order.id]
-    );
-    const payment = paymentRes.rows[0];
-
     const outcome: DeliverPurchaseOutcome = { ...NOTHING };
 
     /* ------------------------------------------------------------ receipt */
+
+    // The receipt record, before any decision about *emailing* one. Whether she
+    // has receipt emails switched on is a question about mail; whether the
+    // purchase can be receipted at all is not, and the member's purchases page,
+    // her invoice list and the emailed PDF all read this one row.
+    //
+    // A caller passing `sendReceipt: false` is saying this was not a purchase —
+    // an access grant, with no money — and there is nothing to receipt.
+    if (input.sendReceipt !== false) await ensureOrderReceipt(order.id);
 
     const paymentSettings = await readSetting("customer_payments");
     const receiptRule = String(paymentSettings.receiptRule ?? "every");
@@ -287,13 +239,7 @@ export async function deliverPurchase(
       paymentSettings.sendReceipts !== false &&
       (receiptRule !== "nonzero" || order.total_cents > 0);
     if (receiptAllowed) {
-      outcome.receiptSent = await sendReceiptEmail(order, lines, {
-        reference: payment?.stripe_payment_intent_id ?? "",
-        method: describePaymentMethod(
-          payment?.payment_method_brand ?? "",
-          payment?.payment_method_last4 ?? ""
-        ),
-      });
+      outcome.receiptSent = await sendReceiptEmail(order, lines);
     }
 
     /* ------------------------------------------------------------ welcome */
@@ -307,7 +253,11 @@ export async function deliverPurchase(
       setPasswordUrl = (await issueSetPasswordLink(input.memberId))?.url ?? null;
     }
 
-    const wantsWelcome = order.send_welcome_email !== false;
+    if (order.gift_recipient_email && order.gift_member_id) {
+      const { deliverGift } = await import("./purchaseGift");
+      await deliverGift(order);
+    }
+    const wantsWelcome = !order.gift_recipient_email && order.send_welcome_email !== false;
     if (wantsWelcome && order.email) {
       const startUrl = `${env.publicSiteUrl}/library`;
       const fallback = purchaseWelcome({

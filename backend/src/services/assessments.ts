@@ -16,7 +16,7 @@ import { pool } from "../db/pool";
  */
 
 export type QuestionKind = "single" | "multiple" | "scale" | "text";
-export type AssessmentKind = "quiz" | "graded";
+export type AssessmentKind = "quiz" | "graded" | "survey";
 
 export interface AnswerOption {
   id: number;
@@ -203,7 +203,7 @@ export function scoreResponses(
     maxScore,
     percent,
     passed,
-    resultId: bandFor(score, definition.results),
+    resultId: definition.kind === "survey" ? null : bandFor(score, definition.results),
     missingQuestionIds,
     feedback,
   };
@@ -335,6 +335,9 @@ export interface PublicAssessment {
   introMd: string;
   kind: AssessmentKind;
   requireEmail: boolean;
+  lessonId: number | null;
+  passMark: number | null;
+  requirePass: boolean;
   questions: PublicQuestion[];
 }
 
@@ -354,8 +357,11 @@ export async function loadPublicAssessment(slug: string): Promise<PublicAssessme
     intro_md: string;
     kind: AssessmentKind;
     require_email: boolean;
+    lesson_id: number | null;
+    pass_mark: number | null;
+    require_pass: boolean;
   }>(
-    `SELECT id, slug::text AS slug, title, intro_md, kind, require_email
+    `SELECT id, slug::text AS slug, title, intro_md, kind, require_email, lesson_id, pass_mark, require_pass
        FROM assessments WHERE slug = $1 AND published`,
     [slug]
   );
@@ -397,6 +403,9 @@ export async function loadPublicAssessment(slug: string): Promise<PublicAssessme
     introMd: row.intro_md,
     kind: row.kind,
     requireEmail: row.require_email,
+    lessonId: row.lesson_id,
+    passMark: row.pass_mark,
+    requirePass: row.kind === "graded" && row.require_pass,
     questions: questions.rows.map((question) => ({
       id: question.id,
       prompt: question.prompt,

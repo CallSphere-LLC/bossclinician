@@ -209,11 +209,11 @@ export function LuxeHero() {
               initial={staticEntrance ? false : { opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ duration: 1.4, delay: staticEntrance ? 0 : 0.1, ease: EASE }}
-              className="portrait-fade relative isolate h-[115vw] max-h-[540px] overflow-hidden sm:h-[80vw] sm:max-h-[600px] lg:h-full lg:max-h-none lg:min-h-[600px]"
+              className="relative isolate h-[115vw] max-h-[540px] overflow-hidden sm:h-[80vw] sm:max-h-[600px] lg:h-full lg:max-h-none lg:min-h-[600px]"
             >
               {/* Layer is taller than its frame in both directions so the
-                  parallax travel never exposes an edge, and so the image sits
-                  low enough that the mask's top fade lands on hair, not face. */}
+                  parallax travel never exposes an edge and the existing
+                  portrait crop stays in place. */}
               <motion.div
                 style={prefersReducedMotion ? undefined : { y: portraitY }}
                 className="absolute inset-x-0 top-[7%] h-[112%] will-change-transform"
@@ -229,32 +229,12 @@ export function LuxeHero() {
                   // spelling is passed through verbatim, which is what the
                   // preload scanner actually reads.
                   {...{ fetchpriority: "high" }}
-                  className="h-full w-full object-cover object-top brightness-[0.76] contrast-[1.08] saturate-[0.66]"
+                  className="h-full w-full object-cover object-top"
                 />
               </motion.div>
-
-              {/* Vignette: keeps the daylight background from competing with
-                  the near-black page, and pulls the eye to the face. */}
-              <div
-                aria-hidden
-                className="absolute inset-0 bg-[radial-gradient(115%_78%_at_52%_22%,transparent_0%,rgba(6,4,11,0.5)_62%,rgba(6,4,11,0.94)_100%)]"
-              />
-              {/* Tint the daylight into the page's plum, then reintroduce the
-                  gold key from the low-right orb as a rim light. */}
-              <div aria-hidden className="absolute inset-0 bg-glow-violet/30 mix-blend-soft-light" />
-              <div
-                aria-hidden
-                className="absolute inset-0 mix-blend-screen bg-[radial-gradient(62%_46%_at_86%_74%,rgba(201,164,106,0.20),transparent_70%)]"
-              />
-              {/* The mask dissolves top/bottom/left only; this closes the right
-                  edge so the frame never hard-cuts on wide viewports. */}
-              <div
-                aria-hidden
-                className="absolute inset-y-0 right-0 w-[14%] bg-[linear-gradient(to_left,#06040B,transparent)]"
-              />
             </motion.div>
 
-            {/* Credential plaque — sits outside the masked frame so the glass
+            {/* Credential plaque — sits outside the portrait frame so the glass
                 keeps its full edge. Phone/tablet only: from lg the same tiers
                 render as the rail under the headline copy. */}
             <motion.div

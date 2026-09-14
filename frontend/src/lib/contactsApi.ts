@@ -1,4 +1,5 @@
-import { ApiError, getToken } from "@/lib/api";
+import { sessionFetch } from "@/lib/adminTransport";
+import { ApiError } from "@/lib/api";
 
 /**
  * Contacts, tags and groups — the admin client for the one list of people.
@@ -18,12 +19,10 @@ import { ApiError, getToken } from "@/lib/api";
 const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? "/api";
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const token = getToken();
   const headers = new Headers(options.headers);
   if (!headers.has("Content-Type")) headers.set("Content-Type", "application/json");
-  if (token) headers.set("Authorization", `Bearer ${token}`);
 
-  const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+  const res = await sessionFetch(`${API_BASE}${path}`, { ...options, headers });
 
   if (!res.ok) {
     // The status travels on the error and the screens turn it into something
@@ -80,6 +79,33 @@ export interface Contact {
   createdAt: string;
   updatedAt: string;
   tags: ContactTag[];
+  /**
+   * The account behind this person, on every contact read.
+   *
+   * Here because the mailing-list status alone was misleading: a member who has
+   * never confirmed their email is blocked from posting, commenting and earning
+   * points, while their consent row happily says "subscribed" — which is how a
+   * contact card came to read "Happy to hear from you" about somebody locked out
+   * of the community. Two stores, one question; see
+   * backend/src/services/emailConfirmation.ts.
+   */
+  accountMemberId: number | null;
+  accountEmailVerifiedAt: string | null;
+}
+
+export type ConfirmationState = "confirmed" | "unconfirmed" | "list_unconfirmed" | "no_account";
+
+/** Both confirmation stores, reconciled by the server into one answer. */
+export interface ContactConfirmation {
+  state: ConfirmationState;
+  confirmed: boolean;
+  /** Whether they can post, comment and earn points right now. */
+  canPost: boolean;
+  label: string;
+  detail: string;
+  contactStatus: string;
+  memberId: number | null;
+  accountConfirmedAt: string | null;
 }
 
 export interface ContactActivity {
@@ -109,6 +135,7 @@ export interface ContactDetail extends Contact {
   memberId: number | null;
   leadCount: number;
   subscribed: boolean;
+  confirmation: ContactConfirmation;
 }
 
 export interface ContactPage {
@@ -129,6 +156,12 @@ export interface ContactInsights {
   optedOut: number;
   bounced: number;
   complained: number;
+  /**
+   * People who haven't confirmed their email, counted across BOTH stores —
+   * the mailing list's double opt-in and the account's own confirmation. The
+   * People filter this number links to uses the same predicate, so the tile and
+   * the list it opens cannot disagree.
+   */
   neverSubscribed: number;
   engagement: { healthy: number; passive: number; unengaged: number; inactive: number };
 }
@@ -253,6 +286,30 @@ export const contactsApi = {
       method: "POST",
       body: JSON.stringify({ tagSlugs }),
     }),
+  /**
+   * Confirm somebody's email address on their behalf.
+   *
+   * The unblock. Confirmation gates posting, commenting and every point a member
+   * can earn, and the only key was a link in an email — so while mail is not
+   * arriving, nobody can use the social half of the product and nobody can help
+   * them. Audited on the server, because it lets an account post under a name
+   * whose owner has not proved they hold the inbox.
+   */
+  confirmEmail: (id: number) =>
+    request<{ changed: boolean; confirmation: ContactConfirmation }>(
+      `/admin/contacts/${id}/confirm-email`,
+      { method: "POST" },
+    ),
+
+  /** Send the confirmation email again, and wait to find out what happened to it. */
+  resendConfirmation: (id: number) =>
+    request<{
+      state: "sent" | "throttled" | "failed";
+      to: string;
+      error: string;
+      confirmation: ContactConfirmation;
+    }>(`/admin/contacts/${id}/resend-confirmation`, { method: "POST" }),
+
   removeTag: (id: number, slug: string) =>
     request<Contact>(`/admin/contacts/${id}/tags/${encodeURIComponent(slug)}`, {
       method: "DELETE",
@@ -278,12 +335,10 @@ export const contactsApi = {
       body: JSON.stringify({ contactIds }),
     }),
   bulkExport: async (contactIds: number[]) => {
-    const token = getToken();
-    const res = await fetch(`${API_BASE}/admin/contacts/bulk/export.csv`, {
+    const res = await sessionFetch(`${API_BASE}/admin/contacts/bulk/export.csv`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
       body: JSON.stringify({ contactIds }),
     });
@@ -314,10 +369,7 @@ export const contactsApi = {
    * shared helper would try to parse it and throw the file away.
    */
   exportCsv: async (filters: ContactFilters = {}) => {
-    const token = getToken();
-    const res = await fetch(`${API_BASE}/admin/contacts/export.csv${toQuery(filters)}`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-    });
+    const res = await sessionFetch(`${API_BASE}/admin/contacts/export.csv${toQuery(filters)}`);
     if (!res.ok) {
       throw new ApiError("That download didn't finish. Please try again in a moment.", res.status);
     }

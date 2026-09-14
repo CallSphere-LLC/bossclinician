@@ -68,10 +68,10 @@ describeDb("protected file delivery (integration)", () => {
     const { createApp } = await import("../../app");
     const { signMemberAccessToken } = await import("../../auth/memberSession");
 
-    buyerId = await insertMember(client, "buyer@example.com");
-    const strangerId = await insertMember(client, "stranger@example.com");
-    buyerToken = signMemberAccessToken({ sub: buyerId, email: "buyer@example.com" });
-    strangerToken = signMemberAccessToken({ sub: strangerId, email: "stranger@example.com" });
+    buyerId = await insertMember(client, "success+buyer@simulator.amazonses.com");
+    const strangerId = await insertMember(client, "success+stranger@simulator.amazonses.com");
+    buyerToken = signMemberAccessToken({ sub: buyerId, email: "success+buyer@simulator.amazonses.com" });
+    strangerToken = signMemberAccessToken({ sub: strangerId, email: "success+stranger@simulator.amazonses.com" });
 
     const course = await insertCourseProduct(client, "boundaries");
     productId = course.productId;

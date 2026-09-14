@@ -11,6 +11,12 @@ flock -w 1800 9 || {
   exit 1
 }
 
+# Build on the daemon's own builder. The GitHub Actions runner on this host
+# (setup-buildx-action) switches the user's *current* buildx builder to a
+# throwaway container and removes it when its job ends, which killed a deploy
+# mid-build ("graceful_stop") on 2026-09-11. An explicit builder is immune.
+export BUILDX_BUILDER="${BUILDX_BUILDER:-default}"
+
 COMPOSE_PARALLEL_LIMIT=1 docker compose build "$@"
 docker compose up -d --wait "$@"
 

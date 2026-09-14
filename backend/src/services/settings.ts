@@ -1,7 +1,10 @@
 import { z } from "zod";
+import { recoveryDefinition } from "./checkoutRecoverySettings";
 import { pool } from "../db/pool";
 import { isValidTimeZone } from "./availability";
 import { clearDripSettingsCache } from "./curriculum";
+import { cancelReasonsProblem } from "./cancellationReasons";
+import { retryScheduleProblem, statementDescriptorProblem } from "./paymentRules";
 
 /**
  * Typed access to the `settings` table, and the description of every setting
@@ -33,7 +36,15 @@ export type FieldType =
   | "timezone"
   | "choice"
   | "color"
-  | "secret";
+  | "secret"
+  /** A file uploaded to the public media library, stored as `/uploads/<file>`. */
+  | "image"
+  /** Cancellation reasons, `key | label` per line — see services/cancellationReasons. */
+  | "reasonlist"
+  /** A card statement descriptor, checked against Stripe's rules. */
+  | "descriptor"
+  /** Days between payment retries, comma-separated — see services/paymentRules. */
+  | "retryschedule";
 
 export interface SettingChoice {
   value: string;
@@ -150,8 +161,14 @@ export const SETTING_DEFINITIONS: SettingDefinition[] = [
     label: "What goes on your receipts",
     description:
       "The business details printed on every receipt and invoice your customers keep.",
-    defaults: { name: "", email: "", address: "", taxId: "" },
+    defaults: { name: "", email: "", address: "", taxId: "", footerNote: "", logoUrl: "" },
     fields: [
+      {
+        name: "logoUrl",
+        label: "Logo",
+        help: "A PNG or JPEG, printed at the top of every receipt on screen and in the PDF. Leave it empty for your business name alone.",
+        type: "image",
+      },
       {
         name: "name",
         label: "Business name",
@@ -180,6 +197,13 @@ export const SETTING_DEFINITIONS: SettingDefinition[] = [
         type: "text",
         placeholder: "88-1691637",
       },
+      {
+        name: "footerNote",
+        label: "A note at the bottom",
+        help: "Printed at the foot of every receipt, on screen and in the PDF — a thank-you, or a registration number your accountant asks for. Leave blank to leave it off.",
+        type: "longtext",
+        placeholder: "Thank you for investing in your practice.",
+      },
     ],
   },
   {
@@ -187,7 +211,7 @@ export const SETTING_DEFINITIONS: SettingDefinition[] = [
     group: "payments",
     label: "Your checkout page",
     description: "What a customer sees while they're paying.",
-    defaults: { brandColor: "", supportEmail: "", termsUrl: "", showCoupons: true },
+    defaults: { brandColor: "", buttonLabelColor: "#211829", buttonOutlineColor: "", buttonBorderRadius: 12, supportEmail: "", termsUrl: "", showCoupons: true },
     fields: [
       {
         name: "brandColor",
@@ -195,6 +219,9 @@ export const SETTING_DEFINITIONS: SettingDefinition[] = [
         help: "Leave blank to use your usual brand colour.",
         type: "color",
       },
+      { name: "buttonLabelColor", label: "Button label colour", type: "color" },
+      { name: "buttonOutlineColor", label: "Button outline colour", type: "color", help: "Leave blank for no outline." },
+      { name: "buttonBorderRadius", label: "Button corner radius (pixels)", type: "number", min: 0, max: 40 },
       {
         name: "supportEmail",
         label: "Where customers write if something goes wrong",
@@ -230,7 +257,9 @@ export const SETTING_DEFINITIONS: SettingDefinition[] = [
       statementDescriptor: "BOSSCLINICIAN",
       receiptTitle: "Receipt",
       refundPolicy: "",
+      sendTrialReminders: true,
       trialReminderDays: 3,
+      sendUpcomingPaymentReminders: true,
       upcomingPaymentReminderDays: 3,
       revokeOnFirstFailedPayment: false,
       cancellationReasons: [
@@ -262,8 +291,8 @@ export const SETTING_DEFINITIONS: SettingDefinition[] = [
       {
         name: "statementDescriptor",
         label: "Name shown on card statements",
-        help: "5–22 letters or numbers. Stripe may add its own account prefix.",
-        type: "text",
+        help: "5–22 letters, numbers, spaces, dots or hyphens, with at least one letter. Sent to Stripe on every checkout, one-click upsell and membership. Stripe may put your account's short prefix in front. Leave blank to use the name on your Stripe account.",
+        type: "descriptor",
         placeholder: "BOSSCLINICIAN",
       },
       {
@@ -281,18 +310,28 @@ export const SETTING_DEFINITIONS: SettingDefinition[] = [
         placeholder: "Refunds are available within 14 days of purchase.",
       },
       {
+        name: "sendTrialReminders",
+        label: "Email a reminder before a free trial ends",
+        help: "Tells the customer when the trial ends and what the first payment will be.",
+        type: "boolean",
+      },
+      {
         name: "trialReminderDays",
-        label: "Warn before a free trial ends",
-        help: "Use 0 to turn this reminder off.",
+        label: "How long before the trial ends",
         type: "number",
         min: 0,
         max: 30,
         unit: "days before",
       },
       {
+        name: "sendUpcomingPaymentReminders",
+        label: "Email a reminder before a membership or instalment payment",
+        help: "Sent once for each upcoming payment, with a link to update the card.",
+        type: "boolean",
+      },
+      {
         name: "upcomingPaymentReminderDays",
-        label: "Warn before the next subscription payment",
-        help: "Use 0 to turn this reminder off.",
+        label: "How long before the payment",
         type: "number",
         min: 0,
         max: 30,
@@ -301,7 +340,7 @@ export const SETTING_DEFINITIONS: SettingDefinition[] = [
       {
         name: "revokeOnFirstFailedPayment",
         label: "Stop access as soon as the first recurring payment fails",
-        help: "A successful retry restores access automatically.",
+        help: "Only the access that membership pays for is paused. The moment a retry or a new card pays the invoice, the same access comes back on its own.",
         type: "boolean",
       },
       {
@@ -330,8 +369,8 @@ export const SETTING_DEFINITIONS: SettingDefinition[] = [
       {
         name: "cancellationReasons",
         label: "Reasons a customer can choose when they cancel",
-        help: "One per line: a stable report key, a |, then the words the customer sees.",
-        type: "longtext",
+        help: "Customers pick one of these, in this order, when they cancel from their billing page. Their answers feed the “People who left” and “What people said when they left” reports.",
+        type: "reasonlist",
         placeholder: "too_expensive | It's too expensive",
       },
     ],
@@ -347,6 +386,44 @@ export const SETTING_DEFINITIONS: SettingDefinition[] = [
       },
     ],
   },
+  {
+    key: "failed_payments",
+    group: "payments",
+    label: "When a payment fails",
+    description:
+      "How often a declined membership or instalment payment is tried again, and what happens when the tries run out.",
+    defaults: { retryMode: "stripe", retryDays: "3, 5, 7", finalAction: "cancel" },
+    fields: [
+      {
+        name: "retryMode",
+        label: "Who tries the card again",
+        help: "If you choose this site, switch off automatic retries in your Stripe account (Settings → Billing → Revenue recovery → Retries) so a card isn't tried twice as often.",
+        type: "choice",
+        choices: [
+          { value: "stripe", label: "Stripe, using the retry settings in your Stripe account" },
+          { value: "schedule", label: "This site, on the schedule below" },
+        ],
+      },
+      {
+        name: "retryDays",
+        label: "Wait this many days before each new try",
+        help: "Whole days, separated by commas. \"3, 5, 7\" tries three more times: 3 days after the first failure, then 5 days later, then 7 days after that. Up to 6 tries, 1–30 days apart.",
+        type: "retryschedule",
+        placeholder: "3, 5, 7",
+      },
+      {
+        name: "finalAction",
+        label: "When the last try fails",
+        help: "Only used when this site is doing the retries. The customer gets the payment-failed email after every try either way.",
+        type: "choice",
+        choices: [
+          { value: "cancel", label: "Cancel the membership, and end the access it pays for" },
+          { value: "leave", label: "Stop trying, but leave the membership overdue for me to sort out" },
+        ],
+      },
+    ],
+  },
+  recoveryDefinition,
   {
     key: "tax",
     group: "payments",
@@ -395,9 +472,9 @@ export const SETTING_DEFINITIONS: SettingDefinition[] = [
       {
         name: "fromEmail",
         label: "Sent from",
-        help: "Has to be an address on a domain you've verified.",
+        help: "Has to be an address on a domain this site is verified to send from — anything else is refused when you save.",
         type: "email",
-        placeholder: "hello@bossclinician.com",
+        placeholder: "yvette@bossclinician.callsphere.site",
       },
       {
         name: "replyTo",
@@ -451,12 +528,17 @@ export const SETTING_DEFINITIONS: SettingDefinition[] = [
       {
         name: "provider",
         label: "Sending service",
+        help: "What actually carries your email. When it is set on the server, this shows the one in use and can't be changed here.",
         type: "choice",
+        // Only transports email/provider.ts can actually run. Postmark and
+        // SendGrid used to be offered and did nothing at all when chosen — the
+        // mail kept going out through SES — which is exactly the lie E5 is
+        // about. The screen narrows this further to what is available on the
+        // running server (routes/admin/settingsV2.ts, `/groups`).
         choices: [
-          { value: "smtp", label: "Your own mail server" },
-          { value: "postmark", label: "Postmark" },
-          { value: "sendgrid", label: "SendGrid" },
           { value: "ses", label: "Amazon SES" },
+          { value: "smtp", label: "Your own mail server" },
+          { value: "resend", label: "Resend" },
         ],
       },
       {
@@ -675,6 +757,23 @@ function fieldSchema(field: SettingField): z.ZodTypeAny {
       return z.string().max(500);
     case "longtext":
       return z.string().max(5000);
+    // The three payment fields Stripe or the reports have rules about. The
+    // message is the reason, so the owner reads why a save was refused.
+    case "reasonlist":
+      return z.string().max(8000).superRefine((value, ctx) => {
+        const problem = cancelReasonsProblem(value);
+        if (problem) ctx.addIssue({ code: z.ZodIssueCode.custom, message: problem });
+      });
+    case "descriptor":
+      return z.string().max(60).superRefine((value, ctx) => {
+        const problem = statementDescriptorProblem(value);
+        if (problem) ctx.addIssue({ code: z.ZodIssueCode.custom, message: problem });
+      });
+    case "retryschedule":
+      return z.string().max(100).superRefine((value, ctx) => {
+        const problem = retryScheduleProblem(value);
+        if (problem) ctx.addIssue({ code: z.ZodIssueCode.custom, message: problem });
+      });
     case "secret":
       return z.string().max(2000);
     case "email":
@@ -685,6 +784,17 @@ function fieldSchema(field: SettingField): z.ZodTypeAny {
       return z.union([z.literal(""), z.string().url().max(2000)]);
     case "color":
       return z.union([z.literal(""), z.string().regex(/^#[0-9a-fA-F]{6}$/)]);
+    case "image":
+      // Only a file this server stores publicly, as the media upload names it,
+      // and only the two formats a PDF can draw. The bytes are checked again
+      // when a receipt reads them (services/receiptLogo.ts).
+      return z.union([
+        z.literal(""),
+        z
+          .string()
+          .max(260)
+          .regex(/^\/uploads\/[A-Za-z0-9][A-Za-z0-9._-]{0,199}\.(png|jpe?g)$/i),
+      ]);
     case "boolean":
       return z.boolean();
     case "number": {
@@ -816,6 +926,24 @@ export async function writeSetting(
   const parsed = patchSchema(definition).safeParse(patch);
   if (!parsed.success) throw new SettingValidationError(parsed.error.flatten());
   const clean = parsed.data as Record<string, unknown>;
+
+  if (key === "cart_recovery") {
+    const candidate = {...await readSetting(key), ...clean};
+    const emails = String(candidate.recipients ?? "").split(/[,\s]+/).filter(Boolean);
+    if (emails.some((email) => !z.string().email().safeParse(email).success)) {
+      throw new SettingValidationError({recipients: ["Enter valid email addresses, separated by commas or newlines."]});
+    }
+    let previous = 0;
+    for (const i of [0, 1, 2, 3]) {
+      if (!candidate[`enabled${i}`]) continue;
+      const hours = Number(candidate[`hours${i}`]);
+      if (hours <= previous) throw new SettingValidationError({[`hours${i}`]: ["Each enabled reminder must have a later delay than the previous one."]});
+      if (!String(candidate[`subject${i}`] ?? "").trim() || !String(candidate[`body${i}`] ?? "").trim()) {
+        throw new SettingValidationError({[`body${i}`]: ["Enabled reminders need a subject and email body."]});
+      }
+      previous = hours;
+    }
+  }
 
   const res = await pool.query<{ value: unknown }>(
     `INSERT INTO settings (key, value, group_key, label, description)

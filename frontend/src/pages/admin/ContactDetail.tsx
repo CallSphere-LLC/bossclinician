@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react
 import { Link, useNavigate, useParams } from "react-router-dom";
 import {
   ArrowLeft,
+  BadgeCheck,
   Clock,
   Combine,
   Download,
@@ -9,6 +10,8 @@ import {
   Pencil,
   Phone,
   Receipt,
+  Send,
+  ShieldAlert,
   StickyNote,
   Trash2,
   X,
@@ -45,6 +48,7 @@ import {
 } from "@/pages/admin/ui/primitives";
 import { Modal, useConfirm } from "@/pages/admin/ui/Dialog";
 import { friendlyError, humaniseKey, orNone, pluralize } from "@/pages/admin/ui/friendly";
+import ContactFilesCard from "@/pages/admin/ContactFilesCard";
 
 /**
  * One person, and everything they have ever done.
@@ -76,6 +80,7 @@ export default function ContactDetail() {
   const [note, setNote] = useState("");
   const [addingTag, setAddingTag] = useState("");
   const [tagBusy, setTagBusy] = useState<string | null>(null);
+  const [confirmBusy, setConfirmBusy] = useState(false);
   const [confirm, confirmDialog] = useConfirm();
 
   const load = useCallback(() => {
@@ -118,6 +123,65 @@ export default function ContactDetail() {
       load();
     } catch (err) {
       toast.error(friendlyError(err, "person"));
+    }
+  }
+
+  /**
+   * Confirm this person's email address by hand.
+   *
+   * The escape hatch the product could not run without: confirmation gates
+   * posting, commenting and every point a member can earn, and until now the
+   * only key was a link in an email. When mail is not arriving there was no way
+   * through it — not for the member, and not for anybody trying to help them.
+   */
+  async function confirmEmail() {
+    if (!person) return;
+    const ok = await confirm({
+      title: `Confirm ${displayName}'s email yourself?`,
+      description:
+        "You're vouching that this address really is theirs. They'll be able to post, comment and " +
+        "earn points straight away, without clicking a link. It's recorded against your name.",
+      confirmLabel: "Yes, confirm it",
+    });
+    if (!ok) return;
+    setConfirmBusy(true);
+    try {
+      const result = await contactsApi.confirmEmail(person.id);
+      toast.success(
+        result.changed
+          ? "Confirmed — they can post and comment now"
+          : "That address was already confirmed",
+      );
+      load();
+    } catch (err) {
+      toast.error(friendlyError(err, "person"));
+    } finally {
+      setConfirmBusy(false);
+    }
+  }
+
+  /** Send the confirmation email again, and say what actually happened to it. */
+  async function resendConfirmation() {
+    if (!person) return;
+    setConfirmBusy(true);
+    try {
+      const result = await contactsApi.resendConfirmation(person.id);
+      if (result.state === "sent") {
+        toast.success(`Confirmation email sent to ${result.to}`);
+      } else if (result.state === "throttled") {
+        toast.warning(
+          "They've been sent several already in the last few minutes. Give the last one a moment to arrive.",
+        );
+      } else {
+        // The mail server's own words. "535 Authentication Credentials Invalid"
+        // is the whole answer, and paraphrasing it throws the answer away.
+        toast.error(`It couldn't be sent: ${result.error}`, { duration: 12000 });
+      }
+      load();
+    } catch (err) {
+      toast.error(friendlyError(err, "person"));
+    } finally {
+      setConfirmBusy(false);
     }
   }
 
@@ -335,6 +399,8 @@ export default function ContactDetail() {
             )}
           </Card>
 
+          <ContactFilesCard contactId={contactId} />
+
           <Card>
             <CardHeader title="Add a note" icon={<StickyNote />} />
             <form onSubmit={saveNote} className="space-y-3 px-5 py-4">
@@ -377,6 +443,57 @@ export default function ContactDetail() {
               ))}
             </dl>
           </Card>
+
+          {/*
+            * Email confirmation, above the mailing-list card and deliberately
+            * separate from it.
+            *
+            * These are two different questions with two different stores behind
+            * them, and this screen used to answer only one: whether we may email
+            * them. A member who has never confirmed their address is blocked from
+            * posting, commenting and earning points — and their card still read
+            * "Happy to hear from you", because their consent row said subscribed.
+            */}
+          {person.confirmation && person.confirmation.state !== "no_account" && (
+            <Card>
+              <CardHeader
+                title="Email confirmation"
+                icon={person.confirmation.confirmed ? <BadgeCheck /> : <ShieldAlert />}
+              />
+              <div className="space-y-3 px-5 py-4">
+                <Badge tone={person.confirmation.confirmed ? "green" : "gold"}>
+                  {person.confirmation.label}
+                </Badge>
+                <p className="text-xs leading-relaxed text-ink-soft">
+                  {person.confirmation.detail}
+                </p>
+                {person.confirmation.accountConfirmedAt && (
+                  <p className="text-xs text-ink-soft">
+                    Confirmed on {formatDate(person.confirmation.accountConfirmedAt)}.
+                  </p>
+                )}
+                {!person.confirmation.confirmed && (
+                  <div className="flex flex-wrap gap-2">
+                    <Button size="sm" onClick={confirmEmail} disabled={confirmBusy}>
+                      <BadgeCheck />
+                      Mark as confirmed
+                    </Button>
+                    {person.confirmation.memberId !== null && (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={resendConfirmation}
+                        disabled={confirmBusy}
+                      >
+                        <Send />
+                        Send the email again
+                      </Button>
+                    )}
+                  </div>
+                )}
+              </div>
+            </Card>
+          )}
 
           <Card>
             <CardHeader title="Emails" icon={<Mail />} />

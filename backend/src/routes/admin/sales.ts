@@ -9,6 +9,12 @@ import { stripe } from "../../stripe/client";
 import { stripeEnabled } from "../../config/env";
 import { requirePermission } from "../../services/permissions";
 import {
+  loadReceiptDocument,
+  renderReceipt,
+  renderReceiptPdf,
+  sampleReceiptDocument,
+} from "../../services/receiptDocument";
+import {
   idParamSchema,
   planCreateSchema,
   planRepriceIssue,
@@ -336,13 +342,126 @@ adminSalesRouter.get(
   }),
 );
 
+/**
+ * Every payment that produced a receipt document, one-off purchases included.
+ *
+ * `invoices` used to hold nothing but Stripe subscription invoices, so this list
+ * was empty on an account that had made sales — it just did not sell
+ * subscriptions. A one-off order now carries a receipt record of its own
+ * (`origin = 'order'`), which is what puts the purchase on this page, and
+ * `receiptUrl` is the document itself rather than a Stripe link that only exists
+ * for the invoices Stripe raised.
+ */
 adminSalesRouter.get(
   "/invoices",
   asyncHandler(async (_req, res) => {
     const result = await pool.query(
-      "SELECT * FROM invoices ORDER BY created_at DESC LIMIT 500",
+      `SELECT i.*,
+              COALESCE(NULLIF(o.billing_name, ''), NULLIF(m.name, ''),
+                       NULLIF(TRIM(m.first_name || ' ' || m.last_name), '')) AS member_name,
+              COALESCE(NULLIF(fo.title, ''), NULLIF(fs.title, ''), NULLIF(pl.name, ''),
+                       NULLIF(o.course_title, ''), 'Purchase') AS description,
+              CASE WHEN i.origin = 'order' THEN 'One-off purchase' ELSE 'Subscription' END
+                AS kind_label,
+              '/admin/sales/invoices/' || i.id || '/receipt'     AS receipt_url,
+              CASE WHEN i.order_id IS NULL THEN NULL
+                   ELSE '/admin/sales/invoices/' || i.id || '/receipt.pdf' END
+                AS receipt_pdf_url
+         FROM invoices i
+         LEFT JOIN orders o        ON o.id  = i.order_id
+         LEFT JOIN offers fo       ON fo.id = o.offer_id
+         LEFT JOIN subscriptions s ON s.id  = i.subscription_id
+         LEFT JOIN offers fs       ON fs.id = s.offer_id
+         LEFT JOIN plans pl        ON pl.id = s.plan_id
+         LEFT JOIN members m       ON m.id  = COALESCE(o.member_id, i.member_id)
+        ORDER BY COALESCE(i.paid_at, i.created_at) DESC, i.id DESC
+        LIMIT 500`,
     );
     res.json(rowsToCamel(result.rows));
+  }),
+);
+
+/**
+ * The receipt the member holds, as the office sees it.
+ *
+ * The same document from the same loader, so "send me my receipt again" is
+ * answered with the receipt rather than with something that resembles it. Both
+ * routes sit on the router's own `orders.view`: reading a receipt is exactly the
+ * support action that permission exists for.
+ */
+adminSalesRouter.get(
+  "/invoices/:id/receipt",
+  asyncHandler(async (req, res) => {
+    const parsed = idParamSchema.safeParse(req.params.id);
+    if (!parsed.success) throw notFound("We couldn't find that receipt.");
+
+    const document = await loadReceiptDocument({ invoiceId: parsed.data }, { admin: true });
+    if (!document) throw notFound("We couldn't find that receipt.");
+
+    res.setHeader(
+      "Content-Security-Policy",
+      "default-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'",
+    );
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("Referrer-Policy", "no-referrer");
+    res.setHeader("Cache-Control", "private, no-store");
+    res.type("html").send(renderReceipt(document.view));
+  }),
+);
+
+adminSalesRouter.get(
+  "/invoices/:id/receipt.pdf",
+  asyncHandler(async (req, res) => {
+    const parsed = idParamSchema.safeParse(req.params.id);
+    if (!parsed.success) throw notFound("We couldn't find that receipt.");
+
+    const document = await loadReceiptDocument({ invoiceId: parsed.data }, { admin: true });
+    // No order behind it means a Stripe renewal, which carries Stripe's own PDF.
+    if (!document?.pdf) throw notFound("We couldn't find that receipt.");
+
+    const pdf = await renderReceiptPdf(document);
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="${document.filename}"`);
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("Cache-Control", "private, no-store");
+    res.send(pdf);
+  }),
+);
+
+/**
+ * GET /admin/sales/receipt-preview(.pdf) — the receipt customiser's proof.
+ *
+ * A made-up purchase dressed in whatever is saved in Settings → General → "What
+ * goes on your receipts" (logo, name, address, tax ID, footer note) and the
+ * receipt title and refund policy, rendered by the same two renderers a real
+ * receipt uses. No order is read, so it works before the first sale and shows
+ * nobody's details.
+ */
+adminSalesRouter.get(
+  "/receipt-preview",
+  asyncHandler(async (_req, res) => {
+    const document = await sampleReceiptDocument();
+    res.setHeader(
+      "Content-Security-Policy",
+      "default-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'",
+    );
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("Referrer-Policy", "no-referrer");
+    res.setHeader("Cache-Control", "private, no-store");
+    res.type("html").send(renderReceipt(document.view));
+  }),
+);
+
+adminSalesRouter.get(
+  "/receipt-preview.pdf",
+  asyncHandler(async (_req, res) => {
+    const document = await sampleReceiptDocument();
+    const pdf = await renderReceiptPdf(document);
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `attachment; filename="${document.filename}"`);
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("Cache-Control", "private, no-store");
+    res.send(pdf);
   }),
 );
 
@@ -384,7 +503,11 @@ adminSalesRouter.get(
          ),
          i AS (
            SELECT created_at::date AS day, COALESCE(SUM(amount_paid_cents), 0)::int AS cents
-           FROM invoices WHERE status = 'paid' AND created_at >= CURRENT_DATE - INTERVAL '29 days'
+           -- Subscription income only. A one-off order carries a receipt row in
+           -- this table too now, and counting it here would report every
+           -- purchase twice: once from the orders table, once from its receipt.
+           FROM invoices WHERE status = 'paid' AND origin <> 'order'
+             AND created_at >= CURRENT_DATE - INTERVAL '29 days'
            GROUP BY 1
          )
          SELECT to_char(d.day, 'YYYY-MM-DD') AS date,

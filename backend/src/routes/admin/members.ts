@@ -19,6 +19,11 @@ import { adminImpersonateLimiter } from "../../middleware/rateLimit";
 import { recordAdminAction, recordAdminActionStrict } from "../../services/adminAudit";
 import { requirePermission } from "../../services/permissions";
 import { upsertContactWithStatus } from "../../services/contacts";
+import {
+  confirmMemberEmailAsAdmin,
+  confirmationForMember,
+  sendMemberVerificationEmail,
+} from "../../services/emailConfirmation";
 import { dispatchEvent } from "../../services/webhooksOut";
 import { publishDomainEvent } from "../../services/domainEvents";
 
@@ -741,6 +746,96 @@ adminMembersRouter.post(
     });
 
     res.json(rowToCamel<Member>(after));
+  }),
+);
+
+/* ---------------------------------------------------- email confirmation */
+
+/**
+ * POST /admin/members/:id/confirm-email
+ *
+ * The override the product cannot run without.
+ *
+ * `requireVerifiedEmail` gates posting, commenting and every point a member can
+ * earn, and the only key was a link in an email. While mail is not arriving —
+ * a sending domain that is not verified yet, a provider account under review, a
+ * hospital mail filter — every member is locked out of the social half of the
+ * product with no way through and no way for anybody to help them.
+ *
+ * Attributable on purpose: this lets an account post under a name whose owner
+ * has not proved they hold the inbox, so the audit row records who decided that.
+ * Both confirmation stores are written together — see
+ * services/emailConfirmation.ts for why there are two.
+ */
+adminMembersRouter.post(
+  "/:id/confirm-email",
+  requireManage,
+  asyncHandler(async (req, res) => {
+    const id = parseId(req.params.id);
+    const member = await loadMember(id);
+    assertNotDeleted(member);
+
+    const result = await confirmMemberEmailAsAdmin(id);
+
+    await recordAdminAction({
+      req,
+      action: "member.confirm_email",
+      entityType: "member",
+      entityId: id,
+      before: {
+        emailVerifiedAt: result.before.accountConfirmedAt,
+        contactStatus: result.before.contactStatus,
+      },
+      after: {
+        emailVerifiedAt: result.after.accountConfirmedAt,
+        contactStatus: result.after.contactStatus,
+        email: member.email,
+      },
+    });
+
+    res.json({ changed: result.changed, confirmation: result.after });
+  }),
+);
+
+/**
+ * POST /admin/members/:id/resend-confirmation
+ *
+ * Waits for the transport rather than firing and forgetting: whoever pressed
+ * this is trying to find out whether mail works, and "Sent." from a send that
+ * was refused is the answer that made this bug take a week to find.
+ */
+adminMembersRouter.post(
+  "/:id/resend-confirmation",
+  requireManage,
+  asyncHandler(async (req, res) => {
+    const id = parseId(req.params.id);
+    const member = await loadMember(id);
+    assertNotDeleted(member);
+
+    const state = await confirmationForMember(id);
+    if (state.accountConfirmedAt !== null) {
+      throw badRequest("They've already confirmed this address — nothing needs sending.");
+    }
+
+    const result = await sendMemberVerificationEmail(
+      { id, email: member.email, first_name: member.first_name },
+      { awaitDelivery: true },
+    );
+
+    await recordAdminAction({
+      req,
+      action: "member.resend_confirmation",
+      entityType: "member",
+      entityId: id,
+      after: { to: member.email, state: result.state },
+    });
+
+    res.json({
+      state: result.state,
+      to: member.email,
+      error: result.state === "failed" ? result.error : "",
+      confirmation: state,
+    });
   }),
 );
 

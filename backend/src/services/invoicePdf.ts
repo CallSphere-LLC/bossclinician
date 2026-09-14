@@ -33,6 +33,8 @@ export interface InvoiceLine {
 export interface InvoiceInput {
   business: BusinessDetails;
   orderId: number;
+  /** The receipt record's number ("R-2026-00009"), the reference the HTML receipt leads with. */
+  receiptNumber?: string;
   /** Stripe's payment intent id, printed as the transaction reference. */
   transactionReference: string;
   issuedAt: Date;
@@ -48,6 +50,11 @@ export interface InvoiceInput {
   taxCents: number;
   totalCents: number;
   currency: string;
+  /**
+   * The receipt logo's bytes, already checked by `receiptLogo` to be a PNG or a
+   * JPEG — the only two formats pdfkit draws. Absent means a text heading.
+   */
+  logo?: Buffer | null;
 }
 
 function pdfToBuffer(doc: PDFKit.PDFDocument): Promise<Buffer> {
@@ -95,6 +102,18 @@ export async function renderInvoicePdf(input: InvoiceInput): Promise<Buffer> {
 
   /* ------------------------------------------------------------- the seller */
 
+  if (input.logo) {
+    // Fitted into a fixed box so a tall logo cannot push the total off the page.
+    // A file that passed the signature check but still will not decode costs the
+    // receipt its logo, never the receipt itself.
+    try {
+      doc.image(input.logo, left, y, { fit: [180, 52] });
+      y += 64;
+    } catch {
+      // Drawn without it.
+    }
+  }
+
   doc.font("Helvetica-Bold").fontSize(15).fillColor(PLUM);
   doc.text(input.business.name.slice(0, 70), left, y, { width });
   y += 22;
@@ -103,7 +122,8 @@ export async function renderInvoicePdf(input: InvoiceInput): Promise<Buffer> {
   const sellerLines = [
     input.business.email,
     ...input.business.addressLines,
-    input.business.taxId ? `Tax #: ${input.business.taxId}` : "",
+    // Worded exactly as the HTML receipt words it, so the two copies agree.
+    input.business.taxId ? `Tax ID ${input.business.taxId}` : "",
   ].filter((line) => line !== "");
   for (const line of sellerLines) {
     doc.text(line, left, y, { width: width / 2 });
@@ -149,6 +169,7 @@ export async function renderInvoicePdf(input: InvoiceInput): Promise<Buffer> {
   let rightY = blockTop + 14;
   const references: [string, string][] = [
     ["Date", longDate(input.issuedAt)],
+    ...(input.receiptNumber ? [["Receipt no.", input.receiptNumber] as [string, string]] : []),
     ["Order no.", String(input.orderId)],
     ["Transaction no.", input.transactionReference || "—"],
     ["Payment method", input.paymentMethod || "—"],
@@ -201,20 +222,16 @@ export async function renderInvoicePdf(input: InvoiceInput): Promise<Buffer> {
 
   /* ------------------------------------------------------------ the totals */
 
-  // Subtotal and tax print only when they say something the total does not. On
-  // the ordinary order — one item, no coupon, no tax — the same number three
-  // times makes a receipt harder to read, not more complete.
+  // Subtotal and tax always print, $0.00 included, matching the HTML receipt: a
+  // receipt handed to an accountant has to show that no tax was charged rather
+  // than leave it to be inferred. The discount prints only when there was one.
   const summary: [string, string, boolean][] = [];
-  if (input.discountCents > 0 || input.taxCents > 0) {
-    summary.push(["Subtotal", money(input.subtotalCents), false]);
-  }
+  summary.push(["Subtotal", money(input.subtotalCents), false]);
   if (input.discountCents > 0) {
     const label = input.couponCode ? `Coupon: ${input.couponCode}` : "Discount";
     summary.push([label, `-${money(input.discountCents)}`, false]);
   }
-  if (input.taxCents > 0) {
-    summary.push(["Tax", money(input.taxCents), false]);
-  }
+  summary.push(["Tax", money(input.taxCents), false]);
   summary.push(["Total paid", money(input.totalCents), true]);
 
   for (const [label, value, bold] of summary) {
@@ -227,6 +244,20 @@ export async function renderInvoicePdf(input: InvoiceInput): Promise<Buffer> {
   }
 
   /* ------------------------------------------------------------- the footer */
+
+  // Her own note sits directly above the standard line, bounded to four lines of
+  // small type so it can never reach up into the totals.
+  const footerNote = (input.business.footerNote ?? "").trim();
+  if (footerNote !== "") {
+    doc.font("Helvetica").fontSize(8).fillColor(INK);
+    const noteHeight = Math.min(doc.heightOfString(footerNote, { width, align: "center" }), 44);
+    doc.text(footerNote, left, doc.page.height - 80 - noteHeight, {
+      width,
+      height: 44,
+      align: "center",
+      ellipsis: true,
+    });
+  }
 
   doc.font("Helvetica").fontSize(8).fillColor(MUTED);
   doc.text(

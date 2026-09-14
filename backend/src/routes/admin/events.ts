@@ -2,7 +2,24 @@ import { Router } from "express";
 import { z } from "zod";
 import { pool } from "../../db/pool";
 import { PRIORITY, enqueue } from "../../jobs/queue";
-import { describeSession, signRegistration } from "../../services/events";
+import {
+  describeRecurrence,
+  describeSession,
+  occurrencesFor,
+  recurrenceProblem,
+  signRegistration,
+  type RecurrenceFreq,
+  type RecurrenceRule,
+} from "../../services/events";
+import {
+  createReminder,
+  deleteReminder,
+  listReminders,
+  reminderStats,
+  retryFailedReminders,
+  seedDefaultReminders,
+  updateReminder,
+} from "../../services/eventReminders";
 import { asyncHandler } from "../../utils/asyncHandler";
 import { publishDomainEvent } from "../../services/domainEvents";
 import { rowToCamel, rowsToCamel } from "../../utils/case";
@@ -63,9 +80,70 @@ const eventSchema = z.object({
   attendedTagId: z.number().int().positive().nullable().optional(),
   noShowTagId: z.number().int().positive().nullable().optional(),
   published: z.boolean().optional(),
+  // The repeat rule. Numbers are only checked for being whole here; the ranges
+  // are explained in words by `recurrenceProblem`, not as a schema error.
+  recurrenceFreq: z.enum(["daily", "weekly", "monthly"]).nullable().optional(),
+  recurrenceInterval: z.number().int().optional(),
+  recurrenceUntil: z.string().trim().max(10).nullable().optional(),
+  recurrenceCount: z.number().int().nullable().optional(),
+  locationType: z.enum(["online", "in_person"]).optional(),
+  locationAddress: z.string().max(1000).optional(),
 });
 
 type EventInput = z.infer<typeof eventSchema>;
+
+/**
+ * The repeat rule and the location as the row will be after this save, checked
+ * in words. A 400 with a sentence beats the table's CHECK constraint arriving
+ * as a 500.
+ */
+function seriesAndPlaceError(effective: {
+  kind: string;
+  startsAt: string | null;
+  timezone: string;
+  freq: RecurrenceFreq | null;
+  interval: number;
+  until: string | null;
+  count: number | null;
+  locationType: string;
+  locationAddress: string;
+}): string | null {
+  if (effective.locationType === "in_person" && !effective.locationAddress.trim()) {
+    return "An in-person event needs its address, so people know where to go.";
+  }
+  const rule: RecurrenceRule | null = effective.freq
+    ? {
+        freq: effective.freq,
+        interval: effective.interval,
+        until: effective.until || null,
+        count: effective.count,
+      }
+    : null;
+  return recurrenceProblem({
+    kind: effective.kind,
+    startsAt: effective.startsAt ? new Date(effective.startsAt) : null,
+    timezone: effective.timezone,
+    rule,
+  });
+}
+
+/** The rule on a stored row, or null for a single session. */
+function ruleOfRow(row: {
+  kind: string;
+  starts_at: Date | null;
+  recurrence_freq: RecurrenceFreq | null;
+  recurrence_interval: number;
+  recurrence_until: string | null;
+  recurrence_count: number | null;
+}): RecurrenceRule | null {
+  if (row.kind !== "live" || !row.recurrence_freq || !row.starts_at) return null;
+  return {
+    freq: row.recurrence_freq,
+    interval: row.recurrence_interval,
+    until: row.recurrence_until,
+    count: row.recurrence_count,
+  };
+}
 
 /**
  * The one rule each kind has, said in her words.
@@ -91,6 +169,9 @@ adminEventsRouter.get(
     const result = await pool.query(
       `SELECT e.id, e.slug::text AS slug, e.title, e.kind, e.starts_at, e.duration_minutes,
               e.timezone, e.published, e.evergreen_interval_minutes, e.updated_at,
+              e.recurrence_freq, e.recurrence_interval,
+              e.recurrence_until::text AS recurrence_until, e.recurrence_count,
+              e.location_type,
               (SELECT count(*)::int FROM event_registrations r WHERE r.event_id = e.id) AS registration_count,
               (SELECT count(*)::int FROM event_registrations r
                 WHERE r.event_id = e.id AND r.attended)                                 AS attended_count,
@@ -111,15 +192,39 @@ adminEventsRouter.post(
     const problem = shapeError(kind, input);
     if (problem) throw badRequest(problem);
 
+    // Only a live event repeats; a rule sent with any other kind is dropped
+    // rather than refused, because the editor hides the rule for those kinds.
+    const freq = kind === "live" ? input.recurrenceFreq ?? null : null;
+    const interval = freq ? input.recurrenceInterval ?? 1 : 1;
+    const until = freq ? input.recurrenceUntil || null : null;
+    const count = freq ? input.recurrenceCount ?? null : null;
+    const locationType = input.locationType ?? "online";
+    const locationAddress = input.locationAddress ?? "";
+    const placeProblem = seriesAndPlaceError({
+      kind,
+      startsAt: input.startsAt ?? null,
+      timezone: input.timezone ?? "America/New_York",
+      freq,
+      interval,
+      until,
+      count,
+      locationType,
+      locationAddress,
+    });
+    if (placeProblem) throw badRequest(placeProblem);
+
     const slug = await freeSlug(slugify(input.title));
 
     const result = await pool.query(
       `INSERT INTO events
          (slug, title, description_md, cover_image, kind, starts_at, duration_minutes, timezone,
           evergreen_interval_minutes, room_url, replay_url, replay_expires_after_hours,
-          registration_form_id, apply_tag_ids, attended_tag_id, no_show_tag_id, published)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
-       RETURNING *, slug::text AS slug`,
+          registration_form_id, apply_tag_ids, attended_tag_id, no_show_tag_id, published,
+          recurrence_freq, recurrence_interval, recurrence_until, recurrence_count,
+          location_type, location_address)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17,
+               $18, $19, $20, $21, $22, $23)
+       RETURNING *, slug::text AS slug, recurrence_until::text AS recurrence_until`,
       [
         slug,
         input.title,
@@ -138,8 +243,20 @@ adminEventsRouter.post(
         input.attendedTagId ?? null,
         input.noShowTagId ?? null,
         input.published ?? false,
+        freq,
+        interval,
+        until,
+        count,
+        locationType,
+        locationAddress,
       ]
     );
+    // A new event starts with the reminder set the public copy promises —
+    // the confirmation, the day before, the hour before, the start. Defaults,
+    // not requirements: every one of them is visible in the editor and can be
+    // switched off there.
+    await seedDefaultReminders(result.rows[0].id);
+
     res.status(201).json(rowToCamel(result.rows[0]));
   })
 );
@@ -148,7 +265,7 @@ adminEventsRouter.get(
   "/:id",
   asyncHandler(async (req, res) => {
     const result = await pool.query(
-      `SELECT e.*, e.slug::text AS slug,
+      `SELECT e.*, e.slug::text AS slug, e.recurrence_until::text AS recurrence_until,
               a.name AS attended_tag_name, n.name AS no_show_tag_name, f.name AS form_name
          FROM events e
          LEFT JOIN tags a ON a.id = e.attended_tag_id
@@ -167,7 +284,48 @@ adminEventsRouter.get(
       [result.rows[0].apply_tag_ids]
     );
 
-    res.json({ ...rowToCamel(result.rows[0]), applyTags: rowsToCamel(tags.rows) });
+    const eventId = Number(result.rows[0].id);
+    const [reminders, stats] = await Promise.all([
+      listReminders(eventId),
+      reminderStats(eventId),
+    ]);
+    const statsById = new Map(stats.map((row) => [row.reminderId, row]));
+
+    // Every session of the event, worked out by the same function the public
+    // page, the room and the calendar file use — so what the editor lists is
+    // what registrants are given.
+    const row = result.rows[0];
+    const rule = ruleOfRow(row);
+    const occurrences =
+      row.kind === "live" && row.starts_at
+        ? occurrencesFor(row.starts_at, row.timezone, rule).map((at) => at.toISOString())
+        : [];
+
+    res.json({
+      ...rowToCamel(result.rows[0]),
+      applyTags: rowsToCamel(tags.rows),
+      occurrences,
+      recurrenceLabel: describeRecurrence(rule),
+      // The reminders and what has happened to them, in the same payload as
+      // the rest of the event: a screen that has to make a second request to
+      // find out whether its reminders are working is a screen nobody looks at.
+      reminders: reminders.map((reminder) => ({
+        ...reminder,
+        stats:
+          statsById.get(reminder.id) ??
+          {
+            reminderId: reminder.id,
+            queued: 0,
+            sent: 0,
+            failed: 0,
+            skipped: 0,
+            lastProblem: "",
+            nextAt: null,
+            delivered: 0,
+            bounced: 0,
+          },
+      })),
+    });
   })
 );
 
@@ -188,6 +346,12 @@ const EVENT_COLUMNS = [
   "attended_tag_id",
   "no_show_tag_id",
   "published",
+  "recurrence_freq",
+  "recurrence_interval",
+  "recurrence_until",
+  "recurrence_count",
+  "location_type",
+  "location_address",
 ] as const;
 
 adminEventsRouter.patch(
@@ -199,20 +363,59 @@ adminEventsRouter.patch(
       kind: string;
       starts_at: Date | null;
       evergreen_interval_minutes: number | null;
-    }>(`SELECT kind, starts_at, evergreen_interval_minutes FROM events WHERE id = $1`, [
-      req.params.id,
-    ]);
+      timezone: string;
+      recurrence_freq: RecurrenceFreq | null;
+      recurrence_interval: number;
+      recurrence_until: string | null;
+      recurrence_count: number | null;
+      location_type: string;
+      location_address: string;
+    }>(
+      `SELECT kind, starts_at, evergreen_interval_minutes, timezone,
+              recurrence_freq, recurrence_interval, recurrence_until::text AS recurrence_until,
+              recurrence_count, location_type, location_address
+         FROM events WHERE id = $1`,
+      [req.params.id]
+    );
     const current = existing.rows[0];
     if (!current) throw notFound("Event not found");
 
     // Checked against the row as it will be, not as it was: switching a replay
     // to a live event in the same save has to bring a date with it.
-    const problem = shapeError(input.kind ?? current.kind, {
-      startsAt: input.startsAt ?? current.starts_at?.toISOString() ?? null,
+    const kind = input.kind ?? current.kind;
+    const startsAt = input.startsAt ?? current.starts_at?.toISOString() ?? null;
+    const problem = shapeError(kind, {
+      startsAt,
       evergreenIntervalMinutes:
         input.evergreenIntervalMinutes ?? current.evergreen_interval_minutes,
     });
     if (problem) throw badRequest(problem);
+
+    // The repeat rule, normalised before it is checked. A blank end date is no
+    // end date; a rule on anything but a live event is dropped, since the
+    // editor stops showing it the moment the kind changes; and switching the
+    // rule off clears its end with it, so the constraint never sees half a rule.
+    if (input.recurrenceUntil === "") input.recurrenceUntil = null;
+    if (kind !== "live" && (input.recurrenceFreq || current.recurrence_freq)) {
+      input.recurrenceFreq = null;
+    }
+    if (input.recurrenceFreq === null) {
+      input.recurrenceUntil = null;
+      input.recurrenceCount = null;
+      input.recurrenceInterval = 1;
+    }
+    const placeProblem = seriesAndPlaceError({
+      kind,
+      startsAt,
+      timezone: input.timezone ?? current.timezone,
+      freq: input.recurrenceFreq !== undefined ? input.recurrenceFreq : current.recurrence_freq,
+      interval: input.recurrenceInterval ?? current.recurrence_interval,
+      until: input.recurrenceUntil !== undefined ? input.recurrenceUntil : current.recurrence_until,
+      count: input.recurrenceCount !== undefined ? input.recurrenceCount : current.recurrence_count,
+      locationType: input.locationType ?? current.location_type,
+      locationAddress: input.locationAddress ?? current.location_address,
+    });
+    if (placeProblem) throw badRequest(placeProblem);
 
     const update = buildUpdate(input, EVENT_COLUMNS);
     if (!update) throw badRequest("Nothing to update");
@@ -220,7 +423,7 @@ adminEventsRouter.patch(
     const result = await pool.query(
       `UPDATE events SET ${update.clause}, updated_at = now()
         WHERE id = $${update.values.length + 1}
-        RETURNING *, slug::text AS slug`,
+        RETURNING *, slug::text AS slug, recurrence_until::text AS recurrence_until`,
       [...update.values, req.params.id]
     );
     res.json(rowToCamel(result.rows[0]));
@@ -366,6 +569,111 @@ adminEventsRouter.post(
     // A null id means the same split is already queued, which is a success:
     // the work is going to happen.
     res.status(202).json({ queued: jobId !== null });
+  })
+);
+
+/* -------------------------------------------------------------- reminders */
+
+/**
+ * Reminder configuration on one event.
+ *
+ * A separate resource rather than a field on the event, because there are
+ * several of them and they are edited one at a time: "add an hour-before
+ * reminder" should not be a PATCH that resends the whole event, and a save that
+ * silently reordered somebody's reminders would be worse than no editor at all.
+ */
+
+const reminderSchema = z.object({
+  kind: z.enum(["registration", "before"]),
+  /**
+   * Minutes before the session. Zero is meaningful on a 'before' reminder — it
+   * is the "we're live, come on in" one — so it is not treated as absent.
+   */
+  offsetMinutes: z.number().int().min(0).max(40_320).optional(),
+  subject: z.string().trim().max(500).optional(),
+  bodyMd: z.string().max(20_000).optional(),
+});
+
+async function eventOr404(id: string): Promise<number> {
+  const eventId = Number(id);
+  if (!Number.isSafeInteger(eventId) || eventId <= 0) throw badRequest("Unknown event");
+  const exists = await pool.query(`SELECT 1 FROM events WHERE id = $1`, [eventId]);
+  if (exists.rowCount === 0) throw notFound("Event not found");
+  return eventId;
+}
+
+adminEventsRouter.get(
+  "/:id/reminders",
+  asyncHandler(async (req, res) => {
+    const eventId = await eventOr404(req.params.id);
+    const [reminders, stats] = await Promise.all([
+      listReminders(eventId),
+      reminderStats(eventId),
+    ]);
+    res.json({ reminders, stats });
+  })
+);
+
+adminEventsRouter.post(
+  "/:id/reminders",
+  asyncHandler(async (req, res) => {
+    const eventId = await eventOr404(req.params.id);
+    const input = reminderSchema.parse(req.body);
+
+    const created = await createReminder(eventId, {
+      kind: input.kind,
+      offsetMinutes: input.offsetMinutes ?? 0,
+      subject: input.subject,
+      bodyMd: input.bodyMd,
+    });
+    // Null means the unique index refused it: this event already reminds people
+    // at exactly this moment. Said in words, because "duplicate key value
+    // violates unique constraint" is not a sentence about an event.
+    if (!created) {
+      throw badRequest("This event already sends a reminder at that moment.");
+    }
+    res.status(201).json(created);
+  })
+);
+
+adminEventsRouter.patch(
+  "/:id/reminders/:reminderId",
+  asyncHandler(async (req, res) => {
+    const eventId = await eventOr404(req.params.id);
+    const input = reminderSchema.partial().pick({ subject: true, bodyMd: true }).extend({
+      enabled: z.boolean().optional(),
+    }).parse(req.body);
+
+    const updated = await updateReminder(eventId, Number(req.params.reminderId), input);
+    if (!updated) throw notFound("Reminder not found");
+    res.json(updated);
+  })
+);
+
+adminEventsRouter.delete(
+  "/:id/reminders/:reminderId",
+  asyncHandler(async (req, res) => {
+    const eventId = await eventOr404(req.params.id);
+    const removed = await deleteReminder(eventId, Number(req.params.reminderId));
+    if (!removed) throw notFound("Reminder not found");
+    res.status(204).end();
+  })
+);
+
+/**
+ * Tries the failed ones again.
+ *
+ * The button that matters while the sending account is on probation: every
+ * reminder attempted in that window is sitting on 'failed' with the provider's
+ * refusal on it, and once sending works again those are the people who were
+ * promised an email and did not get one.
+ */
+adminEventsRouter.post(
+  "/:id/reminders/:reminderId/retry",
+  asyncHandler(async (req, res) => {
+    const eventId = await eventOr404(req.params.id);
+    const requeued = await retryFailedReminders(eventId, Number(req.params.reminderId));
+    res.json({ requeued });
   })
 );
 

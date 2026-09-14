@@ -25,6 +25,9 @@ const EASE: [number, number, number, number] = [0.22, 1, 0.36, 1];
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+/** How many sessions of a series the page lists before "and N more". */
+const SESSIONS_LISTED = 6;
+
 /** Matches the server's own wording for a session, so the two never disagree. */
 function formatSession(iso: string, timeZone: string): string {
   return new Intl.DateTimeFormat("en-US", {
@@ -77,6 +80,12 @@ interface HeldTicket {
   token: string;
   sessionLabel: string;
   icsUrl: string;
+  /**
+   * The reminders this event really sends, as the register call reported them.
+   * Optional because a ticket recalled from a browser that stored one before
+   * reminders existed will not have it; the event's own copy is the fallback.
+   */
+  reminderSchedule?: string[];
 }
 
 function ticketKey(slug: string): string {
@@ -98,12 +107,15 @@ function recallTicket(slug: string): HeldTicket | null {
     if (!raw) return null;
     const parsed: unknown = JSON.parse(raw);
     if (typeof parsed !== "object" || parsed === null) return null;
-    const { token, sessionLabel, icsUrl } = parsed as Partial<HeldTicket>;
+    const { token, sessionLabel, icsUrl, reminderSchedule } = parsed as Partial<HeldTicket>;
     if (typeof token !== "string" || !token) return null;
     return {
       token,
       sessionLabel: typeof sessionLabel === "string" ? sessionLabel : "",
       icsUrl: typeof icsUrl === "string" ? icsUrl : "",
+      reminderSchedule: Array.isArray(reminderSchedule)
+        ? reminderSchedule.filter((step): step is string => typeof step === "string")
+        : undefined,
     };
   } catch {
     return null;
@@ -118,6 +130,24 @@ function recallTicket(slug: string): HeldTicket | null {
  * "the moment you sign up". Splitting them into three pages is how the three
  * drift into three different promises.
  */
+/**
+ * The reminder promise, said only when it is true.
+ *
+ * This page has always claimed "I'll hold you a place and remind you before we
+ * start" and, on the confirmation, "I'll send you a reminder before we begin".
+ * There were no reminders configurable anywhere and no confirmation was ever
+ * sent — the copy was writing cheques the platform did not honour. It now reads
+ * the reminders the event really sends and names them, and says nothing at all
+ * when there are none.
+ */
+function remindersSentence(schedule: string[] | undefined): string {
+  const steps = (schedule ?? []).filter(Boolean);
+  if (steps.length === 0) return "";
+  if (steps.length === 1) return `I'll email you ${steps[0]}.`;
+  const last = steps[steps.length - 1];
+  return `I'll email you ${steps.slice(0, -1).join(", ")} and ${last}.`;
+}
+
 export default function EventRegister() {
   const { slug = "" } = useParams();
   const reduce = useReducedMotion();
@@ -209,6 +239,7 @@ export default function EventRegister() {
       token: registration.token,
       sessionLabel: registration.sessionLabel,
       icsUrl: registration.icsUrl || (registration.token ? eventsApi.icsUrl(registration.token) : ""),
+      reminderSchedule: registration.reminderSchedule,
     };
     setTicket(held);
     if (held.token) rememberTicket(slug, held);
@@ -271,12 +302,36 @@ export default function EventRegister() {
   const upcoming = event.upcomingSessions;
   const roomPath = ticket ? `/events/${slug}/room?ticket=${encodeURIComponent(ticket.token)}` : "";
 
+  // A repeating event's sessions still to come, and an in-person event's
+  // address. Both come from the server, worked out in the event's own zone.
+  const series = event.kind === "live" && event.recurrenceLabel ? event.occurrences ?? [] : [];
+  const address = event.locationType === "in_person" ? (event.locationAddress ?? "").trim() : "";
+  // No online link on an in-person event means no room to send anybody to.
+  const offerRoom = Boolean(roomPath) && (!address || event.hasJoinLink !== false);
+
   const when =
     event.kind === "live" && event.startsAt ? (
       <>
         <p className="font-display text-[1.25rem] leading-snug text-white sm:text-[1.45rem]">
-          {formatSession(event.startsAt, event.timezone)}
+          {formatSession(series[0] ?? event.startsAt, event.timezone)}
         </p>
+        {event.recurrenceLabel && (
+          <p className="copy-luxe mt-2">
+            {series.length > 0
+              ? `${event.recurrenceLabel}. One sign-up saves your place at every session from here on.`
+              : `${event.recurrenceLabel}. Every session in this series has now happened.`}
+          </p>
+        )}
+        {series.length > 1 && (
+          <ul aria-label="Sessions still to come" className="copy-luxe mt-3 space-y-1 text-[0.95rem]">
+            {series.slice(0, SESSIONS_LISTED).map((iso) => (
+              <li key={iso}>{formatSession(iso, event.timezone)}</li>
+            ))}
+            {series.length > SESSIONS_LISTED && (
+              <li>…and {series.length - SESSIONS_LISTED} more after that.</li>
+            )}
+          </ul>
+        )}
         <p className="copy-luxe mt-2">
           We're together for about {describeLength(event.durationMinutes)}. Doors open ten minutes
           before we start.
@@ -331,7 +386,7 @@ export default function EventRegister() {
       />
 
       <LuxePageHero
-        eyebrow={EVENT_KIND_LABEL[event.kind]}
+        eyebrow={event.recurrenceLabel ? "A live series" : EVENT_KIND_LABEL[event.kind]}
         title={event.title}
         tone="violet"
         actions={
@@ -370,6 +425,25 @@ export default function EventRegister() {
             When it happens
           </p>
           <div className="mt-3">{when}</div>
+
+          {address && (
+            <div className="mt-6 border-t border-white/10 pt-5">
+              <p className="text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-orchid">
+                Where it happens
+              </p>
+              <p className="mt-3 whitespace-pre-line break-words text-[1.05rem] leading-snug text-white">
+                {address}
+              </p>
+              <a
+                href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-1 inline-flex min-h-[44px] items-center text-sm font-semibold text-gold underline-offset-4 hover:underline"
+              >
+                Open in maps
+              </a>
+            </div>
+          )}
         </GlassCard>
 
         {event.descriptionMd.trim() && (
@@ -418,16 +492,37 @@ export default function EventRegister() {
                   </p>
                 )}
 
+                {address && (
+                  <p className="mx-auto mt-2 max-w-[36ch] whitespace-pre-line break-words text-pretty text-[0.95rem] leading-relaxed text-white/80">
+                    {address}
+                  </p>
+                )}
+
+                {event.recurrenceLabel && series.length > 1 && (
+                  <p className="copy-luxe mx-auto mt-2 max-w-[40ch] text-pretty">
+                    Your place covers every session:{" "}
+                    {event.recurrenceLabel.charAt(0).toLowerCase()}
+                    {event.recurrenceLabel.slice(1)}.
+                  </p>
+                )}
+
                 <p className="copy-luxe mx-auto mt-3 max-w-[40ch] text-pretty">
                   {event.kind === "replay"
                     ? "It's ready now — go straight in whenever you like."
-                    : "The doors open ten minutes early, so come a few minutes ahead and settle in. I'll send you a reminder before we begin."}
+                    : [
+                        "The doors open ten minutes early, so come a few minutes ahead and settle in.",
+                        // Named, not promised in the abstract: these are the
+                        // reminders this event actually sends.
+                        remindersSentence(ticket.reminderSchedule ?? event.reminderSchedule),
+                      ]
+                        .filter(Boolean)
+                        .join(" ")}
                 </p>
 
                 <GoldRule className="mx-auto mt-8" />
 
                 <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
-                  {roomPath && (
+                  {offerRoom && (
                     <LuxeButton
                       variant="foil"
                       size="md"
@@ -449,7 +544,7 @@ export default function EventRegister() {
                         "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold",
                       )}
                     >
-                      Add to calendar
+                      {series.length > 1 ? "Add every session to my calendar" : "Add to calendar"}
                     </a>
                   )}
                 </div>
@@ -468,7 +563,9 @@ export default function EventRegister() {
               <p className="copy-luxe mt-3 text-pretty">
                 {event.kind === "replay"
                   ? "Add your details and I'll take you straight to it."
-                  : "Add your details, and I'll hold you a place and remind you before we start."}
+                  : event.reminderSchedule.length > 0
+                    ? "Add your details, and I'll hold you a place and remind you before we start."
+                    : "Add your details and I'll hold you a place."}
               </p>
 
               <form

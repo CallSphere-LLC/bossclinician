@@ -1,4 +1,4 @@
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
 import { AdminLayout } from "@/pages/admin/AdminLayout";
 import Login from "@/pages/admin/Login";
@@ -42,6 +42,7 @@ import {
   PlansPage,
   SubscriptionsPage,
 } from "@/pages/admin/SalesPages";
+import { AdminReceiptPage } from "@/pages/admin/AdminReceipt";
 import Coaching from "@/pages/admin/Coaching";
 import Podcasts from "@/pages/admin/Podcasts";
 import Newsletters from "@/pages/admin/Newsletters";
@@ -63,6 +64,11 @@ import Events from "@/pages/admin/Events";
 import PagesAdmin from "@/pages/admin/PagesAdmin";
 import Reports from "@/pages/admin/Reports";
 import Availability from "@/pages/admin/Availability";
+import MarketingOverview from "@/pages/admin/MarketingOverview";
+
+import EmailLog from "@/pages/admin/EmailLog";
+import AdminNotFound, { AliasFirst } from "@/pages/admin/AdminNotFound";
+import { loginPathFor } from "@/pages/admin/adminReturnTo";
 
 function LoadingScreen() {
   return (
@@ -77,9 +83,12 @@ function LoadingScreen() {
 
 function ProtectedRoutes() {
   const { user, loading } = useAuth();
+  const location = useLocation();
 
   if (loading) return <LoadingScreen />;
-  if (!user) return <Navigate to="/admin/login" replace />;
+  // The address asked for rides along as ?next=, so signing in lands on it
+  // rather than on the dashboard — see adminReturnTo.
+  if (!user) return <Navigate to={loginPathFor(location)} replace />;
 
   return (
     <AdminLayout>
@@ -89,6 +98,7 @@ function ProtectedRoutes() {
         {/* Products */}
         <Route path="/products" element={<Products />} />
         <Route path="/catalogue" element={<ProductsCatalog />} />
+        <Route path="/downloads" element={<ProductsCatalog downloadOnly />} />
         <Route path="/courses" element={<CoursesAdmin />} />
         <Route path="/courses/:id/curriculum" element={<CourseBuilder />} />
         <Route path="/community" element={<CommunityList />} />
@@ -106,6 +116,7 @@ function ProtectedRoutes() {
         <Route path="/sales/plans" element={<PlansPage />} />
         <Route path="/sales/subscriptions" element={<SubscriptionsPage />} />
         <Route path="/sales/invoices" element={<InvoicesPage />} />
+        <Route path="/sales/invoices/:id/receipt" element={<AdminReceiptPage />} />
         <Route path="/sales/coupons" element={<CouponsPage />} />
         <Route path="/sales/payouts" element={<PayoutsPage />} />
         <Route path="/partners" element={<Affiliates />} />
@@ -120,6 +131,7 @@ function ProtectedRoutes() {
         <Route path="/pages" element={<PagesAdmin />} />
 
         {/* Marketing */}
+        <Route path="/marketing/overview" element={<MarketingOverview />} />
         <Route path="/marketing/events" element={<Events />} />
         <Route path="/marketing/campaigns" element={<Campaigns />} />
         <Route path="/marketing/funnels" element={<Funnels />} />
@@ -137,7 +149,8 @@ function ProtectedRoutes() {
         {/* Contacts */}
         <Route path="/contacts" element={<Contacts />} />
         <Route path="/contacts/insights" element={<ContactsInsights />} />
-        <Route path="/contacts/:id" element={<ContactDetail />} />
+        {/* AliasFirst: /contacts/tags and friends are aliases, not contact ids. */}
+        <Route path="/contacts/:id" element={<AliasFirst><ContactDetail /></AliasFirst>} />
         <Route path="/tags" element={<Tags />} />
         <Route path="/segments" element={<Segments />} />
         <Route path="/leads" element={<Leads />} />
@@ -158,8 +171,18 @@ function ProtectedRoutes() {
         <Route path="/settings/connections" element={<Integrations />} />
         <Route path="/settings/availability" element={<Availability />} />
         <Route path="/settings/advanced" element={<SettingsPage />} />
-        <Route path="/settings/:group" element={<SettingsGroup />} />
-        <Route path="*" element={<Navigate to="/admin" replace />} />
+        {/* Three segments, so it is ranked above /settings/:group rather than
+            competing with it: the log is a page of its own, and the address
+            people write down for it used to match nothing at all. */}
+        <Route path="/settings/email/log" element={<EmailLog />} />
+        {/* AliasFirst: /settings/users and friends are aliases, not group keys. */}
+        <Route path="/settings/:group" element={<AliasFirst><SettingsGroup /></AliasFirst>} />
+        {/* Not a redirect to /admin. This answers with a 404 for a path that
+            really does not exist, and with a real redirect for the handful we
+            recognise from an older layout — see adminAliases. Because it only
+            runs once matching has failed, an alias can never shadow a route
+            added above. */}
+        <Route path="*" element={<AdminNotFound />} />
       </Routes>
     </AdminLayout>
   );

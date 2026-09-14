@@ -1,0 +1,37 @@
+{
+  "orders": [
+    {
+      "id": 2,
+      "status": "paid",
+      "total_cents": 0,
+      "subtotal_cents": 17100,
+      "discount_cents": 17100,
+      "gift_message": "Three guides for your practice.",
+      "buyer": "zz-buyer@example.invalid",
+      "recipient": "zz-recipient@example.invalid",
+      "offer_count": 3,
+      "grant_count": 3,
+      "receipts": 1
+    }
+  ],
+  "attempts": [
+    {
+      "kind": "graded",
+      "passed": false,
+      "percent": 0,
+      "answers": 1
+    },
+    {
+      "kind": "graded",
+      "passed": true,
+      "percent": 100,
+      "answers": 1
+    },
+    {
+      "kind": "survey",
+      "passed": null,
+      "percent": 0,
+      "answers": 4
+    }
+  ]
+}

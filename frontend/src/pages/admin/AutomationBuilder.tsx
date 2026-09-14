@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useSearchParams } from "react-router-dom";
 import { motion } from "motion/react";
 import {
   ArrowDown,
@@ -42,6 +43,7 @@ import {
 } from "@/pages/admin/ui/primitives";
 import { Modal, useConfirm } from "@/pages/admin/ui/Dialog";
 import { friendlyError } from "@/pages/admin/ui/friendly";
+import { ApiError } from "@/lib/api";
 
 /**
  * The automation builder.
@@ -177,7 +179,28 @@ function readRules(conditions: unknown): ConditionRule[] {
 export default function AutomationBuilder() {
   const [options, setOptions] = useState<BuilderOptions | null>(null);
   const [automations, setAutomations] = useState<AutomationSummary[] | null>(null);
-  const [openId, setOpenId] = useState<number | null>(null);
+  // The open automation lives in ?automation=<id>, so a link (the Marketing
+  // overview's "had problems" rows) or a reload lands on that automation.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [openId, setOpenIdState] = useState<number | null>(() => {
+    const requested = Number(searchParams.get("automation"));
+    return Number.isInteger(requested) && requested > 0 ? requested : null;
+  });
+  const setOpenId = useCallback(
+    (id: number | null) => {
+      setOpenIdState(id);
+      setSearchParams(
+        (previous) => {
+          const next = new URLSearchParams(previous);
+          if (id === null) next.delete("automation");
+          else next.set("automation", String(id));
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setSearchParams],
+  );
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [confirm, confirmDialog] = useConfirm();
@@ -277,20 +300,25 @@ export default function AutomationBuilder() {
           />
         </Card>
       ) : (
-        <div className="grid gap-4">
+        // grid-cols-1 is minmax(0, 1fr), and min-w-0 on each item: a bare `grid`
+        // sizes its one column to the longest unbreakable word in any card (a
+        // pasted link in a reminder, a long tag name), which pushed every card,
+        // and every card's Open button, off the right edge of the window.
+        <div className="grid grid-cols-1 gap-4">
           {automations.map((automation, index) => (
             <motion.div
               key={automation.id}
+              className="min-w-0"
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: Math.min(index * 0.05, 0.3) }}
             >
               <Card className="p-5">
                 <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="min-w-0">
+                  <div className="min-w-0 max-w-full [overflow-wrap:anywhere]">
                     <button
                       type="button"
-                      className="font-display text-lg text-ink hover:text-gold"
+                      className="max-w-full text-left font-display text-lg text-ink hover:text-gold"
                       onClick={() => setOpenId(automation.id)}
                     >
                       {automation.name}
@@ -309,7 +337,7 @@ export default function AutomationBuilder() {
                     )}
                   </div>
 
-                  <div className="flex shrink-0 items-center gap-2">
+                  <div className="flex shrink-0 flex-wrap items-center gap-2">
                     {needsAttention(automation) && <Badge tone="gold">Needs attention</Badge>}
                     <Badge tone={automation.status === "active" ? "green" : "slate"}>
                       {automation.status === "active" ? "Running" : "Paused"}
@@ -437,6 +465,7 @@ function AutomationDetail({
   onBack: () => void;
 }) {
   const [automation, setAutomation] = useState<Automation | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [runs, setRuns] = useState<AutomationRun[]>([]);
   const [editing, setEditing] = useState<StepDraft | null>(null);
   const [testing, setTesting] = useState(false);
@@ -444,7 +473,22 @@ function AutomationDetail({
   const [confirm, confirmDialog] = useConfirm();
 
   const load = useCallback(() => {
-    marketingApi.automation(automationId).then(setAutomation).catch(() => setAutomation(null));
+    marketingApi
+      .automation(automationId)
+      .then((row) => {
+        setAutomation(row);
+        setLoadError(null);
+      })
+      .catch((err) => {
+        setAutomation(null);
+        // A stale or mistyped ?automation= link used to leave a skeleton
+        // spinning forever; say what happened and offer the way back.
+        setLoadError(
+          err instanceof ApiError && err.status === 404
+            ? "The automation in that link isn't here any more — it may have been deleted."
+            : "We couldn't load this automation just now. Try again in a moment.",
+        );
+      });
     marketingApi.automationRuns(automationId).then(setRuns).catch(() => setRuns([]));
   }, [automationId]);
 
@@ -535,7 +579,18 @@ function AutomationDetail({
     void patch({ conditions: { match: "all", rules: next } });
   }
 
-  if (!automation) return <Skeleton className="h-96 rounded-2xl" />;
+  if (!automation) {
+    if (!loadError) return <Skeleton className="h-96 rounded-2xl" />;
+    return (
+      <div className="space-y-4">
+        <ErrorNotice message={loadError} />
+        <Button size="sm" variant="secondary" onClick={onBack}>
+          <ArrowLeft />
+          All automations
+        </Button>
+      </div>
+    );
+  }
 
   const isOn = automation.status === "active";
   const problems = problemsOf(automation);
@@ -588,7 +643,7 @@ function AutomationDetail({
                 : "Finish these and you can turn it on."}
             </p>
           </div>
-          <ul className="mt-2 space-y-0.5 text-sm text-ink-soft">
+          <ul className="mt-2 space-y-0.5 text-sm text-ink-soft [overflow-wrap:anywhere]">
             {problems.map((line, index) => (
               <li key={index}>· {line}</li>
             ))}
@@ -784,7 +839,7 @@ function AutomationDetail({
                   </Button>
                 </div>
 
-                <div className="min-w-0 flex-1">
+                <div className="min-w-0 flex-1 [overflow-wrap:anywhere]">
                   <p className="text-sm text-ink">→ {action.sentence}</p>
                   {action.delayMinutes > 0 && (
                     <p className="mt-1 text-xs text-ink-soft">
@@ -833,7 +888,7 @@ function AutomationDetail({
             {runs.slice(0, 20).map((run) => {
               const verdict = displayedRunStatus(run);
               return (
-              <li key={run.id} className="px-5 py-4">
+              <li key={run.id} className="px-5 py-4 [overflow-wrap:anywhere]">
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge tone={RUN_TONE[verdict] ?? "neutral"}>
                     {RUN_LABEL[verdict] ?? verdict}

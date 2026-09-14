@@ -47,7 +47,10 @@ export function SidebarPanel({
       interactive={false}
       className={cn("p-5", className)}
     >
-      <div className="flex items-center justify-between gap-3">
+      {/* Wraps, so an action wider than the rail (the leaderboard's three
+          period pills) drops under the title instead of spilling past the
+          card's edge. */}
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
         <h2
           id={headingId}
           className="flex items-center gap-2 font-display text-[1.05rem] leading-none text-white"

@@ -1,0 +1,758 @@
+{
+  "at": "2026-09-12T20:01:10.290Z",
+  "url": "https://admin.bossclinician.callsphere.site/admin/offers/2",
+  "viewport": {
+    "width": 1440,
+    "height": 1000
+  },
+  "storageState": "/tmp/boss-followup/admin-state.json",
+  "catalogue": [
+    {
+      "id": 25,
+      "slug": "ppp-collective",
+      "title": "The Profitable Private Practice Boss Builders Collective",
+      "subtitle": "Start, scale and grow your practice",
+      "description": "Test fixture product.",
+      "instructions": "",
+      "thumbnailUrl": "",
+      "kind": "download",
+      "courseId": null,
+      "communityId": null,
+      "podcastId": null,
+      "newsletterId": null,
+      "coachingOfferId": null,
+      "status": "draft",
+      "sort": 0,
+      "createdAt": "2026-08-18T20:06:45.895Z",
+      "updatedAt": "2026-08-18T20:06:45.895Z",
+      "offerCount": 1,
+      "fileCount": 0,
+      "memberCount": 1
+    },
+    {
+      "id": 1,
+      "slug": "directory-makeover-audit",
+      "title": "DIRECTORY MAKEOVER AUDIT",
+      "subtitle": "Make Your Profile Irresistible — Get Seen. Get Chosen. Get Booked.",
+      "description": "A personalized audit that shows you exactly how to transform your Psychology Today or TherapyDen profile into a client-attracting powerhouse.",
+      "instructions": "",
+      "thumbnailUrl": "/images/87e2e475b3ec.webp",
+      "kind": "course",
+      "courseId": 1,
+      "communityId": null,
+      "podcastId": null,
+      "newsletterId": null,
+      "coachingOfferId": null,
+      "status": "published",
+      "sort": 1,
+      "createdAt": "2026-08-17T14:33:53.355Z",
+      "updatedAt": "2026-08-17T14:33:53.355Z",
+      "offerCount": 0,
+      "fileCount": 0,
+      "memberCount": 0
+    },
+    {
+      "id": 2,
+      "slug": "fully-booked-toolkit",
+      "title": "FULLY BOOKED TOOLKIT",
+      "subtitle": "Confidence. Consistency. Clients — This Toolkit Gets You Booked.",
+      "description": "You worked hard to become a therapist — now let your practice reflect that. The Fully Booked Toolkit is designed to help you attract consistent clients, streamline systems, and run a thriving practice that fills your schedule without chaos.",
+      "instructions": "",
+      "thumbnailUrl": "/images/b9de41b029ed.webp",
+      "kind": "download",
+      "courseId": null,
+      "communityId": null,
+      "podcastId": null,
+      "newsletterId": null,
+      "coachingOfferId": null,
+      "status": "published",
+      "sort": 2,
+      "createdAt": "2026-08-17T14:33:53.355Z",
+      "updatedAt": "2026-09-12T18:11:32.396Z",
+      "offerCount": 0,
+      "fileCount": 0,
+      "memberCount": 0
+    },
+    {
+      "id": 3,
+      "slug": "credentialing-success-formula",
+      "title": "CREDENTIALING SUCCESS FORMULA",
+      "subtitle": "For Group Practice Owners Who Need Their Team Credentialed ASAP",
+      "description": "A simple, repeatable system to credential your clinicians quickly and cleanly.",
+      "instructions": "",
+      "thumbnailUrl": "/images/5a8b78757b65.webp",
+      "kind": "course",
+      "courseId": 3,
+      "communityId": null,
+      "podcastId": null,
+      "newsletterId": null,
+      "coachingOfferId": null,
+      "status": "published",
+      "sort": 3,
+      "createdAt": "2026-08-17T14:33:53.355Z",
+      "updatedAt": "2026-08-17T14:33:53.355Z",
+      "offerCount": 0,
+      "fileCount": 0,
+      "memberCount": 0
+    },
+    {
+      "id": 4,
+      "slug": "credential-with-confidence",
+      "title": "CREDENTIAL WITH CONFIDENCE",
+      "subtitle": "For Solo Therapists Ready to Start Credentialing",
+      "description": "No confusion. No overwhelm. Just clear direction.",
+      "instructions": "",
+      "thumbnailUrl": "/images/bf28804cb9be.webp",
+      "kind": "course",
+      "courseId": 4,
+      "communityId": null,
+      "podcastId": null,
+      "newsletterId": null,
+      "coachingOfferId": null,
+      "status": "published",
+      "sort": 4,
+      "createdAt": "2026-08-17T14:33:53.355Z",
+      "updatedAt": "2026-08-17T14:33:53.355Z",
+      "offerCount": 0,
+      "fileCount": 0,
+      "memberCount": 0
+    },
+    {
+      "id": 5,
+      "slug": "private-practice-starter-suite",
+      "title": "PRIVATE PRACTICE STARTER SUITE",
+      "subtitle": "A 3-Step Mini Course to Launch Your Private Practice",
+      "description": "Your roadmap for setting up your business legally & confidently.",
+      "instructions": "",
+      "thumbnailUrl": "/images/b638c609d53c.webp",
+      "kind": "course",
+      "courseId": 5,
+      "communityId": null,
+      "podcastId": null,
+      "newsletterId": null,
+      "coachingOfferId": null,
+      "status": "published",
+      "sort": 5,
+      "createdAt": "2026-08-17T14:33:53.355Z",
+      "updatedAt": "2026-08-17T14:33:53.355Z",
+      "offerCount": 0,
+      "fileCount": 0,
+      "memberCount": 0
+    },
+    {
+      "id": 13,
+      "slug": "ramp-up-rate-formula",
+      "title": "🔥 RAMP-UP RATE FORMULA",
+      "subtitle": "Set Your Rates Like a CEO — Not a Guessing Therapist",
+      "description": "Discover your exact profitable, ethical session rate.",
+      "instructions": "",
+      "thumbnailUrl": "/images/63feb84d0c9d.webp",
+      "kind": "course",
+      "courseId": 6,
+      "communityId": null,
+      "podcastId": null,
+      "newsletterId": null,
+      "coachingOfferId": null,
+      "status": "published",
+      "sort": 6,
+      "createdAt": "2026-08-17T14:33:53.355Z",
+      "updatedAt": "2026-08-17T14:33:53.355Z",
+      "offerCount": 0,
+      "fileCount": 0,
+      "memberCount": 0
+    },
+    {
+      "id": 14,
+      "slug": "provider-partnership-guide",
+      "title": "PROVIDER PARTNERSHIP GUIDE",
+      "subtitle": "Create Referral Streams That Never Dry Up",
+      "description": "Get the templates, scripts, and workflows to build strong referral relationships with doctors and specialists — consistently sending clients your way.",
+      "instructions": "",
+      "thumbnailUrl": "/images/674d37182903.jpeg",
+      "kind": "download",
+      "courseId": null,
+      "communityId": null,
+      "podcastId": null,
+      "newsletterId": null,
+      "coachingOfferId": null,
+      "status": "published",
+      "sort": 7,
+      "createdAt": "2026-08-17T14:33:53.355Z",
+      "updatedAt": "2026-09-12T18:11:32.396Z",
+      "offerCount": 0,
+      "fileCount": 0,
+      "memberCount": 0
+    },
+    {
+      "id": 6,
+      "slug": "private-practice-protection-pack",
+      "title": "PRIVATE PRACTICE PROTECTION PACK",
+      "subtitle": "Protect Your Practice With Lawyer-Reviewed Forms",
+      "description": "Get everything you need — consent forms, HIPAA documents, policies, telehealth and safety templates — to stay compliant and run your practice like a professional.",
+      "instructions": "",
+      "thumbnailUrl": "/images/9d7fb2d1ba2d.webp",
+      "kind": "course",
+      "courseId": 8,
+      "communityId": null,
+      "podcastId": null,
+      "newsletterId": null,
+      "coachingOfferId": null,
+      "status": "published",
+      "sort": 8,
+      "createdAt": "2026-08-17T14:33:53.355Z",
+      "updatedAt": "2026-08-17T14:33:53.355Z",
+      "offerCount": 0,
+      "fileCount": 0,
+      "memberCount": 0
+    },
+    {
+      "id": 15,
+      "slug": "marketing-mastery-for-therapists",
+      "title": "MARKETING MASTERY FOR THERAPISTS",
+      "subtitle": "A Complete Therapist-Friendly Marketing System",
+      "description": "Done-for-you content that helps you get clients consistently.",
+      "instructions": "",
+      "thumbnailUrl": "/images/7df196fe83a2.png",
+      "kind": "download",
+      "courseId": null,
+      "communityId": null,
+      "podcastId": null,
+      "newsletterId": null,
+      "coachingOfferId": null,
+      "status": "published",
+      "sort": 9,
+      "createdAt": "2026-08-17T14:33:53.355Z",
+      "updatedAt": "2026-09-12T18:11:32.396Z",
+      "offerCount": 0,
+      "fileCount": 0,
+      "memberCount": 0
+    },
+    {
+      "id": 7,
+      "slug": "therapist-niche-clarity-accelerator",
+      "title": "THERAPIST NICHE CLARITY ACCELERATOR",
+      "subtitle": "Find Your Niche Fast — So Clients Find YOU",
+      "description": "A powerful clarity tool to identify your ideal client & message.",
+      "instructions": "",
+      "thumbnailUrl": "/images/792bcd2c2e26.png",
+      "kind": "download",
+      "courseId": null,
+      "communityId": null,
+      "podcastId": null,
+      "newsletterId": null,
+      "coachingOfferId": null,
+      "status": "published",
+      "sort": 10,
+      "createdAt": "2026-08-17T14:33:53.355Z",
+      "updatedAt": "2026-09-12T18:11:32.396Z",
+      "offerCount": 0,
+      "fileCount": 0,
+      "memberCount": 0
+    },
+    {
+      "id": 8,
+      "slug": "rate-negotiation-letter-template",
+      "title": "RATE NEGOTIATION LETTER TEMPLATE",
+      "subtitle": "Ask for Higher Rates With Ease",
+      "description": "A plug-and-play, therapist-friendly template that helps you request (and often secure) better reimbursement rates.",
+      "instructions": "",
+      "thumbnailUrl": "/images/fb13cb030751.webp",
+      "kind": "course",
+      "courseId": 11,
+      "communityId": null,
+      "podcastId": null,
+      "newsletterId": null,
+      "coachingOfferId": null,
+      "status": "published",
+      "sort": 11,
+      "createdAt": "2026-08-17T14:33:53.355Z",
+      "updatedAt": "2026-08-17T14:33:53.355Z",
+      "offerCount": 0,
+      "fileCount": 0,
+      "memberCount": 0
+    },
+    {
+      "id": 16,
+      "slug": "prepare-to-profit-journal",
+      "title": "PREPARE TO PROFIT JOURNAL",
+      "subtitle": "A Guided Meditation & Mindset Journal to Release Fear & Step Into CEO Energy",
+      "description": "A 5-step digital journal designed for therapists to ditch self-doubt and step into the confidence needed to start or scale their practice.",
+      "instructions": "",
+      "thumbnailUrl": "/images/1126b9d16f01.webp",
+      "kind": "course",
+      "courseId": 12,
+      "communityId": null,
+      "podcastId": null,
+      "newsletterId": null,
+      "coachingOfferId": null,
+      "status": "published",
+      "sort": 12,
+      "createdAt": "2026-08-17T14:33:53.355Z",
+      "updatedAt": "2026-08-17T14:33:53.355Z",
+      "offerCount": 0,
+      "fileCount": 0,
+      "memberCount": 0
+    },
+    {
+      "id": 17,
+      "slug": "client-consultation-call-script",
+      "title": "CLIENT CONSULTATION CALL SCRIPT",
+      "subtitle": "A Complete, Plug-and-Play Script to Guide Your First Client Calls — Confidently & Professionally",
+      "description": "Make your initial consult calls smooth, confident, and conversion-focused. This script helps you structure discovery calls so you can screen for fit, set expectations, and convert inquiries into booked sessions.",
+      "instructions": "",
+      "thumbnailUrl": "/images/f6e89a66a1a7.webp",
+      "kind": "download",
+      "courseId": null,
+      "communityId": null,
+      "podcastId": null,
+      "newsletterId": null,
+      "coachingOfferId": null,
+      "status": "published",
+      "sort": 13,
+      "createdAt": "2026-08-17T14:33:53.355Z",
+      "updatedAt": "2026-09-12T18:11:32.396Z",
+      "offerCount": 0,
+      "fileCount": 0,
+      "memberCount": 0
+    },
+    {
+      "id": 9,
+      "slug": "from-profile-to-profit",
+      "title": "FROM PROFILE TO PROFIT",
+      "subtitle": "Turn Your Therapist Directory Profile Into Booked Clients",
+      "description": "Stop blending in — make your directory profile stand out, attract your ideal clients, and convert profile views into booked sessions.",
+      "instructions": "",
+      "thumbnailUrl": "/images/7d1cdf512574.webp",
+      "kind": "download",
+      "courseId": null,
+      "communityId": null,
+      "podcastId": null,
+      "newsletterId": null,
+      "coachingOfferId": null,
+      "status": "published",
+      "sort": 14,
+      "createdAt": "2026-08-17T14:33:53.355Z",
+      "updatedAt": "2026-09-12T18:11:32.396Z",
+      "offerCount": 0,
+      "fileCount": 0,
+      "memberCount": 0
+    },
+    {
+      "id": 10,
+      "slug": "practice-reset-intensive",
+      "title": "Practice Reset Intensive",
+      "subtitle": "$3,500.00 USD",
+      "description": "1:1 consulting package — Practice Reset Intensive.",
+      "instructions": "",
+      "thumbnailUrl": "/images/791da84c1a06.webp",
+      "kind": "course",
+      "courseId": 15,
+      "communityId": null,
+      "podcastId": null,
+      "newsletterId": null,
+      "coachingOfferId": null,
+      "status": "draft",
+      "sort": 14,
+      "createdAt": "2026-08-17T14:33:53.355Z",
+      "updatedAt": "2026-08-17T14:33:53.355Z",
+      "offerCount": 1,
+      "fileCount": 0,
+      "memberCount": 1
+    },
+    {
+      "id": 11,
+      "slug": "scale-and-reclaim-suite",
+      "title": "Scale and Reclaim Suite",
+      "subtitle": "$6,500.00 USD",
+      "description": "1:1 consulting package — Scale and Reclaim Suite.",
+      "instructions": "",
+      "thumbnailUrl": "/images/52c45a6b0f9f.png",
+      "kind": "course",
+      "courseId": 16,
+      "communityId": null,
+      "podcastId": null,
+      "newsletterId": null,
+      "coachingOfferId": null,
+      "status": "draft",
+      "sort": 15,
+      "createdAt": "2026-08-17T14:33:53.355Z",
+      "updatedAt": "2026-08-17T14:33:53.355Z",
+      "offerCount": 0,
+      "fileCount": 0,
+      "memberCount": 0
+    },
+    {
+      "id": 12,
+      "slug": "the-boss-boardroom",
+      "title": "The Boss Boardroom",
+      "subtitle": "$12,000.00 USD",
+      "description": "1:1 consulting package — The Boss Boardroom.",
+      "instructions": "",
+      "thumbnailUrl": "/images/8dfa5308c9c5.png",
+      "kind": "course",
+      "courseId": 17,
+      "communityId": null,
+      "podcastId": null,
+      "newsletterId": null,
+      "coachingOfferId": null,
+      "status": "draft",
+      "sort": 16,
+      "createdAt": "2026-08-17T14:33:53.355Z",
+      "updatedAt": "2026-08-17T14:33:53.355Z",
+      "offerCount": 0,
+      "fileCount": 0,
+      "memberCount": 0
+    }
+  ],
+  "runs": [
+    {
+      "visit": 1,
+      "readyMs": 65,
+      "tabs": [
+        "What you're selling",
+        "Price",
+        "Order form",
+        "Order bumps",
+        "Upsells",
+        "After purchase"
+      ],
+      "options": [
+        "Add something they get…",
+        "The Profitable Private Practice Boss Builders Collective · Download",
+        "DIRECTORY MAKEOVER AUDIT · Course",
+        "FULLY BOOKED TOOLKIT · Download",
+        "CREDENTIALING SUCCESS FORMULA · Course",
+        "CREDENTIAL WITH CONFIDENCE · Course",
+        "PRIVATE PRACTICE STARTER SUITE · Course",
+        "🔥 RAMP-UP RATE FORMULA · Course",
+        "PROVIDER PARTNERSHIP GUIDE · Download",
+        "PRIVATE PRACTICE PROTECTION PACK · Course",
+        "MARKETING MASTERY FOR THERAPISTS · Download",
+        "THERAPIST NICHE CLARITY ACCELERATOR · Download",
+        "RATE NEGOTIATION LETTER TEMPLATE · Course",
+        "PREPARE TO PROFIT JOURNAL · Course",
+        "CLIENT CONSULTATION CALL SCRIPT · Download",
+        "FROM PROFILE TO PROFIT · Download",
+        "Scale and Reclaim Suite · Course",
+        "The Boss Boardroom · Course"
+      ],
+      "metrics": {
+        "Documents": 2,
+        "JSEventListeners": 237,
+        "Nodes": 902,
+        "TaskDuration": 0.27264,
+        "JSHeapUsedSize": 7844684
+      },
+      "state": {
+        "documentId": "87d9aec4-7724-43bd-96d1-b19315f65f51",
+        "intervalCount": 0,
+        "intervalDelays": [],
+        "timeoutCount": 0,
+        "longTasks": [],
+        "navigationEntries": 1
+      },
+      "requests": [
+        {
+          "url": "/api/admin/offers/2",
+          "method": "GET"
+        },
+        {
+          "url": "/api/admin/products",
+          "method": "GET"
+        },
+        {
+          "url": "/api/admin/offers",
+          "method": "GET"
+        },
+        {
+          "url": "/api/admin/pages",
+          "method": "GET"
+        },
+        {
+          "url": "/api/admin/stats",
+          "method": "GET"
+        }
+      ]
+    },
+    {
+      "visit": 2,
+      "readyMs": 279,
+      "tabs": [
+        "What you're selling",
+        "Price",
+        "Order form",
+        "Order bumps",
+        "Upsells",
+        "After purchase"
+      ],
+      "options": [
+        "Add something they get…",
+        "The Profitable Private Practice Boss Builders Collective · Download",
+        "DIRECTORY MAKEOVER AUDIT · Course",
+        "FULLY BOOKED TOOLKIT · Download",
+        "CREDENTIALING SUCCESS FORMULA · Course",
+        "CREDENTIAL WITH CONFIDENCE · Course",
+        "PRIVATE PRACTICE STARTER SUITE · Course",
+        "🔥 RAMP-UP RATE FORMULA · Course",
+        "PROVIDER PARTNERSHIP GUIDE · Download",
+        "PRIVATE PRACTICE PROTECTION PACK · Course",
+        "MARKETING MASTERY FOR THERAPISTS · Download",
+        "THERAPIST NICHE CLARITY ACCELERATOR · Download",
+        "RATE NEGOTIATION LETTER TEMPLATE · Course",
+        "PREPARE TO PROFIT JOURNAL · Course",
+        "CLIENT CONSULTATION CALL SCRIPT · Download",
+        "FROM PROFILE TO PROFIT · Download",
+        "Scale and Reclaim Suite · Course",
+        "The Boss Boardroom · Course"
+      ],
+      "metrics": {
+        "Documents": 2,
+        "JSEventListeners": 237,
+        "Nodes": 902,
+        "TaskDuration": 0.405748,
+        "JSHeapUsedSize": 8221500
+      },
+      "state": {
+        "documentId": "87d9aec4-7724-43bd-96d1-b19315f65f51",
+        "intervalCount": 0,
+        "intervalDelays": [],
+        "timeoutCount": 0,
+        "longTasks": [],
+        "navigationEntries": 1
+      },
+      "requests": [
+        {
+          "url": "/api/admin/offers/2",
+          "method": "GET"
+        },
+        {
+          "url": "/api/admin/products",
+          "method": "GET"
+        },
+        {
+          "url": "/api/admin/offers",
+          "method": "GET"
+        },
+        {
+          "url": "/api/admin/pages",
+          "method": "GET"
+        },
+        {
+          "url": "/api/admin/stats",
+          "method": "GET"
+        }
+      ]
+    },
+    {
+      "visit": 3,
+      "readyMs": 263,
+      "tabs": [
+        "What you're selling",
+        "Price",
+        "Order form",
+        "Order bumps",
+        "Upsells",
+        "After purchase"
+      ],
+      "options": [
+        "Add something they get…",
+        "The Profitable Private Practice Boss Builders Collective · Download",
+        "DIRECTORY MAKEOVER AUDIT · Course",
+        "FULLY BOOKED TOOLKIT · Download",
+        "CREDENTIALING SUCCESS FORMULA · Course",
+        "CREDENTIAL WITH CONFIDENCE · Course",
+        "PRIVATE PRACTICE STARTER SUITE · Course",
+        "🔥 RAMP-UP RATE FORMULA · Course",
+        "PROVIDER PARTNERSHIP GUIDE · Download",
+        "PRIVATE PRACTICE PROTECTION PACK · Course",
+        "MARKETING MASTERY FOR THERAPISTS · Download",
+        "THERAPIST NICHE CLARITY ACCELERATOR · Download",
+        "RATE NEGOTIATION LETTER TEMPLATE · Course",
+        "PREPARE TO PROFIT JOURNAL · Course",
+        "CLIENT CONSULTATION CALL SCRIPT · Download",
+        "FROM PROFILE TO PROFIT · Download",
+        "Scale and Reclaim Suite · Course",
+        "The Boss Boardroom · Course"
+      ],
+      "metrics": {
+        "Documents": 2,
+        "JSEventListeners": 237,
+        "Nodes": 902,
+        "TaskDuration": 0.520647,
+        "JSHeapUsedSize": 8456848
+      },
+      "state": {
+        "documentId": "87d9aec4-7724-43bd-96d1-b19315f65f51",
+        "intervalCount": 0,
+        "intervalDelays": [],
+        "timeoutCount": 0,
+        "longTasks": [],
+        "navigationEntries": 1
+      },
+      "requests": [
+        {
+          "url": "/api/admin/offers/2",
+          "method": "GET"
+        },
+        {
+          "url": "/api/admin/products",
+          "method": "GET"
+        },
+        {
+          "url": "/api/admin/offers",
+          "method": "GET"
+        },
+        {
+          "url": "/api/admin/pages",
+          "method": "GET"
+        },
+        {
+          "url": "/api/admin/stats",
+          "method": "GET"
+        }
+      ]
+    },
+    {
+      "visit": 4,
+      "readyMs": 281,
+      "tabs": [
+        "What you're selling",
+        "Price",
+        "Order form",
+        "Order bumps",
+        "Upsells",
+        "After purchase"
+      ],
+      "options": [
+        "Add something they get…",
+        "The Profitable Private Practice Boss Builders Collective · Download",
+        "DIRECTORY MAKEOVER AUDIT · Course",
+        "FULLY BOOKED TOOLKIT · Download",
+        "CREDENTIALING SUCCESS FORMULA · Course",
+        "CREDENTIAL WITH CONFIDENCE · Course",
+        "PRIVATE PRACTICE STARTER SUITE · Course",
+        "🔥 RAMP-UP RATE FORMULA · Course",
+        "PROVIDER PARTNERSHIP GUIDE · Download",
+        "PRIVATE PRACTICE PROTECTION PACK · Course",
+        "MARKETING MASTERY FOR THERAPISTS · Download",
+        "THERAPIST NICHE CLARITY ACCELERATOR · Download",
+        "RATE NEGOTIATION LETTER TEMPLATE · Course",
+        "PREPARE TO PROFIT JOURNAL · Course",
+        "CLIENT CONSULTATION CALL SCRIPT · Download",
+        "FROM PROFILE TO PROFIT · Download",
+        "Scale and Reclaim Suite · Course",
+        "The Boss Boardroom · Course"
+      ],
+      "metrics": {
+        "Documents": 2,
+        "JSEventListeners": 237,
+        "Nodes": 902,
+        "TaskDuration": 0.645702,
+        "JSHeapUsedSize": 8630296
+      },
+      "state": {
+        "documentId": "87d9aec4-7724-43bd-96d1-b19315f65f51",
+        "intervalCount": 0,
+        "intervalDelays": [],
+        "timeoutCount": 0,
+        "longTasks": [],
+        "navigationEntries": 1
+      },
+      "requests": [
+        {
+          "url": "/api/admin/offers/2",
+          "method": "GET"
+        },
+        {
+          "url": "/api/admin/products",
+          "method": "GET"
+        },
+        {
+          "url": "/api/admin/offers",
+          "method": "GET"
+        },
+        {
+          "url": "/api/admin/pages",
+          "method": "GET"
+        },
+        {
+          "url": "/api/admin/stats",
+          "method": "GET"
+        }
+      ]
+    },
+    {
+      "visit": 5,
+      "readyMs": 279,
+      "tabs": [
+        "What you're selling",
+        "Price",
+        "Order form",
+        "Order bumps",
+        "Upsells",
+        "After purchase"
+      ],
+      "options": [
+        "Add something they get…",
+        "The Profitable Private Practice Boss Builders Collective · Download",
+        "DIRECTORY MAKEOVER AUDIT · Course",
+        "FULLY BOOKED TOOLKIT · Download",
+        "CREDENTIALING SUCCESS FORMULA · Course",
+        "CREDENTIAL WITH CONFIDENCE · Course",
+        "PRIVATE PRACTICE STARTER SUITE · Course",
+        "🔥 RAMP-UP RATE FORMULA · Course",
+        "PROVIDER PARTNERSHIP GUIDE · Download",
+        "PRIVATE PRACTICE PROTECTION PACK · Course",
+        "MARKETING MASTERY FOR THERAPISTS · Download",
+        "THERAPIST NICHE CLARITY ACCELERATOR · Download",
+        "RATE NEGOTIATION LETTER TEMPLATE · Course",
+        "PREPARE TO PROFIT JOURNAL · Course",
+        "CLIENT CONSULTATION CALL SCRIPT · Download",
+        "FROM PROFILE TO PROFIT · Download",
+        "Scale and Reclaim Suite · Course",
+        "The Boss Boardroom · Course"
+      ],
+      "metrics": {
+        "Documents": 2,
+        "JSEventListeners": 237,
+        "Nodes": 902,
+        "TaskDuration": 0.768735,
+        "JSHeapUsedSize": 8890660
+      },
+      "state": {
+        "documentId": "87d9aec4-7724-43bd-96d1-b19315f65f51",
+        "intervalCount": 0,
+        "intervalDelays": [],
+        "timeoutCount": 0,
+        "longTasks": [],
+        "navigationEntries": 1
+      },
+      "requests": [
+        {
+          "url": "/api/admin/offers/2",
+          "method": "GET"
+        },
+        {
+          "url": "/api/admin/products",
+          "method": "GET"
+        },
+        {
+          "url": "/api/admin/offers",
+          "method": "GET"
+        },
+        {
+          "url": "/api/admin/pages",
+          "method": "GET"
+        },
+        {
+          "url": "/api/admin/stats",
+          "method": "GET"
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "documentRequests": [
+    "https://admin.bossclinician.callsphere.site/admin/offers"
+  ]
+}

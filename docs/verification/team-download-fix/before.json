@@ -1,0 +1,97 @@
+{
+  "at": "2026-09-12T23:27:00.360Z",
+  "downloads": [
+    {
+      "id": 2,
+      "title": "FULLY BOOKED TOOLKIT",
+      "files": 0,
+      "grants": 0,
+      "offers": []
+    },
+    {
+      "id": 7,
+      "title": "THERAPIST NICHE CLARITY ACCELERATOR",
+      "files": 0,
+      "grants": 0,
+      "offers": []
+    },
+    {
+      "id": 9,
+      "title": "FROM PROFILE TO PROFIT",
+      "files": 0,
+      "grants": 0,
+      "offers": []
+    },
+    {
+      "id": 14,
+      "title": "PROVIDER PARTNERSHIP GUIDE",
+      "files": 0,
+      "grants": 0,
+      "offers": []
+    },
+    {
+      "id": 15,
+      "title": "MARKETING MASTERY FOR THERAPISTS",
+      "files": 0,
+      "grants": 0,
+      "offers": []
+    },
+    {
+      "id": 17,
+      "title": "CLIENT CONSULTATION CALL SCRIPT",
+      "files": 0,
+      "grants": 0,
+      "offers": []
+    },
+    {
+      "id": 25,
+      "title": "The Profitable Private Practice Boss Builders Collective",
+      "files": 0,
+      "grants": 1,
+      "offers": [
+        "ppp-collective"
+      ]
+    }
+  ],
+  "team": [
+    {
+      "id": 1,
+      "role": "owner",
+      "status": "active"
+    }
+  ],
+  "media": [
+    {
+      "id": 6,
+      "original_name": "Video_generation_prompt_s_.mp4"
+    },
+    {
+      "id": 7,
+      "original_name": "IMNxMa8FvUKa4.png"
+    },
+    {
+      "id": 8,
+      "original_name": "zz-test-image.jpg"
+    },
+    {
+      "id": 10,
+      "original_name": "practice-reset-worksheet.txt"
+    },
+    {
+      "id": 11,
+      "original_name": "pdfcoffee.com_hindi-book-pantjali-yog-pradip-pdf-free.pdf"
+    },
+    {
+      "id": 12,
+      "original_name": "callsphere.pdf"
+    },
+    {
+      "id": 13,
+      "original_name": "output_progressive_54030ca1-5962-40b7-b6ed-b5a0a23fd3e8.mp4"
+    },
+    {
+      "id": 14,
+      "original_name": "WhatsApp Video 2026-03-05 at 14.55.49.mp4"
+    }
+  ]
+}

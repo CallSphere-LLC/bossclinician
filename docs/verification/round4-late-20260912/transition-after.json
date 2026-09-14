@@ -1,0 +1,30 @@
+[
+  {
+    "reducedMotion": "no-preference",
+    "questionCount": 1,
+    "submissions": 1,
+    "mismatches": [],
+    "errors": []
+  },
+  {
+    "reducedMotion": "no-preference",
+    "questionCount": 3,
+    "submissions": 1,
+    "mismatches": [],
+    "errors": []
+  },
+  {
+    "reducedMotion": "reduce",
+    "questionCount": 1,
+    "submissions": 1,
+    "mismatches": [],
+    "errors": []
+  },
+  {
+    "reducedMotion": "reduce",
+    "questionCount": 3,
+    "submissions": 1,
+    "mismatches": [],
+    "errors": []
+  }
+]

@@ -1,0 +1,59 @@
+{
+  "results": [
+    {
+      "width": 1280,
+      "choices": [
+        "Create Course",
+        "Create Community",
+        "Create Coaching",
+        "Create Podcast",
+        "Create Newsletter",
+        "Create Download"
+      ],
+      "overflow": 0
+    },
+    {
+      "width": 1440,
+      "choices": [
+        "Create Course",
+        "Create Community",
+        "Create Coaching",
+        "Create Podcast",
+        "Create Newsletter",
+        "Create Download"
+      ],
+      "overflow": 0
+    },
+    {
+      "type": "Course",
+      "url": "https://bossclinician.callsphere.site/admin/courses",
+      "dialog": "Add a course"
+    },
+    {
+      "type": "Community",
+      "url": "https://bossclinician.callsphere.site/admin/community",
+      "dialog": "New community"
+    },
+    {
+      "type": "Coaching",
+      "url": "https://bossclinician.callsphere.site/admin/coaching",
+      "dialog": "New coaching offer"
+    },
+    {
+      "type": "Podcast",
+      "url": "https://bossclinician.callsphere.site/admin/podcasts",
+      "dialog": "New show"
+    },
+    {
+      "type": "Newsletter",
+      "url": "https://bossclinician.callsphere.site/admin/newsletters",
+      "dialog": "New newsletter"
+    },
+    {
+      "type": "Download",
+      "url": "https://bossclinician.callsphere.site/admin/downloads",
+      "dialog": "New download"
+    }
+  ],
+  "errors": []
+}

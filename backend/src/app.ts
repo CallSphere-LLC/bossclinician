@@ -2,11 +2,13 @@ import express, { Express } from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import morgan from "morgan";
+import { requireAdminHost } from "./auth/adminSession";
 import { env } from "./config/env";
 import { publicRouter } from "./routes/public";
 import { adminRouter } from "./routes/admin";
 import { memberAuthRouter } from "./routes/auth";
 import { memberRouter } from "./routes/member";
+import { accountReceiptsRouter } from "./routes/member/accountReceipts";
 import { seoRouter } from "./routes/public/seo";
 import { renderRouter } from "./routes/public/render";
 import { apiV1Router } from "./routes/public/apiV1";
@@ -32,12 +34,14 @@ export function createApp(): Express {
   // entrypoints together; see docs/bugs/infra.md.
   app.set("trust proxy", 1);
 
-  const corsOrigin = env.frontendOrigin === "*" ? true : env.frontendOrigin;
-  // credentials: the member refresh token travels in an HttpOnly cookie, and a
-  // browser will not attach it to a cross-origin request unless the response
-  // says so. Only meaningful when FRONTEND_ORIGIN names a real origin — the
-  // wildcard case is same-origin behind nginx in production anyway.
-  app.use(cors({ origin: corsOrigin, credentials: env.frontendOrigin !== "*" }));
+  // Host is the real routing boundary. Do this before CORS and every admin
+  // endpoint, including login and refresh, even if a legacy cookie is sent.
+  app.use("/api/admin", requireAdminHost);
+  app.use(cors((req, callback) => {
+    const isAdmin = req.url === "/api/admin" || req.url.startsWith("/api/admin/");
+    const origin = isAdmin && env.adminOrigin ? env.adminOrigin : env.frontendOrigin;
+    callback(null, { origin: origin === "*" ? true : origin, credentials: origin !== "*" });
+  }));
 
   app.use(cookieParser());
 
@@ -91,6 +95,10 @@ export function createApp(): Express {
   // refresh, reset); /api/member is everything that requires being signed in.
   app.use("/api/auth", memberAuthRouter);
   app.use("/api/member", memberRouter);
+  // The receipt PDF at its permanent member address. Two exact route shapes,
+  // authenticated by the /account/-scoped document cookie; nginx sends exactly
+  // these here and every other /account URL to the SPA.
+  app.use("/account", accountReceiptsRouter);
   app.use("/api", publicRouter);
 
   // Server-rendered marketing HTML. Last, and matching only its own explicit

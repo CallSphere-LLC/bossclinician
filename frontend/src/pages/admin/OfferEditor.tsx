@@ -18,6 +18,7 @@ import {
   Eye,
   EyeOff,
   Flag,
+  Gift,
   Image as ImageIcon,
   Link2,
   Mail,
@@ -127,6 +128,7 @@ function blankDraft(): OfferDraft {
     thankYouPageId: null,
     accessExpiresAfterDays: null,
     sendWelcomeEmail: true,
+    allowGifting: true,
     welcomeNextSteps: "",
   };
 }
@@ -154,6 +156,7 @@ function draftFrom(offer: OfferDetail): OfferDraft {
     thankYouPageId: offer.thankYouPageId,
     accessExpiresAfterDays: offer.accessExpiresAfterDays,
     sendWelcomeEmail: offer.sendWelcomeEmail,
+    allowGifting: offer.allowGifting !== false,
     welcomeNextSteps: offer.welcomeNextSteps,
   };
 }
@@ -178,7 +181,7 @@ export function offerPricingErrors(
 
 /* ── Tabs ───────────────────────────────────────────────────────────────── */
 
-type TabKey = "selling" | "price" | "form" | "bumps" | "upsells" | "after";
+type TabKey = "selling" | "price" | "form" | "bumps" | "upsells" | "gifting" | "after";
 
 const TABS: { value: TabKey; label: string; icon: LucideIcon }[] = [
   { value: "selling", label: "What you're selling", icon: Package },
@@ -186,6 +189,7 @@ const TABS: { value: TabKey; label: string; icon: LucideIcon }[] = [
   { value: "form", label: "Order form", icon: ClipboardList },
   { value: "bumps", label: "Order bumps", icon: ShoppingBag },
   { value: "upsells", label: "Upsells", icon: Sparkles },
+  { value: "gifting", label: "Send as a gift", icon: Gift },
   { value: "after", label: "After purchase", icon: Flag },
 ];
 
@@ -194,6 +198,7 @@ const TABS: { value: TabKey; label: string; icon: LucideIcon }[] = [
  * of the box she has to fix instead of leaving her to hunt for it.
  */
 const FIELD_TAB: Record<string, TabKey> = {
+  allowGifting: "gifting",
   title: "selling",
   slug: "selling",
   description: "selling",
@@ -820,6 +825,22 @@ export default function OfferEditor() {
             ) : (
               <SaveFirst what="upsells" />
             )}
+          </Tabs.Content>
+
+          <Tabs.Content value="gifting">
+            <Card>
+              <CardHeader icon={<Gift className="size-4" />} title="Send as a gift"
+                subtitle="Let a buyer purchase access for someone else" />
+              <div className="space-y-4 p-5">
+                <Check checked={draft.allowGifting !== false}
+                  onChange={(allowGifting) => update({ allowGifting })}
+                  label="Let buyers send this as a gift"
+                  hint="At checkout, buyers can enter the recipient’s name, email address and a personal message." />
+                <p className="text-sm text-ink-soft">The recipient gets access to the products. The buyer keeps the order and receipt. Gift recipients can sign in with an existing account or set up a new one.</p>
+                <p className="text-sm text-ink-soft">Gifting is available for one-time purchases. Subscriptions and payment plans cannot be gifted. For a multi-item cart, every offer must allow gifting.</p>
+                {(draft.pricingType === "subscription" || draft.pricingType === "payment_plan") && <Caution>This offer uses recurring payments, so the gift option will not appear at checkout. Choose a one-time price to offer gifting.</Caution>}
+              </div>
+            </Card>
           </Tabs.Content>
 
           <Tabs.Content value="after">

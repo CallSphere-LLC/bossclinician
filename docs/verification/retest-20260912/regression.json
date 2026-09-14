@@ -1,0 +1,283 @@
+{
+  "member401": [
+    {
+      "origin": "https://admin.bossclinician.callsphere.site",
+      "name": "contacts",
+      "status": 401
+    },
+    {
+      "origin": "https://admin.bossclinician.callsphere.site",
+      "name": "offers",
+      "status": 401
+    },
+    {
+      "origin": "https://admin.bossclinician.callsphere.site",
+      "name": "settings",
+      "status": 401
+    },
+    {
+      "origin": "https://bossclinician.callsphere.site",
+      "name": "contacts",
+      "status": 401
+    },
+    {
+      "origin": "https://bossclinician.callsphere.site",
+      "name": "offers",
+      "status": 401
+    },
+    {
+      "origin": "https://bossclinician.callsphere.site",
+      "name": "settings",
+      "status": 401
+    }
+  ],
+  "receipt40": {
+    "status": 200,
+    "type": "application/pdf",
+    "disposition": "attachment; filename=\"receipt-R-2026-00009.pdf\"",
+    "prefix": "%PDF-",
+    "bytes": 2560
+  },
+  "receipt53": {
+    "status": 404,
+    "type": "application/json; charset=utf-8",
+    "disposition": null,
+    "prefix": "{\"err",
+    "bytes": 42
+  },
+  "marketing": {
+    "windowDays": 30,
+    "generatedAt": "2026-09-12T20:04:55.670Z",
+    "emails": {
+      "sent": 4,
+      "bySource": {
+        "broadcast": 1,
+        "sequence": 3,
+        "automation": 0
+      },
+      "broadcastUnlisted": 1,
+      "opened": 1,
+      "clicked": 0,
+      "openRate": 25,
+      "clickRate": 0,
+      "notSent": 0,
+      "notSentBySource": {
+        "broadcast": 0,
+        "sequence": 0,
+        "automation": 0
+      },
+      "notSentPeople": 0,
+      "notSentEmails": 0,
+      "notSentLaterSent": 0,
+      "queued": 0,
+      "campaignsSent": 0,
+      "campaignsScheduled": 0,
+      "trackingSeen": true
+    },
+    "sequences": {
+      "active": 1,
+      "total": 1,
+      "enrolled": 1,
+      "people": 1,
+      "top": [
+        {
+          "id": 1,
+          "name": "ZZ Test — welcome sequence",
+          "enrolled": 1
+        }
+      ]
+    },
+    "forms": {
+      "replies": 3,
+      "previousReplies": 0,
+      "formsWithReplies": 1,
+      "top": [
+        {
+          "id": 4,
+          "name": "ZZ Test — waitlist form",
+          "replies": 3
+        }
+      ]
+    },
+    "automations": {
+      "active": 1,
+      "ran": 1,
+      "runs": 4,
+      "problemRuns": 2,
+      "failedRuns": 0,
+      "withProblems": 1,
+      "skippedRuns": 0,
+      "problemAutomations": [
+        {
+          "id": 2,
+          "name": "ZZ Test — buyer welcome",
+          "problemRuns": 2
+        }
+      ]
+    },
+    "events": {
+      "upcoming": 2,
+      "upcomingPublished": 1,
+      "upcomingDrafts": 1,
+      "alwaysOn": 0,
+      "registrations": 2,
+      "communityUpcoming": 0,
+      "next": [
+        {
+          "id": 1,
+          "title": "ZZ Test — live webinar",
+          "startsAt": "2026-09-15T22:00:00.000Z",
+          "published": true,
+          "registrations": 2
+        },
+        {
+          "id": 2,
+          "title": "ZZ Verify — tz check",
+          "startsAt": "2026-10-10T22:00:00.000Z",
+          "published": false,
+          "registrations": 0
+        }
+      ]
+    }
+  },
+  "funnel": {
+    "funnel": {
+      "id": 14,
+      "slug": "zz-origin-verification-funnel",
+      "name": "ZZ Origin Verification Funnel",
+      "description": "",
+      "kind": "opt_in",
+      "published": false,
+      "createdAt": "2026-09-12T20:04:55.677Z",
+      "updatedAt": "2026-09-12T20:04:55.677Z",
+      "formId": 21,
+      "tagId": 54,
+      "sequenceId": 14,
+      "offerId": null
+    },
+    "stageCount": 3,
+    "emailCount": 1,
+    "formId": 21,
+    "tagId": 54,
+    "sequenceId": 14,
+    "reloaded": {
+      "id": 14,
+      "slug": "zz-origin-verification-funnel",
+      "name": "ZZ Origin Verification Funnel",
+      "description": "",
+      "kind": "opt_in",
+      "published": false,
+      "createdAt": "2026-09-12T20:04:55.677Z",
+      "updatedAt": "2026-09-12T20:04:55.677Z",
+      "formId": 21,
+      "tagId": 54,
+      "sequenceId": 14,
+      "offerId": null
+    },
+    "steps": [
+      {
+        "id": 29,
+        "funnelId": 14,
+        "name": "Landing page",
+        "slug": "zz-origin-verification-funnel-1",
+        "stepType": "landing",
+        "headline": "A useful free resource",
+        "bodyMd": "Show what they will get and why it helps.",
+        "ctaLabel": "Get it",
+        "ctaUrl": "",
+        "sort": 0,
+        "views": 0,
+        "conversions": 0,
+        "createdAt": "2026-09-12T20:04:55.677Z",
+        "updatedAt": "2026-09-12T20:04:55.677Z"
+      },
+      {
+        "id": 30,
+        "funnelId": 14,
+        "name": "Sign-up",
+        "slug": "zz-origin-verification-funnel-2",
+        "stepType": "opt_in",
+        "headline": "Where should we send it?",
+        "bodyMd": "Ask for the details you actually need.",
+        "ctaLabel": "Send it to me",
+        "ctaUrl": "/forms/funnel-14-signup",
+        "sort": 1,
+        "views": 0,
+        "conversions": 0,
+        "createdAt": "2026-09-12T20:04:55.677Z",
+        "updatedAt": "2026-09-12T20:04:55.677Z"
+      },
+      {
+        "id": 31,
+        "funnelId": 14,
+        "name": "Thank you",
+        "slug": "zz-origin-verification-funnel-3",
+        "stepType": "thank_you",
+        "headline": "It is on its way",
+        "bodyMd": "Tell them what to expect next.",
+        "ctaLabel": "Back to the site",
+        "ctaUrl": "/",
+        "sort": 2,
+        "views": 0,
+        "conversions": 0,
+        "createdAt": "2026-09-12T20:04:55.677Z",
+        "updatedAt": "2026-09-12T20:04:55.677Z"
+      }
+    ]
+  },
+  "dm": {
+    "a": {
+      "threadId": 109,
+      "other": {
+        "memberId": 53,
+        "name": "ZZ DM Tester",
+        "avatarUrl": ""
+      },
+      "messages": [
+        {
+          "id": 26,
+          "mine": true,
+          "body": "ZZ Origin verification hello",
+          "at": "2026-09-12T20:04:55.739Z"
+        },
+        {
+          "id": 27,
+          "mine": false,
+          "body": "ZZ Origin verification reply",
+          "at": "2026-09-12T20:04:55.761Z"
+        }
+      ]
+    },
+    "b": {
+      "threadId": 109,
+      "other": {
+        "memberId": 40,
+        "name": "Madhav Shankaran",
+        "avatarUrl": ""
+      },
+      "messages": [
+        {
+          "id": 26,
+          "mine": false,
+          "body": "ZZ Origin verification hello",
+          "at": "2026-09-12T20:04:55.739Z"
+        },
+        {
+          "id": 27,
+          "mine": true,
+          "body": "ZZ Origin verification reply",
+          "at": "2026-09-12T20:04:55.761Z"
+        }
+      ]
+    }
+  },
+  "coaching": {
+    "notes": "Private: watch cashflow."
+  },
+  "preview": {
+    "url": "https://bossclinician.callsphere.site/library",
+    "text": "Your library\n\nEverything you own, in one place — courses, downloads and the rest, exactly where you left them.\n\nYour shelf is waiting\n\nEverything you buy lands here the moment it is yours — courses to work through, worksheets to download, and the sessions you have booked. Nothing to open just yet.\n\nBROWSE THE COURSES\nWORK WITH YVETTE",
+    "adminToken": null,
+    "adminApi": 401
+  }
+}

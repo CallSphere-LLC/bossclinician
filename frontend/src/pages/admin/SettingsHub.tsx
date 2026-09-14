@@ -15,8 +15,8 @@ import {
   Users,
   type LucideIcon,
 } from "lucide-react";
-import { settingsApi, type SettingGroup } from "@/lib/settingsApi";
-import { Card, ErrorNotice, PageHeader, Skeleton } from "@/pages/admin/ui/primitives";
+import { settingsApi, type SendingIdentityReport, type SettingGroup } from "@/lib/settingsApi";
+import { Badge, Card, ErrorNotice, PageHeader, Skeleton } from "@/pages/admin/ui/primitives";
 import { pluralize } from "@/pages/admin/ui/friendly";
 
 /**
@@ -46,6 +46,8 @@ interface Destination {
   description: string;
   icon: LucideIcon;
   meta: string;
+  /** A red pill on the card, for a group with something actually broken in it. */
+  alert?: string;
 }
 
 function DestinationCard({ destination, index }: { destination: Destination; index: number }) {
@@ -65,9 +67,10 @@ function DestinationCard({ destination, index }: { destination: Destination; ind
             <Icon className="size-5" />
           </span>
           <span className="min-w-0 flex-1">
-            <span className="flex items-center gap-2">
+            <span className="flex flex-wrap items-center gap-2">
               <span className="font-display text-base text-ink">{destination.label}</span>
               <ChevronRight className="size-4 shrink-0 text-ink-soft/60" />
+              {destination.alert && <Badge tone="red">{destination.alert}</Badge>}
             </span>
             <span className="mt-1 block text-sm leading-relaxed text-ink-soft">
               {destination.description}
@@ -83,6 +86,22 @@ function DestinationCard({ destination, index }: { destination: Destination; ind
 export default function SettingsHub() {
   const [groups, setGroups] = useState<SettingGroup[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [identity, setIdentity] = useState<SendingIdentityReport | null>(null);
+
+  /*
+   * The sending identity, read here as well as inside the email group.
+   *
+   * A tester ran a whole session on the live site without ever discovering that
+   * every marketing send was misconfigured, because a settings screen with empty
+   * boxes looks exactly like one nobody has needed to change. This is the pill
+   * that makes it findable from the front door.
+   */
+  useEffect(() => {
+    settingsApi
+      .sendingIdentity()
+      .then(setIdentity)
+      .catch(() => setIdentity(null));
+  }, []);
 
   useEffect(() => {
     settingsApi
@@ -100,6 +119,10 @@ export default function SettingsHub() {
     description: group.description,
     icon: GROUP_ICONS[group.key] ?? Bell,
     meta: pluralize(group.settings.length, "thing to change", "things to change"),
+    alert:
+      group.key === "email" && identity !== null && !identity.ready
+        ? `${identity.problems.length} to fill in before you can send`
+        : undefined,
   }));
 
   const peopleDestinations: Destination[] = [

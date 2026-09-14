@@ -1,0 +1,103 @@
+/* Public and member appearance. The admin owns its separate console palette. */
+html[data-site-theme="light"] .theme-luxe {
+  color-scheme: light;
+  --c-night: 255 255 255;
+  --c-night-deep: 255 255 255;
+  --c-night-raised: 255 255 255;
+  --c-night-veil: 255 255 255;
+  --c-orchid: 67 57 80;
+  --c-orchid-dim: 86 77 96;
+  --c-orchid-faint: 98 88 108;
+  --c-ink: 30 24 40;
+  --c-ink-soft: 86 77 96;
+  --c-cream: 255 255 255;
+  --c-sand: 255 255 255;
+  --c-surface: 255 255 255;
+  --c-surface-raised: 255 255 255;
+  --c-hairline: 216 211 223;
+  --c-lilac-soft: 102 78 128;
+  --c-lilac-tint: 245 241 249;
+  --c-dark: 30 24 40;
+  --c-plum: 92 69 125;
+  --c-plum-deep: 61 45 92;
+  --c-plum-bright: 102 75 145;
+  --c-lilac: 102 78 128;
+  color: rgb(var(--c-ink));
+  background: #fff;
+  scrollbar-color: #b7afc2 #fff;
+}
+
+html[data-site-theme="light"] body:has(.theme-luxe) {
+  background: #fff;
+}
+
+html[data-site-theme="light"] .theme-luxe :is(section, header, footer) {
+  background-color: #fff;
+  background-image: none;
+}
+
+/* Ambient lighting is a dark-mode decoration, not a tint for light surfaces. */
+html[data-site-theme="light"] .theme-luxe :is(.site-aurora, [aria-hidden="true"][class*="blur"], [aria-hidden="true"][class*="bg-[radial-gradient"]) {
+  display: none;
+}
+html[data-site-theme="light"] .theme-luxe.grain-overlay::after {
+  display: none;
+}
+
+html[data-site-theme="light"] .theme-luxe :is(.glass, .glass-soft) {
+  background: #fff;
+  border-color: rgb(var(--c-hairline));
+  box-shadow: 0 12px 36px -24px rgb(30 24 40 / 0.22);
+}
+html[data-site-theme="light"] .theme-luxe :is(.glass-edge, .spotlight)::after {
+  display: none;
+}
+
+/* The existing luxe components use white utilities as foreground colors.
+   Map those legacy foregrounds here; semantic ink/orchid tokens above cover
+   new components. Avoid image filters so all source colors stay untouched. */
+html[data-site-theme="light"] .theme-luxe :is([class~="text-white"], [class*="text-white/"]) {
+  color: rgb(var(--c-ink));
+}
+html[data-site-theme="light"] .theme-luxe :is([class*="placeholder:text-white"], input, textarea)::placeholder {
+  color: rgb(var(--c-ink-soft));
+  opacity: 1;
+}
+html[data-site-theme="light"] .theme-luxe [class*="text-gold"] {
+  color: #76501b;
+}
+html[data-site-theme="light"] .theme-luxe .text-foil {
+  background-image: none;
+  color: #76501b;
+  -webkit-text-fill-color: currentColor;
+}
+html[data-site-theme="light"] .theme-luxe :is([class*="border-white"], [class*="divide-white"] > :not([hidden]) ~ :not([hidden])) {
+  border-color: rgb(var(--c-hairline));
+}
+/* Dark lettering on gold remains dark even when the page floor turns white. */
+html[data-site-theme="light"] .theme-luxe [class~="text-night-deep"] {
+  color: #06040b;
+}
+html[data-site-theme="light"] .theme-luxe :is(.bg-brand-gradient, .bg-plum, .bg-plum-bright, [class~="bg-red-500/90"]) {
+  color: #fff;
+}
+html[data-site-theme="light"] .theme-luxe header [class~="bg-white"] {
+  background-color: rgb(var(--c-ink));
+}
+html[data-site-theme="light"] .theme-luxe ::-webkit-scrollbar-track {
+  background: #fff;
+}
+html[data-site-theme="light"] .theme-luxe ::-webkit-scrollbar-thumb {
+  background: #b7afc2;
+  border-color: #fff;
+}
+html[data-site-theme="light"] .theme-luxe ::selection {
+  background: #e7dbf3;
+  color: #251b34;
+}
+html[data-site-theme="light"] .theme-luxe .eyebrow-luxe {
+  color: #76501b;
+}
+html[data-site-theme="light"] .theme-luxe header {
+  box-shadow: 0 1px 0 rgb(var(--c-hairline));
+}

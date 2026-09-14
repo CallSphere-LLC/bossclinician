@@ -102,11 +102,14 @@ export const campaignsRepo = createCrudRepo<Row>("email_campaigns", [
   "status",
   "scheduledAt",
   "timezone",
-  // 3.3: scheduled relative to an event rather than to the clock. Resolved at
-  // send time, so a rescheduled event carries its campaigns with it.
-  "anchorKind",
-  "anchorEventId",
-  "anchorOffsetMinutes",
+  // The event anchor (3.3) is deliberately NOT writable through generic CRUD.
+  //
+  // Arming one has to stamp `anchor_armed_at` from the server clock — that
+  // stamp is the whole backlog guard, since the sweeper refuses any send whose
+  // moment was already past when the campaign was armed. A CRUD PUT that could
+  // set `anchorKind` and `anchorEventId` without it would leave an anchor with
+  // no arming moment, which is exactly the state the guard cannot reason about.
+  // POST /campaigns/:id/schedule-event sets all four together, or none.
 ]);
 
 export const funnelsRepo = createCrudRepo<Row>("funnels", [

@@ -1,20 +1,25 @@
+import { publicSiteUrl } from "@/lib/siteOrigins";
 import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
   Bold,
+  Copy,
   Heading2,
   Image,
   Italic,
+  LayoutTemplate,
   Link2,
   List,
   ListOrdered,
   Minus,
   Monitor,
   MousePointerClick,
+  Pencil,
   Pilcrow,
   Save,
   Smartphone,
+  Trash2,
   type LucideIcon,
 } from "lucide-react";
 import { Button, Textarea, selectStyles } from "@/pages/admin/ui/primitives";
@@ -133,6 +138,26 @@ export const EMAIL_STARTERS = [
   },
 ] as const;
 
+/**
+ * 3.11. The two widths the preview can be seen at.
+ *
+ * Exported so the mapping is testable without a DOM: the frontend suite runs in
+ * node, and the thing worth pinning here is that "phone" is a fixed narrow
+ * width rather than whatever the browser window happens to be. A preview that
+ * inherits the viewport shows a desktop layout on a desktop and cannot show the
+ * other one at all, which is the bug this replaced.
+ */
+export const PREVIEW_DEVICES = ["desktop", "mobile"] as const;
+
+export type PreviewDevice = (typeof PREVIEW_DEVICES)[number];
+
+/** 390px is an iPhone's CSS width; `max-w-full` keeps it honest on a narrow screen. */
+export function previewWidthClass(device: PreviewDevice): string {
+  // Centred, so the narrow case reads as a phone rather than as a broken
+  // desktop layout pinned to the left.
+  return device === "mobile" ? "mx-auto w-[390px] max-w-full" : "";
+}
+
 function insertAt(value: string, start: number, end: number, body: string): TextEdit {
   const before = value.slice(0, start);
   const after = value.slice(end);
@@ -167,10 +192,22 @@ export default function EmailComposer({
    * which a responsive preview cannot do because it only ever has the one
    * viewport.
    */
-  const [device, setDevice] = useState<"desktop" | "mobile">("desktop");
+  const [device, setDevice] = useState<PreviewDevice>("desktop");
   const [mergeTags, setMergeTags] = useState<MergeTag[]>([]);
   const [templates, setTemplates] = useState<SavedEmailTemplate[]>([]);
   const [savingTemplate, setSavingTemplate] = useState(false);
+  /**
+   * 3.2. Whether the template library is open.
+   *
+   * The library used to be a row of buttons that appeared only while the
+   * composer was EMPTY, which made it unreachable in the one situation it is
+   * most wanted: an email half-written, and a saved layout that would have
+   * saved the work. It is a panel now, reachable at any point, and it can
+   * duplicate and rename and delete — which is what makes it a library rather
+   * than three fixed starters.
+   */
+  const [libraryOpen, setLibraryOpen] = useState(false);
+  const [busyTemplateId, setBusyTemplateId] = useState<number | null>(null);
 
   // Both lists are small, cached by the browser, and only needed once the
   // composer is on screen — so they are fetched here rather than threaded
@@ -218,11 +255,61 @@ export default function EmailComposer({
     });
   }
 
+  /**
+   * Puts a template's body into the composer.
+   *
+   * Confirms first when there is work on screen. Replacing half a written email
+   * with a starter, with no undo and no warning, is the kind of loss that makes
+   * somebody stop using a feature.
+   */
+  function applyTemplate(label: string, body: string) {
+    if (
+      value.trim() &&
+      !window.confirm(`Replace what you've written with “${label}”? This can't be undone.`)
+    ) {
+      return;
+    }
+    onChange(body);
+    setLibraryOpen(false);
+    setPreview(false);
+  }
+
+  async function saveAsTemplate() {
+    const name = window.prompt("Save this as a template called…");
+    if (!name?.trim()) return;
+    setSavingTemplate(true);
+    try {
+      const saved = await adminApi.savedTemplateCreate({ name: name.trim(), bodyMd: value });
+      setTemplates((prev) => [...prev, saved].sort((a, b) => a.name.localeCompare(b.name)));
+      toast.success(`Saved as “${saved.name}”.`);
+    } catch {
+      toast.error("We couldn't save that as a template.");
+    } finally {
+      setSavingTemplate(false);
+    }
+  }
+
+  async function runTemplateAction(
+    id: number,
+    action: () => Promise<SavedEmailTemplate[] | void>,
+    failure: string,
+  ) {
+    setBusyTemplateId(id);
+    try {
+      const next = await action();
+      if (next) setTemplates(next.sort((a, b) => a.name.localeCompare(b.name)));
+    } catch {
+      toast.error(failure);
+    } finally {
+      setBusyTemplateId(null);
+    }
+  }
+
   function addImage(asset: MediaAsset) {
     const el = ref.current;
     if (!el) return;
     const source = asset.url.startsWith("/") && typeof window !== "undefined"
-      ? `${window.location.origin}${asset.url}`
+      ? publicSiteUrl(asset.url)
       : asset.url;
     const alt = (asset.title || asset.originalName || "Image").replace(/[\[\]]/g, "");
     commit(insertAt(el.value, el.selectionStart, el.selectionEnd, `![${alt}](${source})`));
@@ -231,7 +318,7 @@ export default function EmailComposer({
   return (
     <>
     <div className="space-y-3">
-      {!value.trim() && (
+      {!value.trim() && !libraryOpen && (
         <div className="rounded-xl border border-hairline bg-cream/60 p-3">
           <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-soft">
             Start from a template
@@ -243,21 +330,22 @@ export default function EmailComposer({
                 type="button"
                 variant="secondary"
                 size="sm"
-                onClick={() => onChange(starter.body)}
+                onClick={() => applyTemplate(starter.label, starter.body)}
               >
                 {starter.label}
               </Button>
             ))}
             {/* Her own saved templates alongside the three built-in starters —
-                3.2. Listed here rather than behind a picker because on an empty
-                composer this row IS the picker. */}
+                3.2. On an empty composer this row IS the picker; the Templates
+                button in the toolbar is the way back to it once she is
+                writing, and is where duplicating and renaming live. */}
             {templates.map((template) => (
               <Button
                 key={template.id}
                 type="button"
                 variant="secondary"
                 size="sm"
-                onClick={() => onChange(template.bodyMd)}
+                onClick={() => applyTemplate(template.name, template.bodyMd)}
               >
                 {template.name}
               </Button>
@@ -266,7 +354,202 @@ export default function EmailComposer({
         </div>
       )}
 
+      {libraryOpen && (
+        <div className="rounded-xl border border-hairline bg-cream/60 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-ink-soft">
+              Template library
+            </p>
+            <div className="flex items-center gap-2">
+              {value.trim().length > 0 && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  disabled={savingTemplate}
+                  onClick={() => void saveAsTemplate()}
+                >
+                  <Save />
+                  Save this email as a template
+                </Button>
+              )}
+              <Button type="button" variant="ghost" size="sm" onClick={() => setLibraryOpen(false)}>
+                Close
+              </Button>
+            </div>
+          </div>
+
+          <p className="mt-2 text-xs text-ink-soft">
+            Starters come with the platform. Anything you save is yours to rename, copy or delete.
+          </p>
+
+          <div className="mt-3 space-y-2">
+            {EMAIL_STARTERS.map((starter) => (
+              <div
+                key={starter.key}
+                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-hairline bg-white/[0.04] px-3 py-2"
+              >
+                <span className="text-sm font-medium text-ink">
+                  {starter.label}
+                  <span className="ml-2 text-xs font-normal text-ink-soft">starter</span>
+                </span>
+                <div className="flex items-center gap-1">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => applyTemplate(starter.label, starter.body)}
+                  >
+                    Use this
+                  </Button>
+                  {/* Copying a starter is how a starter becomes hers: the copy
+                      is a saved template she can then edit and rename, which
+                      the three fixed starters never allowed. */}
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="iconSm"
+                    title={`Save a copy of ${starter.label}`}
+                    aria-label={`Save a copy of ${starter.label}`}
+                    disabled={savingTemplate}
+                    onClick={async () => {
+                      setSavingTemplate(true);
+                      try {
+                        const saved = await adminApi.savedTemplateCreate({
+                          name: `${starter.label} (my copy)`,
+                          bodyMd: starter.body,
+                        });
+                        setTemplates((prev) =>
+                          [...prev, saved].sort((a, b) => a.name.localeCompare(b.name)),
+                        );
+                        toast.success(`Saved as “${saved.name}”.`);
+                      } catch {
+                        toast.error("We couldn't copy that starter.");
+                      } finally {
+                        setSavingTemplate(false);
+                      }
+                    }}
+                  >
+                    <Copy />
+                  </Button>
+                </div>
+              </div>
+            ))}
+
+            {templates.map((template) => (
+              <div
+                key={template.id}
+                className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-hairline bg-white/[0.04] px-3 py-2"
+              >
+                <span className="min-w-0 truncate text-sm font-medium text-ink">
+                  {template.name}
+                </span>
+                <div className="flex items-center gap-1">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => applyTemplate(template.name, template.bodyMd)}
+                  >
+                    Use this
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="iconSm"
+                    title={`Make a copy of ${template.name}`}
+                    aria-label={`Make a copy of ${template.name}`}
+                    disabled={busyTemplateId === template.id}
+                    onClick={() =>
+                      void runTemplateAction(
+                        template.id,
+                        async () => {
+                          const copy = await adminApi.savedTemplateDuplicate(template.id);
+                          toast.success(`Copied to “${copy.name}”.`);
+                          return [...templates, copy];
+                        },
+                        "We couldn't copy that template.",
+                      )
+                    }
+                  >
+                    <Copy />
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="iconSm"
+                    title={`Rename ${template.name}`}
+                    aria-label={`Rename ${template.name}`}
+                    disabled={busyTemplateId === template.id}
+                    onClick={() => {
+                      const name = window.prompt("Rename this template to…", template.name);
+                      if (!name?.trim() || name.trim() === template.name) return;
+                      void runTemplateAction(
+                        template.id,
+                        async () => {
+                          const renamed = await adminApi.savedTemplateRename(
+                            template.id,
+                            name.trim(),
+                          );
+                          return templates.map((row) => (row.id === template.id ? renamed : row));
+                        },
+                        "We couldn't rename that template.",
+                      );
+                    }}
+                  >
+                    <Pencil />
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="dangerGhost"
+                    size="iconSm"
+                    title={`Delete ${template.name}`}
+                    aria-label={`Delete ${template.name}`}
+                    disabled={busyTemplateId === template.id}
+                    onClick={() => {
+                      if (!window.confirm(`Delete the template “${template.name}”? Emails you already wrote from it are not affected.`)) {
+                        return;
+                      }
+                      void runTemplateAction(
+                        template.id,
+                        async () => {
+                          await adminApi.savedTemplateDelete(template.id);
+                          toast.success("Template deleted.");
+                          return templates.filter((row) => row.id !== template.id);
+                        },
+                        "We couldn't delete that template.",
+                      );
+                    }}
+                  >
+                    <Trash2 />
+                  </Button>
+                </div>
+              </div>
+            ))}
+
+            {templates.length === 0 && (
+              <p className="text-sm text-ink-soft">
+                You haven't saved any of your own yet. Write an email, then choose “Save this email
+                as a template”.
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-wrap items-center gap-1 rounded-xl border border-hairline bg-white/[0.04] p-1">
+        {!preview && (
+          <Button
+            type="button"
+            variant={libraryOpen ? "secondary" : "ghost"}
+            size="sm"
+            aria-expanded={libraryOpen}
+            onClick={() => setLibraryOpen((open) => !open)}
+          >
+            <LayoutTemplate />
+            Templates
+          </Button>
+        )}
         {!preview &&
           TOOLBAR.map(({ id, label, Icon }) => (
             <Button
@@ -327,28 +610,40 @@ export default function EmailComposer({
 
         <div className="ml-auto flex items-center gap-1">
           {preview && (
-            <div className="mr-1 flex items-center gap-1">
+            /*
+             * 3.11. Desktop and phone widths, with the words on them.
+             *
+             * Two bare icons in the corner of a toolbar were not found by
+             * somebody looking for a mobile preview — the feature was there and
+             * read as absent. Labelled, grouped, and given a heading, it is a
+             * control rather than a pair of glyphs.
+             */
+            <div
+              role="group"
+              aria-label="Preview width"
+              className="mr-1 flex items-center gap-1 rounded-lg border border-hairline p-0.5"
+            >
               <Button
                 type="button"
                 variant={device === "desktop" ? "secondary" : "ghost"}
-                size="iconSm"
-                title="Desktop width"
-                aria-label="Desktop width"
+                size="sm"
+                title="See it at desktop width"
                 aria-pressed={device === "desktop"}
                 onClick={() => setDevice("desktop")}
               >
                 <Monitor />
+                Desktop
               </Button>
               <Button
                 type="button"
                 variant={device === "mobile" ? "secondary" : "ghost"}
-                size="iconSm"
-                title="Phone width"
-                aria-label="Phone width"
+                size="sm"
+                title="See it at phone width"
                 aria-pressed={device === "mobile"}
                 onClick={() => setDevice("mobile")}
               >
                 <Smartphone />
+                Phone
               </Button>
             </div>
           )}
@@ -358,23 +653,7 @@ export default function EmailComposer({
               variant="ghost"
               size="sm"
               disabled={savingTemplate}
-              onClick={async () => {
-                const name = window.prompt("Save this as a template called…");
-                if (!name?.trim()) return;
-                setSavingTemplate(true);
-                try {
-                  const saved = await adminApi.savedTemplateCreate({
-                    name: name.trim(),
-                    bodyMd: value,
-                  });
-                  setTemplates((prev) => [...prev, saved].sort((a, b) => a.name.localeCompare(b.name)));
-                  toast.success(`Saved as “${saved.name}”.`);
-                } catch {
-                  toast.error("We couldn't save that as a template.");
-                } finally {
-                  setSavingTemplate(false);
-                }
-              }}
+              onClick={() => void saveAsTemplate()}
             >
               <Save />
               Save as template
@@ -390,12 +669,16 @@ export default function EmailComposer({
       </div>
 
       {preview ? (
+        <div>
+          <p className="mb-2 text-xs text-ink-soft">
+            {device === "mobile"
+              ? "Phone width — 390px, about an iPhone."
+              : "Desktop width — the full width of the email."}
+          </p>
         <div
           className={cn(
             "prose-boss min-h-[14rem] rounded-xl border border-hairline bg-white/[0.03] p-4",
-            // 390px is an iPhone's CSS width. Centred, so the narrow case reads
-            // as a phone rather than as a broken desktop layout.
-            device === "mobile" && "mx-auto w-[390px] max-w-full",
+            previewWidthClass(device),
           )}
         >
           {value.trim() ? (
@@ -412,6 +695,7 @@ export default function EmailComposer({
           ) : (
             <p className="text-sm text-ink-soft">Nothing written yet — switch to Write and start typing.</p>
           )}
+        </div>
         </div>
       ) : (
         <Textarea ref={ref} rows={rows} value={value} placeholder={placeholder} onChange={(event) => onChange(event.target.value)} />

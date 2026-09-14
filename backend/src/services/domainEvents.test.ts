@@ -40,13 +40,13 @@ describe("durable domain-event bus", () => {
     await publishDomainEvent(trigger, {
       eventKey: `${trigger}:fixture`,
       contactId: 7,
-      email: "person@example.com",
+      email: "success+person@simulator.amazonses.com",
       subjectId: 9,
     });
 
     expect(query).toHaveBeenCalledWith(
       expect.stringContaining("INSERT INTO domain_events"),
-      expect.arrayContaining([`${trigger}:fixture`, trigger, 7, "person@example.com"]),
+      expect.arrayContaining([`${trigger}:fixture`, trigger, 7, "success+person@simulator.amazonses.com"]),
     );
     expect(enqueue).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -66,7 +66,7 @@ describe("durable domain-event bus", () => {
             event_key: `${trigger}:fixture`,
             event_type: trigger,
             contact_id: 7,
-            email: "person@example.com",
+            email: "success+person@simulator.amazonses.com",
             name: "Person",
             subject_id: 9,
             source: "test",

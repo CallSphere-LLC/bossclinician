@@ -85,7 +85,7 @@ coursesRouter.get(
          FROM offers o
          JOIN offer_products op ON op.offer_id = o.id
          JOIN products p        ON p.id = op.product_id
-        WHERE p.course_id = $1 AND o.status = 'published'
+        WHERE COALESCE(p.course_id, p.legacy_course_id) = $1 AND o.status = 'published'
         ORDER BY o.amount_cents`,
       [course.id]
     );
@@ -95,7 +95,7 @@ coursesRouter.get(
       const grant = await pool.query(
         `SELECT 1 FROM access_grants g
            JOIN products p ON p.id = g.product_id
-          WHERE g.member_id = $1 AND p.course_id = $2 AND g.status = 'active'
+          WHERE g.member_id = $1 AND COALESCE(p.course_id, p.legacy_course_id) = $2 AND g.status = 'active'
             AND (g.expires_at IS NULL OR g.expires_at > now())
           LIMIT 1`,
         [req.member.id, course.id]

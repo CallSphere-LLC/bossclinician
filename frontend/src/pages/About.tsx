@@ -705,10 +705,7 @@ function WinText({ win }: { win: Win }) {
 /* ── Portrait ─────────────────────────────────────────────────────────── */
 
 /**
- * The sources are high-key studio shots on near-white backdrops: dropped onto
- * near-black at full brightness they read as lit rectangles pasted on the page.
- * Grading them down, closing the corners with a vignette and passing a violet
- * soft-light over their whites seats them *in* the dark instead.
+ * Preserve the original photograph colors.
  *
  * Deliberately motionless: every caller already wraps it in an animated
  * container whose `initial` is guarded by `useEntranceMotion`.
@@ -745,13 +742,8 @@ function Portrait({
           height={height}
           loading="lazy"
           decoding="async"
-          className="aspect-[4/5] w-full max-w-full object-cover object-top brightness-[0.76] contrast-[1.08] saturate-[0.76]"
+          className="aspect-[4/5] w-full max-w-full object-cover object-top"
         />
-        <div
-          aria-hidden
-          className="absolute inset-0 bg-[radial-gradient(112%_78%_at_50%_26%,transparent_24%,rgba(10,7,19,0.55)_66%,rgba(6,4,11,0.92)_100%)]"
-        />
-        <div aria-hidden className="absolute inset-0 bg-glow-violet/20 mix-blend-soft-light" />
       </div>
 
       {/* Offset crop marks — a printer's registration frame sitting a few

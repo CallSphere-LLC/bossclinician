@@ -318,6 +318,7 @@ interface OutlineRow {
   lesson_drip_date: Date | null;
   comments_enabled: boolean | null;
   requires_previous_lesson: boolean | null;
+  assessment_requires_pass: boolean;
   notes_enabled: boolean | null;
   last_position_seconds: number | null;
   watched_percent: number | null;
@@ -343,6 +344,7 @@ const OUTLINE_SQL = `
          l.id       AS lesson_id,
          l.slug, l.title, l.content_type, l.duration_minutes, l.video_duration_seconds,
          l.preview, l.comments_enabled, l.notes_enabled, l.requires_previous_lesson,
+         EXISTS(SELECT 1 FROM assessments a WHERE a.lesson_id=l.id AND a.kind='graded' AND a.require_pass) AS assessment_requires_pass,
          l.drip_days AS lesson_drip_days,
          l.drip_date AS lesson_drip_date,
          lp.last_position_seconds, lp.watched_percent, lp.completed_at, lp.last_viewed_at
@@ -447,10 +449,11 @@ function buildModules(
 
   // Completion prerequisites follow the actual course order, across section
   // boundaries. A preview remains available by definition.
+  const passRequired = new Set(rows.filter(row => row.assessment_requires_pass).map(row => row.lesson_id));
   let previous: MemberLessonView | null = null;
   for (const mod of modules) {
     for (const lesson of mod.lessons) {
-      if (lesson.requiresPreviousLesson && previous && !previous.completed && !lesson.preview) {
+      if ((lesson.requiresPreviousLesson || (previous && passRequired.has(previous.id))) && previous && !previous.completed && !lesson.preview) {
         lesson.unlocked = false;
         lesson.unlocksAt = null;
         lesson.unlockLabel = `Finish “${previous.title}” first`;

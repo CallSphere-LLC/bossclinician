@@ -1,3 +1,5 @@
+import { cartItemsSchema, priceCart, type CartItem } from "../../services/cart";
+import { followRecoveryLink } from "../../services/checkoutRecovery";
 import crypto from "crypto";
 import { Request, Router } from "express";
 import { rateLimit } from "express-rate-limit";
@@ -5,6 +7,7 @@ import { z } from "zod";
 import type Stripe from "stripe";
 import type { PoolClient } from "pg";
 import { pool } from "../../db/pool";
+import { assertOfferDeliverable } from "../../services/downloadReadiness";
 import { asyncHandler } from "../../utils/asyncHandler";
 import { badRequest, forbidden, notFound, serviceUnavailable } from "../../utils/httpError";
 import { stripe } from "../../stripe/client";
@@ -23,6 +26,8 @@ import { resolveAttribution } from "../../services/affiliates";
 import { VISITOR_COOKIE } from "./affiliateTracking";
 import { addInterval, computeOrderTotal, type OrderTotal } from "../../services/pricing";
 import { readSetting } from "../../services/settings";
+import { cleanStatementDescriptor } from "../../services/paymentRules";
+import { applyDescriptorToPrice } from "../../stripe/descriptor";
 import {
   MAX_PWYW_CENTS,
   addressSchema,
@@ -407,13 +412,9 @@ async function ensureRecurringPrice(offer: OfferRow): Promise<string> {
 /** Stripe accepts 5–22 Latin letters, digits and a small punctuation set. */
 async function cardStatementDescriptor(): Promise<string | undefined> {
   const setting = await readSetting("customer_payments");
-  const clean = String(setting.statementDescriptor ?? "")
-    .toUpperCase()
-    .replace(/[^A-Z0-9 .\-]/g, "")
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, 22);
-  return clean.length >= 5 ? clean : undefined;
+  // One cleaner for every place the setting reaches Stripe (services/paymentRules),
+  // which also refuses a value with no letter in it — Stripe does.
+  return cleanStatementDescriptor(setting.statementDescriptor);
 }
 
 /**
@@ -478,6 +479,10 @@ async function discardInvoiceItems(ids: string[]): Promise<void> {
 }
 
 interface PendingOrderInput {
+  cartItems?: CartItem[];
+  acceptedTerms?: boolean;
+  giftRecipientEmail?: string;
+  giftMessage?: string;
   offer: OfferRow;
   memberId: number | null;
   email: string;
@@ -515,9 +520,11 @@ async function createPendingOrder(input: PendingOrderInput): Promise<PendingOrde
   const client: PoolClient = await pool.connect();
   try {
     await client.query("BEGIN");
+    await assertOfferDeliverable(input.offer.id, input.bumpProductIds, client);
 
-    let coupon: ValidatedCoupon | null = null;
-    if (input.couponCode) {
+    const cart = input.cartItems ? await priceCart({items:input.cartItems,couponCode:input.couponCode,email:input.email,address:input.billingAddress,lock:true,checkout:{phone:input.billingPhone,acceptedTerms:input.acceptedTerms,customFields:input.customFieldData,giftRecipientEmail:input.giftRecipientEmail}},client) : null;
+    let coupon: ValidatedCoupon | null = cart?.coupon ?? null;
+    if (input.couponCode && !cart) {
       const check = await validateCoupon(input.couponCode, input.offer.id, input.email, {
         client,
         lock: true,
@@ -527,7 +534,7 @@ async function createPendingOrder(input: PendingOrderInput): Promise<PendingOrde
     }
 
     const bumpRows = await loadOfferBumps(input.offer.id, client);
-    const total = computeOrderTotal({
+    const total = cart?.total ?? computeOrderTotal({
       offer: toPricedOffer(input.offer),
       bumps: selectBumps(bumpRows, input.bumpProductIds),
       coupon,
@@ -541,6 +548,11 @@ async function createPendingOrder(input: PendingOrderInput): Promise<PendingOrde
     // when the commission accrues weeks later would let whichever partner's link
     // the buyer happened to click since then take a sale somebody else made.
     const attributed = await resolveAttribution(input.visitorToken, input.offer.id, client);
+
+    const storedCustomFields = cart ? Object.fromEntries(cart.groups.flatMap(group => parseCustomFields(group.offer.custom_fields).map(field => {
+      const key = `${group.offer.id}:${field.key}`;
+      return [key, String(input.customFieldData[key] ?? "").trim().slice(0,2000)];
+    }))) : input.customFieldData;
 
     const orderRes = await client.query<{ id: number }>(
       `INSERT INTO orders
@@ -566,7 +578,7 @@ async function createPendingOrder(input: PendingOrderInput): Promise<PendingOrde
         input.billingName,
         input.billingPhone,
         JSON.stringify(input.billingAddress),
-        JSON.stringify(input.customFieldData),
+        JSON.stringify(storedCustomFields),
         input.parentOrderId ?? null,
         input.source,
         attributed?.affiliateId ?? null,
@@ -574,6 +586,21 @@ async function createPendingOrder(input: PendingOrderInput): Promise<PendingOrde
       ]
     );
     const orderId = orderRes.rows[0].id;
+    if (cart) {
+      await client.query(`UPDATE orders SET is_cart=true WHERE id=$1`,[orderId]);
+      for (const group of cart.groups) {
+        await client.query(`INSERT INTO order_offer_totals(order_id,offer_id,subtotal_cents,discount_cents,tax_cents,total_cents) VALUES($1,$2,$3,$4,$5,$6)`,[orderId,group.offer.id,group.total.subtotalCents,group.total.discountCents,group.total.taxCents,group.total.totalCents]);
+        if(group.taxRateBps>0) await client.query(`INSERT INTO tax_records(order_id,country,state,postal_code,rate_bps,taxable_cents,tax_cents,currency,provider) VALUES($1,$2,$3,$4,$5,$6,$7,$8,'internal')`,[orderId,input.billingAddress.country??"",input.billingAddress.state??"",input.billingAddress.postalCode??"",group.taxRateBps,group.total.taxableCents,group.total.taxCents,group.total.currency]);
+      }
+    }
+
+    if (input.giftRecipientEmail) {
+      await client.query(`UPDATE orders SET gift_recipient_email = $2, gift_message = $3 WHERE id = $1`,
+        [orderId, input.giftRecipientEmail.toLowerCase(), input.giftMessage ?? ""]);
+    } else if (input.parentOrderId) {
+      await client.query(`UPDATE orders child SET gift_recipient_email = parent.gift_recipient_email,
+        gift_message = parent.gift_message FROM orders parent WHERE child.id = $1 AND parent.id = $2`, [orderId, input.parentOrderId]);
+    }
 
     for (const line of total.lines) {
       const kind = line.kind === "offer" ? (input.primaryLineKind ?? "offer") : line.kind;
@@ -583,7 +610,7 @@ async function createPendingOrder(input: PendingOrderInput): Promise<PendingOrde
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
         [
           orderId,
-          input.offer.id,
+          line.offerId ?? input.offer.id,
           line.productId ?? null,
           line.title,
           kind,
@@ -599,7 +626,7 @@ async function createPendingOrder(input: PendingOrderInput): Promise<PendingOrde
     // cannot be explained — is not an audit trail. `rate_bps` is the rate that
     // was actually applied; the address beside it is the one recorded on the
     // order, which is what a tax authority asks to see.
-    if (input.taxRateBps > 0 || total.taxCents > 0) {
+    if (!cart && (input.taxRateBps > 0 || total.taxCents > 0)) {
       await client.query(
         `INSERT INTO tax_records
            (order_id, country, state, postal_code, rate_bps,
@@ -668,6 +695,7 @@ async function markOrderFailed(orderId: number): Promise<void> {
 /* ---------------------------------------------------------------- checkout */
 
 const checkoutOfferSchema = z.object({
+  cartItems: cartItemsSchema.optional(),
   pricingOptionId: z.number().int().positive().nullable().optional(),
   email: z.string().trim().email().max(320),
   name: z.string().trim().max(200).optional(),
@@ -678,6 +706,8 @@ const checkoutOfferSchema = z.object({
   bumpProductIds: z.array(z.number().int().positive()).max(20).optional(),
   pwywAmountCents: z.number().int().min(0).max(MAX_PWYW_CENTS).optional(),
   acceptedTerms: z.boolean().optional(),
+  giftRecipientEmail: z.string().trim().email().max(320).optional(),
+  giftMessage: z.string().trim().max(2000).optional(),
 });
 
 /**
@@ -706,7 +736,11 @@ checkoutOfferRouter.post(
     const baseOffer = await loadPublishedOffer(req.params.slug);
     if (!baseOffer) throw notFound("Offer not found");
     const offer = await selectOfferPricing(baseOffer, body.pricingOptionId);
+    if (body.cartItems && (body.cartItems[0].slug !== offer.slug || (body.cartItems[0].pricingOptionId ?? null) !== (offer.pricing_option_id ?? null))) throw badRequest("The cart changed. Refresh it before paying.");
 
+    if (body.giftRecipientEmail && (!offer.allow_gifting || isRecurring(offer))) {
+      throw badRequest("This offer cannot be sent as a gift. Choose a one-time purchase.");
+    }
     if (offer.require_terms && body.acceptedTerms !== true) {
       throw badRequest("Please accept the terms to continue");
     }
@@ -716,7 +750,7 @@ checkoutOfferRouter.post(
     if (offer.collect_address && (!body.address?.line1 || !body.address.country)) {
       throw badRequest("A billing address is required");
     }
-    const customFieldData = collectCustomFields(
+    const customFieldData = body.cartItems ? Object.fromEntries(Object.entries(body.customFields??{}).map(([key,value])=>[key,String(value)])) : collectCustomFields(
       parseCustomFields(offer.custom_fields),
       body.customFields
     );
@@ -731,10 +765,14 @@ checkoutOfferRouter.post(
     const taxRateBps = await resolveTaxRateBps(offer, submittedTaxAddress(offer, billingAddress));
 
     const { orderId, total, coupon } = await createPendingOrder({
+      cartItems: body.cartItems,
+      acceptedTerms: body.acceptedTerms,
       offer,
       memberId,
       email,
       billingName,
+      giftRecipientEmail: body.giftRecipientEmail,
+      giftMessage: body.giftMessage,
       billingPhone: body.phone ?? "",
       billingAddress,
       customFieldData,
@@ -823,6 +861,18 @@ checkoutOfferRouter.post(
         // currency differs from the offer's is the everyday example — and each
         // one used to throw with a $97 bump already sitting on the customer.
         const priceId = await ensureRecurringPrice(offer);
+
+        // Renewals take the statement descriptor from the Product behind the
+        // price, so a Product minted before the setting — or in the Stripe
+        // dashboard — is brought in line here. Never worth failing a sale over.
+        try {
+          await applyDescriptorToPrice(priceId, await cardStatementDescriptor());
+        } catch (err) {
+          console.warn(
+            `[checkout] could not set the statement descriptor on ${priceId}:`,
+            err instanceof Error ? err.message : err
+          );
+        }
 
         const params: Stripe.SubscriptionCreateParams = {
           customer: customerId,
@@ -955,6 +1005,13 @@ checkoutOfferRouter.post(
     }
   })
 );
+
+checkoutOfferRouter.get("/checkout/recover/:token", abandonedLimiter, asyncHandler(async (req, res) => {
+  const slug = await followRecoveryLink(String(req.params.token));
+  if (!slug) throw notFound("This reminder link is no longer available");
+  res.setHeader("Cache-Control", "no-store");
+  res.redirect(303, `/checkout/${encodeURIComponent(slug)}`);
+}));
 
 /* ------------------------------------------------------- abandoned capture */
 
@@ -1089,7 +1146,6 @@ checkoutOfferRouter.post(
   optionalMember,
   asyncHandler(async (req, res) => {
     refuseImpersonation(req);
-    if (!stripeEnabled()) throw serviceUnavailable("Payments are not configured");
 
     const params = upsellParamsSchema.safeParse(req.params);
     if (!params.success) throw notFound("Upsell not found");
@@ -1112,6 +1168,7 @@ checkoutOfferRouter.post(
 
     const upsellOffer = await loadPublishedOfferById(upsellOfferId);
     if (!upsellOffer) throw notFound("Upsell not found");
+    await assertOfferDeliverable(upsellOffer.id);
     if (isRecurring(upsellOffer)) {
       throw badRequest("This offer has to be bought from its own checkout page");
     }
@@ -1187,9 +1244,25 @@ checkoutOfferRouter.post(
         visitorToken: visitorToken(req),
       });
       orderId = created.orderId;
+
       total = created.total;
     }
 
+    // A free bonus still belongs to this order (and its gift recipient), but
+    // has no card charge to authorize. Use the regular fulfillment path so
+    // grants, delivery and repeat-click protection stay consistent.
+    if (total.totalCents === 0) {
+      const result = await fulfillPayment({ orderId, amountCents: 0, currency: total.currency, email: parent.email });
+      if (result.fulfilled) {
+        await deliverPurchase({ orderId, memberId: result.memberId, createdMember: result.createdMember });
+      }
+      res.json({ status: "paid", orderId, orderToken: issueOrderToken(orderId), clientSecret: null, clientSecretType: null });
+      return;
+    }
+    if (!stripeEnabled()) {
+      await markOrderFailed(orderId);
+      throw serviceUnavailable("Payments are not configured");
+    }
     const paymentMethodId = await savedPaymentMethodId(parent);
     if (!paymentMethodId) {
       await markOrderFailed(orderId);
@@ -1204,6 +1277,10 @@ checkoutOfferRouter.post(
       pricingType: upsellOffer.pricing_type,
     };
 
+    // The one-click upsell is a card charge like the checkout's, and carried no
+    // descriptor at all — so it showed on statements under a different name.
+    const upsellDescriptor = await cardStatementDescriptor();
+
     try {
       const intent = await stripe().paymentIntents.create(
         {
@@ -1215,6 +1292,7 @@ checkoutOfferRouter.post(
           confirm: true,
           ...(parent.email ? { receipt_email: parent.email } : {}),
           description: upsellOffer.title,
+          ...(upsellDescriptor ? { statement_descriptor_suffix: upsellDescriptor } : {}),
           metadata,
         },
         // Keyed on the order rather than the step, so a double click replays one

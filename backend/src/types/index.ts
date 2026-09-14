@@ -7,6 +7,7 @@ export interface AdminUser {
 }
 
 export interface JwtPayload {
+  sessionId?: string;
   sub: number;
   email: string;
   role: string;

@@ -8,6 +8,12 @@ import { sendMailStrict } from "../../email/mailer";
 import { escapeHtml } from "../../email/templates";
 import { recordAdminAction } from "../../services/adminAudit";
 import { requirePermission } from "../../services/permissions";
+import { activeTransport, verifiedSendingDomains } from "../../email/provider";
+import {
+  reviewSendingIdentity,
+  sendingAddressProblem,
+  type SendingIdentityInput,
+} from "../../services/sendingIdentity";
 import {
   SETTING_DEFINITIONS,
   SettingValidationError,
@@ -30,11 +36,49 @@ import {
  */
 export const adminSettingsV2Router = Router();
 
+/**
+ * The "Sending service" field, showing the transport that is really in use.
+ *
+ * The stored row said "Your own mail server" while every message went out
+ * through Amazon SES, because the transport is chosen from SMTP_HOST and the row
+ * is consulted only for Resend. So the field's value, its choices and its help
+ * line are replaced with `activeTransport()` — the same rules `resolveProvider`
+ * sends by — and `locked` tells the screen when nothing it offers would change
+ * anything, so it can say so instead of showing a dropdown that lies.
+ */
+async function withRealTransport(
+  groups: Awaited<ReturnType<typeof settingGroups>>
+): Promise<Awaited<ReturnType<typeof settingGroups>>> {
+  const transport = await activeTransport();
+  return groups.map((group) => ({
+    ...group,
+    settings: group.settings.map((card) =>
+      card.key !== "email_provider"
+        ? card
+        : {
+            ...card,
+            fields: card.fields.map((field) =>
+              field.name !== "provider"
+                ? field
+                : {
+                    ...field,
+                    value: transport.key,
+                    choices: transport.choices,
+                    help: transport.detail,
+                    locked: transport.locked,
+                    source: transport.source,
+                  }
+            ),
+          }
+    ),
+  }));
+}
+
 adminSettingsV2Router.get(
   "/groups",
   requirePermission("settings.view"),
   asyncHandler(async (_req, res) => {
-    res.json({ groups: await settingGroups() });
+    res.json({ groups: await withRealTransport(await settingGroups()) });
   })
 );
 
@@ -50,6 +94,44 @@ adminSettingsV2Router.put(
 
     const parsed = patchBodySchema.safeParse(req.body);
     if (!parsed.success) throw badRequest("Please check the details.", parsed.error.flatten());
+    const patch: Record<string, unknown> = { ...parsed.data };
+
+    /*
+     * A from-address has to be on a domain this site is verified to send from.
+     * Refused at save, with the reason, rather than saved and then refused at
+     * every send — `yvette@bossclinician.com` is the address on the legal pages
+     * and was exactly what somebody would type here. The send gate in
+     * email/provider.ts checks again, because a campaign can carry its own.
+     */
+    if (key === "marketing_email" && typeof patch.fromEmail === "string") {
+      const domains = verifiedSendingDomains();
+      const problem = sendingAddressProblem(patch.fromEmail, domains);
+      if (problem) {
+        // Short enough for the console to show verbatim (ui/friendly.ts prints
+        // a 400 of up to 200 characters as it is).
+        const said = `“${patch.fromEmail.trim()}” isn't on a domain this site can send from. Use an address ending in ${domains
+          .map((d) => `@${d}`)
+          .join(" or ")}.`;
+        throw badRequest(said, { fieldErrors: { fromEmail: [problem.message] } });
+      }
+    }
+
+    /*
+     * Only a transport this server can actually run may be chosen. With the
+     * transport set on the server there is exactly one, and saving anything else
+     * used to be accepted and change nothing.
+     */
+    if (key === "email_provider" && patch.provider !== undefined) {
+      const transport = await activeTransport();
+      const allowed = transport.choices.map((choice) => String(choice.value));
+      if (typeof patch.provider !== "string" || !allowed.includes(patch.provider)) {
+        throw badRequest(
+          transport.locked
+            ? `Your email goes out through ${transport.label}, which is set on the server — it can't be changed here.`
+            : `That sending service isn't available on this server. Choose ${allowed.join(" or ")}.`
+        );
+      }
+    }
 
     // Read the old value first: it is what the audit log's `before` needs, and
     // after the write it is gone.
@@ -57,10 +139,23 @@ adminSettingsV2Router.put(
 
     let after: Record<string, unknown>;
     try {
-      after = await writeSetting(key, parsed.data);
+      after = await writeSetting(key, patch);
     } catch (err) {
       if (err instanceof SettingValidationError) {
-        throw badRequest("Something in that form needs fixing.", err.details);
+        // Name the field and say why. A bare "something needs fixing" is a
+        // silent failure with extra steps: the screen has no field to point at.
+        const fieldErrors =
+          (err.details as { fieldErrors?: Record<string, string[] | undefined> } | null)?.fieldErrors ?? {};
+        const [name, messages] = Object.entries(fieldErrors).find(([, list]) => list && list.length > 0) ?? [];
+        const label = definition.fields.find((field) => field.name === name)?.label ?? name;
+        const reason = messages?.[0];
+        const parserWording = !reason || /^(Required|Expected |Invalid |String must|Number must|Array must)/.test(reason);
+        const said = !label
+          ? "Something in that form needs fixing."
+          : parserWording
+            ? `“${label}” doesn't look right — check it and try again.`
+            : `“${label}”: ${reason}`;
+        throw badRequest(said.length <= 200 ? said : `“${label}” needs fixing.`, err.details);
       }
       throw err;
     }
@@ -88,6 +183,67 @@ adminSettingsV2Router.put(
     });
 
     res.json({ key, values: redact(after) });
+  })
+);
+
+/**
+ * The values `reviewSendingIdentity` judges, read from the settings table.
+ *
+ * `readSetting` returns the stored value coerced to the group's shape, secrets
+ * included, so the signing secret is reduced to a boolean here and never leaves
+ * the server — the same promise every other read on this router keeps.
+ */
+async function sendingIdentityInput(): Promise<SendingIdentityInput> {
+  const [marketing, provider, transport] = await Promise.all([
+    readSetting("marketing_email"),
+    readSetting("email_provider"),
+    activeTransport(),
+  ]);
+  const text = (value: unknown): string => (typeof value === "string" ? value : "");
+
+  return {
+    marketing: {
+      fromName: text(marketing.fromName),
+      fromEmail: text(marketing.fromEmail),
+      replyTo: text(marketing.replyTo),
+      address: text(marketing.address),
+      footer: text(marketing.footer),
+    },
+    provider: {
+      provider: text(provider.provider) || "smtp",
+      hasWebhookSecret: text(provider.webhookSecret).trim() !== "",
+    },
+    env: {
+      smtpFrom: env.smtp.from,
+      smtpHost: env.smtp.host,
+      transactionalConfigSet: env.ses.transactionalConfigSet,
+      marketingConfigSet: env.ses.marketingConfigSet,
+      smtpConfigured: Boolean(env.smtp.host && env.smtp.user && env.smtp.pass),
+      // The Resend key may live in the environment or the row; activeTransport
+      // has already looked in both, and offers Resend only when one exists.
+      hasResendKey: transport.choices.some((choice) => choice.value === "resend"),
+      verifiedDomains: verifiedSendingDomains(),
+    },
+  };
+}
+
+/**
+ * GET /api/admin/settings-v2/sending-identity
+ *
+ * Whether this site is in a fit state to send, and what is missing when it is
+ * not — the same judgement email/provider.ts enforces on the send itself, so
+ * the screen cannot say "ready" about a send that would be refused.
+ *
+ * It exists because the blank state was invisible. A tester found "Name in the
+ * inbox", "Sent from" and "Your postal address" all empty on the live site,
+ * with no indication that anything was wrong: empty boxes look identical to
+ * boxes somebody has decided to leave empty.
+ */
+adminSettingsV2Router.get(
+  "/sending-identity",
+  requirePermission("settings.view"),
+  asyncHandler(async (_req, res) => {
+    res.json(reviewSendingIdentity(await sendingIdentityInput()));
   })
 );
 
@@ -163,12 +319,23 @@ adminSettingsV2Router.post(
       after: { to, sent, failure },
     });
 
+    /*
+     * The test message is transactional, so it goes out under the server's own
+     * identity and is not refused for a blank marketing one. But this button is
+     * where somebody comes when mail looks wrong, and "Sent — check your inbox"
+     * from a site that cannot send a single campaign is the same half-truth this
+     * endpoint was already fixed once for telling. So the verdict travels with
+     * the result, and the screen says both things.
+     */
+    const identity = reviewSendingIdentity(await sendingIdentityInput());
+
     res.json({
       to,
       configured,
       sent,
       // Empty when it worked, so the client can branch on truthiness.
       failure,
+      identity,
     });
   })
 );

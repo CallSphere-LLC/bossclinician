@@ -1,0 +1,114 @@
+[
+  {
+    "reducedMotion": "no-preference",
+    "questionCount": 1,
+    "submissions": 1,
+    "mismatches": [
+      {
+        "header": "QUESTION 1 OF 1",
+        "heading": "Transition regression"
+      },
+      {
+        "header": "ONE LAST STEP",
+        "heading": "Question prompt 1"
+      },
+      {
+        "header": "QUESTION 1 OF 1",
+        "heading": "Where should I send your result?"
+      },
+      {
+        "header": "ONE LAST STEP",
+        "heading": "Question prompt 1"
+      }
+    ],
+    "errors": []
+  },
+  {
+    "reducedMotion": "no-preference",
+    "questionCount": 3,
+    "submissions": 1,
+    "mismatches": [
+      {
+        "header": "QUESTION 1 OF 3",
+        "heading": "Transition regression"
+      },
+      {
+        "header": "QUESTION 2 OF 3",
+        "heading": "Question prompt 1"
+      },
+      {
+        "header": "QUESTION 3 OF 3",
+        "heading": "Question prompt 2"
+      },
+      {
+        "header": "ONE LAST STEP",
+        "heading": "Question prompt 3"
+      },
+      {
+        "header": "QUESTION 3 OF 3",
+        "heading": "Where should I send your result?"
+      },
+      {
+        "header": "ONE LAST STEP",
+        "heading": "Question prompt 3"
+      }
+    ],
+    "errors": []
+  },
+  {
+    "reducedMotion": "reduce",
+    "questionCount": 1,
+    "submissions": 1,
+    "mismatches": [
+      {
+        "header": "QUESTION 1 OF 1",
+        "heading": "Transition regression"
+      },
+      {
+        "header": "ONE LAST STEP",
+        "heading": "Question prompt 1"
+      },
+      {
+        "header": "QUESTION 1 OF 1",
+        "heading": "Where should I send your result?"
+      },
+      {
+        "header": "ONE LAST STEP",
+        "heading": "Question prompt 1"
+      }
+    ],
+    "errors": []
+  },
+  {
+    "reducedMotion": "reduce",
+    "questionCount": 3,
+    "submissions": 1,
+    "mismatches": [
+      {
+        "header": "QUESTION 1 OF 3",
+        "heading": "Transition regression"
+      },
+      {
+        "header": "QUESTION 2 OF 3",
+        "heading": "Question prompt 1"
+      },
+      {
+        "header": "QUESTION 3 OF 3",
+        "heading": "Question prompt 2"
+      },
+      {
+        "header": "ONE LAST STEP",
+        "heading": "Question prompt 3"
+      },
+      {
+        "header": "QUESTION 3 OF 3",
+        "heading": "Where should I send your result?"
+      },
+      {
+        "header": "ONE LAST STEP",
+        "heading": "Question prompt 3"
+      }
+    ],
+    "errors": []
+  }
+]

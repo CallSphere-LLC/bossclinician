@@ -88,6 +88,13 @@ adminSequencesRouter.get(
     const result = await pool.query(
       `SELECT q.*,
               (SELECT COUNT(*)::int FROM sequence_emails e WHERE e.sequence_id = q.id) AS email_count,
+              -- A3: "6 emails over 11 days" in the combined email list. The
+              -- span is the sum of the waits of the emails that actually go
+              -- out; a switched-off email is skipped and so is its wait.
+              (SELECT COUNT(*)::int FROM sequence_emails e
+                WHERE e.sequence_id = q.id AND e.enabled)                              AS enabled_email_count,
+              (SELECT COALESCE(SUM(e.delay_minutes), 0)::int FROM sequence_emails e
+                WHERE e.sequence_id = q.id AND e.enabled)                              AS total_delay_minutes,
               (SELECT COUNT(*)::int FROM sequence_subscriptions s
                 WHERE s.sequence_id = q.id AND s.status = 'active')                    AS active_count,
               (SELECT COUNT(*)::int FROM sequence_subscriptions s

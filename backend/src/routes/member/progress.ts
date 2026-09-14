@@ -1,3 +1,4 @@
+import { assertAssessmentCompleted } from "../../services/lessonAssessments";
 import { Request, Router } from "express";
 import { ipKeyGenerator, rateLimit } from "express-rate-limit";
 import { z } from "zod";
@@ -15,6 +16,7 @@ import {
   AUTO_COMPLETE_PERCENT,
   creditWatchedPercent,
   loadDripSettings,
+  loadCourseForMember,
   recomputeCourseProgress,
   type CourseRollup,
   type StoredWatch,
@@ -187,10 +189,12 @@ async function loadOwnedLesson(memberId: number, lessonId: number): Promise<Owne
   const row = found.rows[0];
   if (!row) throw notFound(LESSON_MISSING);
 
-  const [entitled, settings] = await Promise.all([
+  const [entitled, settings, course] = await Promise.all([
     hasCourseAccess(memberId, row.course_id),
     loadDripSettings(),
+    loadCourseForMember(memberId, row.course_id),
   ]);
+  const courseLesson = course?.modules.flatMap(module => module.lessons).find(lesson => lesson.id === row.id);
   if (!entitled) throw notFound(LESSON_MISSING);
 
   const state = resolveDripState({
@@ -212,7 +216,7 @@ async function loadOwnedLesson(memberId: number, lessonId: number): Promise<Owne
     notesEnabled: row.notes_enabled,
     // A preview lesson already plays for strangers on the sales page; holding it
     // back from somebody who has paid would be the platform arguing with itself.
-    unlocked: row.preview || state.unlocked,
+    unlocked: (row.preview || state.unlocked) && courseLesson?.unlocked === true,
     unlocksAt: row.preview ? null : state.unlocksAt,
     timezone: settings.timezone,
     videoDurationSeconds: row.video_duration_seconds,
@@ -432,6 +436,7 @@ memberProgressRouter.post(
 
     const lesson = await loadOwnedLesson(member.id, lessonId);
     assertUnlocked(lesson);
+    await assertAssessmentCompleted(member.id, lesson.id);
 
     const verdict = creditWatchedPercent({
       positionSeconds: parsed.data.positionSeconds,
@@ -521,6 +526,7 @@ memberProgressRouter.post(
 
     const lesson = await loadOwnedLesson(member.id, lessonId);
     assertUnlocked(lesson);
+    await assertAssessmentCompleted(member.id, lesson.id);
 
     const { progress, rollup } = await writeProgress(
       member.id,

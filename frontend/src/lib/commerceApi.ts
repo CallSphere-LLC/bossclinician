@@ -1,3 +1,4 @@
+import type { CartSelection } from "./cart";
 /**
  * Storefront commerce client — offers, quotes, checkout, upsells and receipts.
  *
@@ -51,6 +52,7 @@ export interface CustomFieldDef {
 }
 
 export interface OfferOrderForm {
+  allowGifting?: boolean;
   collectTax: boolean;
   collectAddress: boolean;
   collectPhone: boolean;
@@ -152,6 +154,9 @@ export interface OfferQuote extends Quote {
 }
 
 export interface PublicOffer {
+  cartItems?: CartSelection[];
+  initialCouponCode?: string;
+  cartTerms?: {title:string;url:string}[];
   id: number;
   slug: string;
   title: string;
@@ -195,6 +200,7 @@ export interface BillingAddressInput {
 }
 
 export interface QuoteInput {
+  cartItems?: CartSelection[];
   pricingOptionId?: number | null;
   couponCode?: string;
   bumpProductIds?: number[];
@@ -204,6 +210,8 @@ export interface QuoteInput {
 }
 
 export interface CheckoutInput extends QuoteInput {
+  giftRecipientEmail?: string;
+  giftMessage?: string;
   email: string;
   name?: string;
   phone?: string;
@@ -308,7 +316,7 @@ export const commerceApi = {
    * to recover from mid-checkout.
    */
   quote: (slug: string, input: QuoteInput = {}) =>
-    memberRequest<OfferQuote>(`/offers/${encodeURIComponent(slug)}/quote`, {
+    memberRequest<OfferQuote>(input.cartItems ? "/cart/quote" : `/offers/${encodeURIComponent(slug)}/quote`, {
       method: "POST",
       body: JSON.stringify(input),
     }),

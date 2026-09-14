@@ -27,6 +27,7 @@ export interface TaxAddress {
 }
 
 export interface QuoteSelections {
+  cartItems?: QuoteInput["cartItems"];
   pricingOptionId: number | null;
   couponCode: string;
   bumpProductIds: number[];
@@ -50,7 +51,7 @@ export interface QuoteState {
 const DEBOUNCE_MS = 400;
 
 function buildRequest(selections: QuoteSelections): QuoteInput {
-  const request: QuoteInput = { pricingOptionId: selections.pricingOptionId };
+  const request: QuoteInput = { pricingOptionId: selections.pricingOptionId, ...(selections.cartItems ? {cartItems:selections.cartItems} : {}) };
 
   const code = selections.couponCode.trim();
   if (code !== "") request.couponCode = code;
@@ -100,7 +101,7 @@ export function useOfferQuote(
     request.address ?? null,
   ]);
   const bumpKey = JSON.stringify(request.bumpProductIds ?? []);
-  const pricingKey = String(request.pricingOptionId ?? "base");
+  const pricingKey = JSON.stringify([request.pricingOptionId ?? "base",request.cartItems]);
   const previousTypedKey = useRef(typedKey);
 
   useEffect(() => {

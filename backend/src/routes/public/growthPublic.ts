@@ -1,4 +1,6 @@
-import { Router } from "express";
+import fs from "fs";
+import { Router, type Request } from "express";
+import { rateLimit } from "express-rate-limit";
 import { z } from "zod";
 import { pool } from "../../db/pool";
 import { rowsToCamel } from "../../utils/case";
@@ -20,6 +22,15 @@ import {
 } from "../../services/contacts";
 import { enrollContact } from "../../services/sequences";
 import { isProtectedRef, signDownload } from "../../services/signedUrls";
+import {
+  FILE_TYPE,
+  answerProblem,
+  asFields,
+  keptAnswers,
+  visibleQuestionKeys,
+} from "../../services/formLogic";
+import { keepStagedFile, receiveFormFiles, type StagedFile } from "../../services/formUploads";
+import { kindFromMime } from "../../services/mediaStorage";
 
 /** Public endpoints for podcasts (RSS), forms and funnels. */
 export const growthPublicRouter = Router();
@@ -252,6 +263,7 @@ const submitSchema = z.object({
  */
 interface StoredFormField {
   key?: unknown;
+  type?: unknown;
   contactField?: unknown;
 }
 
@@ -338,6 +350,9 @@ export function contactFromSubmission(
     const key = typeof stored?.key === "string" ? stored.key : "";
     const target = typeof stored?.contactField === "string" ? stored.contactField.trim() : "";
     if (!key || !target) continue;
+    // A file is attached to the contact as a file (see the submit route), never
+    // written into a text detail as its metadata.
+    if (stored?.type === FILE_TYPE) continue;
 
     const answer = data[key];
     if (answer === undefined || answer === null || answer === "") continue;
@@ -402,6 +417,143 @@ async function afterSubmission<T>(what: string, run: () => Promise<T>): Promise<
   }
 }
 
+/** A reply carrying files arrives as multipart; every other reply is JSON, as before. */
+function isMultipart(req: Request): boolean {
+  return Boolean(req.is("multipart/form-data"));
+}
+
+const UPLOAD_WINDOW_MS = 60 * 60 * 1000;
+
+/**
+ * Replies with files, per address. Tighter than `leadsLimiter`, because each one
+ * can put up to five files on disk. Replies without files are not counted.
+ */
+const formUploadIpLimiter = rateLimit({
+  windowMs: UPLOAD_WINDOW_MS,
+  limit: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req) => !isMultipart(req),
+  message: { error: "You've sent a lot of files in the last hour. Please try again a little later." },
+});
+
+/**
+ * Replies with files, per form — so a spread of addresses can't fill the disk
+ * through one form either. Keyed on the form's id, which is only known once the
+ * slug has been looked up, so a made-up slug 404s before it can mint a key.
+ */
+const formUploadFormLimiter = rateLimit({
+  windowMs: UPLOAD_WINDOW_MS,
+  limit: 200,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req) => !isMultipart(req),
+  keyGenerator: (_req, res) => `form-upload:${String((res.locals.form as { id?: unknown }).id)}`,
+  message: {
+    error: "This form has had a lot of files sent to it in the last hour. Please try again a little later.",
+  },
+});
+
+/** The multipart reply's answers: one `payload` field holding the JSON body. */
+function multipartPayload(body: unknown): unknown {
+  const raw = (body as Record<string, unknown> | undefined)?.payload;
+  if (typeof raw !== "string") return undefined;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Stores the reply, and any files with it, as one unit.
+ *
+ * Without files this is the single insert it always was. With them, each file is
+ * moved from its temp name to a random permanent one in the protected root, gets
+ * a media-library row, and its answer becomes a pointer to that row — all inside
+ * one transaction, with the moved files deleted again if any of it fails. A
+ * reply is never stored pointing at a file that isn't there, and a file is never
+ * left behind for a reply that wasn't stored.
+ */
+async function storeSubmission(input: {
+  formId: number;
+  data: Record<string, unknown>;
+  email: string;
+  ip: string;
+  userAgent: string;
+  files: StagedFile[];
+}): Promise<{ submissionId: number; answers: Record<string, unknown> }> {
+  const insertSql = `INSERT INTO form_submissions (form_id, data, email, ip, user_agent)
+                     VALUES ($1, $2, $3, $4, $5) RETURNING id`;
+  const values = (answers: Record<string, unknown>) => [
+    input.formId,
+    JSON.stringify(answers),
+    input.email,
+    input.ip,
+    input.userAgent,
+  ];
+
+  if (input.files.length === 0) {
+    const inserted = await pool.query<{ id: number }>(insertSql, values(input.data));
+    return { submissionId: inserted.rows[0].id, answers: input.data };
+  }
+
+  const answers: Record<string, unknown> = { ...input.data };
+  const moved: string[] = [];
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const assetIds: number[] = [];
+    for (const file of input.files) {
+      const stored = await keepStagedFile(file);
+      moved.push(stored.absolutePath);
+      const asset = await client.query<{ id: number }>(
+        `INSERT INTO media_assets
+           (filename, original_name, url, mime, kind, size_bytes, title, folder, form_field_key)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, 'Form uploads', $8)
+         RETURNING id`,
+        [
+          stored.filename,
+          // Unique on purpose: the library refuses a second upload under a name
+          // it already holds, and a stranger's "photo.jpg" must never block the
+          // owner's own. `title` carries the name people see.
+          `${file.displayName} · ${stored.filename}`,
+          stored.reference,
+          file.mime,
+          kindFromMime(file.mime),
+          file.sizeBytes,
+          file.displayName,
+          file.fieldKey,
+        ],
+      );
+      const assetId = asset.rows[0].id;
+      assetIds.push(assetId);
+      answers[file.fieldKey] = {
+        file: true,
+        mediaAssetId: assetId,
+        name: file.displayName,
+        mime: file.mime,
+        sizeBytes: file.sizeBytes,
+      };
+    }
+
+    const inserted = await client.query<{ id: number }>(insertSql, values(answers));
+    const submissionId = inserted.rows[0].id;
+    await client.query(`UPDATE media_assets SET form_submission_id = $1 WHERE id = ANY($2::int[])`, [
+      submissionId,
+      assetIds,
+    ]);
+    await client.query("COMMIT");
+    return { submissionId, answers };
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => undefined);
+    await Promise.all(moved.map((file) => fs.promises.unlink(file).catch(() => undefined)));
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 // The same limiter every other public write carries. A form submission inserts
 // a row, can insert a lead, and fires an automation for it; without a ceiling
 // this is the one unauthenticated write on the site that a script can repeat as
@@ -409,18 +561,62 @@ async function afterSubmission<T>(what: string, run: () => Promise<T>): Promise<
 growthPublicRouter.post(
   "/forms/:slug/submit",
   leadsLimiter,
-  asyncHandler(async (req, res) => {
-    const parsed = submitSchema.safeParse(req.body);
-    if (!parsed.success) throw badRequest("Invalid submission", parsed.error.flatten());
-
+  formUploadIpLimiter,
+  // Looked up before the body is read: a multipart body can only be checked
+  // against the form's own file questions, and the per-form limit needs its id.
+  asyncHandler(async (req, res, next) => {
     const formResult = await pool.query(
       "SELECT * FROM forms WHERE slug = $1 AND published = true",
       [req.params.slug],
     );
-    const form = formResult.rows[0];
-    if (!form) throw notFound("Form not found");
+    if (!formResult.rows[0]) throw notFound("Form not found");
+    res.locals.form = formResult.rows[0];
+    next();
+  }),
+  formUploadFormLimiter,
+  asyncHandler(async (req, res) => {
+    const form = res.locals.form;
+    const fields = asFields(form.fields);
+    const fileFields = fields.filter((field) => field.type === FILE_TYPE);
 
-    const data = parsed.data.data;
+    const multipart = isMultipart(req);
+    let received: StagedFile[] = [];
+    if (multipart) {
+      try {
+        received = await receiveFormFiles(req, res, fileFields);
+      } catch (err) {
+        // Read and drop whatever is left of the body before answering, so the
+        // refusal reaches the browser instead of a reset connection. Bounded by
+        // the Content-Length ceiling `receiveFormFiles` checks first.
+        req.resume();
+        throw err;
+      }
+    }
+
+    const parsed = submitSchema.safeParse(multipart ? multipartPayload(req.body) : req.body);
+    if (!parsed.success) throw badRequest("Invalid submission", parsed.error.flatten());
+
+    // Nothing a client says about a file question is its answer — only a file
+    // that actually arrived is. Otherwise `{ mediaAssetId: 12 }` typed into the
+    // JSON would attach somebody else's document to this contact.
+    const typed: Record<string, unknown> = { ...parsed.data.data };
+    for (const field of fileFields) delete typed[field.key];
+    const filesPresent = new Set(received.map((file) => file.fieldKey));
+    const withFiles: Record<string, unknown> = { ...typed };
+    for (const key of filesPresent) withFiles[key] = { file: true };
+
+    // The page hides questions whose conditions aren't met; this decides it
+    // again, because the page is only a page. A hidden question is not
+    // required, and nothing sent for it is kept — not its typed answer, and not
+    // its file, which is deleted with the other temp files when this response
+    // closes.
+    const visible = visibleQuestionKeys(fields, withFiles);
+    const problem = answerProblem(fields, withFiles, visible, filesPresent);
+    if (problem) throw badRequest(problem);
+
+    const data = keptAnswers(fields, typed, visible);
+    const keptFiles = received.filter((file) => visible.has(file.fieldKey));
+
     // Accept the email either explicitly or from a field literally named email.
     const envelopeEmail = (parsed.data.email ?? (data.email as string | undefined) ?? "")
       .toString()
@@ -439,18 +635,14 @@ growthPublicRouter.post(
 
     // First, and on its own. Whatever else goes wrong below, the answers a
     // stranger just typed are on disk.
-    const inserted = await pool.query<{ id: number }>(
-      `INSERT INTO form_submissions (form_id, data, email, ip, user_agent)
-       VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-      [
-        form.id,
-        JSON.stringify(data),
-        email,
-        (req.ip ?? "").slice(0, 64),
-        String(req.get("user-agent") ?? "").slice(0, 500),
-      ],
-    );
-    const submissionId = inserted.rows[0].id;
+    const { submissionId, answers } = await storeSubmission({
+      formId: form.id,
+      data,
+      email,
+      ip: (req.ip ?? "").slice(0, 64),
+      userAgent: String(req.get("user-agent") ?? "").slice(0, 500),
+      files: keptFiles,
+    });
 
     // Views were counted and sends were not, so the Forms screen printed a 0%
     // conversion rate for every form on it however many replies had come in.
@@ -493,6 +685,17 @@ growthPublicRouter.post(
         });
       });
 
+      if (keptFiles.length > 0) {
+        // So the files open from the contact, not only from the reply.
+        await afterSubmission(`linking the files on submission ${submissionId} to their contact`, () =>
+          pool.query(
+            `UPDATE media_assets SET contact_id = $1
+              WHERE form_submission_id = $2 AND contact_id IS NULL`,
+            [contactId, submissionId],
+          ),
+        );
+      }
+
       if ((form.apply_tag_ids ?? []).length > 0) {
         await afterSubmission(`the tags on ${form.slug}`, async () => {
           // The form stores tag ids because that is what the builder picks from;
@@ -527,7 +730,7 @@ growthPublicRouter.post(
             email,
             String(data.message ?? ""),
             `form:${form.slug}`,
-            JSON.stringify(data),
+            JSON.stringify(answers),
           ],
         );
         // The lead row and the contact are one person. Left unlinked they are

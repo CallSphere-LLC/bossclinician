@@ -1,3 +1,5 @@
+import { assertLessonAssessmentAccess } from "../../services/lessonAssessments";
+import { recomputeCourseProgress } from "../../services/curriculum";
 import { Router } from "express";
 import { z } from "zod";
 import { pool } from "../../db/pool";
@@ -29,9 +31,6 @@ import { forbidden } from "../../utils/httpError";
 
 export const assessmentsPublicRouter = Router();
 
-/** Faster than this and nobody read the questions, let alone answered them. */
-const MIN_FILL_MS = 2000;
-
 /** Enough for the longest quiz here, and a ceiling on what one POST can cost. */
 const MAX_RESPONSES = 200;
 
@@ -55,9 +54,11 @@ const submitSchema = z.object({
 
 assessmentsPublicRouter.get(
   "/assessments/:slug",
+  optionalMember,
   asyncHandler(async (req, res) => {
     const assessment = await loadPublicAssessment(req.params.slug);
     if (!assessment) throw notFound("Quiz not found");
+    if (assessment.lessonId !== null) await assertLessonAssessmentAccess(req.member?.id, assessment.lessonId);
     res.json(assessment);
   })
 );
@@ -79,8 +80,11 @@ assessmentsPublicRouter.post(
       kind: string;
       lesson_id: number | null;
       max_attempts: number | null;
+      require_pass: boolean;
+      pass_message: string;
+      fail_message: string;
     }>(
-      `SELECT id, title, require_email, show_feedback, kind, lesson_id, max_attempts
+      `SELECT id, title, require_email, show_feedback, kind, lesson_id, max_attempts, require_pass, pass_message, fail_message
          FROM assessments WHERE slug = $1 AND published`,
       [req.params.slug]
     );
@@ -91,8 +95,9 @@ assessmentsPublicRouter.post(
       throw forbidden("View as customer is read-only.");
     }
 
+    if (assessment.lesson_id !== null) await assertLessonAssessmentAccess(req.member?.id, assessment.lesson_id);
     let memberIdentity: { contact_id: number | null; name: string } | null = null;
-    if (req.member && assessment.kind === "graded" && assessment.lesson_id !== null) {
+    if (req.member && assessment.lesson_id !== null) {
       const owned = await pool.query<{ contact_id: number | null; name: string }>(
         `SELECT m.contact_id, m.name
            FROM members m
@@ -146,19 +151,22 @@ assessmentsPublicRouter.post(
 
     const result = scored.resultId === null ? null : await loadResult(scored.resultId);
 
-    // A filled honeypot, or a form returned faster than anyone can read it, is
-    // a script. It gets its score back — that costs nothing and tells a bot
-    // nothing — but no contact is created, no tag applied and no sequence
-    // started, which is what it was actually after.
-    const isBot =
-      Boolean(input.company?.trim()) ||
-      (input.elapsedMs !== undefined && input.elapsedMs < MIN_FILL_MS);
+    // Fast readers and autofill can complete a short quiz in under two seconds.
+    // Timing is not proof of abuse. A rejected submission must never look saved.
+    if (!memberIdentity && input.company?.trim()) {
+      throw badRequest("Your answers were not saved. Please refresh the quiz and try again.");
+    }
 
     let contactId: number | null = null;
     let contactWasCreated = false;
     let attemptId: number | null = null;
-    if (req.member && memberIdentity && !isBot) {
+    if (req.member && memberIdentity) {
       contactId = memberIdentity.contact_id;
+      if (contactId === null) {
+        const contact = await upsertContactWithStatus({ email, name: memberIdentity.name, source: "lesson assessment" });
+        contactId = contact.id;
+        await pool.query(`UPDATE members SET contact_id=$2 WHERE id=$1 AND contact_id IS NULL`,[req.member.id,contactId]);
+      }
       attemptId = await saveAttempt({
         assessmentId: assessment.id,
         contactId,
@@ -167,7 +175,7 @@ assessmentsPublicRouter.post(
         responses,
         scored,
       });
-      if (scored.passed === true && assessment.lesson_id !== null) {
+      if ((scored.passed === true || assessment.kind === "survey" || !assessment.require_pass) && assessment.lesson_id !== null) {
         await pool.query(
           `INSERT INTO lesson_progress (member_id, lesson_id, completed_at, first_viewed_at, last_viewed_at)
            VALUES ($1,$2,now(),now(),now())
@@ -175,8 +183,10 @@ assessmentsPublicRouter.post(
              SET completed_at = COALESCE(lesson_progress.completed_at, now()), last_viewed_at = now()`,
           [req.member.id, assessment.lesson_id],
         );
+        const course = await pool.query(`SELECT m.course_id FROM course_lessons l JOIN course_modules m ON m.id=l.module_id WHERE l.id=$1`,[assessment.lesson_id]);
+        if (course.rows[0]) await recomputeCourseProgress(req.member.id, course.rows[0].course_id);
       }
-    } else if (email && !isBot) {
+    } else if (email) {
       const contact = await upsertContactWithStatus({
         email,
         name: memberIdentity?.name ?? input.name ?? "",
@@ -237,7 +247,7 @@ assessmentsPublicRouter.post(
           source: `quiz:${req.params.slug}`,
         });
       }
-    } else if (!isBot) {
+    } else {
       // An anonymous quiz still records the attempt: the completion rate and
       // the archetype split are the numbers that say whether it is working.
       attemptId = await saveAttempt({
@@ -250,7 +260,7 @@ assessmentsPublicRouter.post(
       });
     }
 
-    if (!isBot && attemptId !== null) {
+    if (attemptId !== null) {
       const eventFacts = {
         attemptId,
         score: scored.score,
@@ -282,10 +292,12 @@ assessmentsPublicRouter.post(
     }
 
     res.status(201).json({
+      attemptId,
       score: scored.score,
       maxScore: scored.maxScore,
       percent: scored.percent,
       passed: scored.passed,
+      message: assessment.kind === "survey" ? "Your responses have been saved." : scored.passed ? assessment.pass_message : assessment.fail_message,
       // Feedback is per-answer and only shown when the owner turned it on; on a
       // graded test it is otherwise a route to the answer key, one attempt at a
       // time.
@@ -303,3 +315,13 @@ assessmentsPublicRouter.post(
     });
   })
 );
+
+assessmentsPublicRouter.get("/assessments/:slug/my-results", optionalMember, asyncHandler(async (req,res) => {
+  const assessment = await loadPublicAssessment(req.params.slug);
+  if (!assessment || assessment.lessonId === null) throw notFound("Assessment not found");
+  await assertLessonAssessmentAccess(req.member?.id, assessment.lessonId);
+  const results = await pool.query(`SELECT id, score, max_score AS "maxScore", percent, passed,
+    completed_at AS "completedAt", responses FROM assessment_attempts
+    WHERE assessment_id=$1 AND member_id=$2 ORDER BY completed_at DESC LIMIT 50`,[assessment.id,req.member!.id]);
+  res.json(results.rows);
+}));

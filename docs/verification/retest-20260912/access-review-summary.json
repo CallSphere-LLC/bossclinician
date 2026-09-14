@@ -1,0 +1,14 @@
+{
+  "reviewFrom": "2026-09-12T18:00:00Z",
+  "reviewTo": "2026-09-12T20:08:20Z",
+  "publicAdminRequestsAfterIsolation": 31,
+  "statusesAfterIsolation": {
+    "401": 31
+  },
+  "successfulNonAdminReferrersBeforeIsolation": {
+    "-": 135,
+    "https://bossclinician.callsphere.site/account": 3,
+    "https://bossclinician.callsphere.site/login?next=%2Faccount": 2
+  },
+  "limitation": "No referrer does not establish request origin; proxy IPs and user agents cannot attribute requests to a person. This is not proof of absence of misuse."
+}

@@ -1,11 +1,28 @@
 import { describe, it, expect } from "vitest";
-import { backoffSeconds } from "./queue";
+import { backoffSeconds, isPermanentFailure } from "./queue";
 
 /**
  * Only the pure half is unit tested here. Claiming, leasing and dedupe are all
  * SQL and are covered by `queue.integration.test.ts` against a real database —
  * `FOR UPDATE SKIP LOCKED` cannot be meaningfully tested against a mock.
  */
+describe("isPermanentFailure", () => {
+  it("treats a recipient-guard refusal as permanent, however it is wrapped", () => {
+    const guard = Object.assign(new Error("email guard: refused send to a@b.c (not allow-listed in staging)"), {
+      name: "RecipientGuardError",
+    });
+    expect(isPermanentFailure(guard)).toBe(true);
+    expect(isPermanentFailure(new Error("Sequence email failed", { cause: guard }))).toBe(true);
+    expect(isPermanentFailure("email guard: refused send to a@b.c")).toBe(true);
+  });
+
+  it("leaves ordinary failures retryable", () => {
+    expect(isPermanentFailure(new Error("upstream down"))).toBe(false);
+    expect(isPermanentFailure(new Error("sending identity incomplete"))).toBe(false);
+    expect(isPermanentFailure(null)).toBe(false);
+  });
+});
+
 describe("backoffSeconds", () => {
   it("doubles with each attempt", () => {
     // Jitter is added on top, so each is asserted as a range rather than a

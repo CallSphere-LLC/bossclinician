@@ -1116,10 +1116,8 @@ function HostPortrait() {
           height={1440}
           loading="lazy"
           decoding="async"
-          className={cn("aspect-[4/5] w-full max-w-full object-cover object-top", GRADE)}
+          className="aspect-[4/5] w-full max-w-full object-cover object-top"
         />
-        <div aria-hidden className="absolute inset-0" style={{ background: PLATE_SCRIM }} />
-        <div aria-hidden className="absolute inset-0 bg-glow-violet/20 mix-blend-soft-light" />
       </div>
 
       <p className="mt-5 text-center text-[0.72rem] font-bold uppercase tracking-[0.14em] text-gold sm:text-[0.7rem] sm:tracking-[0.22em]">

@@ -78,6 +78,38 @@ describeDb("community entitlement (integration)", () => {
     });
   }
 
+  /** A channel in a room, with whatever restriction the test is about. */
+  async function newChannel(
+    communityId: number,
+    input: { slug: string; visibility?: string; accessGroupId?: number | null }
+  ): Promise<number> {
+    const res = await client.query<{ id: number }>(
+      `INSERT INTO community_channels (community_id, slug, name, visibility, access_group_id)
+       VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+      [
+        communityId,
+        input.slug,
+        input.slug,
+        input.visibility ?? "public",
+        input.accessGroupId ?? null,
+      ]
+    );
+    return res.rows[0].id;
+  }
+
+  async function newAccessGroup(communityId: number): Promise<number> {
+    const res = await client.query<{ id: number }>(
+      `INSERT INTO community_access_groups (community_id, name) VALUES ($1, $2) RETURNING id`,
+      [communityId, unique("Tier")]
+    );
+    return res.rows[0].id;
+  }
+
+  async function listedChannels(slug: string, token: string): Promise<string[]> {
+    const overview = await get(`/api/member/community/${slug}`, token);
+    return ((overview.body.channels ?? []) as { slug: string }[]).map((ch) => ch.slug);
+  }
+
   async function newCommunity(access_: "free" | "paid"): Promise<{ id: number; slug: string }> {
     const slug = unique("room");
     const res = await client.query<{ id: number }>(
@@ -252,6 +284,161 @@ describeDb("community entitlement (integration)", () => {
     expect(
       (await get(`/api/member/community/${room.slug}/channels/general/posts`, member.token)).status
     ).toBe(200);
+  });
+
+  /* -------------------------------------------- channel-level restrictions */
+
+  it("shows an invite-only channel to the people invited to it, and nobody else", async () => {
+    /*
+     * The bug this locks down: "Invited members only" was offered in the admin
+     * with nowhere to record an invitation, so the member queries could only
+     * fall back to "moderators and admins" — a channel created private was
+     * invisible to every member of the community, permanently, and there was no
+     * way to let anybody in. The setting was a dead end rather than a
+     * restriction.
+     */
+    const member = await newMember();
+    const stranger = await newMember();
+    const room = await newCommunity("free");
+    const channelId = await newChannel(room.id, { slug: "inner", visibility: "private" });
+
+    // Both are in the room; neither is invited to the channel.
+    await get(`/api/member/community/${room.slug}`, member.token);
+    await get(`/api/member/community/${room.slug}`, stranger.token);
+
+    expect(await listedChannels(room.slug, member.token)).not.toContain("inner");
+    // And hiding is not access control: the URL must not reach it either.
+    expect(
+      (await get(`/api/member/community/${room.slug}/channels/inner/posts`, member.token)).status
+    ).toBe(404);
+
+    await client.query(
+      `INSERT INTO community_channel_members (channel_id, member_id) VALUES ($1, $2)`,
+      [channelId, member.id]
+    );
+
+    expect(await listedChannels(room.slug, member.token)).toContain("inner");
+    expect(
+      (await get(`/api/member/community/${room.slug}/channels/inner/posts`, member.token)).status
+    ).toBe(200);
+
+    // The invitation is one person's, not everybody's.
+    expect(await listedChannels(room.slug, stranger.token)).not.toContain("inner");
+    expect(
+      (await get(`/api/member/community/${room.slug}/channels/inner/posts`, stranger.token)).status
+    ).toBe(404);
+  });
+
+  it("shows every channel to somebody who helps run the room", async () => {
+    const moderator = await newMember();
+    const room = await newCommunity("free");
+    await newChannel(room.id, { slug: "inner", visibility: "private" });
+    const groupId = await newAccessGroup(room.id);
+    await newChannel(room.id, { slug: "tiered", accessGroupId: groupId });
+
+    await get(`/api/member/community/${room.slug}`, moderator.token);
+    await client.query(
+      `UPDATE community_memberships SET role = 'moderator'
+        WHERE community_id = $1 AND member_id = $2`,
+      [room.id, moderator.id]
+    );
+
+    // Running the room is a different question from being invited to a channel:
+    // a moderator who cannot see a channel cannot moderate it.
+    const listed = await listedChannels(room.slug, moderator.token);
+    expect(listed).toContain("inner");
+    expect(listed).toContain("tiered");
+  });
+
+  it("keeps a tiered channel to its tier, however the tier was granted", async () => {
+    const member = await newMember();
+    const room = await newCommunity("paid");
+    const { offerId } = await sellCommunity(room.id);
+    await access.grantOfferAccess({ memberId: member.id, offerId });
+    const groupId = await newAccessGroup(room.id);
+    // `newCommunity` already made the open "general" channel.
+    await newChannel(room.id, { slug: "vip", accessGroupId: groupId });
+
+    expect(await listedChannels(room.slug, member.token)).toEqual(["general"]);
+
+    // The offer grants the tier, read live off the grant rather than copied
+    // into a row — so the tier lapses exactly when the access does.
+    await client.query(`UPDATE offers SET access_group_id = $1 WHERE id = $2`, [groupId, offerId]);
+    expect(await listedChannels(room.slug, member.token)).toContain("vip");
+
+    await access.revokeAccess({
+      memberId: member.id,
+      productId: (
+        await client.query<{ product_id: number }>(
+          `SELECT product_id FROM access_grants WHERE member_id = $1 AND offer_id = $2`,
+          [member.id, offerId]
+        )
+      ).rows[0].product_id,
+      reason: "refunded",
+    });
+    // The room shuts, and with it the tier: no orphan row keeps the door open.
+    expect((await get(`/api/member/community/${room.slug}`, member.token)).status).toBe(404);
+  });
+
+  /* --------------------------------------------------- one member count */
+
+  it("counts the members the same way on every surface", async () => {
+    /*
+     * The header said "2 MEMBERS" over a directory listing one person, because
+     * the two counted different things: the header took every membership row
+     * that was not banned, the directory only rows whose member account was
+     * still active. Same question, two answers, and a member reading both.
+     */
+    const member = await newMember();
+    const closed = await newMember();
+    const banned = await newMember();
+    const room = await newCommunity("free");
+    for (const who of [member, closed, banned]) {
+      await get(`/api/member/community/${room.slug}`, who.token);
+    }
+    await client.query(`UPDATE members SET status = 'cancelled' WHERE id = $1`, [closed.id]);
+    await client.query(
+      `UPDATE community_memberships SET banned_at = now()
+        WHERE community_id = $1 AND member_id = $2`,
+      [room.id, banned.id]
+    );
+
+    const overview = await get(`/api/member/community/${room.slug}`, member.token);
+    const directory = await get(`/api/member/community/${room.slug}/members`, member.token);
+    const listing = await get("/api/member/community", member.token);
+    const card = ((listing.body.communities ?? []) as { slug: string; memberCount: number }[]).find(
+      (row) => row.slug === room.slug
+    );
+
+    expect((overview.body.community as { memberCount: number }).memberCount).toBe(1);
+    expect(directory.body.total).toBe(1);
+    expect(card?.memberCount).toBe(1);
+  });
+
+  /* ----------------------------------------------------- leaderboard rank */
+
+  it("does not rank two members who have never posted as joint first", async () => {
+    const member = await newMember();
+    const other = await newMember();
+    const room = await newCommunity("free");
+    await get(`/api/member/community/${room.slug}`, member.token);
+    await get(`/api/member/community/${room.slug}`, other.token);
+
+    const empty = await get(`/api/member/community/${room.slug}/leaderboard`, member.token);
+    expect(empty.body.leaderboard).toEqual([]);
+
+    await client.query(
+      `UPDATE community_memberships SET points = 7 WHERE community_id = $1`,
+      [room.id]
+    );
+    const tied = await get(`/api/member/community/${room.slug}/leaderboard`, member.token);
+    // A real tie shares its rank, and now says that it is shared.
+    expect(
+      (tied.body.leaderboard as { rank: number; tied: boolean }[]).map((r) => [r.rank, r.tied])
+    ).toEqual([
+      [1, true],
+      [1, true],
+    ]);
   });
 
   it("enrols nobody while an admin is viewing as a member", async () => {

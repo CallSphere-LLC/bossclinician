@@ -1,0 +1,807 @@
+# Codex Prompt — Bring the Boss Clinician admin to Kajabi feature parity
+
+Paste everything below into Codex as a single task brief. It is written to be executed
+incrementally: **Phase 0 (bugs) must ship before Phase 1**, because several "missing
+features" are actually working features whose data is not wired up.
+
+Scope note: **website builder / page builder / landing-page design and the mobile app are
+explicitly out of scope.** Do not build a drag-and-drop site builder, theme editor, custom
+code editor, branded mobile app, or blog/testimonial/resource page design work. Everything
+else in Kajabi is in scope.
+
+---
+
+## CONTEXT
+
+You are working on `bossclinician.callsphere.site` — a React/Vite + Node admin
+("Admin Studio") that is a self-hosted Kajabi replacement. Admin routes live under
+`/admin/*`; public routes include `/f/:slug` (forms), `/quiz/:slug`, `/events/:slug`,
+`/checkout/:slug`. Payments run through Stripe. The stack already has:
+
+Products (courses, community, media library, coaching, podcasts, newsletters, downloads),
+Sales (offers with price/order-form/bumps/upsells/after-purchase, payments, plans,
+subscriptions, invoices, coupons, payouts→Stripe, partners/affiliates), Marketing
+(campaigns, funnels, sequences, automations v2, system emails, quizzes, events, forms),
+Contacts (people, groups/segments, tags, enquiries, AI conversations, members,
+subscribers), Analytics (overview + ~40 reports), Settings (general, payments/checkout,
+email, customers, course delivery, coaching, marketing, website, integrations, team,
+connections).
+
+It is already close to Kajabi at the navigation level. The real gaps are (a) broken wiring
+between modules, and (b) depth inside a handful of modules.
+
+---
+
+## PHASE 0 — BUGS FOUND BY LIVE TESTING (fix these first, highest priority)
+
+Each item below was reproduced by hand in the live admin. Fix the cause, not the symptom,
+and add a regression test for each.
+
+### P0-0. Automations never run on real events — the engine is decorative  ⭐⭐ WORST BUG
+**Reproduce (done end to end):** create an automation with trigger
+`a tag is added to someone → Retreat Waitlist 2027` and one step
+`start them on an email sequence → ZZ Test — welcome sequence`. Confirm the list shows it as
+**RUNNING** with no "needs attention" warning. Un-pause the target sequence
+("Start sending"). Then open a contact and apply the **Retreat Waitlist 2027** tag.
+**Observed:** the tag is applied to the contact, but
+- the automation's "What it has done" log gains **no entry at all**;
+- the sequence's "Who is going through this" still says **Nobody yet**.
+Pressing **Try it out** on the same automation immediately logs
+`RAN FINE · PRACTICE RUN · Sequence: would start them on it` — so the evaluator, the
+condition logic and the step executor all work. **What is missing is the live event
+dispatch:** nothing publishes domain events (tag added/removed, offer purchased, form
+submitted, lesson/course completed, event registered/attended, quiz finished, payment
+failed, subscription cancelled, contact created, abandoned checkout, anniversary) into the
+automation runner.
+**Why this is the top priority:** every "it's already built" marketing feature — form tags,
+quiz result sequences, post-purchase onboarding, dunning follow-up, event reminders —
+depends on this. Until it exists, the 17 triggers and 11 actions in the UI do nothing.
+**Build:** a single event bus. Every mutation that corresponds to a trigger emits a typed
+event; a worker matches enabled automations, evaluates conditions, executes steps in order
+(honouring `wait`), and writes a run record with per-step outcome. Add idempotency (don't
+re-run the same automation for the same event), a retry policy, and an integration test per
+trigger that asserts both the run log entry and the side effect.
+
+### P0-0b. The quiz editor discards every text field
+**Reproduce:** open a quiz, add a question, type the question text, an answer label and its
+point value using the keyboard, press Tab, then reload the page.
+**Observed:** the question and answer **rows** persist, and the two `<select>`-backed fields
+(result tag, result sequence) persist — but **every text value is gone**: question text,
+both answer labels, both point values, the result name, the result button label, the button
+URL and the result body all revert to `New question` / `New answer` / `0` / `New result` /
+empty. The page states "Changes here save themselves as soon as you move on to the next
+box." Verified with real typing plus Tab plus a full reload, not just scripted input.
+**Consequence, confirmed on the public page:** the live quiz renders
+`New question` with two `New answer` options, and a completed attempt is logged as
+**"0 out of 0"**. The quiz flow itself is fine (start → question → email gate → result), so
+this one bug is the only thing making quizzes unusable.
+**Fix:** persist text inputs on debounce/blur like the selects already do, and surface a
+save state. Then re-test that points sum into a real score and select the right result band.
+
+### P0-1. Public form pages never collect a name or an email address — forms capture nothing usable
+**Reproduce:** create a form at `/admin/marketing/forms-v2`, add one short-answer question,
+save, open `/f/<slug>`, submit.
+**Observed:** the public page renders only the custom question and a Submit button. There
+is no name field and no email field. The submission is stored as a reply with
+`"No name given"` and no email. No contact is created, no tag is applied, no email sequence
+starts — so the form's own "Tags added when somebody replies" and "Emails they start
+getting" settings can never fire.
+**Fix:** always render name + email on a public form (as the offer order form already
+does — "Their name and email are always asked for"), require email, and on submit:
+upsert the contact, apply the configured tags, enrol them in the configured sequence, create
+the enquiry, and fire the `form_submitted` automation trigger. Backfill/repair existing
+anonymous replies where possible.
+
+### P0-2. Subscriber counts disagree across five screens
+**Observed on the same data set (5 contacts, all flagged "Happy to hear from you"):**
+- `/admin/contacts` → 5 people, all subscribed
+- `/admin/segments` "everyone" group → 5 people
+- `/admin/subscribers` → **0 subscribers**
+- `/admin/analytics` "On your email list" → **0**
+- `/admin/` dashboard "People who joined your list" → **3**
+- Email campaign composer, audience "Everyone on my email list" → **"0 people will get this"**
+**Fix:** define one canonical "email list membership" predicate (subscribed AND not
+bounced AND not unsubscribed) in a single query/helper, and make Subscribers, Analytics,
+Dashboard, Segments, and the campaign audience estimator all use it. The campaign
+estimator computing 0 means broadcasts currently send to nobody — treat this as a
+send-blocking bug.
+
+### P0-3. Form question editor silently loses work
+**Reproduce:** open a form, "Add the first question", fill it, press "Add it", navigate away.
+**Observed:** the question appears in the list but is discarded — the parent form still needs
+a separate "Save form" press, with no dirty-state indicator and no unsaved-changes warning.
+**Fix:** either persist the question immediately on "Add it", or add a visible unsaved
+badge + `beforeunload`/route-change guard. Apply the same audit to every nested editor
+(offer tabs, quiz questions/results, event dialog, sequence emails, community badges).
+
+### P0-4. New events are created without a timezone, so their time renders wrong
+**Reproduce:** create an event at `/admin/marketing/events-v2`. The create dialog says
+"Eastern time — you can change this next" but offers no timezone field. Enter
+`2026-09-15 18:00`.
+**Observed:** the list renders `Sep 15, 2026, 3:00 PM` — a 3-hour shift. Opening the event's
+edit dialog shows the stored value is correct (`2026-09-15T18:00`) and reveals a timezone
+selector defaulted to `America/New_York`. **Pressing Save event once** makes the list render
+correctly as `Sep 15, 2026, 6:00 PM EDT`, and the public event page then reads
+"Tuesday, September 15 at 6:00 PM EDT".
+**Diagnosis:** creation does not persist a timezone, so the renderer falls back to
+something else until the event is opened and re-saved.
+**Fix:** capture the timezone in the create dialog (default to the site timezone) and
+persist it with the event; render through it everywhere. Add tests across DST boundaries.
+Backfill existing events created without one.
+
+### P0-5. Saving a new offer fails silently when no price is set
+**Reproduce:** `/admin/offers/new`, fill name + description + entitlement, press Save.
+**Observed:** nothing happens, no error, the URL stays on `/new`. It only saves once a
+price is entered on the Price tab.
+**Fix:** show inline validation naming the missing field and switch to the offending tab.
+Audit every "Save" in the admin for silent failure.
+
+### P0-6. A dry run reports success for a step that cannot do anything
+**Correction to an earlier read of this app — the validation here is mostly good.** With an
+unconfigured step the app *does* badge the automation **NEEDS ATTENTION**, explains
+"This is running, but it cannot do everything it says. Its runs will report the problem",
+names the exact fault ("step 1 (add a tag) has no tag chosen"), badges the step
+**UNFINISHED**, and clears all of that once the step is configured. Removing a step also
+raises a proper "Remove this step?" confirmation, and adding one opens a config dialog.
+**The one real defect:** pressing **Try it out** on such an automation logs
+`RAN FINE · PRACTICE RUN · Tag: none chosen` — success, for a step that would have done
+nothing.
+**Fix:** the run log should record that step as skipped/warning, and the overall verdict
+should be "ran with problems", not "ran fine". Also consider refusing to activate an
+automation that is in the needs-attention state at all.
+
+### P0-7. "Send me a test email" gives no feedback
+`/admin/settings/email` → "Send me a test email" produces no toast, no success state and no
+error, so there is no way to tell whether SMTP works.
+**Fix:** return and surface the result (sent / provider error / not configured), and add
+the same feedback to every fire-and-forget action.
+
+### P0-8. `/admin/community/:id` errors for some ids
+`/admin/community/1` renders "We couldn't load this community. Try refreshing the page."
+while `/admin/community/2` works.
+**Fix:** correct the id/route resolution and render a proper 404 for a genuinely missing
+community rather than a generic failure.
+
+### P0-9. Plans cannot be edited and grant nothing
+A plan created at `/admin/sales/plans` offers only **Delete plan** — no edit — and there is
+no field for what the plan gives access to, so a subscription to it unlocks nothing.
+**Fix:** add plan editing, and add entitlements (courses / communities / downloads /
+coaching) to plans, the way offers already have "What do they get?".
+
+### P0-10. Section/lesson editing gaps in the course builder
+Sections cannot be renamed or reordered independently (the chevron only collapses), and
+there is no per-section or per-lesson drip schedule even though
+`/admin/settings/delivery` exposes a global "Drip release time" that nothing consumes.
+**Fix:** see P1-1.
+
+### P0-11. Smaller defects found while testing
+- **Podcast episodes save as LIVE with no audio.** Adding an episode with only a title
+  produces a row reading `ZZ Test — episode one · No audio yet · LIVE`, i.e. a listener-facing
+  episode with nothing to play. Require audio before an episode can go live, or default new
+  episodes to draft.
+- **Tag chips on the contact record need a very precise click.** The first click on
+  `+ Retreat Waitlist 2027` at `/admin/contacts/:id` did nothing; a second, better-centred
+  click applied it. Enlarge the hit area and give the chip a pressed/loading state.
+- **A public form/event submission that fails gives no error.** One of two otherwise
+  identical event registrations produced no contact and no confirmation, with nothing shown
+  to the visitor. Every public submit needs an explicit success and failure state.
+- **Coaching sessions can only be booked for members**, not for any contact — the client
+  picker lists only people with an account (2 of 6 contacts), so someone who bought coaching
+  without creating a password cannot be booked in.
+- **Confirmation dialogs are invisible to assistive tech / text extraction.** "Stop selling"
+  and "Remove this step" both open a confirm prompt whose buttons ("Yes, stop selling it" /
+  "Never mind", "Remove it" / "Never mind") do not surface in the accessibility tree as part
+  of a labelled dialog, which makes the action look broken until you find them. Give every
+  confirm a proper `role="dialog"` with an accessible name, focus trapping and initial focus.
+  (The underlying actions themselves work correctly once confirmed.)
+
+---
+
+## WHAT ALREADY WORKS — DO NOT REBUILD THESE
+
+Verified by creating records and driving the public flows. Extend these; don't replace them.
+
+- **Checkout, including the money maths.** A live offer at
+  `/checkout/zz-test-checkout-probe` rendered the order bump, accepted a coupon, and
+  computed `$19.00 + $7.00 bump = $26.00 subtotal − $13.00 (ZZTEST50, 50%) = $13.00 total`,
+  with the pay button and Stripe element updating in step. Order-summary, discount feedback
+  ("ZZTEST50 applied — $13.00 off.") and the Stripe embed are all correct.
+- **Event registration end to end.** Public page shows the correct localised time, takes
+  name + email (with a honeypot), and on submit creates the contact, applies the configured
+  signup tag, and shows a "You're in." confirmation with "Go to the room" and
+  "Add to calendar".
+- **The quiz-taking flow** — start → question → email gate ("Where should I send your
+  result?") → result page, with the attempt logged against a new contact and the configured
+  result tag applied. Only the authoring side is broken (P0-0b).
+- **Coupons** — create with a percentage and a usage cap; list shows `0 of 5` and
+  `YES — IT WORKS`; switching off works.
+- **Coaching sessions** — "Book a session" captures client, parent offer, date/time, status
+  (Booked / Done / Cancelled / Didn't show), meeting link, a client-visible agenda and
+  private notes, and the row shows "Notes saved".
+- **Segments** — the rule builder evaluates live while you edit (it correctly narrowed to
+  the 2 people carrying a tag) and saves with a plain-English summary and a recount.
+- **Community** — posting to a channel, challenges, events and point-threshold badges all
+  create and persist.
+- **Automation authoring and validation** — needs-attention detection, per-step
+  UNFINISHED badges, remove-step confirmation, step config dialogs, and a working dry run.
+  (Only live firing is missing — P0-0.)
+- **Newsletter editions**, **media uploads**, **contact creation with tags and dedupe
+  detection**, **offer order bumps**, and **course sections/lessons** all save correctly.
+- **Toasts do exist** in some flows (e.g. "Order bump added."). The problem is that they are
+  inconsistent, not absent — see Phase 2.
+
+## PHASE 1 — MISSING FEATURES VS KAJABI
+
+Ordered by business impact. Each item states what Kajabi does, what exists here today, and
+what to build.
+
+### P1-1. Course product depth: drip, paywall, certificates, live rooms  ⭐ biggest product gap
+**Kajabi** (observed at `/admin/products/:id`, `/edit`, `/certificate_template/edit`) — a
+course product has tabs **Outline / Customize / Offers / Customers / Certificates /
+Settings / More**, and the Outline is a drag-and-drop tree of modules and posts each with
+its own Draft/Published state. Specifically:
+- **Per-module (category) drip**, with the release hour set globally in
+  Settings → "Drip settings — Choose what time of day Drip modules will become available".
+- **A Paywall element you drag into the outline.** Adding it auto-creates a **"limited access
+  product"** twin of the course — a second product members can hold that shows only the
+  content *above* the paywall, with a chosen **paywall offer** presented when they hit gated
+  content. The live account has both `test` and `test - limited access` offers.
+- **Certificates tab** with a real designer: logo, certificate title, recipient subtitle,
+  show student's name, course subtitle, include course title / completion date /
+  **unique certificate serial number** / **expiration date** / a custom field, and a
+  background image. Emailed automatically on course completion.
+- **Live Rooms** — "provide a live video session for this course", up to 200 participants.
+- **Community linking** — attach an existing community circle to the course member experience.
+- **Comment settings** — enable comments per course, override per lesson, and "lock all
+  comments" (existing comments stay visible, no new ones).
+- **Customers tab** per product.
+- **Course generator** — AI-generated course outline ("Your course outline was created
+  successfully!"), plus an embedded "Cofounder" AI assistant across the admin.
+
+**Today:** curriculum is sections → lessons only, with no section rename/reorder/settings, no
+paywall, no drip consumption (the global release hour in `settings/delivery` is wired to
+nothing), no certificate generator behind the existing "Certificate issued" email, no live
+rooms, no course↔community link, no comments, and no per-product customers view.
+
+**Build:**
+- Section edit dialog: rename, reorder, "release X days after purchase" / "release on
+  date" / "release immediately", visible/hidden.
+- Lesson-level release override, plus `prerequisite: previous lesson must be complete`.
+- Consume `settings/delivery` release hour + timezone when computing unlock times.
+- Member-facing locked state with the unlock date, and a nightly job that fires the
+  `lesson_unlocked` notification.
+- Completion: mark-complete per lesson, % progress per course (already reported in
+  "How far people get"), course-complete event, and a real PDF certificate delivered by the
+  existing "Certificate issued" email — with the full Kajabi field set above, including a
+  unique serial number and optional expiration date, plus a certificate designer screen.
+- Drag-and-drop reordering of sections and lessons; per-section and per-lesson
+  Draft/Published.
+- **Paywall element** in the outline + the auto-generated limited-access twin product and its
+  paywall offer.
+- **Live room** per course (a scheduled video session members join from inside the course).
+- **Course ↔ community link**, so buying the course joins them to a channel.
+- A per-course **Customers** tab (who is enrolled, progress, last activity).
+- Optional: an AI "generate a course outline from a topic" action, matching Kajabi's Course
+  generator.
+
+### P1-2. Lesson content types
+**Kajabi** (observed at `/admin/posts/:id/edit`): title, module selector, **Media: None /
+Video / Audio**, **Downloads (Add Files)** — multiple attachments, a rich body editor,
+**per-lesson Automations**, Draft/Published, lesson thumbnail, and
+**Comments: Visible / Hidden / Locked** with a comment-settings link.
+**Today:** name + one video (upload or pasted link) + rich-text notes + duration + "free
+taster" + visible. No attachments, no audio, no thumbnail, no automations, no comments.
+**Build:** multiple attachments/downloads per lesson, an audio lesson type, a lesson
+thumbnail, per-lesson automations (reusing the global registry), an embedded
+assessment/quiz block (P1-7), and per-lesson comments with Visible/Hidden/Locked (P1-3).
+
+### P1-3. Comments and a unified inbox
+**Kajabi:** comments on course posts with moderation, plus a **Universal Inbox** at
+`/admin/sites/:id/universal_inbox` that unifies every conversation.
+**Today:** community posts have counters for comments/reactions but no admin reply UI.
+`/admin/conversations` holds only AI website chats; `/admin/leads` holds only enquiries.
+**Build:**
+- Lesson comments: post, reply as host, pin, hide, delete, per-course on/off; notify on new
+  comment; `comment_posted` automation trigger.
+- Community: admin reply/react on posts, moderation queue, member mute/remove.
+- One inbox at `/admin/inbox` merging enquiries + AI conversations + lesson comments +
+  community mentions, with unread/assigned/resolved states.
+
+### P1-4. Email builder — blocks, images, buttons, templates
+**Kajabi:** a visual block editor (text, image, button, divider, video thumbnail, product
+card, columns), saved templates, and a "Email templates" library.
+**Today:** campaigns get a 6-button inline toolbar (bold/italic/H2/list/link) + "See how
+it looks"; **sequence emails are a plain textarea with no formatting at all**; newsletters
+get the same small toolbar as campaigns.
+**Build:** one shared block-based email composer used by campaigns, sequences,
+newsletters, and the system-email editor. Blocks: heading, paragraph, image (from Media
+Library), button/CTA with link, divider, spacer, two-column, product/offer card, social
+row. Saveable/duplicatable templates. A live desktop + mobile preview. Full merge-tag
+palette with a picker (`firstName`, `lastName`, `email`, `offerName`, `courseName`,
+`unsubscribeUrl`, `loginUrl`, custom contact fields) — today only `{{firstName}}` is
+documented.
+
+### P1-5. Campaign audience, scheduling and event-relative sends  ⭐ (verified in Kajabi)
+**Kajabi** (observed at `/admin/sites/:id/email_campaigns`) puts broadcasts *and* sequences
+in **one list** with **Folders**, **Manage Templates**, a Type column (Broadcast / Email
+Sequence) and statuses **Active / Draft / Scheduled**. Critically, campaigns can be scheduled
+**relative to an event**, not just to a clock:
+- `24 hours before 'The Do's & Don'ts CEU' event on September 25, 2026 10:00 PM` — Scheduled
+- `2 hours before …` — Scheduled
+- `7 days before …` — Scheduled
+- `9 hours after …` — Scheduled
+- `Upon 'The Do's & Don'ts Educational' event registration` — Active
+Kajabi also offers **granular email preferences** — "let contacts choose which emails they
+receive instead of unsubscribing from everything" (topic-level subscription).
+
+**Today:** four hard-coded audiences (`Everyone on my email list`, `Everyone with a
+membership`, `Everyone who's enquired`, `Everyone in my community`), immediate **Send** only,
+no test send, no schedule, no folders, no templates, no event-relative timing, and
+unsubscribe is all-or-nothing.
+
+**Build:**
+- Audience = any combination of groups/segments, tags and product/offer ownership, plus
+  exclusions, with a live recipient count (fix P0-2 first).
+- "Schedule for later" with a timezone, plus cancel-scheduled-send.
+- **Event-relative scheduling**: N minutes/hours/days before or after an event's start, and
+  "upon registration" — reusing the Events module (P1-14 events section).
+- "Send a test to me" and subject-line A/B with an automatic winner.
+- Folders and a saved-template library shared with sequences and newsletters.
+- **Topic-level email preferences**: define subscription topics, let contacts manage them on
+  a preference-centre page, and honour them at send time.
+
+### P1-6. Coaching programs and native scheduling  ⭐ (verified in Kajabi — much deeper than a booking link)
+**Kajabi** (observed at `/admin/coaching_programs/:id` and
+`/admin/sites/:id/scheduling/settings/edit`):
+- A **coaching program** is a product with tabs **Clients / Package outline / Offers / Settings**.
+- **Package outline** = a numbered session plan (the live example has **24 sessions**), each
+  with its own actions, plus an "Additional session default" template.
+- **Clients** tab: Active / Past, with per-client info and progress.
+- **Settings → Scheduling preference**: either **Kajabi-native** ("Set availability and book
+  sessions inside of Kajabi") **or** an external link (Calendly / Acuity / Google Calendar).
+- **Location per session**, including **Kajabi Live Video** — a built-in 1-hour video room.
+- **Per-session reminders**: "Send a reminder [N] before the session start time", multiple
+  reminders addable/removable.
+- **Session duration** and **Manage default availability**.
+- **Kajabi Live Recording**: automatically upload the session recording into the session record.
+- **Additional purchases**: "Offer additional 1:1 coaching sessions" — clients buy more
+  sessions inside the program.
+- **Notifications matrix**: coach vs client, per event ("when a change to the coaching
+  session is saved (shared notes, resources…)", "when a recording is uploaded").
+- Site-level **Scheduling** page: weekly availability grid (Sun–Sat) with "You don't have
+  availability on Mondays" states, **slot frequency**, **open date range** ("clients can book
+  up to 6 months ahead"), **session limits per day**, and **calendar connections** —
+  Google Calendar (live-connected in the account, with "Add to calendar" + "Check for
+  conflicts" across multiple named calendars), Microsoft Office 365, Microsoft Outlook,
+  iCloud Calendar, Calendly.
+
+**Today:** a coaching offer is name + description + session count + minutes + price +
+**a pasted Calendly URL** + live toggle. `settings/coaching` has booking/cancellation
+windows, slot granularity and open-window days. **Session records DO exist and work** —
+"Book a session" on the Sessions tab captures client, parent offer, date/time, status,
+meeting link, a client-visible agenda and private notes. What is missing is everything
+around them: no availability grid, no calendar connection, no member-facing booking (the
+admin books manually), no program/session outline, no reminders wired to real sessions, no
+recordings, no extra-session purchases, and the client picker only lists people who already
+have an account.
+
+**Build, in this order:**
+1. **Coaching program** entity: session outline (numbered sessions, reorderable, with a
+   default template for extra sessions), per-session title/agenda/shared resources/private
+   notes/status/recording.
+2. **Clients tab**: enrolled clients, progress through the outline, active vs past.
+3. **Availability**: weekly grid + date overrides + blackout dates, slot frequency, per-day
+   session caps, booking-window days (reuse the existing `settings/coaching` values).
+4. **Calendar sync**: Google Calendar first (two-way: write the booked session, read
+   multiple calendars for conflicts), then Microsoft/Outlook. Keep "paste an external link"
+   as an explicit alternative mode, not the only mode.
+5. **Native booking page** for members that respects availability, windows and caps.
+6. **Reminders**: multiple configurable offsets per program, wired to the existing
+   "Coaching reminder" system email; plus a coach/client notification matrix.
+7. **Video**: a meeting link per session (Zoom/Meet/Whereby), and recording attachment to
+   the session record.
+8. **Additional session purchases** inside a program.
+9. Group coaching (many attendees per session).
+
+### P1-7. Assessments (graded, in-course) as distinct from quizzes
+**Kajabi:** `/assessments` — graded assessments and post-tests attached to course posts,
+with pass marks and per-student submissions.
+**Today:** `/admin/marketing/quizzes` supports scored quizzes and graded tests as **public
+lead-gen pages** only. There is no way to attach one inside a lesson or gate progress on it.
+**Build:** embed an assessment in a lesson, require a pass to unlock the next lesson,
+store per-student attempts and scores, allow manual grading of long-answer questions,
+notify the student, and add a "Assessment results" report.
+
+### P1-8. Funnel blueprints and email steps
+**Kajabi:** a library of prebuilt funnel blueprints (freebie/opt-in, sales, webinar,
+book-a-call, product launch, coaching application) and email steps inside the funnel.
+**Today:** funnels are manual stage lists (landing / sign-up / your offer / extra offer /
+thank-you) with headline + body + one button.
+**Build:** blueprint templates that scaffold stages, forms, tags and a sequence in one
+click; email steps as first-class stages; per-stage conversion rates (the shell exists);
+and A/B testing of a stage.
+
+### P1-9. Offers, checkout and pricing depth  ⭐ (verified in Kajabi — the largest single gap)
+Observed in Kajabi at `/admin/offers/:id/edit`, `/details/edit`, `/upsells`,
+`/settings/edit`, `/admin/sites/:id/coupons` and `/admin/sites/:id/edit/checkout-settings`.
+Your offer editor is well structured but models **one price and one product**; Kajabi models
+a catalogue-grade offer.
+
+**9a. Multiple pricing options per offer** — a single Kajabi offer carries several price
+points side by side, e.g. *Lounge VIP* = `$3,497.00 one-time payment` **and**
+`$347.00/month for 6 payments`, each with its own taxes-included flag and a quantity limit
+("Unlimited"). The offers index shows "Multiple pricing options" for 7 of 44 offers, and the
+checkout renders them as selectable payment options.
+*Today:* one price per offer, so the shop needs two separate offers for PIF vs plan.
+**Build:** a `pricing_options[]` collection on an offer (type, amount, interval, count,
+tax-included, quantity cap, label, default), rendered as a chooser at checkout.
+
+**9b. Multiple products per offer + access limits** — Kajabi's Details tab has
+"Products in this Offer" (the example bundles two), an **internal title** separate from the
+customer-facing title, and **Product Access**: "Begin access at a specific date" and
+"Restrict access to a specific amount of days".
+*Today:* multiple entitlements ✓, access-expiry presets ✓ (30/60/90 days…), but no
+scheduled start date and no internal title.
+**Build:** internal title; "begin access on date"; free-form access duration in days.
+
+**9c. Upsell **and downsell** funnel** — "The first upsell page is shown immediately after
+purchase and can be followed by additional upsell or downsell pages", drawn from a reusable
+**Upsells** library (there is an `Upsells` tab on the offers index, i.e. upsells are
+site-level objects reused across offers, not per-offer only).
+*Today:* per-offer upsells, no downsell branch, no shared library.
+**Build:** a site-level upsell/downsell library, and per-offer sequences with an
+accept→next / decline→downsell branch.
+
+**9d. Per-offer automations with a When / Then / If model** — the live offer has four,
+using triggers your engine does not have: `Payment plan complete`,
+`Recurring payments cancellation initiated/completed`; and actions it does not have:
+`Deactivate from offer`, `Revoke an offer`, `Unsubscribe from an email sequence`.
+**Build:** add those triggers and actions to the global automation registry, and surface an
+"Automations" panel scoped to an offer (and to a lesson — see P1-2 — where Kajabi also
+exposes per-lesson automations).
+
+**9e. Checkout field control** — toggles for name / phone / address, **Tax ID** field,
+**custom fields at checkout** (drawn from the global field library, see P1-14), a
+**geolocation-based default country** with an explicit fallback country, and a custom
+checkout button label.
+*Today:* address and phone toggles + free-text extra questions per offer.
+
+**9f. Consent, accounts and gifting**
+- **Service agreement**: Not required / default T&C / custom text, consented at checkout.
+- **Require new customers to create a password at checkout**, or defer it to after checkout.
+- **"Send as a gift"** — buy an offer for someone else (one-time-payment offers only;
+  disables bumps/upsells when used). Kajabi also has a gift-recipient email opt-in.
+*Today:* a terms checkbox only.
+
+**9g. Checkout abandonment recovery** — per offer: enable, choose recipients
+(**Customers only** vs **All visitors** who entered an email), choose delay
+(**1h / 6h / 10h / 24h**), editable template.
+*Today:* the report **"Money brought back by reminder emails — Carts left behind, and the
+ones your reminder emails rescued"** already exists in your reports list, but there is no
+setting anywhere to enable or configure these emails. Build the feature the report promises.
+
+**9h. Per-offer affiliate commission** — fixed amount or percentage, overriding the global
+rate. *Today:* a single global commission model under Partners → How it works.
+
+**9i. Purchase notifications to you/your team** — per offer, notify a list of email
+addresses on every purchase. *Today:* a global "Someone buys something" toggle only.
+
+**9j. Third-party email hand-off** — per offer, push the buyer to Mailchimp/AWeber/Drip etc.
+*Today:* only generic webhooks under Settings → Connections.
+
+**9k. Coupons** — Kajabi's coupon table has columns your model lacks: **Discount** (% or
+fixed $), **Offers** (restricted to N specific offers), **Duration: Once vs Forever** (for
+recurring — discount the first payment or every payment), **Redemptions** count, **Status**
+(Active/Expired), **Expires** date.
+*Today:* the New coupon dialog offers exactly three fields — code, "How much off?" as a
+**percentage only**, and "How many people can use it?" (a usage cap, which does work and
+renders as `0 of 5`), plus an on/off switch. Missing: **fixed-amount discounts**, an
+**expiry date**, **restriction to specific offers**, and **once-vs-forever** for recurring
+purchases.
+**Build those four.**
+
+**9l. Site-level checkout settings** (`edit/checkout-settings`) — email-opt-in mode
+(**unchecked / pre-checked / custom message / disabled**), "automatically subscribe
+customers who buy a paid offer", gift-recipient opt-in, and a **card-storage opt-in policy**
+(opted-out by default / opted-in / hidden) for one-time Stripe purchases.
+*Today:* discount-code toggle, button colour, support address, terms link.
+
+**9m. Grant/revoke an offer for a person** from the contact record (Kajabi does this via
+offer automations and the contact's Options menu). *Today:* not available.
+
+**9n. Multi-currency.** Kajabi shows a currency selector on the dashboard, reports and
+analytics. *Today:* USD only in practice.
+
+### P1-10. Customer billing portal, dunning and churn capture  ⭐ (verified in Kajabi)
+Observed at `/admin/sites/:id/edit/member-payments`. Kajabi ships a whole customer-facing
+billing portal plus the notification machinery around it:
+- **Receipts:** customisable receipt (title, refund policy, extra info), business address +
+  tax number printed on it, **refund receipts** with a custom message, and
+  **"Attach receipts to emails" as a downloadable PDF**.
+- **Receipt-sending rules:** send for all successful transactions / **only the first payment
+  of a subscription or plan** / **only when the transaction has value** (skip free, trial and
+  100%-discounted).
+- **Statement descriptor** — the 5–22 character name that appears on the customer's card
+  statement, to prevent disputes.
+- **Free-trial ending reminder** — "send a reminder email 7 days before a trial ends", with
+  an editable template.
+- **Upcoming payment reminder** — "send an email N days before the upcoming payment" for
+  subscriptions and payment plans, applied to all current and future offers.
+- **Auto-revoke and restore access** — "auto-revoke product access after the first failed
+  payment", auto-granted again when payment succeeds.
+- **Self-serve pause** and **self-serve cancel** inside a **customer billing portal**, with
+  a **"personal message"** (300 chars) shown at the cancel step to give the customer a
+  reason to reconsider, an **editable list of cancellation reasons**, and a link straight to
+  the **cancellation report**.
+
+**Today:** a "Payment failed" system email template and an `a payment fails` automation
+trigger exist; subscription statuses mention Paused / Past due; `settings/payments` has
+cancel-behaviour and a grace-period cushion. But there is **no customer billing portal at
+all**, no retry policy, no card-update page, no pause action, no trial or upcoming-payment
+reminders, no statement descriptor, no receipt PDF, and no cancellation-reason capture —
+even though your reports list already promises **"People who left — cancellations, and the
+reason each one gave"** and **"What people said when they left"**.
+
+**Build:** the customer billing portal first (payment methods, invoices/receipt PDFs,
+pause / cancel / resume, update card), then the reminder set (trial ending, upcoming
+payment, dunning series), the configurable retry schedule with auto-revoke/restore, the
+statement descriptor, the receipt customiser and rules, and the cancellation-reason editor
+feeding the two reports that already exist.
+
+### P1-11. Contact record depth
+**Kajabi:** custom contact fields, notes, activity timeline, imports with column mapping,
+merge duplicates, GDPR delete/export.
+**Today:** the record has spend, purchases, source, timeline, notes, tags, "Same as
+someone else", timezone, and email status — genuinely strong. Forms already offer
+"A detail of your own…" as a save target.
+**Build:** a custom-fields admin (define, type, use in segments and merge tags); import
+wizard with column mapping and dry-run preview (currently just "Import a list"); a real
+merge-duplicates flow; and per-contact data export/erase.
+
+### P1-12. AI agent for sales and support
+**Kajabi:** "Expert Agents" — configurable AI agents on sales pages and inside courses,
+with tone/topics/instructions, escalation to a human, and every conversation in the inbox.
+**Today:** an AI website chat exists (transcripts at `/admin/conversations`), but the
+transcript shows it "running in limited mode" and there is no configuration screen.
+**Build:** an agent admin — knowledge sources (courses, offers, blog, resources), tone and
+topic guardrails, custom instructions, handoff-to-human, per-page enablement, and a
+conversation → enquiry conversion action.
+
+### P1-13. Backstage-equivalent premium client portal
+**Kajabi:** Backstage — a private portal per high-touch client with dashboard, meetings,
+offers and "needs action" items.
+**Today:** nothing equivalent; coaching is offer + external booking link.
+**Build (after P1-6):** a per-client portal with upcoming meetings, shared documents,
+action items, session history and the offers assigned to them.
+
+### P1-14. Smaller parity items (all verified against the live Kajabi account)
+- **Recurring / evergreen events.** Kajabi's Events list shows recurrence as a first-class
+  schedule: `Daily next up Sep 1, 2026 11:00 AM`, `Hourly next up`, `Every 15 minutes next
+  up`, `Every 4 days next up` — i.e. just-in-time evergreen webinars — plus dedicated
+  **replay-expiry events** ("End of Replay-CEU 9/25/26") and a per-event timezone shown in
+  the list (PST/PDT/IST). *Today:* One live session / Always on / Watch any time, with a
+  replay window in hours, no recurrence schedule and a timezone bug (P0-4).
+  **Build:** a recurrence rule per event, replay-expiry as a schedulable moment, and
+  per-event timezone rendered everywhere.
+- **Global custom-field library.** Kajabi's Forms → Form settings holds a reusable field
+  library — standard fields (First/Last Name, Email, Phone, Address, Address Line 2, City,
+  State, Country, Zip, Business Number) plus unlimited **Custom** fields, each
+  editable/archivable and usable on any form *and* at checkout. The live account has ~45
+  custom fields. *Today:* per-form "A detail of your own…" with no shared library.
+  **Build:** the library, plus use of those fields in segments, merge tags and checkout.
+- **Bot protection.** Kajabi: "Add Google's reCAPTCHA to single opt-in forms". *Today:*
+  Settings mentions "keeping junk out of your forms" but nothing is implemented.
+- **Member social sign-in.** Kajabi: `member_sign_in` offers **Google sign-in** for members.
+  *Today:* magic link + email confirmation only.
+- **2FA for admins** — `/admin/settings/team` shows "Ask for a code as well as my password —
+  COMING SOON". Ship TOTP enrolment, recovery codes, per-user enforcement. Kajabi has this
+  under Account → Sign in & security.
+- **Team roles** — only "Owner" exists. Kajabi has Manage Users with roles. Add
+  Admin / Marketing / Support / Coach with a permission matrix and a real invitation flow.
+- **Media Library** — Kajabi's library has a **Tags** column and per-file tagging across 96
+  files. Add folders/tags, rename, search, replace-file, alt text, and per-file usage
+  ("used in 3 lessons"). *Today:* a flat list with a public/buyers-only flag only.
+- **Affiliate depth** — Kajabi's Affiliates module has Overview (with a **leaderboard** and
+  **top offers**), Commission setup, **Share links**, My affiliates, **Transactions** (ledger
+  with filters + Export), Announcements, Settings — plus **automatic payouts via PayPal** and
+  a **payout schedule**. *Today:* partners, manual mark-off payouts, assets, announcements,
+  commission rules — but no leaderboard, no per-offer share links, no transaction ledger,
+  and no automated payout rail.
+- **Analytics depth** — Kajabi's Analytics has a **Customize view**, period-over-period
+  comparison, gross revenue **by payment method**, top offers, top customers, a
+  **subscription status** breakdown (Active/Trialing/Past due/Pending cancellation/Paused),
+  and a **subscription retention cohort table (PMT 1 → PMT 24)**. *Today:* four metrics and
+  four charts. Add the cohort table and the comparison/customise controls.
+- **Community** — rich composer (image, video, attachment, poll), a **leaderboard** view (your
+  own dashboard already promises leaderboards), scheduled posts, per-channel access rules,
+  and admin reply/moderation (P1-3).
+- **Podcasts** — per-episode private/members-only gating, transcripts, chapters, and an
+  Apple/Spotify submission checklist.
+- **Newsletters** — a public archive page, scheduled editions, and paid-tier gating (your own
+  copy already promises "only for people paying for one of your plans").
+- **Forms** — file-upload field, conditional logic, reCAPTCHA, multi-step forms, an embed
+  snippet, and form types (Kajabi labels forms as "Form" vs "Waitlist").
+- **Reports** — add "Payment balance summary by month" and forecasted future instalments
+  (Kajabi has both); add CSV export and saved date-range presets on every report.
+- **Webhooks/API** — Kajabi has both a per-offer **Purchase webhook URL** and site-level
+  Integrations & Webhooks. Your "Connections" screen exists but ships no event catalogue or
+  docs. Add a documented event list, a delivery log with retries, a signing secret, and a
+  versioned read API for the keys it already mints.
+- **Audit log** — who changed what in the admin.
+- **Bulk actions** — the contacts list already has checkboxes; wire bulk tag / untag /
+  add-to-sequence / grant-offer / export / delete.
+
+---
+
+## PHASE 2 — UI AND THEME REWORK
+
+The owner's feedback: *the light purple looks cheap; make it black, richer, more
+beautiful.* The public site (`bossclinician.callsphere.site`) already nails this — near-black
+ground with a warm gold accent and a serif display face. **The admin should inherit the
+public site's identity instead of inventing a purple one.**
+
+### What to remove
+- The lavender/violet surfaces (`#2A2140`-family) on cards, dialogs, table headers, tab
+  bars and inputs.
+- The purple-tinted page background and the purple glow behind dialogs.
+- Purple as a semantic colour — it currently reads as both "brand" and "selected", so
+  neither is legible.
+
+### Target palette (dark-first, replace the purple ramp with a neutral one)
+```
+--bg-base        #08070A   page ground, near-black, very slightly warm
+--bg-surface     #101014   cards, panels
+--bg-surface-2   #16161B   nested panels, table header, dialog body
+--bg-elevated    #1D1D23   dialogs, popovers, hover
+--border-subtle  #23232B   hairlines between rows
+--border-strong  #33333D   input borders, card edges
+--text-primary   #F2EFE9   warm off-white, never pure #FFF
+--text-secondary #A8A49C
+--text-muted     #6F6B64
+--accent         #D4AF6E   the gold already used on the public site
+--accent-hover   #E4C486
+--accent-ink     #0B0A08   text on gold buttons
+--success        #6FBF8B
+--warning        #E0A94B
+--danger         #E06C6C
+--info           #7FA8D9
+```
+Rules:
+- Exactly **one** accent (gold). Use it for the primary button, the active nav item, the
+  active tab underline, focus rings and links — nothing else.
+- Status colours never double as brand colours. Badges use a 12% tint of the status colour
+  with the status colour as text, not a solid fill.
+- Elevation comes from **surface lightness + a 1px hairline**, not from coloured glows.
+  Dialogs: `background: --bg-elevated`, `border: 1px solid --border-strong`,
+  `box-shadow: 0 24px 60px rgba(0,0,0,.55)`, and a plain `rgba(0,0,0,.6)` scrim — remove the
+  purple bloom.
+
+### Typography
+- Keep the serif display face (the public site's) for page titles and dialog titles only.
+- Body, tables, labels and buttons: one clean sans (Inter / Söhne / system stack), 14px
+  base, 15px for prose.
+- Section eyebrows ("SALES", "MARKETING"): 11px, letter-spacing .12em, `--text-muted` —
+  keep this, it is one of the nicer touches already there.
+- Numbers in tables and metric cards: tabular figures (`font-variant-numeric: tabular-nums`).
+
+### Layout and density
+- Sidebar `#0B0A0D`, one shade darker than the page, hairline right border, active item =
+  gold left rule 2px + `--bg-surface` fill + `--text-primary` label. Drop the purple pill.
+- **Fix the horizontal overflow.** Several admin pages (dashboard metric strip, offers
+  table, contacts table) currently scroll the whole page sideways and clip content at the
+  right edge. Constrain the content column to `max-width: 1440px` and give wide tables their
+  own `overflow-x: auto` container.
+- Metric cards: 1px hairline, no gradient, label 11px muted uppercase, value 28px, delta as
+  a small tinted badge. Remove the coloured underline bars.
+- Tables: 44px rows, sticky header on `--bg-surface-2`, `--border-subtle` row dividers,
+  hover `--bg-elevated`, right-aligned numerics, and row actions revealed on hover.
+- Real empty states: icon in a 40px rounded square at 8% accent tint, one-line headline, one
+  line of help, one primary action.
+
+### Interaction polish (all currently missing or inconsistent)
+- **Make the existing toast system universal.** Toasts already exist and look right (adding
+  an order bump shows "Order bump added."), but most saves signal only via a small "Saved"
+  text swap and several actions — "Send me a test email", failed public form submits, some
+  publish toggles — signal nothing at all. Every mutation should emit success or error, with
+  undo where it applies.
+- Inline field-level validation with the message under the field, and tab-switching to the
+  first invalid field.
+- Dirty-state badge + navigation guard on every editor (also P0-3).
+- Skeleton loaders instead of blank panels.
+- Visible `:focus-visible` gold ring on every interactive element, full keyboard operation
+  of tabs and dialogs, `aria-live` on toasts.
+- Destructive confirmations that name the object being deleted.
+- Respect `prefers-reduced-motion`; keep transitions ≤150ms.
+
+### Deliverable for this phase
+Centralise the above as CSS custom properties in one theme file, delete hard-coded purple
+hex values throughout the admin, and add a short `THEME.md` documenting the tokens and the
+one-accent rule so the next feature does not reintroduce a second brand colour.
+
+---
+
+## HOW TO WORK
+
+1. Land Phase 0 as separate, individually reviewable PRs with a regression test each.
+2. For Phase 1, work top-down; P1-1, P1-4, P1-5 and P1-6 unlock the most value.
+3. Every new module must reuse the existing patterns already in the codebase: the segment
+   rule builder, the automation trigger/condition/action registry, the tag picker, the
+   offer entitlement selector, and the report shell.
+4. Add each new event to the automation trigger list and each new action to the automation
+   step list, so new features are usable from the existing engine.
+5. Do not touch the public marketing site's design, the page builder, or anything mobile-app
+   related.
+
+## APPENDIX — WHAT WAS ACTUALLY INSPECTED
+
+So the claims above can be audited, and so anyone extending this brief knows where the blind
+spots are.
+
+**Kajabi pages opened and read** (`app.kajabi.com`, site `2148299891`, signed in as owner):
+Dashboard · full navigation tree (Products/Sales/Website/Marketing/Contacts/Analytics/Agents/
+Media Library/Amplify/Partner Program/Backstage/More) · Products index · Courses ·
+Offers index (44 offers) · **Offer editor: Details, Pricing, Purchase flow, Settings** ·
+Coupons (18) · Cart · Payments · Payouts · Invoices · Affiliates (Overview + Transactions,
+tab set) · Email Campaigns (14 pages) · Funnels/Pipelines · Events (25) · Forms (48) ·
+Form settings / custom-field library · Contacts (400) · Assessments · Reports (full ~40-report
+catalogue) · Analytics · Media Library (96 files) · Downloads · Newsletters · Podcasts ·
+Communities · Expert Agents · Universal Inbox · Backstage (Dashboard/Clients/Offers/Settings) ·
+**Course product: Outline, Settings, Certificates** · **Lesson/post editor** ·
+**Coaching program: Clients, Package outline (24 sessions), Settings** ·
+Settings index · Scheduling settings · Checkout settings · Customer Payments ·
+Member sign in.
+
+**Kajabi areas NOT opened** (do not treat statements about these as verified): the page/theme
+builder and Customize tabs, Blog settings, Mobile app configs, Labs, Brand styleguide, Custom
+domain, Amplify, Partner Program, Capital (403), Custom Templates, Kajabi Payments onboarding,
+Tax integration, Marketing settings, Email template editors, individual funnel/event/form/
+assessment/community editors, and the module ("category") settings modal where per-module drip
+is configured — module drip is inferred from the site-level "Drip settings" page, which was
+read directly.
+
+**Boss Clinician admin — hands-on testing** (records created, not just pages viewed): an
+automation with a condition, a step, activation and a dry run · an email sequence + a sequence
+email · a broadcast campaign · a form + question + **a real public submission** · a quiz
+(created, published, public page loaded) · a funnel + stage dialog · an event · a plan · an
+offer created, priced, published and **its live Stripe checkout page loaded** · an order-bump
+dialog · a course section + lesson · a community post · a contact with a tag · a media upload ·
+plus every Settings sub-page and every Contacts, Sales and Analytics screen.
+
+**Second testing pass — public flows and real event firing** (all driven end to end):
+quiz authoring with real keystrokes + reload verification · quiz published and **completed
+from the public page** through the email gate to a result · event configured with a signup
+tag, published, and **registered from `/events/...`**, with the resulting contact and tag
+checked in the admin · a coupon created and **applied on the live checkout alongside an order
+bump**, with the totals verified · an automation rewired to a tag trigger with a real
+sequence step, then **fired by tagging a live contact** and compared against its dry run ·
+a sequence taken out of paused state · a newsletter edition, a podcast episode, a coaching
+session, a community badge and a saved segment all created and confirmed after reload.
+
+**Boss Clinician areas still not exercised:** completing a real Stripe payment (deliberately
+avoided — no live charge), actually sending the broadcast or the newsletter edition, the
+member-facing course/community experience, contact import and bulk actions, funnel stage
+saving, and the public website (out of scope).
+
+**A note on verification method:** `get_page_text` on this app can return stale content
+after an interaction — it twice reported "nothing happened" when the action had in fact
+succeeded (the event registration and the quiz start button). Every claim above was
+re-checked with a screenshot or a fresh page load. Anyone extending this brief should do the
+same rather than trusting a single text read.
+
+## TEST DATA LEFT BEHIND (safe to delete)
+
+`ZZ Test — buyer welcome` (automation, live), `ZZ Test — welcome sequence` +
+`ZZ Test — welcome email 1`, `ZZ Test — broadcast` (unsent campaign),
+`ZZ Test — waitlist form` (+1 reply), `ZZ Test — practice quiz`,
+`ZZ Test — masterclass funnel`, `ZZ Test — live webinar` (**live, with one registration**),
+`ZZ Test — monthly membership` (plan), `ZZ Test — checkout probe` (offer, taken off sale, with
+a $7 order bump `ZZ Bump — add the toolkit`), `ZZ Test — Module 1` /
+`ZZ Test — Lesson 1` in *Practice Reset Intensive*, `ZZ Test — edition one` (newsletter),
+`ZZ Test — episode one` (podcast, marked live with no audio), `ZZTEST50` (50% coupon, active,
+1 of 5 used at most), `ZZ Test — tagged people` (segment), `ZZ Badge — Test` (community
+badge), a coaching session for Sagar Shankaran on Sep 20, community post "ZZ Test post…",
+`zz-test-image.jpg` in the Media Library, and the contacts
+`Sagar ZZTest <sagar@callsphere.ai>`, `Sagar <sagar+eventtest2@callsphere.ai>` and
+`Sagar <sagar+quiztest@callsphere.ai>`. Also note the **`Retreat Waitlist 2027` tag was
+added to Yvette Howard**, and the `ZZ Test — welcome sequence` was switched from paused to
+**sending** — turn it back off if you don't want it live.

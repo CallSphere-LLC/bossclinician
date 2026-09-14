@@ -17,12 +17,7 @@ const [TITLE, TITLE_ACCENT] = splitOnce(
   " — ",
 );
 
-/**
- * Graded to the same recipe as the home page portraits. A daylight photograph
- * dropped straight onto near-black reads as a lit rectangle pasted on the page,
- * so it is dimmed, desaturated, vignetted, then passed under a violet
- * soft-light so its whites carry the page's plum instead of fighting it.
- */
+/** Display the original portrait colors independently of the page theme. */
 function HeroPortrait() {
   return (
     <div className="relative isolate mx-auto max-w-[17rem] sm:max-w-xs lg:max-w-none">
@@ -40,13 +35,8 @@ function HeroPortrait() {
           src="/images/yvette-hero-portrait.jpg"
           alt="Yvette Howard, LCSW — Private Practice Strategist at her desk"
           decoding="async"
-          className="aspect-[4/5] w-full max-w-full object-cover object-top brightness-[0.8] contrast-[1.06] saturate-[0.8]"
+          className="aspect-[4/5] w-full max-w-full object-cover object-top"
         />
-        <div
-          aria-hidden
-          className="absolute inset-0 bg-[radial-gradient(112%_78%_at_50%_24%,transparent_24%,rgba(10,7,19,0.5)_66%,rgba(6,4,11,0.9)_100%)]"
-        />
-        <div aria-hidden className="absolute inset-0 bg-glow-violet/20 mix-blend-soft-light" />
       </div>
 
       {/* Offset registration marks — the frame reads as a mounted plate rather

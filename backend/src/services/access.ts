@@ -452,6 +452,17 @@ export async function memberAccessGroupIds(memberId: number): Promise<number[]> 
         AND g.status = 'active'
         AND (g.expires_at IS NULL OR g.expires_at > now())
      UNION
+     -- The offer that produced the grant, which is where the admin actually
+     -- sets the tier ("an offer can grant it"). Same live-grant reading as the
+     -- product above, so a refund takes the tier with the access.
+     SELECT o.access_group_id AS group_id
+       FROM access_grants g
+       JOIN offers o ON o.id = g.offer_id
+      WHERE g.member_id = $1
+        AND o.access_group_id IS NOT NULL
+        AND g.status = 'active'
+        AND (g.expires_at IS NULL OR g.expires_at > now())
+     UNION
      SELECT pl.access_group_id AS group_id
        FROM subscriptions s
        JOIN plans pl ON pl.id = s.plan_id
@@ -483,9 +494,43 @@ export const CHANNEL_GROUP_VISIBLE = `(
          AND g.status = 'active' AND (g.expires_at IS NULL OR g.expires_at > now())
     )
     OR EXISTS (
+      SELECT 1 FROM access_grants g
+        JOIN offers o ON o.id = g.offer_id
+       WHERE g.member_id = $MEMBER$ AND o.access_group_id = ch.access_group_id
+         AND g.status = 'active' AND (g.expires_at IS NULL OR g.expires_at > now())
+    )
+    OR EXISTS (
       SELECT 1 FROM subscriptions s
         JOIN plans pl ON pl.id = s.plan_id
        WHERE s.member_id = $MEMBER$ AND pl.access_group_id = ch.access_group_id
          AND s.status IN ('active', 'trialing', 'past_due')
     )
+  )`;
+
+/**
+ * SQL predicate: may `$MEMBER$` see channel `ch` at all?
+ *
+ * Two independent restrictions, and they are not the same thing.
+ *
+ * `visibility = 'private'` is the hand-picked list: a row in
+ * `community_channel_members` is an invitation, and without one an invite-only
+ * channel is not theirs to see. Before that table existed this arm could only
+ * ever be false for a plain member, which made "Invited members only" a setting
+ * that hid a channel from everybody including the people it was created for.
+ *
+ * `access_group_id` is the tier, derived from a live grant. A channel can be
+ * both — invite-only *and* limited to a tier — and then both have to hold.
+ *
+ * Moderators are handled by the caller rather than here, because "show me
+ * everything in the room I run" is a different question from this one.
+ */
+export const CHANNEL_MEMBER_VISIBLE = `(
+    (
+      ch.visibility <> 'private'
+      OR EXISTS (
+        SELECT 1 FROM community_channel_members ccm
+         WHERE ccm.channel_id = ch.id AND ccm.member_id = $MEMBER$
+      )
+    )
+    AND ${CHANNEL_GROUP_VISIBLE}
   )`;

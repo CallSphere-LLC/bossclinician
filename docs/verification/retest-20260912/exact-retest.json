@@ -1,0 +1,73 @@
+{
+  "exact": {
+    "url": "https://bossclinician.callsphere.site/account",
+    "token": null,
+    "checks": [
+      {
+        "name": "contacts",
+        "status": 401
+      },
+      {
+        "name": "offers",
+        "status": 401
+      },
+      {
+        "name": "settings",
+        "status": 401
+      }
+    ]
+  },
+  "memberTheme": {
+    "theme": "light",
+    "bg": "rgb(255, 255, 255)",
+    "token": null
+  },
+  "redirect": "https://bossclinician.callsphere.site/account",
+  "adminRedirect": "https://admin.bossclinician.callsphere.site/admin/contacts",
+  "quiz": {
+    "id": 1,
+    "slug": "zz-test-practice-quiz",
+    "title": "ZZ Test — practice quiz",
+    "kind": "quiz",
+    "published": true,
+    "requireEmail": true,
+    "passMark": null,
+    "lessonId": null,
+    "updatedAt": "2026-09-02T14:23:37.611Z",
+    "questionCount": 1,
+    "resultCount": 1,
+    "attemptCount": 4
+  },
+  "contact": {
+    "id": 70,
+    "email": "sagar+zz-bughunt-quiz-origin-after@callsphere.ai",
+    "name": "ZZ Bug Hunt Quiz",
+    "firstName": "",
+    "lastName": "",
+    "phone": "",
+    "timezone": "UTC",
+    "emailMarketingStatus": "subscribed",
+    "optedInAt": null,
+    "optedOutAt": null,
+    "consentSource": "quiz: zz-test-practice-quiz",
+    "lifetimeValueCents": 0,
+    "orderCount": 0,
+    "lastActivityAt": "2026-09-12T20:00:46.764Z",
+    "lastOrderedAt": null,
+    "source": "quiz: zz-test-practice-quiz",
+    "customFields": {},
+    "notes": "",
+    "createdAt": "2026-09-12T20:00:46.714Z",
+    "updatedAt": "2026-09-12T20:00:46.764Z",
+    "accountMemberId": null,
+    "accountEmailVerifiedAt": null,
+    "tags": [
+      {
+        "slug": "quiz-steady",
+        "name": "Quiz — Steady Grower",
+        "colour": ""
+      }
+    ]
+  },
+  "quizList": "MARKETING\n\nQuizzes\n\nAsk people a few questions, add up their answers, and send each of them the result that fits.\n\nAdd a quiz\n1 quiz\nQuiz\n\tWhat it is\n\tQuestions\n\tResults\n\tTaken by\n\tOn your site\n\tWeb address\n\t\n\nZZ Test — practice quiz\nPoints add up to a score, and the score decides which result page they see.\n\tQUIZ\t1 question\t1 result\t4 people\tLIVE ON YOUR SITE\tadmin.bossclinician.callsphere.site/quiz/zz-test-practice-quiz\t"
+}

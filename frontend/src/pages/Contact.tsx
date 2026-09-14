@@ -70,15 +70,8 @@ export default function Contact() {
                 src={HERO_PORTRAIT}
                 alt="Yvette Howard"
                 decoding="async"
-                className="aspect-[4/3] w-full max-w-full object-cover brightness-[0.8] contrast-[1.06] saturate-[0.8]"
+                className="aspect-[4/3] w-full max-w-full object-cover"
               />
-              {/* Vignette closes the corners; the violet soft-light pass pulls
-                  the photograph's whites into the page's plum. */}
-              <div
-                aria-hidden
-                className="absolute inset-0 bg-[radial-gradient(112%_80%_at_50%_26%,transparent_26%,rgba(10,7,19,0.52)_68%,rgba(6,4,11,0.9)_100%)]"
-              />
-              <div aria-hidden className="absolute inset-0 bg-glow-violet/20 mix-blend-soft-light" />
             </div>
 
             {/* Offset registration marks — the plate reads as mounted, not inline. */}

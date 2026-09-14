@@ -1,4 +1,5 @@
-import { ApiError, getToken } from "@/lib/api";
+import { sessionFetch } from "@/lib/adminTransport";
+import { ApiError } from "@/lib/api";
 
 /**
  * The quiz client — the public player and the admin editor.
@@ -13,14 +14,10 @@ import { ApiError, getToken } from "@/lib/api";
 const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? "/api";
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const token = getToken();
   const headers = new Headers(options.headers);
   if (!headers.has("Content-Type")) headers.set("Content-Type", "application/json");
-  // The public endpoints ignore it; sending it on both keeps one request
-  // function rather than two that differ by a header.
-  if (token) headers.set("Authorization", `Bearer ${token}`);
 
-  const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
+  const res = await sessionFetch(`${API_BASE}${path}`, { ...options, headers });
 
   if (!res.ok) {
     let message = "Something went wrong. Please try again in a moment.";
@@ -42,7 +39,7 @@ const body = (data: unknown): RequestInit["body"] => JSON.stringify(data);
 /* ── The player ─────────────────────────────────────────────────────────── */
 
 export type QuestionKind = "single" | "multiple" | "scale" | "text";
-export type QuizKind = "quiz" | "graded";
+export type QuizKind = "quiz" | "graded" | "survey";
 
 export interface QuizAnswer {
   id: number;
@@ -59,6 +56,9 @@ export interface QuizQuestion {
 }
 
 export interface Quiz {
+  lessonId?: number | null;
+  passMark?: number | null;
+  requirePass?: boolean;
   id: number;
   slug: string;
   title: string;
@@ -79,6 +79,9 @@ export interface QuizResultPage {
 }
 
 export interface QuizOutcome {
+  /** Server receipt: a result is only complete once this attempt is stored. */
+  attemptId: number;
+  message?: string;
   score: number;
   maxScore: number;
   percent: number;
@@ -166,6 +169,11 @@ export interface EditableResult {
 }
 
 export interface AssessmentDetail extends AssessmentSummary {
+  courseId?: number | null;
+  lessonPublished?: boolean | null;
+  requirePass: boolean;
+  passMessage: string;
+  failMessage: string;
   introMd: string;
   showFeedback: boolean;
   maxAttempts: number | null;
@@ -175,6 +183,9 @@ export interface AssessmentDetail extends AssessmentSummary {
 }
 
 export interface AssessmentDraft {
+  requirePass?: boolean;
+  passMessage?: string;
+  failMessage?: string;
   title?: string;
   introMd?: string;
   kind?: QuizKind;
@@ -213,6 +224,8 @@ export interface ResultDraft {
 }
 
 export interface QuizAttempt {
+  memberId?: number | null;
+  responses?: { questionId: number; answerIds?: number[]; text?: string }[];
   id: number;
   email: string;
   score: number;

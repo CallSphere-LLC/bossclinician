@@ -8,7 +8,7 @@ import { requireAuth } from "../../middleware/auth";
 import { loginIpLimiter, loginEmailLimiter } from "../../middleware/rateLimit";
 import { rowToCamel } from "../../utils/case";
 import { AdminUser } from "../../types";
-import { issueAdminSession, revokeAdminSessionByToken } from "./adminUsers";
+import { ADMIN_REFRESH_COOKIE, issueAdminCookieSession, refreshAdminCookieSession, setAdminCookies, clearAdminCookies, revokeAdminCookieSession } from "../../auth/adminSession";
 import { verifySecondFactor } from "../../services/mfa";
 
 export const authRouter = Router();
@@ -19,8 +19,6 @@ export const authRouter = Router();
 const DUMMY_PASSWORD_HASH =
   "$2b$12$NA4go6EuMN5fPAkc7SUIbOwRRackOhFAPs0bc.2qhYsWdayZ/vdeC";
 
-/** Matches the JWT's own lifetime, so the row and the token expire together. */
-const SESSION_TTL_SECONDS = 7 * 24 * 60 * 60;
 
 authRouter.post(
   "/login",
@@ -77,13 +75,12 @@ authRouter.post(
     // The token is minted alongside the row that makes it revocable — a JWT on
     // its own cannot be withdrawn before it expires, which is the whole reason
     // admin_sessions exists.
-    const token = await issueAdminSession({
+    const session = await issueAdminCookieSession({
       adminUserId: row.id,
       email: row.email,
       role: row.role,
       userAgent: String(req.headers["user-agent"] ?? ""),
       ip: req.ip ?? "",
-      ttlSeconds: SESSION_TTL_SECONDS,
     });
 
     await pool.query(`UPDATE admin_users SET last_login_at = now() WHERE id = $1`, [row.id]);
@@ -96,7 +93,8 @@ authRouter.post(
       created_at: row.created_at,
     });
 
-    res.json({ token, user });
+    setAdminCookies(res, session);
+    res.json({ user });
   })
 );
 
@@ -124,10 +122,20 @@ authRouter.get(
 authRouter.post(
   "/logout",
   asyncHandler(async (req, res) => {
-    const header = req.headers.authorization ?? "";
-    if (header.startsWith("Bearer ")) {
-      await revokeAdminSessionByToken(header.slice("Bearer ".length).trim());
-    }
+    await revokeAdminCookieSession(req);
+    clearAdminCookies(res);
     res.status(204).end();
   })
 );
+
+authRouter.post("/refresh", asyncHandler(async (req, res) => {
+  const refreshToken = req.cookies?.[ADMIN_REFRESH_COOKIE];
+  if (typeof refreshToken !== "string" || !refreshToken) throw unauthorized("Missing admin session");
+  try {
+    setAdminCookies(res, await refreshAdminCookieSession(refreshToken));
+    res.status(204).end();
+  } catch (error) {
+    clearAdminCookies(res);
+    throw error;
+  }
+}));

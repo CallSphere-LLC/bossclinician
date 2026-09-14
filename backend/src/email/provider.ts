@@ -3,7 +3,17 @@ import { z } from "zod";
 import { env } from "../config/env";
 import { pool } from "../db/pool";
 import { sendMailStrict } from "./mailer";
+import { assertRecipientAllowed } from "./recipientGuard";
 import { escapeHtml } from "./templates";
+import {
+  SendingIdentityError,
+  describeTransport,
+  identityFailureReason,
+  marketingIdentityProblems,
+  sendingDomainsFrom,
+  transportKeyForHost,
+  type TransportReport,
+} from "../services/sendingIdentity";
 
 /**
  * The single door every outbound email goes through.
@@ -231,6 +241,8 @@ export function makeResendProvider(apiKey: string): EmailProvider {
   return {
     name: "resend",
     async send(message) {
+      // The SMTP path is guarded inside sendMailStrict; this transport bypasses it.
+      assertRecipientAllowed(message.to);
       const response = await fetch(RESEND_ENDPOINT, {
         method: "POST",
         headers: {
@@ -272,6 +284,48 @@ export async function resolveProvider(): Promise<EmailProvider> {
     return makeResendProvider(settings.apiKey);
   }
   return smtpProvider;
+}
+
+/**
+ * The domains a marketing from-address has to be on — see `sendingDomainsFrom`.
+ *
+ * SES_VERIFIED_DOMAINS is read here rather than declared in config/env.ts: it is
+ * optional, and only this door and the settings screen consult it.
+ */
+export function verifiedSendingDomains(): string[] {
+  return sendingDomainsFrom({
+    smtpHost: env.smtp.host,
+    smtpFrom: env.smtp.from,
+    extra: process.env.SES_VERIFIED_DOMAINS ?? "",
+  });
+}
+
+/** Whether mailer.ts has a real server to hand mail to, by its own test. */
+function smtpConfigured(): boolean {
+  return Boolean(env.smtp.host && env.smtp.user && env.smtp.pass);
+}
+
+/**
+ * What `resolveProvider()` above will pick, described for the settings screen.
+ *
+ * Built from the same two facts `resolveProvider` reads, so the "Sending
+ * service" field cannot show one transport while the mail goes out through
+ * another — which is what it did when it showed the stored row instead.
+ */
+export async function activeTransport(): Promise<TransportReport> {
+  const settings = await providerSettings();
+  return describeTransport({
+    storedProvider: settings.provider,
+    smtpHost: env.smtp.host,
+    smtpConfigured: smtpConfigured(),
+    hasResendKey: settings.apiKey.trim() !== "",
+  });
+}
+
+/** The word the delivery log records for a transport: "ses" rather than the protocol it was reached over. */
+function deliveryLogName(provider: EmailProvider): string {
+  if (provider.name !== smtpProvider.name) return provider.name;
+  return smtpConfigured() ? transportKeyForHost(env.smtp.host) : "console";
 }
 
 /* ----------------------------------------------------------------- content */
@@ -538,7 +592,7 @@ export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult>
       input.sourceId ?? null,
       topic,
       input.subject.slice(0, 500),
-      provider.name,
+      deliveryLogName(provider),
     ]
   );
   const messageId = Number(inserted.rows[0].id);
@@ -555,6 +609,52 @@ export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult>
   }
 
   const settings = await marketingSettings();
+
+  /*
+   * The identity gate.
+   *
+   * Everything below this point builds a marketing email: a From line, and a
+   * CAN-SPAM footer made out of `settings.address`. Both used to be built
+   * happily out of nothing — a blank `fromEmail` fell through `fromHeader()` to
+   * SMTP_FROM, and a blank `address` produced a footer with no postal address in
+   * it, which is not a cosmetic problem but an illegal commercial email. The
+   * send then reported success and the delivery log recorded it as handed over.
+   *
+   * So the effective identity is checked here rather than at each caller: a
+   * campaign carries its own from-name and from-address, a sequence email may
+   * too, and the postal address only ever comes from settings. Refused sends are
+   * written down as `failed` with the missing field named — the same shape the
+   * "no contact to unsubscribe" refusal below already uses — so the delivery log
+   * says which field, and then the error is thrown so a job cannot mistake it
+   * for a delivery.
+   *
+   * Transactional mail is deliberately not gated. A confirmation link is what
+   * unlocks posting, commenting and every point a member can earn, and refusing
+   * it because the marketing footer is blank would lock every member out to
+   * enforce a rule that does not apply to receipts.
+   */
+  if (isMarketing) {
+    const identityProblems = marketingIdentityProblems(
+      {
+        fromName: input.fromName || settings.fromName,
+        fromEmail: input.fromEmail || settings.fromEmail,
+        address: settings.address,
+      },
+      // A campaign or a sequence email can carry its own from-address, so the
+      // domain is judged here on the EFFECTIVE address — the save-time check on
+      // the settings screen cannot see those.
+      { verifiedDomains: verifiedSendingDomains() }
+    );
+    if (identityProblems.length > 0) {
+      const reason = identityFailureReason(identityProblems);
+      await pool.query(`UPDATE email_messages SET status = 'failed', error = $2 WHERE id = $1`, [
+        messageId,
+        reason,
+      ]);
+      throw new SendingIdentityError(identityProblems);
+    }
+  }
+
   const headers: Record<string, string> = {};
   let text = input.text;
   let html = input.html ?? renderMarkdown(input.text);

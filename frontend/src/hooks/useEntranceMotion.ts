@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { useReducedMotion } from "motion/react";
 
 /**
@@ -24,7 +24,11 @@ import { useReducedMotion } from "motion/react";
  */
 export function useEntranceMotion(): boolean {
   const prefersReduced = useReducedMotion();
-  const [staticFirstPaint] = useState(() => !entrancesEnabled);
+  // A parent effect can run before a deferred Suspense subtree hydrates.
+  // React's server snapshot keeps that subtree identical to its server HTML
+  // even when another part of the page has already enabled entrances.
+  const enabled = useSyncExternalStore(subscribe, () => entrancesEnabled, () => false);
+  const [staticFirstPaint] = useState(() => !enabled);
   return staticFirstPaint || prefersReduced === true;
 }
 
@@ -35,6 +39,7 @@ export function useEntranceMotion(): boolean {
  * provider value could be consulted for the mount that is happening right now.
  */
 let entrancesEnabled = false;
+const subscribe = () => () => {};
 
 /** Called once the first screen is on the glass — see ssr/context.tsx. */
 export function enableEntrances(): void {

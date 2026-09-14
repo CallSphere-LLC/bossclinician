@@ -1,12 +1,15 @@
 import { Router } from "express";
 import { z } from "zod";
 import { pool } from "../../db/pool";
+import { assertProductsDeliverable } from "../../services/downloadReadiness";
 import { asyncHandler } from "../../utils/asyncHandler";
 import { badRequest, notFound, serviceUnavailable } from "../../utils/httpError";
 import { stripe } from "../../stripe/client";
 import { stripeEnabled, env } from "../../config/env";
 import { checkoutLimiter } from "../../middleware/rateLimit";
 import { denyImpersonation, requireMember } from "../../middleware/memberAuth";
+import { readSetting } from "../../services/settings";
+import { cleanStatementDescriptor } from "../../services/paymentRules";
 
 export const checkoutRouter = Router();
 
@@ -49,6 +52,10 @@ checkoutRouter.post(
     );
     const course = result.rows[0] as PurchasableCourse | undefined;
     if (!course) throw notFound("Course not found");
+    const linkedProducts = await pool.query<{id: number}>(
+      "SELECT id FROM products WHERE course_id=$1 OR legacy_course_id=$1", [course.id],
+    );
+    await assertProductsDeliverable(linkedProducts.rows.map(product => product.id));
 
     const hasPrice =
       (course.stripe_price_id && course.stripe_price_id.length > 0) ||
@@ -66,10 +73,15 @@ checkoutRouter.post(
           },
         };
 
+    const descriptor = cleanStatementDescriptor(
+      (await readSetting("customer_payments")).statementDescriptor
+    );
+
     const session = await stripe().checkout.sessions.create({
       mode: "payment",
       line_items: [lineItem],
       customer_email: email,
+      ...(descriptor ? { payment_intent_data: { statement_descriptor_suffix: descriptor } } : {}),
       // Stripe substitutes the real id into {CHECKOUT_SESSION_ID}.
       success_url: `${env.publicSiteUrl}/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${env.publicSiteUrl}/courses?checkout=cancelled`,
