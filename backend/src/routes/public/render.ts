@@ -95,7 +95,8 @@ for (const route of ROUTES) {
           // An unreadable database costs the page its server-rendered content
           // and nothing more: with no seed the browser renders exactly what the
           // server just did — the bundled fallback copy — and then fetches.
-          console.error(`[ssr] ${req.originalUrl} loaded no data:`, (err as Error).message);
+          // Visitor-supplied URL: an argument, quoted — see the same line in ssr/renderer.ts.
+          console.error("[ssr] %s loaded no data:", JSON.stringify(req.originalUrl), (err as Error).message);
         }
       }
 

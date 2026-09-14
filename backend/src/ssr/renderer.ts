@@ -188,7 +188,10 @@ export async function renderPage(
       status: result.status,
     };
   } catch (err) {
-    console.error(`[ssr] ${url} fell back to the client:`, (err as Error).stack);
+    // The URL is the visitor's: an argument, never part of the format string (a
+    // `%o` in a path would swallow the stack trace), and JSON-quoted so it cannot
+    // end the line and start a forged one.
+    console.error("[ssr] %s fell back to the client:", JSON.stringify(url), (err as Error).stack);
     return { html: shell, status: 200 };
   }
 }
