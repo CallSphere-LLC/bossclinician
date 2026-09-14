@@ -1,0 +1,85 @@
+# Dependabot version updates.
+#
+# Security updates are switched on for the repository and need no config; this
+# file adds routine weekly version updates. Minor and patch bumps are grouped so
+# an ordinary week is one pull request per ecosystem rather than dozens. Every
+# pull request runs the full CI suite (including dependency review and the
+# CodeQL gate), and nothing reaches production until it is merged to main.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /backend
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Etc/UTC
+    open-pull-requests-limit: 5
+    groups:
+      backend-minor-and-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Etc/UTC
+    open-pull-requests-limit: 5
+    groups:
+      frontend-minor-and-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: pip
+    directory: /ai
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Etc/UTC
+    groups:
+      ai-minor-and-patch:
+        update-types: [minor, patch]
+
+  # Base images in backend/Dockerfile and ai/Dockerfile. A new Node or Python
+  # major is a runtime migration for the whole app, not a routine bump, so it
+  # is left to a deliberate change.
+  - package-ecosystem: docker
+    directories: [/backend, /ai]
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Etc/UTC
+    ignore:
+      - dependency-name: node
+        update-types: [version-update:semver-major]
+      - dependency-name: python
+        update-types: [version-update:semver-major, version-update:semver-minor]
+
+  # postgres, nginx and coturn in docker-compose.yml. A Postgres major needs a
+  # dump and restore, never an image bump.
+  - package-ecosystem: docker-compose
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Etc/UTC
+    ignore:
+      - dependency-name: postgres
+        update-types: [version-update:semver-major]
+
+  # Actions are pinned to commit SHAs; Dependabot moves the SHA and the version
+  # comment together.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Etc/UTC
+    groups:
+      actions:
+        patterns: ["*"]

@@ -137,20 +137,43 @@ class WorkflowContractTests(unittest.TestCase):
     # --- both ---------------------------------------------------------------------
 
     def test_token_permissions_are_read_only(self):
+        # The one exception: the deploy job may mint an OIDC token and store an
+        # attestation for the images it deployed. Nothing may write contents.
+        allowed_writes = {("deploy", "id-token"), ("deploy", "attestations")}
         for wf in (self.ci, self.deploy):
             self.assertEqual(wf["permissions"], {"contents": "read"})
-            for job in wf["jobs"].values():
+            for name, job in wf["jobs"].items():
                 for scope, level in (job.get("permissions") or {}).items():
-                    self.assertNotEqual(level, "write", scope)
+                    if level == "write":
+                        self.assertIn((name, scope), allowed_writes)
 
-    def test_actions_are_pinned_to_a_release(self):
-        pinned = re.compile(r"^[\w.-]+/[\w.-]+(/[\w./-]+)?@(v\d+(\.\d+){0,2}|[0-9a-f]{40})$")
+    def test_actions_are_pinned_to_a_full_commit_sha(self):
+        # The repository requires SHA pinning (Actions settings); a tag here would
+        # make the workflow fail to start rather than run an unexpected version.
+        pinned = re.compile(r"^[\w.-]+/[\w.-]+(/[\w./-]+)?@[0-9a-f]{40}$")
         for path in sorted(WORKFLOWS.glob("*.y*ml")):
             for job in load(path)["jobs"].values():
                 uses = [job["uses"]] if "uses" in job else [s["uses"] for s in steps(job) if "uses" in s]
                 for ref in uses:
                     if not ref.startswith("./"):
                         self.assertRegex(ref, pinned, f"{path.name}: {ref}")
+
+    def test_dependency_review_runs_only_on_pull_requests(self):
+        job = self.ci["jobs"]["dependency-review"]
+        self.assertEqual(job["if"], "github.event_name == 'pull_request'")
+        self.assertTrue(any(str(s.get("uses", "")).startswith("actions/dependency-review-action@") for s in steps(job)))
+
+    def test_attestation_cannot_fail_a_deploy(self):
+        job = self.deploy["jobs"]["deploy"]
+        names = [s.get("name", "") for s in steps(job)]
+        attest = [s for s in steps(job) if str(s.get("uses", "")).startswith("actions/attest@")]
+        self.assertEqual(len(attest), 1)
+        self.assertIs(attest[0].get("continue-on-error"), True)
+        prepare = next(s for s in steps(job) if "attestation subjects" in s.get("name", ""))
+        self.assertIs(prepare.get("continue-on-error"), True)
+        # After the rollout, never before it.
+        rollout = next(i for i, s in enumerate(steps(job)) if "deploy-release.sh" in s.get("run", ""))
+        self.assertLess(rollout, names.index(prepare["name"]))
 
 
 class ComposeContractTests(unittest.TestCase):

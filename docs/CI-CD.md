@@ -243,6 +243,30 @@ git checkout -B main <last-good-sha>
 
 Then find out why before pushing again.
 
+## GitHub security and governance features
+
+The repository lives in the `CallSphere-LLC` organization (moved from
+`shankasf/` on 2026-09-14) to use GitHub Enterprise Cloud features. Those that
+are paid (everything marked *paid*) switch off if the organization leaves
+Enterprise, for example when a trial ends; the pipeline keeps working either
+way.
+
+| Feature | What it does here | Where |
+|---|---|---|
+| Secret scanning + push protection (*paid*) | Scans all history for credentials; rejects a push that adds one. Generic patterns, AI-detected secrets and validity checks are on | Settings → Advanced Security |
+| CodeQL code scanning, default setup, extended suite (*paid*) | Scans JavaScript/TypeScript, Python and workflows on push, PR and weekly; Copilot Autofix proposes fixes on alerts | Security → Code scanning |
+| Dependency review (*paid*) | The `dependency-review` job fails a PR that adds a package with a known high/critical vulnerability | `ci.yml` |
+| Dependabot alerts + security updates | Alerts on vulnerable dependencies and opens fix PRs | Security → Dependabot |
+| Dependabot version updates | Weekly grouped PRs for npm, pip, Docker base images, compose images and Actions | `.github/dependabot.yml` |
+| Rulesets on `main` | *Protect main*: no deletion, no force-push. *Pull request security gates*: PRs need CodeQL clean at high+. *Block merging exposed secrets*. Repository admins bypass, so the owner still pushes straight to `main` | Settings → Rules |
+| Actions: SHA pinning required | Every action is pinned to a full commit SHA; a tag would stop the workflow starting. Dependabot moves the pins | Settings → Actions |
+| Artifact attestations (*paid* on private repos) | After each deploy, signs build provenance for the running `ai`, `backend` and `frontend` image digests (non-blocking) | `deploy.yml`; `gh attestation verify` or `GET /repos/CallSphere-LLC/bossclinician/attestations/sha256:<digest>` |
+| `production` environment branch policy | Only `main` may deploy to `production` | Settings → Environments |
+| Copilot instructions | Project rules for Copilot chat, code review and the cloud agent. Copilot itself needs a Copilot seat, which the Enterprise trial does not include | `.github/copilot-instructions.md` |
+
+Organization-level views (security overview, security campaigns, Copilot and
+runner-group policies) are managed by an organization owner in the web UI.
+
 ## Limits worth knowing
 
 - **Write access to the repo is production access.** A push to main deploys;
