@@ -16,8 +16,12 @@ let client: Stripe | null = null;
  * It is deliberately the literal string and not a reference to the SDK's own
  * latest-version constant: a `stripe` package bump must fail the typecheck here
  * and be reviewed against the payload shapes, not follow the SDK silently.
+ *
+ * 2026-06-24 → 2026-08-26 (stripe 22.6) was reviewed that way: both are dahlia
+ * monthly releases, which Stripe keeps backwards-compatible, and the changes
+ * in between only add fields or drop limited-use ones this code never reads.
  */
-export const STRIPE_API_VERSION = "2026-06-24.dahlia";
+export const STRIPE_API_VERSION = "2026-08-26.dahlia";
 
 /**
  * Lazily constructed Stripe client. Constructing at import time would throw on
