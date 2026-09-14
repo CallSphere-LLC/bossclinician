@@ -1,7 +1,10 @@
 import dotenv from "dotenv";
 import path from "path";
 
-dotenv.config();
+// Quiet: dotenv 17 prints a "injecting env (N) from .env" banner on every load
+// by default, once per process and once per forked test suite. It told nobody
+// anything the missing-variable check below does not, and 16 never printed it.
+dotenv.config({ quiet: true });
 
 function required(name: string, fallback?: string): string {
   const v = process.env[name] ?? fallback;
