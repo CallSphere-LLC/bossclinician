@@ -13,6 +13,7 @@ import { seoRouter } from "./routes/public/seo";
 import { renderRouter } from "./routes/public/render";
 import { apiV1Router } from "./routes/public/apiV1";
 import { notFoundHandler, errorHandler } from "./middleware/errorHandler";
+import { apiLimiter } from "./middleware/rateLimit";
 
 export function createApp(): Express {
   const app = express();
@@ -42,6 +43,13 @@ export function createApp(): Express {
     const origin = isAdmin && env.adminOrigin ? env.adminOrigin : env.frontendOrigin;
     callback(null, { origin: origin === "*" ? true : origin, credentials: origin !== "*" });
   }));
+
+  // The site-wide backstop; middleware/rateLimit.ts has the sizing and why it is
+  // per surface rather than per visitor. After CORS so a refusal still carries
+  // the headers a browser needs to read it, ahead of the body parsers so a
+  // refused request is not parsed first, and ahead of every router so nothing
+  // that reaches the database is unlimited.
+  app.use(apiLimiter);
 
   app.use(cookieParser());
 
