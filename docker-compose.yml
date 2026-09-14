@@ -211,7 +211,7 @@ services:
           memory: 64M
         reservations:
           memory: 16M
-    image: nginx:1.27-alpine
+    image: nginx:1.31-alpine
     restart: unless-stopped
     logging: *logging
     security_opt: ["no-new-privileges:true"]
