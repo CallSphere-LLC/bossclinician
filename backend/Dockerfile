@@ -91,7 +91,7 @@ CMD ["node", "dist/server.js"]
 # server-rendered document shell baked into the API image names the browser
 # bundle by its content hash, and the file it names has to be the file this
 # container actually holds. One build cannot disagree with itself.
-FROM nginx:1.27-alpine AS web
+FROM nginx:1.31-alpine AS web
 COPY --from=frontend /app/dist/client /usr/share/nginx/html
 COPY frontend/nginx.conf /etc/nginx/conf.d/default.conf
 EXPOSE 80
