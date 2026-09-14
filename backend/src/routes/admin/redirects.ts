@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
+import { partialUpdate } from "../../validation/partialUpdate";
 import { pool } from "../../db/pool";
 import { asyncHandler } from "../../utils/asyncHandler";
 import { badRequest, notFound } from "../../utils/httpError";
@@ -28,7 +29,7 @@ const redirectSchema = z.object({
   note: z.string().max(500).default(""),
 });
 
-const redirectUpdateSchema = redirectSchema.partial();
+const redirectUpdateSchema = partialUpdate(redirectSchema);
 
 /**
  * Targets must be site-relative.

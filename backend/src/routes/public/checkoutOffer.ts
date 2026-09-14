@@ -187,7 +187,7 @@ function visitorToken(req: Request): string {
   return typeof raw === "string" ? raw : "";
 }
 
-const submittedFieldSchema = z.record(z.union([z.string(), z.number(), z.boolean()]));
+const submittedFieldSchema = z.record(z.string(), z.union([z.string(), z.number(), z.boolean()]));
 
 /**
  * The answers to the offer's own order-form questions, and nothing else.

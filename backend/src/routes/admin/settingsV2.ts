@@ -82,7 +82,7 @@ adminSettingsV2Router.get(
   })
 );
 
-const patchBodySchema = z.record(z.unknown());
+const patchBodySchema = z.record(z.string(), z.unknown());
 
 adminSettingsV2Router.put(
   "/:key",

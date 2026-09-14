@@ -45,7 +45,7 @@ const automationResumePayload = z.object({
     email: z.string(),
     name: z.string(),
     subjectId: z.number().nullable(),
-    facts: z.record(z.union([z.string(), z.number(), z.boolean(), z.null()])),
+    facts: z.record(z.string(), z.union([z.string(), z.number(), z.boolean(), z.null()])),
   }),
 });
 

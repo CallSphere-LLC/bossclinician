@@ -48,7 +48,7 @@ export const adminGrowthRouter = Router();
 
 /* ------------------------------------------------------------------ schemas */
 
-const loose = z.record(z.unknown());
+const loose = z.record(z.string(), z.unknown());
 
 /** Most resources accept a permissive body — the repo's column whitelist is
  *  the real gate, so a second hand-maintained schema would only drift. */

@@ -1,6 +1,7 @@
 import { Router } from "express";
 import type { PoolClient } from "pg";
 import { z } from "zod";
+import { partialUpdate } from "../../validation/partialUpdate";
 import { pool } from "../../db/pool";
 import { rowToCamel, rowsToCamel } from "../../utils/case";
 import { asyncHandler } from "../../utils/asyncHandler";
@@ -419,7 +420,7 @@ adminOffersRouter.put(
   asyncHandler(async (req, res) => {
     const offerId = parseId(req.params.id);
     const optionId = parseId(req.params.optionId, "payment option");
-    const patch = pricingOptionSchema.partial().safeParse(req.body);
+    const patch = partialUpdate(pricingOptionSchema).safeParse(req.body);
     if (!patch.success) throw badRequest("Invalid payment option", patch.error.flatten());
     const before = await loadPricingOption(offerId, optionId);
     const next = pricingOptionSchema.parse({

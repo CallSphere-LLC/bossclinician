@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { partialUpdate } from "./partialUpdate";
 import type { BillingInterval, PricingType } from "../services/pricing";
 
 /**
@@ -317,7 +318,7 @@ export const productCreateSchema = z.object(productFields).superRefine((value, c
 });
 
 /** Every field optional: an absent key means "leave it alone", not "clear it". */
-export const productUpdateSchema = z.object(productFields).partial();
+export const productUpdateSchema = partialUpdate(z.object(productFields));
 
 export const productListQuerySchema = z.object({
   q: z.string().trim().max(200).optional(),
@@ -349,7 +350,7 @@ const productFileFields = {
 };
 
 export const productFileCreateSchema = z.object(productFileFields);
-export const productFileUpdateSchema = z.object(productFileFields).partial();
+export const productFileUpdateSchema = partialUpdate(z.object(productFileFields));
 
 export const bundleContentsSchema = z.object({
   items: z.array(z.object({ productId: idRef, sort: sortOrder.default(0) })).max(100),
@@ -426,7 +427,7 @@ export const offerCreateSchema = z.object(offerFields).superRefine((value, ctx) 
   if (issue) ctx.addIssue({ code: z.ZodIssueCode.custom, path: [issue.field], message: issue.message });
 });
 
-export const offerUpdateSchema = z.object(offerFields).partial();
+export const offerUpdateSchema = partialUpdate(z.object(offerFields));
 
 export const offerListQuerySchema = z.object({
   q: z.string().trim().max(200).optional(),
@@ -448,7 +449,7 @@ const bumpFields = {
 };
 
 export const bumpCreateSchema = z.object(bumpFields);
-export const bumpUpdateSchema = z.object(bumpFields).partial();
+export const bumpUpdateSchema = partialUpdate(z.object(bumpFields));
 
 const upsellFields = {
   step: z.number().int().min(1).max(20).default(1),
@@ -459,7 +460,7 @@ const upsellFields = {
 };
 
 export const upsellCreateSchema = z.object(upsellFields);
-export const upsellUpdateSchema = z.object(upsellFields).partial();
+export const upsellUpdateSchema = partialUpdate(z.object(upsellFields));
 
 /* --------------------------------------------------------------------- plans */
 
@@ -548,7 +549,7 @@ export const planCreateSchema = z.object(planFields);
  * table by the insert itself, so accepting a position on create would be a
  * number the route then ignores.
  */
-export const planUpdateSchema = z.object({ ...planFields, sort: sortOrder }).partial();
+export const planUpdateSchema = partialUpdate(z.object({ ...planFields, sort: sortOrder }));
 
 /* ------------------------------------------------------------ manual access */
 

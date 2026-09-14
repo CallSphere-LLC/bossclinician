@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
+import { partialUpdate } from "../../validation/partialUpdate";
 import { marketingSettings } from "../../email/provider";
 import { pool } from "../../db/pool";
 import { renderMarkdown, renderTokens, sendEmail } from "../../email/provider";
@@ -694,7 +695,7 @@ adminSavedTemplatesRouter.post(
 adminSavedTemplatesRouter.patch(
   "/:id",
   asyncHandler(async (req, res) => {
-    const input = savedTemplateSchema.partial().parse(req.body);
+    const input = partialUpdate(savedTemplateSchema).parse(req.body);
     const saved = await pool.query(
       `UPDATE email_saved_templates SET
           name    = COALESCE($2, name),

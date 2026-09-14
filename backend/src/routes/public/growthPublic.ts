@@ -250,7 +250,7 @@ growthPublicRouter.get(
 );
 
 const submitSchema = z.object({
-  data: z.record(z.unknown()),
+  data: z.record(z.string(), z.unknown()),
   email: z.string().email().max(320).optional(),
 });
 

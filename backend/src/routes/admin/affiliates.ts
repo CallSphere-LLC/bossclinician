@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
+import { partialUpdate } from "../../validation/partialUpdate";
 import type { PoolClient } from "pg";
 import { pool } from "../../db/pool";
 import { env } from "../../config/env";
@@ -722,7 +723,7 @@ adminAffiliatesRouter.patch(
   "/announcements/:id",
   asyncHandler(async (req, res) => {
     const announcementId = parseId(req.params, "Announcement");
-    const parsed = announcementSchema.partial().safeParse(req.body);
+    const parsed = partialUpdate(announcementSchema).safeParse(req.body);
     if (!parsed.success) throw badRequest("Invalid announcement", parsed.error.flatten());
     const body = parsed.data;
 
@@ -850,7 +851,7 @@ adminAffiliatesRouter.patch(
   "/assets/:id",
   asyncHandler(async (req, res) => {
     const assetId = parseId(req.params, "Item");
-    const parsed = assetSchema.partial().safeParse(req.body);
+    const parsed = partialUpdate(assetSchema).safeParse(req.body);
     if (!parsed.success) throw badRequest("Invalid item", parsed.error.flatten());
     const body = parsed.data;
 
