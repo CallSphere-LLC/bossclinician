@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { memberAuthCsrf } from "../../auth/memberCsrf";
 import { memberAuthRoutes } from "./memberAuth";
 import { memberAccountRoutes } from "./memberAccount";
 
@@ -13,5 +14,8 @@ import { memberAccountRoutes } from "./memberAccount";
  */
 export const memberAuthRouter = Router();
 
+// First, because the refresh cookie is scoped to exactly this mount: see
+// auth/memberCsrf.ts for why SameSite alone does not cover it on this domain.
+memberAuthRouter.use(memberAuthCsrf);
 memberAuthRouter.use(memberAuthRoutes);
 memberAuthRouter.use(memberAccountRoutes);
