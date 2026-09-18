@@ -880,6 +880,8 @@ export interface MergeTag {
   label: string;
   /** What it becomes, so the picker is self-explaining. */
   example: string;
+  /** `transactional` tokens only mean something in an email about one purchase. */
+  scope?: "all" | "transactional";
 }
 
 export interface SendingDomainCheck {
@@ -899,4 +901,37 @@ export interface SendingDomainReport {
   ready: boolean;
   summary: string;
   checks: SendingDomainCheck[];
+}
+
+/* ---- merge tags by kind of email, and the sequence editor's extras ---- */
+
+/** Which kind of email a composer is writing, so the picker offers only what that kind can fill in. */
+export type MergeTagSource = "broadcast" | "sequence" | "transactional";
+
+export interface SequenceEmailStat {
+  id: Id;
+  position: number;
+  subject: string;
+  sent: number;
+  opened: number;
+  clicked: number;
+  bounced: number;
+}
+
+export interface SequenceSubscriberStats {
+  /** Everybody who has ever been put on the sequence. */
+  subscribed: number;
+  active: number;
+  paused: number;
+  completed: number;
+  /** Left before the end, for any of the reasons below. */
+  exited: number;
+  /** On this sequence and since opted out of marketing email altogether. */
+  unsubscribed: number;
+  exitReasons: { reason: string; count: number }[];
+}
+
+export interface SequenceStatsReport {
+  emails: SequenceEmailStat[];
+  subscribers: SequenceSubscriberStats;
 }

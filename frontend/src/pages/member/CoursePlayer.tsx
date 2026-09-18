@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router";
 import { toast } from "sonner";
 import {
@@ -24,8 +24,10 @@ import {
   type CourseOutlineData,
   type LessonResponse,
   type LibraryProduct,
+  type OutlineModule,
   type ProgressResult,
 } from "@/lib/libraryApi";
+import { CertificateCard } from "@/components/player/CertificateCard";
 import { CourseOutline } from "@/components/player/CourseOutline";
 import { OutlineSheet } from "@/components/player/OutlineSheet";
 import { LessonBody } from "@/components/player/LessonBody";
@@ -334,6 +336,7 @@ export default function CoursePlayer() {
                       data={lessonData}
                       productSlug={productSlug}
                       courseImage={course.image}
+                      modules={course.modules}
                       onProgress={applyProgress}
                     />
                   ) : (
@@ -463,6 +466,8 @@ function CourseSummary({
 function CourseHome({ course, productSlug }: { course: CourseOutlineData; productSlug: string }) {
   const cta = course.continueLesson;
   const started = course.progress.lessonsCompleted > 0 || course.progress.percent > 0;
+  // `percent` is floored on the server, so 100 means every lesson, not "nearly".
+  const finished = course.progress.completedAt !== null || course.progress.percent >= 100;
 
   return (
     <div className="flex flex-col gap-8">
@@ -498,6 +503,8 @@ function CourseHome({ course, productSlug }: { course: CourseOutlineData; produc
         </div>
       </GlassCard>
 
+      {finished && <CertificateCard courseId={course.courseId} />}
+
       {/* On the course home the outline is the page, not a sidebar — so it is
           rendered here too rather than only in the `xl` rail, which does not
           exist on a phone. */}
@@ -519,15 +526,51 @@ interface LessonViewProps {
   data: LessonResponse;
   productSlug: string;
   courseImage: string;
+  /** The outline already on screen — the only place a lesson's module is named. */
+  modules: OutlineModule[];
   onProgress: (result: ProgressResult) => void;
 }
 
-function LessonView({ data, productSlug, courseImage, onProgress }: LessonViewProps) {
+function LessonView({ data, productSlug, courseImage, modules, onProgress }: LessonViewProps) {
   const { lesson } = data;
+
+  /*
+   * "Just finished" is the false → true edge of `completed` on the lesson that
+   * is open, which is why it is watched here rather than raised by the tick
+   * button: the player's own auto-complete at 90% arrives through `onProgress`,
+   * and a passed assessment through a re-read of the lesson, and nobody pressed
+   * anything for either. Arriving on a
+   * lesson that was already complete is not an edge and shows nothing, and
+   * un-ticking takes the panel away again.
+   */
+  const completed = lesson.locked ? false : lesson.progress.completed;
+  const seen = useRef<{ id: number; completed: boolean } | null>(null);
+  const [justFinished, setJustFinished] = useState(false);
+
+  useEffect(() => {
+    const before = seen.current;
+    if (before !== null && before.id === lesson.id) {
+      if (!before.completed && completed) setJustFinished(true);
+      if (!completed) setJustFinished(false);
+    } else {
+      setJustFinished(false);
+    }
+    seen.current = { id: lesson.id, completed };
+  }, [lesson.id, completed]);
+
+  const breadcrumb = (
+    <LessonBreadcrumb
+      productSlug={productSlug}
+      courseTitle={data.course.title}
+      moduleTitle={lesson.moduleTitle}
+      lessonTitle={lesson.title}
+    />
+  );
 
   if (lesson.locked) {
     return (
       <div className="flex flex-col gap-8">
+        {breadcrumb}
         <LockedNotice
           title={lesson.title}
           unlockLabel={lesson.unlockLabel}
@@ -544,9 +587,7 @@ function LessonView({ data, productSlug, courseImage, onProgress }: LessonViewPr
   return (
     <div className="flex flex-col gap-8">
       <div>
-        <p className="text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-gold">
-          {lesson.moduleTitle}
-        </p>
+        {breadcrumb}
         <p className="mt-2 text-xs uppercase tracking-[0.14em] text-orchid-faint">
           {contentTypeLabel(lesson.contentType)}
           {length && ` · ${length}`}
@@ -570,11 +611,135 @@ function LessonView({ data, productSlug, courseImage, onProgress }: LessonViewPr
 
       <CompleteBar lessonId={lesson.id} completed={lesson.progress.completed} onSaved={onProgress} />
 
+      {justFinished && (
+        <NicelyDone
+          data={data}
+          productSlug={productSlug}
+          currentModuleId={lesson.moduleId}
+          modules={modules}
+        />
+      )}
+
       <LessonNav data={data} productSlug={productSlug} />
 
       {lesson.notesEnabled && <LessonNotes lessonId={lesson.id} />}
 
       {lesson.commentsEnabled && <LessonComments lessonId={lesson.id} />}
+    </div>
+  );
+}
+
+/**
+ * Course › Module › Lesson.
+ *
+ * Only the course is a link: a module has no page of its own, and the lesson is
+ * where the member already is. It replaces the bare module title that used to
+ * sit here, so nothing is said twice.
+ */
+function LessonBreadcrumb({
+  productSlug,
+  courseTitle,
+  moduleTitle,
+  lessonTitle,
+}: {
+  productSlug: string;
+  courseTitle: string;
+  moduleTitle: string;
+  lessonTitle: string;
+}) {
+  return (
+    <nav aria-label="Breadcrumb">
+      <ol className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[0.68rem] font-semibold uppercase tracking-[0.16em]">
+        <li className="flex min-w-0 items-center gap-1.5">
+          <Link
+            to={productPath(productSlug)}
+            className={cn(
+              "truncate text-orchid transition-colors duration-300 hover:text-gold",
+              "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold",
+            )}
+          >
+            {courseTitle}
+          </Link>
+          <ChevronRight aria-hidden className="size-3 shrink-0 text-orchid-faint" />
+        </li>
+        {moduleTitle && (
+          <li className="flex min-w-0 items-center gap-1.5">
+            <span className="truncate text-gold">{moduleTitle}</span>
+            <ChevronRight aria-hidden className="size-3 shrink-0 text-orchid-faint" />
+          </li>
+        )}
+        <li aria-current="page" className="min-w-0 truncate text-white/70">
+          {lessonTitle}
+        </li>
+      </ol>
+    </nav>
+  );
+}
+
+/**
+ * What comes after the tick.
+ *
+ * The toast says the lesson is saved; this says where to go now, which is the
+ * question a finished lesson actually leaves. Four endings, and each one points
+ * somewhere real: the next lesson, the next module (named, because starting a
+ * new module is a small milestone of its own), a next lesson that has not opened
+ * yet, or the course home — where a finished course's certificate is waiting.
+ */
+function NicelyDone({
+  data,
+  productSlug,
+  currentModuleId,
+  modules,
+}: {
+  data: LessonResponse;
+  productSlug: string;
+  currentModuleId: number;
+  modules: OutlineModule[];
+}) {
+  const { next } = data;
+  const courseFinished =
+    data.course.progress.completedAt !== null || data.course.progress.percent >= 100;
+
+  const nextModule = next
+    ? (modules.find((module) => module.lessons.some((row) => row.slug === next.slug)) ?? null)
+    : null;
+  const newModule = nextModule !== null && nextModule.id !== currentModuleId ? nextModule : null;
+
+  let message: string;
+  let action: { to: string; label: string };
+
+  if (courseFinished) {
+    message = "Nicely done — that is the whole course finished. Congratulations.";
+    action = { to: productPath(productSlug), label: "Back to the course" };
+  } else if (next && next.unlocked) {
+    message = newModule
+      ? `Nicely done — that is this module finished. Next module: ${newModule.title}, starting with ${next.title}.`
+      : `Nicely done — next: ${next.title}`;
+    action = {
+      to: lessonPath(productSlug, next.slug),
+      label: newModule ? "Start the next module" : "Next lesson",
+    };
+  } else if (next) {
+    message = `Nicely done. The next lesson, ${next.title}, is not open yet — we will let you know when it is.`;
+    action = { to: productPath(productSlug), label: "Back to the course" };
+  } else {
+    message = "Nicely done — that was the last lesson. There are still a few earlier ones to finish.";
+    action = { to: productPath(productSlug), label: "See what is left" };
+  }
+
+  return (
+    <div
+      role="status"
+      className="flex flex-col gap-4 rounded-2xl border border-gold/25 bg-gold/[0.06] px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-6 sm:px-5"
+    >
+      <p className="flex min-w-0 items-start gap-3 text-sm leading-relaxed text-white">
+        <Sparkles aria-hidden className="mt-0.5 size-4 shrink-0 text-gold" />
+        <span className="min-w-0 text-balance">{message}</span>
+      </p>
+      <LuxeButton to={action.to} size="sm" className="shrink-0 self-start sm:self-auto">
+        {action.label}
+        <ChevronRight aria-hidden className="size-4" />
+      </LuxeButton>
     </div>
   );
 }

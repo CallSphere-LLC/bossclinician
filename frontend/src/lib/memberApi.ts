@@ -158,7 +158,31 @@ export async function memberRequest<T>(path: string, options: RequestOptions = {
   return request<T>(path, options);
 }
 
+/**
+ * The same authenticated fetch, for the few answers that are not JSON.
+ *
+ * A certificate PDF sits behind the Bearer token like everything else under
+ * `/member`, so an `<a href>` to it is a 401: a link cannot carry the header.
+ * This hands back the raw `Response` — after the same single refresh-and-retry
+ * — so the caller can read it as a blob. Errors are thrown as `MemberApiError`
+ * exactly as `memberRequest` throws them.
+ */
+export async function memberFetch(path: string, options: RequestOptions = {}): Promise<Response> {
+  const res = await authedFetch(path, options);
+  if (!res.ok) throw await parseError(res);
+  return res;
+}
+
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
+  const res = await authedFetch(path, options);
+
+  if (!res.ok) throw await parseError(res);
+  if (res.status === 204) return undefined as T;
+  return (await res.json()) as T;
+}
+
+/** Sends with the access token, and refreshes it exactly once on a 401. */
+async function authedFetch(path: string, options: RequestOptions = {}): Promise<Response> {
   const { skipRefresh, ...init } = options;
 
   const send = async (): Promise<Response> => {
@@ -182,9 +206,7 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     }
   }
 
-  if (!res.ok) throw await parseError(res);
-  if (res.status === 204) return undefined as T;
-  return (await res.json()) as T;
+  return res;
 }
 
 export const memberApi = {
@@ -297,4 +319,8 @@ export const memberApi = {
 
   revokeSession: (id: number) =>
     request<void>(`/auth/me/sessions/${id}`, { method: "DELETE" }),
+
+  /** Signs out every device except the one asking. Resolves with how many went. */
+  revokeOtherSessions: () =>
+    request<{ revoked: number }>("/auth/me/sessions", { method: "DELETE" }),
 };

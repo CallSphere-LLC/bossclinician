@@ -21,6 +21,7 @@ vi.mock("../email/provider", () => ({
   sendEmail: (...args: unknown[]) => sendEmail(...args),
   renderMarkdown: (text: string) => `<p>${text}</p>`,
   renderTokens: (text: string) => text,
+  mergeLinks: () => ({ unsubscribeUrl: "", loginUrl: "", startUrl: "" }),
 }));
 vi.mock("../jobs/queue", () => ({ PRIORITY: {}, enqueueMany: vi.fn() }));
 vi.mock("./audience", () => ({ MAILABLE_CONTACT_SQL: "true" }));

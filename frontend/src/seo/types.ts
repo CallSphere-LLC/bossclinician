@@ -60,6 +60,10 @@ export interface HeadMetaTag {
 export interface HeadLinkTag {
   rel: string;
   href: string;
+  /** MIME type of the linked resource — `application/rss+xml` for a feed. */
+  type?: string;
+  /** Human-readable name. Feed readers show it in their "subscribe" prompt. */
+  title?: string;
 }
 
 export interface ResolvedHead {

@@ -8,15 +8,14 @@ import { HttpError, badRequest, notFound } from "../../utils/httpError";
 import { buildAdminCrudRouter } from "./crudFactory";
 import { renderMarkdown, sendEmail } from "../../email/provider";
 import { BroadcastRefusal, audienceSize, startBroadcast } from "../../services/broadcasts";
+import { sendIssueNow } from "../../services/newsletters";
 import { isValidTimeZone } from "../../services/availability";
 import { adminTestEmailLimiter } from "../../middleware/rateLimit";
 import { recordAdminAction } from "../../services/adminAudit";
 import {
   MAILABLE_CONTACT_COUNT_SQL,
   MAILABLE_CONTACT_SERIES_SQL,
-  MAILABLE_CONTACT_SQL,
 } from "../../services/audience";
-import { upsertContact } from "../../services/contacts";
 import { fireTriggerAsync, type TriggerType } from "../../automations/engine";
 import { dispatchEvent } from "../../services/webhooksOut";
 import { env } from "../../config/env";
@@ -144,10 +143,18 @@ adminGrowthRouter.post(
          VALUES ($1,$2,$3) RETURNING id`,
         [`${input.name} — joined`, `funnel-${funnelId}-joined`, `Created by the ${input.name} funnel blueprint.`],
       );
+      // A funnel created already published gets its follow-up switched on with
+      // it, for the reason `activateFunnelSequence` gives below; one created as
+      // a draft keeps a draft sequence until it is published.
       const sequence = await client.query<{ id: number }>(
         `INSERT INTO email_sequences (name, slug, description, status, topic)
-         VALUES ($1,$2,$3,'draft','marketing') RETURNING id`,
-        [`${input.name} — follow-up`, `funnel-${funnelId}-follow-up`, `Created by the ${input.name} funnel blueprint.`],
+         VALUES ($1,$2,$3,$4,'marketing') RETURNING id`,
+        [
+          `${input.name} — follow-up`,
+          `funnel-${funnelId}-follow-up`,
+          `Created by the ${input.name} funnel blueprint.`,
+          input.published && spec.emails.length > 0 ? "active" : "draft",
+        ],
       );
       for (const [index, email] of spec.emails.entries()) {
         await client.query(
@@ -619,88 +626,20 @@ adminGrowthRouter.get(
 adminGrowthRouter.post(
   "/issues/:id/send",
   asyncHandler(async (req, res) => {
-    const issueResult = await pool.query(
-      `SELECT i.*, n.access, n.plan_id, n.name AS newsletter_name
-         FROM newsletter_issues i
-         JOIN newsletters n ON n.id = i.newsletter_id
-        WHERE i.id = $1`,
-      [req.params.id],
-    );
-    const issue = issueResult.rows[0];
-    if (!issue) throw notFound("Issue not found");
-    if (issue.status === "sent") throw badRequest("This issue has already been sent");
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) throw badRequest("Invalid id");
 
-    const recipients =
-      issue.access === "paid" && issue.plan_id
-        ? await pool.query(
-            `SELECT DISTINCT s.email FROM subscriptions s
-              WHERE s.plan_id = $1 AND s.status IN ('active','trialing') AND s.email <> ''`,
-            [issue.plan_id],
-          )
-        : // A free issue goes to the email list, which is the same set of people
-          // a broadcast reaches. Reading `subscribers` here sent it to whoever
-          // had used the public newsletter form and nobody else.
-          await pool.query(
-            `SELECT c.email FROM contacts c WHERE ${MAILABLE_CONTACT_SQL}`
-          );
-
-    const emails = recipients.rows.map((r) => String(r.email));
-
-    await pool.query(
-      `UPDATE newsletter_issues
-          SET status = 'sent', sent_at = now(), recipient_count = $2, updated_at = now()
-        WHERE id = $1`,
-      [issue.id, emails.length],
-    );
+    // The send itself lives in services/newsletters.ts, where the scheduled job
+    // shares it: until it did, this button was the only thing that ever sent an
+    // issue, and one saved as "scheduled" simply never went.
+    const result = await sendIssueNow(id);
+    if (result.outcome === "not_found") throw notFound("Issue not found");
+    if (result.outcome === "already_sent") throw badRequest("This issue has already been sent");
 
     // Detached: a large list must not hold the request open.
-    //
-    // Every copy goes through `sendEmail` rather than `sendMail`. A newsletter
-    // is a commercial email, so it has to carry the postal address and the
-    // unsubscribe link, and it must not go to an address on the suppression
-    // list — none of which `sendMail` knows anything about. The contact is
-    // resolved first because the opt-out link is addressed to one.
-    void (async () => {
-      const body = String(issue.body_md ?? "");
-      for (const email of emails) {
-        try {
-          const contactId = await upsertContact({ email, source: "newsletter" });
-          await sendEmail({
-            to: email,
-            subject: String(issue.subject ?? ""),
-            text: body,
-            html: renderMarkdown(body),
-            contactId,
-            // `sourceId` is deliberately null, and it is not an oversight.
-            //
-            // Everything downstream reads (`source_type`, `source_id`) as one
-            // key, and for `broadcast` that key means one row in
-            // `email_campaigns`: routes/public/emailWebhook.ts adds every open,
-            // click and bounce to the campaign with that id, and
-            // services/reports/rollup.ts dimensions it as `broadcast:<id>`. A
-            // newsletter id is drawn from a different sequence entirely, so
-            // sending the issue's newsletter id here credited whichever
-            // campaign happened to share the number — an email Yvette may never
-            // have sent — and there is no way to unpick the two afterwards.
-            // Anonymous is wrong but harmless; misattributed is neither.
-            //
-            // The proper fix is a `newsletter` source type carried end to end,
-            // which needs the CHECK on email_messages.source_type widened,
-            // EmailSourceType in email/provider.ts, the two source lists in
-            // services/reports/rollup.ts and the label map in
-            // services/reports/queries.ts — all outside this pass's remit. It is
-            // written up in docs/bugs/backend-growth.md.
-            sourceType: "broadcast",
-            sourceId: null,
-            topic: "marketing",
-          });
-        } catch {
-          // One bad address must not cost the rest of the list its issue.
-        }
-      }
-    })();
+    void result.delivery;
 
-    res.status(202).json({ ok: true, recipients: emails.length });
+    res.status(202).json({ ok: true, recipients: result.recipients });
   }),
 );
 
@@ -821,6 +760,91 @@ adminGrowthRouter.get(
       [req.params.id],
     );
     res.json(rowsToCamel(result.rows));
+  }),
+);
+
+/**
+ * Switches on a published funnel's own follow-up sequence.
+ *
+ * A blueprint creates its sequence as a draft, and `enrollContact` refuses a
+ * draft — so a funnel could be live, collecting addresses, and never send one
+ * of the emails it was built with. Publishing the funnel is the moment she says
+ * "this is ready", and it now carries the sequence with it.
+ *
+ * One statement, safe to run on every save: it only ever moves a sequence from
+ * `draft`, so one she has paused or archived herself stays as she left it, and
+ * an empty one stays a draft because there is nothing in it to send.
+ */
+async function activateFunnelSequence(funnelId: number): Promise<void> {
+  await pool.query(
+    `UPDATE email_sequences s
+        SET status = 'active', updated_at = now()
+       FROM funnels f
+      WHERE f.id = $1
+        AND f.published = true
+        AND s.id = f.sequence_id
+        AND s.status = 'draft'
+        AND EXISTS (SELECT 1 FROM sequence_emails e WHERE e.sequence_id = s.id AND e.enabled)`,
+    [funnelId],
+  );
+}
+
+/**
+ * One funnel, with the state of the parts its blueprint made.
+ *
+ * The readiness card used to tick every part that merely existed. Whether the
+ * follow-up is switched on, has anything in it, and whether the sign-up form is
+ * published are what decide if the funnel works, so they are read here rather
+ * than guessed at on the page.
+ */
+adminGrowthRouter.get(
+  "/funnels/:id",
+  asyncHandler(async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) throw badRequest("Invalid id");
+    const item = await funnelsRepo.getById(id);
+    if (!item) throw notFound("Not found");
+
+    const parts = await pool.query<{
+      sequence_status: string | null;
+      sequence_email_count: number;
+      form_published: boolean | null;
+    }>(
+      `SELECT s.status AS sequence_status,
+              (SELECT count(*) FROM sequence_emails e
+                WHERE e.sequence_id = f.sequence_id AND e.enabled)::int AS sequence_email_count,
+              fm.published AS form_published
+         FROM funnels f
+         LEFT JOIN email_sequences s ON s.id = f.sequence_id
+         LEFT JOIN forms fm ON fm.id = f.form_id
+        WHERE f.id = $1`,
+      [id],
+    );
+    const row = parts.rows[0];
+    res.json({
+      ...item,
+      readiness: {
+        sequenceStatus: row?.sequence_status ?? null,
+        sequenceEmailCount: row?.sequence_email_count ?? 0,
+        formPublished: row?.form_published ?? null,
+      },
+    });
+  }),
+);
+
+// Ahead of the generic mount below, as the DELETE further up is: saving a
+// funnel is also where it gets published, and publishing has a consequence.
+adminGrowthRouter.put(
+  "/funnels/:id",
+  asyncHandler(async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) throw badRequest("Invalid id");
+    const parsed = anySchema.safeParse(req.body);
+    if (!parsed.success) throw badRequest("Invalid payload", parsed.error.flatten());
+    const item = await funnelsRepo.update(id, parsed.data);
+    if (!item) throw notFound("Not found");
+    await activateFunnelSequence(id);
+    res.json(item);
   }),
 );
 

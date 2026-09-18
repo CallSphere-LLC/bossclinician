@@ -366,6 +366,45 @@ memberAccountRoutes.get(
 );
 
 /**
+ * DELETE /api/auth/me/sessions — "sign out of all my other devices".
+ *
+ * The device asking keeps its session, for the same reason a password change
+ * keeps it: signing people out of the screen they are looking at teaches them to
+ * be afraid of the security feature. "Sign out" in the account menu is the
+ * deliberate way to end this one.
+ *
+ * Recorded as a logout, exactly as the single-session route below records it:
+ * without the reason, each signed-out device's next silent refresh presents a
+ * revoked token, which is read as theft and burns the session this route went
+ * out of its way to keep.
+ *
+ * A request with no refresh cookie has no session to spare, so everything goes —
+ * the safe reading of "sign me out everywhere" from a caller that cannot say
+ * where it is.
+ */
+memberAccountRoutes.delete(
+  "/me/sessions",
+  denyImpersonation,
+  asyncHandler(async (req, res) => {
+    const member = currentMember(req);
+
+    const raw = readRefreshCookie(req);
+    const keep = raw ? hashToken(raw) : null;
+
+    const result = await pool.query(
+      `UPDATE member_sessions
+          SET revoked_at = now(), revoked_reason = 'logout'
+        WHERE member_id = $1
+          AND revoked_at IS NULL
+          AND ($2::text IS NULL OR token_hash <> $2)`,
+      [member.id, keep]
+    );
+
+    res.json({ revoked: result.rowCount ?? 0 });
+  })
+);
+
+/**
  * DELETE /api/auth/me/sessions/:id
  *
  * `member_id` is in the WHERE clause, not in an `if` after the read: someone

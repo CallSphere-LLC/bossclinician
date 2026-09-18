@@ -28,6 +28,7 @@ import {
   type ShowIf,
 } from "@/lib/formLogic";
 import { submitFormWithFiles } from "@/lib/publicFormUpload";
+import { useHoneypot } from "@/components/forms/useHoneypot";
 import { contactPage } from "@/content/site";
 import NotFound from "@/pages/NotFound";
 import type { PublicForm, PublicFormField } from "@/types";
@@ -159,6 +160,7 @@ export default function FormPage() {
   const [fileErrors, setFileErrors] = useState<Record<string, string>>({});
   const fileInputs = useRef<Record<string, HTMLInputElement | null>>({});
   const fieldIds = useId();
+  const [honeypot, honeypotField] = useHoneypot();
 
   const retry = useCallback(() => setReloadKey((n) => n + 1), []);
 
@@ -335,11 +337,14 @@ export default function FormPage() {
 
     setStatus("loading");
     try {
-      // JSON exactly as before unless a file is actually attached.
+      // JSON exactly as before unless a file is actually attached. The honeypot
+      // pair rides on the envelope either way, beside `data` rather than in it:
+      // a form is free to ask for a "company" of its own.
+      const trap = honeypot();
       const result =
         Object.keys(attached).length > 0
-          ? await submitFormWithFiles(form.slug, data, email, attached)
-          : await api.submitForm(form.slug, data, email);
+          ? await submitFormWithFiles(form.slug, data, email, attached, trap)
+          : await api.submitForm(form.slug, data, email, trap);
 
       // What the admin chose should happen next. A form built to send people to
       // a booking page, a checkout or a download used to end on the thank-you
@@ -817,6 +822,8 @@ export default function FormPage() {
                   )}
                 </LuxeButton>
               </div>
+              {/* Last, so the form's own spacing never counts it as the first row. */}
+              {honeypotField}
             </form>
           </GlassCard>
         )}

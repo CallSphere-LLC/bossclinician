@@ -20,7 +20,7 @@ export const courses: Course[] = [
       "A personalized audit that shows you exactly how to transform your Psychology Today or TherapyDen profile into a client-attracting powerhouse.",
     priceText: "",
     image: "/images/87e2e475b3ec.webp",
-    url: "https://www.bossclinician.com/resource_redirect/landing_pages/2151750533",
+    url: "/courses/directory-makeover-audit",
     features: [
       "Clear, personalized feedback so you will know exactly what’s holding your profile back.",
       "A high-converting improvement plan so you will make changes with confidence.",
@@ -39,7 +39,7 @@ export const courses: Course[] = [
       "You worked hard to become a therapist — now let your practice reflect that. The Fully Booked Toolkit is designed to help you attract consistent clients, streamline systems, and run a thriving practice that fills your schedule without chaos.",
     priceText: "",
     image: "/images/b9de41b029ed.webp",
-    url: "https://www.bossclinician.com/resource_redirect/landing_pages/2150414734",
+    url: "/courses/fully-booked-toolkit",
     features: [
       "A proven client-attraction plan so you will know exactly how to fill your calendar with aligned clients without burnout or guesswork.",
       "Systems for intake, scheduling, and onboarding so you will create a smooth, professional client experience from first contact to first session.",
@@ -57,7 +57,7 @@ export const courses: Course[] = [
     description: "A simple, repeatable system to credential your clinicians quickly and cleanly.",
     priceText: "",
     image: "/images/5a8b78757b65.webp",
-    url: "https://www.bossclinician.com/resource_redirect/landing_pages/2151053560",
+    url: "/courses/credentialing-success-formula",
     features: [
       "A streamlined credentialing workflow so you will stop scrambling and start credentialing clinicians efficiently.",
       "Organized documentation systems so you will always know where things stand and avoid costly errors.",
@@ -74,7 +74,7 @@ export const courses: Course[] = [
     description: "No confusion. No overwhelm. Just clear direction.",
     priceText: "",
     image: "/images/bf28804cb9be.webp",
-    url: "https://www.bossclinician.com/resource_redirect/landing_pages/2151053468",
+    url: "/courses/credential-with-confidence",
     features: [
       "CAQH made simple so you will finally understand what’s required without confusion.",
       "Insurance panels clearly explained so you will know which panels to apply to and why.",
@@ -91,7 +91,7 @@ export const courses: Course[] = [
     description: "Your roadmap for setting up your business legally & confidently.",
     priceText: "",
     image: "/images/b638c609d53c.webp",
-    url: "https://www.bossclinician.com/resource_redirect/landing_pages/2151054099",
+    url: "/courses/private-practice-starter-suite",
     features: [
       "Business structure guidance so you will choose the right setup from the beginning.",
       "Clear filing instructions so you will complete what matters legally and skip what doesn’t.",
@@ -108,7 +108,7 @@ export const courses: Course[] = [
     description: "Discover your exact profitable, ethical session rate.",
     priceText: "",
     image: "/images/63feb84d0c9d.webp",
-    url: "https://www.bossclinician.com/resource_redirect/landing_pages/2151104751",
+    url: "/courses/ramp-up-rate-formula",
     features: [
       "Fee clarity so you will know exactly what to charge without second-guessing yourself.",
       "No-guilt pricing support so you will feel confident asking for rates that support your life and values.",
@@ -126,7 +126,7 @@ export const courses: Course[] = [
       "Get the templates, scripts, and workflows to build strong referral relationships with doctors and specialists — consistently sending clients your way.",
     priceText: "",
     image: "/images/674d37182903.jpeg",
-    url: "https://www.bossclinician.com/resource_redirect/landing_pages/2151230875",
+    url: "/courses/provider-partnership-guide",
     features: [
       "Outreach and follow-up scripts so you will know exactly what to say to referral partners.",
       "Referral-building templates so you will build professional, lasting relationships with ease.",
@@ -144,7 +144,7 @@ export const courses: Course[] = [
       "Get everything you need — consent forms, HIPAA documents, policies, telehealth and safety templates — to stay compliant and run your practice like a professional.",
     priceText: "",
     image: "/images/9d7fb2d1ba2d.webp",
-    url: "https://www.bossclinician.com/resource_redirect/landing_pages/2151230877",
+    url: "/courses/private-practice-protection-pack",
     features: [
       "Lawyer-reviewed documents so you will operate confidently and professionally.",
       "HIPAA and compliance-ready templates so you will reduce legal risk and protect your license.",
@@ -161,7 +161,7 @@ export const courses: Course[] = [
     description: "Done-for-you content that helps you get clients consistently.",
     priceText: "",
     image: "/images/7df196fe83a2.png",
-    url: "https://www.bossclinician.com/resource_redirect/offers/Jgx2ULVA",
+    url: "/courses/marketing-mastery-for-therapists",
     features: [
       "30-day content calendars so you will never wonder what to post again.",
       "SEO checklists and referral scripts so you will get found and referred consistently.",
@@ -180,7 +180,7 @@ export const courses: Course[] = [
     description: "A powerful clarity tool to identify your ideal client & message.",
     priceText: "",
     image: "/images/792bcd2c2e26.png",
-    url: "https://www.bossclinician.com/resource_redirect/offers/wMz5RNgn",
+    url: "/courses/therapist-niche-clarity-accelerator",
     features: [
       "A clear niche statement so you will confidently explain who you help.",
       "Ideal client breakdown so you will attract aligned clients with ease.",
@@ -198,7 +198,7 @@ export const courses: Course[] = [
       "A plug-and-play, therapist-friendly template that helps you request (and often secure) better reimbursement rates.",
     priceText: "",
     image: "/images/fb13cb030751.webp",
-    url: "https://www.bossclinician.com/resource_redirect/offers/7n6FFEe2",
+    url: "/courses/rate-negotiation-letter-template",
     features: [
       "A professional, therapist-friendly letter so you will advocate for better reimbursement confidently.",
       "Easy customization so you will send it quickly without overthinking.",
@@ -216,7 +216,7 @@ export const courses: Course[] = [
       "A 5-step digital journal designed for therapists to ditch self-doubt and step into the confidence needed to start or scale their practice.",
     priceText: "",
     image: "/images/1126b9d16f01.webp",
-    url: "https://www.bossclinician.com/resource_redirect/offers/JfvDGdjF",
+    url: "/courses/prepare-to-profit-journal",
     features: [
       "Guided meditations so you will ground your nervous system and release fear.",
       "Therapeutic writing prompts so you will gain clarity and confidence.",
@@ -237,7 +237,7 @@ export const courses: Course[] = [
       "Make your initial consult calls smooth, confident, and conversion-focused. This script helps you structure discovery calls so you can screen for fit, set expectations, and convert inquiries into booked sessions.",
     priceText: "",
     image: "/images/f6e89a66a1a7.webp",
-    url: "https://www.bossclinician.com/resource_redirect/offers/Yhc3aisz",
+    url: "/courses/client-consultation-call-script",
     features: [
       "A professionally written call script so you will lead consults with confidence.",
       "Easy customization options so you will align calls with your policies and fees.",
@@ -255,7 +255,7 @@ export const courses: Course[] = [
       "Stop blending in — make your directory profile stand out, attract your ideal clients, and convert profile views into booked sessions.",
     priceText: "",
     image: "/images/7d1cdf512574.webp",
-    url: "https://www.bossclinician.com/resource_redirect/landing_pages/2150427089",
+    url: "/courses/from-profile-to-profit",
     features: [
       "High-converting profile templates so you will stop blending in and start standing out.",
       "Directory optimization strategies so you will increase visibility on platforms like Psychology Today and TherapyDen.",

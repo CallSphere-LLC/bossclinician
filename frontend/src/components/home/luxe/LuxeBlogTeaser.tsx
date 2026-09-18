@@ -34,8 +34,12 @@ interface Teaser {
   excerpt: string;
   /** Slug of the same post on THIS site, once it has been migrated across. */
   localSlug?: string;
-  /** Live permalink, used until the post exists here. */
-  externalHref: string;
+  /**
+   * Internal fallback used until the post exists here. Never an absolute
+   * bossclinician.com URL: after cutover that domain is this app, and a post it
+   * does not have would be a dead end rather than a fallback.
+   */
+  fallbackTo: string;
   accent: CardAccent;
 }
 
@@ -51,7 +55,7 @@ const TEASERS: readonly Teaser[] = [
     title: "Is Talkspace Right for Your Long-Term Practice Goals? A Therapist's Honest Take",
     excerpt:
       "After a year seeing 80–100 clients on the platform, here's what I learned, and why I built my own practice instead.",
-    externalHref: "https://www.bossclinician.com/blog/is-talkspace-right-for-your-practice-goals",
+    fallbackTo: "/blog",
     accent: "green",
   },
   {
@@ -59,8 +63,7 @@ const TEASERS: readonly Teaser[] = [
     title: "Alma vs Private Pay: What the Numbers Actually Look Like for Group Practices",
     excerpt:
       "I joined Alma expecting higher rates and cash pay referrals. Here's what I actually got, and what group practice owners need to know first.",
-    externalHref:
-      "https://www.bossclinician.com/blog/alma-vs-private-pay-group-practice-numbers",
+    fallbackTo: "/blog",
     accent: "plum",
   },
   {
@@ -69,7 +72,7 @@ const TEASERS: readonly Teaser[] = [
     excerpt:
       "The math most therapists have never done, and how changing your rates changes everything.",
     localSlug: "how-to-stop-seeing-25-clients-a-week-and-still-hit-your-income-goals",
-    externalHref: "https://www.bossclinician.com/blog/how-to-stop-seeing-25-clients-a-week",
+    fallbackTo: "/blog/how-to-stop-seeing-25-clients-a-week-and-still-hit-your-income-goals",
     accent: "gold",
   },
 ];
@@ -215,14 +218,9 @@ export function LuxeBlogTeaser() {
                   {card}
                 </Link>
               ) : (
-                <a
-                  href={post.externalHref}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className={LINK_CLASSES}
-                >
+                <Link to={post.fallbackTo} className={LINK_CLASSES}>
                   {card}
-                </a>
+                </Link>
               )}
             </RevealItem>
           );

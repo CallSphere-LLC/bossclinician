@@ -30,6 +30,25 @@ interface Confirmation {
   email: string;
   amountCents: number;
   currency: string;
+  /**
+   * Where the receipt and the access email have got to, read from the delivery
+   * log. Absent for the legacy hosted checkout, which has no such report — the
+   * page then promises nothing either way.
+   */
+  receiptEmail?: OrderEmailState;
+  accessEmail?: OrderEmailState;
+}
+
+/** Mirrors the order endpoint: sent, still on its way, tried and failed, or never meant to go. */
+type OrderEmailState = "sent" | "pending" | "failed" | "off";
+
+/**
+ * The order endpoint's email report. Typed here rather than on `OrderReceipt`
+ * so an older API that does not send it yet still satisfies the shape.
+ */
+interface OrderReceiptWithEmails extends OrderReceipt {
+  receiptEmail?: OrderEmailState;
+  accessEmail?: OrderEmailState;
 }
 
 function fromSession(order: CheckoutOrder): Confirmation {
@@ -42,8 +61,10 @@ function fromSession(order: CheckoutOrder): Confirmation {
   };
 }
 
-function fromReceipt(receipt: OrderReceipt): Confirmation {
+function fromReceipt(receipt: OrderReceiptWithEmails): Confirmation {
   return {
+    receiptEmail: receipt.receiptEmail,
+    accessEmail: receipt.accessEmail,
     status: receipt.status,
     // An order can carry several things; the offer is what was bought.
     title: receipt.offerTitle ?? receipt.items[0]?.title ?? "your order",
@@ -51,6 +72,47 @@ function fromReceipt(receipt: OrderReceipt): Confirmation {
     amountCents: receipt.totalCents,
     currency: receipt.currency,
   };
+}
+
+/**
+ * What the page may truthfully say about the receipt.
+ *
+ * It used to say "and sent a receipt to …" the moment the order turned paid,
+ * whether or not a receipt had gone — including when receipts were switched off
+ * and when the transport had refused it.
+ */
+function receiptSentence(order: Confirmation): string {
+  const to = order.email ? ` to ${order.email}` : "";
+  switch (order.receiptEmail) {
+    case "sent":
+      return `We've sent a receipt${to}.`;
+    case "pending":
+      return `Your receipt is on its way${to}.`;
+    case "failed":
+      return "We couldn't email your receipt just now — get in touch and we'll send you a copy.";
+    case "off":
+      return "";
+    default:
+      return order.email ? `Your receipt will be emailed to ${order.email}.` : "";
+  }
+}
+
+/** And about the email that tells them how to get in. */
+function accessSentence(order: Confirmation): string {
+  switch (order.accessEmail) {
+    case "sent":
+      return "Your access details are in your inbox.";
+    case "pending":
+      return "Your access details are on their way to your inbox.";
+    case "failed":
+      return order.email
+        ? `We couldn't email your access details just now, but your access is ready. Go to your library and sign in with ${order.email} — choose "Forgot password" if you haven't set one yet.`
+        : "We couldn't email your access details just now, but your access is ready in your library.";
+    case "off":
+      return "Your access is ready and waiting in your library.";
+    default:
+      return "Your access details will follow by email, and everything is waiting in your library.";
+  }
 }
 
 function formatAmount(cents: number, currency: string): string {
@@ -143,7 +205,10 @@ export default function CheckoutSuccess() {
   useEffect(() => {
     const read: (() => Promise<Confirmation>) | null =
       orderToken !== null && Number.isInteger(orderId) && orderId > 0
-        ? () => commerceApi.getOrder(orderId, orderToken).then(fromReceipt)
+        ? () =>
+            commerceApi
+              .getOrder(orderId, orderToken)
+              .then((receipt) => fromReceipt(receipt as OrderReceiptWithEmails))
         : sessionId !== null
           ? () => api.checkoutOrder(sessionId).then(fromSession)
           : null;
@@ -165,9 +230,18 @@ export default function CheckoutSuccess() {
         const result = await load();
         if (cancelled) return;
         setOrder(result);
-        if (result.status === "paid" || result.status === "failed") {
+        if (result.status === "failed") {
           setSettling(false);
           return;
+        }
+        if (result.status === "paid") {
+          setSettling(false);
+          // The emails go out just after the order turns paid, so the first
+          // 'paid' read can be a moment early. Keep reading, quietly, until both
+          // have an answer — the panel is already showing, only its wording
+          // about the emails is still to settle.
+          const waiting = result.receiptEmail === "pending" || result.accessEmail === "pending";
+          if (!waiting) return;
         }
       } catch (err) {
         if (cancelled) return;
@@ -265,8 +339,8 @@ export default function CheckoutSuccess() {
                   role="status"
                   className="copy-luxe mx-auto mt-6 max-w-lg text-pretty"
                 >
-                  This usually takes a few seconds. You can safely leave this page — your receipt
-                  comes from Stripe by email either way.
+                  This usually takes a few seconds. You can safely leave this page — nothing else
+                  is needed from you.
                 </motion.p>
               </>
             )}
@@ -326,15 +400,17 @@ export default function CheckoutSuccess() {
                   <span className="font-normal text-white">
                     {formatAmount(order.amountCents, order.currency)}
                   </span>
-                  {order.email ? ` and sent a receipt to ${order.email}` : ""}. Access details are
-                  on their way to your inbox.
+                  . {[receiptSentence(order), accessSentence(order)].filter(Boolean).join(" ")}
                 </motion.p>
 
                 <motion.div
                   {...rise(reduce, 0.4)}
                   className="mt-10 flex flex-wrap items-center justify-center gap-4"
                 >
-                  <LuxeButton variant="foil" to="/courses" className="min-h-[44px]">
+                  <LuxeButton variant="foil" to="/library" className="min-h-[44px]">
+                    Go to your library
+                  </LuxeButton>
+                  <LuxeButton variant="outline" to="/courses" className="min-h-[44px]">
                     Browse More Courses
                   </LuxeButton>
                   <LuxeButton variant="outline" to="/" className="min-h-[44px]">

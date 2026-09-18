@@ -73,6 +73,8 @@ const ROUTES: { path: string; load?: Loader }[] = [
   { path: "/contact" },
   { path: "/retreats" },
   { path: "/store" },
+  { path: "/club" },
+  { path: "/lounge" },
   { path: "/practice-quiz" },
   { path: "/practice-reset-planner" },
   { path: "/privacy-policy" },

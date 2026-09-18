@@ -12,6 +12,10 @@ export interface MediaAsset {
   sizeBytes: number;
   title: string;
   folder: string;
+  /** What a picture shows, for somebody who cannot see it. "" when unset. */
+  altText: string;
+  /** Lower-cased labels, in the order they were given. */
+  tags: string[];
   createdAt: string;
 }
 
@@ -37,6 +41,11 @@ export function toMediaJson(row: Record<string, unknown>, adminUserId: number): 
   const isProtected = isProtectedRef(asset.url);
   return {
     ...asset,
+    // Defaulted rather than trusted: a row handed over by a caller that did not
+    // `SELECT *` would otherwise reach the screen with `tags` undefined, and the
+    // grid maps over it.
+    altText: typeof asset.altText === "string" ? asset.altText : "",
+    tags: Array.isArray(asset.tags) ? asset.tags.map(String) : [],
     visibility: isProtected ? "protected" : "public",
     previewUrl: isProtected
       ? adminPreviewUrl({ assetId: asset.id, adminUserId }).url

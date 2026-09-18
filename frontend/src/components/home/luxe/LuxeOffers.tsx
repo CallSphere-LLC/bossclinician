@@ -1,4 +1,5 @@
 import { motion } from "motion/react";
+import { Link } from "react-router";
 import { useEntranceMotion } from "@/hooks/useEntranceMotion";
 import { Section, SectionTitle } from "@/components/luxe/Section";
 import { GlassCard } from "@/components/luxe/GlassCard";
@@ -14,18 +15,22 @@ interface Offer {
   desc: string;
   audience: string;
   cta: string;
+  /** Internal route of the offer's own sales page. */
+  to: string;
   accent: OfferAccent;
 }
 
 /**
- * Every CTA lands on the one page that exists today. The per-offer routes
- * (club / lounge / boardroom) have not been built on this site yet — point
- * them here rather than shipping three dead links.
+ * Internal on purpose: an absolute bossclinician.com link is a link to this app
+ * after cutover, and the redirect map already sends /offer-quiz here.
  */
-const OFFER_HREF = "/work-with-me";
+const QUIZ_HREF = "/practice-quiz";
 
-const QUIZ_HREF = "https://www.bossclinician.com/offer-quiz";
-
+/**
+ * The Club and the Lounge have their own sales pages (/club, /lounge), as they
+ * do on the source site. The Boardroom has none yet — /boardroom redirects to
+ * /work-with-me — so its card goes there directly.
+ */
 const OFFERS: readonly Offer[] = [
   {
     ribbon: "6-MONTH COACHING PROGRAM",
@@ -33,6 +38,7 @@ const OFFERS: readonly Offer[] = [
     desc: "A 6-month coaching program for clinicians building from the ground up. Get the structure, tools, and guided strategy to do it right, without guessing at every step. This is your foundation, your roadmap, and your support system for the first six months.",
     audience: "For: The Depleted Clinician, just starting or rebuilding",
     cta: "Learn About the Club",
+    to: "/club",
     accent: "green",
   },
   {
@@ -41,6 +47,7 @@ const OFFERS: readonly Offer[] = [
     desc: "For the fully booked clinician who has hit the income ceiling, is exhausted from splitting rates with platforms, and needs a real strategy, not more content, to scale sustainably without working more hours.",
     audience: "For: The Maxed Out Clinician, established but capped",
     cta: "Join the Lounge",
+    to: "/lounge",
     accent: "plum",
   },
   {
@@ -49,6 +56,7 @@ const OFFERS: readonly Offer[] = [
     desc: "An exclusive mastermind for group practice owners and scaling clinicians ready for peer-level strategy, CEO leadership development, and a room full of people building at the same level, with Yvette guiding the room.",
     audience: "For: The Stretched Thin Clinician, leading a team or scaling",
     cta: "Apply for the Boardroom",
+    to: "/work-with-me",
     accent: "gold",
   },
 ];
@@ -150,7 +158,7 @@ export function LuxeOffers() {
                   <LuxeButton
                     variant="glass"
                     size="sm"
-                    to={OFFER_HREF}
+                    to={offer.to}
                     className="mt-6 min-h-[44px] w-full"
                   >
                     {offer.cta}
@@ -192,14 +200,12 @@ export function LuxeOffers() {
           <p className="copy-luxe min-w-0 text-pretty text-sm">
             <span className="font-semibold text-white">Not sure which is right for you?</span>{" "}
             Take the 2-minute quiz:{" "}
-            <a
-              href={QUIZ_HREF}
-              target="_blank"
-              rel="noopener noreferrer"
+            <Link
+              to={QUIZ_HREF}
               className="font-normal text-gold underline decoration-gold/35 underline-offset-4 transition-colors duration-300 ease-luxe hover:text-gold-bright hover:decoration-gold-bright/70"
             >
               Which Boss Clinician Offer Is Right for You?
-            </a>
+            </Link>
           </p>
         </GlassCard>
       </motion.div>

@@ -144,6 +144,7 @@ interface EpisodeRow {
   podcast_id: number;
   title: string;
   description: string;
+  transcript: string;
   audio_url: string;
   duration_seconds: number;
   episode_number: number | null;
@@ -155,6 +156,8 @@ interface EpisodeJson {
   id: number;
   title: string;
   description: string;
+  /** Verbatim, and "" when the episode has none. */
+  transcript: string;
   audioUrl: string;
   durationSeconds: number;
   episodeNumber: number | null;
@@ -243,7 +246,7 @@ async function loadEpisodes(
   // One query with a per-show window rather than a query per show: a member
   // with six feeds should still cost one round trip.
   const res = await pool.query<EpisodeRow>(
-    `SELECT id, podcast_id, title, description, audio_url, duration_seconds,
+    `SELECT id, podcast_id, title, description, transcript, audio_url, duration_seconds,
             episode_number, season, published_at
        FROM (
          SELECT e.*, row_number() OVER (
@@ -264,6 +267,7 @@ async function loadEpisodes(
       id: row.id,
       title: row.title,
       description: row.description,
+      transcript: row.transcript ?? "",
       audioUrl: episodeAudioUrl(row.audio_url, row.id, memberId),
       durationSeconds: row.duration_seconds,
       episodeNumber: row.episode_number,

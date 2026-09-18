@@ -24,7 +24,7 @@ import {
 } from "lucide-react";
 import { Button, Textarea, selectStyles } from "@/pages/admin/ui/primitives";
 import MediaPickerDialog from "@/components/admin/MediaPickerDialog";
-import type { MediaAsset, MergeTag, SavedEmailTemplate } from "@/types/admin";
+import type { MediaAsset, MergeTag, MergeTagSource, SavedEmailTemplate } from "@/types/admin";
 import { adminApi } from "@/lib/api";
 import { toast } from "sonner";
 import { cn } from "@/lib/cn";
@@ -176,11 +176,18 @@ export default function EmailComposer({
   onChange,
   rows = 12,
   placeholder,
+  source,
 }: {
   value: string;
   onChange: (next: string) => void;
   rows?: number;
   placeholder?: string;
+  /**
+   * Which kind of email this is. The picker then offers only the details that
+   * kind can fill in — a newsletter has no order behind it, so "Amount paid"
+   * would go out as a blank.
+   */
+  source?: MergeTagSource;
 }) {
   const ref = useRef<HTMLTextAreaElement>(null);
   const pendingSelection = useRef<[number, number] | null>(null);
@@ -213,7 +220,10 @@ export default function EmailComposer({
   // composer is on screen — so they are fetched here rather than threaded
   // through every screen that renders one.
   useEffect(() => {
-    adminApi.mergeTags().then(setMergeTags).catch(() => setMergeTags([]));
+    adminApi.mergeTags(source).then(setMergeTags).catch(() => setMergeTags([]));
+  }, [source]);
+
+  useEffect(() => {
     adminApi.savedTemplates().then(setTemplates).catch(() => setTemplates([]));
   }, []);
 

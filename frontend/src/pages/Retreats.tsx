@@ -250,18 +250,42 @@ const IMAGINE_STANZAS: readonly (readonly string[])[] = [
 const IMAGINE_CLOSE_A = "That is not a daydream.";
 const IMAGINE_CLOSE_B = "That is June 15-20, 2027. And your room is waiting.";
 
-const RESERVE_STRIP = "BALI  ·  JUNE 15–20, 2027  ·  ALL-INCLUSIVE";
-const RESERVE_PRICE =
-  "Private King Suite $4,500  ·  $500 deposit · balance due June 8, 2027";
-const RESERVE_EARLY_LABEL = "EARLY BIRD PRICING ENDS SEPTEMBER 1";
-const RESERVE_EARLY_BODY =
-  "These are Early Bird rates. Beginning September 1 the investment increases to $5,500 for the Private King Suite. Reserve now to lock in the current rate.";
+/* Pricing re-read from the source on 18 September 2026. Early Bird ($4,500)
+   ended on 1 September, as this page itself used to announce; the published
+   price is now $5,500 and the Early Bird notice is gone from the source, which
+   prints the suite's inclusions in that slot instead. */
+const RESERVE_STRIP = "BALI  ·  JUNE 15–20, 2027  ·  LUXURY RETREAT PACKAGE";
+const RESERVE_PRICE = "Private King Suite $5,500";
+const RESERVE_INCLUDED_LABEL = "WHAT'S INCLUDED IN YOUR PRIVATE KING SUITE";
+const RESERVE_INCLUDED: readonly string[] = [
+  "Your own private bedroom with a king bed and en suite bathroom",
+  "Five nights in the private villa, with full run of both infinity pools, the yoga shala, gym, and spa facility",
+  "All chef-prepared meals, breakfast, brunch, and dinner, daily",
+  "Flower bath, in-villa massages and spa day, and a full cabana day at the pool",
+  "Your choice of Healing Meditation or Palm Reading and Holy Water Ceremony",
+  "Temple tour, Balinese swing, fire show, beach day, photo day, and shared storytelling",
+  "A personalized luxury welcome gift",
+  "Luxury airport transfers and a pre-trip group call with Yvette",
+];
+const RESERVE_INCLUDED_NOTE =
+  "Airfare and travel insurance are not included, see the FAQ below for details.";
 const RESERVE_TERMS =
-  "All payments due by June 8, 2027  ·  Non-payment by this date forfeits your spot";
+  "All payments due by June 8, 2027  ·  See cancellation and refund policy in the FAQ";
 const RESERVE_SCARCITY =
   "RESERVE BEFORE SPOTS CLOSE  ·  LIMITED TO 12 WOMEN";
 
-/** Kajabi checkout URLs — kept exactly as they are on the live page. */
+/**
+ * Where both reservation buttons go.
+ *
+ * They used to be the Kajabi checkout URLs (bossclinician.com/offers/<token>/
+ * checkout). After the domain cutover that host is this app, and the redirect
+ * map sends both tokens back to /retreats — each button was a loop. The retreat
+ * has no offer row here yet, so reservations go through the contact form; once
+ * the two offers are published in the admin, give each option its own
+ * `/checkout/<offer-slug>` here.
+ */
+const RESERVE_ROUTE = "/contact";
+
 const RESERVE_OPTIONS: readonly {
   label: string;
   title: string;
@@ -273,19 +297,19 @@ const RESERVE_OPTIONS: readonly {
 }[] = [
   {
     label: "PRIVATE KING SUITE",
-    title: "Pay in Full — $4,500",
-    body: "Complete your reservation for the Private King Suite in one payment. Your own private bedroom, king bed, and en suite bathroom.",
-    cta: "RESERVE NOW",
-    href: "https://www.bossclinician.com/offers/z9zxY5Pi/checkout",
+    title: "Pay In Full — $5,500",
+    body: "One payment, reservation complete.",
+    cta: "RESERVE YOUR PLACE",
+    href: RESERVE_ROUTE,
     accent: "gold",
     primary: true,
   },
   {
     label: "PRIVATE KING SUITE",
-    title: "Payment Plan — $4,500",
-    body: "$500 deposit secures your spot. Remaining balance of $4,000 due in installments by June 8, 2027. Payment plan available for registrations by Jan 31, 2027.",
-    cta: "START MY PLAN",
-    href: "https://www.bossclinician.com/offers/boofdeo2/checkout",
+    title: "Payment Plan — $500 deposit",
+    body: "$500 deposit, then the remaining balance divided into monthly payments based on your enrollment date. All balances must be paid in full by June 8, 2027. The earlier you reserve, the lower your monthly payments.",
+    cta: "RESERVE YOUR PLACE",
+    href: RESERVE_ROUTE,
     accent: "plum",
     primary: false,
   },
@@ -354,38 +378,71 @@ const COVERAGE: readonly {
   },
 ];
 
-const FAQS: readonly { q: string; a: string }[] = [
+/**
+ * The source page's fourteen questions, in its order and wording (re-read
+ * 18 September 2026 — the price, the payment plan and the refund policy all
+ * changed when Early Bird ended on 1 September). `link` is the one answer that
+ * points at a document: the Retreat Terms & Agreement, which has no page of its
+ * own here yet and lives under /terms, where the redirect map also sends
+ * /retreatagreement.
+ */
+const FAQS: readonly { q: string; a: string; link?: { label: string; to: string } }[] = [
   {
     q: "Are CEUs offered at this retreat?",
-    a: "No. And that is intentional. If you have been on retreats before where you still had to work, still had to learn, still had to produce something — this is not that. FlourisHealer Retreats exist for one reason: to give you the experience of receiving. No agenda. No credentials. No content to create. Just you, finally resting.",
+    a: "No. And that is intentional. If you have been on retreats before where you still had to work, still had to learn, still had to produce something, this is not that. FlourisHealer Retreats exist for one reason: to give you the experience of receiving. No agenda. No credentials. No content to create. Just you, finally resting.",
   },
   {
     q: "Who is this retreat designed for?",
-    a: "This retreat is specifically designed for licensed therapists and psychiatric nurse practitioners who are building, scaling, or growing a private practice. You spend every session holding space for others, navigating insurance, running a business, and managing a caseload. This is your turn to be held.",
+    a: "This retreat is designed for women healthcare and mental health professionals who spend their careers caring for, supporting, and holding space for others, including therapists, nurses, nurse practitioners, physicians, allied health professionals, and other women in helping professions. This retreat is about stepping away from the roles you carry every day and allowing yourself to receive.",
   },
   {
     q: "What is the total group size?",
-    a: "This retreat is limited to twelve women. That intimacy is intentional — twelve women in one private villa creates genuine connection and a space where you can fully exhale.",
+    a: "This retreat is limited to twelve women. That intimacy is intentional. Twelve women in one private villa creates genuine connection and a space where you can fully exhale.",
   },
   {
-    q: "What is and is not included?",
-    a: "Your package includes five nights in the villa, all meals, wellness experiences, curated activities, your welcome gift, and luxury airport transfers. Airfare and travel insurance are not included. Travel insurance is strongly recommended — we suggest Trawick International.",
+    q: "What is included in my package?",
+    a: "Your package includes five nights in the villa, all meals, wellness experiences, curated activities, and luxury airport transfers.",
+  },
+  {
+    q: "What is not included in my package?",
+    a: "Airfare and travel insurance are not included. Flight costs and routes vary too much from woman to woman for us to build one into the package, so booking your own means you get the best price and schedule for where you are flying from. Travel insurance is strongly recommended. You are welcome to choose any provider that meets your needs, we suggest Trawick International for convenience.",
   },
   {
     q: "What is my room like?",
-    a: "Every attendee enjoys a Private King Suite — your own private bedroom with a king bed and en suite bathroom, your own quiet space to retreat into each night, inside the shared luxury of the full villa. Attending with a friend and hoping to room together? Email retreats@bossclinician.com and ask about our companion room option.",
+    a: "Every attendee enjoys a Private King Suite, your own private bedroom with a king bed and en suite bathroom, your own quiet space to retreat into each night, inside the shared luxury of the full villa. Attending with a friend and hoping to room together? Email retreats@bossclinician.com and ask about our companion room option.",
   },
   {
     q: "How does the payment plan work?",
-    a: "A $500 deposit secures your spot. The remaining $4,000 balance must be paid in full by June 8, 2027. You can pay it off in installments between now and that deadline. Please note the monthly payment plan is only available for registrations completed by January 31, 2027. After that date, pay in full only.",
+    a: "A $500 deposit secures your spot. The remaining $5,000 balance is then divided into equal monthly payments based on your enrollment date, with the full balance due by June 8, 2027. Checkout will show your exact monthly schedule. The earlier you enroll, the lower your monthly payment.",
   },
   {
     q: "When is the final payment due?",
-    a: "All payments must be completed in full by June 8, 2027 — one week before the retreat begins on June 15. Any outstanding balance not paid by this date will result in automatic forfeiture of your spot and all payments made to date, with no refund issued.",
+    a: "All payments must be completed in full by June 8, 2027, one week before the retreat begins on June 15. See the cancellation and refund policy below for what happens if a balance is not paid by this date.",
+  },
+  {
+    q: "What is the cancellation and refund policy?",
+    a: "All retreat payments are non-refundable. If you need to cancel while your payments are current, eligible payments made beyond your $500 non-refundable deposit may be applied as a credit toward a future FlourisHealer retreat within 12 months, subject to availability. Missed payments or failure to pay the balance by the final deadline may result in forfeiture of your reservation and payments made. Please review the full Retreat Terms & Agreement before purchasing.",
+    link: { label: "Retreat Terms & Agreement", to: "/terms" },
+  },
+  {
+    q: "Do I have to come with someone?",
+    a: "Not at all. You are welcome to come solo, in fact, many retreat guests do. The experience is intentionally designed so you arrive as an individual and have opportunities to naturally connect with the other women throughout the week.",
+  },
+  {
+    q: "How structured are the six days?",
+    a: "There is a thoughtfully curated rhythm to the retreat, but this is not a packed itinerary. There will be experiences we share together as well as room to rest, wander, sit by the pool, book quiet time, or simply do nothing.",
+  },
+  {
+    q: "I have dietary restrictions. Can those be accommodated?",
+    a: "Yes. Our private villa chef can accommodate most dietary needs and restrictions. You will receive a form before the retreat to share your specific requirements. If you have severe allergies, please reach out directly so we can discuss the details ahead of time.",
+  },
+  {
+    q: "When should I book my flight?",
+    a: "Airfare pricing shifts constantly, so we leave the timing of your purchase entirely up to you. Just know that your flight details are needed when you complete your retreat forms, so plan to have your flight booked before filling those out.",
   },
   {
     q: "How do I secure my spot?",
-    a: "Spots are limited to twelve women and fill in the order reservations are received. Choose your room and payment option above to lock in your place. Remember — all payments must be completed by June 8, 2027 or your spot will be forfeited.",
+    a: "Spots are limited to twelve women and fill in the order reservations are received. Choose your payment option above to lock in your place. Remember, all payments must be completed by June 8, 2027, see the cancellation and refund policy above for details.",
   },
 ];
 
@@ -400,10 +457,9 @@ const RETREAT_PATH = "/retreats";
  *
  * Every field is something the page already states in words: the dates in the
  * hero eyebrow, the villa and its town in the hero strip, the twelve places in
- * the stats band, and the Private King Suite's $4,500 in the reserve band. The
- * early-bird rise to $5,500 is dated "September 1" with no year, so no
- * `priceValidUntil` is claimed — a year guessed here would be a promise the
- * published page never made. The offer points at the page's own reserve band
+ * the stats band, and the Private King Suite's $5,500 in the reserve band (the
+ * $4,500 Early Bird rate ended on 1 September and is no longer published). No
+ * `priceValidUntil` is claimed — the page states no end date. The offer points at the page's own reserve band
  * rather than at one of the two Kajabi checkouts, because the choice between
  * paying in full and starting a plan belongs to the visitor.
  */
@@ -435,7 +491,7 @@ function retreatEventNode(origin: string): JsonLdNode {
       "@type": "Offer",
       name: "Private King Suite",
       url: `${origin}${RETREAT_PATH}#reserve`,
-      price: "4500.00",
+      price: "5500.00",
       priceCurrency: "USD",
       availability: "https://schema.org/InStock",
     },
@@ -464,7 +520,9 @@ export default function Retreats() {
       <HeroBlock />
       <StatsBand />
       <AboutSection />
+      <FounderRetreatSection />
       <ExperienceSection />
+      <IntimacySection />
       <MomentsSection />
       <PatternSection />
       <ReturnsSection />
@@ -473,6 +531,7 @@ export default function Retreats() {
       <HostSection />
       <BaliBand />
       <CoverageSection />
+      <BurnoutQuizSection />
       <FaqSection />
     </>
   );
@@ -649,6 +708,165 @@ function AboutSection() {
         </p>
         <GoldRule className="mx-auto mt-8" />
         <p className="copy-luxe mt-8 text-balance">{ABOUT_KEPT}</p>
+      </motion.div>
+    </Section>
+  );
+}
+
+/* ── 3b · Why Yvette built it ─────────────────────────────────────────────── */
+
+const FOUNDER_EYEBROW = "THIS IS STILL SOMETHING I DO FOR MYSELF";
+const FOUNDER_BODY: readonly string[] = [
+  "In July 2026, I went on a retreat in Thailand. Not for my clients. Not for content. For me.",
+  "I came home feeling more grounded, clear, and rested than I had in a long time. I noticed that the clarity I came home with changed the way I moved through my business, my relationships, and my own clinical work.",
+  "That is what I want for you in Bali.",
+  "This is our first FlourisHealer retreat. I am bringing everything I have learned from every retreat I have invested in since 2023, and everything I know about what women in this field actually need to exhale, into six days in Ubud.",
+];
+
+function FounderRetreatSection() {
+  const reduce = useEntranceMotion();
+
+  return (
+    <Section
+      surface="raised"
+      space="md"
+      aria-label="Why Yvette built FlourisHealer"
+      containerClassName="max-w-3xl"
+    >
+      <SectionTitle
+        eyebrow={FOUNDER_EYEBROW}
+        title={
+          <>
+            I built FlourisHealer
+            <span className="text-foil mt-2 block font-display italic">
+              because I needed it first.
+            </span>
+          </>
+        }
+      />
+
+      <motion.div {...rise(reduce, 0.08)} className="mx-auto mt-10 max-w-[62ch] space-y-5">
+        {FOUNDER_BODY.map((p) => (
+          <p key={p} className="copy-luxe text-pretty">
+            {p}
+          </p>
+        ))}
+      </motion.div>
+    </Section>
+  );
+}
+
+/* ── 4b · Why twelve women, why this villa ────────────────────────────────── */
+
+const INTIMACY_EYEBROW = "THE INTIMACY IS THE POINT";
+const INTIMACY: readonly { title: string; body: readonly string[] }[] = [
+  {
+    title: "Why Only 12 Women",
+    body: [
+      "This is not a conference. It is not a room of a hundred people nodding along to a speaker and going home strangers. Twelve women in one private villa means you are not performing for anyone. You are not managing your face. You get to actually be known, by the end of six days, by name and by story, not just by profession.",
+      "Smaller also means safer. The kind of rest we are talking about, the kind where your nervous system actually lets go, does not happen in a crowd. It happens when you know exactly who is in the room with you.",
+    ],
+  },
+  {
+    title: "Why This Villa",
+    body: [
+      "We chose one private twelve bedroom estate in Ubud on purpose. No hotel staff walking through common areas. No other guests at the pool. No shared spaces with strangers. The entire property, both infinity pools, the yoga shala, the gym, the spa facility, is only for the twelve of us the entire time we are there.",
+      "That privacy is not a luxury detail. It is what makes it possible for you to actually exhale. You cannot fully let your guard down in a space you are sharing with people who do not know what you carry. Here, you do not have to.",
+    ],
+  },
+];
+
+function IntimacySection() {
+  return (
+    <Section
+      surface="deep"
+      space="md"
+      aurora="violet"
+      auroraIntensity={0.45}
+      aria-label="Why twelve women, why this villa"
+    >
+      <SectionTitle
+        eyebrow={INTIMACY_EYEBROW}
+        title={
+          <>
+            Why twelve women.
+            <span className="text-foil mt-2 block font-display italic">Why this villa.</span>
+          </>
+        }
+      />
+
+      <RevealGroup
+        as="ul"
+        className="mx-auto mt-10 grid max-w-md list-none grid-cols-1 items-stretch gap-6 sm:max-w-5xl sm:grid-cols-2 sm:gap-7"
+      >
+        {INTIMACY.map((block, i) => (
+          <RevealItem key={block.title} as="li" className="h-full">
+            <GlassCard accent={accentAt(i)} interactive={false} className="h-full p-7 sm:p-9">
+              <h3 className="font-display text-[1.4rem] font-medium leading-[1.25] text-white">
+                {block.title}
+              </h3>
+              <GoldRule width="w-10" className="mt-5" />
+              <div className="mt-5 space-y-4">
+                {block.body.map((p) => (
+                  <p key={p} className="copy-luxe text-pretty text-[0.95rem]">
+                    {p}
+                  </p>
+                ))}
+              </div>
+            </GlassCard>
+          </RevealItem>
+        ))}
+      </RevealGroup>
+    </Section>
+  );
+}
+
+/* ── 12b · Still on the fence ─────────────────────────────────────────────── */
+
+const BURNOUT_EYEBROW = "STILL ON THE FENCE?";
+const BURNOUT_BODY =
+  "Six honest questions about how you are actually doing, not how you tell everyone you are doing. Two minutes. Just you and the truth. If your cup is running lower than you have been letting on, this is the sign to stop waiting.";
+const BURNOUT_CTA = "TAKE THE QUIZ";
+/**
+ * The source links bossclinician.com/retreat-needed-quiz, a Kajabi quiz. After
+ * cutover that host is this app, so the action opens this app's quiz engine
+ * (`/quiz/:slug`). The six-question Burnout Self-Assessment has to be published
+ * in the admin under exactly this slug; until it is, the route shows the
+ * branded 404.
+ */
+const BURNOUT_QUIZ_ROUTE = "/quiz/retreat-needed-quiz";
+
+function BurnoutQuizSection() {
+  const reduce = useEntranceMotion();
+
+  return (
+    <Section
+      surface="base"
+      space="md"
+      aurora="gold"
+      auroraIntensity={0.4}
+      aria-label="Burnout self-assessment"
+      containerClassName="max-w-3xl text-center"
+    >
+      <SectionTitle
+        eyebrow={BURNOUT_EYEBROW}
+        title={
+          <>
+            Take the Burnout
+            <span className="text-foil mt-2 block font-display italic">Self-Assessment</span>
+          </>
+        }
+      />
+      <motion.div {...rise(reduce, 0.08)} className="mt-10">
+        <p className="copy-luxe mx-auto max-w-[62ch] text-pretty">{BURNOUT_BODY}</p>
+        <LuxeButton
+          variant="foil"
+          size="lg"
+          to={BURNOUT_QUIZ_ROUTE}
+          className="mt-9 w-full tracking-[0.14em] sm:w-auto sm:tracking-[0.2em]"
+        >
+          {BURNOUT_CTA}
+        </LuxeButton>
       </motion.div>
     </Section>
   );
@@ -1016,10 +1234,20 @@ function ReserveSection() {
           className="mt-8 p-6 text-center sm:p-8"
         >
           <p className="text-[0.72rem] font-bold uppercase tracking-[0.13em] text-gold sm:text-[0.7rem] sm:tracking-[0.22em]">
-            {RESERVE_EARLY_LABEL}
+            {RESERVE_INCLUDED_LABEL}
           </p>
-          <p className="copy-luxe mx-auto mt-4 max-w-xl text-pretty text-sm">
-            {RESERVE_EARLY_BODY}
+          <ul className="mx-auto mt-5 max-w-xl space-y-3 text-left">
+            {RESERVE_INCLUDED.map((item) => (
+              <li key={item} className="flex gap-3">
+                <span aria-hidden className="mt-[0.1rem] shrink-0 text-[0.7rem] text-gold">
+                  ✦
+                </span>
+                <span className="copy-luxe min-w-0 text-pretty text-sm">{item}</span>
+              </li>
+            ))}
+          </ul>
+          <p className="copy-luxe mx-auto mt-5 max-w-xl text-pretty text-xs">
+            {RESERVE_INCLUDED_NOTE}
           </p>
         </GlassCard>
 
@@ -1033,7 +1261,7 @@ function ReserveSection() {
         className="mx-auto mt-10 grid max-w-md list-none grid-cols-1 items-stretch gap-6 sm:max-w-4xl sm:grid-cols-2 sm:gap-7"
       >
         {RESERVE_OPTIONS.map((option) => (
-          <RevealItem key={option.href} as="li" className="h-full">
+          <RevealItem key={option.title} as="li" className="h-full">
             <GlassCard
               accent={option.accent}
               className="flex h-full flex-col overflow-hidden p-7 sm:p-8"
@@ -1050,9 +1278,7 @@ function ReserveSection() {
               <LuxeButton
                 variant={option.primary ? "foil" : "glass"}
                 size="sm"
-                href={option.href}
-                target="_blank"
-                rel="noopener noreferrer"
+                to={option.href}
                 className="mt-7 min-h-[44px] w-full tracking-[0.12em]"
               >
                 {option.cta}
@@ -1416,7 +1642,22 @@ function FaqSection() {
                 className="overflow-hidden"
               >
                 <div aria-hidden className="rule-faint mx-6 w-auto" />
-                <p className="copy-luxe px-6 pb-6 pt-5 text-pretty text-sm">{faq.a}</p>
+                <div className="px-6 pb-6 pt-5">
+                  <p className="copy-luxe text-pretty text-sm">{faq.a}</p>
+                  {faq.link && (
+                    // The collapsed panel is aria-hidden, so its link leaves the
+                    // tab order with it.
+                    <p className="mt-4 text-sm">
+                      <Link
+                        to={faq.link.to}
+                        tabIndex={isOpen ? undefined : -1}
+                        className="text-orchid underline decoration-white/20 underline-offset-[6px] transition-colors duration-300 ease-luxe hover:text-gold hover:decoration-gold/60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold"
+                      >
+                        {faq.link.label} &rarr;
+                      </Link>
+                    </p>
+                  )}
+                </div>
               </motion.div>
             </GlassCard>
           );

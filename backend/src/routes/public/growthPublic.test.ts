@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { contactFromSubmission, publicFormFields } from "./growthPublic";
+import { contactFromSubmission, isAutomatedSubmission, publicFormFields } from "./growthPublic";
 
 describe("public form identity fields", () => {
   it("adds name and email to an old form without duplicating newer starter fields", () => {
@@ -10,6 +10,32 @@ describe("public form identity fields", () => {
       { key: "email", label: "Email", type: "email" },
       { key: "state", label: "State", type: "text" },
     ])).toHaveLength(3);
+  });
+});
+
+/**
+ * The form builder's public forms had no bot trap at all, while the lead and
+ * event forms beside them did. These pin the two signals and, as importantly,
+ * that a reply without them still counts as a person's.
+ */
+describe("isAutomatedSubmission", () => {
+  it("catches a filled honeypot, whatever the timing says", () => {
+    expect(isAutomatedSubmission({ company: "Acme Ltd", elapsedMs: 60_000 })).toBe(true);
+    expect(isAutomatedSubmission({ company: "https://spam.example" })).toBe(true);
+  });
+
+  it("catches a form returned faster than anyone can read it", () => {
+    expect(isAutomatedSubmission({ company: "", elapsedMs: 0 })).toBe(true);
+    expect(isAutomatedSubmission({ elapsedMs: 1999 })).toBe(true);
+  });
+
+  it("lets a person through", () => {
+    expect(isAutomatedSubmission({ company: "", elapsedMs: 2000 })).toBe(false);
+    expect(isAutomatedSubmission({ company: "   ", elapsedMs: 45_000 })).toBe(false);
+  });
+
+  it("lets through a reply from a page that predates the trap", () => {
+    expect(isAutomatedSubmission({})).toBe(false);
   });
 });
 

@@ -1364,11 +1364,38 @@ const orderReadParamsSchema = z.object({
 });
 
 /**
+ * Where one of an order's two emails has got to, as the success page may say it.
+ *
+ *  - `sent`    — the transport accepted it.
+ *  - `pending` — expected, but not written down as sent yet. Delivery runs in the
+ *                webhook just after the order turns 'paid', so a page polling for
+ *                'paid' can arrive a moment before the email does.
+ *  - `failed`  — it was tried and did not go.
+ *  - `off`     — deliberately not sent: receipts are switched off (or this was a
+ *                free order under the "only when money changed hands" rule), the
+ *                offer sends no welcome, or the purchase was a gift.
+ */
+type OrderEmailState = "sent" | "pending" | "failed" | "off";
+
+const EMAIL_WENT: ReadonlySet<string> = new Set(["sent", "delivered"]);
+const EMAIL_NOT_YET: ReadonlySet<string> = new Set(["queued"]);
+
+function orderEmailState(expected: boolean, logged: string | undefined): OrderEmailState {
+  if (!expected) return "off";
+  if (logged === undefined || EMAIL_NOT_YET.has(logged)) return "pending";
+  return EMAIL_WENT.has(logged) ? "sent" : "failed";
+}
+
+/**
  * GET /api/checkout/order/:id
  *
  * The success page's view of its own order. `status` is whatever the database
  * holds, and the database only ever reaches 'paid' through the webhook — a
  * browser landing here, however it got the id, cannot make an order look paid.
+ *
+ * The same goes for the emails: `receiptEmail` and `accessEmail` are read from
+ * the delivery log, so the page can only say "we sent your receipt" when the
+ * log says so too.
  */
 checkoutOfferRouter.get(
   "/checkout/order/:id",
@@ -1395,11 +1422,14 @@ checkoutOfferRouter.get(
       offer_title: string | null;
       redirect_url: string | null;
       thank_you_page_id: string | null;
+      send_welcome_email: boolean | null;
+      gift_recipient_email: string | null;
     }>(
       `SELECT o.id, o.member_id, o.status, o.email, o.currency, o.subtotal_cents,
               o.discount_cents, o.tax_cents, o.total_cents, o.coupon_code, o.created_at,
+              o.gift_recipient_email,
               f.slug AS offer_slug, f.title AS offer_title,
-              f.redirect_url, f.thank_you_page_id
+              f.redirect_url, f.thank_you_page_id, f.send_welcome_email
          FROM orders o
          LEFT JOIN offers f ON f.id = o.offer_id
         WHERE o.id = $1`,
@@ -1425,9 +1455,41 @@ checkoutOfferRouter.get(
       [orderId]
     );
 
+    // The latest attempt per topic: a replayed webhook can write a second row,
+    // and the newest one is what actually happened last.
+    const mail = await pool.query<{ topic: string; status: string }>(
+      `SELECT DISTINCT ON (topic) topic, status
+         FROM email_messages
+        WHERE source_type = 'transactional'
+          AND source_id = $1
+          AND topic IN ('purchase_receipt', 'purchase_access')
+        ORDER BY topic, id DESC`,
+      [orderId]
+    );
+    const logged = new Map(mail.rows.map((row) => [row.topic, row.status]));
+
+    // The same two decisions `deliverPurchase` makes, so "off" here means the
+    // email was never going to be sent rather than that it has gone missing.
+    const paymentSettings = await readSetting("customer_payments");
+    const receiptExpected =
+      Boolean(order.email) &&
+      paymentSettings.sendReceipts !== false &&
+      (String(paymentSettings.receiptRule ?? "every") !== "nonzero" || order.total_cents > 0);
+    const accessExpected =
+      Boolean(order.email) && !order.gift_recipient_email && order.send_welcome_email !== false;
+
+    const receiptEmail = orderEmailState(receiptExpected, logged.get("purchase_receipt"));
+    const accessEmail = orderEmailState(accessExpected, logged.get("purchase_access"));
+
     res.json({
       orderId: order.id,
       status: order.status,
+      receiptEmail,
+      accessEmail,
+      receiptSent: receiptEmail === "sent",
+      receiptSuppressed: receiptEmail === "off",
+      accessEmailSent: accessEmail === "sent",
+      accessEmailSuppressed: accessEmail === "off",
       email: order.email,
       currency: order.currency,
       subtotalCents: order.subtotal_cents,

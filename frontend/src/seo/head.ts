@@ -13,6 +13,9 @@ export const DEFAULT_DESCRIPTION =
   "Yvette Howard, LCSW helps therapists and clinicians break free from Alma, Headway, Talkspace, and similar platforms to build a profitable, sustainable private practice that's actually theirs.";
 const DEFAULT_IMAGE = "/images/yvette-hero-portrait.jpg";
 const TWITTER_HANDLE = "@bossclinician";
+/** Served by the API (routes/public/seo.ts) at the source site's own feed path. */
+const FEED_PATH = "/blog.rss";
+const FEED_TITLE = "Boss Clinician Blog";
 
 /** Attribute marking a tag this module owns, so it can replace its own work. */
 export const MANAGED_ATTR = "data-bc-seo";
@@ -103,7 +106,17 @@ export function resolveHead(
   return {
     title,
     meta,
-    links: [{ rel: "canonical", href: canonical }],
+    links: [
+      { rel: "canonical", href: canonical },
+      // Feed autodiscovery, on every page rather than only under /blog: it is
+      // how a reader pointed at the home page finds the feed at all.
+      {
+        rel: "alternate",
+        type: "application/rss+xml",
+        title: FEED_TITLE,
+        href: `${origin}${FEED_PATH}`,
+      },
+    ],
     jsonLd,
   };
 }
@@ -143,7 +156,12 @@ export function renderHead(head: ResolvedHead): string {
   }
 
   for (const link of head.links) {
-    lines.push(`<link ${MANAGED_ATTR} rel="${escapeHtml(link.rel)}" href="${escapeHtml(link.href)}" />`);
+    const extra =
+      (link.type ? ` type="${escapeHtml(link.type)}"` : "") +
+      (link.title ? ` title="${escapeHtml(link.title)}"` : "");
+    lines.push(
+      `<link ${MANAGED_ATTR} rel="${escapeHtml(link.rel)}"${extra} href="${escapeHtml(link.href)}" />`,
+    );
   }
 
   for (const node of head.jsonLd) {
@@ -188,6 +206,8 @@ export function applyHead(head: ResolvedHead): void {
     const el = document.createElement("link");
     el.setAttribute(MANAGED_ATTR, "");
     el.setAttribute("rel", link.rel);
+    if (link.type) el.setAttribute("type", link.type);
+    if (link.title) el.setAttribute("title", link.title);
     el.setAttribute("href", link.href);
     fragment.appendChild(el);
   }

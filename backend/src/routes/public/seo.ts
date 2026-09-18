@@ -4,15 +4,20 @@ import { env } from "../../config/env";
 import { asyncHandler } from "../../utils/asyncHandler";
 
 /**
- * `/sitemap.xml` and `/robots.txt`.
+ * `/sitemap.xml`, `/robots.txt` and `/blog.rss`.
  *
- * Both paths previously fell through to the SPA, which answered HTTP 200 with
+ * The first two previously fell through to the SPA, which answered HTTP 200 with
  * an HTML document. That is worse than a 404: a crawler asked for a sitemap,
  * got a page, and had no way to know the difference. They are served from the
  * backend so they can be generated from what is actually published rather than
  * maintained by hand.
  *
- * nginx routes these two paths here explicitly — see nginx/site.conf.
+ * `/blog.rss` is the same story one release later: the source site publishes
+ * its blog feed at exactly that path, feed readers and a few aggregators hold
+ * that URL, and here it answered 200 with an HTML shell — which a feed reader
+ * reports as "this feed is broken", not as "this feed has moved".
+ *
+ * nginx routes these three paths here explicitly — see nginx/site.conf.
  */
 export const seoRouter = Router();
 
@@ -59,6 +64,10 @@ const STATIC_ROUTES: SitemapEntry[] = [
   { loc: "/", changefreq: "weekly", priority: "1.0" },
   { loc: "/about", changefreq: "monthly", priority: "0.8" },
   { loc: "/work-with-me", changefreq: "monthly", priority: "0.9" },
+  // The two programme sales pages. Same paths as on the source site, where
+  // both are indexed.
+  { loc: "/club", changefreq: "monthly", priority: "0.9" },
+  { loc: "/lounge", changefreq: "monthly", priority: "0.9" },
   { loc: "/courses", changefreq: "weekly", priority: "0.9" },
   { loc: "/store", changefreq: "weekly", priority: "0.8" },
   { loc: "/resources", changefreq: "weekly", priority: "0.7" },
@@ -152,6 +161,97 @@ seoRouter.get(
     res.type("application/xml");
     res.set("Cache-Control", "public, max-age=3600");
     res.send(renderSitemap(entries));
+  })
+);
+
+/* ── /blog.rss ─────────────────────────────────────────────────────────── */
+
+// A type alias, not an interface: pg's `QueryResultRow` constraint is an index
+// signature, which an interface does not implicitly satisfy.
+type FeedRow = {
+  slug: string;
+  title: string;
+  excerpt: string;
+  tags: string[] | null;
+  author: string;
+  published_at: string | Date | null;
+  created_at: string | Date;
+};
+
+/** How many posts a feed carries. Readers poll; nobody pages an RSS file. */
+const FEED_LIMIT = 50;
+
+/** RFC 822, which is what RSS 2.0 specifies and what `toUTCString` produces. */
+function rfc822(value: string | Date | null | undefined): string | null {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toUTCString();
+}
+
+function renderFeed(base: string, rows: FeedRow[]): string {
+  const items = rows
+    .map((row) => {
+      const url = `${base}/blog/${encodeURIComponent(row.slug)}`;
+      const published = rfc822(row.published_at ?? row.created_at);
+      const parts = [
+        `      <title>${xmlEscape(row.title)}</title>`,
+        `      <link>${xmlEscape(url)}</link>`,
+        // The permalink is the identity. A reader that has already shown a post
+        // must not show it again because its title was edited.
+        `      <guid isPermaLink="true">${xmlEscape(url)}</guid>`,
+      ];
+      if (published) parts.push(`      <pubDate>${published}</pubDate>`);
+      if (row.excerpt) parts.push(`      <description>${xmlEscape(row.excerpt)}</description>`);
+      // RSS 2.0's <author> is an email address, which these rows do not carry;
+      // dc:creator is the element for a name.
+      if (row.author) parts.push(`      <dc:creator>${xmlEscape(row.author)}</dc:creator>`);
+      for (const tag of row.tags ?? []) parts.push(`      <category>${xmlEscape(tag)}</category>`);
+      return `    <item>\n${parts.join("\n")}\n    </item>`;
+    })
+    .join("\n");
+
+  const newest = rfc822(rows[0]?.published_at ?? rows[0]?.created_at);
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <channel>
+    <title>Boss Clinician Blog</title>
+    <link>${xmlEscape(`${base}/blog`)}</link>
+    <description>Private practice strategy for therapists and clinicians, from Yvette Howard, LCSW.</description>
+    <language>en-us</language>
+    <atom:link href="${xmlEscape(`${base}/blog.rss`)}" rel="self" type="application/rss+xml" />${
+      newest ? `\n    <lastBuildDate>${newest}</lastBuildDate>` : ""
+    }
+${items}
+  </channel>
+</rss>
+`;
+}
+
+seoRouter.get(
+  "/blog.rss",
+  asyncHandler(async (_req, res) => {
+    // Same rule as the sitemap: a database that cannot be read must not turn the
+    // feed into a 500, which a reader treats as the feed being gone. An empty
+    // channel is a valid document and the next poll fills it.
+    let rows: FeedRow[] = [];
+    try {
+      const result = await pool.query<FeedRow>(
+        `SELECT slug, title, excerpt, tags, author, published_at, created_at
+           FROM blog_posts
+          WHERE published = true
+          ORDER BY published_at DESC NULLS LAST, created_at DESC
+          LIMIT $1`,
+        [FEED_LIMIT]
+      );
+      rows = result.rows;
+    } catch (err) {
+      console.error("[rss] served an empty feed:", (err as Error).message);
+    }
+
+    res.type("application/rss+xml");
+    res.set("Cache-Control", "public, max-age=900");
+    res.send(renderFeed(env.publicSiteUrl, rows));
   })
 );
 

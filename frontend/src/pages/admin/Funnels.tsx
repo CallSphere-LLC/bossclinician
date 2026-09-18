@@ -6,6 +6,7 @@ import {
   Bold,
   CheckCircle2,
   ChevronDown,
+  Circle,
   ChevronUp,
   Copy,
   ExternalLink,
@@ -86,6 +87,172 @@ const BLUEPRINT_SUMMARY: Record<string, string> = {
 };
 
 /* ------------------------------------------------------- formatting toolbar */
+
+/** The state of a blueprint's working parts — `GET /admin/growth/funnels/:id`. */
+interface FunnelReadiness {
+  sequenceStatus: string | null;
+  sequenceEmailCount: number;
+  formPublished: boolean | null;
+}
+
+/** One line of the readiness card. `done` is undefined while it is unknown. */
+interface ReadinessItem {
+  key: string;
+  done: boolean | undefined;
+  label: string;
+  href?: string;
+}
+
+const READINESS_ROW =
+  "flex min-h-11 items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold text-ink";
+
+function ReadinessRow({ item }: { item: ReadinessItem }) {
+  const className = cn(
+    READINESS_ROW,
+    item.done === false ? "border-gold/40 bg-gold/5" : "border-hairline",
+    item.href && "hover:border-plum",
+  );
+  const content = (
+    <>
+      {item.done ? (
+        <CheckCircle2 className="size-4 shrink-0 text-green" aria-hidden />
+      ) : (
+        <Circle
+          className={cn("size-4 shrink-0", item.done === false ? "text-gold" : "text-ink-soft")}
+          aria-hidden
+        />
+      )}
+      <span>
+        <span className="sr-only">{item.done ? "Done: " : item.done === false ? "To do: " : ""}</span>
+        {item.label}
+      </span>
+    </>
+  );
+  return item.href ? (
+    <a className={className} href={item.href}>
+      {content}
+    </a>
+  ) : (
+    <div className={className}>{content}</div>
+  );
+}
+
+/**
+ * What a blueprint funnel still needs before it works end to end.
+ *
+ * Every line used to be a green tick for a part that merely existed — a funnel
+ * whose follow-up was an unsent draft read "Ready and live". Each tick is now a
+ * fact the server reported. A draft sequence on an unpublished funnel is not a
+ * line of its own: publishing is what switches it on, so that is the step.
+ */
+function readinessItems(
+  funnel: Funnel,
+  stageCount: number | null,
+  parts: FunnelReadiness | null | undefined,
+): ReadinessItem[] {
+  const items: ReadinessItem[] = [];
+
+  if (funnel.formId) {
+    const done = parts ? parts.formPublished === true : undefined;
+    items.push({
+      key: "form",
+      done,
+      label: done === false ? "Publish the sign-up form" : "Sign-up form and joined tag",
+      href: `/admin/marketing/forms-v2?form=${funnel.formId}`,
+    });
+  }
+
+  if (funnel.sequenceId) {
+    const href = `/admin/marketing/sequences/${funnel.sequenceId}`;
+    if (!parts) {
+      items.push({ key: "sequence", done: undefined, label: "Follow-up email sequence", href });
+    } else if (parts.sequenceEmailCount === 0) {
+      items.push({ key: "sequence", done: false, label: "Add an email to the follow-up sequence", href });
+    } else {
+      const emails = `${parts.sequenceEmailCount} email${parts.sequenceEmailCount === 1 ? "" : "s"}`;
+      const status = parts.sequenceStatus;
+      items.push(
+        status === "active"
+          ? { key: "sequence", done: true, label: `Follow-up sequence switched on, ${emails}`, href }
+          : status === "draft" && !funnel.published
+            ? { key: "sequence", done: true, label: `Follow-up sequence written, ${emails} — switches on when you publish`, href }
+            : { key: "sequence", done: false, label: `Switch on the follow-up sequence — it is ${status === "draft" ? "still a draft" : (status ?? "off")}`, href },
+      );
+    }
+  }
+
+  items.push({
+    key: "stages",
+    done: stageCount === null ? undefined : stageCount > 0,
+    label:
+      stageCount === 0
+        ? "Add a first stage"
+        : `${stageCount ?? 0} connected stage${stageCount === 1 ? "" : "s"}`,
+  });
+
+  if (funnel.offerId) {
+    items.push({ key: "offer", done: true, label: "Attached offer", href: `/admin/offers/${funnel.offerId}` });
+  } else if (["sales", "launch"].includes(funnel.kind)) {
+    items.push({ key: "offer", done: false, label: "Choose an offer before publishing" });
+  }
+
+  items.push({
+    key: "published",
+    done: funnel.published,
+    label: funnel.published ? "Published" : "Publish the funnel",
+  });
+
+  return items;
+}
+
+/** The readiness card: real ticks, and a count of what is left. */
+function BlueprintReadiness({
+  funnel,
+  stageCount,
+  readiness,
+}: {
+  funnel: Funnel;
+  stageCount: number | null;
+  /** `undefined` while the check is in flight, `null` once it has failed. */
+  readiness: FunnelReadiness | null | undefined;
+}) {
+  const items = readinessItems(funnel, stageCount, readiness);
+  const failed = readiness === null;
+  const checking = !failed && (readiness === undefined || stageCount === null);
+  const left = items.filter((item) => item.done === false).length;
+  return (
+    <Card className="p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="font-semibold text-ink">Blueprint readiness</p>
+          <p className="mt-1 text-sm text-ink-soft">
+            {failed
+              ? "We couldn't check the sign-up form and follow-up emails just now. Try refreshing the page."
+              : checking
+                ? "Checking the working parts of this funnel."
+                : left === 0
+                  ? "Every working part is in place and switched on."
+                  : "What is still to do before this funnel works from start to finish."}
+          </p>
+        </div>
+        <Badge tone={failed || checking ? "neutral" : left === 0 ? "green" : "gold"}>
+          {failed
+            ? "Not checked"
+            : checking
+              ? "Checking"
+              : left === 0
+                ? "Ready and live"
+                : `${left} step${left === 1 ? "" : "s"} left`}
+        </Badge>
+      </div>
+      <div className="mt-4 grid gap-2 sm:grid-cols-2">
+        {items.map((item) => (
+          <ReadinessRow key={item.key} item={item} />
+        ))}
+      </div>
+    </Card>
+  );
+}
 
 type FormatKind = "bold" | "italic" | "bullets" | "link";
 
@@ -190,6 +357,8 @@ export default function Funnels() {
   const [funnels, setFunnels] = useState<Funnel[] | null>(null);
   const [active, setActive] = useState<Funnel | null>(null);
   const [steps, setSteps] = useState<FunnelStep[] | null>(null);
+  // `undefined` while the check is in flight, `null` once it has failed.
+  const [readiness, setReadiness] = useState<FunnelReadiness | null | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
   const [funnelDraft, setFunnelDraft] = useState<Partial<Funnel> | null>(null);
   const [stepDraft, setStepDraft] = useState<Partial<FunnelStep> | null>(null);
@@ -247,6 +416,25 @@ export default function Funnels() {
   useEffect(() => {
     if (active) loadSteps(active.id);
   }, [active, loadSteps]);
+
+  /* Re-read whenever the selection is replaced, which a save does too — so
+     publishing a funnel is followed by the card showing what publishing did. */
+  useEffect(() => {
+    if (!active) return;
+    let cancelled = false;
+    setReadiness(undefined);
+    adminApi
+      .growthGet<Funnel & { readiness?: FunnelReadiness }>("funnels", active.id)
+      .then((detail) => {
+        if (!cancelled) setReadiness(detail.readiness ?? null);
+      })
+      .catch(() => {
+        if (!cancelled) setReadiness(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [active]);
 
   async function saveFunnel(e: FormEvent) {
     e.preventDefault();
@@ -454,43 +642,11 @@ export default function Funnels() {
             )}
 
             {active && (active.formId || active.sequenceId || active.tagId) && (
-              <Card className="p-5">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <p className="font-semibold text-ink">Blueprint readiness</p>
-                    <p className="mt-1 text-sm text-ink-soft">
-                      The working parts were created together and are ready for you to personalise.
-                    </p>
-                  </div>
-                  <Badge tone={active.published ? "green" : "neutral"}>
-                    {active.published ? "Ready and live" : "Ready to review"}
-                  </Badge>
-                </div>
-                <div className="mt-4 grid gap-2 sm:grid-cols-2">
-                  {active.formId && (
-                    <a className="flex min-h-11 items-center gap-2 rounded-lg border border-hairline px-3 text-sm font-semibold text-ink hover:border-plum" href={`/admin/marketing/forms-v2?form=${active.formId}`}>
-                      <CheckCircle2 className="size-4 text-green" /> Sign-up form and joined tag
-                    </a>
-                  )}
-                  {active.sequenceId && (
-                    <a className="flex min-h-11 items-center gap-2 rounded-lg border border-hairline px-3 text-sm font-semibold text-ink hover:border-plum" href={`/admin/marketing/sequences/${active.sequenceId}`}>
-                      <CheckCircle2 className="size-4 text-green" /> Follow-up email sequence
-                    </a>
-                  )}
-                  <div className="flex min-h-11 items-center gap-2 rounded-lg border border-hairline px-3 text-sm font-semibold text-ink">
-                    <CheckCircle2 className="size-4 text-green" /> {steps?.length ?? 0} connected stages
-                  </div>
-                  {active.offerId ? (
-                    <a className="flex min-h-11 items-center gap-2 rounded-lg border border-hairline px-3 text-sm font-semibold text-ink hover:border-plum" href={`/admin/offers/${active.offerId}`}>
-                      <CheckCircle2 className="size-4 text-green" /> Attached offer
-                    </a>
-                  ) : ["sales", "launch"].includes(active.kind) ? (
-                    <div className="flex min-h-11 items-center gap-2 rounded-lg border border-gold/40 bg-gold/5 px-3 text-sm text-ink">
-                      Choose an offer before publishing
-                    </div>
-                  ) : null}
-                </div>
-              </Card>
+              <BlueprintReadiness
+                funnel={active}
+                stageCount={steps ? steps.length : null}
+                readiness={readiness}
+              />
             )}
 
             <Card>

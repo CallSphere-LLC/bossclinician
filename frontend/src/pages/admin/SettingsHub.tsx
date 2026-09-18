@@ -11,6 +11,7 @@ import {
   GraduationCap,
   Mail,
   Plug,
+  ScrollText,
   ShieldCheck,
   Users,
   type LucideIcon,
@@ -18,6 +19,7 @@ import {
 import { settingsApi, type SendingIdentityReport, type SettingGroup } from "@/lib/settingsApi";
 import { Badge, Card, ErrorNotice, PageHeader, Skeleton } from "@/pages/admin/ui/primitives";
 import { pluralize } from "@/pages/admin/ui/friendly";
+import { useAuth } from "@/hooks/useAuth";
 
 /**
  * The front door to settings.
@@ -84,6 +86,10 @@ function DestinationCard({ destination, index }: { destination: Destination; ind
 }
 
 export default function SettingsHub() {
+  const { user } = useAuth();
+  // The same two roles the server lets read it. Anyone else would only be
+  // shown a door that answers "you can't come in".
+  const canReadActivity = user?.role === "owner" || user?.role === "admin";
   const [groups, setGroups] = useState<SettingGroup[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [identity, setIdentity] = useState<SendingIdentityReport | null>(null);
@@ -150,6 +156,18 @@ export default function SettingsHub() {
       icon: Plug,
       meta: "Zapier and anything else you plug in",
     },
+    ...(canReadActivity
+      ? [
+          {
+            to: "/admin/settings/activity",
+            label: "Activity log",
+            description:
+              "Who changed what in this admin, and when — with what each record looked like before and after.",
+            icon: ScrollText,
+            meta: "Every change, newest first",
+          },
+        ]
+      : []),
   ];
 
   return (

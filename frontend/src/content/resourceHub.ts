@@ -2,8 +2,11 @@
  * Resource Hub content.
  *
  * Section order, copy, and accent colours mirror the approved design. Card CTAs
- * point at the bossclinician.com funnels (external, open in a new tab); the
- * section CTA bars point at the offer pages.
+ * are internal routes — never absolute bossclinician.com URLs, which after the
+ * domain cutover point back at this app. Each goes where the redirect map
+ * already sends that funnel's legacy path (opt-ins → /resources, quizzes →
+ * /practice-quiz) until the funnel itself is rebuilt here. The section CTA bars
+ * point at the offer pages (/club, /lounge, /work-with-me).
  */
 
 /** Accent colours available to a hub section. Maps to the brand tokens. */
@@ -74,7 +77,7 @@ export const avatarSections: AvatarSectionData[] = [
         description:
           "Just starting your practice or want to make sure you're building on the right foundation? This guide walks you through exactly what to set up first so you don't waste time or money on the wrong things.",
         ctaLabel: "Download the Free Kick Start Guide",
-        href: "https://www.bossclinician.com/kickstartguide",
+        href: "/resources",
       },
       {
         id: "insurance-guide",
@@ -83,7 +86,7 @@ export const avatarSections: AvatarSectionData[] = [
         description:
           "One of the most confusing decisions new practice owners face. This guide breaks it down simply so you can make the right call for your practice model, your clients, and your income goals.",
         ctaLabel: "Download the Free Guide",
-        href: "https://www.bossclinician.com/insurance-guide",
+        href: "/resources",
       },
       {
         id: "ready-quiz",
@@ -92,13 +95,13 @@ export const avatarSections: AvatarSectionData[] = [
         description:
           "An honest 2-minute quiz for therapists thinking about leaving their agency or platform. Answer 6 quick questions and find out if you are ready, almost ready, or what needs to happen first — plus your personalized next steps.",
         ctaLabel: "Take the Free Quiz",
-        href: "https://www.bossclinician.com/ready-quiz",
+        href: "/practice-quiz",
       },
     ],
     cta: {
       body: "Ready for the full foundation-building experience — live coaching, monthly kits, and a community that actually gets it?",
       label: "Join the Boss Clinician Club",
-      to: "/work-with-me",
+      to: "/club",
     },
   },
   {
@@ -119,7 +122,7 @@ export const avatarSections: AvatarSectionData[] = [
         description:
           "A free, fillable audit to identify exactly what's draining your time and income. Run every task through a 4-question clarity filter and walk away with a clear reset plan — and permission to stop what isn't working.",
         ctaLabel: "Get the Free Audit",
-        href: "https://www.bossclinician.com/reset-audit",
+        href: "/resources",
       },
       {
         id: "marketing-plan",
@@ -128,13 +131,13 @@ export const avatarSections: AvatarSectionData[] = [
         description:
           "Why your marketing isn't working — and exactly what to do instead. A simple, sustainable system to attract aligned clients without posting every day or depending on platforms to send referrals.",
         ctaLabel: "Get the Free 5-Step Marketing Plan",
-        href: "https://www.bossclinician.com/5-step-marketing",
+        href: "/resources",
       },
     ],
     cta: {
       body: "Ready for monthly live coaching, done-for-you tools, and a community of clinicians scaling at your level?",
       label: "Join the Boss Clinician Lounge",
-      to: "/work-with-me",
+      to: "/lounge",
     },
   },
   {
@@ -155,7 +158,7 @@ export const avatarSections: AvatarSectionData[] = [
         description:
           "A self-assessment for group practice owners who built the team — but still can't step back. Score yourself across 5 common blockers, identify exactly what's keeping you stuck, and walk away with a clear picture of what to address first.",
         ctaLabel: "Download the Free Assessment",
-        href: "https://www.bossclinician.com/boss-assessment",
+        href: "/practice-quiz",
       },
       {
         id: "hire-quiz",
@@ -164,7 +167,7 @@ export const avatarSections: AvatarSectionData[] = [
         description:
           "Thinking about hiring but not sure if your practice is ready? Take this 5-minute quiz to find out exactly where you stand — and what to do next. Whether you're ready or not, you'll leave with a clear, personalized action plan.",
         ctaLabel: "Take the Free Quiz",
-        href: "https://www.bossclinician.com/hiring-quiz",
+        href: "/practice-quiz",
       },
     ],
     cta: {

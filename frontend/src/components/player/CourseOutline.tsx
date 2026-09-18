@@ -83,6 +83,11 @@ function ModuleHeading({ module, index }: { module: OutlineModule; index: number
         <h3 className="text-balance font-display text-[0.98rem] leading-snug text-white">
           {module.title}
         </h3>
+        {module.summary && (
+          <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-orchid-dim">
+            {module.summary}
+          </p>
+        )}
         <p className="mt-1 text-[0.7rem] uppercase tracking-[0.14em] text-orchid-faint">
           {module.lessons.length > 0 && (
             <span>

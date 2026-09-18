@@ -18,9 +18,11 @@ import { cn } from "@/lib/cn";
 const EASE_LUXE: [number, number, number, number] = [0.22, 1, 0.36, 1];
 const VIEWPORT = { once: true, margin: "-12% 0px -8% 0px" } as const;
 
-/** Lives on the source site only; kept absolute until the route is built here. */
-const QUIZ_URL = "https://www.bossclinician.com/offer-quiz";
-const EXTERNAL = { target: "_blank", rel: "noopener noreferrer" } as const;
+/**
+ * Internal on purpose. An absolute bossclinician.com link becomes a link to this
+ * very app at cutover; the redirect map already sends /offer-quiz here.
+ */
+const QUIZ_URL = "/practice-quiz";
 
 /**
  * The founder block, verbatim and in source order. Each entry is one
@@ -232,8 +234,7 @@ export default function Blog() {
           <LuxeButton
             variant="foil"
             size="lg"
-            href={QUIZ_URL}
-            {...EXTERNAL}
+            to={QUIZ_URL}
             className="w-full sm:w-auto"
           >
             Take the Free Quiz →

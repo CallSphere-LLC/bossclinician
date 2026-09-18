@@ -5,14 +5,17 @@ import {
   ArrowDown,
   ArrowUp,
   Clock,
+  Copy,
   Mail,
   Pause,
   Play,
   Plus,
   Send,
   Trash2,
+  UserMinus,
 } from "lucide-react";
 import { toast } from "sonner";
+import { adminApi } from "@/lib/api";
 import { formatDateTime, formatNumber } from "@/lib/format";
 import {
   describeWait,
@@ -26,11 +29,14 @@ import {
   type SequenceEmailStats,
   type SequenceSubscriber,
 } from "@/lib/marketingApi";
+import type { SequenceSubscriberStats } from "@/types/admin";
 import {
   Badge,
   Button,
   Card,
   CardHeader,
+  Chip,
+  chipRowStyles,
   EmptyState,
   ErrorNotice,
   Field,
@@ -88,6 +94,19 @@ const BLANK_EMAIL: EmailDraft = {
   enabled: true,
 };
 
+/**
+ * The reason recorded when somebody left, in words.
+ *
+ * Most are already plain ("bought something", "removed by hand"). The one that
+ * is not is an automation's, which is stored with its number.
+ */
+function describeExitReason(reason: string): string {
+  const trimmed = reason.trim();
+  if (!trimmed) return "no reason recorded";
+  if (/^automation \d+$/i.test(trimmed)) return "taken off by an automation";
+  return trimmed.charAt(0).toLowerCase() + trimmed.slice(1);
+}
+
 export default function SequenceEditor() {
   const params = useParams<{ id: string }>();
   const sequenceId = Number(params.id);
@@ -96,6 +115,15 @@ export default function SequenceEditor() {
   const [tags, setTags] = useState<NamedOption[]>([]);
   const [subscribers, setSubscribers] = useState<SequenceSubscriber[] | null>(null);
   const [stats, setStats] = useState<SequenceEmailStats[]>([]);
+  const [subscriberStats, setSubscriberStats] = useState<SequenceSubscriberStats | null>(null);
+  const [offers, setOffers] = useState<NamedOption[]>([]);
+  const [forms, setForms] = useState<NamedOption[]>([]);
+  /** The specific "stop when they…" rules. null until they have loaded. */
+  const [excludes, setExcludes] = useState<{ offers: NamedOption[]; forms: NamedOption[] } | null>(
+    null,
+  );
+  const [excludesError, setExcludesError] = useState(false);
+  const [savingExcludes, setSavingExcludes] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<EmailDraft | null>(null);
   const [showEmailErrors, setShowEmailErrors] = useState(false);
@@ -115,7 +143,16 @@ export default function SequenceEditor() {
       })
       .catch(() => setError("We couldn't load this sequence just now."));
     marketingApi.sequenceSubscribers(sequenceId).then(setSubscribers).catch(() => setSubscribers([]));
-    marketingApi.sequenceStats(sequenceId).then(setStats).catch(() => setStats([]));
+    adminApi
+      .sequenceStats(sequenceId)
+      .then((report) => {
+        setStats(report.emails);
+        setSubscriberStats(report.subscribers);
+      })
+      .catch(() => {
+        setStats([]);
+        setSubscriberStats(null);
+      });
   }, [sequenceId]);
 
   useEffect(load, [load]);
@@ -123,9 +160,87 @@ export default function SequenceEditor() {
   useEffect(() => {
     marketingApi
       .builderOptions()
-      .then((options) => setTags(options.lists.tags ?? []))
-      .catch(() => setTags([]));
+      .then((options) => {
+        setTags(options.lists.tags ?? []);
+        setOffers(options.lists.offers ?? []);
+        setForms(options.lists.forms ?? []);
+      })
+      .catch(() => {
+        setTags([]);
+        setOffers([]);
+        setForms([]);
+      });
   }, []);
+
+  const loadExcludes = useCallback(() => {
+    if (!Number.isFinite(sequenceId)) return;
+    adminApi
+      .sequenceExcludes(sequenceId)
+      .then((saved) => {
+        setExcludes({
+          offers: saved.offers.map((offer) => ({ id: offer.id, name: offer.title })),
+          forms: saved.forms,
+        });
+        setExcludesError(false);
+      })
+      .catch(() => setExcludesError(true));
+  }, [sequenceId]);
+
+  useEffect(loadExcludes, [loadExcludes]);
+
+  /**
+   * Both lists go up together on every change — the server replaces them as a
+   * pair — and the chips wait for the answer, so two quick presses cannot save
+   * over one another.
+   */
+  async function toggleExclude(kind: "offers" | "forms", option: NamedOption) {
+    if (!sequence || !excludes || savingExcludes) return;
+    const current = excludes[kind];
+    const next = {
+      ...excludes,
+      [kind]: current.some((row) => row.id === option.id)
+        ? current.filter((row) => row.id !== option.id)
+        : [...current, option],
+    };
+
+    setExcludes(next);
+    setSavingExcludes(true);
+    try {
+      await adminApi.sequenceExcludesSave(
+        sequence.id,
+        next.offers.map((row) => row.id),
+        next.forms.map((row) => row.id),
+      );
+    } catch (err) {
+      toast.error(friendlyError(err, "sequence"));
+      loadExcludes();
+    } finally {
+      setSavingExcludes(false);
+    }
+  }
+
+  async function saveFolder(value: string) {
+    if (!sequence) return;
+    const folder = value.trim();
+    if (folder === (sequence.folder ?? "")) return;
+    try {
+      await adminApi.sequenceSetFolder(sequence.id, folder);
+      load();
+    } catch (err) {
+      toast.error(friendlyError(err, "sequence"));
+    }
+  }
+
+  async function duplicateEmail(email: SequenceEmail) {
+    if (!sequence) return;
+    try {
+      await adminApi.sequenceEmailDuplicate(sequence.id, email.id);
+      toast.success("Copied. The copy is turned off until you have edited it.");
+      load();
+    } catch (err) {
+      toast.error(friendlyError(err, "email"));
+    }
+  }
 
   async function patch(changes: Parameters<typeof marketingApi.updateSequence>[1]) {
     if (!sequence) return;
@@ -395,6 +510,14 @@ export default function SequenceEditor() {
                     </Button>
                     <Button
                       size="iconSm"
+                      variant="ghost"
+                      aria-label="Duplicate this email"
+                      onClick={() => void duplicateEmail(email)}
+                    >
+                      <Copy />
+                    </Button>
+                    <Button
+                      size="iconSm"
                       variant="dangerGhost"
                       aria-label="Delete this email"
                       onClick={() => void removeEmail(email)}
@@ -482,6 +605,19 @@ export default function SequenceEditor() {
             </select>
           </Field>
 
+          <Field
+            label="Folder"
+            hint="Optional — sequences with the same folder can be filtered together"
+          >
+            <Input
+              key={sequence.folder ?? ""}
+              defaultValue={sequence.folder ?? ""}
+              maxLength={120}
+              onBlur={(event) => void saveFolder(event.target.value)}
+              placeholder="Launch emails"
+            />
+          </Field>
+
           <Field label="Tag them when they finish" hint="Optional">
             <select
               className={selectStyles}
@@ -534,6 +670,73 @@ export default function SequenceEditor() {
         </div>
       </Card>
 
+      {/* ---------------------------------------------------- specific stops */}
+
+      <Card>
+        <CardHeader
+          title="Don't email people who…"
+          subtitle="Narrower than the switch above. Anybody who does one of these is taken off this sequence the moment they do; everybody else carries on."
+          icon={<UserMinus />}
+        />
+        {excludesError ? (
+          <p className="p-5 text-sm text-ink-soft">
+            We couldn't load these just now. Refresh the page to try again.
+          </p>
+        ) : excludes === null ? (
+          <div className="p-5">
+            <Skeleton className="h-20 rounded-xl" />
+          </div>
+        ) : (
+          <div className="grid gap-5 p-5 sm:grid-cols-2">
+            {(
+              [
+                {
+                  kind: "offers",
+                  label: "…have bought",
+                  options: offers,
+                  empty: "You have no offers yet.",
+                },
+                {
+                  kind: "forms",
+                  label: "…have filled in",
+                  options: forms,
+                  empty: "You have no forms yet.",
+                },
+              ] as const
+            ).map((group) => {
+              const chosen = excludes[group.kind];
+              // Something chosen earlier and since archived is still shown, so
+              // it can be taken off again.
+              const options = [
+                ...group.options,
+                ...chosen.filter((row) => !group.options.some((option) => option.id === row.id)),
+              ];
+              return (
+                <div key={group.kind} role="group" aria-label={`Don't email people who ${group.label.slice(1)}`}>
+                  <p className="text-sm font-medium text-ink">{group.label}</p>
+                  {options.length === 0 ? (
+                    <p className="mt-2 text-xs text-ink-soft">{group.empty}</p>
+                  ) : (
+                    <div className={`${chipRowStyles} mt-3`}>
+                      {options.map((option) => (
+                        <Chip
+                          key={option.id}
+                          selected={chosen.some((row) => row.id === option.id)}
+                          disabled={savingExcludes}
+                          onClick={() => void toggleExclude(group.kind, option)}
+                        >
+                          {option.name}
+                        </Chip>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </Card>
+
       {/* ------------------------------------------------------- subscribers */}
 
       <Card>
@@ -541,6 +744,35 @@ export default function SequenceEditor() {
           title="Who is going through this"
           subtitle="The most recent five hundred."
         />
+        {subscriberStats && subscriberStats.subscribed > 0 && (
+          <div className="border-b border-hairline/60 px-5 py-4">
+            <dl className="grid grid-cols-2 gap-4 sm:grid-cols-5">
+              {[
+                { label: "Joined", value: subscriberStats.subscribed },
+                { label: "On it now", value: subscriberStats.active + subscriberStats.paused },
+                { label: "Finished", value: subscriberStats.completed },
+                { label: "Left early", value: subscriberStats.exited },
+                { label: "Unsubscribed", value: subscriberStats.unsubscribed },
+              ].map((figure) => (
+                <div key={figure.label}>
+                  <dt className="text-xs text-ink-soft">{figure.label}</dt>
+                  <dd className="font-display text-xl text-ink">{formatNumber(figure.value)}</dd>
+                </div>
+              ))}
+            </dl>
+            {subscriberStats.exitReasons.length > 0 && (
+              <p className="mt-3 text-xs text-ink-soft">
+                Why people left early:{" "}
+                {subscriberStats.exitReasons
+                  .map(
+                    (row) =>
+                      `${describeExitReason(row.reason)} (${formatNumber(row.count)})`,
+                  )
+                  .join(" · ")}
+              </p>
+            )}
+          </div>
+        )}
         {subscribers === null ? (
           <div className="p-5">
             <Skeleton className="h-24 rounded-xl" />
@@ -678,6 +910,7 @@ export default function SequenceEditor() {
               className="sm:col-span-2"
             >
               <EmailComposer
+                source="sequence"
                 rows={12}
                 value={editing.bodyMd}
                 onChange={(bodyMd) =>

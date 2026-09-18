@@ -49,6 +49,7 @@ import {
 import { Modal, useConfirm } from "@/pages/admin/ui/Dialog";
 import { friendlyError, humaniseKey, orNone, pluralize } from "@/pages/admin/ui/friendly";
 import ContactFilesCard from "@/pages/admin/ContactFilesCard";
+import ContactAccessCard from "@/pages/admin/ContactAccessCard";
 
 /**
  * One person, and everything they have ever done.
@@ -398,6 +399,13 @@ export default function ContactDetail() {
               </ul>
             )}
           </Card>
+
+          <ContactAccessCard
+            contactId={contactId}
+            email={person.email}
+            displayName={displayName}
+            onChanged={load}
+          />
 
           <ContactFilesCard contactId={contactId} />
 

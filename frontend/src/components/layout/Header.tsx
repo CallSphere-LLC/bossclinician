@@ -5,7 +5,7 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Container } from "@/components/ui/Container";
 import { LuxeButton } from "@/components/luxe/LuxeButton";
 import { NavDropdown, navBadgeClass, navBadgeTone } from "@/components/layout/NavDropdown";
-import { isNavMenu, nav, type NavMenu } from "@/content/site";
+import { headerActions, isNavMenu, nav, type NavMenu } from "@/content/site";
 import { cn } from "@/lib/cn";
 import { ShoppingCart } from "lucide-react";
 import { readCart } from "@/lib/cart";
@@ -95,7 +95,9 @@ export function Header({ transparentAtTop = false }: HeaderProps) {
           </span>
         </Link>
 
-        <nav className="hidden items-center gap-9 lg:flex" aria-label="Primary">
+        {/* gap-6 until xl: seven entries at gap-9 push the actions off a 1024px
+            bar. `wideOnly` entries join at xl, where there is room for them. */}
+        <nav className="hidden items-center gap-6 lg:flex xl:gap-8" aria-label="Primary">
           {nav.map((item) =>
             isNavMenu(item) ? (
               <NavDropdown key={item.label} menu={item} />
@@ -107,6 +109,7 @@ export function Header({ transparentAtTop = false }: HeaderProps) {
                   cn(
                     "group relative py-1 text-[0.68rem] font-semibold uppercase tracking-[0.18em] transition-colors duration-300",
                     isActive ? "text-white" : "text-white/55 hover:text-white",
+                    item.wideOnly && "hidden xl:block",
                   )
                 }
               >
@@ -133,8 +136,27 @@ export function Header({ transparentAtTop = false }: HeaderProps) {
             {cartCount > 0 && <span className="absolute right-0 top-0 rounded-full bg-gold px-1.5 text-xs font-bold text-night-deep">{cartCount}</span>}
           </Link>
           <SiteThemeToggle />
+          {/* Members sign in from the marketing header, as on the source site.
+              A text link, not a third button: the bar has one primary action. */}
+          <Link
+            to={headerActions.logIn.to}
+            className="hidden whitespace-nowrap py-2 text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-white/55 transition-colors duration-300 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold lg:inline-flex"
+          >
+            {headerActions.logIn.label}
+          </Link>
+          <div className="hidden xl:block">
+            <LuxeButton
+              href={headerActions.bookACall.href}
+              target="_blank"
+              variant="glass"
+              size="sm"
+              className="whitespace-nowrap"
+            >
+              {headerActions.bookACall.label}
+            </LuxeButton>
+          </div>
           <div className="hidden lg:block">
-            <LuxeButton to="/work-with-me" variant="foil" size="sm">
+            <LuxeButton to="/work-with-me" variant="foil" size="sm" className="whitespace-nowrap">
               Work With Me
             </LuxeButton>
           </div>
@@ -213,6 +235,25 @@ export function Header({ transparentAtTop = false }: HeaderProps) {
                 onClick={() => setOpen(false)}
               >
                 Work With Me
+              </LuxeButton>
+              <LuxeButton
+                href={headerActions.bookACall.href}
+                target="_blank"
+                variant="glass"
+                size="md"
+                className="mt-3 w-full"
+                onClick={() => setOpen(false)}
+              >
+                {headerActions.bookACall.label}
+              </LuxeButton>
+              <LuxeButton
+                to={headerActions.logIn.to}
+                variant="outline"
+                size="md"
+                className="mt-3 w-full"
+                onClick={() => setOpen(false)}
+              >
+                {headerActions.logIn.label}
               </LuxeButton>
             </Container>
           </motion.div>

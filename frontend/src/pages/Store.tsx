@@ -19,8 +19,14 @@ import { useHeadContext } from "@/ssr/context";
  * is scroll the buyer did not ask for.
  *
  * Every string below is reproduced verbatim from bossclinician.com/store,
- * prices included down to the "USD" suffix. Checkout still lives on Kajabi, so
- * the three actions leave for the .com offer pages in a new tab.
+ * prices included down to the "USD" suffix.
+ *
+ * The three actions are internal. They used to leave for the Kajabi offer pages
+ * (bossclinician.com/offers/<token>), which after the domain cutover are this
+ * app — and the redirect map sends those tokens back to /store, so each button
+ * was a loop. None of the three services has an offer row here yet, so each
+ * button goes to the application form; once an offer is published in the admin,
+ * set the card's `to` to `/checkout/<offer-slug>`.
  */
 
 /* ── Copy, verbatim from the live page ───────────────────────────────────── */
@@ -48,8 +54,8 @@ const [HERO_TITLE, HERO_ACCENT] = splitOnce(HEADLINE, " more profitable");
 interface Service {
   name: string;
   price: string;
-  /** Kajabi checkout, still hosted on the .com. Opens in a new tab. */
-  href: string;
+  /** Internal route. `/checkout/<offer-slug>` once the offer exists in the admin. */
+  to: string;
   image: string;
   accent: Accent;
 }
@@ -63,7 +69,7 @@ const SERVICES: readonly Service[] = [
   {
     name: "Practice Reset Intensive",
     price: "$3,500.00 USD",
-    href: "https://www.bossclinician.com/offers/EGheHSbL",
+    to: "/apply",
     image:
       "/images/migrated-4401fc275fd1.png",
     accent: "green",
@@ -71,7 +77,7 @@ const SERVICES: readonly Service[] = [
   {
     name: "Scale and Reclaim Suite",
     price: "$6,500.00 USD",
-    href: "https://www.bossclinician.com/offers/ykWzVqDZ",
+    to: "/apply",
     image:
       "/images/migrated-b78db00e7904.png",
     accent: "plum",
@@ -79,7 +85,7 @@ const SERVICES: readonly Service[] = [
   {
     name: "The Boss Boardroom",
     price: "$12,000.00 USD",
-    href: "https://www.bossclinician.com/offers/GSWsHBTx",
+    to: "/apply",
     image:
       "/images/migrated-840e01072ac7.png",
     accent: "gold",
@@ -104,7 +110,7 @@ function offerNode(origin: string, service: Service): JsonLdNode | null {
 
   return {
     "@type": "Offer",
-    url: service.href,
+    url: absoluteUrl(origin, service.to),
     price: match[1].replace(/,/g, ""),
     priceCurrency: match[2],
     availability: "https://schema.org/InStock",
@@ -119,9 +125,8 @@ function serviceNodes(origin: string): JsonLdNode[] {
     return {
       "@type": "Product",
       name: service.name,
-      // Checkout is still hosted on the .com, so the offer page is where this
-      // product actually lives.
-      url: service.href,
+      // The storefront is where these three live until each has a checkout.
+      url: absoluteUrl(origin, "/store"),
       image: absoluteUrl(origin, service.image),
       brand: { "@id": `${origin}/${ORGANIZATION_ID}` },
       ...(offer ? { offers: offer } : {}),
@@ -262,8 +267,7 @@ function ServiceCard({ service }: { service: Service }) {
           <LuxeButton
             variant="glass"
             size="sm"
-            href={service.href}
-            target="_blank"
+            to={service.to}
             className="mt-6 min-h-[44px] w-full tracking-[0.14em]"
           >
             Get Started

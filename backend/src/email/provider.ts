@@ -3,6 +3,7 @@ import { z } from "zod";
 import { env } from "../config/env";
 import { pool } from "../db/pool";
 import { sendMailStrict } from "./mailer";
+import type { MergeLinks } from "./mergeValues";
 import { assertRecipientAllowed } from "./recipientGuard";
 import { escapeHtml } from "./templates";
 import {
@@ -132,6 +133,28 @@ export function preferencesUrl(contactId: number): string {
 
 export function unsubscribeUrl(contactId: number): string {
   return `${env.publicSiteUrl}${UNSUBSCRIBE_PATH}/${signPreferencesToken(contactId)}`;
+}
+
+/**
+ * The link tokens a marketing email can use: `{{unsubscribeUrl}}`,
+ * `{{loginUrl}}` and `{{startUrl}}`.
+ *
+ * Here rather than in `mergeValues` so that file stays free of the environment
+ * and the signing secret. A send with no contact behind it gets a blank
+ * unsubscribe link rather than one signed for nobody — except a test send,
+ * where a blank would look like the token was broken; that gets a link of the
+ * right shape which unsubscribes nobody.
+ */
+export function mergeLinks(
+  contactId: number | null,
+  options: { preview?: boolean } = {}
+): MergeLinks {
+  const placeholder = options.preview ? `${env.publicSiteUrl}${UNSUBSCRIBE_PATH}/preview` : "";
+  return {
+    unsubscribeUrl: contactId === null ? placeholder : unsubscribeUrl(contactId),
+    loginUrl: `${env.publicSiteUrl}/login`,
+    startUrl: `${env.publicSiteUrl}/library`,
+  };
 }
 
 /* ---------------------------------------------------------------- settings */

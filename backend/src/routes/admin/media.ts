@@ -83,19 +83,150 @@ const upload = multer({
  */
 adminMediaRouter.use("/uploads", adminMediaUploadsRouter);
 
-/** GET /admin/media?kind=video — newest first. */
+const MAX_TAGS = 20;
+const MAX_TAG_LENGTH = 40;
+const MAX_FOLDER_LENGTH = 80;
+
+/**
+ * Tags as they are stored: lower-cased, single-spaced, no leading "#", no
+ * repeats, first mention wins the position.
+ *
+ * Lower-cased because "Workbook" and "workbook" are one label to the person who
+ * typed them and two to `= ANY(tags)`.
+ */
+export function normaliseTags(raw: readonly string[]): string[] {
+  const seen = new Set<string>();
+  for (const value of raw) {
+    const tag = value
+      .trim()
+      .replace(/^#+/, "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .toLowerCase()
+      .slice(0, MAX_TAG_LENGTH)
+      .trim();
+    if (tag !== "") seen.add(tag);
+    if (seen.size >= MAX_TAGS) break;
+  }
+  return Array.from(seen);
+}
+
+/**
+ * A folder is a name, not a path: one level, no slashes to build a tree the
+ * screen has no way to draw. "" means "not in a folder".
+ */
+export function normaliseFolder(raw: string): string {
+  return raw
+    .replace(/[\\\/]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, MAX_FOLDER_LENGTH)
+    .trim();
+}
+
+/** What PATCH /admin/media/:id accepts. Every key optional, at least one present. */
+export const mediaPatchSchema = z
+  .object({
+    title: z.string().trim().max(300).optional(),
+    folder: z.string().max(200).transform(normaliseFolder).optional(),
+    altText: z.string().trim().max(500).optional(),
+    tags: z.array(z.string().max(200)).max(100).transform(normaliseTags).optional(),
+  })
+  .refine(
+    (patch) =>
+      patch.title !== undefined ||
+      patch.folder !== undefined ||
+      patch.altText !== undefined ||
+      patch.tags !== undefined,
+    { message: "Nothing to change" },
+  );
+
+export interface MediaListFilters {
+  kind?: string;
+  /** Present and empty means "not in a folder"; absent means every folder. */
+  folder?: string;
+  tag?: string;
+  q?: string;
+}
+
+/**
+ * The library query for a set of filters.
+ *
+ * Pure, so media.test.ts can pin that each filter is a bound parameter and
+ * that a search reaches tags and alt text as well as the two names.
+ */
+export function buildMediaListQuery(filters: MediaListFilters): { text: string; values: unknown[] } {
+  const where: string[] = [];
+  const values: unknown[] = [];
+  const bind = (value: unknown): string => {
+    values.push(value);
+    return `$${values.length}`;
+  };
+
+  if (filters.kind && filters.kind !== "all") where.push(`kind = ${bind(filters.kind)}`);
+  if (filters.folder !== undefined) where.push(`folder = ${bind(normaliseFolder(filters.folder))}`);
+
+  const tag = filters.tag === undefined ? undefined : normaliseTags([filters.tag])[0];
+  if (tag !== undefined) where.push(`${bind(tag)} = ANY(tags)`);
+
+  const q = filters.q?.trim().slice(0, 200) ?? "";
+  if (q !== "") {
+    const like = bind(`%${q.replace(/[\\%_]/g, (char) => `\\${char}`)}%`);
+    where.push(
+      `(title ILIKE ${like} ESCAPE '\\' OR original_name ILIKE ${like} ESCAPE '\\'
+        OR alt_text ILIKE ${like} ESCAPE '\\'
+        OR EXISTS (SELECT 1 FROM unnest(tags) AS t(tag) WHERE t.tag ILIKE ${like} ESCAPE '\\'))`,
+    );
+  }
+
+  return {
+    text: `SELECT * FROM media_assets${where.length > 0 ? ` WHERE ${where.join(" AND ")}` : ""} ORDER BY created_at DESC`,
+    values,
+  };
+}
+
+function queryString(value: unknown): string | undefined {
+  return typeof value === "string" ? value : undefined;
+}
+
+/**
+ * GET /admin/media?kind=video&folder=Workbooks&tag=intake&q=consent — newest first.
+ *
+ * Every filter is optional and they narrow together. `folder=` with nothing
+ * after it asks for the files that are not in a folder.
+ */
 adminMediaRouter.get(
   "/",
   asyncHandler(async (req, res) => {
-    const kind = typeof req.query.kind === "string" ? req.query.kind : "";
-    const result =
-      kind && kind !== "all"
-        ? await pool.query(
-            "SELECT * FROM media_assets WHERE kind = $1 ORDER BY created_at DESC",
-            [kind],
-          )
-        : await pool.query("SELECT * FROM media_assets ORDER BY created_at DESC");
+    const query = buildMediaListQuery({
+      kind: queryString(req.query.kind),
+      folder: queryString(req.query.folder),
+      tag: queryString(req.query.tag),
+      q: queryString(req.query.q),
+    });
+    const result = await pool.query(query.text, query.values);
     res.json(result.rows.map((row) => toMediaJson(row, adminId(req))));
+  }),
+);
+
+/**
+ * GET /admin/media/folders — every folder in use, with how many files it holds.
+ *
+ * Above the `/:id` routes for the same reason `/uploads` is: a single path
+ * segment that would otherwise be read as an asset id. A folder exists only
+ * while something is in it, so there is no table of them to keep in step.
+ */
+adminMediaRouter.get(
+  "/folders",
+  asyncHandler(async (_req, res) => {
+    const result = await pool.query<{ folder: string; count: number }>(
+      `SELECT folder, count(*)::int AS count
+         FROM media_assets
+        WHERE folder <> ''
+        GROUP BY folder
+        ORDER BY lower(folder)`,
+    );
+    res.json(result.rows.map((row) => ({ name: row.folder, count: row.count })));
   }),
 );
 
@@ -255,15 +386,29 @@ adminMediaRouter.post(
   }),
 );
 
-/** PATCH /admin/media/:id — rename (title only; the stored file is immutable). */
+/**
+ * PATCH /admin/media/:id — the name, folder, alt text and tags.
+ *
+ * Everything the library knows *about* a file. The stored file itself is
+ * immutable, and so is who may open it: that was decided by the directory the
+ * bytes were written to. A key left out of the body is left alone.
+ */
 adminMediaRouter.patch(
   "/:id",
   asyncHandler(async (req, res) => {
-    const { title } = req.body as { title?: string };
-    if (typeof title !== "string") throw badRequest("title is required");
+    const parsed = mediaPatchSchema.safeParse(req.body);
+    if (!parsed.success) {
+      throw badRequest("Tell us what to change about this file.", parsed.error.flatten());
+    }
+    const { title, folder, altText, tags } = parsed.data;
     const result = await pool.query(
-      "UPDATE media_assets SET title = $1 WHERE id = $2 RETURNING *",
-      [title, req.params.id],
+      `UPDATE media_assets
+          SET title    = COALESCE($1, title),
+              folder   = COALESCE($2, folder),
+              alt_text = COALESCE($3, alt_text),
+              tags     = COALESCE($4::text[], tags)
+        WHERE id = $5 RETURNING *`,
+      [title ?? null, folder ?? null, altText ?? null, tags ?? null, req.params.id],
     );
     if (result.rowCount === 0) throw notFound("Media asset not found");
     res.json(toMediaJson(result.rows[0], adminId(req)));

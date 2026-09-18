@@ -9,6 +9,7 @@ import { ensureOrderReceipt, loadReceiptDocument, renderReceiptPdf } from "./rec
 import { issueSetPasswordLink } from "./setPasswordLink";
 import { exitContactOnPurchase } from "./sequences";
 import { readSetting } from "./settings";
+import { notificationRecipients } from "./notificationRecipients";
 
 /**
  * Everything a customer is owed the moment a purchase completes.
@@ -171,7 +172,10 @@ async function sendReceiptEmail(
     content
   );
 
-  await sendMail({
+  // The transport's own answer, not an assumption. `sendMail` never throws, so
+  // returning `true` here reported every receipt as sent — including the ones
+  // the transport had refused.
+  const result = await sendMail({
     topic: "purchase_receipt",
     sourceId: order.id,
     memberId: order.member_id ?? null,
@@ -180,7 +184,7 @@ async function sendReceiptEmail(
     ...stored,
     attachments,
   });
-  return true;
+  return result.sent;
 }
 
 /**
@@ -287,7 +291,7 @@ export async function deliverPurchase(
       // Deliberately its own topic: access details and a receipt are different
       // messages with different switches, and "did they get in?" must be
       // answerable without reading the receipt log.
-      await sendMail({
+      const welcome = await sendMail({
         topic: "purchase_access",
         sourceId: order.id,
         memberId: order.member_id ?? null,
@@ -295,8 +299,9 @@ export async function deliverPurchase(
         to: order.email,
         ...stored,
       });
-      outcome.welcomeSent = true;
-      outcome.setPasswordLinkIncluded = setPasswordUrl !== null;
+      // What the transport said, so "welcome sent" means a welcome was sent.
+      outcome.welcomeSent = welcome.sent;
+      outcome.setPasswordLinkIncluded = welcome.sent && setPasswordUrl !== null;
     } else if (setPasswordUrl !== null) {
       // The offer sends no welcome, but the buyer still has no way in. The
       // link cannot simply be dropped, so it goes as its own email — this is the
@@ -364,15 +369,19 @@ export function notifyOwnerOfSale(input: {
   amountCents: number;
   currency: string;
 }): void {
-  if (!env.notifyEmail) return;
-  void sendMail({
-    to: env.notifyEmail,
-    ...orderPaidNotification({
-      courseTitle: input.description,
-      email: input.email,
-      amountCents: input.amountCents,
-      currency: input.currency,
-    }),
+  // Still fire-and-forget for both callers; the address and the "someone buys
+  // something" switch now come from settings, with NOTIFY_EMAIL as the fallback.
+  void notificationRecipients("sale").then((to) => {
+    if (!to) return;
+    void sendMail({
+      to,
+      ...orderPaidNotification({
+        courseTitle: input.description,
+        email: input.email,
+        amountCents: input.amountCents,
+        currency: input.currency,
+      }),
+    });
   });
 }
 
@@ -432,8 +441,11 @@ export async function deliverManualGrant(input: {
       nextSteps: offer?.welcome_next_steps ?? "",
     });
 
-    await sendMail({ to: member.email, ...content });
-    return { welcomeSent: true, setPasswordLinkIncluded: setPasswordUrl !== null };
+    const welcome = await sendMail({ to: member.email, ...content });
+    return {
+      welcomeSent: welcome.sent,
+      setPasswordLinkIncluded: welcome.sent && setPasswordUrl !== null,
+    };
   } catch (err) {
     // eslint-disable-next-line no-console
     console.error(

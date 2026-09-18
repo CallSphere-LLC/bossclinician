@@ -35,6 +35,7 @@ import { automationIdentity, publishDomainEvent } from "../../services/domainEve
 import { dispatchEvent } from "../../services/webhooksOut";
 import { upsertContactWithStatus } from "../../services/contacts";
 import { readSetting } from "../../services/settings";
+import { notificationRecipients } from "../../services/notificationRecipients";
 import { withStoredTemplate } from "../../email/templateStore";
 import {
   closeDunning,
@@ -1365,9 +1366,12 @@ async function advancePaymentPlan(input: {
     client.release();
   }
 
-  if (overcharged !== null && env.notifyEmail) {
+  // An `alert`, not a `sale`: switching off sale emails must not be able to
+  // silence the news that a customer was charged past the end of their plan.
+  const overchargeAlertTo = overcharged !== null ? await notificationRecipients("alert") : "";
+  if (overcharged !== null && overchargeAlertTo) {
     void sendMail({
-      to: env.notifyEmail,
+      to: overchargeAlertTo,
       ...paymentPlanOverchargeAlert({
         buyerEmail: overcharged.email,
         amountCents: input.amountCents,
@@ -2517,9 +2521,10 @@ async function handleDisputeCreated(dispute: Stripe.Dispute): Promise<void> {
   // Access is deliberately left alone. A dispute is an accusation, not an
   // outcome; pulling a course the moment one is filed punishes the customer for
   // a bank's paperwork, and the money is already held either way.
-  if (env.notifyEmail) {
+  const disputeAlertTo = await notificationRecipients("dispute");
+  if (disputeAlertTo) {
     void sendMail({
-      to: env.notifyEmail,
+      to: disputeAlertTo,
       ...disputeAlert({
         buyerEmail: transaction?.email ?? "",
         amountCents: dispute.amount,

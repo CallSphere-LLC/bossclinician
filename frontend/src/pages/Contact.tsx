@@ -1,43 +1,36 @@
 import { Seo } from "@/components/Seo";
 import { LeadForm } from "@/components/forms/LeadForm";
 import { GlassCard, type Accent } from "@/components/luxe/GlassCard";
+import { LuxeButton } from "@/components/luxe/LuxeButton";
 import { LuxePageHero } from "@/components/luxe/LuxePageHero";
 import { GoldRule, Section, SectionTitle } from "@/components/luxe/Section";
 import { RevealGroup, RevealItem } from "@/components/ui/Reveal";
 import { contactPage } from "@/content/site";
 
-/**
- * The questions the live page lists under the address, in its order and
- * wording. They carry no published answers, so each one opens a pre-addressed
- * email instead of an accordion — a question you can send in a tap is the
- * shortest path for anyone who would rather not fill anything in.
- */
-const QUESTIONS: readonly string[] = [
-  "How Can I get coaching with Yvette",
-  "I purchased a product from you but I can't log in to access my product or didn't get a confirmation email",
-  "How do I cancel my Boss Clinician Lounge Membership subscription?",
-  "How can you help me build my private practice",
-  "When is your next retreat",
-];
-
-/** Card accents cycle so a stack of five never reads as one flat block. */
+/** Card accents cycle so three siblings read as a set, not as a ranking. */
 const ACCENTS: readonly Accent[] = ["green", "plum", "gold"];
 
 /** Held once: the hero plate renders it and the page's share card points at it. */
 const HERO_PORTRAIT = "/images/f5f2cec6b858.jpg";
 
+const ADDRESS_LINK =
+  "break-all text-gold underline decoration-gold/30 underline-offset-[6px] transition-colors duration-300 ease-luxe hover:text-gold-bright hover:decoration-gold-bright/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold";
+
 /**
- * Contact — the Obsidian Luxe rebuild.
+ * Contact — the Obsidian Luxe rebuild of bossclinician.com/contact.
  *
- * The page is deliberately spare: a greeting, one way in, and the five
- * questions people actually arrive with. What it used to lack was a way in the
- * business could see — every enquiry left through a mailto and landed in a
- * personal inbox, never in the admin Leads inbox. So the form leads now, and
- * the address and the pre-addressed questions keep their place underneath it
- * as alternates for anyone who would rather write from their own mail client.
+ * The source page is a help desk in five parts, and this follows it part for
+ * part in its order and wording (content/site.ts → `contactPage`): which
+ * programme is right for you, help getting into a purchase, billing, the next
+ * retreat, and an address for everything else.
+ *
+ * One band is this site's own: the message form. On the source every enquiry
+ * leaves through a mailto and lands in a personal inbox; here it also posts to
+ * /api/leads with source "contact", so a question is answerable from the admin
+ * Leads inbox. It sits directly under the greeting, above the source's blocks.
  */
 export default function Contact() {
-  const mailto = `mailto:${contactPage.email}`;
+  const { programs, access, billing, retreat, closing } = contactPage;
 
   return (
     <>
@@ -52,6 +45,14 @@ export default function Contact() {
         title={contactPage.heading}
         lede={contactPage.intro}
         tone="violet"
+        actions={
+          <p className="copy-luxe text-pretty text-sm">
+            {contactPage.emailLabel}{" "}
+            <a href={`mailto:${contactPage.email}`} className={ADDRESS_LINK}>
+              {contactPage.email}
+            </a>
+          </p>
+        }
         aside={
           <div className="relative isolate mx-auto max-w-sm lg:max-w-none">
             {/* Plum bloom behind the plate: without a light source of its own a
@@ -88,9 +89,8 @@ export default function Contact() {
       />
 
       {/* ── The message ──────────────────────────────────────────────────────
-          The page's primary action. It posts to /api/leads with source
-          "contact", so a question asked here is answerable from the admin Leads
-          inbox instead of only from a mail client. */}
+          Posts to /api/leads with source "contact", so a question asked here is
+          answerable from the admin Leads inbox instead of only a mail client. */}
       <Section
         surface="raised"
         space="md"
@@ -121,91 +121,172 @@ export default function Contact() {
         </RevealGroup>
       </Section>
 
-      {/* ── The other ways in ────────────────────────────────────────────────
-          The address and the five pre-addressed questions the page has always
-          carried. They still work — they are simply no longer the only way
-          through, so they sit under the form at a quieter weight. */}
+      {/* ── Which programme is right for you ───────────────────────────────── */}
+      <Section surface="base" space="lg" aurora="mixed" auroraIntensity={0.45} aria-label={programs.title}>
+        <SectionTitle title={programs.title} body={programs.body} />
+
+        <RevealGroup
+          as="ul"
+          className="mx-auto mt-12 grid max-w-md list-none grid-cols-1 items-stretch gap-6 lg:max-w-none lg:grid-cols-3"
+        >
+          {programs.items.map((program, i) => (
+            <RevealItem key={program.title} as="li" className="h-full">
+              <GlassCard
+                as="article"
+                accent={ACCENTS[i % ACCENTS.length]}
+                className="flex h-full flex-col p-7 sm:p-8"
+              >
+                <h3 className="text-balance font-display text-[1.35rem] font-medium leading-[1.25] text-white">
+                  {program.title}
+                </h3>
+                <GoldRule width="w-10" className="mt-5" />
+                <p className="copy-luxe mt-5 text-pretty text-[0.95rem]">{program.body}</p>
+                <p className="mt-5 flex-1 text-pretty text-sm font-medium leading-[1.7] text-white/85">
+                  {program.bestFit}
+                </p>
+                <LuxeButton
+                  variant="glass"
+                  size="sm"
+                  to={program.to}
+                  className="mt-7 min-h-[44px] w-full tracking-[0.12em]"
+                >
+                  {program.cta}
+                </LuxeButton>
+              </GlassCard>
+            </RevealItem>
+          ))}
+        </RevealGroup>
+
+        <p className="mt-12 text-balance text-center font-display text-[1.2rem] italic text-white sm:text-[1.4rem]">
+          {programs.closing}
+        </p>
+      </Section>
+
+      {/* ── Access and billing help ────────────────────────────────────────── */}
+      <Section surface="raised" space="lg" aria-label="Help with a purchase or membership">
+        <RevealGroup className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <RevealItem className="h-full">
+            <GlassCard accent="plum" interactive={false} className="h-full p-7 sm:p-9">
+              <h2 className="text-balance font-display text-[1.45rem] font-medium leading-[1.25] text-white">
+                {access.title}
+              </h2>
+              <GoldRule width="w-10" className="mt-5" />
+              <p className="copy-luxe mt-5 text-pretty text-[0.95rem]">{access.intro}</p>
+
+              <ol className="mt-6 space-y-5">
+                {access.steps.map((step, i) => (
+                  <li key={step.title} className="flex gap-4">
+                    <span
+                      aria-hidden
+                      className="text-foil shrink-0 font-display text-xl leading-none"
+                    >
+                      {String(i + 1).padStart(2, "0")}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-[0.95rem] font-medium text-white">{step.title}</p>
+                      {step.body && (
+                        <p className="copy-luxe mt-1 text-pretty text-sm">{step.body}</p>
+                      )}
+                    </div>
+                  </li>
+                ))}
+              </ol>
+
+              <p className="copy-luxe mt-6 text-pretty text-sm">
+                {access.emailLead}{" "}
+                <a href={`mailto:${contactPage.supportEmail}`} className={ADDRESS_LINK}>
+                  {contactPage.supportEmail}
+                </a>{" "}
+                {access.emailWith}
+              </p>
+              <ul className="mt-3 list-disc space-y-1.5 pl-5 marker:text-gold">
+                {access.include.map((item) => (
+                  <li key={item} className="copy-luxe text-sm">
+                    {item}
+                  </li>
+                ))}
+              </ul>
+              <p className="copy-luxe mt-5 text-pretty text-sm">{access.outro}</p>
+
+              <div className="mt-7 flex flex-wrap gap-3">
+                <LuxeButton variant="glass" size="sm" to="/login" className="min-h-[44px]">
+                  Log In
+                </LuxeButton>
+                <LuxeButton variant="outline" size="sm" to="/forgot-password" className="min-h-[44px]">
+                  Forgot Password
+                </LuxeButton>
+              </div>
+            </GlassCard>
+          </RevealItem>
+
+          <RevealItem className="h-full">
+            <GlassCard accent="green" interactive={false} className="flex h-full flex-col p-7 sm:p-9">
+              <h2 className="text-balance font-display text-[1.45rem] font-medium leading-[1.25] text-white">
+                {billing.title}
+              </h2>
+              <GoldRule width="w-10" className="mt-5" />
+              <p className="copy-luxe mt-5 flex-1 text-pretty text-[0.95rem]">{billing.body}</p>
+              <div className="mt-7">
+                <LuxeButton variant="glass" size="sm" to="/account/billing" className="min-h-[44px]">
+                  {billing.cta}
+                </LuxeButton>
+              </div>
+            </GlassCard>
+          </RevealItem>
+        </RevealGroup>
+      </Section>
+
+      {/* ── The next retreat ───────────────────────────────────────────────── */}
       <Section
-        surface="base"
-        space="md"
-        aria-label="Other ways to reach Yvette"
-        containerClassName="max-w-3xl"
+        surface="deep"
+        space="lg"
+        aurora="gold"
+        auroraIntensity={0.45}
+        aria-label={retreat.title}
+        containerClassName="max-w-3xl text-center"
       >
         <RevealGroup>
           <RevealItem>
-            <div className="text-center">
-              <span className="eyebrow-luxe">Prefer email?</span>
-              <h2 className="text-balance font-display text-[1.5rem] font-medium leading-snug text-white sm:text-[1.8rem]">
-                Write to me from your own inbox.
-              </h2>
+            <span className="eyebrow-luxe">{retreat.title}</span>
+            <p className="copy-luxe mx-auto max-w-xl text-pretty">{retreat.body}</p>
+            <p className="copy-luxe mt-6 text-sm">{retreat.lead}</p>
+            <h2 className="text-foil mt-3 text-balance font-display text-[2.1rem] font-medium leading-[1.12] sm:text-[2.8rem]">
+              {retreat.date}
+            </h2>
+            <GoldRule className="mx-auto mt-8" />
+            <div className="mt-9">
+              <LuxeButton variant="foil" size="lg" to="/retreats" className="w-full tracking-[0.12em] sm:w-auto sm:tracking-[0.18em]">
+                {retreat.cta}
+              </LuxeButton>
             </div>
           </RevealItem>
+        </RevealGroup>
+      </Section>
 
-          {/* `break-all` keeps the address inside a 360px card instead of
-              pushing the page into a horizontal scroll. */}
-          <RevealItem className="mx-auto mt-8 max-w-xl">
+      {/* ── Anything else ──────────────────────────────────────────────────── */}
+      <Section surface="base" space="md" aria-label={closing.title} containerClassName="max-w-3xl">
+        <RevealGroup>
+          <RevealItem className="mx-auto max-w-xl">
+            {/* `break-all` keeps the address inside a 360px card instead of
+                pushing the page into a horizontal scroll. */}
             <GlassCard
               accent="plum"
               interactive={false}
               spotlight={false}
               className="overflow-hidden p-6 text-center sm:p-8"
             >
-              <p className="copy-luxe text-pretty text-sm">Send me an email at</p>
-
-              <GoldRule className="mx-auto mt-4" width="w-12" />
-
+              <h2 className="font-display text-[1.4rem] font-medium text-white">{closing.title}</h2>
+              <p className="copy-luxe mt-3 text-pretty text-sm">{closing.body}</p>
+              <GoldRule className="mx-auto mt-5" width="w-12" />
               <a
-                href={mailto}
+                href={`mailto:${contactPage.supportEmail}`}
                 className="mt-4 flex min-h-[44px] items-center justify-center break-all rounded-lg px-1 font-display text-[1.05rem] leading-tight text-gold underline decoration-gold/30 underline-offset-[8px] transition-colors duration-300 ease-luxe hover:text-gold-bright hover:decoration-gold-bright/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold sm:text-[1.35rem]"
               >
-                {contactPage.email}
+                {contactPage.supportEmail}
               </a>
+              <p className="copy-luxe mt-4 text-pretty text-sm">{closing.outro}</p>
             </GlassCard>
           </RevealItem>
-
-          <RevealItem>
-            <p className="copy-luxe mt-10 text-center text-pretty text-sm">
-              Or send one that's already written for you:
-            </p>
-          </RevealItem>
-        </RevealGroup>
-
-        <RevealGroup as="ul" className="mt-6 list-none space-y-3.5">
-          {QUESTIONS.map((question, i) => (
-            <RevealItem as="li" key={question}>
-              <GlassCard
-                accent={ACCENTS[i % ACCENTS.length]}
-                spotlight={false}
-                className="overflow-hidden"
-              >
-                <a
-                  href={`${mailto}?subject=${encodeURIComponent(question)}`}
-                  className="flex min-h-[64px] w-full items-center gap-4 px-5 py-4 transition-colors duration-300 ease-luxe hover:bg-white/[0.03] focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-gold sm:gap-5 sm:px-6 sm:py-5"
-                >
-                  <span
-                    aria-hidden
-                    className="text-foil shrink-0 font-display text-xl leading-none sm:text-2xl"
-                  >
-                    {String(i + 1).padStart(2, "0")}
-                  </span>
-
-                  <span className="min-w-0 flex-1 text-pretty text-[0.95rem] font-medium leading-relaxed text-white">
-                    {question}
-                    <span className="sr-only"> — email Yvette about this</span>
-                  </span>
-
-                  <svg
-                    aria-hidden
-                    viewBox="0 0 8 8"
-                    fill="none"
-                    className="h-[7px] w-[7px] shrink-0 text-gold"
-                  >
-                    <path d="M4 0.5 7.5 4 4 7.5 0.5 4Z" fill="currentColor" />
-                  </svg>
-                </a>
-              </GlassCard>
-            </RevealItem>
-          ))}
         </RevealGroup>
       </Section>
     </>

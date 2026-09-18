@@ -38,6 +38,11 @@ export const coachingSessionsRepo = createCrudRepo<Row>("coaching_sessions", [
   "meetingUrl",
   "agenda",
   "privateNotes",
+  // What the member reads after the call. Both columns have been on the table
+  // since migration 003 and the member screen has always rendered them; without
+  // these two entries nothing could ever put a word in either.
+  "sharedNotes",
+  "recordingUrl",
 ]);
 
 export const podcastsRepo = createCrudRepo<Row>("podcasts", [
@@ -59,6 +64,7 @@ export const podcastEpisodesRepo = createCrudRepo<Row>("podcast_episodes", [
   "slug",
   "description",
   "showNotesMd",
+  "transcript",
   "audioUrl",
   "audioBytes",
   "durationSeconds",

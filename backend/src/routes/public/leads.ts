@@ -10,6 +10,7 @@ import { leadsLimiter } from "../../middleware/rateLimit";
 import { fireTriggerAsync } from "../../automations/engine";
 import { linkContact, recordActivity, upsertContactWithStatus } from "../../services/contacts";
 import { publishDomainEvent } from "../../services/domainEvents";
+import { notificationRecipients } from "../../services/notificationRecipients";
 
 export const leadsRouter = Router();
 
@@ -100,9 +101,10 @@ leadsRouter.post(
       });
     }
 
-    if (env.notifyEmail) {
+    const notifyTo = await notificationRecipients("lead");
+    if (notifyTo) {
       const { subject, text, html } = newLeadNotification({ name, email, phone, message, source });
-      void sendMail({ to: env.notifyEmail, subject, text, html });
+      void sendMail({ to: notifyTo, subject, text, html });
     }
 
     // The calculator's capture band promises the reader their own numbers

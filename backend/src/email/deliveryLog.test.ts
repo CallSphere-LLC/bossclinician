@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { sendMail } from "./mailer";
+import { NO_TRANSPORT_ERROR, sendMail } from "./mailer";
 
 /**
  * The delivery log exists because "Sent" was the only signal anyone had.
@@ -30,12 +30,16 @@ vi.mock("nodemailer", () => ({
 // database URL that have nothing to do with this suite. Mocked rather than
 // satisfied, which also keeps the SMTP host set so the "sent" branch under test
 // is the real one.
-vi.mock("../config/env", () => ({
-  env: {
-    smtp: { host: "email-smtp.us-east-1.amazonaws.com", port: 587, user: "u", pass: "p", from: "Boss <no-reply@example.com>" },
-    ses: { transactionalConfigSet: "bc-transactional", marketingConfigSet: "", snsTopicArn: "" },
-  },
+//
+// Hoisted and mutable so the no-transport cases can take the host away and turn
+// production on; `beforeEach` puts both back.
+const SMTP_HOST = "email-smtp.us-east-1.amazonaws.com";
+const mockEnv = vi.hoisted(() => ({
+  nodeEnv: "test",
+  smtp: { host: "email-smtp.us-east-1.amazonaws.com", port: 587, user: "u", pass: "p", from: "Boss <no-reply@example.com>" },
+  ses: { transactionalConfigSet: "bc-transactional", marketingConfigSet: "", snsTopicArn: "" },
 }));
+vi.mock("../config/env", () => ({ env: mockEnv }));
 
 function sqlOf(call: unknown[]): string {
   return String(call[0]).replace(/\s+/g, " ");
@@ -45,6 +49,8 @@ beforeEach(() => {
   query.mockReset();
   transportSend.mockReset();
   query.mockResolvedValue({ rows: [{ id: "77" }] });
+  mockEnv.nodeEnv = "test";
+  mockEnv.smtp.host = SMTP_HOST;
 });
 
 describe("sendMail delivery log", () => {
@@ -98,6 +104,35 @@ describe("sendMail delivery log", () => {
 
     expect(outcome.sent).toBe(true);
     expect(outcome.messageId).toBeNull();
+    expect(transportSend).toHaveBeenCalledOnce();
+  });
+
+  it("records a production send with no transport as failed, not sent", async () => {
+    // The console fallback "succeeds", so this used to be written down as sent
+    // and the buyer was thanked for a receipt that never left the box.
+    mockEnv.nodeEnv = "production";
+    mockEnv.smtp.host = "";
+
+    const outcome = await sendMail({ to: "success+buyer@simulator.amazonses.com", subject: "Your receipt", text: "Thanks" });
+
+    expect(outcome.sent).toBe(false);
+    expect(outcome.error).toBe(NO_TRANSPORT_ERROR);
+    expect(transportSend).not.toHaveBeenCalled();
+
+    const failed = query.mock.calls.find((c) => sqlOf(c).includes("status = 'failed'"));
+    expect(failed).toBeDefined();
+    expect(String(failed?.[1]?.[1])).toContain("No email transport");
+    expect(query.mock.calls.some((c) => sqlOf(c).includes("status = 'sent'"))).toBe(false);
+  });
+
+  it("keeps the console transport outside production, so dev and tests need no SMTP", async () => {
+    mockEnv.nodeEnv = "development";
+    mockEnv.smtp.host = "";
+    transportSend.mockResolvedValue({ response: "", messageId: "<console@local>" });
+
+    const outcome = await sendMail({ to: "success+buyer@simulator.amazonses.com", subject: "Hi", text: "Hi" });
+
+    expect(outcome.sent).toBe(true);
     expect(transportSend).toHaveBeenCalledOnce();
   });
 

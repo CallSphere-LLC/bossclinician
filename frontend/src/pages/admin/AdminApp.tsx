@@ -30,6 +30,7 @@ import SettingsPage from "@/pages/admin/Settings";
 import Affiliates from "@/pages/admin/Affiliates";
 import AffiliateDetail from "@/pages/admin/AffiliateDetail";
 import SettingsHub from "@/pages/admin/SettingsHub";
+import AuditLog from "@/pages/admin/AuditLog";
 import SettingsGroup from "@/pages/admin/SettingsGroup";
 import AdminUsers from "@/pages/admin/AdminUsers";
 import Integrations from "@/pages/admin/Integrations";
@@ -171,6 +172,7 @@ function ProtectedRoutes() {
         <Route path="/settings/connections" element={<Integrations />} />
         <Route path="/settings/availability" element={<Availability />} />
         <Route path="/settings/advanced" element={<SettingsPage />} />
+        <Route path="/settings/activity" element={<AuditLog />} />
         {/* Three segments, so it is ranked above /settings/:group rather than
             competing with it: the log is a page of its own, and the address
             people write down for it used to match nothing at all. */}

@@ -4,6 +4,7 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type FormEvent,
@@ -49,6 +50,69 @@ import {
 import { Modal, useConfirm } from "@/pages/admin/ui/Dialog";
 import { UploadDropzone } from "@/pages/admin/ui/Uploader";
 import { friendlyError, pluralize, publishLabel, slugify, uniqueKey } from "@/pages/admin/ui/friendly";
+
+/**
+ * The episode as the form edits it. The column has been on the table since
+ * migration 003 and the API returns every column; the shared type never named
+ * it because there was no box for it.
+ */
+type EpisodeDraft = Partial<PodcastEpisode> & { transcript?: string };
+
+interface ReadinessCheck {
+  key: string;
+  done: boolean;
+  label: string;
+  /** What to do about it — only shown while the box is unticked. */
+  fix: string;
+}
+
+/**
+ * What Apple Podcasts and Spotify look for before they will list a show.
+ *
+ * Worked out from what is already on the screen — nothing is sent anywhere.
+ * Both directories read the listening link and refuse a show with no artwork,
+ * no category, nobody named as the host, or nothing to play.
+ */
+function submissionChecks(show: Podcast, episodes: PodcastEpisode[]): ReadinessCheck[] {
+  return [
+    {
+      key: "cover",
+      done: show.coverImage.trim() !== "",
+      label: "Cover art",
+      fix: "Add a square picture in Edit show — Apple asks for at least 1400 × 1400 pixels, JPG or PNG.",
+    },
+    {
+      key: "description",
+      done: show.description.trim() !== "",
+      label: "A description of the show",
+      fix: "Write a sentence or two in Edit show about who it's for and what they'll hear.",
+    },
+    {
+      key: "author",
+      done: show.author.trim() !== "",
+      label: "Your name as the host",
+      fix: "Add the host's name in Edit show — it appears under the title in every app.",
+    },
+    {
+      key: "category",
+      done: show.category.trim() !== "",
+      label: "A category",
+      fix: "Choose a category in Edit show so the apps know where to file it.",
+    },
+    {
+      key: "live",
+      done: show.published && show.visibility === "public",
+      label: "The show is live and anyone can listen",
+      fix: "Apple and Spotify can only read a show that's switched on and open to everyone.",
+    },
+    {
+      key: "episode",
+      done: episodes.some((episode) => episode.published && episode.audioUrl.trim() !== ""),
+      label: "At least one live episode with audio",
+      fix: "Add an episode, upload its audio and make it live — they won't accept an empty show.",
+    },
+  ];
+}
 
 const EMPTY_SHOW = {
   title: "",
@@ -296,7 +360,7 @@ export default function Podcasts() {
   const [error, setError] = useState<string | null>(null);
   const [showDraft, setShowDraft] = useState<Partial<Podcast> | null>(null);
   useNewProductRequest(() => setShowDraft({ ...EMPTY_SHOW }));
-  const [episodeDraft, setEpisodeDraft] = useState<Partial<PodcastEpisode> | null>(null);
+  const [episodeDraft, setEpisodeDraft] = useState<EpisodeDraft | null>(null);
   // Which box the file picker is filling in — the episode's audio or the
   // show's cover art. The kind is held separately so the picker doesn't flip
   // from pictures to audio while it's animating closed.
@@ -304,6 +368,14 @@ export default function Podcasts() {
   const [pickerKind, setPickerKind] = useState<"audio" | "image">("audio");
   const [copied, setCopied] = useState(false);
   const [confirm, confirmDialog] = useConfirm();
+
+  // Null while the episodes are still loading, so the card never flashes
+  // "no live episode" at a show that has twenty.
+  const readiness = useMemo(
+    () => (active && episodes ? submissionChecks(active, episodes) : null),
+    [active, episodes],
+  );
+  const readinessLeft = readiness?.filter((check) => !check.done).length ?? 0;
 
   function openPicker(target: "audio" | "cover") {
     setPickerKind(target === "cover" ? "image" : "audio");
@@ -542,6 +614,54 @@ export default function Podcasts() {
                     </Button>
                   </div>
                 </div>
+              </Card>
+            )}
+
+            {active && active.visibility !== "private" && readiness && (
+              <Card>
+                <CardHeader
+                  title="Ready for Apple and Spotify?"
+                  subtitle={
+                    readinessLeft === 0
+                      ? "Everything they ask for is here"
+                      : `${pluralize(readinessLeft, "thing")} left to do`
+                  }
+                  icon={<Check className="size-4" />}
+                />
+                <ul className="divide-y divide-hairline/60">
+                  {readiness.map((check) => (
+                    <li key={check.key} className="flex items-start gap-3 px-5 py-3">
+                      <span
+                        aria-hidden
+                        className={cn(
+                          "mt-0.5 grid size-5 shrink-0 place-items-center rounded-full border",
+                          check.done
+                            ? "border-gold bg-gold text-ink"
+                            : "border-hairline text-transparent",
+                        )}
+                      >
+                        <Check className="size-3" />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-sm font-semibold text-ink">
+                          {check.label}
+                          <span className="sr-only">{check.done ? " — done" : " — still to do"}</span>
+                        </span>
+                        {!check.done && (
+                          <span className="mt-0.5 block text-xs leading-relaxed text-ink-soft">
+                            {check.fix}
+                          </span>
+                        )}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+                <p className="border-t border-hairline/60 px-5 py-3 text-xs leading-relaxed text-ink-soft">
+                  {readinessLeft === 0
+                    ? "Copy the listening link above and paste it into Apple Podcasts Connect and Spotify for Creators. "
+                    : "Once everything is ticked, paste the listening link above into Apple Podcasts Connect and Spotify for Creators. "}
+                  They'll ask for your email address on their own sites to confirm the show is yours.
+                </p>
               </Card>
             )}
 
@@ -971,6 +1091,18 @@ export default function Podcasts() {
                 onChange={(next) => setEpisodeDraft((d) => ({ ...d, showNotesMd: next }))}
                 rows={6}
                 placeholder="What this episode covers, and anything you mention in it."
+              />
+            </Field>
+
+            <Field
+              label="Transcript"
+              hint="optional — members can open it under the episode. Paste it exactly as it was spoken"
+            >
+              <Textarea
+                rows={8}
+                value={episodeDraft.transcript ?? ""}
+                onChange={(e) => setEpisodeDraft((d) => ({ ...d, transcript: e.target.value }))}
+                placeholder="Paste the full transcript here."
               />
             </Field>
 

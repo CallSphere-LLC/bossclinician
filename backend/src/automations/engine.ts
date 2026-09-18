@@ -2,7 +2,7 @@ import { pool } from "../db/pool";
 import { sendMail } from "../email/mailer";
 import { renderMarkdown, sendEmail } from "../email/provider";
 import { upsertContact } from "../services/contacts";
-import { env } from "../config/env";
+import { notificationRecipients } from "../services/notificationRecipients";
 
 /**
  * Automation engine: trigger -> "only if" conditions -> ordered actions.
@@ -123,7 +123,10 @@ async function runAction(action: ActionRow, payload: TriggerPayload): Promise<st
     }
 
     case "notify_admin": {
-      if (!env.notifyEmail) return "notify_admin: skipped (NOTIFY_EMAIL not set)";
+      // The owner built this step herself, so it has no on/off switch to obey —
+      // only the address, which comes from settings before NOTIFY_EMAIL.
+      const notifyTo = await notificationRecipients("alert");
+      if (!notifyTo) return "notify_admin: skipped (no notification address set)";
       const subject = render(String(config.subject ?? "Automation triggered"), payload);
       const body = render(
         String(config.body ?? "An automation fired for {{email}}."),
@@ -131,8 +134,8 @@ async function runAction(action: ActionRow, payload: TriggerPayload): Promise<st
       );
       // Escaped: the body carries a name and a message somebody typed into a
       // public form, and this one lands in the owner's own inbox.
-      await sendMail({ to: env.notifyEmail, subject, text: body, html: renderMarkdown(body) });
-      return `notify_admin: sent to ${env.notifyEmail}`;
+      await sendMail({ to: notifyTo, subject, text: body, html: renderMarkdown(body) });
+      return `notify_admin: sent to ${notifyTo}`;
     }
 
     case "create_member": {

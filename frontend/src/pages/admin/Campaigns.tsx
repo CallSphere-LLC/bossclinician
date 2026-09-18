@@ -1160,6 +1160,7 @@ export default function Campaigns() {
 
             <Field label="Your message">
               <EmailComposer
+                source="broadcast"
                 value={draft.bodyMd ?? ""}
                 onChange={(next) => setDraft((d) => ({ ...d, bodyMd: next }))}
                 placeholder={"Hi there,\n\nI wanted to tell you about…"}

@@ -1,6 +1,7 @@
 import crypto from "crypto";
 import { pool } from "../db/pool";
-import { renderMarkdown, renderTokens, sendEmail } from "../email/provider";
+import { buildMergeValues } from "../email/mergeValues";
+import { mergeLinks, renderMarkdown, renderTokens, sendEmail } from "../email/provider";
 import { PRIORITY, enqueueMany } from "../jobs/queue";
 import { MAILABLE_CONTACT_SQL } from "./audience";
 import { listSegmentContactIds } from "./segments";
@@ -399,17 +400,32 @@ export async function sendBroadcastOne(input: {
   const campaign = campaignRes.rows[0];
   if (!campaign) return { outcome: "skipped" };
 
-  const contactRes = await pool.query<{ name: string; first_name: string }>(
-    `SELECT name, first_name FROM contacts WHERE id = $1`,
+  const contactRes = await pool.query<{
+    name: string;
+    first_name: string;
+    last_name?: string;
+    timezone?: string;
+    custom_fields?: unknown;
+  }>(
+    `SELECT name, first_name, last_name, timezone, custom_fields FROM contacts WHERE id = $1`,
     [send.contact_id]
   );
   const contact = contactRes.rows[0];
 
-  const values = {
-    firstName: contact?.first_name || contact?.name?.split(" ")[0] || "there",
-    name: contact?.name || send.email,
-    email: send.email,
-  };
+  // Every token the composer's picker offers for a broadcast, not just the
+  // name: `renderTokens` blanks what it is not given, and a blank where the
+  // unsubscribe link should be is the worst one to lose.
+  const values = buildMergeValues(
+    {
+      email: send.email,
+      name: contact?.name,
+      firstName: contact?.first_name,
+      lastName: contact?.last_name,
+      timezone: contact?.timezone,
+      customFields: contact?.custom_fields,
+    },
+    mergeLinks(contact ? send.contact_id : null)
+  );
 
   // A/B is on the subject line only, and falls back to the A subject when the
   // B one was left blank — an experiment with an empty arm is a campaign that

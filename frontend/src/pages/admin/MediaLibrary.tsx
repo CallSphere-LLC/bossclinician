@@ -1,9 +1,20 @@
 import { publicSiteUrl } from "@/lib/siteOrigins";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { motion } from "motion/react";
-import { Check, Copy, ExternalLink, FolderOpen, Pencil, Play, Trash2 } from "lucide-react";
+import {
+  Check,
+  Copy,
+  ExternalLink,
+  Folder,
+  FolderInput,
+  FolderOpen,
+  Pencil,
+  Play,
+  Trash2,
+} from "lucide-react";
 import { toast } from "sonner";
 import { adminApi } from "@/lib/api";
+import { mediaLibraryApi, parseTagInput, type LibraryAsset } from "@/lib/mediaLibraryApi";
 import type { MediaAsset, MediaKind, MediaVisibility } from "@/types/admin";
 import { cn } from "@/lib/cn";
 import { formatBytes, formatRelative } from "@/lib/format";
@@ -16,9 +27,11 @@ import {
   chipRowStyles,
   EmptyState,
   ErrorNotice,
+  Field,
   Input,
   PageHeader,
   Skeleton,
+  Textarea,
 } from "@/pages/admin/ui/primitives";
 import { UploadDropzone, iconForKind } from "@/pages/admin/ui/Uploader";
 import { Modal, useConfirm } from "@/pages/admin/ui/Dialog";
@@ -101,13 +114,20 @@ function sentByContact(asset: MediaAsset): number | null {
 }
 
 export default function MediaLibrary() {
-  const [assets, setAssets] = useState<MediaAsset[] | null>(null);
+  const [assets, setAssets] = useState<LibraryAsset[] | null>(null);
   const [filter, setFilter] = useState<MediaKind | "all">("all");
+  // null is every folder; "" is the files that are not in one.
+  const [folderFilter, setFolderFilter] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [preview, setPreview] = useState<MediaAsset | null>(null);
-  const [renaming, setRenaming] = useState<MediaAsset | null>(null);
-  const [newTitle, setNewTitle] = useState("");
+  const [preview, setPreview] = useState<LibraryAsset | null>(null);
+  const [editing, setEditing] = useState<LibraryAsset | null>(null);
+  const [editFocus, setEditFocus] = useState<"name" | "folder">("name");
+  const [details, setDetails] = useState({ title: "", folder: "", altText: "", tags: "" });
+  const [saving, setSaving] = useState(false);
+  const nameRef = useRef<HTMLInputElement>(null);
+  const folderRef = useRef<HTMLInputElement>(null);
+  const folderListId = useId();
   const [copiedId, setCopiedId] = useState<number | null>(null);
   const [audience, setAudience] = useState<MediaVisibility>("public");
   const [confirm, confirmDialog] = useConfirm();
@@ -124,14 +144,43 @@ export default function MediaLibrary() {
   const visible = useMemo(() => {
     if (!assets) return null;
     const term = search.trim().toLowerCase();
+    // "#intake" and "intake" find the same tag.
+    const bare = term.replace(/^#+/, "");
     return assets.filter((a) => {
       if (filter !== "all" && a.kind !== filter) return false;
+      if (folderFilter !== null && (a.folder ?? "") !== folderFilter) return false;
       if (!term) return true;
       return (
-        a.title.toLowerCase().includes(term) || a.originalName.toLowerCase().includes(term)
+        a.title.toLowerCase().includes(term) ||
+        a.originalName.toLowerCase().includes(term) ||
+        (a.altText ?? "").toLowerCase().includes(term) ||
+        (bare !== "" && (a.tags ?? []).some((tag) => tag.toLowerCase().includes(bare)))
       );
     });
-  }, [assets, filter, search]);
+  }, [assets, filter, folderFilter, search]);
+
+  /** Folders in use, A to Z. A folder exists only while something is in it. */
+  const folders = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const a of assets ?? []) {
+      const name = a.folder ?? "";
+      if (name !== "") map.set(name, (map.get(name) ?? 0) + 1);
+    }
+    return Array.from(map, ([name, count]) => ({ name, count })).sort((a, b) =>
+      a.name.localeCompare(b.name, undefined, { sensitivity: "base" }),
+    );
+  }, [assets]);
+
+  const unfiledCount = useMemo(
+    () => (assets ?? []).filter((a) => (a.folder ?? "") === "").length,
+    [assets],
+  );
+
+  // Moving the last file out of a folder removes the folder, and a filter left
+  // pointing at it would show an empty library with no chip to explain why.
+  useEffect(() => {
+    if (folderFilter && !folders.some((f) => f.name === folderFilter)) setFolderFilter(null);
+  }, [folders, folderFilter]);
 
   const counts = useMemo(() => {
     const map = new Map<string, number>();
@@ -152,6 +201,22 @@ export default function MediaLibrary() {
     setAssets((prev) =>
       prev ? [asset, ...prev.filter((existing) => existing.id !== asset.id)] : [asset],
     );
+
+    // Uploaded while looking at a folder: that is where she expects to find it.
+    // Only a file with no folder yet — one she already filed elsewhere stays put.
+    if (folderFilter && !asset.folder) {
+      mediaLibraryApi
+        .update(asset.id, { folder: folderFilter })
+        .then(replaceAsset)
+        .catch(() => undefined);
+    }
+  }
+
+  function replaceAsset(updated: LibraryAsset) {
+    setAssets(
+      (current) => current?.map((asset) => (asset.id === updated.id ? updated : asset)) ?? current,
+    );
+    setPreview((current) => (current?.id === updated.id ? updated : current));
   }
 
   async function copyLink(asset: MediaAsset) {
@@ -187,22 +252,36 @@ export default function MediaLibrary() {
     }
   }
 
-  async function rename() {
-    if (!renaming || !newTitle.trim()) return;
+  async function saveDetails() {
+    if (!editing || !details.title.trim() || saving) return;
+    setSaving(true);
     try {
-      const updated = await adminApi.mediaRename(renaming.id, newTitle.trim());
-      setAssets((current) => current?.map((asset) => asset.id === updated.id ? updated : asset) ?? current);
-      setPreview((current) => current?.id === updated.id ? updated : current);
-      setRenaming(null);
-      toast.success("File renamed");
+      const updated = await mediaLibraryApi.update(editing.id, {
+        title: details.title.trim(),
+        folder: details.folder.trim(),
+        altText: details.altText.trim(),
+        tags: parseTagInput(details.tags),
+      });
+      replaceAsset(updated);
+      setEditing(null);
+      toast.success("File details saved");
     } catch (err) {
       toast.error(friendlyError(err, "file"));
+    } finally {
+      setSaving(false);
     }
   }
 
-  function openRename(asset: MediaAsset) {
-    setRenaming(asset);
-    setNewTitle(asset.title || asset.originalName);
+  /** `focus` is which box the dialog opens on: the name, or the folder for "Move". */
+  function openDetails(asset: LibraryAsset, focus: "name" | "folder" = "name") {
+    setEditing(asset);
+    setEditFocus(focus);
+    setDetails({
+      title: asset.title || asset.originalName,
+      folder: asset.folder ?? "",
+      altText: asset.altText ?? "",
+      tags: (asset.tags ?? []).join(", "),
+    });
   }
 
   /** What to say when the grid comes back empty — it depends on why it did. */
@@ -222,11 +301,20 @@ export default function MediaLibrary() {
       };
     }
     const group = FILTERS.find((f) => f.key === filter);
+    if (folderFilter !== null) {
+      return {
+        title:
+          folderFilter === ""
+            ? `Every one of your ${group?.plural ?? "files"} is in a folder`
+            : `No ${group?.plural ?? "files"} in “${folderFilter}”`,
+        description: "Choose “All folders” to see everything again.",
+      };
+    }
     return {
       title: `No ${group?.plural ?? "files"} yet — upload your first one`,
       description: "Anything you add in the box above will show up here.",
     };
-  }, [assets, filter, search]);
+  }, [assets, filter, folderFilter, search]);
 
   return (
     <div className="space-y-6">
@@ -305,11 +393,43 @@ export default function MediaLibrary() {
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by name…"
-            aria-label="Search your files by name"
+            placeholder="Search by name or tag…"
+            aria-label="Search your files by name, tag or description"
             className="ml-auto h-9 w-full sm:w-56"
           />
         </div>
+
+        {/* Shown once there is a folder to choose. Until then the row would be
+            two chips that both mean "everything". */}
+        {folders.length > 0 && (
+          <div
+            className="flex flex-wrap items-center gap-2 border-b border-hairline/60 px-4 py-3"
+            role="group"
+            aria-label="Folders"
+          >
+            <Folder aria-hidden className="size-4 shrink-0 text-ink-soft" />
+            <Chip selected={folderFilter === null} onClick={() => setFolderFilter(null)}>
+              All folders
+            </Chip>
+            {folders.map((f) => {
+              const active = folderFilter === f.name;
+              return (
+                <Chip key={f.name} selected={active} onClick={() => setFolderFilter(f.name)}>
+                  {f.name}
+                  <span className={cn(active ? "text-white/70" : "text-ink-soft/60")}>{f.count}</span>
+                </Chip>
+              );
+            })}
+            {unfiledCount > 0 && (
+              <Chip selected={folderFilter === ""} onClick={() => setFolderFilter("")}>
+                Not in a folder
+                <span className={cn(folderFilter === "" ? "text-white/70" : "text-ink-soft/60")}>
+                  {unfiledCount}
+                </span>
+              </Chip>
+            )}
+          </div>
+        )}
 
         <div className="p-4">
           {visible === null ? (
@@ -351,7 +471,7 @@ export default function MediaLibrary() {
                       {asset.kind === "image" ? (
                         <img
                           src={asset.previewUrl}
-                          alt={name}
+                          alt={asset.altText || name}
                           loading="lazy"
                           className="size-full object-cover transition-transform duration-150 group-hover:scale-[1.04]"
                         />
@@ -399,6 +519,21 @@ export default function MediaLibrary() {
                         {formatBytes(Number(asset.sizeBytes))} · added{" "}
                         {formatRelative(asset.createdAt)}
                       </p>
+                      {(asset.folder || (asset.tags ?? []).length > 0) && (
+                        <p className="mt-0.5 truncate text-[0.68rem] text-ink-soft">
+                          {asset.folder && (
+                            <button
+                              type="button"
+                              onClick={() => setFolderFilter(asset.folder)}
+                              className="font-semibold text-plum hover:underline"
+                            >
+                              {asset.folder}
+                            </button>
+                          )}
+                          {asset.folder && (asset.tags ?? []).length > 0 && " · "}
+                          {(asset.tags ?? []).map((tag) => `#${tag}`).join(" ")}
+                        </p>
+                      )}
                       {sentByContact(asset) !== null && (
                         <Link
                           to={`/admin/contacts/${sentByContact(asset)}`}
@@ -428,8 +563,19 @@ export default function MediaLibrary() {
                           variant="ghost"
                           size="iconSm"
                           className="h-8 w-8"
-                          aria-label={`Rename ${name}`}
-                          onClick={() => openRename(asset)}
+                          aria-label={`Move ${name} to a folder`}
+                          title="Move to folder"
+                          onClick={() => openDetails(asset, "folder")}
+                        >
+                          <FolderInput />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="iconSm"
+                          className="h-8 w-8"
+                          aria-label={`Edit the name, description and tags of ${name}`}
+                          title="Edit details"
+                          onClick={() => openDetails(asset)}
                         >
                           <Pencil />
                         </Button>
@@ -475,7 +621,7 @@ export default function MediaLibrary() {
               {preview.kind === "image" ? (
                 <img
                   src={preview.previewUrl}
-                  alt={preview.title || preview.originalName}
+                  alt={preview.altText || preview.title || preview.originalName}
                   className="mx-auto max-h-[60vh] w-auto"
                 />
               ) : preview.kind === "video" ? (
@@ -494,6 +640,30 @@ export default function MediaLibrary() {
                   </Button>
                 </div>
               )}
+            </div>
+
+            <div className="flex flex-wrap items-start gap-x-6 gap-y-2 rounded-xl border border-hairline px-3 py-2.5 text-xs text-ink-soft">
+              <p className="min-w-0 flex-1 basis-56">
+                <span className="font-semibold text-ink">Folder: </span>
+                {preview.folder || "Not in a folder"}
+                <span className="mx-2 text-ink-soft/50">·</span>
+                <span className="font-semibold text-ink">Tags: </span>
+                {(preview.tags ?? []).length > 0
+                  ? (preview.tags ?? []).map((tag) => `#${tag}`).join(" ")
+                  : "None yet"}
+                {preview.kind === "image" && (
+                  <>
+                    <br />
+                    <span className="font-semibold text-ink">Description: </span>
+                    {preview.altText ||
+                      "None yet — add one so people using a screen reader know what this picture shows."}
+                  </>
+                )}
+              </p>
+              <Button variant="secondary" size="sm" onClick={() => openDetails(preview)}>
+                <Pencil />
+                Edit details
+              </Button>
             </div>
 
             {/* The link itself is machinery — she needs to be able to hand it
@@ -525,31 +695,89 @@ export default function MediaLibrary() {
       </Modal>
 
       <Modal
-        open={renaming !== null}
-        onOpenChange={(open) => !open && setRenaming(null)}
-        title="Rename file"
-        description="This changes the name in your library; links and anything already using the file keep working."
-        size="sm"
+        open={editing !== null}
+        onOpenChange={(open) => !open && setEditing(null)}
+        title={editFocus === "folder" ? "Move to folder" : "File details"}
+        description="This only changes how the file is organised in your library; links and anything already using it keep working."
+        size="md"
+        initialFocusRef={editFocus === "folder" ? folderRef : nameRef}
         footer={
           <>
-            <Button variant="secondary" size="sm" onClick={() => setRenaming(null)}>
+            <Button variant="secondary" size="sm" onClick={() => setEditing(null)}>
               Cancel
             </Button>
-            <Button size="sm" disabled={!newTitle.trim()} onClick={() => void rename()}>
-              Save name
+            <Button
+              size="sm"
+              disabled={!details.title.trim() || saving}
+              onClick={() => void saveDetails()}
+            >
+              {saving ? "Saving…" : "Save"}
             </Button>
           </>
         }
       >
-        <Input
-          value={newTitle}
-          onChange={(event) => setNewTitle(event.target.value)}
-          aria-label="File name"
-          autoFocus
-          onKeyDown={(event) => {
-            if (event.key === "Enter") void rename();
-          }}
-        />
+        {editing && (
+          <form
+            className="space-y-4"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void saveDetails();
+            }}
+          >
+            <Field label="Name">
+              <Input
+                ref={nameRef}
+                value={details.title}
+                onChange={(event) => setDetails((d) => ({ ...d, title: event.target.value }))}
+                aria-label="File name"
+                maxLength={300}
+              />
+            </Field>
+            <Field
+              label="Folder"
+              hint="choose one you've already made, or type a new name. Leave it empty to take the file out of its folder"
+            >
+              <Input
+                ref={folderRef}
+                list={folderListId}
+                value={details.folder}
+                onChange={(event) => setDetails((d) => ({ ...d, folder: event.target.value }))}
+                placeholder="e.g. Course workbooks"
+                aria-label="Folder"
+                maxLength={80}
+              />
+              <datalist id={folderListId}>
+                {folders.map((f) => (
+                  <option key={f.name} value={f.name} />
+                ))}
+              </datalist>
+            </Field>
+            {editing.kind === "image" && (
+              <Field
+                label="Description of the picture"
+                hint="read aloud to people who can't see it. Say what it shows, in a sentence"
+              >
+                <Textarea
+                  rows={2}
+                  value={details.altText}
+                  onChange={(event) => setDetails((d) => ({ ...d, altText: event.target.value }))}
+                  placeholder="Yvette smiling at her desk, laptop open"
+                  maxLength={500}
+                />
+              </Field>
+            )}
+            <Field label="Tags" hint="separate them with commas — you can search by any of them">
+              <Input
+                value={details.tags}
+                onChange={(event) => setDetails((d) => ({ ...d, tags: event.target.value }))}
+                placeholder="intake, worksheet, 2026"
+                aria-label="Tags"
+              />
+            </Field>
+            {/* So Enter in any box saves, without a second visible button. */}
+            <button type="submit" hidden aria-hidden tabIndex={-1} />
+          </form>
+        )}
       </Modal>
 
       {confirmDialog}

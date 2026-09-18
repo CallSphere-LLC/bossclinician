@@ -1,4 +1,5 @@
 import { sessionFetch } from "@/lib/adminTransport";
+import type { HoneypotPayload } from "@/components/forms/useHoneypot";
 import type {
   AdminStats,
   AdminUser,
@@ -54,8 +55,10 @@ import type {
   AdminPointRule,
   AdminScheduledPost,
   MergeTag,
+  MergeTagSource,
   SavedEmailTemplate,
   SendingDomainReport,
+  SequenceStatsReport,
 } from "@/types/admin";
 
 /**
@@ -199,10 +202,10 @@ export const api = {
    * out, the server falls back to a field literally *keyed* `email`, and a
    * form whose email field is keyed anything else creates no lead at all.
    */
-  submitForm: (slug: string, data: Record<string, unknown>, email?: string) =>
+  submitForm: (slug: string, data: Record<string, unknown>, email?: string, honeypot?: HoneypotPayload) =>
     request<{ ok: true; message: string }>(`/forms/${encodeURIComponent(slug)}/submit`, {
       method: "POST",
-      body: JSON.stringify(email ? { data, email } : { data }),
+      body: JSON.stringify(email ? { data, email, ...honeypot } : { data, ...honeypot }),
     }),
   /** Reading a funnel does not count a view — the step counters do, below. */
   publicFunnel: (slug: string) => request<PublicFunnel>(`/funnels/${encodeURIComponent(slug)}`),
@@ -566,7 +569,10 @@ export const adminApi = {
   savedTemplateDelete: (id: number) =>
     request<void>(`/admin/saved-templates/${id}`, { method: "DELETE" }),
 
-  mergeTags: () => request<MergeTag[]>("/admin/saved-templates/merge-tags"),
+  mergeTags: (source?: MergeTagSource) =>
+    request<MergeTag[]>(
+      `/admin/saved-templates/merge-tags${source ? `?source=${encodeURIComponent(source)}` : ""}`,
+    ),
 
   /* ---- email: the sending domain (3.9) ---- */
 
@@ -587,6 +593,22 @@ export const adminApi = {
       method: "PUT",
       body: JSON.stringify({ offerIds, formIds }),
     }),
+
+  /* ---- sequences: folder, duplicate an email, joined/left figures ---- */
+
+  sequenceSetFolder: (id: number, folder: string) =>
+    request<{ id: number; folder: string }>(`/admin/sequences/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify({ folder }),
+    }),
+
+  sequenceEmailDuplicate: (id: number, emailId: number) =>
+    request<{ id: number; position: number; subject: string }>(
+      `/admin/sequences/${id}/emails/${emailId}/duplicate`,
+      { method: "POST" },
+    ),
+
+  sequenceStats: (id: number) => request<SequenceStatsReport>(`/admin/sequences/${id}/stats`),
 
   /* ---- gamification rules (2.7) ---- */
 

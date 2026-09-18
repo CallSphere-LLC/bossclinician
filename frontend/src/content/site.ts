@@ -1,6 +1,13 @@
 export interface NavLinkItem {
   label: string;
   to: string;
+  /**
+   * Desktop header only: hold this link back until the `xl` breakpoint. Seven
+   * links plus the account and booking actions do not fit a 1024px bar, and a
+   * wrapped nav is worse than a shorter one. The mobile sheet and the footer
+   * always show it.
+   */
+  wideOnly?: boolean;
 }
 
 export type NavBadgeTone = "green" | "plum" | "gold";
@@ -24,23 +31,23 @@ export function isNavMenu(entry: NavEntry): entry is NavMenu {
   return "items" in entry;
 }
 
-// TODO: point at /boss-clinician-club, /boss-clinician-lounge and
-// /boss-clinician-boardroom once those routes exist. Until then every offer
-// funnels into /work-with-me.
+// The Club and the Lounge have their own sales pages, at the same paths the
+// source site uses. The Boardroom has none yet: /boardroom redirects to
+// /work-with-me (migration 064), so the menu goes there directly.
 export const learnMenu: NavMenu = {
   label: "Learn",
   items: [
     {
       group: "Coaching Program",
       label: "Boss Clinician Club",
-      to: "/work-with-me",
+      to: "/club",
       badge: "6-Month Program",
       badgeTone: "green",
     },
     {
       group: "Membership",
       label: "Boss Clinician Lounge",
-      to: "/work-with-me",
+      to: "/lounge",
       badge: "Monthly",
       badgeTone: "plum",
     },
@@ -61,27 +68,50 @@ export const nav: NavEntry[] = [
   { label: "Resource Hub", to: "/resource-hub" },
   { label: "Retreats", to: "/retreats" },
   { label: "Blog", to: "/blog" },
+  { label: "Contact", to: "/contact", wideOnly: true },
 ];
+
+/** The header's account and booking actions, as the source site's header has them. */
+export const headerActions = {
+  logIn: { label: "Log In", to: "/login" },
+  // The header books the "chat" call; the footer's link is a different booking
+  // (alignwithyvette). Both are as they are on bossclinician.com.
+  bookACall: {
+    label: "Book A Call",
+    href: "https://tidycal.com/profitwithyvette/chatprofitwithyvette",
+  },
+};
 
 export const footer = {
   brandTagline: "Self Made — Self Paid.",
   tagline:
     "Community, strategy, and mastermind for therapists and clinicians building practices that are actually theirs.",
-  // TODO: swap the offer links for /boss-clinician-club, /boss-clinician-lounge
-  // and /boss-clinician-boardroom once those routes exist.
   exploreLinks: [
     { label: "About Yvette", to: "/about" },
-    { label: "Boss Clinician Club", to: "/work-with-me" },
-    { label: "Boss Clinician Lounge", to: "/work-with-me" },
+    { label: "Work With Me", to: "/work-with-me" },
+    { label: "Boss Clinician Club", to: "/club" },
+    { label: "Boss Clinician Lounge", to: "/lounge" },
+    // No Boardroom page yet; /boardroom itself redirects here.
     { label: "Boss Clinician Boardroom", to: "/work-with-me" },
     { label: "Blog", to: "/blog" },
     { label: "Contact", to: "/contact" },
   ] satisfies NavLinkItem[],
-  // TODO: point at /masterclass and /practice-reset-planner once those routes exist
+  // The source footer's resource list, under the source's labels. The four
+  // funnels that have not been rebuilt here (assessment, audit, marketing plan,
+  // hiring quiz) point at the Resource Hub, whose cards describe them and which
+  // is the closest page this site has; the offer quiz goes where the redirect
+  // map sends /offer-quiz. No #section anchors: Layout scrolls to the top on a
+  // path change and nothing scrolls to a hash, so an anchor would be a promise
+  // the page does not keep.
   resourceLinks: [
+    { label: "Resource Hub", to: "/resource-hub" },
     { label: "Free Masterclass", to: "/resources" },
     { label: "Practice Reset Planner", to: "/practice-reset-planner" },
-    { label: "Resource Hub", to: "/resource-hub" },
+    { label: "Offer Quiz", to: "/practice-quiz" },
+    { label: "Group Practice Assessment", to: "/resource-hub" },
+    { label: "Practice Reset Audit", to: "/resource-hub" },
+    { label: "5-Step Marketing Plan", to: "/resource-hub" },
+    { label: "Hiring Readiness Quiz", to: "/resource-hub" },
   ] satisfies NavLinkItem[],
   legalLinks: [
     { label: "Privacy Policy", to: "/privacy-policy" },
@@ -93,6 +123,9 @@ export const footer = {
   instagramHandle: "@bossclinician",
   facebook: "https://facebook.com/yvette.hwd",
   threads: "https://threads.net/@bossclinician",
+  linkedin: "https://www.linkedin.com/in/yvettelcsw/",
+  tiktok: "https://www.tiktok.com/@bossclinician",
+  tiktokHandle: "@bossclinician",
   bookACall: "https://tidycal.com/profitwithyvette/alignwithyvette",
   contactEmail: "yvette@bossclinician.com",
 };
@@ -557,10 +590,104 @@ export const applyPage = {
   cta: "LET'S BEGIN YOUR JOURNEY.",
 };
 
+/**
+ * bossclinician.com/contact as of 18 September 2026, block for block and in the
+ * source's wording. Two addresses, as on the source: `email` for general
+ * questions, `supportEmail` for access, billing and "where do I belong".
+ *
+ * One passage is adapted rather than copied: the source's cancellation steps
+ * walk through Kajabi's account menu ("tap your circle profile photo … Settings
+ * … Billing … Cancel"), which does not exist here. `billing.body` keeps the
+ * source's sentence and names this app's own Billing screen instead.
+ */
 export const contactPage = {
-  heading: "Hey There!",
-  intro: "Have a question or want to work with me?",
-  email: "bossclinician@gmail.com",
+  heading: "Hey there — how can we help?",
+  intro:
+    "Whether you have a question about a Boss Clinician program, need help accessing something you purchased, or want to figure out which space is right for you, you’re in the right place.",
+  emailLabel: "For general questions, email:",
+  email: "yvette@bossclinician.com",
+  supportEmail: "support@bossclinician.com",
+  programs: {
+    title: "Not sure which Boss Clinician program is right for you?",
+    body: "Boss Clinician supports therapists through different seasons of private-practice ownership.",
+    items: [
+      {
+        title: "The Club — Build It",
+        body: "For therapists who are still building the foundation of their private practice, working toward consistent clients, and creating a business they won’t have to undo later.",
+        bestFit: "Best fit if: your biggest question is still, “How do I build this and get it working?”",
+        cta: "LEARN ABOUT THE CLUB",
+        to: "/club",
+      },
+      {
+        title: "The Lounge — Sustain It",
+        body: "For established clinicians whose practice is already working — but requires more time, energy, or clinical output than they want to maintain long-term.",
+        bestFit:
+          "Best fit if: you’re full or nearly full and asking, “How do I make the practice I already built work better for my life?”",
+        cta: "LEARN ABOUT THE LOUNGE",
+        to: "/lounge",
+      },
+      {
+        title: "The Boardroom — Lead It",
+        body: "For practice owners who are moving beyond themselves and need support around leadership, team development, systems, and building a business that can grow without everything depending on them.",
+        bestFit:
+          "Best fit if: you’re asking, “How do I lead this business well as it grows beyond me?”",
+        cta: "LEARN ABOUT THE BOARDROOM",
+        // No Boardroom page yet; /boardroom redirects here too (migration 064).
+        to: "/work-with-me",
+      },
+    ],
+    closing: "Build it. Sustain it. Lead it. Leave it on your terms.",
+  },
+  access: {
+    title: "I need help accessing something I purchased",
+    intro:
+      "If you purchased a Boss Clinician course, training, membership, or resource and can’t log in, start here:",
+    steps: [
+      {
+        title: "Check the email address you used when purchasing.",
+        body: "Sometimes a different email address was used at checkout.",
+      },
+      {
+        title: "Check your spam, promotions, and junk folders.",
+        body: "Your purchase confirmation or login information may be there.",
+      },
+      {
+        title: "Reset your password.",
+        body: "Visit the Boss Clinician login page and select Forgot Password.",
+      },
+      {
+        title: "Still can’t get in?",
+        // The source's fourth step is the address and the list that follow it.
+        body: "",
+      },
+    ],
+    emailLead: "Email:",
+    emailWith: "with:",
+    include: [
+      "your full name",
+      "the product or program you purchased",
+      "the email address you believe you used",
+      "the approximate date of purchase",
+    ],
+    outro: "We’ll help you get it sorted out.",
+  },
+  billing: {
+    title: "I need help with billing or my membership",
+    body: "If you'd like to cancel your subscription membership to the Boss Clinician Lounge membership, you can do this by logging into your account, opening Billing, and selecting Cancel.",
+    cta: "Go to Billing",
+  },
+  retreat: {
+    title: "I’m interested in a retreat or event",
+    body: "Boss Clinician also hosts curated retreat experiences for healthcare and wellness professionals.",
+    lead: "Our next international retreat is planned for:",
+    date: "Bali — June 15–20, 2027",
+    cta: "LEARN ABOUT THE BALI RETREAT",
+  },
+  closing: {
+    title: "I still have a question",
+    body: "If you’re unsure where you belong or just need help, email:",
+    outro: "We’ll point you in the right direction.",
+  },
   body: "Currently, Yvette offers private practice coaching through her Profitable Private Practice group programs. This is her high-touch coaching program, and the best way to get personal access to her for help with starting, scaling, and expanding your practice.",
 };
 

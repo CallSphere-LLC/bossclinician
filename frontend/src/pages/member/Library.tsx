@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router";
 import {
+  Award,
   BookOpen,
   CalendarClock,
   FileDown,
@@ -44,6 +45,30 @@ import { cn } from "@/lib/cn";
 export default function Library() {
   const [data, setData] = useState<LibraryResponse | null>(null);
   const [error, setError] = useState("");
+  // Course ids with a live certificate. Loaded beside the shelf, never before
+  // it: the badge is a nicety, and a slow or failed read must not hold up — or
+  // break — the page somebody opened to get back to a lesson.
+  const [certifiedCourseIds, setCertifiedCourseIds] = useState<ReadonlySet<number>>(
+    () => new Set<number>(),
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    void libraryApi
+      .getCertificates()
+      .then(({ certificates }) => {
+        if (cancelled) return;
+        const ids = new Set<number>();
+        for (const row of certificates) {
+          if (!row.revoked && row.courseId !== null) ids.add(row.courseId);
+        }
+        setCertifiedCourseIds(ids);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const load = useCallback(async () => {
     try {
@@ -118,7 +143,10 @@ export default function Library() {
                 <ul className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                   {group.items.map((item) => (
                     <li key={item.productId} className="flex">
-                      <LibraryCard item={item} />
+                      <LibraryCard
+                        item={item}
+                        certified={item.courseId !== null && certifiedCourseIds.has(item.courseId)}
+                      />
                     </li>
                   ))}
                 </ul>
@@ -201,7 +229,7 @@ const KIND_ICONS: Record<string, typeof BookOpen> = {
   bundle: Layers,
 };
 
-function LibraryCard({ item }: { item: LibraryItem }) {
+function LibraryCard({ item, certified }: { item: LibraryItem; certified: boolean }) {
   const Icon = KIND_ICONS[item.kind] ?? BookOpen;
   const percent = item.progress?.percent ?? 0;
 
@@ -241,6 +269,15 @@ function LibraryCard({ item }: { item: LibraryItem }) {
                   : item.expiresInDays === 1
                     ? "1 day left"
                     : `${item.expiresInDays ?? 0} days left`}
+              </LuxePill>
+            </span>
+          )}
+
+          {certified && (
+            <span className="absolute right-3 top-3">
+              <LuxePill accent="green" className="gap-1.5 bg-night-deep/80 backdrop-blur">
+                <Award aria-hidden className="size-3" />
+                Certificate earned
               </LuxePill>
             </span>
           )}

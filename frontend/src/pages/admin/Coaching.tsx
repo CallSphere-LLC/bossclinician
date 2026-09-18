@@ -2,10 +2,11 @@ import { useNewProductRequest } from "./ui/useNewProductRequest";
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import * as Tabs from "@radix-ui/react-tabs";
 import type { ColumnDef } from "@tanstack/react-table";
-import { CalendarClock, Headphones, NotebookPen, Plus, Trash2, Users, Video } from "lucide-react";
+import { CalendarClock, Headphones, Link2, NotebookPen, Paperclip, Plus, Trash2, Users, Video } from "lucide-react";
 import { toast } from "sonner";
 import { adminApi } from "@/lib/api";
-import type { CoachingOffer, CoachingSession } from "@/types/admin";
+import { coachingAdminApi, type CoachingSessionFile } from "@/lib/coachingAdminApi";
+import type { CoachingOffer, CoachingSession, MediaAsset } from "@/types/admin";
 import { cn } from "@/lib/cn";
 import { formatCurrency, formatDateTime } from "@/lib/format";
 import {
@@ -24,6 +25,7 @@ import {
 } from "@/pages/admin/ui/primitives";
 import { DataTable, RowActions } from "@/pages/admin/ui/DataTable";
 import { Modal, useConfirm } from "@/pages/admin/ui/Dialog";
+import { UploadDropzone } from "@/pages/admin/ui/Uploader";
 import {
   friendlyError,
   fromDateTimeInput,
@@ -52,6 +54,18 @@ const SESSION_LABEL: Record<string, string> = {
 };
 
 const SESSION_STATUSES = ["scheduled", "completed", "cancelled", "no_show"];
+
+/**
+ * The session as the form edits it.
+ *
+ * The list endpoint returns every column, so these two have always arrived;
+ * the shared `CoachingSession` type simply never named them, because until now
+ * there was no box to type them into.
+ */
+type SessionDraft = Partial<CoachingSession> & {
+  recordingUrl?: string;
+  sharedNotes?: string;
+};
 
 interface CoachingClient {
   kind: "member" | "contact";
@@ -399,8 +413,78 @@ function SessionsTab() {
   const [clients, setClients] = useState<CoachingClient[]>([]);
   const [contactSearch, setContactSearch] = useState("");
   const [clientChoice, setClientChoice] = useState("");
-  const [draft, setDraft] = useState<Partial<CoachingSession> | null>(null);
+  const [draft, setDraft] = useState<SessionDraft | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [files, setFiles] = useState<CoachingSessionFile[]>([]);
+  const [linkTitle, setLinkTitle] = useState("");
+  const [linkUrl, setLinkUrl] = useState("");
+
+  // Files belong to a saved session, so they load when one is opened and are
+  // attached and removed straight away rather than with "Save session".
+  const draftId = draft?.id ?? null;
+  useEffect(() => {
+    setFiles([]);
+    setLinkTitle("");
+    setLinkUrl("");
+    if (!draftId) return;
+    let cancelled = false;
+    coachingAdminApi
+      .sessionFiles(draftId)
+      .then((list) => {
+        if (!cancelled) setFiles(list);
+      })
+      .catch(() => {
+        if (!cancelled) toast.error("We couldn't load this session's files. Close it and open it again.");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [draftId]);
+
+  async function attachFile(data: { mediaId?: number | null; title: string; url: string }) {
+    if (!draftId) return false;
+    try {
+      const file = await coachingAdminApi.sessionFileAdd(draftId, data);
+      setFiles((current) => [...current, file]);
+      toast.success("Shared with your client");
+      return true;
+    } catch (err) {
+      toast.error(friendlyError(err, "file"));
+      return false;
+    }
+  }
+
+  function attachUpload(asset: MediaAsset) {
+    void attachFile({
+      mediaId: asset.id,
+      title: asset.title || asset.originalName,
+      url: asset.url,
+    });
+  }
+
+  async function attachLink() {
+    const url = linkUrl.trim();
+    if (!/^https?:\/\//i.test(url)) {
+      toast.error("Paste the full link, starting with https://");
+      return;
+    }
+    const added = await attachFile({ title: linkTitle.trim() || url, url });
+    if (added) {
+      setLinkTitle("");
+      setLinkUrl("");
+    }
+  }
+
+  async function removeFile(file: CoachingSessionFile) {
+    if (!draftId) return;
+    try {
+      await coachingAdminApi.sessionFileDelete(draftId, file.id);
+      setFiles((current) => current.filter((item) => item.id !== file.id));
+      toast.success("File removed");
+    } catch (err) {
+      toast.error(friendlyError(err, "file"));
+    }
+  }
 
   const load = useCallback(() => {
     adminApi
@@ -660,6 +744,123 @@ function SessionsTab() {
                 onChange={(e) => setDraft((d) => ({ ...d, privateNotes: e.target.value }))}
                 className={cn("bg-gold-light/40")}
               />
+            </Field>
+
+            <div className="sm:col-span-2">
+              <p className="border-t border-hairline/60 pt-4 text-[0.8rem] font-semibold text-ink">
+                After the session
+              </p>
+              <p className="mt-0.5 text-xs text-ink-soft">
+                Everything below appears on your client's session page.
+              </p>
+            </div>
+            <Field
+              label="Notes to share"
+              hint="a recap, the homework, what you agreed — your client can read this"
+              className="sm:col-span-2"
+            >
+              <Textarea
+                rows={4}
+                value={draft.sharedNotes ?? ""}
+                onChange={(e) => setDraft((d) => ({ ...d, sharedNotes: e.target.value }))}
+              />
+            </Field>
+            <Field
+              label="Recording link"
+              hint="a Zoom, Loom or YouTube link. If you've got the recording as a file, add it under Files instead"
+              className="sm:col-span-2"
+            >
+              <Input
+                inputMode="url"
+                value={draft.recordingUrl ?? ""}
+                onChange={(e) => setDraft((d) => ({ ...d, recordingUrl: e.target.value }))}
+                placeholder="https://zoom.us/rec/share/…"
+              />
+            </Field>
+            <Field
+              label="Files"
+              hint="handouts, worksheets or the recording itself — only this client can open them"
+              className="sm:col-span-2"
+            >
+              {draft.id ? (
+                <div className="space-y-3">
+                  <UploadDropzone
+                    compact
+                    visibility="protected"
+                    scope={`coaching-files:${draft.id}`}
+                    onUploaded={attachUpload}
+                  />
+                  <div className="grid gap-2 sm:grid-cols-[1fr_1.4fr_auto]">
+                    <Input
+                      value={linkTitle}
+                      onChange={(e) => setLinkTitle(e.target.value)}
+                      placeholder="Name, e.g. Session slides"
+                      aria-label="Name for the link"
+                    />
+                    <Input
+                      inputMode="url"
+                      value={linkUrl}
+                      onChange={(e) => setLinkUrl(e.target.value)}
+                      placeholder="Or paste a link — https://…"
+                      aria-label="Link to share"
+                      onKeyDown={(e) => {
+                        // Enter here would otherwise submit the whole session form.
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          void attachLink();
+                        }
+                      }}
+                    />
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      className="h-full min-h-10"
+                      disabled={!linkUrl.trim()}
+                      onClick={() => void attachLink()}
+                    >
+                      Add link
+                    </Button>
+                  </div>
+                  {files.length > 0 && (
+                    <ul className="space-y-2">
+                      {files.map((file) => {
+                        const isLink = /^https?:\/\//i.test(file.url);
+                        const name = file.title || (isLink ? file.url : "Untitled file");
+                        return (
+                          <li
+                            key={file.id}
+                            className="flex min-h-11 items-center gap-3 rounded-xl border border-hairline px-3 py-2"
+                          >
+                            {isLink ? (
+                              <Link2 className="size-4 shrink-0 text-ink-soft" />
+                            ) : (
+                              <Paperclip className="size-4 shrink-0 text-ink-soft" />
+                            )}
+                            <span className="min-w-0 flex-1 truncate text-sm text-ink">{name}</span>
+                            <span className="shrink-0 text-xs text-ink-soft">
+                              {isLink ? "Link" : "Uploaded file"}
+                            </span>
+                            <Button
+                              type="button"
+                              variant="dangerGhost"
+                              size="iconSm"
+                              aria-label={`Remove ${name}`}
+                              onClick={() => void removeFile(file)}
+                            >
+                              <Trash2 />
+                            </Button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </div>
+              ) : (
+                <p className="rounded-xl border border-dashed border-hairline px-4 py-3 text-sm text-ink-soft">
+                  Save the session once, then open it again to add files.
+                </p>
+              )}
             </Field>
           </form>
         )}

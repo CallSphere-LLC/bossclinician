@@ -35,6 +35,9 @@ import { kindFromMime } from "../../services/mediaStorage";
 /** Public endpoints for podcasts (RSS), forms and funnels. */
 export const growthPublicRouter = Router();
 
+/** Faster than this and nobody read the form, let alone filled it in. */
+const MIN_FILL_MS = 2000;
+
 /** XML entity escaping — podcast titles routinely contain & and quotes. */
 function xmlEscape(value: string): string {
   return value
@@ -252,7 +255,23 @@ growthPublicRouter.get(
 const submitSchema = z.object({
   data: z.record(z.string(), z.unknown()),
   email: z.string().email().max(320).optional(),
+  // The honeypot pair, same shape as the lead form's. On the envelope rather
+  // than inside `data`, where a form may well ask for a "company" of its own.
+  company: z.string().max(200).optional(),
+  elapsedMs: z.number().int().nonnegative().optional(),
 });
+
+/**
+ * Whether a reply came from a script rather than a person.
+ *
+ * The same two signals the lead and event forms read: a field nobody can see
+ * has something in it, or the form came back faster than anyone could have
+ * read it. A reply carrying neither value is let through — a page cached from
+ * before the trap existed must not lose somebody's answers.
+ */
+export function isAutomatedSubmission(input: { company?: string; elapsedMs?: number }): boolean {
+  return Boolean(input.company?.trim()) || (input.elapsedMs !== undefined && input.elapsedMs < MIN_FILL_MS);
+}
 
 /**
  * A stored question, as much of one as a submission has to understand.
@@ -595,6 +614,17 @@ growthPublicRouter.post(
 
     const parsed = submitSchema.safeParse(multipart ? multipartPayload(req.body) : req.body);
     if (!parsed.success) throw badRequest("Invalid submission", parsed.error.flatten());
+
+    // A filled honeypot, or a form sent faster than a person can read it, is a
+    // script. It gets the same 201 a real submission gets — an error response
+    // is just feedback a bot can tune against — but nothing is written, mailed
+    // or triggered. Checked here for both kinds of reply: a multipart one has
+    // its files in temp names by now, and those are deleted when this response
+    // closes, as they are for any reply that is not kept.
+    if (isAutomatedSubmission(parsed.data)) {
+      res.status(201).json({ ok: true, message: form.success_message });
+      return;
+    }
 
     // Nothing a client says about a file question is its answer — only a file
     // that actually arrived is. Otherwise `{ mediaAssetId: 12 }` typed into the

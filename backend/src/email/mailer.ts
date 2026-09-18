@@ -6,10 +6,23 @@ import { assertRecipientAllowed } from "./recipientGuard";
 
 let transporter: Transporter;
 
+/** True when there is a real SMTP transport behind this module. */
+function smtpConfigured(): boolean {
+  return Boolean(env.smtp.host && env.smtp.user && env.smtp.pass);
+}
+
+/**
+ * What a production send says when there is nothing to send it with.
+ *
+ * Exported so a test, and anyone reading the delivery log, can match on it.
+ */
+export const NO_TRANSPORT_ERROR =
+  "No email transport is configured (SMTP_HOST, SMTP_USER and SMTP_PASS are not all set), so nothing was sent.";
+
 function getTransporter(): Transporter {
   if (transporter) return transporter;
 
-  if (env.smtp.host && env.smtp.user && env.smtp.pass) {
+  if (smtpConfigured()) {
     transporter = nodemailer.createTransport({
       host: env.smtp.host,
       port: env.smtp.port,
@@ -100,6 +113,16 @@ export async function sendMailStrict(input: SendMailInput): Promise<{ messageId:
   // Outside production, only allow-listed recipients (see recipientGuard.ts).
   // Thrown before the transport, so every caller records it as not sent.
   assertRecipientAllowed(input.to);
+
+  // In production the console fallback below is a lie waiting to be told:
+  // jsonTransport "succeeds", so a receipt that never left the box was written
+  // down as `sent` and the success page thanked the buyer for an email that did
+  // not exist. Checked on every call rather than inside `getTransporter`, whose
+  // result is cached for the life of the process. Development and tests keep
+  // the console transport — they have no SMTP and must not need one.
+  if (env.nodeEnv === "production" && !smtpConfigured()) {
+    throw new Error(NO_TRANSPORT_ERROR);
+  }
 
   // SES emits nothing at all for a message sent without a configuration set, so
   // the default is applied here rather than at each call site: a sender that

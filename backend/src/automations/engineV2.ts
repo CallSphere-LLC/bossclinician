@@ -8,6 +8,7 @@ import { PRIORITY, enqueue } from "../jobs/queue";
 import { grantOfferAccess, revokeOfferAccess } from "../services/access";
 import { applyTags, recordActivity, removeTags, upsertContact } from "../services/contacts";
 import { enrollContact, exitContact } from "../services/sequences";
+import { notificationRecipients } from "../services/notificationRecipients";
 
 /**
  * The automation engine, second edition: When → If → Then.
@@ -35,6 +36,8 @@ export const TRIGGER_TYPES = [
   "form_submitted",
   "offer_purchased",
   "sequence_completed",
+  "sequence_subscribed",
+  "sequence_unsubscribed",
   "tag_added",
   "tag_removed",
   "subscription_cancelled",
@@ -83,6 +86,11 @@ export const TRIGGER_DESCRIPTORS: TriggerDescriptor[] = [
   { type: "form_submitted", label: "someone submits a form", subjectKey: "formId", subjectSource: "forms", subjectLabel: "Which form" },
   { type: "offer_purchased", label: "someone buys an offer", subjectKey: "offerId", subjectSource: "offers", subjectLabel: "Which offer" },
   { type: "sequence_completed", label: "someone finishes an email sequence", subjectKey: "sequenceId", subjectSource: "sequences", subjectLabel: "Which sequence" },
+  // Joining and leaving, as distinct from finishing: "left" is a run cut short —
+  // taken off by hand, by an automation, by an exit tag, or by buying the thing
+  // the sequence was selling — and never fires for somebody who reached the end.
+  { type: "sequence_subscribed", label: "someone is added to an email sequence", subjectKey: "sequenceId", subjectSource: "sequences", subjectLabel: "Which sequence" },
+  { type: "sequence_unsubscribed", label: "someone leaves an email sequence early", subjectKey: "sequenceId", subjectSource: "sequences", subjectLabel: "Which sequence" },
   { type: "tag_added", label: "a tag is added to someone", subjectKey: "tagId", subjectSource: "tags", subjectLabel: "Which tag" },
   { type: "tag_removed", label: "a tag is removed from someone", subjectKey: "tagId", subjectSource: "tags", subjectLabel: "Which tag" },
   { type: "subscription_cancelled", label: "someone's subscription actually ends", subjectKey: "planId", subjectSource: "plans", subjectLabel: "Which plan" },
@@ -690,9 +698,10 @@ async function performAction(
           subjectId: String(automationId),
         });
       }
-      if (env.notifyEmail) {
+      const followUpTo = await notificationRecipients("alert");
+      if (followUpTo) {
         await sendMail({
-          to: env.notifyEmail,
+          to: followUpTo,
           subject: `Follow up: ${title}`,
           text: [`${title}`, ``, note, ``, `About: ${context.email || "someone"}`].join("\n"),
         });

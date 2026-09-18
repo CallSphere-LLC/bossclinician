@@ -1,4 +1,4 @@
-import { memberRequest, type RequestOptions } from "@/lib/memberApi";
+import { memberFetch, memberRequest, type RequestOptions } from "@/lib/memberApi";
 
 /**
  * Library domain client — the shelf, the player, and everything a member
@@ -325,6 +325,82 @@ export interface DownloadLink {
 
 export type DownloadKind = "product" | "lesson";
 
+/**
+ * One row of "all my downloads". Mirrors `DownloadItem` in
+ * `routes/member/downloads.ts`.
+ *
+ * A lesson attachment that has not dripped yet is still listed, with
+ * `available: false`, an unlock label, and no filename or size — the server
+ * withholds both until the lesson opens.
+ */
+export interface DownloadListItem {
+  kind: DownloadKind;
+  id: number;
+  title: string;
+  description: string;
+  filename: string;
+  mime: string;
+  sizeBytes: number;
+  sizeLabel: string;
+  available: boolean;
+  unlocksAt: string | null;
+  unlockLabel: string | null;
+  /** A display hint. The credential is minted by `downloadLink`, as everywhere else. */
+  linkUrl: string | null;
+  productId: number | null;
+  productTitle: string;
+  productSlug: string;
+  courseId: number | null;
+  courseTitle: string;
+  lessonId: number | null;
+  lessonTitle: string;
+  moduleTitle: string;
+  downloadCount: number;
+  createdAt: string;
+}
+
+export interface DownloadsResponse {
+  files: DownloadListItem[];
+  total: number;
+  availableCount: number;
+  linkTtlSeconds: number;
+}
+
+/* ------------------------------------------------------------ certificates */
+
+/**
+ * Mirrors `CertificateJson` in `routes/member/certificates.ts`.
+ *
+ * A withdrawn certificate stays in the list with `revoked: true`, and the
+ * server blanks its code and both of its URLs — so those three are empty
+ * strings, not missing, and must be checked before they are shown or followed.
+ */
+export interface MemberCertificate {
+  id: number;
+  courseId: number | null;
+  courseSlug: string | null;
+  courseTitle: string;
+  recipientName: string;
+  verificationCode: string;
+  /** A site path — `/verify/<code>` — that a licensing board can open signed out. */
+  verifyUrl: string;
+  downloadUrl: string;
+  creditQuarterHours: number;
+  /** "1.5 CE hours", or "" for a course that carries no CE credit. */
+  creditHours: string;
+  providerNumber: string;
+  completedAt: string;
+  issuedAt: string;
+  revoked: boolean;
+  revokedAt: string | null;
+}
+
+export interface CertificateClaimResult {
+  /** null when there is nothing to issue yet — `message` says why, in the server's words. */
+  certificate: MemberCertificate | null;
+  message: string;
+}
+
 /* -------------------------------------------------------------------- paths */
 
 /**
@@ -416,7 +492,71 @@ export const libraryApi = {
    */
   downloadLink: (kind: DownloadKind, fileId: number) =>
     memberRequest<DownloadLink>(`/member/downloads/${kind}/${fileId}/link`, { method: "POST" }),
+
+  /** Every file the member can reach, across every product and course they own. */
+  getDownloads: () => memberRequest<DownloadsResponse>("/member/downloads"),
+
+  getCertificates: () =>
+    memberRequest<{ certificates: MemberCertificate[] }>("/member/certificates"),
+
+  /**
+   * Asks for the certificate of a finished course. Idempotent: one that already
+   * exists comes back unchanged, with no second email.
+   */
+  claimCertificate: (courseId: number) =>
+    memberRequest<CertificateClaimResult>("/member/certificates/claim", {
+      method: "POST",
+      body: JSON.stringify({ courseId }),
+    }),
 };
+
+/** Where a certificate's PDF is fetched from. Needs the Bearer token, so not an href. */
+export function certificateDownloadPath(certificateId: number): string {
+  return `/member/certificates/${certificateId}/download`;
+}
+
+/** The name the server gave the file, or a sensible one if the header is unreadable. */
+function filenameFromDisposition(header: string | null, fallback: string): string {
+  if (!header) return fallback;
+  const encoded = /filename\*=UTF-8''([^;]+)/i.exec(header);
+  if (encoded?.[1]) {
+    try {
+      return decodeURIComponent(encoded[1]);
+    } catch {
+      // Falls through to the plain form.
+    }
+  }
+  const plain = /filename="?([^";]+)"?/i.exec(header);
+  return plain?.[1] ?? fallback;
+}
+
+/**
+ * Fetches a certificate's PDF and hands it to the browser.
+ *
+ * Unlike the files above there is no signed link to mint: the route answers with
+ * the bytes themselves, behind the Bearer token. So the PDF is read as a blob and
+ * saved through an object URL, which is released straight after the click.
+ */
+export async function downloadCertificate(certificate: MemberCertificate): Promise<void> {
+  const res = await memberFetch(certificateDownloadPath(certificate.id));
+  const blob = await res.blob();
+
+  const filename = filenameFromDisposition(
+    res.headers.get("Content-Disposition"),
+    `certificate-${certificate.verificationCode || certificate.id}.pdf`,
+  );
+
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.rel = "noopener";
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  // Deferred a tick: some browsers start reading the blob after `click` returns.
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
 
 /**
  * Mints a link and hands the file to the browser.

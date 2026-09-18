@@ -44,6 +44,9 @@ import { adminEventsRouter } from "./events";
 import { adminFormsRouter as adminFormsV2Router } from "./formsV2";
 import { adminAvailabilityRouter } from "./availability";
 import { adminMarketingOverviewRouter } from "./marketingOverview";
+import { adminCoachingSessionFilesRouter } from "./coachingSessionFiles";
+import { adminAuditLogRouter } from "./auditLog";
+import { adminContactAccessRouter } from "./contactAccess";
 
 export const adminRouter = Router();
 adminRouter.use(adminCsrf);
@@ -138,6 +141,9 @@ adminRouter.use("/settings", requireAuth, moduleGate("settings"), adminSettingsR
 adminRouter.use("/ai", requireAuth, moduleGate("website"), adminAiRouter);
 adminRouter.use("/media", requireAuth, moduleGate("website"), adminMediaRouter);
 adminRouter.use("/curriculum", requireAuth, moduleGate("products"), adminCurriculumRouter);
+adminRouter.use("/coaching", requireAuth, moduleGate("coaching"), adminCoachingSessionFilesRouter);
+adminRouter.use("/audit-log", requireAuth, requirePermission("admins.view"), adminAuditLogRouter);
+adminRouter.use("/contact-access", requireAuth, moduleGate("contacts"), adminContactAccessRouter);
 adminRouter.use("/members", requireAuth, requirePermission("contacts.view"), adminMembersRouter);
 adminRouter.use("/community", requireAuth, moduleGate("community"), adminCommunityRouter);
 adminRouter.use("/sales", requireAuth, requirePermission("orders.view"), adminSalesRouter);

@@ -1,5 +1,6 @@
 import { pool } from "../db/pool";
-import { renderMarkdown, renderTokens, sendEmail } from "../email/provider";
+import { buildMergeValues } from "../email/mergeValues";
+import { mergeLinks, renderMarkdown, renderTokens, sendEmail } from "../email/provider";
 import { PRIORITY, enqueueMany } from "../jobs/queue";
 import { zonedWallClockToUtc } from "./drip";
 import { applyTags, recordActivity } from "./contacts";
@@ -277,7 +278,47 @@ export async function enrollContact(
     subjectId: String(sequenceId),
   });
 
+  await publishSequenceEvent("sequence_subscribed", {
+    subscriptionId: inserted.rows[0].id,
+    sequenceId,
+    contactId,
+    reason: options.reason ?? "",
+  });
+
   return { subscriptionId: Number(inserted.rows[0].id), outcome: "enrolled", reason: "" };
+}
+
+/**
+ * Tells the automation engine somebody joined, or left, a sequence.
+ *
+ * The import is lazy on purpose. `domainEvents` imports the engine and the
+ * engine imports this file (it enrols people), so a static import here closes a
+ * cycle — the same one the completion trigger avoids by firing from the job
+ * instead. Enrolment and exit have too many callers for that, so the module is
+ * loaded at the moment of the call, by which time all three are initialised.
+ *
+ * Never throws: the subscription row is already written, and a trigger that
+ * could not be queued is not a reason to tell the caller the enrolment failed.
+ */
+async function publishSequenceEvent(
+  trigger: "sequence_subscribed" | "sequence_unsubscribed",
+  input: { subscriptionId: string | number; sequenceId: number; contactId: number; reason: string }
+): Promise<void> {
+  try {
+    const { publishDomainEvent } = await import("./domainEvents");
+    await publishDomainEvent(trigger, {
+      // One subscription row is reused when somebody re-enters, so the row id
+      // alone would collapse their second run into their first.
+      eventKey: `${trigger.replace("_", "-")}:subscription:${input.subscriptionId}:${Date.now()}`,
+      contactId: input.contactId,
+      subjectId: input.sequenceId,
+      source: "sequence",
+      facts: { reason: input.reason.slice(0, 200) },
+    });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error(`[sequences] ${trigger} for subscription ${input.subscriptionId} not published:`, err);
+  }
 }
 
 /** Ends a contact's run through one sequence. Silent when they were not in it. */
@@ -294,6 +335,16 @@ export async function exitContact(
       RETURNING id`,
     [sequenceId, contactId, options.status ?? "exited", (options.reason ?? "").slice(0, 200)]
   );
+  const row = res.rows[0];
+  // Finishing is its own trigger; only a run that was cut short is "left".
+  if (row && (options.status ?? "exited") !== "completed") {
+    await publishSequenceEvent("sequence_unsubscribed", {
+      subscriptionId: row.id,
+      sequenceId,
+      contactId,
+      reason: options.reason ?? "",
+    });
+  }
   return (res.rowCount ?? 0) > 0;
 }
 
@@ -313,7 +364,7 @@ export async function exitContactOnPurchase(
    */
   offerId: number | null = null
 ): Promise<number> {
-  const res = await pool.query(
+  const res = await pool.query<{ id: string; sequence_id: number }>(
     `UPDATE sequence_subscriptions s
         SET status = 'exited', exit_reason = $2, next_send_at = NULL,
             completed_at = now(), updated_at = now()
@@ -332,9 +383,18 @@ export async function exitContactOnPurchase(
                 SELECT 1 FROM sequence_exclude_offers x
                  WHERE x.sequence_id = q.id AND x.offer_id = $3
               ))
-        )`,
+        )
+      RETURNING s.id, s.sequence_id`,
     [contactId, reason.slice(0, 200), offerId]
   );
+  for (const row of res.rows) {
+    await publishSequenceEvent("sequence_unsubscribed", {
+      subscriptionId: row.id,
+      sequenceId: row.sequence_id,
+      contactId,
+      reason,
+    });
+  }
   return res.rowCount ?? 0;
 }
 
@@ -351,7 +411,7 @@ export async function exitContactOnFormSubmission(
   formId: number,
   reason = "filled in a form"
 ): Promise<number> {
-  const res = await pool.query(
+  const res = await pool.query<{ id: string; sequence_id: number }>(
     `UPDATE sequence_subscriptions s
         SET status = 'exited', exit_reason = $3, next_send_at = NULL,
             completed_at = now(), updated_at = now()
@@ -362,9 +422,18 @@ export async function exitContactOnFormSubmission(
         AND EXISTS (
           SELECT 1 FROM sequence_exclude_forms x
            WHERE x.sequence_id = q.id AND x.form_id = $2
-        )`,
+        )
+      RETURNING s.id, s.sequence_id`,
     [contactId, formId, reason.slice(0, 200)]
   );
+  for (const row of res.rows) {
+    await publishSequenceEvent("sequence_unsubscribed", {
+      subscriptionId: row.id,
+      sequenceId: row.sequence_id,
+      contactId,
+      reason,
+    });
+  }
   return res.rowCount ?? 0;
 }
 
@@ -424,12 +493,6 @@ export interface SendStepResult {
   /** Set on every outcome that touched a real subscription, for the caller's trigger fan-out. */
   sequenceId: number | null;
   contactId: number | null;
-}
-
-function greetingName(name: string, firstName: string): string {
-  if (firstName.trim()) return firstName.trim();
-  const first = name.trim().split(/\s+/)[0];
-  return first || "there";
 }
 
 /**
@@ -495,10 +558,12 @@ export async function sendDueEmail(
       email: string;
       name: string;
       first_name: string;
+      last_name: string;
       timezone: string;
       email_marketing_status: string;
+      custom_fields: unknown;
     }>(
-      `SELECT email, name, first_name, timezone, email_marketing_status
+      `SELECT email, name, first_name, last_name, timezone, email_marketing_status, custom_fields
          FROM contacts WHERE id = $1`,
       [subscription.contact_id]
     );
@@ -537,6 +602,12 @@ export async function sendDueEmail(
           [subscription.id]
         );
         await client.query("COMMIT");
+        await publishSequenceEvent("sequence_unsubscribed", {
+          subscriptionId: subscription.id,
+          sequenceId: subscription.sequence_id,
+          contactId: subscription.contact_id,
+          reason: "exit tag applied",
+        });
         return {
           outcome: "exited",
           detail: "exit tag applied",
@@ -573,11 +644,20 @@ export async function sendDueEmail(
       };
     }
 
-    const values = {
-      firstName: greetingName(contact.name, contact.first_name),
-      name: contact.name || contact.email,
-      email: contact.email,
-    };
+    // Every token the composer's picker offers for a sequence. `renderTokens`
+    // blanks what it is not given, so a token missing here goes out as nothing.
+    const values = buildMergeValues(
+      {
+        email: contact.email,
+        name: contact.name,
+        firstName: contact.first_name,
+        lastName: contact.last_name,
+        timezone: contact.timezone,
+        customFields: contact.custom_fields,
+      },
+      mergeLinks(subscription.contact_id),
+      now
+    );
 
     const result = await sendEmail({
       to: contact.email,

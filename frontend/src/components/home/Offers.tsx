@@ -41,7 +41,7 @@ const offers: Offer[] = [
     desc: "A 6-month coaching program for clinicians building from the ground up. Get the structure, tools, and guided strategy to do it right — without guessing at every step. This is your foundation, your roadmap, and your support system for the first six months.",
     forWho: "For: The Depleted Clinician — just starting or rebuilding",
     ctaLabel: "Learn About the Club",
-    to: "/work-with-me",
+    to: "/club",
   },
   {
     tag: "Membership",
@@ -50,7 +50,7 @@ const offers: Offer[] = [
     desc: "For the fully booked clinician who has hit the income ceiling, is exhausted from splitting rates with platforms, and needs a real strategy — not more content — to scale sustainably without working more hours.",
     forWho: "For: The Maxed Out Clinician — established but capped",
     ctaLabel: "Join the Lounge",
-    to: "/work-with-me",
+    to: "/lounge",
   },
   {
     tag: "Mastermind",
@@ -117,14 +117,9 @@ export function Offers() {
 
         <div className="mx-auto mt-10 max-w-4xl border-l-[3px] border-plum bg-lilac-tint px-7 py-5 text-sm leading-relaxed text-ink">
           <strong>Not sure which is right for you?</strong> Take the 2-minute quiz:{" "}
-          <a
-            href="https://www.bossclinician.com/offer-quiz"
-            target="_blank"
-            rel="noopener"
-            className="text-plum underline underline-offset-2"
-          >
+          <Link to="/practice-quiz" className="text-plum underline underline-offset-2">
             Which Boss Clinician Offer Is Right for You?
-          </a>
+          </Link>
         </div>
       </Container>
     </section>

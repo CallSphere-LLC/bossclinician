@@ -81,8 +81,7 @@ export function ResourceCard({ card, accent }: ResourceCardProps) {
           variant="glass"
           size="sm"
           href={card.href}
-          target="_blank"
-          rel="noopener noreferrer"
+          {...(card.href.startsWith("http") ? { target: "_blank", rel: "noopener noreferrer" } : {})}
           className="mt-6 min-h-[44px] w-full tracking-[0.1em] sm:tracking-[0.14em]"
         >
           {card.ctaLabel}

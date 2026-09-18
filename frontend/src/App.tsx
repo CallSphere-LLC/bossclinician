@@ -24,6 +24,8 @@ const MemberProfile = lazy(() => import("@/pages/member/Profile"));
 const MemberSecurity = lazy(() => import("@/pages/member/Security"));
 const MemberBilling = lazy(() => import("@/pages/member/Billing"));
 const MemberPurchases = lazy(() => import("@/pages/member/Purchases"));
+const MemberDownloads = lazy(() => import("@/pages/member/Downloads"));
+const MemberEmailPreferences = lazy(() => import("@/pages/member/EmailPreferences"));
 const MemberReceipt = lazy(() => import("@/pages/member/Receipt"));
 const MemberLibrary = lazy(() => import("@/pages/member/Library"));
 const MemberCoursePlayer = lazy(() => import("@/pages/member/CoursePlayer"));
@@ -69,6 +71,9 @@ export const PUBLIC_ROUTES: readonly { path: string; Component: RouteComponent }
   // Where 55 of the legacy bossclinician.com product URLs land.
   { path: "/courses/:slug", Component: lazyRoute(() => import("@/pages/CourseDetail")) },
   { path: "/partners", Component: lazyRoute(() => import("@/pages/AffiliateSignup")) },
+  // The address printed on every certificate and returned as `verifyUrl` by the
+  // member API. Public on purpose: the reader is a licensing board, signed out.
+  { path: "/verify/:code", Component: lazyRoute(() => import("@/pages/VerifyCertificate")) },
   // One route per builder-created thing, so a quiz or an event is shareable the
   // moment it is published — no deploy to add one.
   { path: "/quiz/:slug", Component: lazyRoute(() => import("@/pages/Quiz")) },
@@ -83,6 +88,8 @@ export const PUBLIC_ROUTES: readonly { path: string; Component: RouteComponent }
   { path: "/contact", Component: lazyRoute(() => import("@/pages/Contact")) },
   { path: "/retreats", Component: lazyRoute(() => import("@/pages/Retreats")) },
   { path: "/store", Component: lazyRoute(() => import("@/pages/Store")) },
+  { path: "/club", Component: lazyRoute(() => import("@/pages/Club")) },
+  { path: "/lounge", Component: lazyRoute(() => import("@/pages/Lounge")) },
   { path: "/practice-quiz", Component: lazyRoute(() => import("@/pages/PracticeQuiz")) },
   {
     path: "/practice-reset-planner",
@@ -160,6 +167,8 @@ function memberRoutes() {
         <Route path="/account/security" element={<MemberSecurity />} />
         <Route path="/account/billing" element={<MemberBilling />} />
         <Route path="/account/purchases" element={<MemberPurchases />} />
+        <Route path="/account/downloads" element={<MemberDownloads />} />
+        <Route path="/account/email" element={<MemberEmailPreferences />} />
         {/* A receipt's permanent address, and its PDF's. Inside RequireMember,
             so a signed-out visit goes to /login and returns here. */}
         <Route path="/account/purchases/:orderId/receipt" element={<MemberReceipt />} />

@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { motion } from "motion/react";
+import { Link } from "react-router";
 import { Seo } from "@/components/Seo";
 import { GlassCard } from "@/components/luxe/GlassCard";
 import { LuxeButton, LuxePill } from "@/components/luxe/LuxeButton";
@@ -29,11 +30,12 @@ type Accent = React.ComponentProps<typeof GlassCard>["accent"];
 const ACCENTS = ["green", "plum", "gold"] as const satisfies readonly Accent[];
 
 /* ── Routes & outbound links ──────────────────────────────────────────────
-   /offer-quiz has no counterpart on this site yet, so it stays an absolute
-   link to the Kajabi page and opens in a new tab. The three community CTAs
-   all resolve to /work-with-me, which is where the Club, Lounge and Boardroom
-   live here. */
-const QUIZ_URL = "https://www.bossclinician.com/offer-quiz";
+   /offer-quiz has no counterpart on this site yet. It must NOT be an absolute
+   bossclinician.com link: after the domain cutover that URL is this app, and
+   the redirect map (migration 004) already sends /offer-quiz to
+   /practice-quiz — so the link goes there directly, in the same tab. The
+   three community CTAs all resolve to /work-with-me. */
+const QUIZ_URL = "/practice-quiz";
 const WORK_WITH_ME = "/work-with-me";
 const BRIGHTER_TOMORROW = "https://brightertomorrowtherapy.com/";
 const EXTERNAL = { target: "_blank", rel: "noopener noreferrer" } as const;
@@ -240,8 +242,7 @@ export default function About() {
               <LuxeButton
                 variant="foil"
                 size="lg"
-                href={QUIZ_URL}
-                {...EXTERNAL}
+                to={QUIZ_URL}
                 className="w-full sm:w-auto"
               >
                 FIND YOUR NEXT STEP →
@@ -515,8 +516,7 @@ export default function About() {
           <LuxeButton
             variant="foil"
             size="lg"
-            href={QUIZ_URL}
-            {...EXTERNAL}
+            to={QUIZ_URL}
             className="w-full sm:w-auto"
           >
             FIND YOUR OFFER →
@@ -802,13 +802,12 @@ function ClosingCta() {
         className="mt-8 flex flex-wrap items-center justify-center gap-x-2"
       >
         <span className="copy-luxe text-sm">Not sure which is right for you?</span>
-        <a
-          href={QUIZ_URL}
-          {...EXTERNAL}
+        <Link
+          to={QUIZ_URL}
           className={cn(LINK_CLASS, "inline-flex min-h-[44px] items-center text-sm")}
         >
           Take the free 2-minute quiz →
-        </a>
+        </Link>
       </motion.div>
     </>
   );

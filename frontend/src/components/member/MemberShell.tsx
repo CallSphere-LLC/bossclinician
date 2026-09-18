@@ -14,6 +14,7 @@ import {
   Users,
 } from "lucide-react";
 import { useMember } from "@/hooks/useMember";
+import { TimezonePrompt } from "@/components/member/TimezonePrompt";
 import { cn } from "@/lib/cn";
 
 /**
@@ -272,6 +273,9 @@ export function MemberShell({ title, description, actions, children }: MemberShe
         </nav>
 
         <main id="member-content" className="min-w-0 flex-1">
+          {/* Renders nothing unless the device and the saved time zone disagree. */}
+          <TimezonePrompt className="mb-8" />
+
           <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between sm:gap-8">
             <div className="min-w-0">
               <h1 className="text-balance font-display text-[1.9rem] font-medium leading-[1.15] text-white sm:text-[2.4rem]">

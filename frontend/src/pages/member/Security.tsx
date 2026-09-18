@@ -148,6 +148,10 @@ function SessionsCard({ reloadToken }: { reloadToken: number }) {
   const [sessions, setSessions] = useState<MemberSessionInfo[] | null>(null);
   const [error, setError] = useState("");
   const [revoking, setRevoking] = useState<number | null>(null);
+  // Two steps rather than a browser confirm(): the question is asked in the
+  // page's own voice, and it cannot be answered by a stray Enter.
+  const [confirmingAll, setConfirmingAll] = useState(false);
+  const [revokingAll, setRevokingAll] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -176,6 +180,27 @@ function SessionsCard({ reloadToken }: { reloadToken: number }) {
       toast.error("We could not sign that device out. Please try again.");
     } finally {
       setRevoking(null);
+    }
+  };
+
+  const others = sessions?.filter((row) => !row.current).length ?? 0;
+
+  const revokeOthers = async () => {
+    setRevokingAll(true);
+    try {
+      await memberApi.revokeOtherSessions();
+      // The server keeps the session that asked; the list keeps the same row.
+      setSessions((list) => (list ? list.filter((row) => row.current) : list));
+      toast.success("Done. Every other device has been signed out.");
+    } catch (err) {
+      toast.error(
+        err instanceof MemberApiError
+          ? err.message
+          : "We could not sign your other devices out. Please try again.",
+      );
+    } finally {
+      setRevokingAll(false);
+      setConfirmingAll(false);
     }
   };
 
@@ -249,6 +274,57 @@ function SessionsCard({ reloadToken }: { reloadToken: number }) {
           </ul>
         )}
       </div>
+
+      {others > 0 && (
+        <div className="mt-6 border-t border-white/[0.07] pt-6">
+          {confirmingAll ? (
+            <div role="group" aria-labelledby="sign-out-all-question">
+              <p id="sign-out-all-question" className="text-sm font-medium text-white">
+                Sign out of {others === 1 ? "your other device" : `all ${others} other devices`}?
+              </p>
+              <p className="copy-luxe mt-1 max-w-lg text-sm">
+                You will stay signed in here. Everywhere else will need your password again.
+              </p>
+              <div className="mt-4 flex flex-wrap gap-3">
+                <LuxeButton
+                  type="button"
+                  variant="foil"
+                  size="sm"
+                  disabled={revokingAll}
+                  onClick={() => void revokeOthers()}
+                >
+                  {revokingAll && <Loader2 aria-hidden className="size-4 animate-spin" />}
+                  {revokingAll ? "Signing out" : "Yes, sign them out"}
+                </LuxeButton>
+                <LuxeButton
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={revokingAll}
+                  onClick={() => setConfirmingAll(false)}
+                >
+                  Not now
+                </LuxeButton>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
+              <p className="copy-luxe max-w-lg text-sm">
+                Lost a phone, or used a shared computer? Sign out everywhere else in one go.
+              </p>
+              <LuxeButton
+                type="button"
+                variant="outline"
+                size="sm"
+                className="shrink-0 self-start sm:self-auto"
+                onClick={() => setConfirmingAll(true)}
+              >
+                Sign out of all other devices
+              </LuxeButton>
+            </div>
+          )}
+        </div>
+      )}
     </GlassCard>
   );
 }

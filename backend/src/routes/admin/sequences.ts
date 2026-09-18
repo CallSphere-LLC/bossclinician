@@ -3,7 +3,15 @@ import { z } from "zod";
 import { partialUpdate } from "../../validation/partialUpdate";
 import { marketingSettings } from "../../email/provider";
 import { pool } from "../../db/pool";
-import { renderMarkdown, renderTokens, sendEmail } from "../../email/provider";
+import { mergeLinks, renderMarkdown, renderTokens, sendEmail } from "../../email/provider";
+import {
+  MERGE_TAGS,
+  MERGE_TAG_SOURCES,
+  buildMergeValues,
+  customTokenKey,
+  mergeTagsFor,
+  type MergeTagEntry,
+} from "../../email/mergeValues";
 import { enrollContact, exitContact } from "../../services/sequences";
 import { upsertContact } from "../../services/contacts";
 import { asyncHandler } from "../../utils/asyncHandler";
@@ -330,6 +338,90 @@ adminSequencesRouter.delete(
 );
 
 /**
+ * POST /:id/emails/:emailId/duplicate
+ *
+ * The copy lands directly after the original, switched off and marked
+ * "(copy)": a second email with the same subject going out by itself the next
+ * morning is not what anybody pressing Duplicate wants, and the per-email
+ * figures are matched on the subject line.
+ *
+ * Making room uses the same negative scratch space as the reorder below —
+ * `(sequence_id, position)` is unique, and a plain `position + 1` collides
+ * with the next row half way through the statement. People part-way through
+ * are moved along with the emails they were waiting for, so nobody is sent the
+ * previous email a second time.
+ */
+adminSequencesRouter.post(
+  "/:id/emails/:emailId/duplicate",
+  asyncHandler(async (req, res) => {
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+
+      const sourceRes = await client.query<{
+        position: number;
+        delay_minutes: number;
+        subject: string;
+        preview_text: string;
+        body_md: string;
+        from_name: string;
+        from_email: string;
+      }>(
+        `SELECT position, delay_minutes, subject, preview_text, body_md, from_name, from_email
+           FROM sequence_emails
+          WHERE id = $2 AND sequence_id = $1
+          FOR UPDATE`,
+        [req.params.id, req.params.emailId]
+      );
+      const source = sourceRes.rows[0];
+      if (!source) throw notFound("Email not found");
+
+      await client.query(
+        `UPDATE sequence_emails SET position = -position
+          WHERE sequence_id = $1 AND position > $2`,
+        [req.params.id, source.position]
+      );
+      await client.query(
+        `UPDATE sequence_emails SET position = -position + 1, updated_at = now()
+          WHERE sequence_id = $1 AND position < 0`,
+        [req.params.id]
+      );
+      await client.query(
+        `UPDATE sequence_subscriptions SET position = position + 1, updated_at = now()
+          WHERE sequence_id = $1 AND position > $2 AND status IN ('active', 'paused')`,
+        [req.params.id, source.position]
+      );
+
+      const copy = await client.query(
+        `INSERT INTO sequence_emails
+           (sequence_id, position, delay_minutes, subject, preview_text, body_md,
+            from_name, from_email, enabled)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, false)
+         RETURNING *`,
+        [
+          req.params.id,
+          source.position + 1,
+          source.delay_minutes,
+          `${source.subject.slice(0, 493)} (copy)`,
+          source.preview_text,
+          source.body_md,
+          source.from_name,
+          source.from_email,
+        ]
+      );
+
+      await client.query("COMMIT");
+      res.status(201).json(rowToCamel(copy.rows[0]));
+    } catch (err) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      throw err;
+    } finally {
+      client.release();
+    }
+  })
+);
+
+/**
  * PUT the whole running order.
  *
  * Two passes, because `(sequence_id, position)` is unique and swapping two
@@ -394,7 +486,32 @@ adminSequencesRouter.post(
     const row = result.rows[0];
     if (!row) throw notFound("Email not found");
 
-    const values = { firstName: "there", name: "Test reader", email };
+    // The same values a real send builds, so a test shows every token filled
+    // in. When the address belongs to a contact it reads as it would for them.
+    const known = await pool.query<{
+      id: number;
+      name: string;
+      first_name: string;
+      last_name: string;
+      timezone: string;
+      custom_fields: unknown;
+    }>(
+      `SELECT id, name, first_name, last_name, timezone, custom_fields
+         FROM contacts WHERE email = $1`,
+      [email]
+    );
+    const contact = known.rows[0];
+    const values = buildMergeValues(
+      {
+        email,
+        name: contact?.name || "Test reader",
+        firstName: contact ? contact.first_name : "there",
+        lastName: contact?.last_name,
+        timezone: contact?.timezone,
+        customFields: contact?.custom_fields,
+      },
+      mergeLinks(contact?.id ?? null, { preview: true })
+    );
     const body = renderTokens(row.body_md, values);
 
     // Sent as transactional: it is a preview going to the person who wrote it,
@@ -483,10 +600,50 @@ adminSequencesRouter.post(
   })
 );
 
-/** Per-email open and click totals — the reason `email_messages` exists. */
+/**
+ * Per-email open and click totals — the reason `email_messages` exists — and
+ * how many people have joined, finished and left.
+ *
+ * `subscribed` is everybody who has ever been put on the sequence (there is one
+ * row per person, reused on re-entry). `exited` is a run cut short, broken down
+ * by the reason recorded at the time. `unsubscribed` is a different thing from
+ * leaving the sequence: people on it who have since opted out of marketing
+ * email altogether.
+ */
 adminSequencesRouter.get(
   "/:id/stats",
   asyncHandler(async (req, res) => {
+    const [totals, reasons] = await Promise.all([
+      pool.query<{
+        subscribed: number;
+        active: number;
+        paused: number;
+        completed: number;
+        exited: number;
+        unsubscribed: number;
+      }>(
+        `SELECT COUNT(*)::int                                                    AS subscribed,
+                COUNT(*) FILTER (WHERE s.status = 'active')::int                 AS active,
+                COUNT(*) FILTER (WHERE s.status = 'paused')::int                 AS paused,
+                COUNT(*) FILTER (WHERE s.status = 'completed')::int              AS completed,
+                COUNT(*) FILTER (WHERE s.status IN ('exited', 'cancelled'))::int AS exited,
+                COUNT(*) FILTER (WHERE c.email_marketing_status = 'opted_out')::int AS unsubscribed
+           FROM sequence_subscriptions s
+           JOIN contacts c ON c.id = s.contact_id
+          WHERE s.sequence_id = $1`,
+        [req.params.id]
+      ),
+      pool.query<{ reason: string; count: number }>(
+        `SELECT exit_reason AS reason, COUNT(*)::int AS count
+           FROM sequence_subscriptions
+          WHERE sequence_id = $1 AND status IN ('exited', 'cancelled')
+          GROUP BY exit_reason
+          ORDER BY count DESC, reason
+          LIMIT 20`,
+        [req.params.id]
+      ),
+    ]);
+
     const result = await pool.query(
       `SELECT e.id, e.position, e.subject,
               COUNT(m.id) FILTER (WHERE m.status <> 'suppressed')::int AS sent,
@@ -501,7 +658,18 @@ adminSequencesRouter.get(
         ORDER BY e.position`,
       [req.params.id]
     );
-    res.json(rowsToCamel(result.rows));
+    res.json({
+      emails: rowsToCamel(result.rows),
+      subscribers: {
+        subscribed: totals.rows[0]?.subscribed ?? 0,
+        active: totals.rows[0]?.active ?? 0,
+        paused: totals.rows[0]?.paused ?? 0,
+        completed: totals.rows[0]?.completed ?? 0,
+        exited: totals.rows[0]?.exited ?? 0,
+        unsubscribed: totals.rows[0]?.unsubscribed ?? 0,
+        exitReasons: reasons.rows.map((row) => ({ reason: row.reason, count: row.count })),
+      },
+    });
   })
 );
 
@@ -744,31 +912,63 @@ adminSavedTemplatesRouter.delete(
 /* ---------------------------------------------------------------- merge tags */
 
 /**
- * 3.5. Every token the composer understands, with what it becomes.
- *
- * Served rather than hardcoded in the client for one reason: the list has to
- * agree with what the renderer actually substitutes. A picker offering
- * `{{courseName}}` that renders as the literal text is worse than no picker,
- * because it puts the broken token into the email under Yvette's name.
+ * 3.5. The list itself lives beside the code that fills the tokens in
+ * (`email/mergeValues`), so the two are tested against each other. Re-exported
+ * because this is where it used to be.
  */
-export const MERGE_TAGS = [
-  { token: "{{firstName}}", label: "First name", example: "Yvette" },
-  { token: "{{lastName}}", label: "Last name", example: "Howard" },
-  { token: "{{name}}", label: "Full name", example: "Yvette Howard" },
-  { token: "{{email}}", label: "Email address", example: "yvette@example.com" },
-  { token: "{{offerName}}", label: "What they bought", example: "The B.O.S.S Blueprint" },
-  { token: "{{courseName}}", label: "Course name", example: "Practice Reset Intensive" },
-  { token: "{{communityName}}", label: "Community name", example: "The Boss" },
-  { token: "{{total}}", label: "Amount paid", example: "$19.00" },
-  { token: "{{date}}", label: "The date in question", example: "September 15" },
-  { token: "{{loginUrl}}", label: "Sign-in link", example: "https://…/login" },
-  { token: "{{startUrl}}", label: "Their library", example: "https://…/library" },
-  { token: "{{unsubscribeUrl}}", label: "Unsubscribe link", example: "https://…/email/prefs" },
-] as const;
+export { MERGE_TAGS };
 
+/** How many `{{custom.…}}` tokens the picker will list. */
+const CUSTOM_TAG_LIMIT = 30;
+
+/**
+ * The custom fields people actually have, as tokens.
+ *
+ * Read off the contacts rather than a definitions table because there is not
+ * one: a custom field exists the moment a form stores it.
+ */
+async function customMergeTags(): Promise<MergeTagEntry[]> {
+  const keys = await pool.query<{ key: string }>(
+    `SELECT DISTINCT jsonb_object_keys(custom_fields) AS key
+       FROM contacts
+      WHERE custom_fields <> '{}'::jsonb
+      ORDER BY key
+      LIMIT $1`,
+    [CUSTOM_TAG_LIMIT]
+  );
+  const seen = new Set<string>();
+  const tags: MergeTagEntry[] = [];
+  for (const row of keys.rows) {
+    const key = customTokenKey(row.key);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    tags.push({
+      token: `{{custom.${key}}}`,
+      label: `Custom: ${row.key}`,
+      example: "from their contact record",
+      scope: "all",
+    });
+  }
+  return tags;
+}
+
+/**
+ * GET /merge-tags?source=broadcast|sequence|transactional
+ *
+ * Only what that kind of email can fill in. A broadcast has no order behind
+ * it, so offering it `{{total}}` is offering a blank.
+ */
 adminSavedTemplatesRouter.get(
   "/merge-tags",
-  asyncHandler(async (_req, res) => {
-    res.json(MERGE_TAGS);
+  asyncHandler(async (req, res) => {
+    const source = z.enum(MERGE_TAG_SOURCES).optional().catch(undefined).parse(req.query.source);
+    const tags = mergeTagsFor(source);
+    if (source === "broadcast" || source === "sequence") {
+      // The picker is still useful without these, so a failure here is not one.
+      const custom = await customMergeTags().catch(() => []);
+      res.json([...tags, ...custom]);
+      return;
+    }
+    res.json(tags);
   })
 );

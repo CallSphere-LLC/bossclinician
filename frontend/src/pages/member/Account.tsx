@@ -1,6 +1,15 @@
 import { useState } from "react";
 import { Link } from "react-router";
-import { CreditCard, MailWarning, Receipt, ShieldCheck, User, type LucideIcon } from "lucide-react";
+import {
+  CreditCard,
+  FileDown,
+  Mail,
+  MailWarning,
+  Receipt,
+  ShieldCheck,
+  User,
+  type LucideIcon,
+} from "lucide-react";
 import { Seo } from "@/components/Seo";
 import { MemberShell, MemberAvatar } from "@/components/member/MemberShell";
 import { GlassCard } from "@/components/luxe/GlassCard";
@@ -41,6 +50,18 @@ const AREAS: AreaCard[] = [
     icon: Receipt,
     title: "Purchases",
     body: "Every course, retreat and resource you have bought, with receipts.",
+  },
+  {
+    to: "/account/downloads",
+    icon: FileDown,
+    title: "Downloads",
+    body: "Every worksheet and workbook that came with something you own, in one place.",
+  },
+  {
+    to: "/account/email",
+    icon: Mail,
+    title: "Email preferences",
+    body: "Choose which emails you would like from us — newsletters, reminders and the rest.",
   },
 ];
 

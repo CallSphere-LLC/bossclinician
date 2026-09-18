@@ -117,6 +117,26 @@ export function Footer() {
                 Threads
               </a>
             </li>
+            <li>
+              <a
+                href={footer.linkedin}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={columnLink}
+              >
+                LinkedIn
+              </a>
+            </li>
+            <li>
+              <a
+                href={footer.tiktok}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={columnLink}
+              >
+                TikTok {footer.tiktokHandle}
+              </a>
+            </li>
           </ul>
         </div>
       </Container>

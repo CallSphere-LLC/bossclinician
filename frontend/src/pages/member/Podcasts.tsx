@@ -13,6 +13,7 @@ import {
 import { Seo } from "@/components/Seo";
 import { MemberShell } from "@/components/member/MemberShell";
 import { GlassCard } from "@/components/luxe/GlassCard";
+import { TranscriptPanel } from "@/components/player/TranscriptPanel";
 import { LuxeButton, LuxePill } from "@/components/luxe/LuxeButton";
 import { MemberApiError } from "@/lib/memberApi";
 import { publishingApi, type MemberPodcast, type PodcastEpisode } from "@/lib/publishingApi";
@@ -380,6 +381,9 @@ function EpisodeRow({
   onToggle: () => void;
 }) {
   const length = episodeLength(episode.durationSeconds);
+  // The API sends it on every episode; `lib/publishingApi` has not named the
+  // field yet, and an older cached response will not carry it at all.
+  const transcript = (episode as PodcastEpisode & { transcript?: string }).transcript ?? "";
 
   return (
     <div className="py-3.5">
@@ -431,6 +435,14 @@ function EpisodeRow({
           className="mt-3 w-full"
           aria-label={`${episode.title} audio player`}
         />
+      )}
+
+      {/* Renders nothing for an episode without one. Offered whether or not the
+          player is open: reading is how some members take an episode in. */}
+      {transcript.trim() !== "" && (
+        <div className="mt-3">
+          <TranscriptPanel transcript={transcript} />
+        </div>
       )}
     </div>
   );
