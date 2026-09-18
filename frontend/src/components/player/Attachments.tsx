@@ -33,7 +33,9 @@ interface OpenFile {
 const ACTION =
   "inline-flex min-h-[2.75rem] shrink-0 items-center gap-2 rounded-lg border border-white/10 px-3 " +
   "text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-orchid transition-colors duration-300 " +
-  "hover:border-gold/40 hover:bg-white/[0.05] hover:text-white " +
+  // Gold, not white, on hover: the light theme remaps `text-white` but not its
+  // `hover:` form, and a white label on a white page is an empty box.
+  "hover:border-gold/40 hover:bg-white/[0.05] hover:text-gold " +
   "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold " +
   "disabled:cursor-wait disabled:opacity-60";
 

@@ -59,6 +59,13 @@ html[data-site-theme="light"] .theme-luxe :is(.glass-edge, .spotlight)::after {
 html[data-site-theme="light"] .theme-luxe :is([class~="text-white"], [class*="text-white/"]) {
   color: rgb(var(--c-ink));
 }
+/* The same mapping for the hover and focus forms. `hover:text-white` is a
+   different class token, so without this a link or button label turned pure
+   white on a white page the moment the pointer reached it. */
+html[data-site-theme="light"] .theme-luxe :is([class*="hover:text-white"]:hover, [class*="focus:text-white"]:focus, [class*="focus-visible:text-white"]:focus-visible),
+html[data-site-theme="light"] .theme-luxe .group:hover [class*="group-hover:text-white"] {
+  color: rgb(var(--c-ink));
+}
 html[data-site-theme="light"] .theme-luxe :is([class*="placeholder:text-white"], input, textarea)::placeholder {
   color: rgb(var(--c-ink-soft));
   opacity: 1;
