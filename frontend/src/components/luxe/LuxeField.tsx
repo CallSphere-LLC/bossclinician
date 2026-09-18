@@ -178,7 +178,9 @@ export function LuxeSelect({
           CONTROL,
           "appearance-none bg-[length:0.7rem] bg-[right_1rem_center] bg-no-repeat pr-10",
           "[background-image:url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23C9A46A' stroke-width='1.6' fill='none' stroke-linecap='round'/%3E%3C/svg%3E\")]",
-          "[&>option]:bg-night-raised [&>option]:text-white",
+          // Tokens, not `text-white`: both follow the theme, so the list is dark
+          // on white in the light theme instead of white on white.
+          "[&>option]:bg-night-raised [&>option]:text-ink [&>optgroup]:bg-night-raised [&>optgroup]:text-ink",
           error && "border-red-400/60",
           className,
         )}

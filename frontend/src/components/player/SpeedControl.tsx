@@ -80,7 +80,7 @@ export function SpeedControl({ rate, onChange, className }: SpeedControlProps) {
           "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold/70",
           "appearance-none bg-[length:0.65rem] bg-[right_0.9rem_center] bg-no-repeat",
           "[background-image:url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23C9A46A' stroke-width='1.6' fill='none' stroke-linecap='round'/%3E%3C/svg%3E\")]",
-          "[&>option]:bg-night-raised [&>option]:text-white",
+          "[&>option]:bg-night-raised [&>option]:text-ink",
         )}
       >
         {PLAYBACK_RATES.map((value) => (
