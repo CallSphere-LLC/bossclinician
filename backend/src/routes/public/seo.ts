@@ -315,6 +315,8 @@ seoRouter.get("/robots.txt", asyncHandler(async (_req, res) => {
       "Disallow: /signup",
       "Disallow: /reset-password",
       "Disallow: /verify-email",
+      "Disallow: /host-link",
+      "Disallow: /verify",
       "Disallow: /api/",
       "",
       `Sitemap: ${env.publicSiteUrl}/sitemap.xml`,

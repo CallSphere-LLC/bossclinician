@@ -43,6 +43,11 @@ interface MemberAuthValue {
     lastName?: string;
   }) => Promise<boolean>;
   signInWithToken: (token: string) => Promise<void>;
+  /**
+   * Trades a one-time host link from the admin for a member session as the
+   * community's host. Replaces whoever was signed in here before.
+   */
+  signInAsHost: (token: string) => Promise<void>;
   signOut: () => Promise<void>;
   /** Replaces the cached profile after a save, without a round trip. */
   setMember: (member: MemberProfile) => void;
@@ -172,6 +177,14 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
     [applySession],
   );
 
+  const signInAsHost = useCallback(
+    async (token: string) => {
+      const { member: profile, accessToken } = await memberApi.consumeHostLink(token);
+      applySession(profile, accessToken);
+    },
+    [applySession],
+  );
+
   const signOut = useCallback(async () => {
     try {
       await memberApi.logout();
@@ -192,11 +205,12 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
       signIn,
       signUp,
       signInWithToken,
+      signInAsHost,
       signOut,
       setMember: setMemberState,
       refreshMember,
     }),
-    [member, loading, signIn, signUp, signInWithToken, signOut, refreshMember],
+    [member, loading, signIn, signUp, signInWithToken, signInAsHost, signOut, refreshMember],
   );
 
   return <MemberAuthContext.Provider value={value}>{children}</MemberAuthContext.Provider>;

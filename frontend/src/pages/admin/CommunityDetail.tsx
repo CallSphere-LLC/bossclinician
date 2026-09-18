@@ -277,6 +277,7 @@ function LiveRoomPanel({
     liveRoomCapacity: community.liveRoomCapacity ?? 8,
   });
   const [saving, setSaving] = useState(false);
+  const [joining, setJoining] = useState(false);
   const [visits, setVisits] = useState<AdminLiveVisit[] | null>(null);
 
   useEffect(() => {
@@ -284,6 +285,32 @@ function LiveRoomPanel({
   }, [communityId]);
 
   const label = form.liveRoomAlias.trim() || "Live room";
+
+  /**
+   * The room lives on the member site and only lets member sessions in, so an
+   * admin session cannot simply follow a link to it. The API mints a one-time
+   * link that signs this browser in over there as the host.
+   */
+  async function joinAsHost() {
+    // Opened before the request, not after it: a popup blocker only trusts a
+    // window.open that happens inside the click itself, and an await ends that.
+    const tab = window.open("", "_blank");
+    if (!tab) {
+      toast.error("Your browser blocked the new tab. Allow pop-ups for the admin and press Join again.");
+      return;
+    }
+    tab.opener = null;
+    setJoining(true);
+    try {
+      const { url } = await adminApi.communityLiveHostLink(communityId);
+      tab.location.href = url;
+    } catch (err) {
+      tab.close();
+      toast.error(friendlyError(err, "community"));
+    } finally {
+      setJoining(false);
+    }
+  }
 
   async function save(e: FormEvent) {
     e.preventDefault();
@@ -309,14 +336,23 @@ function LiveRoomPanel({
             : "Switched off — nobody sees it."
         }
         icon={<Video className="size-4" />}
-        action={
-          <Button asChild variant="secondary" size="sm">
-            <Link to={`/community/${community.slug}/live`} target="_blank" rel="noreferrer">
-              Open the room
-            </Link>
-          </Button>
-        }
       />
+
+      {/* The saved setting, not the form's: a room switched on but not yet
+          saved is still shut, and the link would open onto a closed door. */}
+      {community.liveRoomEnabled === true && (
+        <div className="border-b border-hairline/60 px-5 py-5">
+          <Button type="button" onClick={joinAsHost} disabled={joining}>
+            <Video />
+            {joining ? "Opening…" : "Join the live room as host"}
+          </Button>
+          <p className="mt-2.5 text-xs leading-relaxed text-ink-soft">
+            Opens the room in a new tab, signed in on the member site as the host. The
+            link works once and expires in two minutes. If you're signed in there as
+            someone else, it swaps you over.
+          </p>
+        </div>
+      )}
 
       <form onSubmit={save} className="space-y-4 px-5 py-5">
         <Field label="Is it open?">

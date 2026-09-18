@@ -2,11 +2,13 @@ import { Router } from "express";
 import { pool } from "../../db/pool";
 import { rowToCamel, rowsToCamel } from "../../utils/case";
 import { asyncHandler } from "../../utils/asyncHandler";
-import { badRequest, notFound } from "../../utils/httpError";
+import { badRequest, forbidden, notFound } from "../../utils/httpError";
 import { buildUpdate } from "../../utils/sqlUpdate";
 import { z } from "zod";
 import { partialUpdate } from "../../validation/partialUpdate";
 import { POINT_ACTIONS } from "../../services/communityNotifications";
+import { recordAdminActionStrict } from "../../services/adminAudit";
+import { HOST_LINK_TTL_SECONDS, createHostLink } from "../../services/hostLinks";
 
 /**
  * Community admin API — mounted at /admin/community.
@@ -292,6 +294,62 @@ adminCommunityRouter.get(
       [req.params.id],
     );
     res.json(rowsToCamel(visits.rows));
+  }),
+);
+
+/**
+ * POST /:id/live/host-link
+ *
+ * "Join the live room as host". The room only admits member sessions, so this
+ * hands back a one-time address on the public site that signs the admin's
+ * browser in as the member account carrying her own email, already a host of
+ * this community — see services/hostLinks.ts. The client opens it at once; it
+ * is good for two minutes and for one use.
+ *
+ * The permission is the router's: every non-GET under /admin/community needs
+ * `community.manage`.
+ *
+ * The audit row is written first and is allowed to fail the request, for the
+ * reason impersonation's is (see recordAdminActionStrict): this mints a member
+ * session, and one with no durable trace of who asked for it must not exist.
+ * The raw token is never part of it.
+ */
+adminCommunityRouter.post(
+  "/:id/live/host-link",
+  asyncHandler(async (req, res) => {
+    const communityId = Number(req.params.id);
+    if (!Number.isInteger(communityId) || communityId < 1) throw notFound("Community not found");
+    const adminId = req.user?.sub;
+    if (adminId === undefined) throw forbidden("Admin identity missing");
+
+    // Email and name come from the table rather than the JWT: the token carries
+    // no name, and its email is whatever it was when she signed in.
+    const admin = await pool.query<{ email: string; name: string }>(
+      `SELECT email, name FROM admin_users WHERE id = $1`,
+      [adminId],
+    );
+    const me = admin.rows[0];
+    if (!me) throw forbidden("Admin identity missing");
+
+    // So a mistyped id is a 404 and not an audit row about a link nobody got.
+    const exists = await pool.query(`SELECT 1 FROM communities WHERE id = $1`, [communityId]);
+    if (exists.rowCount === 0) throw notFound("Community not found");
+
+    await recordAdminActionStrict({
+      req,
+      action: "community.live.host_link",
+      entityType: "community",
+      entityId: communityId,
+      after: { memberEmail: me.email, expiresInSeconds: HOST_LINK_TTL_SECONDS },
+    });
+
+    const link = await createHostLink({
+      adminId,
+      adminEmail: me.email,
+      adminName: me.name,
+      communityId,
+    });
+    res.json({ url: link.url, expiresInSeconds: link.expiresInSeconds });
   }),
 );
 

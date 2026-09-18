@@ -292,6 +292,14 @@ export const memberApi = {
       skipRefresh: true,
     }),
 
+  /** The admin's "Join the live room as host" link. One use, two minutes. */
+  consumeHostLink: (token: string) =>
+    request<AuthSuccess>("/auth/host-link/consume", {
+      method: "POST",
+      body: JSON.stringify({ token }),
+      skipRefresh: true,
+    }),
+
   // ---- Signed in ----
 
   me: () => request<MemberProfile>("/auth/me"),

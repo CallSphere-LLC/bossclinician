@@ -689,6 +689,13 @@ export const adminApi = {
   communityLiveVisits: (communityId: number) =>
     request<AdminLiveVisit[]>(`/admin/community/${communityId}/live-visits`),
 
+  /** A one-time link to the member site that signs the admin in as the host. */
+  communityLiveHostLink: (communityId: number) =>
+    request<{ url: string; expiresInSeconds: number }>(
+      `/admin/community/${communityId}/live/host-link`,
+      { method: "POST" },
+    ),
+
   communityGuidelinesSave: (communityId: number, guidelinesMd: string) =>
     request<{ reAccceptanceRequired: boolean }>(
       `/admin/community/${communityId}/guidelines`,

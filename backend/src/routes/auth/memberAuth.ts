@@ -971,6 +971,7 @@ memberAuthRoutes.post(
         `SELECT count(*) AS count
            FROM member_magic_links
           WHERE member_id = $1
+            AND purpose = 'signin'
             AND created_at > now() - make_interval(mins => $2)`,
         [member.id, RESET_WINDOW_MINUTES]
       );
@@ -981,7 +982,7 @@ memberAuthRoutes.post(
 
       await pool.query(
         `UPDATE member_magic_links SET used_at = now()
-          WHERE member_id = $1 AND used_at IS NULL`,
+          WHERE member_id = $1 AND purpose = 'signin' AND used_at IS NULL`,
         [member.id]
       );
 
@@ -1016,35 +1017,78 @@ memberAuthRoutes.post(
     const parsed = magicLinkConsumeSchema.safeParse(req.body);
     if (!parsed.success) throw badRequest(GENERIC_LINK, parsed.error.flatten());
 
-    const claimed = await pool.query<{ member_id: number }>(
-      `UPDATE member_magic_links
-          SET used_at = now()
-        WHERE token_hash = $1
-          AND used_at IS NULL
-          AND expires_at > now()
-        RETURNING member_id`,
-      [hashToken(parsed.data.token)]
-    );
-    const link = claimed.rows[0];
-    if (!link) throw badRequest(GENERIC_LINK);
-
-    const updated = await pool.query<MemberProfileRow>(
-      `UPDATE members
-          SET email_verified_at = COALESCE(email_verified_at, now()),
-              last_login_at     = now(),
-              updated_at        = now()
-        WHERE id = $1
-        RETURNING ${MEMBER_PROFILE_COLUMNS}`,
-      [link.member_id]
-    );
-    const row = updated.rows[0];
-    if (!row || SIGN_IN_BLOCKED.has(row.status)) throw unauthorized(GENERIC_CREDENTIALS);
-
-    // The statement above proves the address (the link only arrived there), so
-    // the mailing list's own confirmation state is brought with it.
-    await reflectConfirmationOnContact(link.member_id);
-
-    const session = await startSession(res, toMemberProfile(row), clientMeta(req));
-    res.json(session);
+    const memberId = await claimLink(parsed.data.token, "signin");
+    await completeLinkSignIn(req, res, memberId);
   })
 );
+
+/**
+ * POST /api/auth/host-link/consume — an admin stepping into her own live room.
+ *
+ * The link is minted by services/hostLinks.ts on the word of an authenticated
+ * admin and opened by her own browser seconds later; it is never mailed. That
+ * is why this route is deliberately NOT behind `requireMagicLinkEnabled`: the
+ * setting governs whether the platform emails bearer sign-in links to members,
+ * production has it off, and the coach still has to be able to reach her room.
+ * What keeps the two apart is `purpose` — a host link cannot be spent at the
+ * magic-link endpoint, nor a magic link here.
+ *
+ * Same body in, same session out as the magic-link consume.
+ */
+memberAuthRoutes.post(
+  "/host-link/consume",
+  memberTokenLimiter,
+  asyncHandler(async (req, res) => {
+    const parsed = magicLinkConsumeSchema.safeParse(req.body);
+    if (!parsed.success) throw badRequest(GENERIC_LINK, parsed.error.flatten());
+
+    const memberId = await claimLink(parsed.data.token, "host");
+    await completeLinkSignIn(req, res, memberId);
+  })
+);
+
+/**
+ * Spends a one-time link and says whose it was.
+ *
+ * One statement, so two requests racing for the same link cannot both win: the
+ * loser's UPDATE matches no row. `purpose` is part of the claim rather than a
+ * check made afterwards, so presenting a link at the wrong endpoint does not
+ * burn it either.
+ */
+async function claimLink(token: string, purpose: "signin" | "host"): Promise<number> {
+  const claimed = await pool.query<{ member_id: number }>(
+    `UPDATE member_magic_links
+        SET used_at = now()
+      WHERE token_hash = $1
+        AND purpose = $2
+        AND used_at IS NULL
+        AND expires_at > now()
+      RETURNING member_id`,
+    [hashToken(token), purpose]
+  );
+  const link = claimed.rows[0];
+  if (!link) throw badRequest(GENERIC_LINK);
+  return link.member_id;
+}
+
+/** What follows a claimed link, whichever kind it was: the session. */
+async function completeLinkSignIn(req: Request, res: Response, memberId: number): Promise<void> {
+  const updated = await pool.query<MemberProfileRow>(
+    `UPDATE members
+        SET email_verified_at = COALESCE(email_verified_at, now()),
+            last_login_at     = now(),
+            updated_at        = now()
+      WHERE id = $1
+      RETURNING ${MEMBER_PROFILE_COLUMNS}`,
+    [memberId]
+  );
+  const row = updated.rows[0];
+  if (!row || SIGN_IN_BLOCKED.has(row.status)) throw unauthorized(GENERIC_CREDENTIALS);
+
+  // The statement above proves the address (the link only arrived there), so
+  // the mailing list's own confirmation state is brought with it.
+  await reflectConfirmationOnContact(memberId);
+
+  const session = await startSession(res, toMemberProfile(row), clientMeta(req));
+  res.json(session);
+}

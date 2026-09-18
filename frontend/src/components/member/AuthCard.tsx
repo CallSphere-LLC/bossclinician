@@ -24,6 +24,8 @@ interface AuthCardProps {
   /** Browser tab title. The on-page heading is usually shorter and warmer. */
   documentTitle: string;
   description?: string;
+  /** For pages reached by a one-time token, which have no business in an index. */
+  noindex?: boolean;
   eyebrow?: string;
   title: string;
   subtitle?: ReactNode;
@@ -35,6 +37,7 @@ interface AuthCardProps {
 export function AuthCard({
   documentTitle,
   description,
+  noindex,
   eyebrow,
   title,
   subtitle,
@@ -53,7 +56,7 @@ export function AuthCard({
         transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
         className="relative w-full max-w-[27rem]"
       >
-        <Seo title={documentTitle} description={description} />
+        <Seo title={documentTitle} description={description} noindex={noindex} />
 
         <Link
           to="/"
