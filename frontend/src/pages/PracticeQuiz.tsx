@@ -18,9 +18,9 @@ import { cn } from "@/lib/cn";
  * second act either. Two bands: the promise, then the reassurances running
  * straight into the one action.
  *
- * The single CTA opens this app's own quiz engine at `/quiz/practice-quiz`
- * (see QUIZ_URL below) — never the apex domain, which after cutover is this
- * page.
+ * The quiz engine itself has not moved yet: the .com serves the six questions
+ * and the four results from its own page, so the single CTA is an absolute
+ * bossclinician.com link opened in a new tab until that engine lands here.
  */
 
 const EASE: [number, number, number, number] = [0.22, 1, 0.36, 1];
@@ -50,22 +50,25 @@ const CTA_LABEL = "TAKE THE FREE QUIZ →";
 const CTA_NOTE = "No email required to start";
 
 /**
- * Where the one button goes: this app's own quiz engine.
+ * The quiz engine (six questions, four results) still lives on the Kajabi site,
+ * so this is deliberately an absolute .com URL rather than a local route.
  *
- * It used to be the absolute bossclinician.com/practice-quiz URL, which at the
- * domain cutover resolves to the page the visitor is already standing on — a
- * no-op loop — and no redirect can fix that, because /practice-quiz is a real
- * route here. It is not one dead button either: the redirect map funnels six
- * legacy quiz URLs plus /ready-quiz into this page, so every quiz entry point
- * ends on this action.
+ * CUTOVER BLOCKER: the moment bossclinician.com points at this app, this URL
+ * resolves to the page the visitor is already standing on — the button becomes
+ * a no-op loop and the quiz is simply gone. It cannot be fixed with a redirect
+ * (/practice-quiz is a real route here, so 004's self-row is inert), and it is
+ * not one dead button: 004 funnels six legacy quiz URLs (/offer-quiz,
+ * /hiring-quiz, /boss-assessment, /start-your-own-private-practice-quiz,
+ * /practice-set-up-quiz, /practice-set-up-quiz-ty) plus /ready-quiz into this
+ * page, so every quiz entry point in the redirect map ends here.
  *
- * `/quiz/:slug` renders a published assessment (pages/Quiz.tsx reading
- * GET /api/assessments/:slug). The six-question "Practice Set Up" quiz must be
- * published in the admin under exactly this slug; until it is, the route shows
- * the branded 404 rather than looping the visitor back onto this page.
+ * Resolving it is a content decision, not a code one: either rebuild the quiz
+ * as an assessment on this app (the machinery exists — see
+ * backend/src/services/assessments.ts and the /quiz/:slug route) and point
+ * QUIZ_URL at it, or keep the engine on a host that survives the cutover and
+ * name that host here. Do not leave it pointing at the apex domain.
  */
-const QUIZ_SLUG = "practice-quiz";
-const QUIZ_URL = `/quiz/${QUIZ_SLUG}`;
+const QUIZ_URL = "https://www.bossclinician.com/practice-quiz";
 
 /**
  * Break the headline at its natural turn so the second clause can be set in foil
@@ -255,7 +258,8 @@ function QuizSection() {
         <LuxeButton
           variant="foil"
           size="lg"
-          to={QUIZ_URL}
+          href={QUIZ_URL}
+          target="_blank"
           className="max-w-full px-7 text-center leading-[1.4] tracking-[0.1em] sm:px-10 sm:tracking-[0.2em]"
         >
           {CTA_LABEL}

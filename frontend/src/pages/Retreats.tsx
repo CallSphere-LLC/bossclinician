@@ -828,13 +828,13 @@ const BURNOUT_BODY =
   "Six honest questions about how you are actually doing, not how you tell everyone you are doing. Two minutes. Just you and the truth. If your cup is running lower than you have been letting on, this is the sign to stop waiting.";
 const BURNOUT_CTA = "TAKE THE QUIZ";
 /**
- * The source links bossclinician.com/retreat-needed-quiz, a Kajabi quiz. After
- * cutover that host is this app, so the action opens this app's quiz engine
- * (`/quiz/:slug`). The six-question Burnout Self-Assessment has to be published
- * in the admin under exactly this slug; until it is, the route shows the
- * branded 404.
+ * The six-question Burnout Self-Assessment still lives on the Kajabi site, so
+ * this is deliberately an absolute .com URL, like the practice quiz.
+ *
+ * CUTOVER BLOCKER: once bossclinician.com points at this app, publish the
+ * assessment here and switch this to `/quiz/retreat-needed-quiz`.
  */
-const BURNOUT_QUIZ_ROUTE = "/quiz/retreat-needed-quiz";
+const BURNOUT_QUIZ_URL = "https://www.bossclinician.com/retreat-needed-quiz";
 
 function BurnoutQuizSection() {
   const reduce = useEntranceMotion();
@@ -862,7 +862,9 @@ function BurnoutQuizSection() {
         <LuxeButton
           variant="foil"
           size="lg"
-          to={BURNOUT_QUIZ_ROUTE}
+          href={BURNOUT_QUIZ_URL}
+          target="_blank"
+          rel="noopener noreferrer"
           className="mt-9 w-full tracking-[0.14em] sm:w-auto sm:tracking-[0.2em]"
         >
           {BURNOUT_CTA}
