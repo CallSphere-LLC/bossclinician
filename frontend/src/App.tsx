@@ -172,6 +172,7 @@ function memberRoutes() {
         <Route path="/account/billing" element={<MemberBilling />} />
         <Route path="/account/purchases" element={<MemberPurchases />} />
         <Route path="/account/downloads" element={<MemberDownloads />} />
+        <Route path="/downloads" element={<MemberDownloads />} />
         <Route path="/account/email" element={<MemberEmailPreferences />} />
         {/* A receipt's permanent address, and its PDF's. Inside RequireMember,
             so a signed-out visit goes to /login and returns here. */}

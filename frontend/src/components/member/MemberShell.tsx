@@ -7,6 +7,7 @@ import {
   BookOpen,
   CalendarDays,
   ChevronDown,
+  Download,
   Eye,
   LogOut,
   Sparkles,
@@ -47,6 +48,9 @@ interface RailLink {
 
 const RAIL: RailLink[] = [
   { to: "/library", label: "Library", icon: BookOpen },
+  // Its own address rather than /account/downloads, so this and Account are
+  // never both lit: NavLink matches by prefix.
+  { to: "/downloads", label: "Downloads", icon: Download },
   { to: "/community", label: "Community", icon: Users },
   { to: "/coaching", label: "Coaching", icon: Sparkles },
   // Between coaching and account, because it is a thing you attend rather than

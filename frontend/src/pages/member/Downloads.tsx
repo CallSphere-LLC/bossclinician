@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router";
+import { Link, useLocation } from "react-router";
 import { ArrowLeft, FileDown, Loader2, Lock } from "lucide-react";
 import { Seo } from "@/components/Seo";
 import { MemberShell } from "@/components/member/MemberShell";
@@ -62,6 +62,7 @@ function groupFiles(files: DownloadListItem[]): DownloadGroup[] {
 }
 
 export default function Downloads() {
+  const fromAccount = useLocation().pathname.startsWith("/account");
   const [data, setData] = useState<DownloadsResponse | null>(null);
   const [error, setError] = useState("");
 
@@ -97,6 +98,9 @@ export default function Downloads() {
     >
       <Seo title="Your Downloads | Boss Clinician" />
 
+      {/* Only when it was reached from the account page: from the side nav,
+          /downloads is a section of its own and has nowhere to go "back" to. */}
+      {fromAccount && (
       <Link
         to="/account"
         className={cn(
@@ -108,6 +112,7 @@ export default function Downloads() {
         <ArrowLeft aria-hidden className="size-4" />
         Your account
       </Link>
+      )}
 
       <div aria-live="polite">
         {error && (
