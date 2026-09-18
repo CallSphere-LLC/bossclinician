@@ -20,6 +20,7 @@ const MemberForgotPassword = lazy(() => import("@/pages/member/ForgotPassword"))
 const MemberResetPassword = lazy(() => import("@/pages/member/ResetPassword"));
 const MemberVerifyEmail = lazy(() => import("@/pages/member/VerifyEmail"));
 const MemberHostLink = lazy(() => import("@/pages/member/HostLink"));
+const MemberLogout = lazy(() => import("@/pages/member/Logout"));
 const MemberAccount = lazy(() => import("@/pages/member/Account"));
 const MemberProfile = lazy(() => import("@/pages/member/Profile"));
 const MemberSecurity = lazy(() => import("@/pages/member/Security"));
@@ -155,6 +156,7 @@ function memberRoutes() {
       {/* Signed-out on purpose: this is the page that does the signing in, for
           the coach arriving from "Join the live room as host" in the admin. */}
       <Route path="/host-link" element={<MemberHostLink />} />
+      <Route path="/logout" element={<MemberLogout />} />
 
       {/* One guard for the whole signed-in half: `RequireMember` renders the
           matched child through `<Outlet>`, so the check happens once rather
