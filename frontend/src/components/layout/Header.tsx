@@ -4,7 +4,7 @@ import { Link, NavLink, useLocation } from "react-router";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Container } from "@/components/ui/Container";
 import { LuxeButton } from "@/components/luxe/LuxeButton";
-import { NavDropdown, navBadgeClass, navBadgeTone } from "@/components/layout/NavDropdown";
+import { NavDropdown, isMenuActive } from "@/components/layout/NavDropdown";
 import { headerActions, isNavMenu, nav, type NavMenu } from "@/content/site";
 import { cn } from "@/lib/cn";
 import { ShoppingCart } from "lucide-react";
@@ -23,6 +23,10 @@ interface HeaderProps {
 export function Header({ transparentAtTop = false }: HeaderProps) {
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
+  // One desktop dropdown, and one mobile section, open at a time, so both
+  // live here rather than in the menus themselves.
+  const [openMenu, setOpenMenu] = useState<string | null>(null);
+  const [mobileSection, setMobileSection] = useState<string | null>(null);
   const location = useLocation();
   const prefersReducedMotion = useReducedMotion();
   const [cartCount, setCartCount] = useState(0);
@@ -46,7 +50,14 @@ export function Header({ transparentAtTop = false }: HeaderProps) {
 
   useEffect(() => {
     setOpen(false);
+    setOpenMenu(null);
+    setMobileSection(null);
   }, [location.pathname]);
+
+  // A reopened sheet starts with every section closed.
+  useEffect(() => {
+    if (!open) setMobileSection(null);
+  }, [open]);
 
   // An open mobile sheet must not scroll the page behind it.
   useEffect(() => {
@@ -95,24 +106,35 @@ export function Header({ transparentAtTop = false }: HeaderProps) {
           </span>
         </Link>
 
-        {/* The full bar needs about 1100px of content width once the labels are
-            kept on one line, so it starts at xl; below that — including a laptop
-            browser zoomed in — the menu button carries everything. At lg the
-            labels wrapped ("RESOURCE / HUB") and the primary action folded into
-            a three-line oval. `wideOnly` entries and Book A Call join at 2xl. */}
+        {/* Two category menus and two plain links: everything else is one
+            click away inside a panel. The bar still starts at xl (below that,
+            including a laptop browser zoomed in, the menu button carries
+            everything) and the labels stay on one line. */}
         <nav className="hidden items-center gap-5 xl:flex 2xl:gap-8" aria-label="Primary">
-          {nav.map((item) =>
+          {nav.map((item, index) =>
             isNavMenu(item) ? (
-              <NavDropdown key={item.label} menu={item} />
+              <NavDropdown
+                key={item.label}
+                menu={item}
+                open={openMenu === item.label}
+                onOpenChange={(next) =>
+                  // A late close from menu A (its hover grace period) must not
+                  // shut menu B, which has opened in the meantime.
+                  setOpenMenu((current) =>
+                    next ? item.label : current === item.label ? null : current,
+                  )
+                }
+                // Only a menu sitting last in the bar can reach the right edge.
+                align={index === nav.length - 1 ? "end" : "center"}
+              />
             ) : (
               <NavLink
                 key={item.to}
                 to={item.to}
                 className={({ isActive }) =>
                   cn(
-                    "group relative whitespace-nowrap py-1 text-[0.68rem] font-semibold uppercase tracking-[0.18em] transition-colors duration-300",
+                    "group relative whitespace-nowrap py-1 text-[0.68rem] font-semibold uppercase tracking-[0.18em] transition-colors duration-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold",
                     isActive ? "text-white" : "text-white/55 hover:text-white",
-                    item.wideOnly && "hidden 2xl:block",
                   )
                 }
               >
@@ -140,24 +162,15 @@ export function Header({ transparentAtTop = false }: HeaderProps) {
           </Link>
           <SiteThemeToggle />
           {/* Members sign in from the marketing header, as on the source site.
-              A text link, not a third button: the bar has one primary action. */}
+              A text link, not a second button: the bar has ONE primary action,
+              Work With Me. Book A Call sits in the Programs panel's footer and
+              in the mobile sheet. */}
           <Link
             to={headerActions.logIn.to}
             className="hidden whitespace-nowrap py-2 text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-white/55 transition-colors duration-300 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold xl:inline-flex"
           >
             {headerActions.logIn.label}
           </Link>
-          <div className="hidden 2xl:block">
-            <LuxeButton
-              href={headerActions.bookACall.href}
-              target="_blank"
-              variant="glass"
-              size="sm"
-              className="whitespace-nowrap"
-            >
-              {headerActions.bookACall.label}
-            </LuxeButton>
-          </div>
           <div className="hidden xl:block">
             <LuxeButton to="/work-with-me" variant="foil" size="sm" className="whitespace-nowrap">
               Work With Me
@@ -212,7 +225,15 @@ export function Header({ transparentAtTop = false }: HeaderProps) {
             <Container as="nav" aria-label="Mobile" className="flex flex-col gap-1 py-6">
               {nav.map((item) =>
                 isNavMenu(item) ? (
-                  <MobileNavGroup key={item.label} menu={item} onNavigate={() => setOpen(false)} />
+                  <MobileNavGroup
+                    key={item.label}
+                    menu={item}
+                    expanded={mobileSection === item.label}
+                    onToggle={() =>
+                      setMobileSection((current) => (current === item.label ? null : item.label))
+                    }
+                    onNavigate={() => setOpen(false)}
+                  />
                 ) : (
                   <NavLink
                     key={item.to}
@@ -268,14 +289,22 @@ export function Header({ transparentAtTop = false }: HeaderProps) {
 
 interface MobileNavGroupProps {
   menu: NavMenu;
+  /** Owned by the header: opening one section closes the other. */
+  expanded: boolean;
+  onToggle: () => void;
   onNavigate: () => void;
 }
 
-/** The "Learn" group as an expandable disclosure — no hover on touch. */
-function MobileNavGroup({ menu, onNavigate }: MobileNavGroupProps) {
-  const [expanded, setExpanded] = useState(false);
+/**
+ * A header menu as an accordion section (there is no hover on touch). The
+ * panel's footer links are not repeated here: Work With Me and Book A Call are
+ * the two buttons at the bottom of the sheet.
+ */
+function MobileNavGroup({ menu, expanded, onToggle, onNavigate }: MobileNavGroupProps) {
   const prefersReducedMotion = useReducedMotion();
-  const panelId = `mobile-nav-${menu.label.toLowerCase()}`;
+  const { pathname } = useLocation();
+  const active = isMenuActive(menu, pathname);
+  const panelId = `mobile-nav-${menu.label.toLowerCase().replace(/\s+/g, "-")}`;
 
   return (
     <div>
@@ -283,8 +312,11 @@ function MobileNavGroup({ menu, onNavigate }: MobileNavGroupProps) {
         type="button"
         aria-expanded={expanded}
         aria-controls={panelId}
-        onClick={() => setExpanded((v) => !v)}
-        className="flex w-full items-center justify-between rounded-xl px-4 py-3.5 font-display text-lg text-white/70 transition-colors hover:bg-white/[0.05] hover:text-white"
+        onClick={onToggle}
+        className={cn(
+          "flex min-h-[44px] w-full items-center justify-between rounded-xl px-4 py-3.5 font-display text-lg text-white/70 transition-colors hover:bg-white/[0.05] hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-gold",
+          (expanded || active) && "text-white",
+        )}
       >
         {menu.label}
         <span
@@ -302,6 +334,7 @@ function MobileNavGroup({ menu, onNavigate }: MobileNavGroupProps) {
         {expanded && (
           <motion.ul
             id={panelId}
+            aria-label={menu.label}
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
@@ -311,23 +344,29 @@ function MobileNavGroup({ menu, onNavigate }: MobileNavGroupProps) {
             }}
             className="overflow-hidden pl-2"
           >
-            {menu.items.map((item) => (
-              <li key={item.label}>
-                <span className="block px-4 pb-1 pt-3 text-[0.58rem] font-bold uppercase tracking-[0.24em] text-gold/70">
-                  {item.group}
-                </span>
-                <Link
-                  to={item.to}
-                  onClick={onNavigate}
-                  className="flex items-center justify-between gap-3 rounded-xl px-4 py-3 text-sm font-medium text-white/60 transition-colors hover:bg-gold/[0.07] hover:text-gold"
-                >
-                  <span>{item.label}</span>
-                  <span className={cn(navBadgeClass, navBadgeTone[item.badgeTone])}>
-                    {item.badge}
-                  </span>
-                </Link>
-              </li>
-            ))}
+            {menu.items.map((item) => {
+              const current = pathname === item.to;
+              return (
+                <li key={item.label}>
+                  <Link
+                    to={item.to}
+                    onClick={onNavigate}
+                    aria-current={current ? "page" : undefined}
+                    className={cn(
+                      "flex min-h-[44px] flex-col justify-center gap-0.5 rounded-xl px-4 py-2.5 transition-colors hover:bg-ink/[0.05] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-gold",
+                      current && "bg-ink/[0.05]",
+                    )}
+                  >
+                    <span className={cn("text-[0.95rem] font-medium", current ? "text-gold" : "text-ink")}>
+                      {item.label}
+                    </span>
+                    <span className="text-[0.8rem] leading-snug text-orchid-dim">
+                      {item.description}
+                    </span>
+                  </Link>
+                </li>
+              );
+            })}
           </motion.ul>
         )}
       </AnimatePresence>

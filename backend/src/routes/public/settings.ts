@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { pool } from "../../db/pool";
 import { asyncHandler } from "../../utils/asyncHandler";
+import { googleSignInEnabled } from "../../auth/googleOAuth";
 
 export const settingsRouter = Router();
 
@@ -57,6 +58,29 @@ export function publicView(key: string, value: unknown): unknown | undefined {
   return out;
 }
 
+/**
+ * Facts the public site needs that are not settings rows at all.
+ *
+ * `member_signin.googleEnabled` comes from the environment — whether the two
+ * Google credentials are present — so the sign-in screen can decide to draw the
+ * "Continue with Google" button without a rebuild and without a button that
+ * leads nowhere. A boolean and nothing else: it says a button exists, not how
+ * it is keyed.
+ *
+ * Applied after the allow-list rather than through it, for two reasons. A
+ * stored `googleEnabled` must never win over the computed one, and the flag has
+ * to be present even on an install whose settings table has no `member_signin`
+ * row yet — where the loop below produces no such key to add it to.
+ */
+export function withComputedFlags(
+  merged: Record<string, unknown>,
+  flags: { googleEnabled: boolean }
+): Record<string, unknown> {
+  const stored = merged.member_signin;
+  const signIn = typeof stored === "object" && stored !== null ? (stored as Record<string, unknown>) : {};
+  return { ...merged, member_signin: { ...signIn, googleEnabled: flags.googleEnabled } };
+}
+
 settingsRouter.get(
   "/settings",
   asyncHandler(async (_req, res) => {
@@ -69,6 +93,6 @@ settingsRouter.get(
       const view = publicView(row.key, row.value);
       if (view !== undefined) merged[row.key] = view;
     }
-    res.json(merged);
+    res.json(withComputedFlags(merged, { googleEnabled: googleSignInEnabled() }));
   })
 );

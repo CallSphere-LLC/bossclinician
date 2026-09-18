@@ -9,6 +9,8 @@ import {
   Send,
   ShieldAlert,
   Video,
+  Volume2,
+  VolumeX,
   VideoOff,
 } from "lucide-react";
 import { CommunityLayout } from "@/components/community/CommunityLayout";
@@ -19,6 +21,7 @@ import { communityApi, type LiveRoomStatus } from "@/lib/communityApi";
 import { MemberApiError } from "@/lib/memberApi";
 import { useMember } from "@/hooks/useMember";
 import { cn } from "@/lib/cn";
+import { roomSoundsEnabled, setRoomSoundsEnabled } from "@/lib/liveRoom/chime";
 import {
   getIdleSnapshot,
   joinRoom,
@@ -31,6 +34,8 @@ import {
   subscribeRoom,
   type RoomSnapshot,
 } from "@/lib/liveRoom/callManager";
+/** "Nobody on the stage, and I meant it" — distinct from never having chosen. */
+const UNPINNED = "__none__";
 
 /**
  * The community live room — Yvette's office hours.
@@ -83,7 +88,44 @@ function LiveRoom({ slug }: { slug: string }) {
   // While outside the room, poll so "Yvette just opened it" arrives without a
   // reload. Inside, presence comes down the signalling stream and polling would
   // be noise.
-  const inRoom = call.slug === slug && (call.status === "waiting" || call.status === "live" || call.status === "connecting");
+  const inRoom =
+    call.slug === slug &&
+    (call.status === "waiting" ||
+      call.status === "live" ||
+      call.status === "connecting" ||
+      // Still in the room as far as this person is concerned: their camera is
+      // on, the people they were talking to can usually still hear them, and the
+      // page is getting them back in. Showing the join card here would read as
+      // "you were thrown out".
+      call.status === "reconnecting");
+  const reconnecting = call.slug === slug && call.status === "reconnecting";
+
+  // Who is on the stage. A pin is this person's own choice and wins; otherwise
+  // whoever is sharing a screen goes up by themselves, which is what people
+  // expect when someone says "can you all see this?". UNPINNED records that
+  // they took a sharer down on purpose, so the share does not jump back up.
+  const [pinnedPeerId, setPinnedPeerId] = useState<string | null>(null);
+  // The arrival and departure chimes. On unless this person turned them off.
+  const [sounds, setSounds] = useState(roomSoundsEnabled);
+
+  // "You're back" is said once, briefly, and only after a real interruption.
+  const [justResumed, setJustResumed] = useState(false);
+  const wasReconnecting = useRef(false);
+  useEffect(() => {
+    if (reconnecting) {
+      wasReconnecting.current = true;
+      setJustResumed(false);
+      return;
+    }
+    if (wasReconnecting.current && inRoom) {
+      wasReconnecting.current = false;
+      setJustResumed(true);
+      const timer = window.setTimeout(() => setJustResumed(false), 4000);
+      return () => window.clearTimeout(timer);
+    }
+    wasReconnecting.current = false;
+    return undefined;
+  }, [reconnecting, inRoom]);
   useEffect(() => {
     if (inRoom) return;
     const timer = window.setInterval(() => void refresh(), 15_000);
@@ -133,6 +175,18 @@ function LiveRoom({ slug }: { slug: string }) {
    * whatever it said at the moment of joining and read "1 of 8" to a room of
    * four.
    */
+  const stagePeer = useMemo(() => {
+    if (pinnedPeerId === UNPINNED) return null;
+    const pinned = pinnedPeerId ? others.find((peer) => peer.peerId === pinnedPeerId) : undefined;
+    return pinned ?? others.find((peer) => peer.sharing) ?? null;
+  }, [others, pinnedPeerId]);
+  // A sharer who stops, or a pinned person who leaves, clears an explicit
+  // "off the stage" so the next share is shown again.
+  const anyoneSharing = others.some((peer) => peer.sharing);
+  useEffect(() => {
+    if (!anyoneSharing && pinnedPeerId === UNPINNED) setPinnedPeerId(null);
+  }, [anyoneSharing, pinnedPeerId]);
+
   const occupancy = inRoom ? others.length + 1 : room?.occupancy ?? 0;
 
   if (loadError) {
@@ -184,6 +238,35 @@ function LiveRoom({ slug }: { slug: string }) {
           </p>
         </GlassCard>
       )}
+
+      {/* A dropped connection is announced, with what is happening about it, in
+          the place the eye already is. polite, not assertive: it is not the
+          member's job to do anything. */}
+      <div aria-live="polite">
+        {reconnecting && (
+          <p className="flex items-start gap-3 rounded-xl border border-gold/30 bg-gold/[0.08] px-4 py-3 text-sm text-orchid">
+            <Loader2 aria-hidden className="mt-0.5 size-4 shrink-0 animate-spin text-gold" />
+            <span>
+              <span className="font-semibold text-white">
+                {call.online ? "Reconnecting you to the room…" : "You're offline."}
+              </span>{" "}
+              {call.online
+                ? "Your camera and microphone are still on. Stay on this page and the call picks up by itself."
+                : "We'll bring you back into the room as soon as your connection returns."}
+              {call.reconnectAttempt > 3 && call.online && (
+                <span className="block pt-1 text-xs text-orchid-dim">
+                  Still trying (attempt {call.reconnectAttempt}). You can also press Leave and join again.
+                </span>
+              )}
+            </span>
+          </p>
+        )}
+        {justResumed && !reconnecting && (
+          <p className="rounded-xl border border-gold/30 bg-gold/[0.08] px-4 py-3 text-sm text-orchid">
+            <span className="font-semibold text-white">You're back in the room.</span>
+          </p>
+        )}
+      </div>
 
       {/* Said out loud rather than discovered as a failed call: without a relay
           a few corporate and mobile networks cannot make a direct path. */}
@@ -245,14 +328,35 @@ function LiveRoom({ slug }: { slug: string }) {
       ) : (
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_18rem]">
           <div className="min-w-0 space-y-4">
+            {/* The stage: whoever is showing a screen, or whoever this person
+                pinned. A screen is for reading, so it gets the width of the room
+                and everyone else moves to a strip underneath. */}
+            {stagePeer !== null && (
+              <LiveVideoTile
+                key={`stage:${stagePeer.peerId}`}
+                stage
+                stream={stagePeer.stream}
+                name={stagePeer.name}
+                role={stagePeer.role}
+                avatarUrl={stagePeer.avatarUrl}
+                connecting={!stagePeer.connected}
+                sharing={stagePeer.sharing}
+                pinned={pinnedPeerId === stagePeer.peerId}
+                onTogglePin={() =>
+                  setPinnedPeerId((current) => (current === stagePeer.peerId ? UNPINNED : stagePeer.peerId))
+                }
+              />
+            )}
             <div
               className={cn(
                 "grid gap-3",
-                others.length === 0
-                  ? "grid-cols-1"
-                  : others.length === 1
-                    ? "grid-cols-1 sm:grid-cols-2"
-                    : "grid-cols-1 sm:grid-cols-2 xl:grid-cols-3",
+                stagePeer !== null
+                  ? "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4"
+                  : others.length === 0
+                    ? "grid-cols-1"
+                    : others.length === 1
+                      ? "grid-cols-1 sm:grid-cols-2"
+                      : "grid-cols-1 sm:grid-cols-2 xl:grid-cols-3",
               )}
             >
               <LiveVideoTile
@@ -265,16 +369,20 @@ function LiveRoom({ slug }: { slug: string }) {
                 sharing={call.sharing}
                 role={room.youAreHost ? "host" : "member"}
               />
-              {others.map((peer) => (
-                <LiveVideoTile
-                  key={peer.peerId}
-                  stream={peer.stream}
-                  name={peer.name}
-                  role={peer.role}
-                  avatarUrl={peer.avatarUrl}
-                  connecting={!peer.connected}
-                />
-              ))}
+              {others
+                .filter((peer) => peer.peerId !== stagePeer?.peerId)
+                .map((peer) => (
+                  <LiveVideoTile
+                    key={peer.peerId}
+                    stream={peer.stream}
+                    name={peer.name}
+                    role={peer.role}
+                    avatarUrl={peer.avatarUrl}
+                    connecting={!peer.connected}
+                    sharing={peer.sharing}
+                    onTogglePin={() => setPinnedPeerId(peer.peerId)}
+                  />
+                ))}
             </div>
 
             {others.length === 0 && (
@@ -313,6 +421,24 @@ function LiveRoom({ slug }: { slug: string }) {
               >
                 <MonitorUp aria-hidden className="size-4" />
                 {call.sharing ? "Stop sharing" : "Share screen"}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setRoomSoundsEnabled(!sounds);
+                  setSounds(!sounds);
+                }}
+                aria-pressed={sounds}
+                title={sounds ? "A sound plays when someone joins or leaves" : "Join and leave sounds are off"}
+                className={cn(
+                  "inline-flex min-h-11 items-center gap-2 rounded-full border px-4 text-sm font-semibold transition-colors",
+                  sounds
+                    ? "border-white/15 text-white/80 hover:border-white/30"
+                    : "border-white/15 text-white/50 hover:border-white/30",
+                )}
+              >
+                {sounds ? <Volume2 aria-hidden className="size-4" /> : <VolumeX aria-hidden className="size-4" />}
+                {sounds ? "Sounds on" : "Sounds off"}
               </button>
               <button
                 type="button"

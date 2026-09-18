@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { useMember } from "@/hooks/useMember";
 import { TimezonePrompt } from "@/components/member/TimezonePrompt";
+import { FloatingCall } from "@/components/community/FloatingCall";
 import { cn } from "@/lib/cn";
 
 /**
@@ -122,6 +123,8 @@ export function MemberShell({ title, description, actions, children }: MemberShe
 
   return (
     <div className="theme-luxe grain-overlay flex min-h-screen flex-col bg-night-deep">
+      {/* A call in progress follows the member around the portal. */}
+      <FloatingCall />
       <Toaster
         position="top-center"
         toastOptions={{

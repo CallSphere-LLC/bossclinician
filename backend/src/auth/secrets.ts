@@ -26,6 +26,7 @@ import { env } from "../config/env";
  */
 
 const MEMBER_INFO = "bossclinician/member-access-token/v1";
+const GOOGLE_STATE_INFO = "bossclinician/google-oauth-state/v1";
 
 function derive(info: string): string {
   // A 32-byte key from the base secret. The salt is empty by design: the base
@@ -41,6 +42,19 @@ let memberKey: string | null = null;
 export function memberTokenSecret(): string {
   if (memberKey === null) memberKey = derive(MEMBER_INFO);
   return memberKey;
+}
+
+let googleStateKey: string | null = null;
+
+/**
+ * The HMAC key for the cookie that parks a Google sign-in between /start and
+ * /callback (auth/googleOAuth.ts). Its own derivation for the reason at the top
+ * of this file: a MAC made with the member or admin key would be a value that
+ * means something to two verifiers.
+ */
+export function googleStateSecret(): string {
+  if (googleStateKey === null) googleStateKey = derive(GOOGLE_STATE_INFO);
+  return googleStateKey;
 }
 
 /** The signing key for admin tokens — the configured secret, unchanged. */

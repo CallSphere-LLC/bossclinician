@@ -68,7 +68,7 @@ const GENERIC_THROTTLED = "Too many sign-in attempts. Please wait a few minutes 
 const GENERIC_LINK = "That link has expired or has already been used. Please request a new one.";
 
 /** Suspended and deleted accounts are refused everywhere a session can be created. */
-const SIGN_IN_BLOCKED = new Set(["suspended", "deleted"]);
+export const SIGN_IN_BLOCKED = new Set(["suspended", "deleted"]);
 
 const PASSWORD_RESET_TTL_MINUTES = 60;
 const MAGIC_LINK_TTL_MINUTES = 15;
@@ -116,12 +116,12 @@ const LOGIN_BACKOFF_MAX_SECONDS = 60;
 const RESET_WINDOW_MINUTES = 15;
 const RESET_MAX_PER_WINDOW = 5;
 
-interface ClientMeta {
+export interface ClientMeta {
   ip: string;
   userAgent: string;
 }
 
-function clientMeta(req: Request): ClientMeta {
+export function clientMeta(req: Request): ClientMeta {
   return { ip: req.ip ?? "", userAgent: req.get("user-agent") ?? "" };
 }
 
@@ -137,13 +137,13 @@ export function readRefreshCookie(req: Request): string | null {
   return typeof raw === "string" && raw.length > 0 ? raw : null;
 }
 
-interface AuthSuccess {
+export interface AuthSuccess {
   member: MemberProfile;
   accessToken: string;
 }
 
 /** Mints the refresh cookie and the access token that go with a freshly proven identity. */
-async function startSession(
+export async function startSession(
   res: Response,
   member: MemberProfile,
   meta: ClientMeta
@@ -162,7 +162,7 @@ async function startSession(
   };
 }
 
-function isUniqueViolation(err: unknown): boolean {
+export function isUniqueViolation(err: unknown): boolean {
   return typeof err === "object" && err !== null && (err as { code?: string }).code === "23505";
 }
 
@@ -306,6 +306,62 @@ async function loginThrottle(email: string, ip: string): Promise<LoginThrottle> 
     return "account";
   }
   return "none";
+}
+
+/**
+ * What a brand-new member row is owed besides the row: its CRM contact, the
+ * link between the two, the "Created an account" activity entry, and the two
+ * announcements (the internal `contact_created` event that automations listen
+ * for, and the outbound `member.created` webhook).
+ *
+ * One function because there are two front doors — the signup form here and
+ * "Continue with Google" in ./googleAuth.ts — and a member who came in through
+ * the second must not be missing from the People screen, or from a Zap, just
+ * because that door was built later. `source` is how the webhook tells them
+ * apart.
+ *
+ * Deliberately NOT here: the email. A signup is sent a link to confirm its
+ * address; a Google member's address arrives already confirmed and gets the
+ * welcome instead. That is the caller's decision.
+ */
+export async function onboardNewMember(
+  row: MemberProfileRow,
+  origin: { ip: string; source: "signup" | "google" }
+): Promise<void> {
+  const contact = await upsertContactWithStatus({
+    email: row.email,
+    firstName: row.first_name,
+    lastName: row.last_name,
+    timezone: row.timezone,
+    source: "member",
+    consentIp: origin.ip,
+  });
+  const contactId = contact.id;
+  await linkContact("member", row.id, contactId);
+  await recordActivity({
+    contactId,
+    kind: "account.created",
+    title: "Created an account",
+    subjectType: "member",
+    subjectId: row.id,
+  });
+  if (contact.created) {
+    await publishDomainEvent("contact_created", {
+      eventKey: `contact-created:${contactId}`,
+      contactId,
+      email: row.email,
+      name: row.name,
+      source: "member",
+    });
+  }
+  await dispatchEvent("member.created", {
+    id: `member:${row.id}`,
+    memberId: row.id,
+    contactId,
+    email: row.email,
+    name: row.name,
+    source: origin.source,
+  });
 }
 
 interface LookupRow extends MemberProfileRow {
@@ -493,40 +549,7 @@ memberAuthRoutes.post(
     // nothing on the word of an unauthenticated request, and writing a contact
     // there would be the one thing they did change — and would let this endpoint
     // be used to stamp an activity entry on any address a stranger names.
-    const contact = await upsertContactWithStatus({
-      email: row.email,
-      firstName: row.first_name,
-      lastName: row.last_name,
-      timezone: row.timezone,
-      source: "member",
-      consentIp: req.ip ?? "",
-    });
-    const contactId = contact.id;
-    await linkContact("member", row.id, contactId);
-    await recordActivity({
-      contactId,
-      kind: "account.created",
-      title: "Created an account",
-      subjectType: "member",
-      subjectId: row.id,
-    });
-    if (contact.created) {
-      await publishDomainEvent("contact_created", {
-        eventKey: `contact-created:${contactId}`,
-        contactId,
-        email: row.email,
-        name: displayName,
-        source: "member",
-      });
-    }
-    await dispatchEvent("member.created", {
-      id: `member:${row.id}`,
-      memberId: row.id,
-      contactId,
-      email: row.email,
-      name: displayName,
-      source: "signup",
-    });
+    await onboardNewMember(row, { ip: req.ip ?? "", source: "signup" });
 
     await sendVerificationEmail(row);
 

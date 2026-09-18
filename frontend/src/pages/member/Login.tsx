@@ -9,6 +9,7 @@ import {
   AuthSubmit,
   authErrorMessage,
 } from "@/components/member/AuthCard";
+import { GoogleButton, googleEnabledIn, googleErrorMessage } from "@/components/member/GoogleButton";
 import { LuxeButton } from "@/components/luxe/LuxeButton";
 import { LuxeInput } from "@/components/luxe/LuxeField";
 import { api } from "@/lib/api";
@@ -41,9 +42,23 @@ export default function Login() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
+  // A failed "Continue with Google" comes back here as `?error=google_…`. Read
+  // once, as the initial value: the param is stripped from the address just
+  // below, and the message should outlive it until the member tries again.
+  const [error, setError] = useState<string | null>(() => googleErrorMessage(params.get("error")));
   const [submitting, setSubmitting] = useState(false);
   const [magicLink, setMagicLink] = useState<MagicLinkState>("checking");
+  const [googleEnabled, setGoogleEnabled] = useState(false);
+
+  // Otherwise the error is part of the page's address: a refresh shows it again
+  // after it has stopped being true, and a bookmark keeps it for good.
+  // `replaceState`, so Back still goes wherever it went before. `next` stays.
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (!url.searchParams.get("error")?.startsWith("google_")) return;
+    url.searchParams.delete("error");
+    window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+  }, []);
 
   // Offered only when it is switched on. It used to be shown to everyone and
   // withdrawn after a failed click, which is a button that promises an email
@@ -56,6 +71,8 @@ export default function Login() {
         if (cancelled) return;
         const signIn = settings.member_signin as { magicLinkEnabled?: unknown } | undefined;
         setMagicLink(signIn?.magicLinkEnabled === true ? "offered" : "unavailable");
+        // Same request, second answer: whether the server has Google credentials.
+        setGoogleEnabled(googleEnabledIn(settings));
       })
       .catch(() => {
         if (!cancelled) setMagicLink("unavailable");
@@ -115,6 +132,8 @@ export default function Login() {
         </>
       }
     >
+      {googleEnabled && <GoogleButton next={destination} />}
+
       <form onSubmit={handleSubmit} className="space-y-5" noValidate>
         <LuxeInput
           label="Email"

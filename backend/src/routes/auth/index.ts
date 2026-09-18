@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { memberAuthCsrf } from "../../auth/memberCsrf";
 import { memberAuthRoutes } from "./memberAuth";
+import { googleAuthRoutes } from "./googleAuth";
 import { memberAccountRoutes } from "./memberAccount";
 
 /**
@@ -18,4 +19,8 @@ export const memberAuthRouter = Router();
 // auth/memberCsrf.ts for why SameSite alone does not cover it on this domain.
 memberAuthRouter.use(memberAuthCsrf);
 memberAuthRouter.use(memberAuthRoutes);
+// "Continue with Google": two GET navigations, so the CSRF check above passes
+// them by design — Google's redirect back is cross-site and could never carry
+// our Origin. A signed state cookie does that job instead; see ./googleAuth.ts.
+memberAuthRouter.use(googleAuthRoutes);
 memberAuthRouter.use(memberAccountRoutes);

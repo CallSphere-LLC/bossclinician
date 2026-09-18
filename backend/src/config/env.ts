@@ -167,6 +167,17 @@ export const env = {
     ""
   ),
 
+  // "Continue with Google" on the member sign-in and sign-up screens. Off until
+  // BOTH are set — the button is not drawn and /api/auth/google/start is a 404 —
+  // so the app boots fine without them. There is no redirect-URI variable on
+  // purpose: it is always `${PUBLIC_SITE_URL}/api/auth/google/callback`, and
+  // that exact string is what has to be registered in the Google Cloud Console.
+  // See auth/googleOAuth.ts.
+  google: {
+    clientId: (process.env.GOOGLE_CLIENT_ID ?? "").trim(),
+    clientSecret: (process.env.GOOGLE_CLIENT_SECRET ?? "").trim(),
+  },
+
   // Off until the DNS cutover. bossclinician.com is live and indexed; a staging
   // host serving the same content to crawlers competes with it. See
   // routes/public/seo.ts.

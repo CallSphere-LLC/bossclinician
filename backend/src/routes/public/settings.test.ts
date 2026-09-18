@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { publicView } from "./settings";
+import { publicView, withComputedFlags } from "./settings";
 
 /**
  * The public settings endpoint is unauthenticated, and the settings table holds
@@ -81,5 +81,39 @@ describe("publicView", () => {
     for (const key of ["__proto__", "constructor", "toString", "hasOwnProperty"]) {
       expect(publicView(key, { leaked: true })).toBeUndefined();
     }
+  });
+});
+
+/**
+ * `googleEnabled` is computed from the environment, not read from the table, so
+ * it takes a different road from everything above — and it is the one value the
+ * sign-in screen needs even when the table has nothing to say about signing in.
+ */
+describe("withComputedFlags", () => {
+  it("adds the flag beside what the allow-list already published", () => {
+    const merged = { member_signin: publicView("member_signin", { magicLinkEnabled: true }), nav: { items: [] } };
+    expect(withComputedFlags(merged, { googleEnabled: true })).toEqual({
+      member_signin: { magicLinkEnabled: true, googleEnabled: true },
+      nav: { items: [] },
+    });
+  });
+
+  it("publishes the flag when there is no member_signin row at all", () => {
+    expect(withComputedFlags({}, { googleEnabled: false })).toEqual({ member_signin: { googleEnabled: false } });
+    expect(withComputedFlags({ member_signin: "junk" }, { googleEnabled: true })).toEqual({
+      member_signin: { googleEnabled: true },
+    });
+  });
+
+  it("never lets a stored value stand in for the computed one", () => {
+    // Not reachable through publicView, which drops the field — this pins the
+    // order of the spread in case the allow-list ever grows it by mistake.
+    const view = withComputedFlags({ member_signin: { googleEnabled: true } }, { googleEnabled: false });
+    expect(view.member_signin).toEqual({ googleEnabled: false });
+  });
+
+  it("publishes a boolean and nothing about the credentials behind it", () => {
+    const view = withComputedFlags({}, { googleEnabled: true });
+    expect(Object.keys(view.member_signin as object)).toEqual(["googleEnabled"]);
   });
 });

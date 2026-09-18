@@ -1,75 +1,38 @@
 export interface NavLinkItem {
   label: string;
   to: string;
-  /**
-   * Desktop header only: hold this link back until the `xl` breakpoint. Seven
-   * links plus the account and booking actions do not fit a 1024px bar, and a
-   * wrapped nav is worse than a shorter one. The mobile sheet and the footer
-   * always show it.
-   */
-  wideOnly?: boolean;
 }
 
 export type NavBadgeTone = "green" | "plum" | "gold";
 
+/** One row of a header dropdown: a label, and a line saying what is behind it. */
 export interface NavMenuItem extends NavLinkItem {
-  /** Small label row rendered above the item inside the dropdown. */
-  group: string;
-  badge: string;
-  badgeTone: NavBadgeTone;
+  description: string;
+  /** Optional pill beside the label ("6-Month Program", "Apply"). */
+  badge?: string;
+  badgeTone?: NavBadgeTone;
 }
+
+/** A link in a dropdown's footer row: a route (`to`) or an outside URL (`href`). */
+export type NavMenuFooterLink =
+  | { label: string; to: string; href?: undefined }
+  | { label: string; href: string; to?: undefined };
 
 export interface NavMenu {
   label: string;
+  /** Short line set above the items inside the desktop panel. */
+  description?: string;
   items: NavMenuItem[];
+  /** Links along the bottom edge of the desktop panel, left to right. */
+  footer?: NavMenuFooterLink[];
 }
 
 export type NavEntry = NavLinkItem | NavMenu;
 
-/** Discriminates the header's dropdown group from a plain nav link. */
+/** Discriminates a header dropdown from a plain nav link. */
 export function isNavMenu(entry: NavEntry): entry is NavMenu {
   return "items" in entry;
 }
-
-// The Club and the Lounge have their own sales pages, at the same paths the
-// source site uses. The Boardroom has none yet: /boardroom redirects to
-// /work-with-me (migration 064), so the menu goes there directly.
-export const learnMenu: NavMenu = {
-  label: "Learn",
-  items: [
-    {
-      group: "Coaching Program",
-      label: "Boss Clinician Club",
-      to: "/club",
-      badge: "6-Month Program",
-      badgeTone: "green",
-    },
-    {
-      group: "Membership",
-      label: "Boss Clinician Lounge",
-      to: "/lounge",
-      badge: "Monthly",
-      badgeTone: "plum",
-    },
-    {
-      group: "Mastermind",
-      label: "Boss Clinician Boardroom",
-      to: "/work-with-me",
-      badge: "Apply",
-      badgeTone: "gold",
-    },
-  ],
-};
-
-export const nav: NavEntry[] = [
-  { label: "About", to: "/about" },
-  learnMenu,
-  { label: "Courses", to: "/courses" },
-  { label: "Resource Hub", to: "/resource-hub" },
-  { label: "Retreats", to: "/retreats" },
-  { label: "Blog", to: "/blog" },
-  { label: "Contact", to: "/contact", wideOnly: true },
-];
 
 /** The header's account and booking actions, as the source site's header has them. */
 export const headerActions = {
@@ -81,6 +44,100 @@ export const headerActions = {
     href: "https://tidycal.com/profitwithyvette/chatprofitwithyvette",
   },
 };
+
+// Everything a clinician can join or buy a seat in. The Club and the Lounge
+// have their own sales pages, at the same paths the source site uses. The
+// Boardroom has none yet: /boardroom redirects to /work-with-me (migration
+// 064), so the menu goes there directly. Book A Call lives in this panel's
+// footer rather than as a second button in the bar.
+export const programsMenu: NavMenu = {
+  label: "Programs",
+  description: "Ways to work with Yvette",
+  items: [
+    {
+      label: "Boss Clinician Club",
+      to: "/club",
+      description: "Six months of coaching to build your practice on the right foundation.",
+      badge: "6-Month Program",
+      badgeTone: "green",
+    },
+    {
+      label: "Boss Clinician Lounge",
+      to: "/lounge",
+      description: "A membership for established therapists easing caseload pressure.",
+      badge: "Monthly",
+      badgeTone: "plum",
+    },
+    {
+      label: "Boardroom Mastermind",
+      to: "/work-with-me",
+      description: "Private strategy for clinicians ready to lead, hire and scale.",
+      badge: "Apply",
+      badgeTone: "gold",
+    },
+    {
+      label: "Retreats",
+      to: "/retreats",
+      description: "A luxury wellness retreat for women mental health professionals.",
+    },
+    {
+      label: "Courses",
+      to: "/courses",
+      description: "Self-paced trainings and toolkits from the training library.",
+    },
+  ],
+  footer: [
+    { label: "See all programs", to: "/work-with-me" },
+    { label: headerActions.bookACall.label, href: headerActions.bookACall.href },
+  ],
+};
+
+export const resourcesMenu: NavMenu = {
+  label: "Resources",
+  description: "Free tools and reading",
+  items: [
+    {
+      label: "Resource Hub",
+      to: "/resource-hub",
+      description: "Free tools for where your practice is now, including the income calculator.",
+    },
+    {
+      label: "Free Resources",
+      to: "/resources",
+      description: "The free masterclass, guides and checklists.",
+    },
+    {
+      label: "Blog",
+      to: "/blog",
+      description: "Articles on building a private practice.",
+    },
+    {
+      label: "Practice Quiz",
+      to: "/practice-quiz",
+      description: "A free 2-minute quiz about how your practice is working for you.",
+    },
+    {
+      label: "Practice Reset Planner",
+      to: "/practice-reset-planner",
+      description: "A free 30-day planner to reset how your practice runs.",
+    },
+    {
+      label: "Store",
+      to: "/store",
+      description: "Done-with-you consulting services.",
+    },
+  ],
+};
+
+// Two categories, then the two pages a visitor looks for by name. About and
+// Contact stay plain links: a two-item dropdown hides both behind a click and
+// groups nothing.
+export const nav: NavEntry[] = [
+  programsMenu,
+  resourcesMenu,
+  { label: "About", to: "/about" },
+  { label: "Contact", to: "/contact" },
+];
 
 export const footer = {
   brandTagline: "Self Made — Self Paid.",

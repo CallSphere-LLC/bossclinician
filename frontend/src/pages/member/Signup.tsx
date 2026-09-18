@@ -11,6 +11,7 @@ import {
   MIN_PASSWORD_LENGTH,
   authErrorMessage,
 } from "@/components/member/AuthCard";
+import { GoogleButton, useGoogleSignInEnabled } from "@/components/member/GoogleButton";
 import { LuxeInput } from "@/components/luxe/LuxeField";
 import { useMember } from "@/hooks/useMember";
 import { cn } from "@/lib/cn";
@@ -26,6 +27,7 @@ const legalLink = cn(
 export default function Signup() {
   const { member, loading, signUp } = useMember();
   const navigate = useNavigate();
+  const googleEnabled = useGoogleSignInEnabled();
 
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
@@ -114,6 +116,11 @@ export default function Signup() {
         </>
       }
     >
+      {/* Signing up and signing in are the same act with Google: the server
+          creates the account if the address is new. A failure lands on /login,
+          which is where the message for it lives. */}
+      {googleEnabled && <GoogleButton next={AFTER_SIGNUP} />}
+
       <form onSubmit={handleSubmit} className="space-y-5" noValidate>
         <div className="grid gap-5 sm:grid-cols-2">
           <LuxeInput

@@ -5,6 +5,7 @@ import { runSeedIfEmpty } from "./seed/seed";
 import { pool } from "./db/pool";
 import { registerCoreHandlers } from "./jobs/handlers";
 import { startWorker, stopWorker } from "./jobs/worker";
+import { closeAllLiveStreams } from "./routes/public/communityLiveStream";
 
 async function main(): Promise<void> {
   await applySchema();
@@ -28,6 +29,11 @@ async function main(): Promise<void> {
     process.on(signal, () => {
       console.log(`[server] ${signal} received, shutting down`);
       stopWorker();
+      // Live-room streams never finish by themselves, so `server.close` below
+      // would wait on them until the hard exit. Ending them here, each with a
+      // note telling its browser when to come back, is what lets it complete.
+      const liveStreams = closeAllLiveStreams();
+      console.log(`[server] closed ${liveStreams} live-room stream(s)`);
       server.close(() => void pool.end().then(() => process.exit(0)));
       // Docker sends SIGKILL after its grace period regardless; this makes sure
       // a hung connection does not hold the container open until then.

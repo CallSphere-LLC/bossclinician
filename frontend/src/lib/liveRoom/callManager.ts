@@ -28,7 +28,8 @@
  * infrastructure and not pretended at here.
  */
 
-import { getAccessToken } from "@/lib/memberApi";
+import { getAccessToken, MemberApiError, memberFetch } from "@/lib/memberApi";
+import { playChime, primeChime } from "./chime";
 
 /** Matches memberApi so a deployment that moves the API moves this with it. */
 const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? "/api";
@@ -38,6 +39,7 @@ export type RoomStatus =
   | "connecting" // acquiring devices, ICE config and the signalling stream
   | "waiting" // in the room, nobody else here yet
   | "live" // at least one peer connected
+  | "reconnecting" // the signalling stream dropped; media keeps flowing while we get back in
   | "left"
   | "error";
 
@@ -50,6 +52,8 @@ export interface RemoteParticipant {
   stream: MediaStream | null;
   /** True once this leg's connection is actually up. */
   connected: boolean;
+  /** True while what they are sending is a screen rather than a camera. */
+  sharing: boolean;
 }
 
 export interface RoomChatMessage {
@@ -73,6 +77,10 @@ export interface RoomSnapshot {
   chat: RoomChatMessage[];
   /** False when no TURN relay is configured — surfaced, never hidden. */
   relayAvailable: boolean;
+  /** Which try this is while `status` is "reconnecting"; 0 otherwise. */
+  reconnectAttempt: number;
+  /** False while the browser reports no network at all. */
+  online: boolean;
 }
 
 interface IncomingSignal {
@@ -98,6 +106,8 @@ interface PeerLeg {
   info: RosterEntry;
   stream: MediaStream | null;
   connected: boolean;
+  /** They told us they are showing a screen (a "net" signal; see announceSharing). */
+  sharing: boolean;
   /** Perfect-negotiation flags, per leg — they cannot be shared across peers. */
   makingOffer: boolean;
   ignoreOffer: boolean;
@@ -121,6 +131,38 @@ let rawPeerId = "";
 let source: EventSource | null = null;
 let myMemberId = 0;
 
+/* Resuming a call. Media is peer to peer, so a dropped signalling stream — a
+   server restart, a lift, a laptop lid — does not by itself stop anyone being
+   seen or heard. What it stops is negotiation. The rules below are the usual
+   ones for a call that is meant to survive that:
+     - keep the peer connections and the camera exactly as they are;
+     - get back in with capped exponential backoff and jitter, so a room full of
+       people does not retry a restarting server in lockstep;
+     - retry at once when the network or the tab comes back;
+     - give up only on an answer that will never change (no access, room closed),
+       or after a long time;
+     - once back, let the roster settle before believing anyone has left. */
+let reconnectAttempt = 0;
+let reconnectTimer: number | null = null;
+let reconnectSince = 0;
+let lastEventAt = 0;
+let watchdog: number | null = null;
+/** Until this time a roster that omits a still-connected peer is not believed. */
+let resyncUntil = 0;
+let pruneTimer: number | null = null;
+let listening = false;
+
+const BACKOFF_BASE_MS = 1_000;
+const BACKOFF_CAP_MS = 15_000;
+/** After this long without getting back in, stop and say so. */
+const GIVE_UP_AFTER_MS = 5 * 60_000;
+/** The server pings every 25s; two missed pings and the stream is treated as dead. */
+const STREAM_SILENCE_MS = 60_000;
+/** How long everyone else gets to reappear after we do. */
+const RESYNC_GRACE_MS = 20_000;
+/** "disconnected" often heals by itself; past this, ask ICE to start over. */
+const ICE_DISCONNECTED_GRACE_MS = 4_000;
+
 const legs = new Map<string, PeerLeg>();
 const listeners = new Set<(snapshot: RoomSnapshot) => void>();
 
@@ -136,6 +178,8 @@ function idle(): RoomSnapshot {
     sharing: false,
     chat: [],
     relayAvailable: false,
+    reconnectAttempt: 0,
+    online: true,
   };
 }
 
@@ -149,12 +193,15 @@ function snapshot(): RoomSnapshot {
       ...leg.info,
       stream: leg.stream,
       connected: leg.connected,
+      sharing: leg.sharing,
     })),
     micOn,
     camOn,
     sharing: screenStream !== null,
     chat,
     relayAvailable,
+    reconnectAttempt: status === "reconnecting" ? reconnectAttempt : 0,
+    online: typeof navigator === "undefined" ? true : navigator.onLine !== false,
   };
 }
 
@@ -246,6 +293,7 @@ function openLeg(info: RosterEntry): PeerLeg {
     info,
     stream: null,
     connected: false,
+    sharing: false,
     makingOffer: false,
     ignoreOffer: false,
     polite: myPeerId < info.peerId,
@@ -299,6 +347,20 @@ function openLeg(info: RosterEntry): PeerLeg {
         /* not supported; the next presence broadcast will rebuild the leg */
       }
     }
+    if (state === "disconnected") {
+      // A Wi-Fi to mobile handover looks like this. It usually heals within a
+      // second or two; if it has not, new candidates are what it needs.
+      window.setTimeout(() => {
+        if (legs.get(info.peerId) !== leg) return;
+        if (pc.connectionState === "disconnected") {
+          try {
+            pc.restartIce();
+          } catch {
+            /* as above */
+          }
+        }
+      }, ICE_DISCONNECTED_GRACE_MS);
+    }
     if (state === "closed") legs.delete(info.peerId);
     recomputeStatus();
     publish();
@@ -309,6 +371,12 @@ function openLeg(info: RosterEntry): PeerLeg {
 
 function recomputeStatus(): void {
   if (status === "idle" || status === "left" || status === "error") return;
+  // No signalling stream means we are on our way back in, whatever the media is
+  // doing. Saying "live" here would hide that nobody new can reach us.
+  if (source === null && slug !== null && reconnectSince !== 0) {
+    status = "reconnecting";
+    return;
+  }
   const anyConnected = [...legs.values()].some((leg) => leg.connected);
   status = anyConnected ? "live" : legs.size > 0 ? "connecting" : "waiting";
 }
@@ -331,6 +399,43 @@ async function onDesc(leg: PeerLeg, description: RTCSessionDescriptionInit): Pro
   }
 }
 
+let latestRoster: RosterEntry[] | null = null;
+/** Who we have already announced, so a roster re-send is not a second chime. */
+const announced = new Set<string>();
+/** The first roster is who was already here — nobody "arrived". */
+let rosterBaselined = false;
+
+/** Arrival and departure sounds, from the difference between two rosters. */
+function chimeForRoster(present: Set<string>): void {
+  // While the room is refilling after a reconnect, people reappearing are not
+  // arriving and people not yet back have not left.
+  const settling = Date.now() < resyncUntil;
+  if (!rosterBaselined) {
+    rosterBaselined = true;
+    for (const id of present) announced.add(id);
+    return;
+  }
+  let arrived = false;
+  let departed = false;
+  for (const id of present) {
+    if (!announced.has(id)) {
+      announced.add(id);
+      arrived = true;
+    }
+  }
+  if (!settling) {
+    for (const id of [...announced]) {
+      if (!present.has(id)) {
+        announced.delete(id);
+        departed = true;
+      }
+    }
+  }
+  if (settling) return;
+  if (arrived) playChime("join");
+  else if (departed) playChime("leave");
+}
+
 function onPresence(roster: RosterEntry[]): void {
   const present = new Set<string>();
   for (const entry of roster) {
@@ -338,6 +443,8 @@ function onPresence(roster: RosterEntry[]): void {
     present.add(entry.peerId);
     const isNew = !legs.has(entry.peerId);
     const leg = openLeg(entry);
+    // Somebody who walks in mid-presentation has not heard the announcement.
+    if (isNew && screenStream) void post("net", entry.peerId, { sharing: true });
     // The impolite peer of the pair opens the conversation. Either could —
     // perfect negotiation would survive both — but having one of them do it
     // halves the glare and the wasted offers on a busy join.
@@ -358,11 +465,30 @@ function onPresence(roster: RosterEntry[]): void {
     }
   }
 
+  chimeForRoster(present);
+
   // Anybody the server no longer lists has gone. Closing here rather than
-  // waiting for ICE to fail is what makes a tile vanish promptly.
+  // waiting for ICE to fail is what makes a tile vanish promptly — except just
+  // after we have come back. A restarted server starts with an empty room and
+  // fills up as each browser returns, so the first rosters are short by
+  // everyone who is a second behind us, and their media is still flowing.
+  const settling = Date.now() < resyncUntil;
   for (const peerId of [...legs.keys()]) {
-    if (!present.has(peerId)) closeLeg(peerId);
+    if (present.has(peerId)) continue;
+    const leg = legs.get(peerId);
+    if (settling && leg && leg.pc.connectionState === "connected") continue;
+    closeLeg(peerId);
   }
+  if (settling && pruneTimer === null) {
+    const roster_ = roster;
+    pruneTimer = window.setTimeout(() => {
+      pruneTimer = null;
+      resyncUntil = 0;
+      // Whoever has still not reappeared really has gone.
+      if (slug !== null && source !== null) onPresence(latestRoster ?? roster_);
+    }, Math.max(0, resyncUntil - Date.now()) + 50);
+  }
+  latestRoster = roster;
 
   recomputeStatus();
   publish();
@@ -395,6 +521,7 @@ function handleSignal(signal: IncomingSignal): void {
   }
 
   if (signal.kind === "bye") {
+    if (announced.delete(signal.senderId)) playChime("leave");
     closeLeg(signal.senderId);
     recomputeStatus();
     publish();
@@ -403,6 +530,17 @@ function handleSignal(signal: IncomingSignal): void {
 
   const leg = legs.get(signal.senderId);
   if (!leg) return; // a signal from somebody presence has not introduced yet
+
+  if (signal.kind === "net") {
+    // A screen and a camera arrive on the same video track, so the picture alone
+    // cannot say which it is — and the room lays a screen out very differently.
+    const payload = signal.payload as { sharing?: unknown } | undefined;
+    if (typeof payload?.sharing === "boolean" && leg.sharing !== payload.sharing) {
+      leg.sharing = payload.sharing;
+      publish();
+    }
+    return;
+  }
 
   if (signal.kind === "desc") {
     void onDesc(leg, signal.payload as RTCSessionDescriptionInit).catch(() => {
@@ -430,60 +568,230 @@ function randomId(): string {
   return [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+/** True while this tab is meant to be in a room (joined, not left, not failed). */
+function wantsRoom(): boolean {
+  return slug !== null && status !== "idle" && status !== "left" && status !== "error";
+}
+
+function clearReconnectTimer(): void {
+  if (reconnectTimer !== null) {
+    window.clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
+}
+
+function dropStream(): void {
+  if (source) {
+    source.onerror = null;
+    source.onopen = null;
+    source.close();
+    source = null;
+  }
+}
+
+/** An answer that will be the same however often it is asked. */
+function isFatal(err: unknown): err is MemberApiError {
+  return err instanceof MemberApiError && [400, 403, 404, 409, 410].includes(err.status);
+}
+
+function fail(message: string): void {
+  clearReconnectTimer();
+  dropStream();
+  reconnectSince = 0;
+  reconnectAttempt = 0;
+  status = "error";
+  error = message;
+  publish();
+}
+
+/**
+ * Schedules the next attempt to get back in.
+ *
+ * Full-jitter exponential backoff: 1s, 2s, 4s, 8s, then every 15s, each
+ * multiplied by a random 0.5 to 1. A restart drops every browser in the room at
+ * the same instant; without the jitter they would all return at the same instant
+ * too. `soon` is for the moments when waiting is pointless — the network just
+ * came back, the tab just became visible, the server said it is restarting.
+ */
+function scheduleReconnect(soon = false): void {
+  if (!wantsRoom() && status !== "reconnecting") return;
+  clearReconnectTimer();
+  dropStream();
+
+  if (reconnectSince === 0) reconnectSince = Date.now();
+  if (Date.now() - reconnectSince > GIVE_UP_AFTER_MS) {
+    fail("We lost the connection to the room and could not get it back. Press Join to come back in.");
+    return;
+  }
+
+  status = "reconnecting";
+  error = null;
+  publish();
+
+  const exponential = Math.min(BACKOFF_CAP_MS, BACKOFF_BASE_MS * 2 ** reconnectAttempt);
+  const delay = soon ? 250 + Math.random() * 750 : exponential * (0.5 + Math.random() * 0.5);
+  reconnectAttempt += 1;
+
+  reconnectTimer = window.setTimeout(() => {
+    reconnectTimer = null;
+    if (status === "reconnecting") void openStream();
+  }, delay);
+}
+
+/** TURN credentials are short-lived; a resumed call gets fresh ones. */
+async function loadIceConfig(): Promise<void> {
+  if (!slug) return;
+  try {
+    const res = await memberFetch(`/member/community/${encodeURIComponent(slug)}/live/ice`);
+    const body = (await res.json()) as { iceServers?: RTCIceServer[]; turn?: boolean };
+    iceServers = body.iceServers ?? [];
+    relayAvailable = body.turn === true;
+    for (const leg of legs.values()) {
+      try {
+        leg.pc.setConfiguration({ iceServers });
+      } catch {
+        /* a closed connection, or a browser that will not change it mid-call */
+      }
+    }
+  } catch {
+    // Keep whatever we had. No ICE config at all still leaves host candidates,
+    // which work on one network.
+  }
+}
+
 /**
  * Opens the signalling stream.
  *
  * `EventSource` cannot send an Authorization header, so rather than putting the
  * member's access token in a URL — where nginx logs it — we swap it for a
- * one-minute single-use ticket first and connect with that.
+ * one-minute single-use ticket first and connect with that. The ticket request
+ * goes through `memberFetch`, so an access token that expired during a long
+ * call is refreshed instead of ending it.
  */
 async function openStream(): Promise<void> {
   if (!slug) return;
-  const res = await fetch(
-    `${API_BASE}/member/community/${encodeURIComponent(slug)}/live/ticket`,
-    {
+  const forSlug = slug;
+  let minted: { ticket: string; peerId: string };
+  try {
+    const res = await memberFetch(`/member/community/${encodeURIComponent(forSlug)}/live/ticket`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", ...authHeaders() },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ peerId: rawPeerId }),
+    });
+    minted = (await res.json()) as { ticket: string; peerId: string };
+  } catch (err) {
+    if (slug !== forSlug) return; // left, or moved rooms, while this was in flight
+    if (err instanceof MemberApiError && err.status === 401) {
+      fail("You have been signed out. Sign in again to come back to the room.");
+    } else if (isFatal(err)) {
+      fail(err.message || "We couldn't get you into the room.");
+    } else {
+      // A 5xx, a 429, a timeout, no network: all of them pass.
+      scheduleReconnect();
     }
-  );
-  if (!res.ok) {
-    const body = (await res.json().catch(() => ({}))) as { error?: string };
-    status = "error";
-    error = body.error || "We couldn't get you into the room.";
-    publish();
     return;
   }
-  const { ticket, peerId } = (await res.json()) as { ticket: string; peerId: string };
+  if (slug !== forSlug || !wantsRoom()) return;
+
   // The server's own binding, so echo filtering and politeness both agree with
   // the ids it stamps on relayed signals.
-  myPeerId = peerId;
+  myPeerId = minted.peerId;
 
-  const query = new URLSearchParams({ ticket, peerId });
-  source = new EventSource(`${API_BASE}/community-live/stream?${query.toString()}`);
-  source.addEventListener("signal", (event) => {
+  dropStream();
+  const query = new URLSearchParams({ ticket: minted.ticket, peerId: minted.peerId });
+  const stream = new EventSource(`${API_BASE}/community-live/stream?${query.toString()}`);
+  source = stream;
+  lastEventAt = Date.now();
+
+  stream.onopen = () => {
+    if (source !== stream) return;
+    lastEventAt = Date.now();
+    const resumed = reconnectSince !== 0;
+    reconnectAttempt = 0;
+    reconnectSince = 0;
+    if (resumed) {
+      resyncUntil = Date.now() + RESYNC_GRACE_MS;
+      void loadIceConfig();
+      // Anything that failed while nobody could negotiate gets another go now.
+      for (const leg of legs.values()) {
+        if (leg.pc.connectionState === "failed" || leg.pc.connectionState === "disconnected") {
+          try {
+            leg.pc.restartIce();
+          } catch {
+            /* rebuilt by presence if it cannot */
+          }
+        }
+      }
+    }
+    if (status === "reconnecting") status = "waiting";
+    recomputeStatus();
+    publish();
+  };
+  stream.addEventListener("signal", (event) => {
+    lastEventAt = Date.now();
     try {
       handleSignal(JSON.parse((event as MessageEvent).data) as IncomingSignal);
     } catch {
       /* a malformed frame is not worth ending a call over */
     }
   });
-  source.onerror = () => {
+  stream.addEventListener("ping", () => {
+    lastEventAt = Date.now();
+  });
+  stream.addEventListener("shutdown", () => {
+    // The server is restarting and said so. Come back quickly, but not all at once.
+    if (source === stream) scheduleReconnect(true);
+  });
+  stream.onerror = () => {
     // A ticket is single-use, so EventSource's built-in retry would replay a
     // spent one and be refused forever. Close it and re-mint instead — the
-    // server ref-counts membership, so the brief overlap does not read as a
-    // leave, and the roster comes back on the next presence broadcast.
-    if (!slug || status === "idle" || status === "left") return;
-    source?.close();
-    source = null;
-    window.setTimeout(() => {
-      if (slug && status !== "idle" && status !== "left") void openStream();
-    }, RECONNECT_DELAY_MS);
+    // server holds our place for a few seconds, so a brief drop is not
+    // announced to the room as a departure.
+    if (source !== stream) return;
+    if (!wantsRoom() && status !== "reconnecting") return;
+    scheduleReconnect();
   };
 }
 
-/** Long enough not to hammer a server that is restarting, short enough to feel instant. */
-const RECONNECT_DELAY_MS = 1_500;
+function onOnline(): void {
+  publish();
+  if (status === "reconnecting") scheduleReconnect(true);
+}
+
+function onOffline(): void {
+  publish();
+  // The stream will error shortly; saying so now is kinder than a frozen room.
+  if (wantsRoom()) scheduleReconnect();
+}
+
+function onVisible(): void {
+  if (document.visibilityState !== "visible") return;
+  // A phone that slept the tab may have a stream the OS killed without telling
+  // it. If the server has gone quiet, do not wait for the watchdog.
+  if (status === "reconnecting") scheduleReconnect(true);
+  else if (wantsRoom() && source && Date.now() - lastEventAt > STREAM_SILENCE_MS) scheduleReconnect(true);
+}
+
+function startResumeWatchers(): void {
+  if (listening) return;
+  listening = true;
+  window.addEventListener("online", onOnline);
+  window.addEventListener("offline", onOffline);
+  document.addEventListener("visibilitychange", onVisible);
+  watchdog = window.setInterval(() => {
+    if (wantsRoom() && source && Date.now() - lastEventAt > STREAM_SILENCE_MS) scheduleReconnect(true);
+  }, 10_000);
+}
+
+function stopResumeWatchers(): void {
+  if (!listening) return;
+  listening = false;
+  window.removeEventListener("online", onOnline);
+  window.removeEventListener("offline", onOffline);
+  document.removeEventListener("visibilitychange", onVisible);
+  if (watchdog !== null) window.clearInterval(watchdog);
+  watchdog = null;
+}
 
 export interface JoinRoomOptions {
   slug: string;
@@ -494,8 +802,14 @@ export interface JoinRoomOptions {
 
 export async function joinRoom(options: JoinRoomOptions): Promise<void> {
   if (slug === options.slug && status !== "idle" && status !== "left" && status !== "error") {
-    return; // already in this room
+    // Already in this room. If we were on our way back in, pressing Join again
+    // means "now, please".
+    if (status === "reconnecting") scheduleReconnect(true);
+    return;
   }
+  // Before the first await: this runs inside the Join click, which is what lets
+  // the browser play the arrival and departure sounds later.
+  primeChime();
   await leaveRoom();
 
   slug = options.slug;
@@ -525,33 +839,30 @@ export async function joinRoom(options: JoinRoomOptions): Promise<void> {
     return;
   }
 
-  try {
-    const res = await fetch(
-      `${API_BASE}/member/community/${encodeURIComponent(options.slug)}/live/ice`,
-      { headers: authHeaders() }
-    );
-    if (res.ok) {
-      const body = (await res.json()) as { iceServers?: RTCIceServer[]; turn?: boolean };
-      iceServers = body.iceServers ?? [];
-      relayAvailable = body.turn === true;
-    }
-  } catch {
-    // No ICE config still leaves host candidates, which work on one network.
-    iceServers = [];
-    relayAvailable = false;
-  }
+  await loadIceConfig();
 
   rawPeerId = randomId();
   status = "waiting";
+  reconnectAttempt = 0;
+  reconnectSince = 0;
+  resyncUntil = 0;
   publish();
+  startResumeWatchers();
   await openStream();
 }
 
 export async function leaveRoom(): Promise<void> {
-  if (source) {
-    source.close();
-    source = null;
-  }
+  clearReconnectTimer();
+  stopResumeWatchers();
+  if (pruneTimer !== null) window.clearTimeout(pruneTimer);
+  pruneTimer = null;
+  latestRoster = null;
+  announced.clear();
+  rosterBaselined = false;
+  reconnectAttempt = 0;
+  reconnectSince = 0;
+  resyncUntil = 0;
+  dropStream();
   if (slug && rawPeerId) void post("bye", "");
 
   for (const peerId of [...legs.keys()]) closeLeg(peerId);
@@ -612,18 +923,40 @@ export function sendRoomChat(text: string): void {
 export async function startScreenShare(): Promise<void> {
   if (screenStream) return;
   try {
-    screenStream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+    // Text is what a shared screen is for: ask for the full resolution and a
+    // modest frame rate rather than the camera-style defaults.
+    screenStream = await navigator.mediaDevices.getDisplayMedia({
+      video: { frameRate: { ideal: 15, max: 30 } },
+      audio: false,
+    });
   } catch {
     return; // the picker was dismissed
   }
   const track = screenStream.getVideoTracks()[0];
   if (!track) return;
+  // "detail" tells the encoder to keep edges sharp and drop frames instead when
+  // bandwidth is short — the opposite of what suits a face.
+  try {
+    track.contentHint = "detail";
+  } catch {
+    /* not supported everywhere; the share still works */
+  }
   // The browser's own "Stop sharing" button ends the track without telling us.
   track.addEventListener("ended", () => void stopScreenShare());
   for (const leg of legs.values()) {
     const sender = leg.pc.getSenders().find((s) => s.track?.kind === "video");
-    if (sender) await sender.replaceTrack(track).catch(() => undefined);
+    if (sender) {
+      await sender.replaceTrack(track).catch(() => undefined);
+      try {
+        const parameters = sender.getParameters();
+        parameters.degradationPreference = "maintain-resolution";
+        await sender.setParameters(parameters);
+      } catch {
+        /* a browser that will not take the hint */
+      }
+    }
   }
+  void post("net", "", { sharing: true });
   publish();
 }
 
@@ -634,7 +967,17 @@ export async function stopScreenShare(): Promise<void> {
   const camera = localStream?.getVideoTracks()[0] ?? null;
   for (const leg of legs.values()) {
     const sender = leg.pc.getSenders().find((s) => s.track?.kind === "video");
-    if (sender) await sender.replaceTrack(camera).catch(() => undefined);
+    if (sender) {
+      await sender.replaceTrack(camera).catch(() => undefined);
+      try {
+        const parameters = sender.getParameters();
+        parameters.degradationPreference = "balanced";
+        await sender.setParameters(parameters);
+      } catch {
+        /* as above */
+      }
+    }
   }
+  void post("net", "", { sharing: false });
   publish();
 }

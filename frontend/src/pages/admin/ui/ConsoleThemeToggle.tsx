@@ -1,4 +1,5 @@
 import { useLayoutEffect, useState } from "react";
+import { Check } from "lucide-react";
 import { cn } from "@/lib/cn";
 
 /**
@@ -65,7 +66,7 @@ export function ConsoleThemeToggle({ className }: { className?: string }) {
     <div
       role="group"
       aria-label="Console appearance"
-      className={cn("flex items-center gap-0.5 rounded-xl border border-hairline p-[3px]", className)}
+      className={cn("flex items-center gap-0.5 rounded-xl border border-hairline bg-sand p-[3px]", className)}
     >
       {OPTIONS.map((option) => {
         const active = theme === option.value;
@@ -79,17 +80,24 @@ export function ConsoleThemeToggle({ className }: { className?: string }) {
             title={`${option.label} appearance`}
             className={cn(
               "flex h-10 items-center gap-1.5 rounded-lg px-3 text-xs font-semibold transition-colors sm:h-7 sm:px-2",
-              active ? "bg-ink/[0.08] text-ink" : "text-ink-soft hover:text-plum",
+              // The chosen one is a filled accent pill with a tick; the other is
+              // plain text. A faint tint on both was the old look, and nobody
+              // could tell which was on. `bg-brand-gradient` is the console's
+              // accent fill and brings its own readable ink in both appearances.
+              active
+                ? "bg-brand-gradient shadow-[0_1px_2px_rgba(0,0,0,0.25)]"
+                : "text-ink-soft hover:bg-ink/[0.06] hover:text-ink",
             )}
           >
-            <span
-              aria-hidden="true"
-              className={cn(
-                "size-3 shrink-0 rounded-full ring-1",
-                active ? "ring-plum" : "ring-ink/25",
-              )}
-              style={{ backgroundColor: option.swatch }}
-            />
+            {active ? (
+              <Check aria-hidden="true" className="size-3.5 shrink-0" strokeWidth={3} />
+            ) : (
+              <span
+                aria-hidden="true"
+                className="size-3 shrink-0 rounded-full ring-1 ring-ink/30"
+                style={{ backgroundColor: option.swatch }}
+              />
+            )}
             <span className="hidden sm:inline">{option.label}</span>
           </button>
         );
