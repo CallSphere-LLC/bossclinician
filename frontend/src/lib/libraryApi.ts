@@ -566,6 +566,19 @@ export async function downloadCertificate(certificate: MemberCertificate): Promi
  * player — including the progress write that has not gone out yet — to fetch
  * something that was never going to render as a page.
  */
+/**
+ * The bytes of one file, for reading on the page rather than saving.
+ *
+ * Same credential as a download: a link minted for this member, fetched once.
+ * The response is held in memory and the signed URL never reaches the DOM.
+ */
+export async function fetchFileBlob(kind: DownloadKind, fileId: number): Promise<Blob> {
+  const link = await libraryApi.downloadLink(kind, fileId);
+  const response = await fetch(link.url, { credentials: "same-origin" });
+  if (!response.ok) throw new Error(`file ${response.status}`);
+  return response.blob();
+}
+
 export async function downloadFile(kind: DownloadKind, fileId: number): Promise<DownloadLink> {
   const link = await libraryApi.downloadLink(kind, fileId);
 

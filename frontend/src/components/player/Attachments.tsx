@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { toast } from "sonner";
-import { Download, Loader2, Paperclip } from "lucide-react";
+import { Download, Eye, EyeOff, Loader2, Paperclip } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { formatBytes } from "@/lib/format";
 import { MemberApiError } from "@/lib/memberApi";
-import { downloadFile, type DownloadKind } from "@/lib/libraryApi";
+import { downloadFile, fetchFileBlob, type DownloadKind } from "@/lib/libraryApi";
+import { FileViewer, MAX_VIEW_BYTES, viewerKindFor, type ViewerKind } from "./FileViewer";
 
 export interface AttachmentItem {
   id: number;
@@ -23,35 +24,71 @@ interface AttachmentsProps {
   className?: string;
 }
 
+interface OpenFile {
+  id: number;
+  viewer: ViewerKind;
+  blob: Blob;
+}
+
+const ACTION =
+  "inline-flex min-h-[2.75rem] shrink-0 items-center gap-2 rounded-lg border border-white/10 px-3 " +
+  "text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-orchid transition-colors duration-300 " +
+  "hover:border-gold/40 hover:bg-white/[0.05] hover:text-white " +
+  "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold " +
+  "disabled:cursor-wait disabled:opacity-60";
+
 /**
  * Files that come with a lesson.
  *
- * Every row is a button, not a link. The bytes live behind a signed token minted
- * per click for one member and valid for minutes, so there is no href to put on
- * an anchor — and that is the point: a URL a member could copy out of the page is
- * a URL that ends up in a Facebook group.
+ * Every action is a button, not a link. The bytes live behind a signed token
+ * minted per click for one member and valid for minutes, so there is no href to
+ * put on an anchor — and that is the point: a URL a member could copy out of the
+ * page is a URL that ends up in a Facebook group.
+ *
+ * View reads the file here on the page (see FileViewer); Download saves it.
  */
 export function Attachments({ files, kind, heading = "Downloads", className }: AttachmentsProps) {
-  const [pending, setPending] = useState<number | null>(null);
+  const [pending, setPending] = useState<{ id: number; action: "view" | "download" } | null>(null);
+  const [open, setOpen] = useState<OpenFile | null>(null);
   const [status, setStatus] = useState("");
 
   if (files.length === 0) return null;
 
+  const fail = (err: unknown, fallback: string) => {
+    // The server refuses an attachment on a lesson that has not dripped yet,
+    // and says when it opens. That sentence is more use than "download failed".
+    const message = err instanceof MemberApiError ? err.message : fallback;
+    setStatus(message);
+    toast.error(message);
+  };
+
   const start = async (file: AttachmentItem) => {
-    setPending(file.id);
+    setPending({ id: file.id, action: "download" });
     setStatus(`Preparing ${file.title}…`);
     try {
       await downloadFile(kind, file.id);
       setStatus(`${file.title} is downloading.`);
     } catch (err) {
-      // The server refuses an attachment on a lesson that has not dripped yet,
-      // and says when it opens. That sentence is more use than "download failed".
-      const message =
-        err instanceof MemberApiError
-          ? err.message
-          : "We could not start that download. Please try again.";
-      setStatus(message);
-      toast.error(message);
+      fail(err, "We could not start that download. Please try again.");
+    } finally {
+      setPending(null);
+    }
+  };
+
+  const view = async (file: AttachmentItem, viewer: ViewerKind) => {
+    if (open?.id === file.id) {
+      setOpen(null);
+      setStatus(`${file.title} closed.`);
+      return;
+    }
+    setPending({ id: file.id, action: "view" });
+    setStatus(`Opening ${file.title}…`);
+    try {
+      const blob = await fetchFileBlob(kind, file.id);
+      setOpen({ id: file.id, viewer, blob });
+      setStatus(`${file.title} is open below.`);
+    } catch (err) {
+      fail(err, "We could not open that file here. Please try again, or download it.");
     } finally {
       setPending(null);
     }
@@ -66,24 +103,23 @@ export function Attachments({ files, kind, heading = "Downloads", className }: A
 
       <ul className="mt-3.5 flex flex-col gap-2">
         {files.map((file) => {
-          const busy = pending === file.id;
+          const busy = pending?.id === file.id ? pending.action : null;
           const size = file.sizeBytes > 0 ? formatBytes(file.sizeBytes) : "";
+          const viewer = viewerKindFor(file);
+          const tooBig = file.sizeBytes > MAX_VIEW_BYTES;
+          const canView = viewer !== "none" && !tooBig;
+          const isOpen = open?.id === file.id;
 
           return (
             <li key={file.id}>
-              <button
-                type="button"
-                onClick={() => void start(file)}
-                disabled={busy}
+              <div
                 className={cn(
-                  "flex min-h-[2.75rem] w-full items-center gap-3 rounded-xl border border-white/10",
-                  "bg-white/[0.02] px-3.5 py-3 text-left transition-colors duration-300",
-                  "hover:border-gold/40 hover:bg-white/[0.05]",
-                  "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold",
-                  "disabled:cursor-wait disabled:opacity-60",
+                  "flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-white/10",
+                  "bg-white/[0.02] px-3.5 py-3",
+                  isOpen && "border-gold/40",
                 )}
               >
-                <span className="min-w-0 flex-1">
+                <span className="min-w-0 flex-1 basis-48">
                   <span className="block truncate text-sm font-medium text-white">{file.title}</span>
                   {file.description && (
                     <span className="mt-0.5 block text-xs leading-relaxed text-orchid-dim">
@@ -96,13 +132,54 @@ export function Attachments({ files, kind, heading = "Downloads", className }: A
                   </span>
                 </span>
 
-                {busy ? (
-                  <Loader2 aria-hidden className="size-4 shrink-0 animate-spin text-gold" />
-                ) : (
-                  <Download aria-hidden className="size-4 shrink-0 text-orchid-dim" />
-                )}
-                <span className="sr-only">Download {file.title}</span>
-              </button>
+                <span className="flex items-center gap-2">
+                  {canView && (
+                    <button
+                      type="button"
+                      onClick={() => void view(file, viewer)}
+                      disabled={busy !== null}
+                      aria-expanded={isOpen}
+                      className={ACTION}
+                    >
+                      {busy === "view" ? (
+                        <Loader2 aria-hidden className="size-4 animate-spin text-gold" />
+                      ) : isOpen ? (
+                        <EyeOff aria-hidden className="size-4" />
+                      ) : (
+                        <Eye aria-hidden className="size-4" />
+                      )}
+                      {isOpen ? "Close" : "View"}
+                      <span className="sr-only"> {file.title}</span>
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => void start(file)}
+                    disabled={busy !== null}
+                    className={ACTION}
+                  >
+                    {busy === "download" ? (
+                      <Loader2 aria-hidden className="size-4 animate-spin text-gold" />
+                    ) : (
+                      <Download aria-hidden className="size-4" />
+                    )}
+                    Download
+                    <span className="sr-only"> {file.title}</span>
+                  </button>
+                </span>
+              </div>
+
+              {!canView && (
+                <p className="mt-1 px-1 text-[0.7rem] text-orchid-faint">
+                  {tooBig
+                    ? "Too large to open on the page. Download it to watch or read it."
+                    : "This kind of file cannot be shown on the page. Download it to open it."}
+                </p>
+              )}
+
+              {isOpen && open && (
+                <FileViewer kind={open.viewer} blob={open.blob} filename={file.filename} title={file.title} />
+              )}
             </li>
           );
         })}
