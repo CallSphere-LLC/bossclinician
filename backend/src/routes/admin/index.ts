@@ -3,6 +3,7 @@ import { adminCsrf } from "../../auth/adminSession";
 import { requireAuth } from "../../middleware/auth";
 import { requirePermission, type Module } from "../../services/permissions";
 import { authRouter } from "./auth";
+import { adminGoogleAuthRouter } from "./googleAuth";
 import { statsRouter } from "./stats";
 import { adminBlogRouter } from "./blog";
 import { adminCoursesRouter } from "./courses";
@@ -128,6 +129,9 @@ function adminsGate(req: Request, res: Response, next: NextFunction): void {
 
 // Login is unauthenticated; /me and everything else requires a valid JWT.
 adminRouter.use("/", authRouter);
+// "Sign in with Google" is sign-in too, so it sits outside requireAuth with the
+// password form: /signin-options, /google/start and /google/callback, all GETs.
+adminRouter.use("/", adminGoogleAuthRouter);
 
 adminRouter.use("/stats", requireAuth, requirePermission("reports.view"), statsRouter);
 adminRouter.use("/blog", requireAuth, moduleGate("website"), adminBlogRouter);

@@ -270,6 +270,8 @@ export const adminApi = {
       method: "POST",
       body: JSON.stringify({ email, password, ...(code ? { code } : {}) }),
     }),
+  /** What the sign-in page may offer besides email and password. Needs no session. */
+  signinOptions: () => request<{ googleEnabled: boolean }>("/admin/signin-options"),
   /**
    * Ends the session on the server as well as in this browser.
    *

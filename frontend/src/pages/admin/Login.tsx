@@ -6,6 +6,11 @@ import { useAuth } from "@/hooks/useAuth";
 import { isMfaRequiredError } from "@/lib/api";
 import { Button, ErrorNotice, Field, Input } from "@/pages/admin/ui/primitives";
 import { RETURN_PARAM, safeReturnPath } from "@/pages/admin/adminReturnTo";
+import {
+  AdminGoogleButton,
+  adminGoogleErrorMessage,
+  useAdminGoogleEnabled,
+} from "@/pages/admin/AdminGoogleButton";
 
 const HIGHLIGHTS = [
   "Courses, community and media in one place",
@@ -22,15 +27,23 @@ export default function Login() {
   const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
   const [searchParams] = useSearchParams();
+  const googleEnabled = useAdminGoogleEnabled();
+  const returnTo = safeReturnPath(searchParams.get(RETURN_PARAM));
+  // What a failed trip to Google left in the URL. It belongs to that attempt,
+  // so it goes quiet for good once the form is used instead.
+  const googleError = submitted ? null : adminGoogleErrorMessage(searchParams.get("error"));
+  const notice = error ?? googleError;
 
   if (!loading && user) {
     // Back to the page that sent them here, if it was an admin page.
-    return <Navigate to={safeReturnPath(searchParams.get(RETURN_PARAM))} replace />;
+    return <Navigate to={returnTo} replace />;
   }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
+    setSubmitted(true);
     setError(null);
     setSubmitting(true);
     try {
@@ -115,7 +128,9 @@ export default function Login() {
               : "Welcome back. Enter your details to continue."}
           </p>
 
-          <form onSubmit={handleSubmit} className="mt-8 space-y-4">
+          {googleEnabled && !mfaRequired && <AdminGoogleButton next={returnTo} />}
+
+          <form onSubmit={handleSubmit} className={googleEnabled && !mfaRequired ? "mt-6 space-y-4" : "mt-8 space-y-4"}>
             {!mfaRequired && <Field label="Email" htmlFor="admin-email">
               <Input
                 id="admin-email"
@@ -167,7 +182,7 @@ export default function Login() {
               </Field>
             )}
 
-            {error && <ErrorNotice message={error} />}
+            {notice && <ErrorNotice message={notice} />}
 
             <Button
               type="submit"

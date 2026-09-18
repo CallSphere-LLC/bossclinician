@@ -66,8 +66,10 @@ export function googleErrorMessage(code: string | null): string | null {
  * Google's mark, inline. The four colours and the geometry are Google's and are
  * not to be restyled; it is inline rather than an image because the site's
  * Content-Security-Policy only draws images from our own origin.
+ *
+ * Exported so the admin sign-in button draws the same mark rather than a copy.
  */
-function GoogleMark() {
+export function GoogleMark() {
   return (
     <svg viewBox="0 0 48 48" className="size-[18px] shrink-0" aria-hidden focusable="false">
       <path

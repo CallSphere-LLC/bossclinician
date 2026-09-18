@@ -10,7 +10,6 @@ import {
   GOOGLE_STATE_COOKIE,
   GOOGLE_STATE_COOKIE_PATH,
   GOOGLE_STATE_TTL_SECONDS,
-  GOOGLE_TOKEN_ENDPOINT,
   buildAuthoriseUrl,
   decodeIdToken,
   googleConfig,
@@ -19,10 +18,10 @@ import {
   signState,
   validateIdToken,
   verifyState,
-  type GoogleConfig,
   type GoogleFailure,
   type GoogleIdentity,
 } from "../../auth/googleOAuth";
+import { exchangeCode } from "../../auth/googleTokenExchange";
 import { memberLoginLimiter } from "../../middleware/rateLimit";
 import { sendMail } from "../../email/mailer";
 import * as emails from "../../email/memberTemplates";
@@ -60,8 +59,6 @@ import {
  * The decisions live in auth/googleOAuth.ts. This file is the I/O around them.
  */
 export const googleAuthRoutes = Router();
-
-const TOKEN_EXCHANGE_TIMEOUT_MS = 8000;
 
 function stateCookieOptions() {
   return {
@@ -130,40 +127,6 @@ googleAuthRoutes.get(
     );
   }
 );
-
-/** Swaps the single-use code for Google's id_token. Throws with a loggable reason. */
-async function exchangeCode(config: GoogleConfig, code: string, verifier: string): Promise<unknown> {
-  const controller = new AbortController();
-  // A sign-in waiting on a stalled third party is a visitor staring at a blank
-  // tab. Eight seconds is far beyond Google's normal answer and well inside
-  // nginx's proxy timeout, so the visitor gets our error page rather than a 504.
-  const timer = setTimeout(() => controller.abort(), TOKEN_EXCHANGE_TIMEOUT_MS);
-  try {
-    const response = await fetch(GOOGLE_TOKEN_ENDPOINT, {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" },
-      body: new URLSearchParams({
-        code,
-        client_id: config.clientId,
-        client_secret: config.clientSecret,
-        redirect_uri: config.redirectUri,
-        grant_type: "authorization_code",
-        code_verifier: verifier,
-      }).toString(),
-      signal: controller.signal,
-    });
-    const body = (await response.json().catch(() => null)) as Record<string, unknown> | null;
-    if (!response.ok) {
-      // Google's `error` is a short machine code (invalid_grant, invalid_client).
-      // The description is left out: it can quote the request back.
-      const errorCode = typeof body?.error === "string" ? body.error.slice(0, 40) : "no error code";
-      throw new Error(`token endpoint answered ${response.status} (${errorCode})`);
-    }
-    return body?.id_token;
-  } finally {
-    clearTimeout(timer);
-  }
-}
 
 interface GoogleLookupRow extends MemberProfileRow {
   google_sub: string | null;

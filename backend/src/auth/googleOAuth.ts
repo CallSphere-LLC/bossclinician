@@ -34,6 +34,19 @@ export const GOOGLE_STATE_TTL_SECONDS = 10 * 60;
 export const DEFAULT_NEXT = "/library";
 
 /**
+ * The admin's own round trip (routes/admin/googleAuth.ts). A second cookie
+ * under a second path, because the admin lives on a host of its own and its
+ * callback has to arrive there: the admin session cookies are host-scoped, so
+ * a callback on the public host could sign nobody in to anything.
+ */
+export const GOOGLE_ADMIN_STATE_COOKIE = "bc_admin_google_oauth";
+/** The admin host only proxies `/api/admin/`, and only these two routes read the cookie. */
+export const GOOGLE_ADMIN_STATE_COOKIE_PATH = "/api/admin/google";
+export const ADMIN_DEFAULT_NEXT = "/admin";
+/** Written inside the signature of an admin state cookie, and demanded back. */
+export const GOOGLE_ADMIN_AUDIENCE = "admin";
+
+/**
  * The only things the sign-in page is ever told. A fixed vocabulary rather than
  * a message, because the value travels in a URL anybody can write: a free-text
  * `?error=` would put whatever a stranger typed into our own sign-in screen.
@@ -45,6 +58,21 @@ export type GoogleFailure =
   | "google_blocked"
   | "google_mismatch"
   | "google_disabled";
+
+/**
+ * The admin sign-in page's vocabulary.
+ *
+ * `google_blocked` is gone on purpose: a suspended admin is told exactly what
+ * a stranger is told (`google_no_account`), for the reason the password form
+ * answers both with "Invalid email or password". `google_mfa` is the one that
+ * has no member equivalent — an admin with two-step sign-in switched on is sent
+ * to the password form, because Google vouching for an address is a first
+ * factor and must never stand in for the second.
+ */
+export type AdminGoogleFailure =
+  | Exclude<GoogleFailure, "google_blocked">
+  | "google_no_account"
+  | "google_mfa";
 
 export interface GoogleConfig {
   clientId: string;
@@ -73,6 +101,29 @@ export function googleSignInEnabled(): boolean {
   return googleConfig() !== null;
 }
 
+/**
+ * The same credentials, pointed at the admin host — or null when the admin
+ * button is off.
+ *
+ * One OAuth client serves both: the client id says which application is asking,
+ * and the redirect URI says where the answer goes. The admin's goes to
+ * ADMIN_ORIGIN because that is the only host its session cookies can be set on,
+ * and under `/api/admin/` because that is the only prefix that host proxies.
+ * Without an ADMIN_ORIGIN (development, where everything shares one origin and
+ * the variable is empty) there is no address to register with Google, so there
+ * is no button. This URI has to be added to the client's "Authorised redirect
+ * URIs" in the Cloud Console alongside the member one.
+ */
+export function googleAdminConfig(): GoogleConfig | null {
+  const { clientId, clientSecret } = env.google;
+  if (!clientId || !clientSecret || !env.adminOrigin) return null;
+  return { clientId, clientSecret, redirectUri: `${env.adminOrigin}/api/admin/google/callback` };
+}
+
+export function googleAdminSignInEnabled(): boolean {
+  return googleAdminConfig() !== null;
+}
+
 const MAX_NEXT_LENGTH = 512;
 
 /**
@@ -91,17 +142,58 @@ const MAX_NEXT_LENGTH = 512;
  *  - no `://` before the query string, which is the "no scheme" rule for
  *    anything that slipped past the three above.
  */
-export function safeNext(raw: unknown): string {
-  if (typeof raw !== "string" || raw.length === 0 || raw.length > MAX_NEXT_LENGTH) return DEFAULT_NEXT;
-  if (!raw.startsWith("/") || raw.startsWith("//")) return DEFAULT_NEXT;
-  if (raw.includes("\\")) return DEFAULT_NEXT;
+export function safeNext(raw: unknown, fallback: string = DEFAULT_NEXT): string {
+  if (typeof raw !== "string" || raw.length === 0 || raw.length > MAX_NEXT_LENGTH) return fallback;
+  if (!raw.startsWith("/") || raw.startsWith("//")) return fallback;
+  if (raw.includes("\\")) return fallback;
   for (let i = 0; i < raw.length; i += 1) {
     const code = raw.charCodeAt(i);
-    if (code < 0x20 || code === 0x7f) return DEFAULT_NEXT;
+    if (code < 0x20 || code === 0x7f) return fallback;
   }
   const path = raw.split(/[?#]/, 1)[0] ?? "";
-  if (path.includes("://")) return DEFAULT_NEXT;
+  if (path.includes("://")) return fallback;
   return raw;
+}
+
+/** Any stand-in origin: it only exists so a relative path can be parsed. */
+const ADMIN_NEXT_BASE = "https://admin.invalid";
+const ADMIN_LOGIN_PATH = "/admin/login";
+
+/**
+ * `safeNext` for the admin: everything above, and the path has to be inside
+ * `/admin` as well.
+ *
+ * The admin host serves nothing else, so a `next` of `/library` is not
+ * dangerous, only a blank screen straight after signing in. It is held to the
+ * same rule as `safeReturnPath` in the admin sign-in page (which writes this
+ * value) so the two can never disagree about where somebody ends up:
+ *
+ *  - resolved with URL before the prefix is compared, so `/admin/../x` and
+ *    `/admin/%2e%2e/x` are judged as the `/x` a browser would make of them, and
+ *    `/administrator` is not mistaken for `/admin`;
+ *  - never the sign-in page or an invitation link — landing a freshly signed-in
+ *    admin back on the sign-in form reads as "that did not work".
+ *
+ * What comes back is the resolved form, not the raw one, for the same reason.
+ */
+export function safeAdminNext(raw: unknown): string {
+  const candidate = safeNext(raw, ADMIN_DEFAULT_NEXT);
+  let url: URL;
+  try {
+    url = new URL(candidate, ADMIN_NEXT_BASE);
+  } catch {
+    return ADMIN_DEFAULT_NEXT;
+  }
+  if (url.origin !== ADMIN_NEXT_BASE) return ADMIN_DEFAULT_NEXT;
+
+  const { pathname } = url;
+  if (pathname !== ADMIN_DEFAULT_NEXT && !pathname.startsWith(`${ADMIN_DEFAULT_NEXT}/`)) return ADMIN_DEFAULT_NEXT;
+
+  const lower = pathname.toLowerCase().replace(/\/+$/, "");
+  if (lower === ADMIN_LOGIN_PATH || lower === "/admin/invite" || lower.startsWith("/admin/invite/")) {
+    return ADMIN_DEFAULT_NEXT;
+  }
+  return `${pathname}${url.search}${url.hash}`;
 }
 
 /** RFC 7636 S256: the challenge is the base64url SHA-256 of the verifier. */
@@ -120,7 +212,26 @@ export interface GoogleState {
 interface SignedState extends GoogleState {
   /** Unix seconds. Inside the signature, because Max-Age is only a request to the browser. */
   exp: number;
+  /** Which flow wrote it. Absent on a member cookie, `"admin"` on an admin one. */
+  aud?: string;
 }
+
+/**
+ * What differs between the member flow and the admin one. Omitted entirely,
+ * the behaviour is the member's, byte for byte.
+ */
+export interface StateFlow {
+  /** Written into the signed payload by `signState`, and required back by `verifyState`. */
+  audience?: string;
+  /** The destination rule `verifyState` applies on the way out. Defaults to `safeNext`. */
+  sanitiseNext?: (raw: unknown) => string;
+}
+
+/** The admin flow: its own audience, and destinations inside `/admin` only. */
+export const ADMIN_STATE_FLOW: StateFlow = {
+  audience: GOOGLE_ADMIN_AUDIENCE,
+  sanitiseNext: safeAdminNext,
+};
 
 function sign(body: string): string {
   return crypto.createHmac("sha256", googleStateSecret()).update(body).digest("base64url");
@@ -135,14 +246,19 @@ function sign(body: string): string {
  * application on the same registrable domain can set a cookie for this host,
  * and an unsigned `{state, verifier, next}` would let it choose all three.
  */
-export function signState(value: GoogleState, nowMs: number = Date.now()): string {
+export function signState(value: GoogleState, nowMs: number = Date.now(), flow: StateFlow = {}): string {
   const payload: SignedState = { ...value, exp: Math.floor(nowMs / 1000) + GOOGLE_STATE_TTL_SECONDS };
+  // Both flows sign with the same key, so the audience is what keeps a cookie
+  // minted by one from being worth anything to the other. A member can start a
+  // member round trip and knows its state and verifier; without this, that
+  // cookie planted under the admin's name would verify there too.
+  if (flow.audience !== undefined) payload.aud = flow.audience;
   const body = Buffer.from(JSON.stringify(payload), "utf8").toString("base64url");
   return `${body}.${sign(body)}`;
 }
 
 /** The parked round trip, or null for anything forged, mangled or out of date. */
-export function verifyState(raw: unknown, nowMs: number = Date.now()): GoogleState | null {
+export function verifyState(raw: unknown, nowMs: number = Date.now(), flow: StateFlow = {}): GoogleState | null {
   if (typeof raw !== "string") return null;
   const parts = raw.split(".");
   if (parts.length !== 2) return null;
@@ -156,12 +272,15 @@ export function verifyState(raw: unknown, nowMs: number = Date.now()): GoogleSta
     return null;
   }
   if (typeof parsed !== "object" || parsed === null) return null;
-  const { state, verifier, next, exp } = parsed as Record<string, unknown>;
+  const { state, verifier, next, exp, aud } = parsed as Record<string, unknown>;
   if (typeof state !== "string" || typeof verifier !== "string" || typeof next !== "string") return null;
   if (typeof exp !== "number" || exp * 1000 <= nowMs) return null;
+  // Exact, in both directions: a member cookie carries no audience and an admin
+  // one carries "admin", so neither flow will read the other's.
+  if (aud !== flow.audience) return null;
   // Validated again on the way out: the signature proves we wrote it, and this
   // keeps the redirect safe even if a future caller signs something unchecked.
-  return { state, verifier, next: safeNext(next) };
+  return { state, verifier, next: (flow.sanitiseNext ?? safeNext)(next) };
 }
 
 /** The address the visitor is sent to at Google. */
@@ -215,9 +334,12 @@ export interface GoogleIdentity {
   lastName: string;
 }
 
+/** The two things an id_token can be refused for — both in the member's vocabulary and the admin's. */
+export type IdTokenFailure = Extract<GoogleFailure, "google_failed" | "google_unverified">;
+
 export type IdTokenVerdict =
   | { ok: true; identity: GoogleIdentity }
-  | { ok: false; failure: GoogleFailure; reason: string };
+  | { ok: false; failure: IdTokenFailure; reason: string };
 
 const GOOGLE_ISSUERS = new Set(["https://accounts.google.com", "accounts.google.com"]);
 const MAX_NAME_LENGTH = 100;
@@ -236,7 +358,7 @@ function nameClaim(value: unknown): string {
  * "true", Google does not, and a loose check is how that class of bug starts.
  */
 export function validateIdToken(payload: unknown, clientId: string, nowMs: number = Date.now()): IdTokenVerdict {
-  const refuse = (reason: string, failure: GoogleFailure = "google_failed"): IdTokenVerdict => ({
+  const refuse = (reason: string, failure: IdTokenFailure = "google_failed"): IdTokenVerdict => ({
     ok: false,
     failure,
     reason,
