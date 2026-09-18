@@ -68,7 +68,7 @@ export function LuxeKeepItReal() {
         whileInView={{ opacity: 1, scaleY: 1 }}
         viewport={VIEWPORT}
         transition={{ duration: 1.1, ease: EASE_LUXE }}
-        className="mx-auto mb-10 block h-12 w-px origin-top bg-gradient-to-b from-transparent to-white/25 sm:h-16"
+        className="mx-auto mb-6 block h-8 w-px origin-top bg-gradient-to-b from-transparent to-white/25 sm:h-10 lg:mb-10 lg:h-16"
       />
 
       <motion.span {...rise(reduce, 0.08)} className="eyebrow-luxe">

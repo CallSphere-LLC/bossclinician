@@ -33,10 +33,14 @@ const SURFACE: Record<Surface, string> = {
  * gutters there are measured against a screen half the usual height.
  */
 const SPACE: Record<Space, string> = {
-  sm: "py-10 sm:py-12 lg:py-16 short:py-8",
-  md: "py-12 sm:py-16 lg:py-20 short:py-10",
-  lg: "py-14 sm:py-20 lg:py-24 short:py-12",
-  xl: "py-16 sm:py-24 lg:py-32 short:py-14",
+  // Tightened again (Sep 2026): in a half-screen or zoomed window the sm tier is
+  // what a laptop actually gets, and lg-into-xl there was a 176px void before
+  // any decoration. The desktop tier keeps its air; the middle tier does not
+  // need desktop gutters.
+  sm: "py-8 sm:py-10 lg:py-14 short:py-8",
+  md: "py-10 sm:py-12 lg:py-16 short:py-10",
+  lg: "py-12 sm:py-12 lg:py-20 short:py-12",
+  xl: "py-12 sm:py-14 lg:py-24 short:py-14",
 };
 
 interface SectionProps {
