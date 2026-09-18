@@ -17,7 +17,7 @@ import { findBlogPostBySlug } from "@/content/blog";
  * and a card without one meet the copy block on exactly the same gradient.
  */
 const COVER_SCRIM =
-  "linear-gradient(to top, rgba(9,6,17,0.96) 0%, rgba(9,6,17,0.74) 16%, rgba(9,6,17,0.28) 44%, rgba(9,6,17,0) 74%)";
+  "linear-gradient(to top, rgb(var(--c-night, 9 6 17) / 0.96) 0%, rgb(var(--c-night, 9 6 17) / 0.74) 16%, rgb(var(--c-night, 9 6 17) / 0.28) 44%, rgb(var(--c-night, 9 6 17) / 0) 74%)";
 
 type CardAccent = Extract<Accent, "green" | "plum" | "gold">;
 

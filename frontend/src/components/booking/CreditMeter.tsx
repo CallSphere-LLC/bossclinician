@@ -53,7 +53,7 @@ export function CreditMeter({
         aria-valuemax={total}
         aria-valuenow={clamped}
         aria-valuetext={`${clamped} of ${total} sessions used, ${remaining} remaining`}
-        className="mt-2.5 h-2 w-full overflow-hidden rounded-full bg-white/[0.08]"
+        className="mt-2.5 h-2 w-full overflow-hidden rounded-full bg-ink/[0.08]"
       >
         <div
           className={cn(

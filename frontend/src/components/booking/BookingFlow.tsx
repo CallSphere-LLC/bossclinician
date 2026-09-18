@@ -480,7 +480,7 @@ function StepTrail({ step, showPackageStep }: { step: Step; showPackageStep: boo
             {entry.label}
           </span>
           {index < steps.length - 1 && (
-            <span aria-hidden className="h-px w-4 bg-white/15 sm:w-6" />
+            <span aria-hidden className="h-px w-4 bg-ink/15 sm:w-6" />
           )}
         </li>
       ))}

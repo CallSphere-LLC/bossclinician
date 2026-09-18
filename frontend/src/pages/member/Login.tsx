@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Navigate, useNavigate, useSearchParams } from "react-router";
 import { ArrowRight, Loader2, Mail } from "lucide-react";
 import {
@@ -11,6 +11,7 @@ import {
 } from "@/components/member/AuthCard";
 import { LuxeButton } from "@/components/luxe/LuxeButton";
 import { LuxeInput } from "@/components/luxe/LuxeField";
+import { api } from "@/lib/api";
 import { MemberApiError, memberApi } from "@/lib/memberApi";
 import { useMember } from "@/hooks/useMember";
 
@@ -30,7 +31,7 @@ function safeDestination(raw: string | null): string {
   return raw;
 }
 
-type MagicLinkState = "offered" | "sending" | "sent" | "unavailable";
+type MagicLinkState = "checking" | "offered" | "sending" | "sent" | "unavailable";
 
 export default function Login() {
   const { member, loading, signIn } = useMember();
@@ -42,7 +43,27 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [magicLink, setMagicLink] = useState<MagicLinkState>("offered");
+  const [magicLink, setMagicLink] = useState<MagicLinkState>("checking");
+
+  // Offered only when it is switched on. It used to be shown to everyone and
+  // withdrawn after a failed click, which is a button that promises an email
+  // the site has been told not to send.
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .settings()
+      .then((settings) => {
+        if (cancelled) return;
+        const signIn = settings.member_signin as { magicLinkEnabled?: unknown } | undefined;
+        setMagicLink(signIn?.magicLinkEnabled === true ? "offered" : "unavailable");
+      })
+      .catch(() => {
+        if (!cancelled) setMagicLink("unavailable");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   if (!loading && member) return <Navigate to={destination} replace />;
 
@@ -126,14 +147,14 @@ export default function Login() {
         </AuthSubmit>
       </form>
 
-      {magicLink !== "unavailable" && (
+      {magicLink !== "unavailable" && magicLink !== "checking" && (
         <div className="mt-7">
           <div className="flex items-center gap-4" aria-hidden>
-            <span className="h-px flex-1 bg-white/10" />
+            <span className="h-px flex-1 bg-ink/10" />
             <span className="text-[0.62rem] font-semibold uppercase tracking-[0.22em] text-orchid-faint">
               or
             </span>
-            <span className="h-px flex-1 bg-white/10" />
+            <span className="h-px flex-1 bg-ink/10" />
           </div>
 
           <div className="mt-5" aria-live="polite">
@@ -147,7 +168,9 @@ export default function Login() {
                 type="button"
                 variant="outline"
                 size="md"
-                className="w-full"
+                // One line inside the pill: the full sentence wrapped to two in
+                // a 360px card and pushed the icon out to the side.
+                className="w-full whitespace-nowrap px-4 text-[0.68rem] tracking-[0.1em] sm:px-6 sm:tracking-[0.12em]"
                 disabled={magicLink === "sending"}
                 onClick={() => void sendMagicLink()}
               >
@@ -159,7 +182,7 @@ export default function Login() {
                 ) : (
                   <>
                     <Mail className="size-4" aria-hidden />
-                    Email me a sign-in link instead
+                    Email me a sign-in link
                   </>
                 )}
               </LuxeButton>

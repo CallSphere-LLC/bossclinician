@@ -151,8 +151,11 @@ function CheckboxField({
           aria-hidden
           className={cn(
             "mt-0.5 flex h-6 w-6 flex-none items-center justify-center rounded-md border transition-colors duration-300 ease-luxe",
-            checked ? "border-gold bg-gold-foil text-night-deep" : "border-white/25",
-            error && !checked && "border-red-400/60",
+            checked
+              ? "border-gold bg-gold-foil text-night-deep"
+              : error
+                ? "border-red-400/60"
+                : "border-white/25",
           )}
         >
           {checked && <Check className="h-4 w-4" />}

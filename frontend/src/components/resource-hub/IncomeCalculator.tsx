@@ -76,7 +76,7 @@ function Slider({
           aria-hidden
           className="pointer-events-none absolute inset-x-0 top-1/2 h-1.5 -translate-y-1/2 rounded-full"
           style={{
-            background: `linear-gradient(to right, #C9A46A ${percent}%, rgba(255,255,255,0.15) ${percent}%)`,
+            background: `linear-gradient(to right, #C9A46A ${percent}%, rgb(var(--c-ink) / 0.15) ${percent}%)`,
           }}
         />
         <input

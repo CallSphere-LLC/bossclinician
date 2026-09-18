@@ -387,7 +387,7 @@ export default function CheckoutUpsell() {
                     type="button"
                     onClick={decline}
                     disabled={busy}
-                    className="mx-auto mt-7 flex min-h-[44px] items-center justify-center rounded-sm px-4 text-sm text-orchid underline decoration-white/25 underline-offset-[6px] transition-colors duration-300 ease-luxe hover:text-white hover:decoration-white/50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold disabled:opacity-50"
+                    className="mx-auto mt-7 flex min-h-[44px] items-center justify-center rounded-sm px-4 text-sm text-orchid underline decoration-ink/25 underline-offset-[6px] transition-colors duration-300 ease-luxe hover:text-white hover:decoration-ink/50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold disabled:opacity-50"
                   >
                     No thanks — I don't want this
                   </button>
@@ -409,18 +409,22 @@ export default function CheckoutUpsell() {
 /* ── Pieces ─────────────────────────────────────────────────────────────── */
 
 function UpsellShell({ children }: { children: ReactNode }) {
+  // Routed outside `Layout`, so the shell supplies `theme-luxe` itself; see
+  // CheckoutShell in Checkout.tsx.
   return (
-    <Section
-      surface="deep"
-      space="lg"
-      aurora="gold"
-      auroraIntensity={0.75}
-      seam={false}
-      aria-label="One more thing"
-      containerClassName="flex min-h-[50vh] items-center justify-center"
-    >
-      {children}
-    </Section>
+    <div className="theme-luxe flex min-h-screen flex-col bg-night-deep">
+      <Section
+        surface="deep"
+        space="lg"
+        aurora="gold"
+        auroraIntensity={0.75}
+        seam={false}
+        aria-label="One more thing"
+        containerClassName="flex min-h-[50vh] items-center justify-center"
+      >
+        {children}
+      </Section>
+    </div>
   );
 }
 
@@ -481,7 +485,7 @@ function Downsell({
       <button
         type="button"
         onClick={onSkip}
-        className="mx-auto mt-7 flex min-h-[44px] items-center justify-center rounded-sm px-4 text-sm text-orchid underline decoration-white/25 underline-offset-[6px] transition-colors duration-300 ease-luxe hover:text-white hover:decoration-white/50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold"
+        className="mx-auto mt-7 flex min-h-[44px] items-center justify-center rounded-sm px-4 text-sm text-orchid underline decoration-ink/25 underline-offset-[6px] transition-colors duration-300 ease-luxe hover:text-white hover:decoration-ink/50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold"
       >
         No thanks — take me to my purchase
       </button>

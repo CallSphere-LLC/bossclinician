@@ -268,14 +268,14 @@ function PreferenceRow<T>({
           aria-hidden
           className={cn(
             "h-6 w-11 rounded-full border transition-colors duration-300",
-            checked ? "border-gold/50 bg-gold/[0.35]" : "border-white/15 bg-white/[0.08]",
+            checked ? "border-gold/50 bg-gold/[0.35]" : "border-white/15 bg-ink/[0.08]",
           )}
         />
         <span
           aria-hidden
           className={cn(
             "absolute size-4 rounded-full transition-transform duration-300 ease-luxe",
-            checked ? "translate-x-3 bg-gold" : "-translate-x-3 bg-white/50",
+            checked ? "translate-x-3 bg-gold" : "-translate-x-3 bg-ink/50",
           )}
         />
       </button>

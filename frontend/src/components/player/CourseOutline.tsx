@@ -180,7 +180,7 @@ function LessonRow({ lesson, productSlug, active, onNavigate }: LessonRowProps) 
         {inProgress && (
           <span
             aria-hidden
-            className="mt-2 block h-[3px] w-full overflow-hidden rounded-full bg-white/[0.08]"
+            className="mt-2 block h-[3px] w-full overflow-hidden rounded-full bg-orchid-dim/20"
           >
             <span
               className="block h-full rounded-full bg-gold-foil"
@@ -211,7 +211,7 @@ function LessonRow({ lesson, productSlug, active, onNavigate }: LessonRowProps) 
       className={cn(
         shell,
         "hover:bg-white/[0.05]",
-        active && "bg-white/[0.05]",
+        active && "bg-orchid-dim/[0.12]",
         "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold",
       )}
     >

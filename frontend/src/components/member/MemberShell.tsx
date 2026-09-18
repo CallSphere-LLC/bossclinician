@@ -136,7 +136,7 @@ export function MemberShell({ title, description, actions, children }: MemberShe
         className={cn(
           "sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100]",
           "focus:rounded-full focus:bg-gold focus:px-5 focus:py-2.5",
-          "focus:text-sm focus:font-semibold focus:text-night-deep",
+          "focus:text-sm focus:font-semibold focus:text-[#06040b]",
         )}
       >
         Skip to main content
@@ -307,7 +307,7 @@ function railLinkClass({ isActive }: { isActive: boolean }): string {
   return cn(
     "relative flex min-h-[2.75rem] items-center gap-3 rounded-xl pl-5 pr-4",
     "text-[0.72rem] font-semibold uppercase tracking-[0.16em] transition-colors duration-300",
-    isActive ? "bg-white/[0.05] text-white" : "text-white/50 hover:bg-white/[0.03] hover:text-white",
+    isActive ? "bg-ink/[0.05] text-white" : "text-white/50 hover:bg-ink/[0.03] hover:text-white",
   );
 }
 

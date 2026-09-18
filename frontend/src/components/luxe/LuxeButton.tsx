@@ -80,7 +80,10 @@ export function LuxeButton(props: Props) {
     "group relative inline-flex items-center justify-center gap-2.5 rounded-full",
     // A long label in a narrow column (or a zoomed window) may still wrap;
     // centred, balanced lines keep a two-line pill looking deliberate.
-    "text-balance text-center font-semibold uppercase leading-snug transition-all duration-300 ease-luxe",
+    // `text-wrap-style`, not Tailwind's `text-balance`: that one is the `text-wrap`
+    // shorthand, which also resets the wrap MODE and so defeats `whitespace-nowrap`
+    // on the header buttons.
+    "[text-wrap-style:balance] text-center font-semibold uppercase leading-snug transition-all duration-300 ease-luxe",
     "hover:-translate-y-0.5 active:translate-y-0",
     "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold",
     "disabled:pointer-events-none disabled:opacity-50",

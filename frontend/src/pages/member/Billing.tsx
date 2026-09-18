@@ -16,7 +16,8 @@ import { CancelSubscriptionDialog } from "@/components/member/CancelSubscription
 import { GlassCard } from "@/components/luxe/GlassCard";
 import { LuxeButton, LuxePill } from "@/components/luxe/LuxeButton";
 import { ReceiptPdfLink } from "@/components/member/ReceiptPdfLink";
-import { getStripe, luxeAppearance, stripeConfigured } from "@/components/checkout/stripeClient";
+import { appearanceForTheme, getStripe, stripeConfigured } from "@/components/checkout/stripeClient";
+import { useSiteTheme } from "@/lib/siteTheme";
 import { useMember } from "@/hooks/useMember";
 import { formatCurrency, formatDate } from "@/lib/format";
 import {
@@ -554,7 +555,7 @@ function PlanProgress({ paid, total }: { paid: number; total: number }) {
   return (
     <span
       aria-hidden
-      className="mt-3 block h-1.5 w-full max-w-sm overflow-hidden rounded-full bg-white/[0.08]"
+      className="mt-3 block h-1.5 w-full max-w-sm overflow-hidden rounded-full bg-ink/[0.08]"
     >
       <span
         className="block h-full rounded-full bg-gold-foil transition-[width] duration-700 ease-luxe"
@@ -736,9 +737,10 @@ function UpdateCardButton({
  */
 function NewCardForm({ clientSecret, onDone }: { clientSecret: string; onDone: () => void }) {
   const stripePromise = useMemo(() => getStripe(), []);
+  const siteTheme = useSiteTheme();
   const options = useMemo<StripeElementsOptions>(
-    () => ({ clientSecret, appearance: luxeAppearance }),
-    [clientSecret],
+    () => ({ clientSecret, appearance: appearanceForTheme(siteTheme) }),
+    [clientSecret, siteTheme],
   );
 
   if (!stripePromise) {

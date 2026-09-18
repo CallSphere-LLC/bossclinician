@@ -154,7 +154,7 @@ function ChallengeRow({
           className={cn(
             "mt-3 inline-flex items-center gap-1.5 rounded-full px-3 py-1.5",
             "text-[0.65rem] font-semibold uppercase tracking-[0.12em]",
-            approved ? "bg-green-bright/[0.12] text-green-bright" : "bg-white/[0.06] text-orchid",
+            approved ? "bg-green-bright/[0.12] text-green-bright" : "bg-ink/[0.06] text-orchid",
           )}
         >
           {approved ? (

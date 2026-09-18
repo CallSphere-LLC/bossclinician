@@ -49,7 +49,7 @@ export function OrderSummary({ offer, state, wording }: OrderSummaryProps) {
         aria-controls="order-summary-detail"
         className={cn(
           "flex min-h-[3.25rem] w-full items-center justify-between gap-3 px-5 py-4 text-left lg:hidden",
-          "transition-colors duration-300 ease-luxe hover:bg-white/[0.03]",
+          "transition-colors duration-300 ease-luxe hover:bg-ink/[0.03]",
           "focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-gold",
         )}
       >

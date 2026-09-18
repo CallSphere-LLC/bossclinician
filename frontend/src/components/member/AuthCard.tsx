@@ -181,7 +181,7 @@ function strengthOf(value: string): Strength {
     return {
       filled: 0,
       label: `At least ${MIN_PASSWORD_LENGTH} characters — a short phrase works well.`,
-      bar: "bg-white/15",
+      bar: "bg-ink/15",
     };
   }
   if (value.length < MIN_PASSWORD_LENGTH) {
@@ -212,7 +212,7 @@ function PasswordStrength({ value }: { value: string }) {
             key={i}
             className={cn(
               "h-full flex-1 rounded-full transition-colors duration-300",
-              i < filled ? bar : "bg-white/12",
+              i < filled ? bar : "bg-ink/12",
             )}
           />
         ))}

@@ -416,7 +416,7 @@ function PartnershipSection() {
             <ul className="mt-6 space-y-3.5">
               {workWithMe.comparison.hourly.map((item) => (
                 <li key={item} className="flex gap-3 text-pretty text-sm font-light leading-[1.7] text-orchid-faint">
-                  <span aria-hidden className="mt-[0.7rem] h-px w-3 shrink-0 bg-white/25" />
+                  <span aria-hidden className="mt-[0.7rem] h-px w-3 shrink-0 bg-ink/25" />
                   <span className="min-w-0">{item}</span>
                 </li>
               ))}
@@ -575,7 +575,7 @@ function PathwaysSection() {
                   "ml-2.5 rounded-full px-2 py-0.5 text-[0.7rem] font-bold uppercase tracking-[0.08em]",
                   // On the foil pill the badge is a dark cut-out; off it, the
                   // badge has to supply its own gold or it disappears.
-                  active === i ? "bg-night-deep/20" : "bg-gold/20 text-gold",
+                  active === i ? "bg-[#06040b]/20" : "bg-gold/20 text-gold",
                 )}
               >
                 {p.badge}

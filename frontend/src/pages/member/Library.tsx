@@ -193,7 +193,7 @@ function ContinueBand({ lesson }: { lesson: ContinueLesson }) {
                 aria-valuemax={100}
                 aria-valuenow={lesson.watchedPercent}
                 aria-valuetext={`${lesson.watchedPercent}% of this lesson watched`}
-                className="h-1.5 w-full overflow-hidden rounded-full bg-white/[0.08]"
+                className="h-1.5 w-full overflow-hidden rounded-full bg-ink/[0.08]"
               >
                 <div
                   className="h-full rounded-full bg-gold-foil"

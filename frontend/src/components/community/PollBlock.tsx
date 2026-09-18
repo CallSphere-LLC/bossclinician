@@ -88,7 +88,7 @@ export function PollBlock({ postId, poll, onChange, locked }: PollBlockProps) {
                     style={{ width: `${share}%` }}
                     className={cn(
                       "absolute inset-y-0 left-0 transition-[width] duration-700 ease-luxe",
-                      chosen ? "bg-gold/[0.16]" : "bg-white/[0.06]",
+                      chosen ? "bg-gold/[0.16]" : "bg-ink/[0.06]",
                     )}
                   />
                 )}

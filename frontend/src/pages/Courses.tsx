@@ -67,7 +67,7 @@ const [HERO_TITLE, HERO_ACCENT] = splitOnce(HERO_HEADLINE, " Your Private Practi
  * glass surface so the image dissolves into the card instead of ending at it.
  */
 const COVER_SCRIM =
-  "linear-gradient(to top, rgba(9,6,17,0.96) 0%, rgba(9,6,17,0.72) 18%, rgba(9,6,17,0.26) 46%, rgba(9,6,17,0) 76%)";
+  "linear-gradient(to top, rgb(var(--c-night, 9 6 17) / 0.96) 0%, rgb(var(--c-night, 9 6 17) / 0.72) 18%, rgb(var(--c-night, 9 6 17) / 0.26) 46%, rgb(var(--c-night, 9 6 17) / 0) 76%)";
 
 /** Shared grading recipe for the two editorial photographs on this page. */
 const PLATE_GRADE = "brightness-[0.82] contrast-[1.06] saturate-[0.8]";

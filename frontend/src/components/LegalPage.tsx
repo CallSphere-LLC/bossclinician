@@ -226,7 +226,7 @@ export function LegalPage({
                           className={cn(
                             "group flex min-h-[44px] items-center gap-3 rounded-lg px-2 py-2.5",
                             "text-sm leading-snug text-orchid-dim transition-colors duration-300",
-                            "hover:bg-white/[0.05] hover:text-white",
+                            "hover:bg-ink/[0.05] hover:text-white",
                             "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold",
                           )}
                         >

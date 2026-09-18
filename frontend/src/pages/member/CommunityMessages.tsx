@@ -170,7 +170,7 @@ function Messages({ slug, openWith }: { slug: string; openWith: number | null })
                     {t.otherAvatarUrl ? (
                       <img src={t.otherAvatarUrl} alt="" className="size-8 shrink-0 rounded-full object-cover" />
                     ) : (
-                      <span className="grid size-8 shrink-0 place-items-center rounded-full bg-white/10 text-xs font-bold text-white/70">
+                      <span className="grid size-8 shrink-0 place-items-center rounded-full bg-ink/10 text-xs font-bold text-white/70">
                         {t.otherName.charAt(0).toUpperCase()}
                       </span>
                     )}
@@ -242,7 +242,7 @@ function Messages({ slug, openWith }: { slug: string; openWith: number | null })
                     <div
                       className={cn(
                         "max-w-[80%] rounded-2xl px-3.5 py-2.5",
-                        m.mine ? "bg-gold/15 text-white" : "bg-white/[0.06] text-white/85",
+                        m.mine ? "bg-gold/15 text-white" : "bg-ink/[0.06] text-white/85",
                       )}
                     >
                       <p className="whitespace-pre-wrap break-words text-sm">{m.body}</p>

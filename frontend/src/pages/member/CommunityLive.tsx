@@ -211,7 +211,7 @@ function LiveRoom({ slug }: { slug: string }) {
                     {peer.avatarUrl ? (
                       <img src={peer.avatarUrl} alt="" className="size-6 rounded-full object-cover" />
                     ) : (
-                      <span className="grid size-6 place-items-center rounded-full bg-white/10 text-[0.6rem] font-bold">
+                      <span className="grid size-6 place-items-center rounded-full bg-ink/10 text-[0.6rem] font-bold">
                         {peer.name.charAt(0).toUpperCase()}
                       </span>
                     )}

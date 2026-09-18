@@ -237,7 +237,7 @@ export function PostCard({
               "inline-flex min-h-[2.75rem] items-center gap-2 rounded-full px-3",
               "text-xs font-semibold uppercase tracking-[0.12em] transition-colors duration-300",
               "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold",
-              showComments ? "bg-white/[0.06] text-white" : "text-orchid-dim hover:text-white",
+              showComments ? "bg-ink/[0.06] text-white" : "text-orchid-dim hover:text-white",
             )}
           >
             <MessageCircle aria-hidden className="size-4" />

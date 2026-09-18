@@ -103,7 +103,7 @@ export function FinalCTA() {
             max-w-4xl container to the full bleed the fade needs. */}
         <div
           aria-hidden
-          className="pointer-events-none absolute -bottom-16 left-1/2 -z-10 h-32 w-screen -translate-x-1/2 bg-[linear-gradient(to_bottom,transparent,rgba(6,4,11,0.75)_58%,#06040B)] sm:-bottom-24 lg:-bottom-32"
+          className="pointer-events-none absolute -bottom-16 left-1/2 -z-10 h-32 w-screen -translate-x-1/2 bg-gradient-to-b from-transparent via-night-deep/75 via-[58%] to-night-deep sm:-bottom-24 lg:-bottom-32"
         />
       </div>
     </Section>

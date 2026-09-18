@@ -65,7 +65,7 @@ export function BadgesPanel({ points, badges, nextBadge }: BadgesPanelProps) {
             aria-valuemin={0}
             aria-valuemax={100}
             aria-label={`Progress to ${nextBadge.name}`}
-            className="h-1.5 w-full overflow-hidden rounded-full bg-white/[0.08]"
+            className="h-1.5 w-full overflow-hidden rounded-full bg-ink/[0.08]"
           >
             <span
               style={{ width: `${progress}%` }}

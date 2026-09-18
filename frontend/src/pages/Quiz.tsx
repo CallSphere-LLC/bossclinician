@@ -546,7 +546,7 @@ export default function Quiz() {
           )}
         </div>
 
-        <div aria-hidden className="mt-3 h-1 w-full overflow-hidden rounded-full bg-white/10">
+        <div aria-hidden className="mt-3 h-1 w-full overflow-hidden rounded-full bg-ink/10">
           <motion.div
             className="h-full w-full rounded-full bg-gold-foil"
             style={{ transformOrigin: "left" }}

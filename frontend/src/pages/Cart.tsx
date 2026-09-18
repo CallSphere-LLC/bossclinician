@@ -4,6 +4,7 @@ import {useEffect,useState} from "react";
 import {Link} from "react-router";
 import {Seo} from "@/components/Seo";
 import {Section} from "@/components/luxe/Section";
+import {Layout} from "@/components/layout/Layout";
 import {GlassCard} from "@/components/luxe/GlassCard";
 import {CheckoutExperience} from "./Checkout";
 import {commerceApi,type PublicOffer,type OfferQuote} from "@/lib/commerceApi";
@@ -52,7 +53,7 @@ export default function Cart(){
       orderForm:{...first.orderForm,allowGifting:offers.every(o=>o.orderForm.allowGifting),collectPhone:offers.some(o=>o.orderForm.collectPhone),collectAddress:offers.some(o=>o.orderForm.collectAddress),collectTax:offers.some(o=>o.orderForm.collectTax),requireTerms:offers.some(o=>o.orderForm.requireTerms),termsUrl:"/terms",customFields:offers.flatMap(o=>o.orderForm.customFields.map(f=>({...f,key:`${o.id}:${f.key}`,label:`${o.title}: ${f.label}`})))},
       products:offers.flatMap(o=>o.products),bumps:[],upsells:first.upsells.filter(u=>!items.some(i=>i.slug===u.offer.slug)),redirectUrl:"",alreadyOwned:offers.every(o=>o.alreadyOwned)};
   }
-  return <><Seo title="Your cart - Boss Clinician"/><Section surface="deep" space="md">
+  return <Layout><Seo title="Your cart - Boss Clinician"/><Section surface="deep" space="md">
     <div className="mx-auto max-w-6xl px-4 text-white">
       <div className="mb-8 flex flex-wrap items-center justify-between gap-4"><h1 className="font-display text-3xl">Your cart</h1><Link to="/courses" className="text-gold underline">Continue browsing</Link></div>
       {checkout&&combined?<CheckoutExperience offer={combined}/>:<>
@@ -71,5 +72,5 @@ export default function Cart(){
         <h2 className="mb-4 font-display text-2xl">Browse offers</h2><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">{catalog.filter(o=>!items.some(i=>i.slug===o.slug)).map(offer=><GlassCard key={offer.slug} accent="plum" interactive={false} className="flex flex-col p-5"><h3 className="text-lg font-semibold">{offer.title}</h3><p className="mt-3 text-gold">{formatCurrency(offer.amountCents,offer.currency)}</p><button type="button" disabled={items.length>=20} onClick={()=>update([...items,{slug:offer.slug,pricingOptionId:null}])} className="mt-5 rounded-lg border border-gold p-3 text-gold">Add to cart</button></GlassCard>)}</div>
       </>}
     </div>
-  </Section></>;
+  </Section></Layout>;
 }

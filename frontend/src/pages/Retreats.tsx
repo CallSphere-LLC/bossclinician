@@ -43,10 +43,6 @@ const accentAt = (i: number): Accent => ACCENTS[i % ACCENTS.length];
 /** One grading recipe for every photograph on the page. */
 const GRADE = "brightness-[0.8] contrast-[1.06] saturate-[0.8]";
 
-/** Scrim that dissolves a daylight photograph into the near-black page. */
-const PLATE_SCRIM =
-  "radial-gradient(112% 78% at 50% 30%, transparent 26%, rgba(10,7,19,0.48) 66%, rgba(6,4,11,0.9) 100%)";
-
 /**
  * One rise recipe for the whole page; only the delay changes. Reduced-motion
  * users get `initial={false}` — the final state on mount, never a blank element
@@ -894,7 +890,10 @@ function VillaPlate() {
           decoding="async"
           className={cn("aspect-[4/3] w-full max-w-full object-cover sm:aspect-[16/9]", GRADE)}
         />
-        <div aria-hidden className="absolute inset-0" style={{ background: PLATE_SCRIM }} />
+        <div
+          aria-hidden
+          className="absolute inset-0 bg-[radial-gradient(112%_78%_at_50%_30%,transparent_26%,rgba(10,7,19,0.48)_66%,rgba(6,4,11,0.9)_100%)]"
+        />
         <div aria-hidden className="absolute inset-0 bg-glow-violet/20 mix-blend-soft-light" />
         <div
           aria-hidden
@@ -1014,7 +1013,7 @@ function MomentsSection() {
                   className="absolute inset-0"
                   style={{
                     background:
-                      "linear-gradient(to top, rgba(9,6,17,0.92) 0%, rgba(9,6,17,0.42) 26%, rgba(9,6,17,0) 62%)",
+                      "linear-gradient(to top, rgb(var(--c-night, 9 6 17) / 0.92) 0%, rgb(var(--c-night, 9 6 17) / 0.42) 26%, rgb(var(--c-night, 9 6 17) / 0) 62%)",
                   }}
                 />
                 <div

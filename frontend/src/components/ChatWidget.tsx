@@ -164,7 +164,7 @@ function ChatTeaser({ onOpen }: { onOpen: () => void }) {
             // 21x21 was an awkward miss-tap next to the teaser's own click
             // area; the padded box reaches a comfortable touch size while the
             // glyph stays small.
-            className="absolute right-0.5 top-0.5 flex h-11 w-11 items-center justify-center rounded-full text-white/35 transition-colors hover:bg-white/10 hover:text-white"
+            className="absolute right-0.5 top-0.5 flex h-11 w-11 items-center justify-center rounded-full text-white/35 transition-colors hover:bg-ink/10 hover:text-white"
           >
             <CloseIcon size={13} />
           </button>
@@ -265,7 +265,7 @@ export function ChatWidget() {
                 type="button"
                 onClick={() => setOpen(false)}
                 aria-label="Close chat"
-                className="rounded-full p-1.5 text-white/60 transition-colors hover:bg-white/10 hover:text-white"
+                className="rounded-full p-1.5 text-white/60 transition-colors hover:bg-ink/10 hover:text-white"
               >
                 <CloseIcon />
               </button>
@@ -287,7 +287,7 @@ export function ChatWidget() {
                       "max-w-[85%] whitespace-pre-wrap rounded-2xl px-4 py-2.5 text-sm leading-relaxed",
                       m.role === "user"
                         ? "bg-plum-bright/25 text-white ring-1 ring-inset ring-plum-bright/30"
-                        : "bg-white/[0.05] text-orchid ring-1 ring-inset ring-white/[0.07]",
+                        : "bg-ink/[0.05] text-orchid ring-1 ring-inset ring-ink/[0.07]",
                     )}
                   >
                     {m.content}
@@ -296,7 +296,7 @@ export function ChatWidget() {
               ))}
               {loading && (
                 <div className="flex justify-start">
-                  <span className="inline-flex items-center gap-1 rounded-2xl bg-white/[0.05] px-4 py-2.5 ring-1 ring-inset ring-white/[0.07]">
+                  <span className="inline-flex items-center gap-1 rounded-2xl bg-ink/[0.05] px-4 py-2.5 ring-1 ring-inset ring-ink/[0.07]">
                     <Dot delay={0} />
                     <Dot delay={0.15} />
                     <Dot delay={0.3} />

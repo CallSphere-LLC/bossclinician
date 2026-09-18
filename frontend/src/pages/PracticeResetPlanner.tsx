@@ -159,7 +159,11 @@ function PlannerCover({ titleLines, subLines, className }: CoverProps) {
       <div className="relative overflow-hidden rounded-2xl border border-gold/25 bg-night-deep shadow-[0_44px_100px_-36px_rgba(0,0,0,0.95)]">
         <div
           aria-hidden
-          className="absolute inset-0 bg-[linear-gradient(155deg,rgba(75,46,131,0.5)_0%,rgba(10,7,19,0.9)_55%,rgba(6,4,11,1)_100%)]"
+          className="absolute inset-0"
+          style={{
+            background:
+              "linear-gradient(155deg, rgba(75,46,131,0.5) 0%, rgb(var(--c-night, 10 7 19) / 0.9) 55%, rgb(var(--c-night-deep, 6 4 11)) 100%)",
+          }}
         />
         <div
           aria-hidden

@@ -57,7 +57,7 @@ const MEET_YVETTE: readonly (readonly string[])[] = [
  * the card instead of ending at a hard edge.
  */
 const COVER_SCRIM =
-  "linear-gradient(to top, rgba(9,6,17,0.96) 0%, rgba(9,6,17,0.72) 18%, rgba(9,6,17,0.26) 46%, rgba(9,6,17,0) 76%)";
+  "linear-gradient(to top, rgb(var(--c-night, 9 6 17) / 0.96) 0%, rgb(var(--c-night, 9 6 17) / 0.72) 18%, rgb(var(--c-night, 9 6 17) / 0.26) 46%, rgb(var(--c-night, 9 6 17) / 0) 76%)";
 
 const MONTHS = [
   "Jan",

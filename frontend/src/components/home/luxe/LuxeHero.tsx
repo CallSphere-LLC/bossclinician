@@ -182,14 +182,14 @@ export function LuxeHero() {
                     Boss Clinician
                   </span>
                 </div>
-                <span aria-hidden className="hidden h-7 w-px shrink-0 bg-white/10 xl:block" />
+                <span aria-hidden className="hidden h-7 w-px shrink-0 bg-ink/10 xl:block" />
                 {/* Hairline separators, not dots, and a tone that warms toward
                     the flagship — the ladder (Club → Lounge → Boardroom) is
                     what the old single-colour dotted run flattened away. */}
                 <ul className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
                   {TIERS.map((tier, i) => (
                     <Fragment key={tier.name}>
-                      {i > 0 && <li aria-hidden className="h-3 w-px bg-white/10" />}
+                      {i > 0 && <li aria-hidden className="h-3 w-px bg-ink/10" />}
                       <li
                         className={`whitespace-nowrap text-[0.78rem] font-medium tracking-[0.07em] ${tier.tone}`}
                       >

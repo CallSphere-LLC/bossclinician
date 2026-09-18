@@ -18,13 +18,14 @@ import { OrderSummary } from "@/components/checkout/OrderSummary";
 import { describeBilling } from "@/components/checkout/billingLanguage";
 import { rememberReceipt, successPath } from "@/components/checkout/receipt";
 import {
+  appearanceForTheme,
   getStripe,
-  luxeAppearance,
   paymentElementOptions,
   stripeConfigured,
 } from "@/components/checkout/stripeClient";
 import { useOfferQuote } from "@/components/checkout/useOfferQuote";
 import { useMember } from "@/hooks/useMember";
+import { useSiteTheme } from "@/lib/siteTheme";
 import {
   commerceApi,
   commerceErrorMessage,
@@ -151,17 +152,22 @@ export default function Checkout() {
 }
 
 function CheckoutShell({ children }: { children: ReactNode }) {
+  // This route is declared outside `Layout`, which is what normally supplies
+  // `theme-luxe`. Without that ancestor none of the themed colour variables —
+  // dark or light — reach the page, so the shell carries the class itself.
   return (
-    <Section
-      surface="deep"
-      space="md"
-      aurora="mixed"
-      auroraIntensity={0.6}
-      seam={false}
-      aria-label="Checkout"
-    >
-      {children}
-    </Section>
+    <div className="theme-luxe flex min-h-screen flex-col bg-night-deep">
+      <Section
+        surface="deep"
+        space="md"
+        aurora="mixed"
+        auroraIntensity={0.6}
+        seam={false}
+        aria-label="Checkout"
+      >
+        {children}
+      </Section>
+    </div>
   );
 }
 
@@ -203,6 +209,10 @@ export function CheckoutExperience({ offer }: { offer: PublicOffer }) {
   const mode = useMemo(() => elementsModeFor(pricedOffer), [pricedOffer]);
   const [amountCents, setAmountCents] = useState(selectedPricing.quote.totalCents);
   const stripePromise = useMemo(() => getStripe(), []);
+  // The Payment Element is an iframe, so the site theme has to be handed to it.
+  // `<Elements>` forwards a changed `appearance` through `elements.update`, so a
+  // theme toggle repaints the card field without remounting (and emptying) it.
+  const siteTheme = useSiteTheme();
 
   useEffect(() => setAmountCents(selectedPricing.quote.totalCents), [selectedPricing]);
 
@@ -213,11 +223,12 @@ export function CheckoutExperience({ offer }: { offer: PublicOffer }) {
 
   const options = useMemo<StripeElementsOptions>(() => {
     const currency = (selectedPricing.currency || "usd").toLowerCase();
+    const appearance = appearanceForTheme(siteTheme);
     if (mode === "setup") {
-      return { mode: "setup", currency, setupFutureUsage: "off_session", appearance: luxeAppearance };
+      return { mode: "setup", currency, setupFutureUsage: "off_session", appearance };
     }
     if (mode === "subscription") {
-      return { mode: "subscription", currency, amount: Math.max(amountCents, 1), appearance: luxeAppearance };
+      return { mode: "subscription", currency, amount: Math.max(amountCents, 1), appearance };
     }
     return {
       mode: "payment",
@@ -229,9 +240,9 @@ export function CheckoutExperience({ offer }: { offer: PublicOffer }) {
       // refused at confirmation time, and keeping the card on file is what makes
       // the upsell one click instead of a second card entry.
       setupFutureUsage: "off_session",
-      appearance: luxeAppearance,
+      appearance,
     };
-  }, [mode, amountCents, selectedPricing.currency]);
+  }, [mode, amountCents, selectedPricing.currency, siteTheme]);
 
   return (
     <div className="space-y-5">
@@ -941,8 +952,11 @@ function TermsCheckbox({
           aria-hidden
           className={cn(
             "mt-0.5 flex h-6 w-6 flex-none items-center justify-center rounded-md border transition-colors duration-300 ease-luxe",
-            checked ? "border-gold bg-gold-foil text-night-deep" : "border-white/25",
-            error && !checked && "border-red-400/60",
+            checked
+              ? "border-gold bg-gold-foil text-night-deep"
+              : error
+                ? "border-red-400/60"
+                : "border-white/25",
           )}
         >
           {checked && <Check className="h-4 w-4" />}

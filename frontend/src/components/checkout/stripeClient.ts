@@ -4,6 +4,7 @@ import {
   type Stripe,
   type StripePaymentElementOptions,
 } from "@stripe/stripe-js";
+import type { SiteTheme } from "@/lib/siteTheme";
 
 /**
  * Stripe.js, loaded once, and the appearance that makes it look like the rest
@@ -93,6 +94,76 @@ export const luxeAppearance: Appearance = {
     },
   },
 };
+
+/**
+ * The same appearance restated for the light site theme. The iframe cannot see
+ * the page's CSS variables, so the light palette from site-theme.css is named
+ * outright: white fields, ink text, the darker gold the light theme uses.
+ * Without it a buyer in light mode types white digits into a near-black box on
+ * a white page.
+ */
+const INK = "#1E1828";
+const INK_SOFT = "#564D60";
+const HAIRLINE = "#D8D3DF";
+const GOLD_ON_LIGHT = "#76501B";
+
+export const luxeLightAppearance: Appearance = {
+  theme: "stripe",
+  labels: "above",
+  variables: {
+    fontFamily: "Montserrat, Arial, sans-serif",
+    fontSizeBase: "15px",
+    spacingUnit: "4px",
+    borderRadius: "12px",
+    colorPrimary: GOLD_ON_LIGHT,
+    colorBackground: "#FFFFFF",
+    colorText: INK,
+    colorTextSecondary: INK_SOFT,
+    colorTextPlaceholder: "#8D849A",
+    colorDanger: "#B42318",
+    colorIcon: INK_SOFT,
+  },
+  rules: {
+    ".Input": {
+      backgroundColor: "#FFFFFF",
+      border: `1px solid ${HAIRLINE}`,
+      boxShadow: "none",
+      padding: "12px 14px",
+    },
+    ".Input:focus": {
+      border: "1px solid rgba(118,80,27,0.7)",
+      boxShadow: "0 0 0 2px rgba(201,164,106,0.35)",
+    },
+    ".Input--invalid": { border: "1px solid rgba(180,35,24,0.7)" },
+    ".Label": {
+      fontSize: "11px",
+      fontWeight: "600",
+      letterSpacing: "0.18em",
+      textTransform: "uppercase",
+      color: INK_SOFT,
+    },
+    ".Tab": {
+      backgroundColor: "#FFFFFF",
+      border: `1px solid ${HAIRLINE}`,
+      boxShadow: "none",
+    },
+    ".Tab:hover": { border: "1px solid rgba(118,80,27,0.45)" },
+    ".Tab--selected": {
+      backgroundColor: "rgba(201,164,106,0.12)",
+      border: "1px solid rgba(118,80,27,0.7)",
+      color: INK,
+    },
+    ".Block": {
+      backgroundColor: "#F5F1F9",
+      border: `1px solid ${HAIRLINE}`,
+    },
+  },
+};
+
+/** The appearance for the active site theme (see `useSiteTheme`). */
+export function appearanceForTheme(theme: SiteTheme): Appearance {
+  return theme === "light" ? luxeLightAppearance : luxeAppearance;
+}
 
 /**
  * The Element's own field set.

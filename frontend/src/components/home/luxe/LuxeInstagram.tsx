@@ -128,7 +128,7 @@ export function LuxeInstagram() {
             className="mx-auto flex h-16 w-16 items-center justify-center rounded-full shadow-[0_16px_36px_-14px_rgba(123,94,167,0.9)] ring-1 ring-white/20"
             style={{ background: AVATAR_GRADIENT }}
           >
-            <CameraGlyph className="h-7 w-7 text-night-deep/85" />
+            <CameraGlyph className="h-7 w-7 text-[#06040b]/85" />
           </span>
 
           <p className="mt-5 font-display text-xl text-white">{footer.instagramHandle}</p>

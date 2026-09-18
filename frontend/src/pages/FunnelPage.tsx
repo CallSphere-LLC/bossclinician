@@ -190,7 +190,7 @@ export default function FunnelPage() {
                   key={s.id}
                   className={cn(
                     "h-1.5 rounded-full transition-all duration-500",
-                    i === index ? "w-6 bg-gold" : "w-1.5 bg-white/20",
+                    i === index ? "w-6 bg-gold" : "w-1.5 bg-ink/20",
                   )}
                 />
               ))}

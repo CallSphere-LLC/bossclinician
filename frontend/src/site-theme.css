@@ -27,8 +27,13 @@ html[data-site-theme="light"] .theme-luxe {
   scrollbar-color: #b7afc2 #fff;
 }
 
-html[data-site-theme="light"] body:has(.theme-luxe) {
+/* The floor under everything, from the first paint (theme-init.js sets the
+   attribute in <head>). Not conditional on a mounted `.theme-luxe`: while a
+   route chunk is still loading nothing is mounted, and the dark floor showing
+   through was a black screen. The admin console paints its own surface. */
+html[data-site-theme="light"] body:not(:has(.theme-console)) {
   background: #fff;
+  color: rgb(30 24 40);
 }
 
 html[data-site-theme="light"] .theme-luxe :is(section, header, footer) {
@@ -70,7 +75,15 @@ html[data-site-theme="light"] .theme-luxe :is([class*="placeholder:text-white"],
   color: rgb(var(--c-ink-soft));
   opacity: 1;
 }
-html[data-site-theme="light"] .theme-luxe [class*="text-gold"] {
+/* Anchored to a whole class token. A bare `[class*="text-gold"]` also matched
+   `hover:text-gold` on an element that is NOT hovered, and — coming after the
+   white mapping at equal specificity — painted every footer and menu link
+   permanently gold. */
+html[data-site-theme="light"] .theme-luxe :is([class^="text-gold"], [class*=" text-gold"]) {
+  color: #76501b;
+}
+html[data-site-theme="light"] .theme-luxe :is([class*="hover:text-gold"]:hover, [class*="focus-visible:text-gold"]:focus-visible),
+html[data-site-theme="light"] .theme-luxe .group:hover [class*="group-hover:text-gold"] {
   color: #76501b;
 }
 html[data-site-theme="light"] .theme-luxe .text-foil {
@@ -107,4 +120,120 @@ html[data-site-theme="light"] .theme-luxe .eyebrow-luxe {
 }
 html[data-site-theme="light"] .theme-luxe header {
   box-shadow: 0 1px 0 rgb(var(--c-hairline));
+}
+
+/* ---- Light theme: things the token swap cannot reach ---------------------- */
+
+/* Long-form bodies: `prose-headings:text-white` compiles to descendant rules,
+   so no class patch sees them — headings and bold were white on white. */
+html[data-site-theme="light"] .theme-luxe .prose-boss :is(h1, h2, h3, h4, h5, h6, strong, th, dt, figcaption) {
+  color: rgb(var(--c-ink));
+}
+html[data-site-theme="light"] .theme-luxe .prose-boss :is(td, li)::marker,
+html[data-site-theme="light"] .theme-luxe .prose-boss td {
+  color: rgb(var(--c-orchid-dim));
+}
+html[data-site-theme="light"] .theme-luxe .prose-boss :is(a, code) {
+  color: #76501b;
+}
+html[data-site-theme="light"] .theme-luxe .prose-boss :is(hr, thead, tbody tr) {
+  border-color: rgb(var(--c-hairline));
+}
+
+/* Status colours tuned for a black page are ~2.6:1 on white. */
+html[data-site-theme="light"] .theme-luxe :is([class*="text-green-bright"], [class*="text-[#6FA894]"], [class*="text-emerald-2"], [class*="text-emerald-3"], [class*="text-green-3"]) {
+  color: #2f6553;
+}
+html[data-site-theme="light"] .theme-luxe :is([class*="text-red-2"], [class*="text-red-3"], [class*="text-red-4"], [class*="text-rose-3"]) {
+  color: #b42318;
+}
+html[data-site-theme="light"] .theme-luxe :is([class*="text-amber-2"], [class*="text-amber-3"], [class*="text-yellow-2"], [class*="text-yellow-3"]) {
+  color: #8a5a00;
+}
+html[data-site-theme="light"] .theme-luxe :is([class*="text-sky-2"], [class*="text-sky-3"], [class*="text-blue-3"]) {
+  color: #1d4f91;
+}
+
+/* A white veil is how the dark theme says "raised" or "hovered"; on white it is
+   nothing at all. */
+html[data-site-theme="light"] .theme-luxe [class*="hover:bg-white/"]:hover {
+  background-color: rgb(var(--c-ink) / 0.05);
+}
+html[data-site-theme="light"] .theme-luxe [class*="decoration-white"] {
+  text-decoration-color: rgb(var(--c-hairline));
+}
+html[data-site-theme="light"] .theme-luxe .rule-faint {
+  background-image: linear-gradient(90deg, transparent, rgb(var(--c-hairline)) 50%, transparent);
+}
+html[data-site-theme="light"] .theme-luxe header nav [class~="bg-white/[0.05]"] {
+  background-color: rgb(var(--c-lilac-tint));
+}
+
+/* Photo frames carried a near-black glow. */
+html[data-site-theme="light"] .theme-luxe [class*="rgba(0,0,0,0.9"] {
+  box-shadow: 0 28px 60px -34px rgb(30 24 40 / 0.35);
+}
+/* …and the photos a night grade: dimmed, desaturated, under a violet multiply. */
+html[data-site-theme="light"] .theme-luxe img[class*="brightness-[0.8"] {
+  filter: none;
+}
+html[data-site-theme="light"] .theme-luxe [aria-hidden="true"][class*="mix-blend-"] {
+  display: none;
+}
+
+/* State borders. The `border-white` -> hairline mapping above also matches
+   `hover:border-white/20`, so on a field it outranked the error and selected
+   borders that sit on the same element. These come after it on purpose. */
+html[data-site-theme="light"] .theme-luxe [class*="border-red-4"] {
+  border-color: rgb(180 35 24 / 0.7);
+}
+html[data-site-theme="light"] .theme-luxe :is([class*="focus-visible:border-gold"]:focus-visible, [class*="focus:border-gold"]:focus) {
+  border-color: #76501b;
+}
+html[data-site-theme="light"] .theme-luxe [class*="border-gold"]:not([class*=":border-gold"]) {
+  border-color: #a07840;
+}
+
+/* Long-form bodies, part two: the typography plugin's own variables. */
+html[data-site-theme="light"] .theme-luxe .prose-boss {
+  --tw-prose-invert-body: rgb(var(--c-ink-soft));
+  --tw-prose-invert-bullets: rgb(var(--c-hairline));
+  --tw-prose-invert-counters: rgb(var(--c-ink-soft));
+  --tw-prose-invert-hr: rgb(var(--c-hairline));
+  --tw-prose-invert-th-borders: rgb(var(--c-hairline));
+  --tw-prose-invert-td-borders: rgb(var(--c-hairline));
+  --tw-prose-invert-captions: rgb(var(--c-ink-soft));
+  --tw-prose-invert-quotes: rgb(var(--c-ink));
+}
+
+html[data-site-theme="light"] .theme-luxe [class~="shadow-glass"] {
+  box-shadow: 0 12px 36px -24px rgb(30 24 40 / 0.22);
+}
+
+/* A surface that is dark in BOTH themes: a video tile, a caption over footage.
+   `data-media-surface` puts the dark palette back inside it and undoes the
+   foreground mappings above, so a name over a camera feed stays white. Keep
+   this block last. */
+html[data-site-theme="light"] .theme-luxe [data-media-surface] {
+  color-scheme: dark;
+  color: #fff;
+  --c-night: 10 7 19;
+  --c-night-deep: 6 4 11;
+  --c-night-raised: 16 11 28;
+  --c-night-veil: 23 16 38;
+  --c-orchid: 185 162 214;
+  --c-orchid-dim: 139 121 168;
+  --c-orchid-faint: 99 84 115;
+  --c-ink: 255 255 255;
+  --c-ink-soft: 139 121 168;
+  --c-hairline: 56 46 78;
+}
+html[data-site-theme="light"] .theme-luxe [data-media-surface] :is([class~="text-white"], [class*="text-white/"], [class*="hover:text-white"]:hover) {
+  color: #fff;
+}
+html[data-site-theme="light"] .theme-luxe [data-media-surface] :is([class^="text-gold"], [class*=" text-gold"]) {
+  color: #c9a46a;
+}
+html[data-site-theme="light"] .theme-luxe [data-media-surface] [class*="border-white"] {
+  border-color: rgb(255 255 255 / 0.1);
 }

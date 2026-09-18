@@ -31,7 +31,7 @@ const BLOG_ROUTE = "/blog";
  * the page instead of ending at a hard edge.
  */
 const COVER_SCRIM =
-  "linear-gradient(to top, rgba(9,6,17,0.92) 0%, rgba(9,6,17,0.62) 20%, rgba(9,6,17,0.2) 52%, rgba(9,6,17,0) 80%)";
+  "linear-gradient(to top, rgb(var(--c-night, 9 6 17) / 0.92) 0%, rgb(var(--c-night, 9 6 17) / 0.62) 20%, rgb(var(--c-night, 9 6 17) / 0.2) 52%, rgb(var(--c-night, 9 6 17) / 0) 80%)";
 
 /** One rise recipe for the page; only the delay changes. */
 function rise(reduce: boolean | null, delay: number) {

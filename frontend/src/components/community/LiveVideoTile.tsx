@@ -59,8 +59,9 @@ export function LiveVideoTile({
 
   return (
     <div
+      data-media-surface
       className={cn(
-        "relative aspect-video overflow-hidden rounded-2xl border bg-night-deep",
+        "relative aspect-video overflow-hidden rounded-2xl border bg-[#06040b]",
         sharing ? "border-gold/50" : "border-white/10",
       )}
     >
