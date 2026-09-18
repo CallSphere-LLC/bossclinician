@@ -1,5 +1,6 @@
 import nodemailer, { Transporter } from "nodemailer";
 import { env } from "../config/env";
+import { brandEmailHtml } from "./brandShell";
 import { pool } from "../db/pool";
 import { transportKeyForHost } from "../services/sendingIdentity";
 import { assertRecipientAllowed } from "./recipientGuard";
@@ -208,6 +209,18 @@ async function closeMailRecord(
   }
 }
 
+/** A text-only message as paragraphs, so it can take the same frame as the rest. */
+function textToParagraphs(text: string): string {
+  const escape = (value: string) =>
+    value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return text
+    .split(/\n{2,}/)
+    .map((block) => block.trim())
+    .filter(Boolean)
+    .map((block) => `<p>${escape(block).replace(/\n/g, "<br>")}</p>`)
+    .join("\n");
+}
+
 /**
  * Sends mail; on any failure (or unconfigured SMTP) logs instead of throwing.
  *
@@ -230,7 +243,18 @@ export async function sendMail(input: SendMailInput): Promise<SendMailOutcome> {
 
   const messageId = await openMailRecord(input);
   try {
-    const { messageId: providerMessageId } = await sendMailStrict(input);
+    // Account and purchase emails are written as plain paragraphs; the brand
+    // frame is put on here, once, for all of them. Marketing sends do not come
+    // through this function and keep the composer's own shell.
+    const { messageId: providerMessageId } = await sendMailStrict({
+      ...input,
+      html: brandEmailHtml({
+        html: input.html ?? textToParagraphs(input.text),
+        subject: input.subject,
+        text: input.text,
+        siteUrl: env.publicSiteUrl,
+      }),
+    });
     // Subjects and addresses can carry what a visitor typed into a form, so they
     // are JSON-quoted arguments: a newline in one cannot forge a second log line.
     if (!env.smtp.host) {
