@@ -83,10 +83,10 @@ export function Header({ transparentAtTop = false }: HeaderProps) {
         )}
       />
 
-      <Container className="flex h-20 items-center justify-between">
+      <Container className="flex h-20 items-center justify-between gap-6">
         <Link
           to="/"
-          className="group relative font-display text-[1.32rem] font-bold leading-[1.05] tracking-[0.03em] text-white"
+          className="group relative shrink-0 font-display text-[1.32rem] font-bold leading-[1.05] tracking-[0.03em] text-white"
           onClick={() => setOpen(false)}
         >
           Boss <em className="text-foil italic">Clinician</em>
@@ -95,9 +95,12 @@ export function Header({ transparentAtTop = false }: HeaderProps) {
           </span>
         </Link>
 
-        {/* gap-6 until xl: seven entries at gap-9 push the actions off a 1024px
-            bar. `wideOnly` entries join at xl, where there is room for them. */}
-        <nav className="hidden items-center gap-6 lg:flex xl:gap-8" aria-label="Primary">
+        {/* The full bar needs about 1100px of content width once the labels are
+            kept on one line, so it starts at xl; below that — including a laptop
+            browser zoomed in — the menu button carries everything. At lg the
+            labels wrapped ("RESOURCE / HUB") and the primary action folded into
+            a three-line oval. `wideOnly` entries and Book A Call join at 2xl. */}
+        <nav className="hidden items-center gap-5 xl:flex 2xl:gap-8" aria-label="Primary">
           {nav.map((item) =>
             isNavMenu(item) ? (
               <NavDropdown key={item.label} menu={item} />
@@ -107,9 +110,9 @@ export function Header({ transparentAtTop = false }: HeaderProps) {
                 to={item.to}
                 className={({ isActive }) =>
                   cn(
-                    "group relative py-1 text-[0.68rem] font-semibold uppercase tracking-[0.18em] transition-colors duration-300",
+                    "group relative whitespace-nowrap py-1 text-[0.68rem] font-semibold uppercase tracking-[0.18em] transition-colors duration-300",
                     isActive ? "text-white" : "text-white/55 hover:text-white",
-                    item.wideOnly && "hidden xl:block",
+                    item.wideOnly && "hidden 2xl:block",
                   )
                 }
               >
@@ -140,11 +143,11 @@ export function Header({ transparentAtTop = false }: HeaderProps) {
               A text link, not a third button: the bar has one primary action. */}
           <Link
             to={headerActions.logIn.to}
-            className="hidden whitespace-nowrap py-2 text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-white/55 transition-colors duration-300 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold lg:inline-flex"
+            className="hidden whitespace-nowrap py-2 text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-white/55 transition-colors duration-300 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold xl:inline-flex"
           >
             {headerActions.logIn.label}
           </Link>
-          <div className="hidden xl:block">
+          <div className="hidden 2xl:block">
             <LuxeButton
               href={headerActions.bookACall.href}
               target="_blank"
@@ -155,7 +158,7 @@ export function Header({ transparentAtTop = false }: HeaderProps) {
               {headerActions.bookACall.label}
             </LuxeButton>
           </div>
-          <div className="hidden lg:block">
+          <div className="hidden xl:block">
             <LuxeButton to="/work-with-me" variant="foil" size="sm" className="whitespace-nowrap">
               Work With Me
             </LuxeButton>
@@ -163,7 +166,7 @@ export function Header({ transparentAtTop = false }: HeaderProps) {
 
           <button
             type="button"
-            className="-mr-2 inline-flex h-11 w-11 items-center justify-center rounded-full text-white transition-colors hover:bg-white/[0.06] lg:hidden"
+            className="-mr-2 inline-flex h-11 w-11 items-center justify-center rounded-full text-white transition-colors hover:bg-white/[0.06] xl:hidden"
             aria-label={open ? "Close menu" : "Open menu"}
             aria-expanded={open}
             onClick={() => setOpen((v) => !v)}
@@ -204,7 +207,7 @@ export function Header({ transparentAtTop = false }: HeaderProps) {
             // items: on a near-black surface the eye is dark-adapted, so a 5%
             // leak of near-white text is a ~19/255 ghost against a 6/255 field
             // — obvious, where the same leak on a light theme would vanish.
-            className="absolute inset-x-0 top-full max-h-[calc(100dvh-5rem)] overflow-y-auto border-t border-white/[0.07] bg-night-deep lg:hidden"
+            className="absolute inset-x-0 top-full max-h-[calc(100dvh-5rem)] overflow-y-auto border-t border-white/[0.07] bg-night-deep xl:hidden"
           >
             <Container as="nav" aria-label="Mobile" className="flex flex-col gap-1 py-6">
               {nav.map((item) =>

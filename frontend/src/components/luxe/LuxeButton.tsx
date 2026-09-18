@@ -31,8 +31,10 @@ const VARIANT: Record<Variant, string> = {
 
 const SIZE: Record<Size, string> = {
   sm: "px-6 py-3 text-[0.7rem] tracking-[0.16em]",
-  md: "px-8 py-4 text-[0.74rem] tracking-[0.18em]",
-  lg: "px-10 py-[1.15rem] text-[0.78rem] tracking-[0.2em]",
+  // Phones get tighter side padding and tracking: a full-width 335px pill has
+  // to hold "WATCH FREE MASTERCLASS" on one line.
+  md: "px-6 py-4 text-[0.74rem] tracking-[0.14em] sm:px-8 sm:tracking-[0.18em]",
+  lg: "px-6 py-[1.15rem] text-[0.78rem] tracking-[0.14em] sm:px-10 sm:tracking-[0.2em]",
 };
 
 interface Common {
@@ -76,7 +78,9 @@ export function LuxeButton(props: Props) {
 
   const classes = cn(
     "group relative inline-flex items-center justify-center gap-2.5 rounded-full",
-    "font-semibold uppercase transition-all duration-300 ease-luxe",
+    // A long label in a narrow column (or a zoomed window) may still wrap;
+    // centred, balanced lines keep a two-line pill looking deliberate.
+    "text-balance text-center font-semibold uppercase leading-snug transition-all duration-300 ease-luxe",
     "hover:-translate-y-0.5 active:translate-y-0",
     "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold",
     "disabled:pointer-events-none disabled:opacity-50",
