@@ -22,6 +22,8 @@ interface AttachmentsProps {
   kind: DownloadKind;
   heading?: string;
   className?: string;
+  /** Rows only, without the card and heading — for a page that has its own. */
+  bare?: boolean;
 }
 
 interface OpenFile {
@@ -49,7 +51,13 @@ const ACTION =
  *
  * View reads the file here on the page (see FileViewer); Download saves it.
  */
-export function Attachments({ files, kind, heading = "Downloads", className }: AttachmentsProps) {
+export function Attachments({
+  files,
+  kind,
+  heading = "Downloads",
+  className,
+  bare = false,
+}: AttachmentsProps) {
   const [pending, setPending] = useState<{ id: number; action: "view" | "download" } | null>(null);
   const [open, setOpen] = useState<OpenFile | null>(null);
   const [status, setStatus] = useState("");
@@ -96,14 +104,20 @@ export function Attachments({ files, kind, heading = "Downloads", className }: A
     }
   };
 
-  return (
-    <section className={cn("rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-5", className)}>
-      <h2 className="flex items-center gap-2.5 font-display text-base text-white">
-        <Paperclip aria-hidden className="size-4 text-gold" />
-        {heading}
-      </h2>
+  const Frame = bare ? "div" : "section";
 
-      <ul className="mt-3.5 flex flex-col gap-2">
+  return (
+    <Frame
+      className={cn(!bare && "rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-5", className)}
+    >
+      {!bare && (
+        <h2 className="flex items-center gap-2.5 font-display text-base text-white">
+          <Paperclip aria-hidden className="size-4 text-gold" />
+          {heading}
+        </h2>
+      )}
+
+      <ul className={cn("flex flex-col gap-2", !bare && "mt-3.5")}>
         {files.map((file) => {
           const busy = pending?.id === file.id ? pending.action : null;
           const size = file.sizeBytes > 0 ? formatBytes(file.sizeBytes) : "";
@@ -190,6 +204,6 @@ export function Attachments({ files, kind, heading = "Downloads", className }: A
       <p aria-live="polite" className="sr-only">
         {status}
       </p>
-    </section>
+    </Frame>
   );
 }

@@ -1,14 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router";
-import { toast } from "sonner";
-import { ArrowLeft, Download, FileDown, Loader2, Lock } from "lucide-react";
+import { ArrowLeft, FileDown, Loader2, Lock } from "lucide-react";
 import { Seo } from "@/components/Seo";
 import { MemberShell } from "@/components/member/MemberShell";
 import { GlassCard } from "@/components/luxe/GlassCard";
 import { LuxeButton } from "@/components/luxe/LuxeButton";
 import { MemberApiError } from "@/lib/memberApi";
+import { Attachments } from "@/components/player/Attachments";
 import {
-  downloadFile,
   libraryApi,
   productPath,
   type DownloadListItem,
@@ -143,28 +142,19 @@ export default function Downloads() {
 }
 
 function DownloadGroupCard({ group }: { group: DownloadGroup }) {
-  const [pending, setPending] = useState<string | null>(null);
-  const [status, setStatus] = useState("");
-
-  const start = async (file: DownloadListItem) => {
-    setPending(`${file.kind}:${file.id}`);
-    setStatus(`Preparing ${file.title}…`);
-    try {
-      await downloadFile(file.kind, file.id);
-      setStatus(`${file.title} is downloading.`);
-    } catch (err) {
-      // The server says why — an attachment that has not opened yet, access
-      // that has lapsed — and that sentence is more use than "download failed".
-      const message =
-        err instanceof MemberApiError
-          ? err.message
-          : "We could not start that download. Please try again.";
-      setStatus(message);
-      toast.error(message);
-    } finally {
-      setPending(null);
-    }
-  };
+  // One kind per group by construction: a group is one product or one course.
+  const kind = group.files[0]?.kind ?? "product";
+  const available = group.files
+    .filter((file) => file.available)
+    .map((file) => ({
+      id: file.id,
+      title: file.title,
+      filename: file.filename,
+      mime: file.mime,
+      sizeBytes: file.sizeBytes,
+      description: contextLine(file) || undefined,
+    }));
+  const locked = group.files.filter((file) => !file.available);
 
   return (
     <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-5">
@@ -185,25 +175,18 @@ function DownloadGroupCard({ group }: { group: DownloadGroup }) {
         )}
       </h2>
 
-      <ul className="mt-3.5 flex flex-col gap-2">
-        {group.files.map((file) => (
-          <li key={`${file.kind}:${file.id}`}>
-            {file.available ? (
-              <AvailableRow
-                file={file}
-                busy={pending === `${file.kind}:${file.id}`}
-                onStart={() => void start(file)}
-              />
-            ) : (
-              <LockedRow file={file} />
-            )}
-          </li>
-        ))}
-      </ul>
+      {/* View and Download for each file, the same rows a lesson shows. */}
+      <Attachments files={available} kind={kind} bare className="mt-3.5" />
 
-      <p aria-live="polite" className="sr-only">
-        {status}
-      </p>
+      {locked.length > 0 && (
+        <ul className={cn("flex flex-col gap-2", available.length > 0 ? "mt-2" : "mt-3.5")}>
+          {locked.map((file) => (
+            <li key={`${file.kind}:${file.id}`}>
+              <LockedRow file={file} />
+            </li>
+          ))}
+        </ul>
+      )}
     </section>
   );
 }
@@ -216,53 +199,6 @@ function contextLine(file: DownloadListItem): string {
   return file.description;
 }
 
-function AvailableRow({
-  file,
-  busy,
-  onStart,
-}: {
-  file: DownloadListItem;
-  busy: boolean;
-  onStart: () => void;
-}) {
-  const context = contextLine(file);
-  const size = file.sizeBytes > 0 ? file.sizeLabel : "";
-
-  return (
-    <button
-      type="button"
-      onClick={onStart}
-      disabled={busy}
-      className={cn(
-        "flex min-h-[2.75rem] w-full items-center gap-3 rounded-xl border border-white/10",
-        "bg-white/[0.02] px-3.5 py-3 text-left transition-colors duration-300",
-        "hover:border-gold/40 hover:bg-white/[0.05]",
-        "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold",
-        "disabled:cursor-wait disabled:opacity-60",
-      )}
-    >
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm font-medium text-white">{file.title}</span>
-        {context && (
-          <span className="mt-0.5 block text-xs leading-relaxed text-orchid-dim">{context}</span>
-        )}
-        <span className="mt-0.5 block truncate text-[0.7rem] uppercase tracking-[0.12em] text-orchid-faint">
-          {file.filename}
-          {size && ` · ${size}`}
-        </span>
-      </span>
-
-      {busy ? (
-        <Loader2 aria-hidden className="size-4 shrink-0 animate-spin text-gold" />
-      ) : (
-        <Download aria-hidden className="size-4 shrink-0 text-orchid-dim" />
-      )}
-      <span className="sr-only">Download {file.title}</span>
-    </button>
-  );
-}
-
-/** A `<div>`, not a disabled button: there is nothing here to press yet. */
 function LockedRow({ file }: { file: DownloadListItem }) {
   const context = contextLine(file);
 
