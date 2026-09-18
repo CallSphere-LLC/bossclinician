@@ -92,7 +92,7 @@ export function LuxeHero() {
           {/* lg padding is tighter than the 6rem the column used to carry: the
               tier rail now lives in this column, and on a 1536×864 laptop the
               old value pushed it past the fold. */}
-          <div className="relative z-10 pb-4 pt-14 sm:pt-16 lg:py-20 xl:pr-10">
+          <div className="relative z-10 pb-4 pt-14 sm:pt-16 lg:py-20 short:py-10 xl:pr-10">
             <motion.div {...rise(staticEntrance, 0.05)} className="flex items-center gap-4">
               <span aria-hidden className="rule-gold hidden w-10 shrink-0 sm:block" />
               {/* 0.6rem resolved to 9.6px on a phone — below the floor where a
@@ -209,7 +209,7 @@ export function LuxeHero() {
               initial={staticEntrance ? false : { opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ duration: 1.4, delay: staticEntrance ? 0 : 0.1, ease: EASE }}
-              className="relative isolate h-[115vw] max-h-[540px] overflow-hidden sm:h-[80vw] sm:max-h-[600px] lg:h-full lg:max-h-none lg:min-h-[600px]"
+              className="relative isolate h-[115vw] max-h-[540px] overflow-hidden sm:h-[80vw] sm:max-h-[600px] lg:h-full lg:max-h-none lg:min-h-[600px] short:min-h-[420px]"
             >
               {/* Layer is taller than its frame in both directions so the
                   parallax travel never exposes an edge and the existing

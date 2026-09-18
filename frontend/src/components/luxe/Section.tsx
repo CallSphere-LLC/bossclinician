@@ -28,12 +28,15 @@ const SURFACE: Record<Surface, string> = {
  * Sections should not add their own large top margins on top of this; keep
  * internal gaps around mt-8/mt-10 so the scale stays the single source of
  * rhythm.
+ *
+ * `short:` is the wide-but-short window (see tailwind.config.js): desktop
+ * gutters there are measured against a screen half the usual height.
  */
 const SPACE: Record<Space, string> = {
-  sm: "py-10 sm:py-12 lg:py-16",
-  md: "py-12 sm:py-16 lg:py-20",
-  lg: "py-14 sm:py-20 lg:py-24",
-  xl: "py-16 sm:py-24 lg:py-32",
+  sm: "py-10 sm:py-12 lg:py-16 short:py-8",
+  md: "py-12 sm:py-16 lg:py-20 short:py-10",
+  lg: "py-14 sm:py-20 lg:py-24 short:py-12",
+  xl: "py-16 sm:py-24 lg:py-32 short:py-14",
 };
 
 interface SectionProps {

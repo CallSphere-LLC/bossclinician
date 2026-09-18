@@ -9,6 +9,13 @@ export default {
       padding: "1.25rem",
     },
     extend: {
+      // A wide but short window (a laptop browser zoomed in, or a window dragged
+      // down to a strip). The width breakpoints hand it desktop gutters that then
+      // fill half of a 460px-tall screen with empty band, so vertical rhythm also
+      // answers to height. Declared after the width screens, so it wins.
+      screens: {
+        short: { raw: "(min-width: 1024px) and (max-height: 600px)" },
+      },
       colors: {
         // ────────────────────────────────────────────────────────────────
         // OBSIDIAN LUXE — the dark surface scale.

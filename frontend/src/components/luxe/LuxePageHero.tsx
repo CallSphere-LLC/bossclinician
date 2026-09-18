@@ -59,7 +59,7 @@ export function LuxePageHero({
         className="pointer-events-none absolute inset-x-0 bottom-0 h-32 bg-gradient-to-b from-transparent to-night"
       />
 
-      <Container className="relative z-[1] py-16 sm:py-24 lg:py-32">
+      <Container className="relative z-[1] py-16 sm:py-24 lg:py-32 short:py-14">
         <div
           className={cn(
             aside && "grid items-center gap-12 lg:grid-cols-[1.15fr_0.85fr] lg:gap-16",
