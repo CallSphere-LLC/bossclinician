@@ -45,36 +45,100 @@
 }
 
 /*
- * "Dark" appearance — a graphite step up from the default ("Black", above).
- * Chosen in the topbar (ui/ConsoleThemeToggle.tsx), which sets
- * <html data-console-theme>; the second selector lets a shell carry the
- * attribute itself. Same gold accent and status meanings; text is WCAG AA on
- * every layer up to --bg-elevated (danger is lifted slightly to stay there).
+ * "White" appearance — the console on a light ground. "Dark" is the default
+ * palette above (it was labelled "Black" while a graphite "Dark" sat beside it;
+ * the graphite step is gone). Chosen in the topbar (ui/ConsoleThemeToggle.tsx),
+ * which sets <html data-console-theme>; the second selector lets a shell carry
+ * the attribute itself.
+ *
+ * The accent darkens to a bronze so gold still reads as text and as a button on
+ * white (4.6:1 both ways), and the status colours move to their dark forms.
  */
-:root[data-console-theme="dark"] .theme-console,
-.theme-console[data-console-theme="dark"] {
-  --bg-base: #1a1a1f;
-  --bg-surface: #222228;
-  --bg-surface-2: #29292f;
-  --bg-elevated: #303037;
-  --border-subtle: #36363f;
-  --border-strong: #48484f;
-  --text-primary: #f2efe9;
-  --text-secondary: #b5b1a9;
-  --text-muted: #a19d95;
-  --danger: #ea7a7a;
+:root[data-console-theme="light"] .theme-console,
+.theme-console[data-console-theme="light"] {
+  color-scheme: light;
+  --bg-base: #f6f5f2;
+  --bg-surface: #ffffff;
+  --bg-surface-2: #f1efeb;
+  --bg-elevated: #ffffff;
+  --border-subtle: #e6e2da;
+  --border-strong: #cfc9bd;
+  --text-primary: #1b1a1f;
+  --text-secondary: #55524c;
+  --text-muted: #7a766e;
+  --accent: #9a6f2a;
+  --accent-hover: #7f5a1f;
+  --accent-ink: #ffffff;
+  --success: #2f7a4f;
+  --warning: #8a5a00;
+  --danger: #b42318;
+  --info: #1d4f91;
 
-  --c-ink: 242 239 233;
-  --c-ink-soft: 181 177 169;
-  --c-cream: 26 26 31;
-  --c-sand: 41 41 47;
-  --c-surface: 34 34 40;
-  --c-surface-raised: 48 48 55;
-  --c-hairline: 54 54 63;
-  --c-lilac-soft: 181 177 169;
-  --c-lilac-tint: 41 41 47;
-  --c-lilac: 181 177 169;
-  --c-dark: 20 20 24;
+  --c-ink: 27 26 31;
+  --c-ink-soft: 85 82 76;
+  --c-cream: 246 245 242;
+  --c-sand: 241 239 235;
+  --c-surface: 255 255 255;
+  --c-surface-raised: 255 255 255;
+  --c-hairline: 230 226 218;
+  --c-lilac-soft: 85 82 76;
+  --c-lilac-tint: 241 239 235;
+  --c-lilac: 85 82 76;
+  --c-dark: 27 26 31;
+  --c-plum: 154 111 42;
+  --c-plum-deep: 127 90 31;
+  --c-plum-bright: 154 111 42;
+}
+
+/*
+ * The console was written dark-first, so a good many screens say "white" where
+ * they mean "foreground" or "a faint raised surface". On the White appearance
+ * those are mapped here, once, rather than in a hundred components. Selectors
+ * are anchored to whole class tokens so a `hover:` form does not apply at rest.
+ */
+:root[data-console-theme="light"] .theme-console [class~="text-white"]:not([class*="bg-red-"]):not([class*="bg-emerald-"]):not(.bg-brand-gradient):not(.bg-gold-foil) {
+  color: var(--text-primary);
+}
+:root[data-console-theme="light"] .theme-console :is([class^="text-white/"], [class*=" text-white/"]) {
+  color: var(--text-secondary);
+}
+:root[data-console-theme="light"] .theme-console :is([class*="hover:text-white"]:hover, [class*="focus:text-white"]:focus) {
+  color: var(--text-primary);
+}
+:root[data-console-theme="light"] .theme-console :is([class^="bg-white/"], [class*=" bg-white/"]) {
+  background-color: rgb(27 26 31 / 0.04);
+}
+:root[data-console-theme="light"] .theme-console [class*="hover:bg-white/"]:hover {
+  background-color: rgb(27 26 31 / 0.07);
+}
+:root[data-console-theme="light"] .theme-console :is([class^="border-white/"], [class*=" border-white/"], [class*="divide-white/"] > :not([hidden]) ~ :not([hidden])) {
+  border-color: var(--border-strong);
+}
+:root[data-console-theme="light"] .theme-console [class*="hover:border-white/"]:hover {
+  border-color: var(--text-muted);
+}
+:root[data-console-theme="light"] .theme-console [class*="ring-white/"] {
+  --tw-ring-color: rgb(27 26 31 / 0.18);
+}
+:root[data-console-theme="light"] .theme-console :is([class^="text-gold"], [class*=" text-gold"]) {
+  color: var(--accent);
+}
+/* Status text tuned for a black page is ~2.7:1 on white. */
+:root[data-console-theme="light"] .theme-console :is([class*="text-red-1"], [class*="text-red-2"], [class*="text-red-3"], [class*="text-red-4"]) {
+  color: var(--danger);
+}
+:root[data-console-theme="light"] .theme-console :is([class*="text-sky-3"], [class*="text-blue-3"]) {
+  color: var(--info);
+}
+:root[data-console-theme="light"] .theme-console :is([class*="text-emerald-3"], [class*="text-green-3"], [class*="text-emerald-2"]) {
+  color: var(--success);
+}
+:root[data-console-theme="light"] .theme-console :is([class*="text-amber-2"], [class*="text-amber-3"], [class*="text-yellow-3"]) {
+  color: var(--warning);
+}
+/* Native pickers and option lists follow the ground they sit on. */
+:root[data-console-theme="light"] .theme-console :is(select, input, textarea) {
+  color-scheme: light;
 }
 
 .theme-console h2:not(.font-display),

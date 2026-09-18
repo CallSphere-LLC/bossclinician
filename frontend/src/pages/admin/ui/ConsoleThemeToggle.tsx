@@ -2,13 +2,18 @@ import { useLayoutEffect, useState } from "react";
 import { cn } from "@/lib/cn";
 
 /**
- * Console appearance: "Black" (the original near-black palette, and the
- * default) or "Dark" (a lighter graphite step). The palettes themselves live in
- * admin-theme.css; this only chooses between them.
+ * Console appearance: "Dark" (the original near-black palette, and the default)
+ * or "White" (the same console on a light ground). The palettes themselves live
+ * in admin-theme.css; this only chooses between them.
+ *
+ * History, because the stored values outlive the labels: the near-black palette
+ * was once labelled "Black" and stored as "black", beside a graphite "Dark"
+ * stored as "dark". The graphite step is gone. Both old values now mean the
+ * near-black palette, which is what "dark" stores from here on.
  *
  * The choice is written to `<html data-console-theme>` rather than to the shell
  * alone, because portalled layers (the admin Dialog) re-apply `.theme-console`
- * under `<body>`, outside the shell, and would otherwise stay Black. The
+ * under `<body>`, outside the shell, and would otherwise stay Dark. The
  * attribute does nothing outside a `.theme-console`, so the public site and the
  * member pages are unaffected even after client-side navigation away.
  *
@@ -17,22 +22,23 @@ import { cn } from "@/lib/cn";
  * and a layout effect applies the attribute before the first paint.
  */
 
-export type ConsoleTheme = "black" | "dark";
+export type ConsoleTheme = "dark" | "light";
 
 const STORAGE_KEY = "bc_admin_theme";
 
 function readStoredTheme(): ConsoleTheme {
   try {
-    return localStorage.getItem(STORAGE_KEY) === "dark" ? "dark" : "black";
+    // Anything but "light" — including the retired "black" and graphite "dark".
+    return localStorage.getItem(STORAGE_KEY) === "light" ? "light" : "dark";
   } catch {
     // Storage blocked (private mode, site data disabled): fall back to default.
-    return "black";
+    return "dark";
   }
 }
 
 const OPTIONS: { value: ConsoleTheme; label: string; swatch: string }[] = [
-  { value: "dark", label: "Dark", swatch: "#1a1a1f" },
-  { value: "black", label: "Black", swatch: "#000000" },
+  { value: "light", label: "White", swatch: "#ffffff" },
+  { value: "dark", label: "Dark", swatch: "#08070a" },
 ];
 
 export function ConsoleThemeToggle({ className }: { className?: string }) {
@@ -73,14 +79,14 @@ export function ConsoleThemeToggle({ className }: { className?: string }) {
             title={`${option.label} appearance`}
             className={cn(
               "flex h-7 items-center gap-1.5 rounded-lg px-2 text-xs font-semibold transition-colors",
-              active ? "bg-white/[0.08] text-ink" : "text-ink-soft hover:text-plum",
+              active ? "bg-ink/[0.08] text-ink" : "text-ink-soft hover:text-plum",
             )}
           >
             <span
               aria-hidden="true"
               className={cn(
                 "size-3 shrink-0 rounded-full ring-1",
-                active ? "ring-gold/70" : "ring-white/25",
+                active ? "ring-plum" : "ring-ink/25",
               )}
               style={{ backgroundColor: option.swatch }}
             />
