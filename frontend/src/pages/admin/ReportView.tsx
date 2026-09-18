@@ -361,7 +361,7 @@ export default function ReportView() {
         </label>
 
         {(report?.dimensions?.length ?? 0) > 1 && (
-          <div className="flex items-center gap-1.5">
+          <div className="flex flex-wrap items-center gap-1.5">
             {report?.dimensions?.map((option) => (
               <Button
                 key={option.key}
@@ -402,13 +402,13 @@ export default function ReportView() {
 
       {/* Totals — also the chart's text alternative */}
       {report === null ? (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {Array.from({ length: 3 }, (_, i) => (
             <Skeleton key={i} className="h-24 w-full" />
           ))}
         </div>
       ) : totals.length > 0 ? (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
           {totals.map(([key, total]) => {
             const delta = report.comparison?.change[key] ?? null;
             const before = report.comparison?.totals[key];

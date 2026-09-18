@@ -105,7 +105,7 @@ export function EventsPanel({ communitySlug }: { communitySlug: string }) {
             )}
 
             {event.description && (
-              <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-orchid-dim">
+              <p className="mt-2 whitespace-pre-line break-words text-sm leading-relaxed text-orchid-dim">
                 {event.description}
               </p>
             )}

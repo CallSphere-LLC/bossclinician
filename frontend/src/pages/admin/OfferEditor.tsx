@@ -895,7 +895,7 @@ function SellingTab({
   const available = catalogue.filter((product) => !attachedIds.has(product.id));
 
   return (
-    <div className="grid gap-5 lg:grid-cols-[1.4fr_1fr]">
+    <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1.4fr_1fr]">
       <Card className="p-5">
         <div className="grid gap-4">
           <Field
@@ -1086,7 +1086,7 @@ function PriceTab({
   const preview = pricePreview({ ...draft, currency });
 
   return (
-    <div className="grid gap-5 lg:grid-cols-[1fr_1fr]">
+    <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_1fr]">
       <Card>
         <CardHeader
           icon={<BadgeDollarSign className="size-4" />}
@@ -1562,7 +1562,7 @@ function OrderFormTab({
   }
 
   return (
-    <div className="grid gap-5 lg:grid-cols-2">
+    <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
       <Card>
         <CardHeader
           icon={<ClipboardList className="size-4" />}
@@ -2374,7 +2374,7 @@ function AfterTab({
     : [...EXPIRY_CHOICES, { value: expiryValue, label: `After ${expiryValue} days` }];
 
   return (
-    <div className="grid gap-5 lg:grid-cols-2">
+    <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
       <Card>
         <CardHeader
           icon={<Flag className="size-4" />}

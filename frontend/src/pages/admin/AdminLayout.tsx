@@ -250,7 +250,7 @@ export function AdminLayout({ children }: { children: ReactNode }) {
               animate={{ x: 0 }}
               exit={{ x: "-100%" }}
               transition={{ type: "spring", stiffness: 340, damping: 34 }}
-              className="fixed inset-y-0 left-0 z-50 w-[17rem] lg:hidden"
+              className="fixed inset-y-0 left-0 z-50 w-[17rem] max-w-[85vw] lg:hidden"
             >
               {rail}
               <button
@@ -304,7 +304,7 @@ export function AdminLayout({ children }: { children: ReactNode }) {
           <div className="ml-auto flex items-center gap-2.5">
             <Link
               to="/admin/leads"
-              className="relative grid size-9 place-items-center rounded-xl border border-hairline text-ink-soft transition-colors hover:border-plum/40 hover:text-plum"
+              className="relative grid size-11 place-items-center rounded-xl border border-hairline text-ink-soft transition-colors hover:border-plum/40 hover:text-plum lg:size-9"
               aria-label={`Your enquiries${newLeads > 0 ? `, ${newLeads} new` : ""}`}
               title={
                 newLeads > 0 ? pluralize(newLeads, "new enquiry", "new enquiries") : "Your enquiries"
@@ -335,7 +335,7 @@ export function AdminLayout({ children }: { children: ReactNode }) {
           </div>
         </header>
 
-        <main className="flex-1 px-4 py-6 lg:px-7 lg:py-8">
+        <main className="min-w-0 flex-1 px-4 py-6 lg:px-7 lg:py-8">
           <motion.div
             key={location.pathname}
             initial={reduceMotion ? false : { opacity: 0, y: 8 }}

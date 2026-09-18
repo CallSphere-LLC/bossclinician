@@ -393,7 +393,7 @@ function LiveRoomPanel({
         </Field>
 
         <Field label="When can they get in?">
-          <div className="grid gap-2 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             {LIVE_ROOM_ACCESS.map((option) => (
               <button
                 key={option.value}
@@ -554,7 +554,7 @@ function ChannelFields({
           placeholder="Share the win you're proudest of this week."
         />
       </Field>
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Field label="How should it work?">
           <div className="flex gap-2">
             {CHANNEL_FORMATS.map((option) => (
@@ -1016,7 +1016,7 @@ function ChannelsTab({
   }
 
   return (
-    <div className="grid gap-5 lg:grid-cols-[17rem_minmax(0,1fr)]">
+    <div className="grid grid-cols-1 gap-5 lg:grid-cols-[17rem_minmax(0,1fr)]">
       <Card className="h-fit">
         <CardHeader
           title="Channels"
@@ -1199,7 +1199,7 @@ function ChannelsTab({
               />
 
               {attaching && (
-                <div className="mt-2.5 grid gap-2.5 sm:grid-cols-2">
+                <div className="mt-2.5 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
                   <Field label="Link to a picture, video or file" htmlFor="post-media">
                     <Input
                       id="post-media"
@@ -1542,7 +1542,7 @@ function MembersTab({ communityId }: { communityId: number }) {
   const present = memberships?.filter(membershipIsPresent).length ?? 0;
 
   return (
-    <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_20rem]">
+    <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_20rem]">
       <Card>
         <CardHeader
           title="Members"
@@ -1932,7 +1932,7 @@ function ChallengesTab({ communityId }: { communityId: number }) {
       </div>
 
       {challenges === null ? (
-        <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
           {Array.from({ length: 3 }, (_, i) => (
             <Skeleton key={i} className="h-40 w-full" />
           ))}
@@ -1951,7 +1951,7 @@ function ChallengesTab({ communityId }: { communityId: number }) {
           />
         </Card>
       ) : (
-        <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
           {challenges.map((c) => (
             <Card key={c.id} className="p-5">
               <div className="flex items-start justify-between gap-3">
@@ -2018,7 +2018,7 @@ function ChallengesTab({ communityId }: { communityId: number }) {
               placeholder="Reach out to one past client a day for ten days, and share how it went."
             />
           </Field>
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <Field label="Points for finishing" htmlFor="challenge-points">
               <Input
                 id="challenge-points"
@@ -2254,7 +2254,7 @@ function EventsTab({ communityId }: { communityId: number }) {
               placeholder="Bring one question about your practice and we'll work through it together."
             />
           </Field>
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label="When does it start?" htmlFor="event-starts">
               <Input
                 id="event-starts"
@@ -2337,7 +2337,7 @@ function BadgesTab({ communityId }: { communityId: number }) {
   }
 
   return (
-    <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_20rem]">
+    <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_20rem]">
       <Card>
         <CardHeader
           title="Badges"
@@ -2657,7 +2657,7 @@ function AccessGroupPanel({
     (grants?.offers.length ?? 0) + (grants?.products.length ?? 0) + (grants?.plans.length ?? 0);
 
   return (
-    <div className="grid gap-5 border-t border-hairline/60 px-5 py-5 lg:grid-cols-2">
+    <div className="grid grid-cols-1 gap-5 border-t border-hairline/60 px-5 py-5 lg:grid-cols-2">
       <div className="space-y-3">
         <p className="text-[0.8rem] font-semibold text-ink">Who's in it</p>
         {members === null ? (

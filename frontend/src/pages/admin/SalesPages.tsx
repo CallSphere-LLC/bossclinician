@@ -442,7 +442,7 @@ export function PlansPage() {
       {error && <ErrorNotice message={error} />}
 
       {plans === null ? (
-        <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
           {Array.from({ length: 3 }, (_, i) => (
             <Card key={i} className="h-56 animate-pulse" />
           ))}
@@ -461,7 +461,7 @@ export function PlansPage() {
           />
         </Card>
       ) : (
-        <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
           {plans.map((plan) => {
             const features = featuresOf(plan);
             return (
@@ -594,7 +594,7 @@ export function PlansPage() {
               placeholder="Monthly group calls, the private community and every masterclass."
             />
           </Field>
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <Field
               label="Price"
               hint="in dollars"
@@ -648,7 +648,7 @@ export function PlansPage() {
 
           {canPickProducts && (
             <Field label="What does this plan unlock?" hint="courses, downloads, communities and more">
-              <div className="grid gap-2 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 {catalogue?.map((product) => {
                   const selected = form.productIds.includes(product.id);
                   return (
@@ -1231,7 +1231,7 @@ export function CouponsPage() {
               className="font-mono"
             />
           </Field>
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label="Discount type" htmlFor="coupon-kind">
               <select
                 id="coupon-kind"

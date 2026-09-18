@@ -185,13 +185,13 @@ export default function SettingsHub() {
           Your business
         </h2>
         {groups === null ? (
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
             {Array.from({ length: 6 }, (_, i) => (
               <Skeleton key={i} className="h-28 w-full" />
             ))}
           </div>
         ) : (
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
             {settingDestinations.map((destination, i) => (
               <DestinationCard key={destination.to} destination={destination} index={i} />
             ))}
@@ -203,7 +203,7 @@ export default function SettingsHub() {
         <h2 className="text-[0.7rem] font-semibold uppercase tracking-[0.18em] text-gold/85">
           People and other tools
         </h2>
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           {peopleDestinations.map((destination, i) => (
             <DestinationCard key={destination.to} destination={destination} index={i} />
           ))}

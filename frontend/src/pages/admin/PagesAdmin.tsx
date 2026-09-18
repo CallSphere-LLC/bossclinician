@@ -298,7 +298,7 @@ export default function PagesAdmin() {
           />
         </Card>
       ) : (
-        <div className="grid gap-5 lg:grid-cols-[16rem_minmax(0,1fr)]">
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-[16rem_minmax(0,1fr)]">
           <Card className="h-fit">
             <CardHeader title="Your pages" />
             <ul className="space-y-0.5 p-2">

@@ -189,11 +189,20 @@ export function DataTable<TData>({
             ) : (
               rows.map((row) => (
                 <tr key={row.id} className="group h-11 transition-colors hover:bg-surface-raised">
-                  {row.getVisibleCells().map((cell) => (
-                    <td key={cell.id} className="px-5 py-2 align-middle text-ink">
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </td>
-                  ))}
+                  {row.getVisibleCells().map((cell) => {
+                    // On a phone the row is a card and the header is gone, so
+                    // each value carries its own column name (admin-theme.css).
+                    const header = cell.column.columnDef.header;
+                    return (
+                      <td
+                        key={cell.id}
+                        data-label={typeof header === "string" ? header : undefined}
+                        className="px-5 py-2 align-middle text-ink"
+                      >
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </td>
+                    );
+                  })}
                 </tr>
               ))
             )}

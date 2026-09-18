@@ -236,7 +236,7 @@ export default function Dashboard() {
       )}
 
       {/* The daily numbers */}
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {tiles.length === 0
           ? Array.from({ length: 5 }, (_, i) => <Skeleton key={i} className="h-36 w-full" />)
           : tiles.map((tile) => {
@@ -356,7 +356,7 @@ export default function Dashboard() {
       </div>
 
       {/* The chart for whichever number she picked */}
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_19rem]">
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_19rem]">
         <Card className="overflow-hidden">
           <div className="flex flex-wrap items-center gap-2 border-b border-hairline/60 px-5 py-3.5">
             <Badge tone="plum">Last {figures?.range.days ?? 30} days</Badge>
@@ -417,7 +417,7 @@ export default function Dashboard() {
         </Card>
 
         {/* Income rail */}
-        <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-1">
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-1">
           <Card className="relative overflow-hidden bg-surface-raised p-5 text-ink">
             <div className="pointer-events-none absolute -right-10 -top-12 size-36 rounded-full bg-gold/20 blur-2xl" />
             <p className="text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-white/65">
@@ -487,7 +487,7 @@ export default function Dashboard() {
       </div>
 
       {/* Bento stat row */}
-      <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
         <StatTile
           label="Enquiries"
           value={overview?.totals.leads}
@@ -546,7 +546,7 @@ export default function Dashboard() {
       </div>
 
       {/* Bento content row */}
-      <div className="grid gap-5 xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
         <Card className="xl:col-span-2">
           <CardHeader
             title="Latest enquiries"
@@ -634,7 +634,7 @@ export default function Dashboard() {
       </div>
 
       {/* Community + storage */}
-      <div className="grid gap-5 xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
         <Card className="relative overflow-hidden xl:col-span-2">
           <div className="pointer-events-none absolute -right-16 -top-16 size-56 rounded-full bg-lilac-tint/70 blur-3xl" />
           <div className="relative p-6">

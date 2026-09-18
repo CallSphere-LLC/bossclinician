@@ -32,7 +32,33 @@ export function ForumView({
   channelSlug: string;
 }) {
   return (
-    <div className="overflow-x-auto">
+    <div>
+      {/* On a phone the four columns become one stacked row per topic. */}
+      <ul className="divide-y divide-white/[0.07] border-t border-white/[0.07] sm:hidden">
+        {posts.map((post) => (
+          <li key={post.id}>
+            <Link
+              to={`/community/${communitySlug}/${channelSlug}?post=${post.id}`}
+              className="flex min-h-11 flex-col gap-1 py-3 hover:text-gold"
+            >
+              <span className="flex items-start gap-2 font-semibold text-white">
+                {post.pinned && <Pin aria-label="Pinned" className="mt-0.5 size-3.5 shrink-0 text-gold" />}
+                <span className="line-clamp-2 min-w-0 break-words">
+                  {post.title || post.body.slice(0, 90) || "(no words)"}
+                </span>
+              </span>
+              <span className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-white/50">
+                <span className="min-w-0 truncate text-white/70">{post.author.name}</span>
+                <span className="tabular-nums">
+                  {post.commentCount} {post.commentCount === 1 ? "reply" : "replies"}
+                </span>
+                <span>{formatRelative(post.lastActivityAt ?? post.createdAt)}</span>
+              </span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+      <div className="hidden overflow-x-auto sm:block">
       <table className="w-full min-w-[36rem] text-left text-sm">
         <thead>
           <tr className="text-[0.65rem] uppercase tracking-[0.14em] text-white/45">
@@ -65,6 +91,7 @@ export function ForumView({
           ))}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }

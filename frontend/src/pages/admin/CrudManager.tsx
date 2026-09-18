@@ -386,7 +386,7 @@ export function CrudManager<T extends { id: string }>({
         }
       >
         {draft && (
-          <form id="crud-form" onSubmit={handleSave} className="grid gap-4 sm:grid-cols-2">
+          <form id="crud-form" onSubmit={handleSave} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             {fields.map((field) => {
               const id = `crud-${field.key}`;
               const wide = field.wide || field.type === "textarea" || field.type === "picture";

@@ -245,7 +245,7 @@ function BlueprintReadiness({
                 : `${left} step${left === 1 ? "" : "s"} left`}
         </Badge>
       </div>
-      <div className="mt-4 grid gap-2 sm:grid-cols-2">
+      <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
         {items.map((item) => (
           <ReadinessRow key={item.key} item={item} />
         ))}
@@ -576,7 +576,7 @@ export default function Funnels() {
           />
         </Card>
       ) : (
-        <div className="grid gap-5 lg:grid-cols-[17rem_minmax(0,1fr)]">
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-[17rem_minmax(0,1fr)]">
           <Card className="h-fit">
             <CardHeader title="Your funnels" />
             <ul className="space-y-0.5 p-2">
@@ -608,7 +608,7 @@ export default function Funnels() {
 
           <div className="space-y-5">
             {active && (
-              <div className="grid gap-5 sm:grid-cols-3">
+              <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
                 <Card className="p-5">
                   <p className="text-[0.7rem] font-semibold uppercase tracking-wide text-ink-soft">
                     Times viewed
@@ -660,7 +660,7 @@ export default function Funnels() {
                     : undefined
                 }
                 action={
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2">
                     {active && (
                       <>
                         <Button variant="secondary" size="sm" onClick={() => setFunnelDraft(active)}>
@@ -951,7 +951,7 @@ export default function Funnels() {
         }
       >
         {stepDraft && (
-          <form id="step-form" onSubmit={saveStage} className="grid gap-4 sm:grid-cols-2">
+          <form id="step-form" onSubmit={saveStage} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label="Name this stage" hint="just so you can find it">
               <Input
                 value={stepDraft.name ?? ""}

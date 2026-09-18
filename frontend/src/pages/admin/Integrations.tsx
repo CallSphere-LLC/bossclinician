@@ -486,7 +486,7 @@ export default function Integrations() {
                 pick none to send it everything
               </span>
             </p>
-            <div className="grid gap-1.5 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
               {events
                 .filter((event) => event.type !== "test.ping")
                 .map((event) => (

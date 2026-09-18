@@ -851,7 +851,7 @@ function AddPersonModal({
         </>
       }
     >
-      <form id="add-person" onSubmit={save} className="grid gap-4 sm:grid-cols-2">
+      <form id="add-person" onSubmit={save} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Field label="Email address" className="sm:col-span-2">
           <Input
             type="email"

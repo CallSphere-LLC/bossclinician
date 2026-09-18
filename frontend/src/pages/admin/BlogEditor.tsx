@@ -396,7 +396,7 @@ export default function BlogEditor() {
     return (
       <div className="space-y-6">
         <Skeleton className="h-10 w-72" />
-        <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_21rem]">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_21rem]">
           <div className="space-y-6">
             <Skeleton className="h-52 w-full" />
             <Skeleton className="h-[26rem] w-full" />
@@ -480,7 +480,7 @@ export default function BlogEditor() {
         </div>
       </Card>
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_21rem]">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_21rem]">
         <div className="space-y-6">
           <Card>
             <CardHeader title="Title and summary" />

@@ -210,7 +210,7 @@ export default function ReportsHub() {
       </div>
 
       {catalogue === null ? (
-        <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
           {Array.from({ length: 6 }, (_, i) => (
             <Skeleton key={i} className="h-28 w-full" />
           ))}
@@ -235,7 +235,7 @@ export default function ReportsHub() {
               <BarChart3 className="size-4 text-gold" />
               {section.group}
             </h2>
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
               {section.reports.map((report) => (
                 <Link
                   key={report.id}

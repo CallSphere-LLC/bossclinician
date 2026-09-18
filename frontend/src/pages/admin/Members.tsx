@@ -1139,7 +1139,7 @@ export default function Members() {
                 <p className="mb-2 text-sm font-semibold text-ink">
                   Here's what we read — check the first few look right
                 </p>
-                <div className="overflow-hidden rounded-xl border border-hairline">
+                <div className="overflow-x-auto rounded-xl border border-hairline">
                   <table className="w-full text-left text-sm">
                     <thead className="bg-cream/70">
                       <tr>
@@ -1154,7 +1154,7 @@ export default function Members() {
                     <tbody className="divide-y divide-hairline/60">
                       {previewRows.map((row, i) => (
                         <tr key={i}>
-                          <td className="px-4 py-2 text-ink">{row.email}</td>
+                          <td className="break-all px-4 py-2 text-ink">{row.email}</td>
                           <td className="px-4 py-2 text-ink-soft">
                             {[row.firstName, row.lastName].filter(Boolean).join(" ") ||
                               row.name ||

@@ -353,7 +353,7 @@ function TextCard({
         {heading}
       </h2>
       <p className="copy-luxe mt-2 max-w-xl text-sm">{blurb}</p>
-      <p className="copy-luxe mt-4 whitespace-pre-wrap text-sm">{value.trim() || empty}</p>
+      <p className="copy-luxe mt-4 whitespace-pre-wrap break-words text-sm">{value.trim() || empty}</p>
     </GlassCard>
   );
 }

@@ -108,7 +108,7 @@ export default function Tags() {
       {error && <ErrorNotice message={error} />}
 
       {tags === null ? (
-        <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
           {Array.from({ length: 6 }, (_, i) => (
             <Skeleton key={i} className="h-32 w-full" />
           ))}
@@ -127,7 +127,7 @@ export default function Tags() {
           />
         </Card>
       ) : (
-        <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
           {tags.map((tag, i) => (
             <motion.div
               key={tag.id}

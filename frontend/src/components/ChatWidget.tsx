@@ -249,7 +249,7 @@ export function ChatWidget() {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 20, scale: 0.96 }}
             transition={panelTransition}
-            className="glass glass-edge mb-4 flex h-[28rem] w-[min(92vw,22rem)] flex-col overflow-hidden rounded-3xl sm:h-[32rem] sm:w-96"
+            className="glass glass-edge mb-4 flex h-[28rem] max-h-[calc(100dvh-6rem)] w-[min(92vw,22rem)] flex-col overflow-hidden rounded-3xl sm:h-[32rem] sm:w-96"
           >
             <div className="relative flex items-center justify-between border-b border-white/[0.07] bg-night-raised/70 px-5 py-4 text-white">
               <div aria-hidden className="absolute inset-x-0 bottom-0 h-px bg-rule-gold opacity-50" />

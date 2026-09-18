@@ -408,7 +408,7 @@ function CommentBox({
             void send();
           }
         }}
-        className={cn(luxeControlClass, "min-h-[2.75rem] resize-y py-2.5 text-[0.9rem]")}
+        className={cn(luxeControlClass, "min-h-[2.75rem] min-w-0 resize-y py-2.5 text-[0.9rem]")}
       />
       <LuxeButton
         type="submit"

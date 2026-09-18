@@ -123,7 +123,7 @@ function ChallengeRow({
   return (
     <div>
       <div className="flex items-start justify-between gap-3">
-        <p className="font-semibold leading-snug text-white">{challenge.title}</p>
+        <p className="min-w-0 break-words font-semibold leading-snug text-white">{challenge.title}</p>
         {challenge.points > 0 && (
           <span className="shrink-0 rounded-full bg-gold/[0.12] px-2.5 py-1 text-[0.6rem] font-bold uppercase tracking-[0.12em] text-gold">
             {challenge.points} pts
@@ -132,7 +132,7 @@ function ChallengeRow({
       </div>
 
       {challenge.description && (
-        <p className="mt-1.5 whitespace-pre-line text-sm leading-relaxed text-orchid-dim">
+        <p className="mt-1.5 whitespace-pre-line break-words text-sm leading-relaxed text-orchid-dim">
           {challenge.description}
         </p>
       )}

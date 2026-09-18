@@ -531,7 +531,7 @@ export default function Automations() {
           />
         </Card>
       ) : (
-        <div className="grid gap-5 lg:grid-cols-[18rem_minmax(0,1fr)]">
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-[18rem_minmax(0,1fr)]">
           <Card className="h-fit">
             <CardHeader title="Your automations" />
             <ul className="space-y-0.5 p-2">
@@ -584,7 +584,7 @@ export default function Automations() {
                     subtitle={active.description || undefined}
                     icon={<Zap className="size-4" />}
                     action={
-                      <div className="flex gap-2">
+                      <div className="flex flex-wrap gap-2">
                         <Button
                           variant="secondary"
                           size="sm"

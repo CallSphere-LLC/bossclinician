@@ -142,7 +142,7 @@ export default function Reports() {
           title="Active subscriptions"
           subtitle="How your plans and memberships are doing right now"
         />
-        <div className="grid gap-px bg-hairline/60 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-1 gap-px bg-hairline/60 sm:grid-cols-2 xl:grid-cols-4">
           <Metric
             label="People paying you"
             hint="on a plan right now"
@@ -166,7 +166,7 @@ export default function Reports() {
             tone={subs && subs.churnRate > 5 ? "bad" : "good"}
           />
         </div>
-        <div className="grid gap-px border-t border-hairline/60 bg-hairline/60 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-px border-t border-hairline/60 bg-hairline/60 sm:grid-cols-3">
           <Metric
             label="Joined"
             hint="in the last 30 days"
@@ -200,7 +200,7 @@ export default function Reports() {
           subtitle="Everyone in your world, and how many joined each day over the last 30 days"
           icon={<Users className="size-4" />}
         />
-        <div className="grid gap-px bg-hairline/60 sm:grid-cols-3 xl:grid-cols-5">
+        <div className="grid grid-cols-1 gap-px bg-hairline/60 sm:grid-cols-3 xl:grid-cols-5">
           <Metric
             label="On your email list"
             value={audience && formatNumber(audience.totals.subscribers)}
@@ -236,7 +236,7 @@ export default function Reports() {
         </div>
       </Card>
 
-      <div className="grid gap-5 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         {/* Sign-up journeys */}
         <Card>
           <CardHeader

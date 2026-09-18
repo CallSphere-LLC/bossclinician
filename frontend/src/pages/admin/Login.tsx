@@ -48,7 +48,7 @@ export default function Login() {
   }
 
   return (
-    <div className="theme-console grid min-h-screen bg-cream lg:grid-cols-2">
+    <div className="theme-console grid grid-cols-1 min-h-screen bg-cream lg:grid-cols-2">
       {/* Brand panel */}
       <div className="relative hidden overflow-hidden border-r border-hairline bg-[var(--bg-base)] p-12 lg:flex lg:flex-col">
         <div className="pointer-events-none absolute -bottom-24 -right-16 size-96 rounded-full bg-gold/15 blur-3xl" />

@@ -372,7 +372,7 @@ function RepeatFields({
       </label>
 
       {value.on && (
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label="How often">
             <select
               className={selectStyles}
@@ -469,7 +469,7 @@ function LocationFields({
   return (
     <fieldset className="grid gap-2.5">
       <legend className="mb-1.5 text-[0.8rem] font-semibold text-ink">Where does it happen?</legend>
-      <div className="grid gap-2.5 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
         {options.map((option) => (
           <label
             key={option.value}
@@ -1432,7 +1432,7 @@ export default function EventsAdmin() {
           <div className="space-y-8">
             {/* -------------------------------------------------- the numbers */}
             {report && (
-              <div className="grid gap-3 sm:grid-cols-3 lg:grid-cols-6">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 lg:grid-cols-6">
                 <StatTile label="Signed up" value={String(report.registered)} />
                 <StatTile label="Turned up" value={String(report.attended)} />
                 <StatTile label="Bought something" value={String(report.converted)} />
@@ -1477,7 +1477,7 @@ export default function EventsAdmin() {
                 name="event-kind"
               />
 
-              <div className="grid gap-5 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
                 {form.kind === "live" && (
                   <Field label="When does it happen?" error={problems.startsAt}>
                     <Input
@@ -1609,7 +1609,7 @@ export default function EventsAdmin() {
                   <p className="text-sm font-semibold text-ink">
                     {detail.recurrenceLabel} — the sessions as saved
                   </p>
-                  <ol className="mt-2 grid gap-x-4 gap-y-1 text-sm text-ink-soft sm:grid-cols-2">
+                  <ol className="mt-2 grid grid-cols-1 gap-x-4 gap-y-1 text-sm text-ink-soft sm:grid-cols-2">
                     {(detail.occurrences ?? []).slice(0, SESSIONS_SHOWN).map((iso, index) => (
                       <li key={iso}>
                         {index + 1}. {describeStart(iso, detail.timezone)}
@@ -1685,7 +1685,7 @@ export default function EventsAdmin() {
                 )}
               </Field>
 
-              <div className="grid gap-5 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
                 <Field label="Tag everyone who turned up">
                   <select
                     className={selectStyles}

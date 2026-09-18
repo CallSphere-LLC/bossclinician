@@ -385,7 +385,7 @@ function DocxView({ blob }: { blob: Blob }) {
       )}
       <div
         ref={holder}
-        className={cn("max-h-[80vh] overflow-auto bg-white text-black", state !== "ready" && "hidden")}
+        className={cn("max-h-[80vh] max-w-full overflow-auto bg-white text-black [&_.docx-wrapper]:min-w-fit", state !== "ready" && "hidden")}
       />
     </div>
   );

@@ -979,7 +979,7 @@ function BillingPortalCard() {
         title="Customer billing portal"
         subtitle="Customers can replace a card, see invoices and PDF receipts, pause or resume a subscription, and cancel with a reason."
       />
-      <div className="grid gap-3 px-5 py-5 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 px-5 py-5 sm:grid-cols-2">
         <Button asChild variant="secondary" className="min-h-11 justify-start">
           <a href="/account/billing" target="_blank" rel="noreferrer">
             <CreditCard />

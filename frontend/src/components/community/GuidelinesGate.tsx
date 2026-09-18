@@ -67,7 +67,7 @@ export function GuidelinesGate({
           </div>
         </div>
 
-        <div className="prose-boss min-h-0 flex-1 overflow-y-auto px-6 py-5">
+        <div className="prose-boss min-h-0 flex-1 overflow-y-auto break-words px-5 py-5 sm:px-6">
           <ReactMarkdown remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown>
         </div>
 

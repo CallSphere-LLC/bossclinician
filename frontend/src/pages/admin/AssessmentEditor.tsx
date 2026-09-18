@@ -325,7 +325,7 @@ function QuestionBlock({
 
       <div className="min-w-0 flex-1 space-y-4">
         <div className="flex flex-wrap items-start gap-3">
-          <div className="min-w-[16rem] flex-1">
+          <div className="min-w-[min(16rem,100%)] flex-1">
             <InlineText
               label={`Question ${index + 1}`}
               value={question.prompt}
@@ -382,7 +382,7 @@ function QuestionBlock({
           </p>
         ) : (
           <div className="space-y-2">
-            <div className="grid grid-cols-[1fr_5rem_auto] items-center gap-2 text-[0.68rem] font-bold uppercase tracking-[0.1em] text-ink-soft">
+            <div className="grid grid-cols-[minmax(0,1fr)_5rem] items-center gap-2 sm:grid-cols-[1fr_5rem_auto] text-[0.68rem] font-bold uppercase tracking-[0.1em] text-ink-soft">
               <span>Answer</span>
               <span>Points</span>
               <span className="sr-only">Remove</span>
@@ -394,7 +394,7 @@ function QuestionBlock({
               </p>
             ) : (
               answers.map((answer) => (
-                <div key={answer.id} className="grid grid-cols-[1fr_5rem_auto] items-center gap-2">
+                <div key={answer.id} className="grid grid-cols-[minmax(0,1fr)_5rem] items-center gap-2 sm:grid-cols-[1fr_5rem_auto]">
                   <InlineText
                     label={`Answer for question ${index + 1}`}
                     value={answer.label}
@@ -406,7 +406,7 @@ function QuestionBlock({
                     value={answer.weight}
                     onCommit={(weight) => onAnswerPatch(answer.id, { weight })}
                   />
-                  <div className="flex items-center gap-1">
+                  <div className="col-span-2 flex items-center justify-end gap-1 sm:col-span-1 sm:justify-start">
                     {graded && (
                       <label className="flex cursor-pointer items-center gap-2 whitespace-nowrap px-1 text-xs text-ink-soft">
                         <input
@@ -528,7 +528,7 @@ function ResultBlock({
           </div>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <Field label="What is this result called?" className="md:col-span-2">
             <InlineText
               label="What is this result called?"
@@ -1196,7 +1196,7 @@ export default function AssessmentEditor() {
         </div>
 
         {report && (
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <StatTile label="Finished it" value={String(report.attempts)} />
             {detail.kind !== "survey" && <StatTile label="Average score" value={`${report.averagePercent}%`} />}
             {detail.kind !== "survey" && <StatTile
@@ -1282,7 +1282,7 @@ export default function AssessmentEditor() {
             </Field>
 
             {graded && (
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <Field label="Pass mark" hint="out of 100">
                   <Input
                     inputMode="numeric"

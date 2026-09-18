@@ -539,7 +539,7 @@ export default function ProductsCatalog({ downloadOnly = false }: { downloadOnly
         description="Pick the sort of thing it is — you can put a price on it afterwards."
         size="lg"
       >
-        <div className="grid gap-2.5 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
           {KIND_ORDER.map((kind) => (
             <button
               key={kind}

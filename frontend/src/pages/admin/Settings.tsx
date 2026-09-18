@@ -643,7 +643,7 @@ export default function SettingsPage() {
               subtitle="How people reach you, kept here for your contact page and footer."
               icon={<AtSign className="size-4" />}
             />
-            <div className="grid gap-5 p-5 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-5 p-5 sm:grid-cols-2">
               {editable.contact ? (
                 <>
                   <Field

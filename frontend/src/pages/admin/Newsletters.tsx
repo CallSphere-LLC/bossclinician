@@ -416,7 +416,7 @@ export default function Newsletters() {
           />
         </Card>
       ) : (
-        <div className="grid gap-5 lg:grid-cols-[17rem_minmax(0,1fr)]">
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-[17rem_minmax(0,1fr)]">
           <Card className="h-fit">
             <CardHeader title="Your newsletters" />
             <ul className="space-y-0.5 p-2">
@@ -450,7 +450,7 @@ export default function Newsletters() {
               title={active ? `${active.name} — editions` : "Editions"}
               subtitle={active?.description}
               action={
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   {active && (
                     <Button variant="secondary" size="sm" onClick={() => setNlDraft(active)}>
                       Edit this newsletter

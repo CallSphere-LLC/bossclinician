@@ -225,7 +225,7 @@ export default function Forms() {
           />
         </Card>
       ) : (
-        <div className="grid gap-5 lg:grid-cols-[17rem_minmax(0,1fr)]">
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-[17rem_minmax(0,1fr)]">
           <Card className="h-fit">
             <CardHeader title="Your forms" />
             <ul className="space-y-0.5 p-2">
@@ -257,7 +257,7 @@ export default function Forms() {
           <div className="space-y-5">
             {active && (
               <>
-                <div className="grid gap-5 sm:grid-cols-3">
+                <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
                   <Card className="p-5">
                     <p className="text-[0.7rem] font-semibold uppercase tracking-wide text-ink-soft">
                       Times viewed
@@ -441,7 +441,7 @@ export default function Forms() {
                               {formatDateTime(s.createdAt)}
                             </span>
                           </div>
-                          <dl className="mt-1.5 grid gap-x-4 gap-y-0.5 sm:grid-cols-2">
+                          <dl className="mt-1.5 grid grid-cols-1 gap-x-4 gap-y-0.5 sm:grid-cols-2">
                             {Object.entries(s.data ?? {}).map(([key, value]) => (
                               <div key={key} className="flex gap-2 text-xs">
                                 <dt className="shrink-0 font-semibold text-ink-soft">
@@ -482,7 +482,7 @@ export default function Forms() {
       >
         {draft && (
           <form id="form-builder" onSubmit={save} className="space-y-5">
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <Field label="Name this form" hint="just so you can find it">
                 <Input
                   value={draft.name ?? ""}

@@ -159,7 +159,7 @@ export default function AuditLog() {
       </div>
 
       <Card>
-        <form onSubmit={apply} className="grid gap-4 px-5 py-5 sm:grid-cols-2 xl:grid-cols-5">
+        <form onSubmit={apply} className="grid grid-cols-1 gap-4 px-5 py-5 sm:grid-cols-2 xl:grid-cols-5">
           <Field label="Who">
             <Select
               value={form.actor}
@@ -277,27 +277,36 @@ export default function AuditLog() {
                         <td className="whitespace-nowrap px-5 py-2.5 align-middle text-xs text-ink-soft">
                           {formatDateTime(row.createdAt)}
                         </td>
-                        <td className="px-5 py-2.5 align-middle">
-                          <p className="truncate font-semibold text-ink">
-                            {row.adminName || row.adminEmail || "Someone no longer here"}
-                          </p>
-                          {row.adminName && row.adminEmail && (
-                            <p className="truncate text-xs text-ink-soft">{row.adminEmail}</p>
-                          )}
+                        {/* Each cell's content sits in one wrapper: on a phone the cell is a
+                            flex row (label left, value right), and two loose children
+                            would line up side by side instead of stacking. */}
+                        <td data-label="Who" className="px-5 py-2.5 align-middle">
+                          <div className="min-w-0">
+                            <p className="truncate font-semibold text-ink">
+                              {row.adminName || row.adminEmail || "Someone no longer here"}
+                            </p>
+                            {row.adminName && row.adminEmail && (
+                              <p className="truncate text-xs text-ink-soft">{row.adminEmail}</p>
+                            )}
+                          </div>
                         </td>
-                        <td className="px-5 py-2.5 align-middle">
-                          <p className="text-ink">{actionLabel(row.action)}</p>
-                          <p className="font-mono text-[0.68rem] text-ink-soft/80">{row.action}</p>
+                        <td data-label="What they did" className="px-5 py-2.5 align-middle">
+                          <div className="min-w-0">
+                            <p className="text-ink">{actionLabel(row.action)}</p>
+                            <p className="font-mono text-[0.68rem] text-ink-soft/80">{row.action}</p>
+                          </div>
                         </td>
-                        <td className="px-5 py-2.5 align-middle text-ink">
-                          {row.entityType ? humaniseKey(row.entityType) : "Not recorded"}
-                          {row.entityId && (
-                            <span className="ml-1.5 font-mono text-xs text-ink-soft">
-                              #{row.entityId}
-                            </span>
-                          )}
+                        <td data-label="Which record" className="px-5 py-2.5 align-middle text-ink">
+                          <div className="min-w-0">
+                            {row.entityType ? humaniseKey(row.entityType) : "Not recorded"}
+                            {row.entityId && (
+                              <span className="ml-1.5 font-mono text-xs text-ink-soft">
+                                #{row.entityId}
+                              </span>
+                            )}
+                          </div>
                         </td>
-                        <td className="px-3 py-1.5 text-right align-middle">
+                        <td data-label="Details" className="px-3 py-1.5 text-right align-middle">
                           <Button
                             type="button"
                             variant="ghost"
@@ -320,7 +329,7 @@ export default function AuditLog() {
                       {expanded && (
                         <tr id={`audit-detail-${row.id}`} className="bg-white/[0.02]">
                           <td colSpan={5} className="px-5 py-4">
-                            <div className="grid gap-4 lg:grid-cols-2">
+                            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
                               <StateBlock title="Before" value={row.beforeState} />
                               <StateBlock title="After" value={row.afterState} />
                             </div>

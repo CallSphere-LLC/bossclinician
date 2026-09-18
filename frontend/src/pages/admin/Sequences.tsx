@@ -171,7 +171,7 @@ export default function Sequences() {
       )}
 
       {shown === null ? (
-        <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
           {[0, 1, 2].map((key) => (
             <Skeleton key={key} className="h-44 rounded-2xl" />
           ))}
@@ -204,7 +204,7 @@ export default function Sequences() {
           />
         </Card>
       ) : (
-        <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
           {shown.map((sequence, index) => (
             <motion.div
               key={sequence.id}

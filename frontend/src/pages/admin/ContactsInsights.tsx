@@ -44,13 +44,13 @@ export default function ContactsInsights() {
       <Link to="/admin/contacts" className="inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-ink-soft hover:text-ink"><ArrowLeft className="size-4" />People</Link>
       <PageHeader eyebrow="Contacts" title="Insights" description="Who is joining, buying and still engaging with your emails." />
       {error && <ErrorNotice message={error} />}
-      {!data ? <div className="grid gap-4 md:grid-cols-3"><Skeleton className="h-44" /><Skeleton className="h-44" /><Skeleton className="h-44" /></div> : <>
-        <div className="grid gap-4 md:grid-cols-3">
+      {!data ? <div className="grid grid-cols-1 gap-4 md:grid-cols-3"><Skeleton className="h-44" /><Skeleton className="h-44" /><Skeleton className="h-44" /></div> : <>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           <Metric label="Contacts" value={data.contacts} detail={`${data.newContacts.toLocaleString()} new in the last 30 days`} icon={<Users className="size-5" />} to="/admin/contacts?audience=new" linkLabel="View new contacts" />
           <Metric label="Subscribed" value={data.subscribed} detail={`${data.newSubscribers.toLocaleString()} newly subscribed`} icon={<MailCheck className="size-5" />} to="/admin/contacts?audience=subscribed" />
           <Metric label="Customers" value={data.customers} detail={`${data.newCustomers.toLocaleString()} bought in the last 30 days`} icon={<ShoppingBag className="size-5" />} to="/admin/contacts?audience=customer" />
         </div>
-        <div className="grid gap-5 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
           <Card className="p-5"><h2 className="font-display text-xl text-ink">People no longer receiving marketing</h2><div className="mt-3"><Row label="Unsubscribed by you" value={data.manuallyUnsubscribed} to="/admin/contacts?optOut=manual" /><Row label="Opted out themselves" value={data.optedOut} to="/admin/contacts?optOut=self" /><Row label="Email bounced" value={data.bounced} to="/admin/contacts?status=bounced" /><Row label="Marked as spam" value={data.complained} to="/admin/contacts?status=complained" /></div></Card>
           <Card className="p-5"><div className="flex items-center gap-2"><Activity className="size-5 text-plum" /><h2 className="font-display text-xl text-ink">Subscriber engagement</h2></div><div className="mt-3"><Row label="Healthy" hint="Opened or clicked in the last 90 days" value={data.engagement.healthy} to="/admin/contacts?engagement=healthy" /><Row label="Passive" hint="Last engaged 91–180 days ago" value={data.engagement.passive} to="/admin/contacts?engagement=passive" /><Row label="Unengaged" hint="Last engaged 181–270 days ago" value={data.engagement.unengaged} to="/admin/contacts?engagement=unengaged" /><Row label="Inactive" hint="No engagement for more than 270 days" value={data.engagement.inactive} to="/admin/contacts?engagement=inactive" /></div></Card>
         </div>
@@ -64,7 +64,7 @@ export default function ContactsInsights() {
           * first, which is why the tile said 0 while members sat locked out. The
           * People list this opens uses the same predicate, so the two agree.
           */}
-        <div className="grid gap-5 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
           <Card className="p-5"><div className="flex items-center gap-2"><ShieldAlert className="size-5 text-gold" /><h2 className="font-display text-xl text-ink">Email confirmation</h2></div><div className="mt-3"><Row label="Hasn't confirmed their email" hint="Anyone with an account can't post, comment or earn points until they do — you can confirm it for them on their card" value={data.neverSubscribed} to="/admin/contacts?status=unconfirmed" /></div></Card>
         </div>
       </>}

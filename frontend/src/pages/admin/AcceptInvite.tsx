@@ -59,7 +59,7 @@ export default function AcceptInvite() {
             <h1 className="font-display text-2xl text-white">Set your password</h1>
             <p className="mt-2 text-sm text-ink-soft">
               You've been given access to Boss Clinician as{" "}
-              <span className="text-ink">{invite.email}</span>.
+              <span className="break-all text-ink">{invite.email}</span>.
             </p>
 
             <form onSubmit={submit} className="mt-6 space-y-4">

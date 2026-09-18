@@ -227,7 +227,7 @@ export default function CourseDetail() {
 
       <Section className="pt-16 sm:pt-24">
         <Container>
-          <div className="grid gap-12 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start">
+          <div className="grid grid-cols-1 gap-12 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start">
             <motion.div
               initial={reduceMotion ? false : { opacity: 0, y: 18 }}
               animate={{ opacity: 1, y: 0 }}

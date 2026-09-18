@@ -1121,7 +1121,7 @@ export default function Campaigns() {
             </label>
 
             {(draft.abSplitPercent ?? 0) > 0 && (
-              <div className="grid gap-3 sm:grid-cols-[1fr_10rem]">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_10rem]">
                 <Field
                   label="Subject line B"
                   hint="compare this with the original subject"
@@ -1206,7 +1206,7 @@ export default function Campaigns() {
               </Field>
 
               {sendMode === "absolute" && (
-                <div className="grid gap-3 sm:grid-cols-2">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <Field label="Date and time" error={fieldErrors.scheduledAt}>
                     <Input
                       id={CAMPAIGN_FIELD_IDS.scheduledAt}
@@ -1273,7 +1273,7 @@ export default function Campaigns() {
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                       <Field label="Which event?" error={fieldErrors.anchorEventId}>
                         <select
                           id={CAMPAIGN_FIELD_IDS.anchorEventId}

@@ -87,7 +87,7 @@ export default function EmailTemplates() {
       {error && <ErrorNotice message={error} />}
 
       {templates === null ? (
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           {[0, 1, 2, 3].map((key) => (
             <Skeleton key={key} className="h-32 rounded-2xl" />
           ))}
@@ -101,7 +101,7 @@ export default function EmailTemplates() {
           />
         </Card>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           {templates.map((template, index) => (
             <motion.div
               key={template.id}

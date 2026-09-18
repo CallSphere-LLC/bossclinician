@@ -281,7 +281,7 @@ export default function ContactDetail() {
       <div className="space-y-6">
         <BackLink />
         <Skeleton className="h-24 w-full" />
-        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
           <Skeleton className="h-96 w-full" />
           <Skeleton className="h-96 w-full" />
         </div>
@@ -323,7 +323,7 @@ export default function ContactDetail() {
         }
       />
 
-      <div className="grid gap-5 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
         <SummaryTile
           label="Spent with you"
           value={person.lifetimeValueCents > 0 ? money(person.lifetimeValueCents) : "Nothing yet"}
@@ -335,7 +335,7 @@ export default function ContactDetail() {
         <SummaryTile label="First came from" value={sourceLabel(person.source)} />
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
         <div className="space-y-5">
           <Card>
             <CardHeader title="What's happened" icon={<Clock />} />
@@ -735,7 +735,7 @@ function EditModal({
         </>
       }
     >
-      <form id="edit-person" onSubmit={save} className="grid gap-4 sm:grid-cols-2">
+      <form id="edit-person" onSubmit={save} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Field label="First name">
           <Input value={firstName} onChange={(e) => setFirstName(e.target.value)} autoFocus />
         </Field>

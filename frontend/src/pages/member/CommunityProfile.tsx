@@ -286,7 +286,7 @@ function ProfileView({
             />
 
             <div className="min-w-0 flex-1">
-              <h2 className="font-display text-2xl leading-tight text-white">{profile.name}</h2>
+              <h2 className="break-words font-display text-2xl leading-tight text-white">{profile.name}</h2>
               {profile.headline && (
                 <p className="mt-1 text-sm text-orchid">{profile.headline}</p>
               )}

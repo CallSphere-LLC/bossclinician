@@ -32,7 +32,7 @@ export function Layout({ children }: { children: ReactNode }) {
   // and tile visibly at section boundaries.
   return (
     <div
-      className="theme-luxe grain-overlay flex min-h-screen flex-col bg-night-deep"
+      className="theme-luxe grain-overlay flex min-h-screen flex-col overflow-x-clip bg-night-deep"
     >
       <a
         href="#main-content"

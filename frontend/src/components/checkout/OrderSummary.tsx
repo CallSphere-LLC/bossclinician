@@ -195,7 +195,7 @@ function Row({
 }) {
   return (
     <div className="flex items-baseline justify-between gap-4">
-      <dt className="text-orchid-dim">{label}</dt>
+      <dt className="min-w-0 text-orchid-dim [overflow-wrap:anywhere]">{label}</dt>
       <dd className={cn("flex-none", tone === "gold" ? "text-gold" : "text-white")}>{value}</dd>
     </div>
   );

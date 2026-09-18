@@ -196,7 +196,7 @@ function LiveRoom({ slug }: { slug: string }) {
       )}
 
       {!inRoom ? (
-        <GlassCard accent="gold" spotlight={false} interactive={false} className="space-y-5 p-8">
+        <GlassCard accent="gold" spotlight={false} interactive={false} className="space-y-5 p-6 sm:p-8">
           {room.roster.length > 0 ? (
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-white/50">
@@ -243,8 +243,8 @@ function LiveRoom({ slug }: { slug: string }) {
           </p>
         </GlassCard>
       ) : (
-        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_18rem]">
-          <div className="space-y-4">
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_18rem]">
+          <div className="min-w-0 space-y-4">
             <div
               className={cn(
                 "grid gap-3",
@@ -341,7 +341,7 @@ function LiveRoom({ slug }: { slug: string }) {
                 </p>
               ) : (
                 call.chat.map((message) => (
-                  <div key={message.id} className="text-sm">
+                  <div key={message.id} className="break-words text-sm">
                     <span
                       className={cn(
                         "font-semibold",

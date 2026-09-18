@@ -1119,7 +1119,7 @@ export default function CourseBuilder() {
 
             <DripFields value={lessonDraft.drip} onChange={updateDrip} noun="lesson" />
 
-            <div className="grid gap-4 sm:grid-cols-3">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               {/*
                * Read out, never typed in. The length is a fact about the file
                * she just chose, and asking for it invites a number that is

@@ -135,7 +135,7 @@ function Messages({ slug, openWith }: { slug: string; openWith: number | null })
       <h1 className="font-display text-2xl text-white">Messages</h1>
       {error && <p className="text-sm text-red-300">{error}</p>}
 
-      <div className="grid gap-4 lg:grid-cols-[18rem_minmax(0,1fr)]">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[18rem_minmax(0,1fr)]">
         <GlassCard
           accent="plum"
           spotlight={false}
@@ -223,7 +223,7 @@ function Messages({ slug, openWith }: { slug: string; openWith: number | null })
               >
                 ← All
               </button>
-              <p className="font-display text-lg text-white">{thread?.other.name ?? "…"}</p>
+              <p className="min-w-0 truncate font-display text-lg text-white">{thread?.other.name ?? "…"}</p>
             </div>
 
             <div className="min-h-0 flex-1 space-y-2.5 overflow-y-auto py-4">

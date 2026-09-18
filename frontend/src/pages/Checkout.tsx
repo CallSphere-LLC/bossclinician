@@ -250,7 +250,7 @@ export function CheckoutExperience({ offer }: { offer: PublicOffer }) {
         <GlassCard accent="plum" interactive={false} className="mx-auto max-w-5xl p-4 sm:p-5">
           <fieldset>
             <legend className="px-1 text-sm font-semibold text-white">Choose how you would like to pay</legend>
-            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
               {offer.pricingOptions.map((option) => {
                 const selected = option.id === pricingOptionId;
                 return (
@@ -260,7 +260,7 @@ export function CheckoutExperience({ offer }: { offer: PublicOffer }) {
                   )}>
                     <input type="radio" name="pricing-option" checked={selected} onChange={() => choosePricingOption(option)} className="size-4 accent-[#c9a46a]" />
                     <span className="min-w-0 flex-1">
-                      <span className="flex items-center gap-2 font-semibold text-white">
+                      <span className="flex flex-wrap items-center gap-x-2 gap-y-1 font-semibold text-white">
                         {option.label}
                         {option.recommended && <span className="rounded-full bg-gold/15 px-2 py-0.5 text-[0.65rem] uppercase tracking-wide text-gold">Recommended</span>}
                       </span>
@@ -617,7 +617,7 @@ function CheckoutForm({ offer, pricingOption, mode, onAmountChange }: CheckoutFo
         : `Pay ${quote.formatted.total}`;
 
   return (
-    <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_25rem] lg:items-start lg:gap-12">
+    <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_25rem] lg:items-start lg:gap-12">
       {/* The summary leads on a phone, where it is collapsed to a single line,
           and sits beside the form on a desktop. */}
       <motion.aside
@@ -670,7 +670,7 @@ function CheckoutForm({ offer, pricingOption, mode, onAmountChange }: CheckoutFo
 
         <form onSubmit={handleSubmit} noValidate className="mt-8 space-y-8">
           <Fieldset legend="Your details">
-            <div className="grid gap-5 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
               <LuxeInput
                 label="Email address"
                 type="email"

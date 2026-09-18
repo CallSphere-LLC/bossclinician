@@ -130,7 +130,7 @@ export default function Conversations() {
           />
         </Card>
       ) : (
-        <div className="grid gap-5 lg:grid-cols-[20rem_minmax(0,1fr)]">
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-[20rem_minmax(0,1fr)]">
           <Card className="h-fit">
             <CardHeader
               title="Recent chats"

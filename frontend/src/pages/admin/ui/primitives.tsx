@@ -281,7 +281,7 @@ export function Field({
     <div className={className}>
       <label
         htmlFor={single || htmlFor ? controlId : undefined}
-        className="mb-1.5 flex items-baseline gap-2 text-[0.8rem] font-semibold text-ink"
+        className="mb-1.5 flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-[0.8rem] font-semibold text-ink"
       >
         {label}
         {hint && <span className="font-normal text-ink-soft/80">{hint}</span>}
@@ -317,8 +317,8 @@ export function PageHeader({
             {eyebrow}
           </p>
         )}
-        <h1 className="font-display text-[1.75rem] leading-tight text-ink">{title}</h1>
-        {description && <p className="mt-1.5 max-w-2xl text-sm text-ink-soft">{description}</p>}
+        <h1 className="break-words font-display text-[1.75rem] leading-tight text-ink">{title}</h1>
+        {description && <p className="mt-1.5 max-w-2xl break-words text-sm text-ink-soft">{description}</p>}
       </div>
       {actions && <div className="flex flex-wrap items-center gap-2.5">{actions}</div>}
     </div>

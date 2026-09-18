@@ -603,7 +603,7 @@ function AutomationDetail({
         title={automation.name}
         description={automation.description || "Reads top to bottom. Every step runs in order."}
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button size="sm" variant="ghost" onClick={onBack}>
               <ArrowLeft />
               All automations
@@ -655,7 +655,7 @@ function AutomationDetail({
 
       <Card>
         <CardHeader title="When this happens" />
-        <div className="grid gap-4 p-5 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 p-5 sm:grid-cols-2">
           <Field label="Start it when…">
             <select
               className={selectStyles}
@@ -976,7 +976,7 @@ function AddStepMenu({
   return (
     <div className="flex items-center gap-2">
       <select
-        className={`${selectStyles} min-w-[15rem]`}
+        className={`${selectStyles} min-w-0 sm:min-w-[15rem]`}
         value={value}
         onChange={(event) => setValue(event.target.value)}
         aria-label="Choose a step to add"
@@ -1173,7 +1173,7 @@ function ActionModal({
         )}
 
         {actionType === "wait" && (
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label="Wait this many days" error={problem ?? undefined}>
               <Input
                 type="number"

@@ -145,7 +145,7 @@ export default function MarketingOverview() {
             </Card>
           )}
 
-          <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
             <EmailsTile data={data} />
             <SequencesTile data={data} />
             <FormsTile data={data} />
@@ -602,7 +602,7 @@ function ShowingNote({ shown, of, what }: { shown: number; of: number; what: str
 
 function OverviewSkeleton() {
   return (
-    <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3" aria-busy="true" aria-label="Loading your marketing overview">
+    <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3" aria-busy="true" aria-label="Loading your marketing overview">
       <Skeleton className="h-52 w-full md:col-span-2" />
       <Skeleton className="h-52 w-full" />
       <Skeleton className="h-52 w-full" />

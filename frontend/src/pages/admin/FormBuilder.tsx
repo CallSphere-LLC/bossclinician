@@ -214,7 +214,7 @@ function ShowIfEditor({
 
       {rule !== null && (
         <>
-          <div className="mt-3 grid gap-3 sm:grid-cols-3">
+          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
             <select
               className={selectStyles}
               aria-label={`The question “${label}” depends on`}
@@ -390,7 +390,7 @@ function FieldBlock({
       </div>
 
       <div className="min-w-0 flex-1 space-y-4">
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <Field label="What are you asking?" className="md:col-span-2">
             <div className="flex items-start gap-2">
               <Input
@@ -582,7 +582,7 @@ function FieldBlock({
         {field.type !== "file" && (
         <details className="rounded-xl border border-hairline bg-white/[0.03] px-4 py-3">
           <summary className="cursor-pointer text-sm font-semibold text-ink">More rules</summary>
-          <div className="mt-4 grid gap-4 sm:grid-cols-3">
+          <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
             <Field label="Shortest answer" hint="letters">
               <Input
                 inputMode="numeric"
@@ -1394,7 +1394,7 @@ export default function FormBuilder() {
 
       {/* ---------------------------------------------------------- basics */}
 
-      <Card className="grid gap-4 p-5 md:grid-cols-2">
+      <Card className="grid grid-cols-1 gap-4 p-5 md:grid-cols-2">
         <Field label="What is this form called?" className="md:col-span-2">
           <Input
             aria-label="What this form is called"
@@ -1557,7 +1557,7 @@ export default function FormBuilder() {
             ))}
           </fieldset>
 
-          <div className="grid gap-5 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
             <Field label="Tags added when somebody replies" hint="tick as many as you need">
               {tags.length === 0 ? (
                 <p className="text-sm text-ink-soft">

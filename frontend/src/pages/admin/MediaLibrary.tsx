@@ -338,7 +338,7 @@ export default function MediaLibrary() {
           afterwards without uploading it again. */}
       <Card className="p-4">
         <p className="text-sm font-semibold text-ink">Who is this file for?</p>
-        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+        <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
           {AUDIENCES.map((choice) => {
             const active = audience === choice.key;
             return (
@@ -505,7 +505,7 @@ export default function MediaLibrary() {
                       </Badge>
                       <Badge
                         tone={paid ? "gold" : "neutral"}
-                        className="absolute right-2 top-2 !bg-night-deep/80 ring-1 ring-white/15 !text-[0.6rem] backdrop-blur"
+                        className="absolute right-2 top-2 !bg-night-deep/80 !text-white ring-1 ring-white/15 !text-[0.6rem] backdrop-blur"
                       >
                         {audienceBadge(asset.visibility)}
                       </Badge>

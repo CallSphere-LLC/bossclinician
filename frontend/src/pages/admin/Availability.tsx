@@ -163,7 +163,7 @@ export default function Availability() {
       {error && <ErrorNotice message={error} />}
 
       {preview && (
-        <Card className="grid gap-4 p-5 sm:grid-cols-2 xl:grid-cols-4">
+        <Card className="grid grid-cols-1 gap-4 p-5 sm:grid-cols-2 xl:grid-cols-4">
           <Policy label="Timezone" value={preview.timezone} />
           <Policy label="Slot frequency" value={`Every ${preview.policy.slotIntervalMinutes} minutes`} />
           <Policy label="Advance notice" value={`${preview.policy.minimumNoticeHours} hours`} />
@@ -181,7 +181,7 @@ export default function Availability() {
         {rules === null ? <div className="p-5"><Skeleton className="h-72 w-full" /></div> : (
           <div className="divide-y divide-hairline/60">
             {WEEKDAYS.map((day, weekday) => (
-              <div key={day} className="grid min-h-14 gap-3 px-5 py-3 sm:grid-cols-[8rem_1fr_auto] sm:items-center">
+              <div key={day} className="grid grid-cols-1 min-h-14 gap-3 px-5 py-3 sm:grid-cols-[8rem_1fr_auto] sm:items-center">
                 <p className="text-sm font-semibold text-ink">{day}</p>
                 <div className="flex flex-wrap gap-2">
                   {byDay[weekday].length === 0 ? <span className="text-sm text-ink-soft">No availability</span> : byDay[weekday].map((rule) => (
@@ -199,7 +199,7 @@ export default function Availability() {
         )}
       </Card>
 
-      <div className="grid gap-5 xl:grid-cols-2">
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
         <Card>
           <CardHeader title="Date exceptions" subtitle="Block a holiday or open extra hours on one date." />
           {overrides === null ? <div className="p-5"><Skeleton className="h-40 w-full" /></div> : overrides.length === 0 ? (
@@ -229,7 +229,7 @@ export default function Availability() {
       <Modal open={ruleOpen} onOpenChange={setRuleOpen} title="Add weekly hours" size="sm" footer={<><Button variant="secondary" size="sm" onClick={() => setRuleOpen(false)}>Cancel</Button><Button size="sm" type="submit" form="availability-rule" disabled={busy}>{busy ? "Adding…" : "Add hours"}</Button></>}>
         <form id="availability-rule" onSubmit={addRule} className="space-y-4">
           <Field label="Day"><select className={selectStyles} value={ruleDraft.weekday} onChange={(e) => setRuleDraft((old) => ({ ...old, weekday: Number(e.target.value) }))}>{WEEKDAYS.map((day, index) => <option key={day} value={index}>{day}</option>)}</select></Field>
-          <div className="grid grid-cols-2 gap-3"><Field label="Starts"><Input type="time" value={ruleDraft.start} onChange={(e) => setRuleDraft((old) => ({ ...old, start: e.target.value }))} required /></Field><Field label="Ends"><Input type="time" value={ruleDraft.end} onChange={(e) => setRuleDraft((old) => ({ ...old, end: e.target.value }))} required /></Field></div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2"><Field label="Starts"><Input type="time" value={ruleDraft.start} onChange={(e) => setRuleDraft((old) => ({ ...old, start: e.target.value }))} required /></Field><Field label="Ends"><Input type="time" value={ruleDraft.end} onChange={(e) => setRuleDraft((old) => ({ ...old, end: e.target.value }))} required /></Field></div>
         </form>
       </Modal>
 

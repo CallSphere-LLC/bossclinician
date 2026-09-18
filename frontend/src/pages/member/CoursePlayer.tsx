@@ -914,7 +914,7 @@ function NonCourseProduct({ product }: { product: LibraryProduct }) {
     return (
       <div className="flex flex-col gap-6">
         <ProductIntro title={product.title} description={product.description} />
-        {product.instructions && <section className="rounded-xl border border-white/10 p-5"><h2 className="mb-2 font-semibold text-white">Instructions</h2><p className="whitespace-pre-wrap text-sm text-orchid-dim">{product.instructions}</p></section>}
+        {product.instructions && <section className="rounded-xl border border-white/10 p-5"><h2 className="mb-2 font-semibold text-white">Instructions</h2><p className="whitespace-pre-wrap break-words text-sm text-orchid-dim">{product.instructions}</p></section>}
         {product.files.length > 0 ? (
           <Attachments files={product.files} kind="product" heading="Your files" />
         ) : (

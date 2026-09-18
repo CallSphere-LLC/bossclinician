@@ -125,7 +125,7 @@ function OverviewTab({ onError }: { onError: (message: string) => void }) {
   }, [onError]);
 
   return (
-    <div className="grid gap-5 xl:grid-cols-2">
+    <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
       <Card>
         <CardHeader
           icon={<Trophy />}
@@ -967,7 +967,7 @@ function HowItWorksTab({ onError }: { onError: (message: string) => void }) {
     <form onSubmit={save} className="space-y-6">
       <Card>
         <CardHeader title="What partners earn" subtitle="Unless you set something different for one of them." />
-        <div className="grid gap-4 p-5 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 p-5 sm:grid-cols-2">
           <Field label="How they're paid">
             <select
               value={settings.commissionKind}
@@ -1031,7 +1031,7 @@ function HowItWorksTab({ onError }: { onError: (message: string) => void }) {
 
       <Card>
         <CardHeader title="Who gets the credit" subtitle="When somebody clicks two different partners' links before buying." />
-        <div className="grid gap-4 p-5 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 p-5 sm:grid-cols-2">
           <Field label="Credit goes to">
             <select
               value={settings.whoGetsCredit}
@@ -1075,7 +1075,7 @@ function HowItWorksTab({ onError }: { onError: (message: string) => void }) {
 
       <Card>
         <CardHeader title="Paying them" />
-        <div className="grid gap-4 p-5 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 p-5 sm:grid-cols-2">
           <Field
             label="Hold their earnings for"
             hint="so a refund doesn't leave you chasing money back"

@@ -78,7 +78,7 @@ export function ConsoleThemeToggle({ className }: { className?: string }) {
             aria-label={`${option.label} appearance`}
             title={`${option.label} appearance`}
             className={cn(
-              "flex h-7 items-center gap-1.5 rounded-lg px-2 text-xs font-semibold transition-colors",
+              "flex h-10 items-center gap-1.5 rounded-lg px-3 text-xs font-semibold transition-colors sm:h-7 sm:px-2",
               active ? "bg-ink/[0.08] text-ink" : "text-ink-soft hover:text-plum",
             )}
           >

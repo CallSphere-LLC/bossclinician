@@ -136,6 +136,16 @@
 :root[data-console-theme="light"] .theme-console :is([class*="text-amber-2"], [class*="text-amber-3"], [class*="text-yellow-3"]) {
   color: var(--warning);
 }
+/* "Live", "Sending", "Running": the bright green is 2.4:1 on white. */
+:root[data-console-theme="light"] .theme-console :is([class^="text-green-bright"], [class*=" text-green-bright"]) {
+  color: var(--success);
+}
+/* A count inside a selected chip sits on the accent, not on the page: it takes
+   the chip's own ink, softened, rather than the page's secondary text. */
+:root[data-console-theme="light"] .theme-console .bg-brand-gradient :is([class^="text-white/"], [class*=" text-white/"]) {
+  color: inherit;
+  opacity: 0.8;
+}
 /* Native pickers and option lists follow the ground they sit on. */
 :root[data-console-theme="light"] .theme-console :is(select, input, textarea) {
   color-scheme: light;
@@ -173,4 +183,54 @@
   .admin-data-table th > button { max-width: 100%; text-align: left; white-space: normal; }
   .admin-data-table td > * { max-width: 100%; }
   .admin-data-table td .whitespace-nowrap { white-space: normal; }
+}
+
+/*
+ * Phones: a list is a stack of cards, not a 640px table dragged sideways.
+ *
+ * The header row goes (it cannot line up with anything once cells stack), each
+ * cell becomes a line with its column name in front of it from `data-label`, and
+ * the first cell — the thing the row is about — leads at full weight. The
+ * inline `min-width` and the <colgroup> widths are desktop concerns and are
+ * switched off. The empty state and the loading skeleton are single-cell rows
+ * and need nothing.
+ */
+@media (max-width: 639px) {
+  .admin-data-table { min-width: 0 !important; display: block; }
+  .admin-data-table colgroup, .admin-data-table thead { display: none; }
+  .admin-data-table tbody { display: block; }
+  .admin-data-table tbody tr {
+    display: block; height: auto; padding: 0.75rem 1rem;
+  }
+  /* Label on the left, the value stacked on the right. A grid rather than a
+     flex row: a cell that renders two siblings (a name over an email) keeps
+     them one above the other instead of side by side. */
+  .admin-data-table tbody td {
+    display: grid; grid-template-columns: minmax(0, 40%) minmax(0, 1fr);
+    align-items: center; column-gap: 1rem; row-gap: 0.15rem;
+    padding: 0.3rem 0; min-width: 0; text-align: right; overflow-wrap: anywhere;
+  }
+  .admin-data-table tbody td > * { grid-column: 2; justify-self: end; }
+  /* No column name (row actions): the controls sit on the right, and wrap. */
+  .admin-data-table tbody td:not([data-label]):not(:first-child):not([colspan]) {
+    display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0.5rem;
+  }
+  .admin-data-table tbody td[colspan] { display: block; padding: 0; text-align: left; }
+  .admin-data-table tbody td:first-child:not([colspan]) {
+    display: block; text-align: left; padding-bottom: 0.45rem; font-weight: 600;
+  }
+  .admin-data-table tbody td:first-child:not([colspan]) > * { justify-self: auto; }
+  .admin-data-table tbody td:first-child::before { content: none; }
+  .admin-data-table tbody td[data-label]::before {
+    content: attr(data-label);
+    grid-column: 1; grid-row: 1 / span 6; align-self: center; text-align: left;
+    font-size: 0.68rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--text-muted);
+  }
+  .admin-data-table tbody td > * { max-width: 100%; min-width: 0; }
+  .admin-data-table tbody td .whitespace-nowrap { white-space: normal; }
+  /* In a card there is room to show the whole address or price line. */
+  .admin-data-table tbody td .truncate {
+    white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere;
+  }
 }

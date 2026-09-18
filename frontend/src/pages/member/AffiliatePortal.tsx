@@ -357,7 +357,7 @@ export default function AffiliatePortal() {
                   className="flex flex-wrap items-center gap-3 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3"
                 >
                   <Link2 aria-hidden className="size-4 shrink-0 text-gold" />
-                  <div className="min-w-0 flex-1">
+                  <div className="min-w-0 flex-1 basis-40 sm:basis-0">
                     <p className="truncate text-sm font-medium text-white">
                       {link.label || link.destinationPath}
                     </p>
@@ -397,14 +397,14 @@ export default function AffiliatePortal() {
               <div className="space-y-6">
                 {announcements.map((item) => (
                   <article key={item.id}>
-                    <div className="flex items-center gap-2">
-                      <Megaphone aria-hidden className="size-4 text-gold" />
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                      <Megaphone aria-hidden className="size-4 shrink-0 text-gold" />
                       <h3 className="font-display text-base text-white">{item.title}</h3>
                       <span className="text-xs text-orchid-faint">
                         {formatDate(item.publishedAt)}
                       </span>
                     </div>
-                    <div className="prose-boss mt-2 break-words text-sm">
+                    <div className="prose-boss mt-2 break-words text-sm [&_table]:block [&_table]:overflow-x-auto">
                       <ReactMarkdown remarkPlugins={[remarkGfm]}>{item.bodyMd}</ReactMarkdown>
                     </div>
                   </article>
@@ -445,7 +445,7 @@ export default function AffiliatePortal() {
                       )}
                     </div>
                     {asset.bodyMd && (
-                      <div className="prose-boss mt-3 break-words text-sm">
+                      <div className="prose-boss mt-3 break-words text-sm [&_table]:block [&_table]:overflow-x-auto">
                         <ReactMarkdown remarkPlugins={[remarkGfm]}>{asset.bodyMd}</ReactMarkdown>
                       </div>
                     )}
@@ -465,7 +465,36 @@ export default function AffiliatePortal() {
                 Nothing yet — earnings appear here as soon as somebody buys through your link.
               </p>
             ) : (
-              <div className="overflow-x-auto">
+              <>
+              {/* A phone gets the same rows stacked: four columns do not fit in
+                  300px, and a sideways-scrolling table hides the amount. */}
+              <ul className="divide-y divide-white/[0.06] sm:hidden">
+                {transactions.map((row) => {
+                  const described = describeRow(row);
+                  return (
+                    <li key={row.id} className="py-3 first:pt-0 last:pb-0">
+                      <div className="flex items-start justify-between gap-3">
+                        <p className="min-w-0 break-words text-sm text-white/85">
+                          {row.offerTitle ?? "A purchase"}
+                        </p>
+                        <p
+                          className={cn(
+                            "shrink-0 text-sm font-medium tabular-nums",
+                            row.amountCents < 0 ? "text-red-400" : "text-white",
+                          )}
+                        >
+                          {formatCurrency(row.amountCents, row.currency)}
+                        </p>
+                      </div>
+                      <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                        <span className="text-xs text-orchid-dim">{formatDate(row.createdAt)}</span>
+                        <LuxePill accent={described.tone}>{described.label}</LuxePill>
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+              <div className="hidden overflow-x-auto sm:block">
                 <table className="w-full min-w-[36rem] text-left text-sm">
                   <thead>
                     <tr className="text-[0.64rem] uppercase tracking-[0.14em] text-orchid">
@@ -509,6 +538,7 @@ export default function AffiliatePortal() {
                   </tbody>
                 </table>
               </div>
+              </>
             )}
           </Panel>
 
@@ -570,7 +600,7 @@ export default function AffiliatePortal() {
 
           {overview?.termsMd && (
             <Panel title="The terms you agreed to">
-              <div className="prose-boss break-words text-sm">
+              <div className="prose-boss break-words text-sm [&_table]:block [&_table]:overflow-x-auto">
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>{overview.termsMd}</ReactMarkdown>
               </div>
             </Panel>

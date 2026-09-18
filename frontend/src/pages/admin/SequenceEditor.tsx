@@ -375,7 +375,7 @@ export default function SequenceEditor() {
         title={sequence.name}
         description={sequence.description || "Emails go out in this order, spaced as you set below."}
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button asChild size="sm" variant="ghost">
               <Link to="/admin/marketing/sequences">
                 <ArrowLeft />
@@ -436,7 +436,7 @@ export default function SequenceEditor() {
               const wait = splitWait(email.delayMinutes);
               const measured = statsFor(email.id);
               return (
-                <li key={email.id} className="flex items-start gap-4 px-5 py-4">
+                <li key={email.id} className="flex flex-wrap items-start gap-x-4 gap-y-2 px-5 py-4 sm:flex-nowrap">
                   <div className="flex flex-col items-center gap-1 pt-1">
                     <Button
                       size="iconSm"
@@ -482,7 +482,7 @@ export default function SequenceEditor() {
                     )}
                   </div>
 
-                  <div className="flex shrink-0 items-center gap-1">
+                  <div className="flex w-full shrink-0 items-center justify-end gap-1 sm:w-auto">
                     <Button
                       size="iconSm"
                       variant="ghost"
@@ -540,7 +540,7 @@ export default function SequenceEditor() {
           subtitle="Nothing is ever sent early — an email that comes due outside these hours waits for the next slot."
           icon={<Clock />}
         />
-        <div className="grid gap-5 p-5 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-5 p-5 sm:grid-cols-2">
           <label className="flex items-start gap-3 text-sm text-ink">
             <input
               type="checkbox"
@@ -687,7 +687,7 @@ export default function SequenceEditor() {
             <Skeleton className="h-20 rounded-xl" />
           </div>
         ) : (
-          <div className="grid gap-5 p-5 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-5 p-5 sm:grid-cols-2">
             {(
               [
                 {
@@ -843,7 +843,7 @@ export default function SequenceEditor() {
             id="sequence-email-form"
             onSubmit={saveEmail}
             noValidate
-            className="grid gap-4 sm:grid-cols-2"
+            className="grid grid-cols-1 gap-4 sm:grid-cols-2"
           >
             <Field label="Subject line" className="sm:col-span-2" error={emailErrors.subject}>
               <Input

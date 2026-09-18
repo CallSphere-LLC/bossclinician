@@ -223,7 +223,7 @@ function OffersTab() {
       </div>
 
       {offers === null ? (
-        <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
           {Array.from({ length: 3 }, (_, i) => (
             <Skeleton key={i} className="h-52 w-full" />
           ))}
@@ -242,7 +242,7 @@ function OffersTab() {
           />
         </Card>
       ) : (
-        <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
           {offers.map((offer) => (
             <Card key={offer.id} className="flex flex-col p-5">
               <div className="flex items-start justify-between gap-3">
@@ -310,7 +310,7 @@ function OffersTab() {
         }
       >
         {draft && (
-          <form id="offer-form" onSubmit={save} className="grid gap-4 sm:grid-cols-2">
+          <form id="offer-form" onSubmit={save} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label="What's it called?" className="sm:col-span-2">
               <Input
                 value={draft.title ?? ""}
@@ -650,7 +650,7 @@ function SessionsTab() {
         }
       >
         {draft && (
-          <form id="session-form" onSubmit={save} className="grid gap-4 sm:grid-cols-2">
+          <form id="session-form" onSubmit={save} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label="Client" hint="any person in your contacts or members">
               <div className="space-y-2">
               <Input
@@ -790,7 +790,7 @@ function SessionsTab() {
                     scope={`coaching-files:${draft.id}`}
                     onUploaded={attachUpload}
                   />
-                  <div className="grid gap-2 sm:grid-cols-[1fr_1.4fr_auto]">
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_1.4fr_auto]">
                     <Input
                       value={linkTitle}
                       onChange={(e) => setLinkTitle(e.target.value)}

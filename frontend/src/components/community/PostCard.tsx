@@ -151,7 +151,7 @@ export function PostCard({
               title="Pinned to the top of this channel"
             >
               <Pin aria-hidden className="size-3" />
-              Pinned
+              <span className="sr-only sm:not-sr-only">Pinned</span>
             </span>
           )}
           {post.locked && (
@@ -160,7 +160,7 @@ export function PostCard({
               title="Comments are closed"
             >
               <Lock aria-hidden className="size-3" />
-              Locked
+              <span className="sr-only sm:not-sr-only">Locked</span>
             </span>
           )}
 

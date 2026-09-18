@@ -93,13 +93,13 @@ export function Modal({
                    * fields the wrong colour, and a <select> whose chosen value
                    * she cannot read.
                    */
-                  "theme-console fixed left-1/2 top-1/2 z-50 flex max-h-[88vh] w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-[var(--border-strong)] bg-surface-raised shadow-[0_24px_60px_rgba(0,0,0,0.55)]",
+                  "theme-console fixed left-1/2 top-1/2 z-50 flex max-h-[calc(100dvh-2rem)] w-[calc(100vw-1.5rem)] -translate-x-1/2 sm:max-h-[88vh] sm:w-[calc(100vw-2rem)] -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-[var(--border-strong)] bg-surface-raised shadow-[0_24px_60px_rgba(0,0,0,0.55)]",
                   widths[size],
                 )}
               >
-                <div className="flex items-start justify-between gap-4 border-b border-hairline/70 px-6 py-4">
+                <div className="flex items-start justify-between gap-4 border-b border-hairline/70 px-4 py-4 sm:px-6">
                   <div className="min-w-0">
-                    <RadixDialog.Title className="font-display text-lg text-ink">
+                    <RadixDialog.Title className="break-words font-display text-lg text-ink">
                       {title}
                     </RadixDialog.Title>
                     {description && (
@@ -115,10 +115,10 @@ export function Modal({
                   </RadixDialog.Close>
                 </div>
 
-                <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">{children}</div>
+                <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6">{children}</div>
 
                 {footer && (
-                  <div className="flex flex-wrap items-center justify-end gap-2.5 border-t border-hairline/70 bg-cream/50 px-6 py-4">
+                  <div className="flex flex-wrap items-center justify-end gap-2.5 border-t border-hairline/70 bg-cream/50 px-4 py-4 sm:px-6">
                     {footer}
                   </div>
                 )}

@@ -139,7 +139,7 @@ function CommunityCard({ community }: { community: CommunitySummary }) {
         className="flex h-full flex-col p-6 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold"
       >
         <div className="flex items-start justify-between gap-3">
-          <h2 className="font-display text-xl leading-snug text-white">{community.name}</h2>
+          <h2 className="min-w-0 break-words font-display text-xl leading-snug text-white">{community.name}</h2>
           {community.unreadCount > 0 && (
             <span className="shrink-0 rounded-full bg-gold px-2.5 py-1 text-[0.62rem] font-bold text-night-deep">
               {community.unreadCount > 99 ? "99+" : community.unreadCount} new

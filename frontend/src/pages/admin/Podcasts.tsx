@@ -853,7 +853,7 @@ export default function Podcasts() {
         }
       >
         {showDraft && (
-          <form id="show-form" onSubmit={saveShow} className="grid gap-4 sm:grid-cols-2">
+          <form id="show-form" onSubmit={saveShow} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label="Show name" className="sm:col-span-2">
               <Input
                 value={showDraft.title ?? ""}
@@ -947,7 +947,7 @@ export default function Podcasts() {
                 <option value="private">Members only</option>
               </select>
             </Field>
-            <div className="flex items-end gap-5">
+            <div className="flex flex-wrap items-end gap-x-5 gap-y-3">
               <label className="flex cursor-pointer items-center gap-2.5 text-sm font-medium text-ink">
                 <input
                   type="checkbox"
@@ -1047,7 +1047,7 @@ export default function Podcasts() {
               </div>
             </Field>
 
-            <div className="grid gap-4 sm:grid-cols-3">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               <Field label="Episode number">
                 <Input
                   type="number"
@@ -1265,6 +1265,7 @@ function MediaPicker({
           >
             <div className="flex gap-2">
               <Input
+                className="min-w-0"
                 value={address}
                 onChange={(e) => setAddress(e.target.value)}
                 placeholder="https://…"

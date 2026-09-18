@@ -305,7 +305,7 @@ export default function Segments() {
       {error && <ErrorNotice message={error} />}
 
       {segments === null ? (
-        <div className="grid gap-5 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
           {Array.from({ length: 4 }, (_, i) => (
             <Skeleton key={i} className="h-40 w-full" />
           ))}
@@ -329,7 +329,7 @@ export default function Segments() {
           />
         </Card>
       ) : (
-        <div className="grid gap-5 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
           {segments.map((segment, i) => (
             <motion.div
               key={segment.id}
@@ -523,7 +523,7 @@ function SegmentEditor({
       }
     >
       <div className="space-y-5">
-        <div className="grid gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <Field label="Name this group">
             <Input
               value={name}

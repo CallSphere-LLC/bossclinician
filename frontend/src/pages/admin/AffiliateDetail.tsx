@@ -251,7 +251,7 @@ export default function AffiliateDetail() {
         }
       />
 
-      <div className="grid gap-5 lg:grid-cols-4">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-4">
         {[
           { label: "Sales sent", value: String(partner.sales) },
           { label: "Clicks", value: String(partner.clicks) },
@@ -352,7 +352,7 @@ export default function AffiliateDetail() {
         )}
 
         {rule && (
-          <form onSubmit={saveRule} className="grid gap-4 border-t border-hairline/60 p-5 sm:grid-cols-2">
+          <form onSubmit={saveRule} className="grid grid-cols-1 gap-4 border-t border-hairline/60 p-5 sm:grid-cols-2">
             <Field label="This applies to">
               <select
                 value={rule.offerId ?? ""}
@@ -527,7 +527,7 @@ export default function AffiliateDetail() {
 
       <Card>
         <CardHeader title="How you pay them, and anything you want to remember" />
-        <form onSubmit={saveDetails} className="grid gap-4 p-5 sm:grid-cols-2">
+        <form onSubmit={saveDetails} className="grid grid-cols-1 gap-4 p-5 sm:grid-cols-2">
           <Field label="How they want to be paid">
             <Input
               value={payoutMethod}

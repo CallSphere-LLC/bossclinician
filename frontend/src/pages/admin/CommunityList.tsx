@@ -107,7 +107,7 @@ export default function CommunityList() {
       {error && <ErrorNotice message={error} />}
 
       {communities === null ? (
-        <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
           {Array.from({ length: 3 }, (_, i) => (
             <Skeleton key={i} className="h-52 w-full" />
           ))}
@@ -127,7 +127,7 @@ export default function CommunityList() {
           />
         </Card>
       ) : (
-        <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
           {communities.map((community, i) => (
             <motion.div
               key={community.id}

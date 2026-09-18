@@ -156,7 +156,7 @@ export default function Profile() {
     >
       <Seo title="Your Details | Boss Clinician" />
 
-      <div className="grid gap-6 lg:grid-cols-[20rem_1fr] lg:items-start">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[20rem_1fr] lg:items-start">
         <AvatarPanel />
 
         <GlassCard spotlight={false} interactive={false} className="p-6 sm:p-8">

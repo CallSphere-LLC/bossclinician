@@ -13,7 +13,7 @@ const types = [
 
 export function NewProductPicker({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
   return <Modal open={open} onOpenChange={onOpenChange} title="New product" description="Choose what you want to create." size="xl">
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {types.map((type) => <section key={type.name} className="flex min-w-0 flex-col gap-4 rounded-xl border border-hairline bg-surface p-5">
         <h3 className="font-display text-xl text-ink">{type.name}</h3>
         <p className="text-sm text-ink-soft">{type.description}</p>

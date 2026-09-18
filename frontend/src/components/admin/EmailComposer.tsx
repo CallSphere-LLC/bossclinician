@@ -370,7 +370,7 @@ export default function EmailComposer({
             <p className="text-xs font-semibold uppercase tracking-wide text-ink-soft">
               Template library
             </p>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               {value.trim().length > 0 && (
                 <Button
                   type="button"
@@ -618,7 +618,7 @@ export default function EmailComposer({
           </label>
         )}
 
-        <div className="ml-auto flex items-center gap-1">
+        <div className="ml-auto flex flex-wrap items-center justify-end gap-1">
           {preview && (
             /*
              * 3.11. Desktop and phone widths, with the words on them.

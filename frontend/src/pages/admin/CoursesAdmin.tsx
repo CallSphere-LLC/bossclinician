@@ -192,7 +192,7 @@ export default function CoursesAdmin() {
       {error && <ErrorNotice message={error} />}
 
       {courses === null ? (
-        <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
           {Array.from({ length: 3 }, (_, i) => (
             <Skeleton key={i} className="h-64 w-full" />
           ))}
@@ -211,7 +211,7 @@ export default function CoursesAdmin() {
           />
         </Card>
       ) : (
-        <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
           {courses.map((course, i) => (
             <motion.div
               key={course.id}
@@ -303,7 +303,7 @@ export default function CoursesAdmin() {
         }
       >
         {editing && (
-          <form id="course-form" onSubmit={save} className="grid gap-4 sm:grid-cols-2">
+          <form id="course-form" onSubmit={save} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label="Course name" className="sm:col-span-2">
               <Input
                 value={editing.title ?? ""}

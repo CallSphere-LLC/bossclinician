@@ -75,7 +75,7 @@ export default function Products() {
 
       {error && <ErrorNotice message={error} />}
 
-      <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
         <SummaryTile label="Downloads" value={downloads?.length} icon={<FileDown className="size-4" />} to="/admin/downloads" loading={loading} />
         <SummaryTile label="Coaching" value={coaching?.length} icon={<Headphones className="size-4" />} to="/admin/coaching" loading={loading} />
         <SummaryTile label="Podcasts" value={podcasts?.length} icon={<Mic className="size-4" />} to="/admin/podcasts" loading={loading} />

@@ -132,7 +132,7 @@ export function CommunityLayout({
       {overview && (
         <div
           className={cn(
-            "grid gap-8",
+            "grid grid-cols-1 gap-8",
             showSidebar && "lg:grid-cols-[minmax(0,1fr)_19rem] lg:gap-10",
           )}
         >
@@ -148,7 +148,7 @@ export function CommunityLayout({
           </div>
 
           {showSidebar && (
-            <aside className="flex flex-col gap-4 lg:sticky lg:top-28 lg:self-start">
+            <aside className="flex min-w-0 flex-col gap-4 lg:sticky lg:top-28 lg:self-start">
               <BadgesPanel
                 points={overview.membership.points}
                 badges={overview.membership.badges}

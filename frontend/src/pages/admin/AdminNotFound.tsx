@@ -70,7 +70,7 @@ function NotFoundPage() {
           }
         />
         <p className="border-t border-hairline/60 px-5 py-4 text-center text-xs text-ink-soft">
-          You asked for <span className="font-mono text-ink">{location.pathname}</span>
+          You asked for <span className="break-all font-mono text-ink">{location.pathname}</span>
         </p>
       </Card>
 

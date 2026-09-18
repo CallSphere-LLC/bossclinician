@@ -146,6 +146,7 @@
       prose-p:text-orchid-dim prose-p:leading-[1.85]
       prose-li:text-orchid-dim prose-li:leading-[1.8]
       prose-strong:text-white
+      prose-table:block prose-table:max-w-full prose-table:overflow-x-auto prose-pre:overflow-x-auto prose-pre:max-w-full
       prose-a:text-gold prose-a:no-underline hover:prose-a:underline
       prose-blockquote:border-l-gold/60 prose-blockquote:font-display
       prose-blockquote:not-italic prose-blockquote:text-orchid

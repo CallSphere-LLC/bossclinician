@@ -83,14 +83,14 @@ export function Header({ transparentAtTop = false }: HeaderProps) {
         )}
       />
 
-      <Container className="flex h-20 items-center justify-between gap-6">
+      <Container className="flex h-20 items-center justify-between gap-3 sm:gap-6">
         <Link
           to="/"
-          className="group relative shrink-0 font-display text-[1.32rem] font-bold leading-[1.05] tracking-[0.03em] text-white"
+          className="group relative shrink-0 font-display text-[1.32rem] max-[359px]:text-[1.15rem] font-bold leading-[1.05] tracking-[0.03em] text-white"
           onClick={() => setOpen(false)}
         >
           Boss <em className="text-foil italic">Clinician</em>
-          <span className="mt-1 block font-body text-[0.52rem] font-bold not-italic uppercase tracking-[0.34em] text-gold/70 transition-colors duration-300 group-hover:text-gold">
+          <span className="mt-1 block font-body text-[0.52rem] font-bold not-italic uppercase tracking-[0.26em] max-[359px]:hidden sm:tracking-[0.34em] text-gold/70 transition-colors duration-300 group-hover:text-gold">
             Lead. Heal. Elevate.
           </span>
         </Link>
@@ -133,7 +133,7 @@ export function Header({ transparentAtTop = false }: HeaderProps) {
           )}
         </nav>
 
-        <div className="flex items-center gap-2 sm:gap-4">
+        <div className="flex items-center gap-1 sm:gap-4">
           <Link to="/cart" aria-label={`Cart (${cartCount} items)`} className="relative inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-gold hover:bg-white/[0.06]">
             <ShoppingCart className="size-5" />
             {cartCount > 0 && <span className="absolute right-0 top-0 rounded-full bg-gold px-1.5 text-xs font-bold text-night-deep">{cartCount}</span>}

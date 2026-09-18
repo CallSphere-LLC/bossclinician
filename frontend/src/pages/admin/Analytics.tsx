@@ -100,7 +100,7 @@ export default function Analytics() {
         actions={<Badge tone="plum">Charts show the last 30 days</Badge>}
       />
 
-      <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
         <Kpi
           label="Money coming in"
           hint="Everything people have paid you"
@@ -165,7 +165,7 @@ export default function Analytics() {
         </div>
       </Card>
 
-      <div className="grid gap-5 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         <Card>
           <CardHeader
             title="Where your enquiries are up to"
