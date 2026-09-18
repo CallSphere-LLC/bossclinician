@@ -325,6 +325,7 @@ export const adminApi = {
   leadsList: () => request<Lead[]>("/admin/leads"),
   leadUpdate: (id: string, status: string) =>
     request<Lead>(`/admin/leads/${id}`, { method: "PUT", body: JSON.stringify({ status }) }),
+  leadDelete: (id: string | number) => request<void>(`/admin/leads/${id}`, { method: "DELETE" }),
 
   subscribersList: () => request<Subscriber[]>("/admin/subscribers"),
 

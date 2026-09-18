@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Inbox, Mail, Phone } from "lucide-react";
+import { Inbox, Mail, Phone, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { adminApi } from "@/lib/api";
 import type { Lead } from "@/types";
@@ -21,7 +21,7 @@ import {
 } from "@/pages/admin/ui/primitives";
 import { friendlyError, humaniseKey } from "@/pages/admin/ui/friendly";
 import { DataTable } from "@/pages/admin/ui/DataTable";
-import { Modal } from "@/pages/admin/ui/Dialog";
+import { Modal, useConfirm } from "@/pages/admin/ui/Dialog";
 
 const STATUSES = ["new", "contacted", "qualified", "closed", "archived"];
 
@@ -175,6 +175,30 @@ export default function Leads() {
     [load],
   );
 
+  const [confirm, confirmDialog] = useConfirm();
+
+  const removeLead = useCallback(
+    async (lead: Lead) => {
+      const ok = await confirm({
+        title: `Delete the enquiry from ${lead.name || lead.email || "this person"}?`,
+        description:
+          "This removes the message from your enquiries for good. The person stays in your contacts, with their tags and anything they have bought.",
+        confirmLabel: "Yes, delete it",
+        destructive: true,
+      });
+      if (!ok) return;
+      try {
+        await adminApi.leadDelete(lead.id);
+        setLeads((prev) => prev?.filter((l) => l.id !== lead.id) ?? prev);
+        toast.success("Enquiry deleted");
+      } catch (err) {
+        toast.error(friendlyError(err, "enquiry"));
+        load();
+      }
+    },
+    [confirm, load],
+  );
+
   const counts = useMemo(() => {
     const map = new Map<string, number>();
     for (const lead of leads ?? []) map.set(lead.status, (map.get(lead.status) ?? 0) + 1);
@@ -258,8 +282,28 @@ export default function Leads() {
           </select>
         ),
       },
+      {
+        id: "remove",
+        header: () => <span className="sr-only">Delete</span>,
+        enableSorting: false,
+        cell: ({ row }) => (
+          <button
+            type="button"
+            onClick={(e) => {
+              // The row opens the enquiry; this must not.
+              e.stopPropagation();
+              void removeLead(row.original);
+            }}
+            aria-label={`Delete the enquiry from ${row.original.name || row.original.email}`}
+            title="Delete this enquiry"
+            className="inline-flex size-11 items-center justify-center rounded-lg text-ink-soft transition-colors duration-150 hover:bg-red-500/10 hover:text-red-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold"
+          >
+            <Trash2 aria-hidden className="size-4" />
+          </button>
+        ),
+      },
     ],
-    [changeStatus, sourceNames],
+    [changeStatus, removeLead, sourceNames],
   );
 
   return (
@@ -391,6 +435,7 @@ export default function Leads() {
           </div>
         )}
       </Modal>
+      {confirmDialog}
     </div>
   );
 }
