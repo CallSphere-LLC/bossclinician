@@ -37,10 +37,13 @@ const SPACE: Record<Space, string> = {
   // what a laptop actually gets, and lg-into-xl there was a 176px void before
   // any decoration. The desktop tier keeps its air; the middle tier does not
   // need desktop gutters.
-  sm: "py-8 sm:py-10 lg:py-14 short:py-8",
-  md: "py-10 sm:py-12 lg:py-16 short:py-10",
-  lg: "py-12 sm:py-12 lg:py-20 short:py-12",
-  xl: "py-12 sm:py-14 lg:py-24 short:py-14",
+  // The generous tier starts at 2xl. A 1024-1535px window is as often a big
+  // screen zoomed in or snapped to half as it is a small laptop, and 80px +
+  // 96px between every pair of sections read there as the page having stalled.
+  sm: "py-8 sm:py-10 lg:py-12 2xl:py-14 short:py-8",
+  md: "py-10 sm:py-12 lg:py-14 2xl:py-16 short:py-10",
+  lg: "py-12 sm:py-12 lg:py-16 2xl:py-20 short:py-12",
+  xl: "py-12 sm:py-14 lg:py-16 xl:py-20 2xl:py-24 short:py-14",
 };
 
 interface SectionProps {

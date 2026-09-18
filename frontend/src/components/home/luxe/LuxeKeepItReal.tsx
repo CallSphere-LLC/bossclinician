@@ -68,7 +68,7 @@ export function LuxeKeepItReal() {
         whileInView={{ opacity: 1, scaleY: 1 }}
         viewport={VIEWPORT}
         transition={{ duration: 1.1, ease: EASE_LUXE }}
-        className="mx-auto mb-10 hidden h-16 w-px origin-top bg-gradient-to-b from-transparent to-white/25 lg:block"
+        className="mx-auto mb-8 hidden h-12 w-px origin-top bg-gradient-to-b from-transparent to-white/25 2xl:block"
       />
 
       <motion.span {...rise(reduce, 0.08)} className="eyebrow-luxe">
@@ -136,7 +136,7 @@ export function LuxeKeepItReal() {
         whileInView={{ opacity: 1, scaleY: 1 }}
         viewport={VIEWPORT}
         transition={{ duration: 1.1, delay: reduce ? 0 : 0.75, ease: EASE_LUXE }}
-        className="mx-auto mt-10 hidden h-14 w-px origin-top bg-gradient-to-b from-white/20 to-transparent lg:block"
+        className="mx-auto mt-8 hidden h-12 w-px origin-top bg-gradient-to-b from-white/20 to-transparent 2xl:block"
       />
     </Section>
   );

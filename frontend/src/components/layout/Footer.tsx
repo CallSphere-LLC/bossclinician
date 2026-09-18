@@ -27,7 +27,7 @@ export function Footer() {
       <div aria-hidden className="absolute inset-x-0 top-0 h-px bg-rule-gold opacity-40" />
       <Aurora tone="plum" intensity={0.35} />
 
-      <Container className="relative z-[1] grid gap-12 py-14 sm:py-16 lg:gap-14 lg:py-24 lg:grid-cols-[1.5fr_1fr_1fr_1fr]">
+      <Container className="relative z-[1] grid gap-12 py-14 sm:py-16 lg:gap-14 lg:py-16 2xl:py-24 lg:grid-cols-[1.5fr_1fr_1fr_1fr]">
         <div>
           <p className="font-display text-2xl font-bold leading-[1.05] text-white">
             Boss <em className="text-foil italic">Clinician</em>
