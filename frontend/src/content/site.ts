@@ -117,14 +117,9 @@ export const resourcesMenu: NavMenu = {
       description: "A free 2-minute quiz about how your practice is working for you.",
     },
     {
-      label: "Practice Reset Planner",
-      to: "/practice-reset-planner",
-      description: "A free 30-day planner to reset how your practice runs.",
-    },
-    {
       label: "Store",
       to: "/store",
-      description: "Done-with-you consulting services.",
+      description: "Courses, toolkits and templates to buy and use today.",
     },
   ],
 };

@@ -188,21 +188,6 @@ const DESTINATIONS: readonly VoiceDestination[] = [
     surfaces: PUBLIC,
   },
   {
-    key: "practice-reset-planner",
-    path: "/practice-reset-planner",
-    label: "Practice Reset Planner",
-    aliases: [
-      "the planner",
-      "the reset planner",
-      "the thirty day plan",
-      "the free download",
-      "work less earn more",
-    ],
-    narration:
-      "The Practice Reset Planner is a free thirty-day guided plan for working less and earning more, laid out in four phases — audit, reposition, build scalable income, then systems — with instant access once you give an email address.",
-    surfaces: PUBLIC,
-  },
-  {
     key: "blog",
     path: "/blog",
     label: "Blog",
@@ -521,20 +506,6 @@ const TOUR: readonly TourStop[] = [
       {
         focus: "Take the free quiz",
         say: "Six questions, four possible results, and each one ends on a recommendation — so you finish knowing what to do next rather than just how you scored.",
-      },
-    ],
-  },
-  {
-    destination: "practice-reset-planner",
-    purpose: "The free thirty-day planner, the most substantial thing given away here.",
-    beats: [
-      {
-        focus: "The Practice Reset Planner",
-        say: "Thirty days, laid out in phases, to work less and earn more. It is a plan rather than more hustle, which is the distinction the page makes itself.",
-      },
-      {
-        focus: "Get the free planner",
-        say: "Free, with instant access once you give an email address. If you only take one thing from the site, take this.",
       },
     ],
   },
