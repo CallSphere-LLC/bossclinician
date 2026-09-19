@@ -113,6 +113,12 @@ export const club = {
     items: [
       {
         label: "The starter",
+        image: {
+          src: "/images/club/persona-starter.webp",
+          alt: "Illustration representing the Starter, a clinician holding a planner and a gold flag",
+          width: 480,
+          height: 480,
+        },
         title: "Never seen a client of your own",
         paragraphs: [
           "Maybe you haven't seen a private practice client yet. You have the license, the clinical skill, and the pull you cannot shake, and you are ready to stop waiting for the moment you feel ready.",
@@ -122,6 +128,12 @@ export const club = {
       },
       {
         label: "The returner",
+        image: {
+          src: "/images/club/persona-returner.webp",
+          alt: "Illustration representing the Returner, a clinician holding a planner and a tablet with a roadmap",
+          width: 480,
+          height: 480,
+        },
         title: "Tried it before, went back",
         paragraphs: [
           "Maybe the caseload slowed down, the income felt unpredictable, or you ended up going back to an agency or platform because it felt safer..",
@@ -131,6 +143,12 @@ export const club = {
       },
       {
         label: "The independent",
+        image: {
+          src: "/images/club/persona-independent.webp",
+          alt: "Illustration representing the Independent, a clinician with icons for a website, community, and growth floating beside her",
+          width: 480,
+          height: 480,
+        },
         title: "Gigs wearing a practice's name",
         paragraphs: [
           "Maybe your income comes from platforms, referral apps, insurance panels, or a mix of different sources, working hard for income that never feels solid.",
@@ -197,12 +215,24 @@ export const club = {
       {
         label: "CURRENT ENROLLMENT BONUS",
         title: "The Ramp-Up Rate Formula",
+        image: {
+          src: "/images/club/bonus-ramp-up-rate-formula.jpg",
+          alt: "The Ramp-Up Rate Formula shown on a laptop, tablet, and phone",
+          width: 1456,
+          height: 819,
+        },
         body: "Set your rates with more confidence from the beginning. Plug in your numbers and see what your fee actually needs to support across a week, month, and year — so you’re not choosing your rate based on fear, guesswork, or what someone else charges.",
         note: "Included with Club enrollment during the current bonus period.",
       },
       {
         label: "Bonus 1",
         title: "The First 30 Days Success Planner",
+        image: {
+          src: "/images/club/bonus-first-30-days-planner.jpg",
+          alt: "Clinician reading The First 30 Days Success Planner",
+          width: 1456,
+          height: 819,
+        },
         body: "Your first month inside The Club already mapped out. Use the planner to stay focused on the right milestones, track your progress, and know what to work on next as you begin building your practice.",
         note: "Designed to help you implement — not just consume more information.",
       },
@@ -219,11 +249,23 @@ export const club = {
         quote:
           "Yvette helped me launch my private practice while I was still working my full-time job and within a few weeks I was already seeing clients and bringing in consistent extra income. That income gave me the confidence to leave my 9 to 5 and go full time in my own practice",
         name: "Kristan L, LCSW",
+        image: {
+          src: "/images/club/testimonial-kristan-l.webp",
+          alt: "Kristan L, LCSW",
+          width: 480,
+          height: 480,
+        },
       },
       {
         quote:
           "Working with Yvette was an invaluable experience. Her guidance gave me the clarity, confidence, and direction I needed to establish my private practice. I had a vision but needed support in bringing it to life. Yvette provided the information, insight, and encouragement that helped me take the leap and officially create North Star Wellness LLC.",
         name: "Christina Mason, LCSW, CADC",
+        image: {
+          src: "/images/club/testimonial-christina-mason.webp",
+          alt: "Christina Mason, LCSW, CADC",
+          width: 480,
+          height: 480,
+        },
       },
     ],
     /** Sits on its own under the pricing, as it does on the source page. */
@@ -231,18 +273,21 @@ export const club = {
       quote:
         "Yvette is truly a person who has a desire to guide, teach and mentor others into their profession. supportive, and patient, and knowledgeable about the ins and outs of the counseling business. Yvette always encouraged me to have faith, confidence in my abilities. I'm now 100% in control of my business and she still will assist me with minor questions as it pertains to the business as well as there for emotional support and has a smile for you.",
       name: "Sharon S LPC",
+      image: {
+        src: "/images/club/testimonial-sharon-s.webp",
+        alt: "Sharon S LPC",
+        width: 480,
+        height: 480,
+      },
     },
   },
 
   pace: {
     eyebrow: "Your Pace, Your Practice",
     title: "How Much Time Can You Give Your Practice Each Week?",
-    body: "You don't need endless free time to make progress inside The Club.",
-    exampleLabel: "3 hours a week",
-    exampleResultLabel: "Your Estimated Curriculum Pace",
-    exampleResult: "About 7.5 Weeks",
-    exampleBody:
-      "At this pace, you could work through the core Boss Move curriculum in approximately 7.5 weeks.",
+    body: "You don't need endless free time to make progress inside The Club. Use the calculator below to estimate how quickly you could work through the core Boss Move curriculum based on your weekly implementation time.",
+    sliderPrompt: "How many focused hours can you dedicate each week?",
+    resultLabel: "Your Estimated Curriculum Pace",
     paragraphs: [
       "But there's no prize for finishing fast.",
       "Your Club experience lasts six full months so you have time to implement, get coached, troubleshoot, and actually build.",

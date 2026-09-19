@@ -7,19 +7,20 @@ import {
   ProgramFaq,
   Prose,
   Pull,
-  QuoteCard,
   accentAt,
   rise,
 } from "@/components/home/luxe/ProgramSections";
-import { GlassCard } from "@/components/luxe/GlassCard";
+import { GlassCard, type Accent } from "@/components/luxe/GlassCard";
 import { LuxeButton, LuxePill } from "@/components/luxe/LuxeButton";
 import { LuxePageHero } from "@/components/luxe/LuxePageHero";
+import { PaceCalculator } from "@/components/luxe/PaceCalculator";
 import { GoldRule, Section, SectionTitle } from "@/components/luxe/Section";
 import { TestimonialVideo } from "@/components/luxe/TestimonialVideo";
 import { VideoBand } from "@/components/luxe/VideoBand";
 import { RevealGroup, RevealItem } from "@/components/ui/Reveal";
 import { CLUB_JOIN_ROUTE, club } from "@/content/club";
 import { useEntranceMotion } from "@/hooks/useEntranceMotion";
+import { cn } from "@/lib/cn";
 import { ORGANIZATION_ID, absoluteUrl, faqPageNode } from "@/seo/schema";
 import type { JsonLdNode } from "@/seo/types";
 import { useHeadContext } from "@/ssr/context";
@@ -40,13 +41,89 @@ const PORTRAIT = "/images/758479b0818b.png";
 const JOIN_ANCHOR = "#join";
 
 /**
+ * The source page's own pictures, self-hosted (the CSP allows images from
+ * 'self' only) and placed in the sections she shows them in. Pictures that
+ * belong to a list item (personas, bonuses, testimonials) sit beside that
+ * item's copy in content/club.ts. `width`/`height` are the files' intrinsic
+ * sizes, so nothing shifts while they load.
+ */
+interface Picture {
+  src: string;
+  alt: string;
+  width: number;
+  height: number;
+}
+
+const TAUGHT_PHOTO: Picture = {
+  src: "/images/club/yvette-female-owned-business.webp",
+  alt: "Yvette Howard smiling, in a T-shirt that reads “Minding my female owned business”",
+  width: 514,
+  height: 634,
+};
+const WARNING_PHOTO: Picture = {
+  src: "/images/club/overwhelmed-clinician-at-desk.jpg",
+  alt: "A clinician at her desk, head in hand, worn out in front of a laptop",
+  width: 1200,
+  height: 1200,
+};
+const ENTER_PHOTO: Picture = {
+  src: "/images/club/clinicians-in-conversation.jpg",
+  alt: "A group of women talking and laughing together over coffee and notebooks",
+  width: 1672,
+  height: 940,
+};
+const PROGRAM_MOCKUP: Picture = {
+  src: "/images/club/club-program-mockup.jpg",
+  alt: "The Club shown on desktop, laptop, tablet and phone screens: lessons, worksheets and a live coaching call",
+  width: 1920,
+  height: 1080,
+};
+const NEXT_MOVE_PHOTO: Picture = {
+  src: "/images/club/yvette-beach-sunrise.jpg",
+  alt: "Yvette on a beach at sunrise, arms raised in a heart shape toward the sun",
+  width: 816,
+  height: 1440,
+};
+/** The portrait her letter runs under on the source page. */
+const FOUNDER_PHOTO = "/images/5f84052ec83a.jpg";
+
+/**
+ * A photograph mounted the way FounderLetter mounts its portrait: a glass
+ * card with a thin mat. `imgClassName` carries the crop (aspect + position).
+ */
+function Framed({
+  picture,
+  className,
+  imgClassName,
+}: {
+  picture: Picture;
+  className?: string;
+  imgClassName?: string;
+}) {
+  return (
+    <GlassCard interactive={false} spotlight={false} className={cn("overflow-hidden p-2", className)}>
+      <img
+        src={picture.src}
+        alt={picture.alt}
+        width={picture.width}
+        height={picture.height}
+        loading="lazy"
+        decoding="async"
+        className={cn("h-auto w-full max-w-full rounded-xl object-cover", imgClassName)}
+      />
+    </GlassCard>
+  );
+}
+
+/**
  * The source page's two films, self-hosted (the CSP allows media from 'self'
  * only). Filenames are versioned because nothing under public/ is hashed.
  */
 const INTRO_FILM = {
-  src720: "/videos/club-intro-bg-v1-720.mp4",
-  src540: "/videos/club-intro-bg-v1-540.mp4",
-  poster: "/videos/club-intro-bg-v1-poster.jpg",
+  src1080: "/videos/club-intro-bg-v2-1080.mp4",
+  src720: "/videos/club-intro-bg-v2-720.mp4",
+  src540: "/videos/club-intro-bg-v2-540.mp4",
+  poster: "/videos/club-intro-bg-v2-poster.jpg",
 };
 const STORY_FILM = {
   src720: "/videos/club-mike-testimonial-v1-720.mp4",
@@ -147,8 +224,8 @@ export default function Club() {
         paragraphs={club.founder.paragraphs}
         signoff={club.founder.signoff}
         signature={club.founder.signature}
-        image={PORTRAIT}
-        imageAlt="Yvette Howard, LCSW"
+        image={FOUNDER_PHOTO}
+        imageAlt="Yvette Howard, LCSW, holding a mug that reads “business coach”"
       />
       <ProgramFaq title={club.faq.title} items={club.faq.items}>
         <Cta label={club.faq.cta} to={JOIN_ANCHOR} />
@@ -178,9 +255,16 @@ function TaughtSection() {
   return (
     <Section surface="base" space="lg" aurora="plum" auroraIntensity={0.45} aria-label={club.taught.title}>
       <SectionTitle title={club.taught.title} className="max-w-3xl" />
-      <motion.div {...rise(reduce, 0.1)} className="mx-auto mt-7 sm:mt-8 max-w-2xl">
-        <Prose paragraphs={club.taught.paragraphs} align="center" />
-      </motion.div>
+      {/* Her portrait beside the argument, as the source sets it; stacked on
+          top of it below lg. */}
+      <div className="mx-auto mt-7 grid max-w-5xl items-center gap-8 sm:mt-8 lg:grid-cols-[0.8fr_1.2fr] lg:gap-14">
+        <motion.div {...rise(reduce)} className="mx-auto w-full max-w-xs lg:max-w-sm">
+          <Framed picture={TAUGHT_PHOTO} imgClassName="aspect-[4/5] object-top" />
+        </motion.div>
+        <motion.div {...rise(reduce, 0.1)} className="mx-auto max-w-2xl">
+          <Prose paragraphs={club.taught.paragraphs} align="center" className="lg:text-left" />
+        </motion.div>
+      </div>
       <Pull className="mt-8 sm:mt-10">{club.taught.closing}</Pull>
     </Section>
   );
@@ -257,13 +341,19 @@ function WarningSection() {
   const reduce = useEntranceMotion();
 
   return (
-    <Section surface="base" space="lg" aria-label={club.warning.title} containerClassName="max-w-3xl">
+    <Section surface="base" space="lg" aria-label={club.warning.title} containerClassName="max-w-5xl">
       <SectionTitle title={club.warning.title} />
-      <motion.div {...rise(reduce, 0.1)} className="mt-7 sm:mt-8">
-        <Prose paragraphs={club.warning.paragraphs} />
-      </motion.div>
+      {/* The source floats this photograph to the right of the copy. */}
+      <div className="mt-7 grid items-center gap-8 sm:mt-8 lg:grid-cols-[1.25fr_0.75fr] lg:gap-14">
+        <motion.div {...rise(reduce)} className="mx-auto w-full max-w-xs lg:order-last lg:max-w-none">
+          <Framed picture={WARNING_PHOTO} imgClassName="aspect-square" />
+        </motion.div>
+        <motion.div {...rise(reduce, 0.1)} className="mx-auto w-full max-w-3xl">
+          <Prose paragraphs={club.warning.paragraphs} />
+        </motion.div>
+      </div>
 
-      <motion.div {...rise(reduce, 0.15)} className="mt-8 sm:mt-10">
+      <motion.div {...rise(reduce, 0.15)} className="mx-auto mt-8 max-w-3xl sm:mt-10">
         <GlassCard accent="gold" interactive={false} className="p-7 text-center sm:p-10">
           <h3 className="text-balance font-display text-[1.4rem] font-medium leading-[1.3] text-white sm:text-[1.7rem]">
             {club.warning.meetsYou}
@@ -293,9 +383,18 @@ function PersonasSection() {
         {club.personas.items.map((persona, i) => (
           <RevealItem key={persona.label} as="li" className="h-full">
             <GlassCard as="article" accent={accentAt(i)} className="flex h-full flex-col p-7 sm:p-8">
-              <LuxePill accent={accentAt(i)} className="self-start">
-                {persona.label}
-              </LuxePill>
+              <div className="flex items-center gap-4">
+                <img
+                  src={persona.image.src}
+                  alt={persona.image.alt}
+                  width={persona.image.width}
+                  height={persona.image.height}
+                  loading="lazy"
+                  decoding="async"
+                  className="h-20 w-20 shrink-0 rounded-full object-cover ring-1 ring-gold/30 sm:h-24 sm:w-24"
+                />
+                <LuxePill accent={accentAt(i)}>{persona.label}</LuxePill>
+              </div>
               <h3 className="mt-5 text-balance font-display text-[1.35rem] font-medium leading-[1.25] text-white">
                 {persona.title}
               </h3>
@@ -327,6 +426,12 @@ function EnterSection() {
       containerClassName="max-w-3xl"
     >
       <SectionTitle eyebrow={club.enter.eyebrow} title={club.enter.title} />
+      {/* The source runs this photograph behind the copy under a plum wash.
+          Here it is framed instead: type over a photograph cannot hold AA
+          contrast in both themes. */}
+      <motion.div {...rise(reduce)} className="mt-7 sm:mt-8">
+        <Framed picture={ENTER_PHOTO} imgClassName="aspect-[16/9]" />
+      </motion.div>
       <motion.div {...rise(reduce, 0.1)} className="mt-7 sm:mt-8">
         <Prose paragraphs={club.enter.paragraphs} />
       </motion.div>
@@ -345,6 +450,10 @@ function PillarsSection() {
         title={club.pillars.title}
         body={club.pillars.body}
       />
+
+      {/* The source's product shot. A band of its own there; here it leads
+          the section it illustrates. */}
+      <Framed picture={PROGRAM_MOCKUP} className="mx-auto mt-8 max-w-3xl sm:mt-10" imgClassName="aspect-[16/9]" />
 
       {/* Five items: the first spans the row so the remaining four sit 2 × 2
           instead of leaving an orphan under a 3-up grid. */}
@@ -389,6 +498,15 @@ function BonusesSection() {
         {club.bonuses.items.map((bonus, i) => (
           <RevealItem key={bonus.title} as="li" className="h-full">
             <GlassCard as="article" accent={i === 0 ? "gold" : "plum"} className="flex h-full flex-col p-7 sm:p-8">
+              <img
+                src={bonus.image.src}
+                alt={bonus.image.alt}
+                width={bonus.image.width}
+                height={bonus.image.height}
+                loading="lazy"
+                decoding="async"
+                className="mb-6 aspect-[16/9] h-auto w-full max-w-full rounded-xl object-cover"
+              />
               <LuxePill accent={i === 0 ? "gold" : "plum"} className="self-start">
                 {bonus.label}
               </LuxePill>
@@ -422,11 +540,50 @@ function TestimonialsSection() {
       >
         {club.testimonials.items.map((item, i) => (
           <RevealItem key={item.name} as="li" className="h-full">
-            <QuoteCard quote={item.quote} name={item.name} accent={accentAt(i)} />
+            <PhotoQuoteCard quote={item.quote} name={item.name} image={item.image} accent={accentAt(i)} />
           </RevealItem>
         ))}
       </RevealGroup>
     </Section>
+  );
+}
+
+/**
+ * The shared QuoteCard with the clinician's headshot, as the source shows each
+ * of them. Same figure, glyph, rule and caption; the photograph joins the name.
+ */
+function PhotoQuoteCard({
+  quote,
+  name,
+  image,
+  accent = "gold",
+}: {
+  quote: string;
+  name: string;
+  image: Picture;
+  accent?: Accent;
+}) {
+  return (
+    <GlassCard as="figure" accent={accent} interactive={false} className="flex h-full flex-col p-7 sm:p-8">
+      <span aria-hidden className="text-foil font-display text-[3rem] leading-none">
+        &ldquo;
+      </span>
+      <blockquote className="copy-luxe mt-2 flex-1 text-pretty text-[0.95rem] italic">{quote}</blockquote>
+      <GoldRule width="w-10" className="mt-6" />
+      <figcaption className="mt-5 flex items-center gap-4">
+        {/* The name is printed beside it, so the photograph stays silent. */}
+        <img
+          src={image.src}
+          alt=""
+          width={image.width}
+          height={image.height}
+          loading="lazy"
+          decoding="async"
+          className="h-20 w-20 shrink-0 rounded-full object-cover ring-1 ring-gold/30"
+        />
+        <span className="min-w-0 text-[0.72rem] font-semibold uppercase tracking-[0.16em] text-gold">{name}</span>
+      </figcaption>
+    </GlassCard>
   );
 }
 
@@ -439,21 +596,9 @@ function PaceSection() {
     <Section surface="base" space="lg" aria-label={club.pace.title} containerClassName="max-w-3xl">
       <SectionTitle eyebrow={club.pace.eyebrow} title={club.pace.title} body={club.pace.body} />
 
-      {/* The source runs a slider here. Its one worked example is kept as a
-          static figure; the numbers are the page's own. */}
+      {/* The source's slider, with the source's arithmetic — see PaceCalculator. */}
       <motion.div {...rise(reduce, 0.1)} className="mt-7 sm:mt-8">
-        <GlassCard accent="green" interactive={false} className="p-7 text-center sm:p-10">
-          <p className="text-[0.7rem] font-bold uppercase tracking-[0.2em] text-orchid">
-            {club.pace.exampleLabel}
-          </p>
-          <p className="mt-6 text-[0.7rem] font-bold uppercase tracking-[0.2em] text-gold/80">
-            {club.pace.exampleResultLabel}
-          </p>
-          <p className="text-foil mt-3 font-display text-[2.4rem] font-medium leading-none sm:text-[3rem]">
-            {club.pace.exampleResult}
-          </p>
-          <p className="copy-luxe mx-auto mt-6 max-w-lg text-pretty text-sm">{club.pace.exampleBody}</p>
-        </GlassCard>
+        <PaceCalculator prompt={club.pace.sliderPrompt} resultLabel={club.pace.resultLabel} />
         <Prose paragraphs={club.pace.paragraphs} align="center" className="mt-7 sm:mt-8" />
       </motion.div>
 
@@ -534,9 +679,10 @@ function ValueSection() {
       </motion.div>
 
       <motion.div {...rise(reduce, 0.15)} className="mx-auto mt-7 sm:mt-8 max-w-3xl">
-        <QuoteCard
+        <PhotoQuoteCard
           quote={club.testimonials.closing.quote}
           name={club.testimonials.closing.name}
+          image={club.testimonials.closing.image}
           accent="plum"
         />
       </motion.div>
@@ -556,12 +702,20 @@ function NextMoveSection() {
       aurora="violet"
       auroraIntensity={0.6}
       aria-label={club.nextMove.title}
-      containerClassName="max-w-3xl"
+      containerClassName="max-w-5xl"
     >
       <SectionTitle eyebrow={club.nextMove.eyebrow} title={club.nextMove.title} />
-      <motion.div {...rise(reduce, 0.1)} className="mt-7 sm:mt-8">
-        <Prose paragraphs={club.nextMove.paragraphs} align="center" />
-      </motion.div>
+      {/* The source sets its heading over this photograph; framed here for the
+          same contrast reason as the Enter band. The crop keeps both the sun
+          and Yvette inside a 4:5 window of the tall original. */}
+      <div className="mt-7 grid items-center gap-8 sm:mt-8 lg:grid-cols-[0.75fr_1.25fr] lg:gap-14">
+        <motion.div {...rise(reduce)} className="mx-auto w-full max-w-xs lg:max-w-none">
+          <Framed picture={NEXT_MOVE_PHOTO} imgClassName="aspect-[4/5] object-[center_70%]" />
+        </motion.div>
+        <motion.div {...rise(reduce, 0.1)} className="mx-auto w-full max-w-3xl">
+          <Prose paragraphs={club.nextMove.paragraphs} align="center" className="lg:text-left" />
+        </motion.div>
+      </div>
       <Pull className="mt-8 sm:mt-10">{club.nextMove.closing}</Pull>
       <Cta label={club.nextMove.cta} to={JOIN_ANCHOR} className="mt-7 sm:mt-8" />
     </Section>

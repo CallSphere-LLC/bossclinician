@@ -5,12 +5,16 @@ import { cn } from "@/lib/cn";
 
 /** Phones get the 540p file: it is half the bytes and indistinguishable under the veil. */
 const PHONE_QUERY = "(max-width: 767px)";
+/** Wide enough that a 720p frame is being stretched; only then is 1080p worth its bytes. */
+const WIDE_QUERY = "(min-width: 1280px)";
 
 /** `navigator.connection` is not in lib.dom; only the one field read here is declared. */
 type ConnectionNavigator = Navigator & { connection?: { saveData?: boolean } };
 
 interface VideoBandProps {
   /** Desktop source — H.264, no audio track, faststart. */
+  /** Optional sharper file for wide screens. */
+  src1080?: string;
   src720: string;
   /** Phone source, chosen once at mount. */
   src540: string;
@@ -41,6 +45,7 @@ interface VideoBandProps {
  * below stays dark and white type over the footage stays white.
  */
 export function VideoBand({
+  src1080,
   src720,
   src540,
   poster,
@@ -76,7 +81,11 @@ export function VideoBand({
         if (!entry) return;
         setInView(entry.isIntersecting);
         if (entry.isIntersecting) {
-          setSrc((current) => current ?? (window.matchMedia(PHONE_QUERY).matches ? src540 : src720));
+          setSrc((current) => {
+            if (current) return current;
+            if (window.matchMedia(PHONE_QUERY).matches) return src540;
+            return src1080 && window.matchMedia(WIDE_QUERY).matches ? src1080 : src720;
+          });
         }
       },
       // Start fetching a little before the band is on screen, so the first
@@ -85,7 +94,7 @@ export function VideoBand({
     );
     observer.observe(section);
     return () => observer.disconnect();
-  }, [prefersReduced, src540, src720]);
+  }, [prefersReduced, src540, src720, src1080]);
 
   useEffect(() => {
     const video = videoRef.current;
