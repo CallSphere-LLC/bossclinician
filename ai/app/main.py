@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
@@ -20,12 +20,10 @@ from app.models import (
     HealthResponse,
     QualifyRequest,
     QualifyResponse,
-    RealtimeSessionResponse,
 )
 from app.services.blog_service import run_generate_blog
 from app.services.chat_service import run_chat
 from app.services.qualify_service import run_qualify_lead
-from app.services.realtime_service import create_realtime_session
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("bossclinician.ai")
@@ -60,14 +58,3 @@ async def generate_blog(request: BlogRequest) -> BlogResponse:
 async def qualify_lead(request: QualifyRequest) -> QualifyResponse:
     return await run_qualify_lead(request)
 
-
-@app.post("/realtime/session", response_model=RealtimeSessionResponse)
-async def realtime_session() -> RealtimeSessionResponse:
-    """Mint an ephemeral Realtime credential for the browser's voice session."""
-    try:
-        data = await create_realtime_session()
-    except RuntimeError as exc:
-        # 503 rather than 500: the widget treats this as "voice unavailable"
-        # and stays on text chat instead of showing a hard error.
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
-    return RealtimeSessionResponse(**data)

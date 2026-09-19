@@ -10,7 +10,6 @@ import { settingsRouter } from "./settings";
 import { leadsRouter } from "./leads";
 import { subscribeRouter } from "./subscribe";
 import { chatRouter } from "./chat";
-import { realtimeRouter } from "./realtime";
 import { communityLiveStreamRouter } from "./communityLiveStream";
 import { checkoutRouter } from "./checkout";
 import { offersRouter } from "./offers";
@@ -39,7 +38,6 @@ publicRouter.use(settingsRouter);
 publicRouter.use(leadsRouter);
 publicRouter.use(subscribeRouter);
 publicRouter.use(chatRouter);
-publicRouter.use(realtimeRouter);
 // Ticket-authenticated, not open: see the router's own note on why it is here.
 publicRouter.use(communityLiveStreamRouter);
 publicRouter.use(checkoutRouter);

@@ -11,7 +11,6 @@ import dataclasses
 import functools
 import json
 import logging
-import types
 from typing import Any, Iterator
 
 import httpx2
@@ -22,13 +21,13 @@ from openai import AsyncOpenAI
 from app import openai_client
 from app.config import settings
 from app.main import app
-from app.services import blog_service, chat_service, qualify_service, realtime_service
+from app.services import blog_service, chat_service, qualify_service
 
 client = TestClient(app)
 
 GATEWAY = "http://gateway.test/v1"
 # Every module that did `from app.config import settings`.
-SETTINGS_MODULES = (openai_client, chat_service, blog_service, qualify_service, realtime_service)
+SETTINGS_MODULES = (openai_client, chat_service, blog_service, qualify_service)
 
 
 class FakeOpenAI:
@@ -188,42 +187,3 @@ def test_api_error_retries_once_then_falls_back(fake_openai: FakeOpenAI) -> None
     assert response.json() == chat_service.FALLBACK_RESPONSE.model_dump()
     assert len(fake_openai.requests) == chat_service.MAX_ATTEMPTS
 
-
-@pytest.fixture
-def fake_realtime(fake_openai: FakeOpenAI, monkeypatch: pytest.MonkeyPatch) -> FakeOpenAI:
-    """Route realtime_service's own httpx2 client to the same FakeOpenAI."""
-    mocked = functools.partial(httpx2.AsyncClient, transport=httpx2.MockTransport(fake_openai.handle))
-    monkeypatch.setattr(
-        realtime_service, "httpx2", types.SimpleNamespace(AsyncClient=mocked, HTTPError=httpx2.HTTPError)
-    )
-    return fake_openai
-
-
-def test_realtime_session_mints_client_secret(fake_realtime: FakeOpenAI) -> None:
-    fake_realtime.respond(json={"value": "ek_test", "expires_at": 1_760_000_060})
-
-    response = client.post("/realtime/session")
-
-    assert response.status_code == 200
-    assert response.json() == {
-        "clientSecret": "ek_test",
-        "expiresAt": 1_760_000_060,
-        "model": settings.realtime_model,
-        "voice": settings.realtime_voice,
-    }
-    [request] = fake_realtime.requests
-    assert str(request.url) == realtime_service.OPENAI_REALTIME_SECRETS_URL
-    assert request.headers["authorization"] == "Bearer sk-test"
-    session = json.loads(request.content)["session"]
-    assert session["type"] == "realtime"
-    assert session["model"] == settings.realtime_model
-    assert [tool["name"] for tool in session["tools"]] == ["navigate_to_page", "list_site_pages"]
-
-
-def test_realtime_session_rejection_is_503(fake_realtime: FakeOpenAI) -> None:
-    fake_realtime.respond(403, text="model not available to this key")
-
-    response = client.post("/realtime/session")
-
-    assert response.status_code == 503
-    assert "(403): model not available to this key" in response.json()["detail"]

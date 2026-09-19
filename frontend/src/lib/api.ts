@@ -217,16 +217,6 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ sessionId, message }),
     }),
-  /**
-   * Voice lines, posted a turn at a time. Speech never reaches our server on
-   * its own — see hooks/useVoiceAgent — so this is what puts a spoken
-   * conversation in the same inbox as a typed one.
-   */
-  chatTranscript: (sessionId: string, lines: { role: "user" | "assistant"; content: string }[]) =>
-    request<{ ok: true }>("/chat/transcript", {
-      method: "POST",
-      body: JSON.stringify({ sessionId, lines }),
-    }),
   /** Creates a Stripe Checkout Session; returns the hosted-checkout URL. */
   createCheckoutSession: (slug: string, email?: string) =>
     request<{ url: string }>("/checkout/session", {

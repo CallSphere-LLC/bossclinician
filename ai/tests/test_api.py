@@ -55,8 +55,3 @@ def test_qualify_lead_fallback_shape() -> None:
     assert 0 <= body["score"] <= 100
     assert isinstance(body["summary"], str) and body["summary"]
 
-
-def test_realtime_session_without_key_is_503() -> None:
-    response = client.post("/realtime/session")
-    assert response.status_code == 503
-    assert "OPENAI_API_KEY" in response.json()["detail"]

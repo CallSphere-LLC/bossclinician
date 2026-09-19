@@ -90,11 +90,3 @@ class QualifyModelOutput(BaseModel):
     score: int = Field(ge=0, le=100, description="Fit score for 1:1 Boss Clinician coaching, 0-100.")
     summary: str = Field(description="2-3 sentence rationale for the score, referencing concrete signals from the text.")
 
-
-class RealtimeSessionResponse(BaseModel):
-    """Short-lived credential the browser uses to open its own WebRTC session."""
-
-    clientSecret: str
-    expiresAt: int | None = None
-    model: str
-    voice: str
