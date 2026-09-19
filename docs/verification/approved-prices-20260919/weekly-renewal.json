@@ -1,0 +1,28 @@
+{
+  "orderId": 23,
+  "livemode": false,
+  "firstChargeCents": 2400,
+  "interval": "week",
+  "nextPaymentAfterSeconds": 604800,
+  "installmentCount": 2,
+  "cancelAt": 1791066709,
+  "originalSchedule": [
+    {
+      "sequence": 1,
+      "amount": 2400,
+      "dueAt": "2026-09-19T22:31:52+00:00",
+      "status": "paid"
+    },
+    {
+      "sequence": 2,
+      "amount": 2400,
+      "dueAt": "2026-09-26T22:31:52+00:00",
+      "status": "scheduled"
+    }
+  ],
+  "renewalTest": "Original seven-day schedule verified. Test-clock access was denied. Resetting the test billing anchor produced no invoice; a separate $24 invoice attached to this test subscription exercised the second payment early. No claim of waiting seven real days.",
+  "secondChargeCents": 2400,
+  "totalPaidCents": 4800,
+  "finalPlanStatus": "completed",
+  "installmentsPaid": 2
+}

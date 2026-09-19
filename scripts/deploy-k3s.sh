@@ -45,6 +45,8 @@ sudo -n install -m 644 "$work/source-manifest.json" "/var/lib/bossclinician/rele
 for component in backend frontend ai gateway; do
   docker save "bossclinician-k3-$component:$release" | sudo -n k3s ctr images import -
 done
+# Preserve both the next build and existing hashes before changing any pods.
+sudo -n python3 scripts/retain-browser-assets.py
 # Migrations run at API startup: preserve a consistent database backup first.
 sudo -n install -d -m 700 /var/backups/bossclinician
 backup="/var/backups/bossclinician/pre-k3s-$release.dump"

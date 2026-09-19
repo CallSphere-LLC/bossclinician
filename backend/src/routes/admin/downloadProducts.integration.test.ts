@@ -70,6 +70,12 @@ describeDb("Download products lifecycle (integration)", () => {
     expect(offer.status).toBe(201);
     const offerId = ((await offer.json()) as { id: number }).id;
     await db.client.query(`INSERT INTO offer_products (offer_id,product_id) VALUES ($1,$2)`, [offerId, productId]);
+    const landingCourse = (await db.client.query(`INSERT INTO courses(slug,title,published) VALUES('zz-download-landing','Download landing',true) RETURNING id`)).rows[0].id;
+    await db.client.query(`UPDATE products SET legacy_course_id=$2 WHERE id=$1`, [productId, landingCourse]);
+    const { loadCourseDetail } = await import("../../ssr/loaders");
+    const publicDetail = await (await fetch(`${base}/api/courses/zz-download-landing`)).json() as { offers: { available: boolean }[] };
+    expect(publicDetail.offers[0].available).toBe(true);
+    expect((await loadCourseDetail('zz-download-landing'))?.offers).toEqual(publicDetail.offers);
     const checkout = await call("/api/checkout/offer/zz-download-offer", buyer, "POST", { email, name: "ZZ Download Buyer", acceptedTerms: true });
     expect(checkout.status).toBe(201);
     expect((await db.client.query(`SELECT status FROM access_grants WHERE member_id=$1 AND product_id=$2`, [buyerId, productId])).rows[0].status).toBe("active");
@@ -133,4 +139,31 @@ describeDb("Download products lifecycle (integration)", () => {
     fs.unlinkSync(file);
     await blocked('/api/checkout/offer/zz-empty-offer','POST',{email});
   });
+  it("keeps empty courses readable but blocks purchase until a published lesson exists", async () => {
+    const course = (await db.client.query(`INSERT INTO courses(slug,title,published) VALUES('zz-course-readiness','Readiness Course',true) RETURNING id`)).rows[0].id;
+    const product = (await db.client.query(`INSERT INTO products(slug,title,kind,course_id,status) VALUES('zz-course-ready','Readiness Course','course',$1,'published') RETURNING id`, [course])).rows[0].id;
+    const offer = (await db.client.query(`INSERT INTO offers(slug,title,status,pricing_type,amount_cents) VALUES('zz-course-readiness','Readiness Offer','published','free',0) RETURNING id`)).rows[0].id;
+    await db.client.query(`INSERT INTO offer_products(offer_id,product_id) VALUES($1,$2)`,[offer,product]);
+    const before = (await db.client.query('SELECT count(*)::int AS n FROM orders')).rows[0].n;
+    const detail = await call('/api/courses/zz-course-readiness',buyer);
+    expect(detail.status).toBe(200);
+    expect((await detail.json() as {offers:{available:boolean}[]}).offers[0].available).toBe(false);
+    const { loadCourseDetail } = await import("../../ssr/loaders");
+    const ssr = await loadCourseDetail('zz-course-readiness') as { offers: { available: boolean; unavailableReason: string }[] };
+    expect(ssr.offers[0].available).toBe(false);
+    expect(ssr.offers[0].unavailableReason).toContain('materials');
+    expect((await call('/api/checkout/offer/zz-course-readiness',buyer,'POST',{email})).status).toBe(503);
+    const module = (await db.client.query(`INSERT INTO course_modules(course_id,title) VALUES($1,'Getting started') RETURNING id`,[course])).rows[0].id;
+    await db.client.query(`INSERT INTO course_lessons(module_id,title,slug,body_md,published) VALUES($1,'Welcome','welcome','Original lesson contents',false)`,[module]);
+    expect((await call('/api/offers/zz-course-readiness',buyer)).status).toBe(503);
+    expect((await db.client.query('SELECT count(*)::int AS n FROM orders')).rows[0].n).toBe(before);
+    await db.client.query(`UPDATE course_lessons SET published=true WHERE module_id=$1`,[module]);
+    const readyDetail = await (await fetch(`${base}/api/courses/zz-course-readiness`)).json() as { offers: { available: boolean }[] };
+    expect(readyDetail.offers[0].available).toBe(true);
+    expect((await loadCourseDetail('zz-course-readiness'))?.offers).toEqual(readyDetail.offers);
+    expect((await call('/api/offers/zz-course-readiness',buyer)).status).toBe(200);
+    expect((await call('/api/checkout/offer/zz-course-readiness',buyer,'POST',{email})).status).toBe(201);
+    expect((await call('/api/member/library/zz-course-ready',buyer)).status).toBe(200);
+  });
+
 });

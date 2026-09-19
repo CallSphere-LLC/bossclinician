@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import {
   Award,
@@ -70,22 +70,43 @@ export default function Library() {
     };
   }, []);
 
-  const load = useCallback(async () => {
-    try {
-      setData(await libraryApi.getLibrary());
-      setError("");
-    } catch (err) {
-      setError(
-        err instanceof MemberApiError
-          ? err.message
-          : "We could not open your library just now. Please try again.",
-      );
-    }
-  }, []);
-
   useEffect(() => {
+    let cancelled = false;
+    let latestRequest = 0;
+
+    async function load() {
+      const request = ++latestRequest;
+      try {
+        const library = await libraryApi.getLibrary();
+        if (cancelled || request !== latestRequest) return;
+        setData(library);
+        setError("");
+      } catch (err) {
+        if (cancelled || request !== latestRequest) return;
+        setError(
+          err instanceof MemberApiError
+            ? err.message
+            : "We could not open your library just now. Please try again.",
+        );
+      }
+    }
+
+    // Access can be granted or revoked while this page is open in another tab.
+    // Re-read when the member returns so the shelf reflects those changes.
+    const refreshVisible = () => {
+      if (document.visibilityState === "visible") void load();
+    };
     void load();
-  }, [load]);
+    window.addEventListener("focus", refreshVisible);
+    window.addEventListener("pageshow", refreshVisible);
+    document.addEventListener("visibilitychange", refreshVisible);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("focus", refreshVisible);
+      window.removeEventListener("pageshow", refreshVisible);
+      document.removeEventListener("visibilitychange", refreshVisible);
+    };
+  }, []);
 
   const empty = data !== null && data.total === 0;
 

@@ -1,0 +1,21 @@
+{
+  "initialScripts": [
+    "https://bossclinician.callsphere.site/theme-init.js",
+    "https://bossclinician.callsphere.site/assets/index-Diuqn3Ku.js"
+  ],
+  "completedAt": "2026-09-19T22:43:03.545Z",
+  "eventResponses": [
+    {
+      "url": "https://bossclinician.callsphere.site/assets/Events-xUYaIMF1.js",
+      "status": 200
+    }
+  ],
+  "errors": [],
+  "heading": "Your events",
+  "sameDocument": true,
+  "currentReleaseScripts": [
+    "/theme-init.js",
+    "/assets/index-BFuhoBVq.js"
+  ],
+  "release": "20260919-sheet-bugs-2240"
+}

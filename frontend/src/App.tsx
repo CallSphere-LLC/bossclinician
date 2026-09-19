@@ -3,6 +3,7 @@ import { AdminOriginBoundary } from "@/components/admin/AdminOriginBoundary";
 import { lazy, Suspense } from "react";
 import { Outlet, Route, Routes } from "react-router";
 import { Layout } from "@/components/layout/Layout";
+import { RouteErrorBoundary } from "@/components/RouteErrorBoundary";
 import { AuthProvider } from "@/hooks/useAuth";
 import { MemberAuthProvider, RequireMember } from "@/hooks/useMember";
 import { lazyRoute, type RouteComponent } from "@/ssr/lazyRoute";
@@ -117,6 +118,7 @@ export const PUBLIC_ROUTES: readonly { path: string; Component: RouteComponent }
 function PublicRoutes() {
   return (
     <Layout>
+      <RouteErrorBoundary>
       <Suspense fallback={<PageFallback />}>
         <Routes>
           {PUBLIC_ROUTES.map(({ path, Component }) => (
@@ -125,6 +127,7 @@ function PublicRoutes() {
           <Route path="*" element={<NotFound />} />
         </Routes>
       </Suspense>
+      </RouteErrorBoundary>
     </Layout>
   );
 }
@@ -254,6 +257,7 @@ export default function App() {
     <AdminOriginBoundary>
     <MemberPreviewBridge>
     <MemberAuthProvider>
+      <RouteErrorBoundary>
       <Routes>
         <Route
           path="/admin/*"
@@ -309,6 +313,7 @@ export default function App() {
 
         <Route path="/*" element={<PublicRoutes />} />
       </Routes>
+      </RouteErrorBoundary>
 
       {/* Outside the route table on purpose. The visitor's concierge has to
           outlive every public navigation it makes, and `Layout` wraps only the
@@ -344,5 +349,5 @@ function MemberFallback() {
 }
 
 function PageFallback() {
-  return <div className="min-h-[40vh]" aria-hidden />;
+  return <div role="status" aria-live="polite" className="flex min-h-[40vh] items-center justify-center px-5 text-orchid">Loading page…</div>;
 }

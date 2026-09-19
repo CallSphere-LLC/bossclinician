@@ -1,6 +1,7 @@
 import { pool } from "../db/pool";
 import { automationIdentity, publishDomainEvent } from "../services/domainEvents";
 import { registerHandler } from "./worker";
+import { sendCommunityMembershipWelcome } from "../services/communityMembershipWelcome";
 
 /**
  * Publishes community posts whose scheduled moment has arrived.
@@ -15,7 +16,7 @@ import { registerHandler } from "./worker";
  * under everything published since — which is the opposite of what scheduling
  * it was for.
  */
-export async function publishScheduledPosts(): Promise<{ published: number }> {
+export async function publishScheduledPosts(): Promise<{ published: number; eventsFailed: number }> {
   const published = await pool.query<{
     id: number;
     channel_id: number;
@@ -46,25 +47,43 @@ export async function publishScheduledPosts(): Promise<{ published: number }> {
    * automation on "posted in the community" runs when the post actually
    * appears. Keyed on the post, so a re-run of this sweeper cannot fire twice
    * — which matters because the UPDATE and this loop are not one transaction.
+   *
+   * And because they are not one transaction, each row is caught on its own.
+   * The UPDATE has already committed by the time this loop starts: a throw
+   * here fails the job, the retry's UPDATE finds nothing still scheduled, and
+   * every post after the failing one loses its automation trigger for good.
+   * The post is out either way — what is at stake is the event, and one row
+   * that cannot raise one must not take the rest of the batch's with it. Same
+   * reasoning as the per-segment catch in contactRollup.
    */
+  let eventsFailed = 0;
   for (const row of published.rows) {
-    const identity = row.member_id === null
-      ? { contactId: null as number | null, email: "", name: row.author_name }
-      : await automationIdentity(row.member_id, "", row.author_name);
-    await publishDomainEvent("community_post_created", {
-      eventKey: `community-post:${row.id}`,
-      contactId: identity.contactId,
-      email: identity.email,
-      name: identity.name || row.author_name,
-      subjectId: row.community_id,
-      source: `community:${row.community_slug}`,
-      facts: { postId: row.id, channelId: row.channel_id, communityId: row.community_id },
-    });
+    try {
+      const identity = row.member_id === null
+        ? { contactId: null as number | null, email: "", name: row.author_name }
+        : await automationIdentity(row.member_id, "", row.author_name);
+      await publishDomainEvent("community_post_created", {
+        eventKey: `community-post:${row.id}`,
+        contactId: identity.contactId,
+        email: identity.email,
+        name: identity.name || row.author_name,
+        subjectId: row.community_id,
+        source: `community:${row.community_slug}`,
+        facts: { postId: row.id, channelId: row.channel_id, communityId: row.community_id },
+      });
+    } catch (err) {
+      eventsFailed += 1;
+      console.error(
+        `[jobs] community.publishScheduled: post ${row.id} is published but its event failed:`,
+        err instanceof Error ? err.message : err,
+      );
+    }
   }
 
-  return { published: published.rowCount ?? 0 };
+  return { published: published.rowCount ?? 0, eventsFailed };
 }
 
 export function registerCommunityJobs(): void {
   registerHandler("community.publishScheduled", () => publishScheduledPosts());
+  registerHandler("community.membershipWelcome", (payload) => sendCommunityMembershipWelcome(payload));
 }

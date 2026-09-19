@@ -1,0 +1,107 @@
+[
+  {
+    "slug": "directory-makeover-audit",
+    "offers": [],
+    "lessons": 1
+  },
+  {
+    "slug": "fully-booked-toolkit",
+    "offers": [
+      [
+        6700,
+        true
+      ]
+    ],
+    "lessons": 0
+  },
+  {
+    "slug": "credentialing-success-formula",
+    "offers": [
+      [
+        1700,
+        false
+      ]
+    ],
+    "lessons": 0
+  },
+  {
+    "slug": "credential-with-confidence",
+    "offers": [],
+    "lessons": 2
+  },
+  {
+    "slug": "private-practice-starter-suite",
+    "offers": [
+      [
+        2700,
+        false
+      ]
+    ],
+    "lessons": 0
+  },
+  {
+    "slug": "ramp-up-rate-formula",
+    "offers": [
+      [
+        9700,
+        false
+      ]
+    ],
+    "lessons": 0
+  },
+  {
+    "slug": "provider-partnership-guide",
+    "offers": [
+      [
+        9700,
+        false
+      ]
+    ],
+    "lessons": 0
+  },
+  {
+    "slug": "private-practice-protection-pack",
+    "offers": [
+      [
+        9700,
+        false
+      ]
+    ],
+    "lessons": 0
+  },
+  {
+    "slug": "marketing-mastery-for-therapists",
+    "offers": [],
+    "lessons": 0
+  },
+  {
+    "slug": "therapist-niche-clarity-accelerator",
+    "offers": [],
+    "lessons": 0
+  },
+  {
+    "slug": "rate-negotiation-letter-template",
+    "offers": [],
+    "lessons": 0
+  },
+  {
+    "slug": "prepare-to-profit-journal",
+    "offers": [],
+    "lessons": 0
+  },
+  {
+    "slug": "client-consultation-call-script",
+    "offers": [],
+    "lessons": 0
+  },
+  {
+    "slug": "from-profile-to-profit",
+    "offers": [
+      [
+        9700,
+        true
+      ]
+    ],
+    "lessons": 0
+  }
+]

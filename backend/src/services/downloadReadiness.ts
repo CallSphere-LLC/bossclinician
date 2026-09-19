@@ -11,6 +11,18 @@ type DB = Pick<PoolClient, "query">;
  * or contact for a purchase whose deliverable is missing. */
 export async function assertProductsDeliverable(productIds: number[], db: DB = pool): Promise<void> {
   if (!productIds.length) return;
+  const courses = await db.query<{ title: string }>(
+    `WITH RECURSIVE included(id) AS (
+       SELECT unnest($1::int[])
+       UNION SELECT bi.product_id FROM product_bundle_items bi JOIN included i ON i.id=bi.bundle_product_id
+     ) SELECT p.title FROM included i JOIN products p ON p.id=i.id
+       WHERE p.kind='course' AND NOT EXISTS (
+         SELECT 1 FROM course_modules m JOIN course_lessons l ON l.module_id=m.id
+         WHERE m.course_id=p.course_id AND l.published=true
+           AND (length(trim(l.body_md))>0 OR l.video_url<>'' OR l.audio_url<>'' OR l.attachment_url<>'' OR l.embed_html<>'')
+       )`, [productIds],
+  );
+  if (courses.rows.length) throw serviceUnavailable(`Enrollment for ${courses.rows[0].title} will open when its course materials are ready.`);
   const { rows } = await db.query<{ title: string; paths: string[] }>(
     `WITH RECURSIVE included(id) AS (
        SELECT unnest($1::int[])

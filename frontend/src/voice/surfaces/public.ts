@@ -650,7 +650,7 @@ export const PUBLIC_POLICY: VoiceSurfacePolicy = {
   surface: "public",
   audience: "anonymous",
   agentName: "Boss Clinician AI",
-  voice: "coral",
+  voice: "marin",
   // The shared persona has to come FIRST and verbatim. The browser re-sends
   // these instructions to the live model straight after the handshake, which
   // overwrites whatever the broker set when it minted the session — so a

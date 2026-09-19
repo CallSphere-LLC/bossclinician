@@ -261,6 +261,96 @@ function startCallRecording(pc: RTCPeerConnection, sessionId: string, surface: V
   };
 }
 
+/* =============================== one call's own ============================ */
+
+/**
+ * Everything a single call owns, taken out of the hook's refs in one breath.
+ *
+ * Letting go of a call politely takes time: the recorder's tail slice has to be
+ * uploaded, and the provider's close waits up to fifteen seconds for the final
+ * usage. A teardown that read the hook's refs on the far side of those waits
+ * would be reading whatever is there NOW — and `start` is free again the moment
+ * the teardown begins, so what is there now can easily be the next call's
+ * microphone. Taking the resources first means a teardown can only ever release
+ * the call it was asked to end.
+ */
+type OwnedCall = {
+  sessionId: string | null;
+  session: RealtimeSession | null;
+  recorder: CallRecorder | null;
+  micStream: MediaStream | null;
+  audioElement: HTMLAudioElement | null;
+};
+
+type Held<T> = { current: T };
+
+/** Empties the refs and hands back what was in them. Synchronous on purpose. */
+export function takeOwnedCall(refs: {
+  sessionId: Held<string | null>;
+  session: Held<RealtimeSession | null>;
+  recorder: Held<CallRecorder | null>;
+  micStream: Held<MediaStream | null>;
+  audioElement: Held<HTMLAudioElement | null>;
+}): OwnedCall {
+  const owned: OwnedCall = {
+    sessionId: refs.sessionId.current,
+    session: refs.session.current,
+    recorder: refs.recorder.current,
+    micStream: refs.micStream.current,
+    audioElement: refs.audioElement.current,
+  };
+  refs.sessionId.current = null;
+  refs.session.current = null;
+  refs.recorder.current = null;
+  refs.micStream.current = null;
+  refs.audioElement.current = null;
+  return owned;
+}
+
+/**
+ * Release one call's resources, in the order that preserves the audio.
+ *
+ * `superseded` answers "has another call begun while this was draining?". Only
+ * the audio tap has to ask: it is the page's, not the call's, so detaching it
+ * late would blind the orb and the captions of whoever is talking now. The
+ * microphone and the audio element belong to this call whatever else has
+ * happened, and are released either way.
+ */
+export async function releaseOwnedCall(
+  owned: OwnedCall,
+  surface: VoiceSurface,
+  superseded: () => boolean,
+): Promise<void> {
+  // The recorder first, while the peer connection is still up: stopping the
+  // connection first silences the mix before the tail slice is flushed, and
+  // that tail is the goodbye.
+  if (owned.recorder) await owned.recorder.stop().catch(() => {});
+
+  // `close` waits for the provider's own `session.closed`, which is what
+  // carries the final usage, so the call is billed for what it used.
+  if (owned.session) await owned.session.close().catch(() => {});
+
+  if (owned.sessionId) {
+    await voiceFetch("/voice/end", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessionId: owned.sessionId, reason: "hung up" }),
+      keepalive: true,
+    }, surface).catch((failure) => {
+      console.warn("Voice conversation end could not be saved", failure);
+    });
+  }
+
+  if (!superseded()) detachVoiceAgentAudioTap();
+
+  owned.micStream?.getTracks().forEach((track) => track.stop());
+  const element = owned.audioElement;
+  if (element) {
+    element.pause();
+    element.srcObject = null;
+  }
+}
+
 /* ================================= the hook ================================ */
 
 export function useVoiceSession(input: VoiceSessionInput): VoiceSessionHandle {
@@ -289,58 +379,33 @@ export function useVoiceSession(input: VoiceSessionInput): VoiceSessionHandle {
   const capTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const farewellSentRef = useRef(false);
   const startingRef = useRef(false);
+  const startGeneration = useRef(0);
   const liveRef = useRef(false);
   const hangingUpRef = useRef(false);
   const loggedTurnsRef = useRef<Set<string>>(new Set());
 
   /** Everything the hook owns, released in the order that preserves the audio. */
   const teardown = useCallback(async (): Promise<void> => {
-    const endingSessionId = sessionIdRef.current;
+    const generation = ++startGeneration.current;
+    startingRef.current = false;
+    const owned = takeOwnedCall({
+      sessionId: sessionIdRef,
+      session: sessionRef,
+      recorder: recorderRef,
+      micStream: micStreamRef,
+      audioElement: audioElementRef,
+    });
     // Freeze queued actions immediately; flushing the recorder may take time.
-    sessionRef.current?.beginClose();
+    owned.session?.beginClose();
     if (capTimerRef.current) {
       clearInterval(capTimerRef.current);
       capTimerRef.current = null;
     }
 
-    // The recorder first, while the peer connection is still up: stopping the
-    // connection first silences the mix before the tail slice is flushed, and
-    // that tail is the goodbye.
-    const recorder = recorderRef.current;
-    recorderRef.current = null;
-    if (recorder) await recorder.stop().catch(() => {});
-
-    const session = sessionRef.current;
-    sessionRef.current = null;
-    if (session) {
-      // `close` waits for the provider's own `session.closed`, which is what
-      // carries the final usage, so the call is billed for what it used.
-      await session.close().catch(() => {});
-    }
-
-    if (endingSessionId) {
-      await voiceFetch("/voice/end", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionId: endingSessionId, reason: "hung up" }),
-        keepalive: true,
-      }, inputRef.current.policy.surface).catch((failure) => {
-        console.warn("Voice conversation end could not be saved", failure);
-      });
-    }
-
-    detachVoiceAgentAudioTap();
-
-    micStreamRef.current?.getTracks().forEach((track) => track.stop());
-    micStreamRef.current = null;
-    const element = audioElementRef.current;
-    audioElementRef.current = null;
-    if (element) {
-      element.pause();
-      element.srcObject = null;
-    }
-
-    sessionIdRef.current = null;
+    // Everything below this line is bookkeeping about a call that is already
+    // over, so it is settled now rather than after the waits — a hangup that
+    // left the countdown and the recording notice on screen for the fifteen
+    // seconds a provider close may take would read as a call still running.
     liveRef.current = false;
     recordingRef.current = false;
     loggedTurnsRef.current.clear();
@@ -350,6 +415,12 @@ export function useVoiceSession(input: VoiceSessionInput): VoiceSessionHandle {
     setSessionId(null);
     setActiveSurface(null);
     setRecording(false);
+
+    await releaseOwnedCall(
+      owned,
+      inputRef.current.policy.surface,
+      () => generation !== startGeneration.current,
+    );
   }, []);
 
   const stop = useCallback(async (): Promise<void> => {
@@ -384,6 +455,7 @@ export function useVoiceSession(input: VoiceSessionInput): VoiceSessionHandle {
     // the loser of that race fails the handshake for no visible reason.
     if (startingRef.current || sessionRef.current || hangingUpRef.current) return;
     startingRef.current = true;
+    const generation = ++startGeneration.current;
     const { policy, buildTools } = inputRef.current;
 
     setError(null);
@@ -419,6 +491,10 @@ export function useVoiceSession(input: VoiceSessionInput): VoiceSessionHandle {
       const micStream = await navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
       });
+      if (generation !== startGeneration.current) {
+        micStream.getTracks().forEach((track) => track.stop());
+        return;
+      }
       micStreamRef.current = micStream;
 
       setStatus("connecting");
@@ -426,6 +502,15 @@ export function useVoiceSession(input: VoiceSessionInput): VoiceSessionHandle {
         surface: policy.surface,
         path: `${window.location.pathname}${window.location.search}`,
       });
+      if (generation !== startGeneration.current) {
+        await voiceFetch("/voice/end", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionId: admission.sessionId, reason: "hung up" }),
+          keepalive: true,
+        }, policy.surface).catch(() => undefined);
+        return;
+      }
       sessionIdRef.current = admission.sessionId;
       setSessionId(admission.sessionId);
       // The clock transcript lines are stamped against starts here, with the
@@ -448,6 +533,7 @@ export function useVoiceSession(input: VoiceSessionInput): VoiceSessionHandle {
       const capSeconds = Math.min(policy.maxSessionSeconds, admission.maxSessionSeconds);
 
       const shim = await loadLiveSessionShim();
+      if (generation !== startGeneration.current) return;
       const audioElement = document.createElement("audio");
       audioElement.autoplay = true;
       audioElement.setAttribute("playsinline", "");
@@ -488,6 +574,12 @@ export function useVoiceSession(input: VoiceSessionInput): VoiceSessionHandle {
       });
 
       session.on("error", (sessionError: unknown) => {
+        // Nothing this call says still counts once it has been let go of. Its
+        // audio element's `play()` rejects as that element is released, which
+        // is precisely when a call that replaced it is standing up — and
+        // failing THAT one on this one's last words is how a retry that worked
+        // ends up showing an error nobody caused.
+        if (sessionRef.current !== session) return;
         // The provider emits recoverable errors mid-call — cancellation races,
         // an empty audio commit, a transcription hiccup. While the transport is
         // still connected the conversation is still happening, and tearing down
@@ -500,6 +592,14 @@ export function useVoiceSession(input: VoiceSessionInput): VoiceSessionHandle {
       });
 
       transport.on("connection_change", (next: string) => {
+        // Both halves of this belong to one call, and a call that has been let
+        // go of has no say in either. Its `session.started` can still land —
+        // the provider's close waits up to fifteen seconds on the same data
+        // channel the start arrives on — and its final `disconnected` always
+        // does, as the close completes. By then the refs below are a REPLACEMENT
+        // call's: attaching here would build a tap and a recorder nothing can
+        // stop, and hanging up here would drop the call somebody is on.
+        if (sessionRef.current !== session) return;
         if (next === "connected") {
           const pc = transport.connectionState.peerConnection;
           if (pc) {
@@ -531,6 +631,7 @@ export function useVoiceSession(input: VoiceSessionInput): VoiceSessionHandle {
         backendModel: admission.backendModel,
         voice: admission.voice,
       });
+      if (generation !== startGeneration.current) return;
       liveRef.current = true;
       setStatus("live");
 
@@ -564,9 +665,9 @@ export function useVoiceSession(input: VoiceSessionInput): VoiceSessionHandle {
       // If teardown has already let go of this session, the handshake did not
       // fail — it was cancelled, by a hangup or by the page going away. Saying
       // "error" to someone who pressed stop is a lie about their own action.
-      if (!startedSession || sessionRef.current === startedSession) fail(startError);
+      if (generation === startGeneration.current && (!startedSession || sessionRef.current === startedSession)) fail(startError);
     } finally {
-      startingRef.current = false;
+      if (generation === startGeneration.current) startingRef.current = false;
     }
   }, [fail, hangUp]);
 

@@ -1,0 +1,29 @@
+{
+  "results": [
+    {
+      "slug": "fully-booked-toolkit",
+      "orderId": "17",
+      "success": true
+    },
+    {
+      "slug": "from-profile-to-profit",
+      "decline": "visible error; no success redirect"
+    },
+    {
+      "slug": "from-profile-to-profit",
+      "orderId": "20",
+      "success": true
+    },
+    {
+      "slug": "from-profile-to-profit",
+      "downloads": [
+        {
+          "filename": "from-profile-to-profit.pdf",
+          "bytes": 9590646,
+          "sha256": "7e22fc39b04758b96faf7ccbac419f96a516fc1081952a23e2b44b2f2725a739"
+        }
+      ]
+    }
+  ],
+  "errors": []
+}

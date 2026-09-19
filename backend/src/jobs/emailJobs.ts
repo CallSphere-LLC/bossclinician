@@ -95,13 +95,27 @@ async function automationRunAction(payload: Record<string, unknown>): Promise<un
 const DIGEST_WINDOW_HOURS = 24;
 
 /**
+ * How recently a member must already have been sent a community's digest for
+ * this run to count it as delivered and skip them.
+ *
+ * Deliberately shorter than the 24-hour cadence rather than equal to it. The
+ * schedule fires at a wall-clock minute, so two consecutive runs are 24 hours
+ * apart give or take a few seconds — and a guard of exactly 24 hours would
+ * read yesterday's send as "already sent" whenever yesterday's run started a
+ * moment later than today's, silently costing a day's digest. Twenty hours is
+ * far beyond the queue's whole retry curve (five attempts, backoff capped at an
+ * hour) and the five-minute lease a dead worker's job waits out.
+ */
+const DIGEST_RESEND_GUARD_HOURS = 20;
+
+/**
  * A once-a-day summary of what happened in each community.
  *
  * Sent only to members who have not turned the digest off, and only when there
  * is something to summarise: a daily email that says "nothing happened" teaches
  * people to filter the sender, which then costs the emails that matter.
  */
-async function communityDigest(): Promise<unknown> {
+export async function communityDigest(): Promise<unknown> {
   const communities = await pool.query<{ id: number; name: string; slug: string }>(
     `SELECT id, name, slug FROM communities WHERE published`
   );
@@ -136,8 +150,24 @@ async function communityDigest(): Promise<unknown> {
           AND NOT EXISTS (
             SELECT 1 FROM member_email_preferences p
              WHERE p.member_id = m.id AND p.topic = 'community' AND NOT p.subscribed
+          )
+          -- Anybody this window's digest has already reached. Nothing else in
+          -- this job is idempotent: the send is not transactional, the schedule
+          -- dedupe key only collapses jobs that are still queued, and the queue
+          -- retries a failure up to five times — so a database error partway
+          -- down the list, or a deploy restarting the worker mid-run and
+          -- another reclaiming the lapsed lease, re-sent the same summary to
+          -- everybody already mailed. sendEmail writes this row before it
+          -- hands anything to the provider, so a crash mid-send counts as sent
+          -- rather than as licence to send again.
+          AND NOT EXISTS (
+            SELECT 1 FROM email_messages em
+             WHERE em.member_id = m.id
+               AND em.source_type = 'digest'
+               AND em.source_id = $1
+               AND em.created_at > now() - make_interval(hours => $2)
           )`,
-      [community.id]
+      [community.id, DIGEST_RESEND_GUARD_HOURS]
     );
 
     const lines = posts.rows.map(

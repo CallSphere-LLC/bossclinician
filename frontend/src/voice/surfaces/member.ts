@@ -503,7 +503,7 @@ export const MEMBER_POLICY: VoiceSurfacePolicy = {
   surface: "member",
   audience: "member",
   agentName: "Boss Clinician AI",
-  voice: "coral",
+  voice: "marin",
   // The shared persona first and verbatim — see the note in public.ts: the
   // browser overwrites the server's copy of these instructions the moment the
   // handshake completes, so this is the one that a member actually hears.

@@ -150,7 +150,7 @@ describe.each(POLICIES)("the %s policy", (name, policy) => {
   });
 
   it("speaks in the one voice the app uses", () => {
-    expect(policy.voice).toBe("coral");
+    expect(policy.voice).toBe("marin");
   });
 
   it("caps a call at what the server will allow", () => {

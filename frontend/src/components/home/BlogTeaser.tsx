@@ -36,7 +36,7 @@ export function BlogTeaser() {
               >
                 <div className="aspect-[16/9] overflow-hidden">
                   <img
-                    src={post.coverImage}
+                    src={post.coverImage ?? undefined}
                     alt=""
                     loading="lazy"
                     className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"

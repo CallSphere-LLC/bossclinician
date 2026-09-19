@@ -1,3 +1,4 @@
+import { stripeTestMode } from "@/lib/paymentMode";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router";
 import { motion, useReducedMotion } from "motion/react";
@@ -203,6 +204,10 @@ export default function CheckoutSuccess() {
   const reduce = useReducedMotion();
 
   useEffect(() => {
+    polls.current = 0;
+    setOrder(null);
+    setError(null);
+    setSettling(true);
     const read: (() => Promise<Confirmation>) | null =
       orderToken !== null && Number.isInteger(orderId) && orderId > 0
         ? () =>
@@ -230,10 +235,9 @@ export default function CheckoutSuccess() {
         const result = await load();
         if (cancelled) return;
         setOrder(result);
-        if (result.status === "failed") {
-          setSettling(false);
-          return;
-        }
+        // A successful retry can arrive before its webhook, while the order
+        // still holds the previous card decline. Keep checking within the same
+        // bounded window; only the server's paid status confirms the purchase.
         if (result.status === "paid") {
           setSettling(false);
           // The emails go out just after the order turns paid, so the first
@@ -396,11 +400,11 @@ export default function CheckoutSuccess() {
                   {...rise(reduce, 0.3)}
                   className="copy-luxe mx-auto mt-6 max-w-lg text-pretty [overflow-wrap:anywhere]"
                 >
-                  We charged{" "}
+                  {stripeTestMode() ? "Test payment completed for " : "We charged "}
                   <span className="font-normal text-white">
                     {formatAmount(order.amountCents, order.currency)}
                   </span>
-                  . {[receiptSentence(order), accessSentence(order)].filter(Boolean).join(" ")}
+                  . {stripeTestMode() ? "No real money was charged. Test purchase emails are disabled. Your receipt is available in your account." : [receiptSentence(order), accessSentence(order)].filter(Boolean).join(" ")}
                 </motion.p>
 
                 <motion.div

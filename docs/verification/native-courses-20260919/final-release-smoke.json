@@ -1,0 +1,42 @@
+{
+  "release": "20260919202209-99df2fc",
+  "checks": [
+    {
+      "width": 320,
+      "blog": true,
+      "menuNavigation": true,
+      "nativeCourse": true,
+      "testCheckout": true
+    },
+    {
+      "width": 390,
+      "blog": true,
+      "menuNavigation": true,
+      "nativeCourse": true,
+      "testCheckout": true
+    },
+    {
+      "width": 768,
+      "blog": true,
+      "menuNavigation": true,
+      "nativeCourse": true,
+      "testCheckout": true
+    },
+    {
+      "width": 1440,
+      "blog": true,
+      "menuNavigation": true,
+      "nativeCourse": true,
+      "testCheckout": true
+    },
+    {
+      "width": 1920,
+      "blog": true,
+      "menuNavigation": true,
+      "nativeCourse": true,
+      "testCheckout": true
+    }
+  ],
+  "removedTestSessionStatus": 401,
+  "errors": []
+}

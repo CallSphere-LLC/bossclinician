@@ -3,11 +3,13 @@ export interface BlogCard {
   slug: string;
   title: string;
   excerpt: string;
-  coverImage: string;
+  /** Nullable in the API: `blog_posts.cover_image` has no NOT NULL. */
+  coverImage: string | null;
   tags: string[];
   author: string;
   readMinutes: number;
-  publishedAt: string;
+  /** Nullable in the API: a post can be published with no date set. */
+  publishedAt: string | null;
   /** Absent from the bundled fallback copy, which has no edit history. */
   updatedAt?: string;
 }

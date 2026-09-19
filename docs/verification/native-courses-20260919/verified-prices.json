@@ -1,0 +1,58 @@
+[
+  {
+    "slug": "fully-booked-toolkit",
+    "amountCents": 6700,
+    "currency": "usd",
+    "source": "https://www.bossclinician.com/fullybooked",
+    "verifiedAt": "2026-09-19",
+    "pricingType": "one_time"
+  },
+  {
+    "slug": "credentialing-success-formula",
+    "amountCents": 1700,
+    "currency": "usd",
+    "source": "https://www.bossclinician.com/csfgrouppractices",
+    "verifiedAt": "2026-09-19",
+    "pricingType": "one_time"
+  },
+  {
+    "slug": "private-practice-starter-suite",
+    "amountCents": 2700,
+    "currency": "usd",
+    "source": "https://www.bossclinician.com/startersuitecourse",
+    "verifiedAt": "2026-09-19",
+    "pricingType": "one_time"
+  },
+  {
+    "slug": "ramp-up-rate-formula",
+    "amountCents": 9700,
+    "currency": "usd",
+    "source": "https://www.bossclinician.com/rampedrevenue",
+    "verifiedAt": "2026-09-19",
+    "pricingType": "one_time"
+  },
+  {
+    "slug": "provider-partnership-guide",
+    "amountCents": 9700,
+    "currency": "usd",
+    "source": "https://www.bossclinician.com/Turn-Doctor-Referrals-Into-Ideal-Client",
+    "verifiedAt": "2026-09-19",
+    "pricingType": "one_time"
+  },
+  {
+    "slug": "private-practice-protection-pack",
+    "amountCents": 9700,
+    "currency": "usd",
+    "source": "https://www.bossclinician.com/Practice-Protection-Pack",
+    "verifiedAt": "2026-09-19",
+    "pricingType": "one_time"
+  },
+  {
+    "slug": "from-profile-to-profit",
+    "amountCents": 9700,
+    "currency": "usd",
+    "source": "https://www.bossclinician.com/profiletoprofitguide",
+    "verifiedAt": "2026-09-19",
+    "pricingType": "one_time"
+  }
+]

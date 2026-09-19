@@ -1,0 +1,32 @@
+{
+  "results": [
+    {
+      "slug": "credential-with-confidence",
+      "orderId": "21",
+      "success": true
+    },
+    {
+      "slug": "credential-with-confidence",
+      "libraryAccess": true
+    },
+    {
+      "slug": "client-consultation-call-script",
+      "orderId": "22",
+      "success": true
+    },
+    {
+      "slug": "client-consultation-call-script",
+      "libraryAccess": true
+    },
+    {
+      "slug": "client-consultation-call-script",
+      "orderId": "23",
+      "success": true
+    },
+    {
+      "slug": "client-consultation-call-script",
+      "libraryAccess": true
+    }
+  ],
+  "errors": []
+}

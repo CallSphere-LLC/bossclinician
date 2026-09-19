@@ -20,6 +20,14 @@ import { createTestDatabase, hasTestDatabase, insertMember } from "../testing/db
 
 const sent: Array<{ to: string; subject: string; text: string }> = [];
 
+// These assertions exercise live billing email content. Keep the fake Stripe
+// key and mocked mailer, but explicitly enable live side effects: sandbox billing
+// intentionally suppresses mail (covered separately by stripeSideEffects.test).
+vi.mock("../config/env", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../config/env")>();
+  return { ...actual, stripeTestMode: () => false };
+});
+
 vi.mock("../email/mailer", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../email/mailer")>();
   return {

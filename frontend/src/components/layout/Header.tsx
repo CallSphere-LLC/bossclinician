@@ -9,6 +9,7 @@ import { headerActions, isNavMenu, nav, type NavMenu } from "@/content/site";
 import { cn } from "@/lib/cn";
 import { ShoppingCart } from "lucide-react";
 import { readCart } from "@/lib/cart";
+import { warmPublicRoute } from "@/ssr/preload";
 
 interface HeaderProps {
   /**
@@ -30,6 +31,10 @@ export function Header({ transparentAtTop = false }: HeaderProps) {
   const location = useLocation();
   const prefersReducedMotion = useReducedMotion();
   const [cartCount, setCartCount] = useState(0);
+  useEffect(() => {
+    const menu = nav.find((item) => isNavMenu(item) && item.label === (openMenu ?? mobileSection));
+    if (menu && isNavMenu(menu)) menu.items.forEach((item) => warmPublicRoute(item.to));
+  }, [openMenu, mobileSection]);
   useEffect(() => {
     const refresh = () => setCartCount(readCart().length);
     refresh();
@@ -73,6 +78,14 @@ export function Header({ transparentAtTop = false }: HeaderProps) {
 
   return (
     <header
+      onPointerOver={(event) => {
+        const href = (event.target as Element).closest("a")?.getAttribute("href");
+        if (href?.startsWith("/") && !href.startsWith("//")) warmPublicRoute(href.split(/[?#]/)[0]);
+      }}
+      onFocusCapture={(event) => {
+        const href = (event.target as Element).closest("a")?.getAttribute("href");
+        if (href?.startsWith("/") && !href.startsWith("//")) warmPublicRoute(href.split(/[?#]/)[0]);
+      }}
       className={cn(
         "sticky top-0 z-50 transition-[background-color,box-shadow,backdrop-filter] duration-500 ease-luxe",
         // 0.8 alpha let bright headings ghost through the bar as they scrolled

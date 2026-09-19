@@ -32,6 +32,7 @@ import {
   selectStyles,
   Textarea,
 } from "@/pages/admin/ui/primitives";
+import { saveCsv } from "@/lib/formsApi";
 import { DataTable } from "@/pages/admin/ui/DataTable";
 import { Modal, useConfirm } from "@/pages/admin/ui/Dialog";
 import { friendlyError, orNone, pluralize } from "@/pages/admin/ui/friendly";
@@ -211,6 +212,7 @@ export default function Contacts() {
   const [status, setStatus] = useState<EmailStatus | "all">(
     EMAIL_STATUS_LABEL[requestedStatus as EmailStatus] ? requestedStatus as EmailStatus : "all",
   );
+  const [communityOnly, setCommunityOnly] = useState(searchParams.get("community") === "true");
   const [tagFilter, setTagFilter] = useState(searchParams.get("tag") ?? "");
   const [sort, setSort] = useState<NonNullable<ContactFilters["sort"]>>("recent");
 
@@ -234,13 +236,14 @@ export default function Contacts() {
       q: search.trim() || undefined,
       status: status === "all" ? undefined : status,
       tag: tagFilter || undefined,
+      community: communityOnly || undefined,
       audience,
       optOut,
       engagement,
       sort,
       limit: PAGE_SIZE,
     }),
-    [search, status, tagFilter, sort, audience, optOut, engagement],
+    [search, status, tagFilter, communityOnly, sort, audience, optOut, engagement],
   );
 
   const insightFilterLabel = audience
@@ -391,6 +394,24 @@ export default function Contacts() {
           ),
       },
       {
+        id: "communities",
+        header: "Communities",
+        enableSorting: false,
+        cell: ({ row }) => (row.original.communities ?? []).length === 0 ? (
+          <span className="text-xs text-ink-soft">None yet</span>
+        ) : (
+          <div className="flex min-w-36 flex-wrap gap-1.5">
+            {row.original.communities.map((community) => (
+              <Link key={community.id} to={`/admin/community/${community.communityId}`}>
+                <Badge tone={community.banned || !community.memberActive ? "slate" : "plum"}>
+                  {community.name}{community.banned ? " (banned)" : !community.memberActive ? " (account inactive)" : ""}
+                </Badge>
+              </Link>
+            ))}
+          </div>
+        ),
+      },
+      {
         accessorKey: "lifetimeValueCents",
         header: "Spent with you",
         cell: ({ row }) => (
@@ -449,12 +470,7 @@ export default function Contacts() {
     setBusy(true);
     try {
       const blob = await contactsApi.exportCsv(filters);
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `people-${new Date().toISOString().slice(0, 10)}.csv`;
-      link.click();
-      URL.revokeObjectURL(url);
+      saveCsv(blob, `people-${new Date().toISOString().slice(0, 10)}.csv`);
       toast.success("Your spreadsheet is downloading");
     } catch (err) {
       toast.error(friendlyError(err, "list"));
@@ -467,12 +483,7 @@ export default function Contacts() {
     setBusy(true);
     try {
       const blob = await contactsApi.bulkExport([...selected]);
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `chosen-people-${new Date().toISOString().slice(0, 10)}.csv`;
-      link.click();
-      URL.revokeObjectURL(url);
+      saveCsv(blob, `chosen-people-${new Date().toISOString().slice(0, 10)}.csv`);
       toast.success("Your chosen people are downloading");
     } catch (err) {
       toast.error(friendlyError(err, "list"));
@@ -607,6 +618,22 @@ export default function Contacts() {
               className="h-11 min-w-0 flex-1 sm:max-w-xs"
             />
             <select
+              value={communityOnly ? "community" : "everyone"}
+              onChange={(e) => {
+                const community = e.target.value === "community";
+                setCommunityOnly(community);
+                const next = new URLSearchParams(searchParams);
+                if (community) next.set("community", "true");
+                else next.delete("community");
+                setSearchParams(next, { replace: true });
+              }}
+              aria-label="Filter people by membership"
+              className={cn(selectStyles, "w-auto")}
+            >
+              <option value="everyone">Everyone</option>
+              <option value="community">Community members</option>
+            </select>
+            <select
               value={tagFilter}
               onChange={(e) => setTagFilter(e.target.value)}
               aria-label="Show only people with a tag"
@@ -636,9 +663,9 @@ export default function Contacts() {
         emptyState={
           <EmptyState
             icon={<Users />}
-            title={search || tagFilter || status !== "all" || insightFilterLabel ? "Nobody matches that" : "No people yet"}
+            title={search || tagFilter || communityOnly || status !== "all" || insightFilterLabel ? "Nobody matches that" : "No people yet"}
             description={
-              search || tagFilter || status !== "all" || insightFilterLabel
+              search || tagFilter || communityOnly || status !== "all" || insightFilterLabel
                 ? "Try a shorter search, or clear the filters above."
                 : "People appear here as they enquire, join your list, sign up or buy something."
             }

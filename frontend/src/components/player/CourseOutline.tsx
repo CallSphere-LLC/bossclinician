@@ -1,5 +1,5 @@
 import { Link } from "react-router";
-import { Check, Lock } from "lucide-react";
+import { Check, ChevronRight, Lock } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { lessonPath, type OutlineLesson, type OutlineModule } from "@/lib/libraryApi";
 import { contentTypeIcon, contentTypeLabel, lessonLengthLabel } from "@/components/player/lessonMeta";
@@ -119,7 +119,7 @@ function LessonRow({ lesson, productSlug, active, onNavigate }: LessonRowProps) 
   const inProgress = !lesson.completed && lesson.watchedPercent > 0 && lesson.watchedPercent < 100;
 
   const shell = cn(
-    "relative flex min-h-[2.75rem] w-full items-start gap-3 rounded-xl py-2.5 pl-4 pr-3",
+    "group relative flex min-h-[2.75rem] w-full items-start gap-3 rounded-xl py-2.5 pl-4 pr-3",
     "text-left transition-colors duration-300",
   );
 
@@ -216,6 +216,7 @@ function LessonRow({ lesson, productSlug, active, onNavigate }: LessonRowProps) 
       )}
     >
       {body}
+      <ChevronRight aria-hidden className="mt-0.5 size-4 shrink-0 text-orchid-faint motion-safe:transition-transform motion-safe:duration-150 motion-safe:group-hover:translate-x-0.5 motion-safe:group-focus-visible:translate-x-0.5" />
     </Link>
   );
 }

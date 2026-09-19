@@ -1,0 +1,18 @@
+{
+  "release": "20260919-sheet-merged-2246",
+  "sourceSha256": "de2663b7663288e0ed7fb3d108db86a6d333330f23effabda1f1a3c4546f6cce",
+  "allProductionBugFixesPreserved": true,
+  "productionFiles": [
+    "backend/src/jobs/communityJobs.ts",
+    "backend/src/routes/admin/community.ts",
+    "backend/src/routes/admin/contacts.ts",
+    "backend/src/services/communityMembershipWelcome.ts",
+    "backend/src/db/migrations/072_complete_catalog_prices.sql",
+    "frontend/src/components/player/CourseOutline.tsx",
+    "frontend/src/lib/contactsApi.ts",
+    "frontend/src/pages/admin/Contacts.tsx",
+    "frontend/src/pages/admin/ContactDetail.tsx",
+    "frontend/src/pages/admin/CourseBuilder.tsx",
+    "frontend/src/pages/member/Library.tsx"
+  ]
+}

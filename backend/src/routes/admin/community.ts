@@ -8,10 +8,12 @@ import { badRequest, forbidden, notFound } from "../../utils/httpError";
 import { buildUpdate } from "../../utils/sqlUpdate";
 import { z } from "zod";
 import { partialUpdate } from "../../validation/partialUpdate";
-import { POINT_ACTIONS } from "../../services/communityNotifications";
+import { POINT_ACTIONS, notify } from "../../services/communityNotifications";
+import { enqueue, PRIORITY } from "../../jobs/queue";
 import { recordAdminActionStrict } from "../../services/adminAudit";
 import { HOST_LINK_TTL_SECONDS, createHostLink } from "../../services/hostLinks";
 import { communityEventLocation } from "../../services/communityEventLocation";
+import { mayEnterCommunity } from "../../services/access";
 
 /**
  * Community admin API — mounted at /admin/community.
@@ -1379,20 +1381,85 @@ adminCommunityRouter.get(
 adminCommunityRouter.post(
   "/:id/members",
   asyncHandler(async (req, res) => {
-    const { memberId, role } = req.body as { memberId?: number; role?: string };
-    if (!memberId) throw badRequest("memberId is required");
+    const parsed = z.object({
+      memberId: z.coerce.number().int().positive(),
+      role: z.enum(["member", "moderator", "admin", "host"]).optional(),
+    }).safeParse(req.body);
+    if (!parsed.success) throw badRequest("Choose a valid member and community role.");
+    const { memberId, role } = parsed.data;
 
-    const result = await pool.query(
-      // source 'manual': Yvette putting somebody in a room IS the entitlement.
-      // There is no purchase to point at and none should be required.
-      `INSERT INTO community_memberships (community_id, member_id, role, source)
-       VALUES ($1, $2, $3, 'manual')
-       ON CONFLICT (community_id, member_id) DO UPDATE
-         SET role = EXCLUDED.role, source = 'manual'
-       RETURNING *`,
-      [req.params.id, memberId, role ?? "member"],
-    );
-    res.status(201).json(rowToCamel(result.rows[0]));
+    /*
+     * Is the room already open to them? Asked before the transaction so the
+     * read never holds a second pool connection inside one.
+     *
+     * It decides one thing: whether an existing membership's `source` is taken
+     * over as 'manual'. services/access.ts reads 'manual' as an entitlement in
+     * its own right and deliberately does not read 'purchase' — so promoting a
+     * membership that is already working outlives the thing paying for it. A
+     * plan membership survives the cancellation its `subscription_id` exists to
+     * enforce, and a bought one survives the refund that revokes its grant,
+     * which is the exact bug access.ts says must never come back. The "Add
+     * someone" list is not filtered to people who are missing, so picking a
+     * current member is a click anybody can make.
+     *
+     * When the door is already shut, the takeover IS what the click means, and
+     * it still happens.
+     */
+    const communityId = Number(req.params.id);
+    const alreadyIn =
+      Number.isInteger(communityId) && communityId > 0
+        ? await mayEnterCommunity(memberId, communityId)
+        : false;
+
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const community = await client.query<{ name: string; slug: string }>(
+        "SELECT name, slug FROM communities WHERE id=$1", [req.params.id],
+      );
+      if (!community.rows[0]) throw notFound("Community not found");
+      const member = await client.query("SELECT id FROM members WHERE id=$1", [memberId]);
+      if (!member.rows[0]) throw notFound("Member not found");
+      // The unique membership constraint also serializes concurrent duplicate adds.
+      const inserted = await client.query(
+        `INSERT INTO community_memberships (community_id, member_id, role, source)
+         VALUES ($1, $2, $3, 'manual') ON CONFLICT (community_id, member_id) DO NOTHING RETURNING *`,
+        [req.params.id, memberId, role ?? "member"],
+      );
+      let membership = inserted.rows[0];
+      if (membership) {
+        await notify({
+          memberId, kind: "community_membership_added",
+          title: `You've been added to ${community.rows[0].name}`,
+          body: "Your community is ready. Open it to join the conversation.",
+          link: `/community/${encodeURIComponent(community.rows[0].slug)}`, client,
+        });
+        await enqueue({
+          kind: "community.membershipWelcome", payload: { membershipId: membership.id },
+          dedupeKey: `community-membership-welcome:${membership.id}`,
+          priority: PRIORITY.transactional, client,
+        });
+      } else {
+        // A role only moves when one was actually asked for: the console's own
+        // "Add someone" sends no role, so writing the default here demoted a
+        // moderator to member for picking their name out of the list twice.
+        const updated = await client.query(
+          `UPDATE community_memberships
+              SET role = COALESCE($3, role),
+                  source = CASE WHEN $4::bool THEN source ELSE 'manual' END
+            WHERE community_id=$1 AND member_id=$2 RETURNING *`,
+          [req.params.id, memberId, role ?? null, alreadyIn],
+        );
+        membership = updated.rows[0];
+      }
+      await client.query("COMMIT");
+      res.status(201).json(rowToCamel(membership));
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
   }),
 );
 

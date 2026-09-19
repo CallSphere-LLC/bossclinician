@@ -1,0 +1,12 @@
+{
+  "injectedFailure": "404 for the requested Club route module (matching missing previous-release assets)",
+  "blank": {
+    "url": "https://bossclinician.callsphere.site/club",
+    "main": null,
+    "root": ""
+  },
+  "errors": [
+    "Failed to fetch dynamically imported module: https://bossclinician.callsphere.site/assets/Club-C9MvBco7.js"
+  ],
+  "refreshed": "Build a Private Practice\nYou Won’t Have to Undo Later."
+}

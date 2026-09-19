@@ -1,0 +1,52 @@
+{
+  "state": {
+    "url": "https://bossclinician.callsphere.site/club",
+    "text": "THE CLUB · 6-MONTH PROGRAM\nBuild a Private Practice\nBuild a Private Practice\nYou Won’t Have to Undo Later.\nYou Won’t Have to Undo Later.\n\nA structured 6-month program designed to help practice owners strengthen operations, leadership, growth, and profitability with ongoing coaching and accountability.\nWhether you’re starting from scratch, building while employed, or rebuilding after a false start, The Club helps you make smarter decisions now so future-you doesn’t have to come back and fix them later.\n\nJOIN THE CLUB\n\nIncludes The Boss Move + live coaching + community + implementation resources.\n\nENROLLMENT BONUS: RAMP-UP RATE FORMULA INCLUDED.\n\nFOR THERAPISTS AND PSYCHIATRIC PROVIDERS READY TO BUILD PRIVATE PRACTICE WITH THE RIGHT FOUNDATION FROM THE START.\n\nYou Learned How to Be a Clinician. Nobody Taught You How to Build the Business.\n\nYou spent years earning the degree, completing the clinical hours, and becoming licensed.\n\nBut when it came time to actually build a private practice, you were expected to figure out the business side on your own.\n\nThe Club gives you a clear place to start — and a structure for building without putting your financial security on the line.\n\nBuild wh",
+    "html": "<!--$--><!--/$--><section class=\"relative overflow-hidden bg-night-deep\" aria-label=\"Page header\"><div aria-hidden=\"true\" class=\"site-aurora pointer-events-none absolute inset-0 overflow-hidden\" style=\"opacity: 0.85;\"><div class=\"animate-aurora-a absolute -left-[18%] -top-[28%] h-[75vw] max-h-[900px] w-[75vw] max-w-[900px] rounded-full blur-[90px] will-change-transform\" style=\"background: radial-gradient(circle, rgba(123, 94, 167, 0.32) 0%, transparent 68%);\"></div><div class=\"animate-aurora-b absolute -bottom-[32%] -right-[16%] h-[68vw] max-h-[820px] w-[68vw] max-w-[820px] rounded-full blur-[",
+    "h1": [
+      {
+        "text": "Build a Private Practice\nBuild a Private Practice\nYou Won’t Have to Undo Later.\nYou Won’t Have to Undo Later.",
+        "rect": {
+          "x": 336,
+          "y": 186.3125,
+          "width": 768,
+          "height": 231.859375,
+          "top": 186.3125,
+          "right": 1104,
+          "bottom": 418.171875,
+          "left": 336
+        },
+        "parent": "<div class=\"mx-auto max-w-3xl text-center\" style=\"opacity: 1; transform: none;\"><span class=\"eyebrow-luxe\">THE CLUB · 6-MONTH PROGRAM</span><h1 class=\"text-balance font-display text-[2.4rem] font-normal leading-[1.06] tracking-[-0.015em] text-white sm:text-[3.2rem] lg:text-[3.9rem]\"><span class=\"sr-only\">Build a Private Practice</span><span aria-hidden=\"true\" class=\"inline\"><span class=\"inline-block overflow-hidden pb-[0.12em] align-bottom\"><span class=\"inline-block\" style=\"transform: none;\">Build</span></span> <span class=\"inline-block overflow-hidden pb-[0.12em] align-bottom\"><span class=\"inline-block\" style=\"transform: none;\">a</span></span> <span class=\"inline-block overflow-hidden pb-[0.12em] align-bottom\"><span class=\"inline-block\" style=\"transform: none;\">Private</span></span> <span class=\"inline-block overflow-hidden pb-[0.12em] align-bottom\"><span class=\"inline-block\" style=\"transform: none;\">Practice</span></span></span><span class=\"text-foil mt-1.5 block font-display italic\"",
+        "opacity": "1"
+      }
+    ],
+    "hidden": [
+      {
+        "tag": "DIV",
+        "text": "You Learned How to Be a Clinician. Nobody Taught You How to Build the Business.",
+        "style": "opacity: 0; transform: translateY(26px);"
+      },
+      {
+        "tag": "DIV",
+        "text": "",
+        "style": "opacity: 0; transform: translateY(24px);"
+      },
+      {
+        "tag": "DIV",
+        "text": "You spent years earning the degree, completing the clinical hours, and becoming licensed.\n\nBut when ",
+        "style": "opacity: 0; transform: translateY(24px);"
+      },
+      {
+        "tag": "DIV",
+        "text": "So... are you ever actually going to start your own practice?",
+        "style": "opacity: 0; transform: translateY(26px);"
+      },
+      {
+        "tag": "DIV",
+        "text": "You are way past daydreaming about this.\n\nYou know private practice could give you more control over",
+        "style": "opacity: 0; transform: translateY(24px);"
+      }
+    ]
+  },
+  "errors": []
+}

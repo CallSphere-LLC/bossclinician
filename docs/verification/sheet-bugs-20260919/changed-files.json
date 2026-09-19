@@ -1,0 +1,18 @@
+[
+  "backend/src/jobs/communityJobs.ts",
+  "backend/src/routes/admin/community.ts",
+  "backend/src/routes/admin/community.integration.test.ts",
+  "backend/src/routes/admin/contacts.ts",
+  "backend/src/routes/admin/contactsCommunities.integration.test.ts",
+  "backend/src/services/communityMembershipWelcome.ts",
+  "backend/src/services/communityMembershipWelcome.test.ts",
+  "backend/src/db/migrations/072_complete_catalog_prices.sql",
+  "frontend/src/components/player/CourseOutline.tsx",
+  "frontend/src/lib/contactsApi.ts",
+  "frontend/src/pages/admin/Contacts.tsx",
+  "frontend/src/pages/admin/ContactDetail.tsx",
+  "frontend/src/pages/admin/CourseBuilder.tsx",
+  "frontend/src/pages/member/Library.tsx",
+  "scripts/verify-contact-communities.mjs",
+  "backend/src/services/billingDunningEmail.integration.test.ts"
+]

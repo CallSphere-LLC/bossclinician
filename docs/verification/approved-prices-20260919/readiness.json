@@ -1,0 +1,137 @@
+[
+  {
+    "slug": "directory-makeover-audit",
+    "priceText": "1 profile: $67 \u00b7 2 profiles: $97 \u00b7 3 profiles: $147",
+    "offers": []
+  },
+  {
+    "slug": "fully-booked-toolkit",
+    "priceText": "",
+    "offers": [
+      {
+        "amountCents": 6700,
+        "available": true
+      }
+    ]
+  },
+  {
+    "slug": "credentialing-success-formula",
+    "priceText": "",
+    "offers": [
+      {
+        "amountCents": 1700,
+        "available": false
+      }
+    ]
+  },
+  {
+    "slug": "credential-with-confidence",
+    "priceText": "$47",
+    "offers": [
+      {
+        "amountCents": 4700,
+        "available": true
+      }
+    ]
+  },
+  {
+    "slug": "private-practice-starter-suite",
+    "priceText": "",
+    "offers": [
+      {
+        "amountCents": 2700,
+        "available": false
+      }
+    ]
+  },
+  {
+    "slug": "ramp-up-rate-formula",
+    "priceText": "",
+    "offers": [
+      {
+        "amountCents": 9700,
+        "available": false
+      }
+    ]
+  },
+  {
+    "slug": "provider-partnership-guide",
+    "priceText": "",
+    "offers": [
+      {
+        "amountCents": 9700,
+        "available": false
+      }
+    ]
+  },
+  {
+    "slug": "private-practice-protection-pack",
+    "priceText": "",
+    "offers": [
+      {
+        "amountCents": 9700,
+        "available": false
+      }
+    ]
+  },
+  {
+    "slug": "marketing-mastery-for-therapists",
+    "priceText": "$67 (regular price $147)",
+    "offers": [
+      {
+        "amountCents": 6700,
+        "available": false
+      }
+    ]
+  },
+  {
+    "slug": "therapist-niche-clarity-accelerator",
+    "priceText": "$47",
+    "offers": [
+      {
+        "amountCents": 4700,
+        "available": false
+      }
+    ]
+  },
+  {
+    "slug": "rate-negotiation-letter-template",
+    "priceText": "$7",
+    "offers": [
+      {
+        "amountCents": 700,
+        "available": false
+      }
+    ]
+  },
+  {
+    "slug": "prepare-to-profit-journal",
+    "priceText": "$17",
+    "offers": [
+      {
+        "amountCents": 1700,
+        "available": false
+      }
+    ]
+  },
+  {
+    "slug": "client-consultation-call-script",
+    "priceText": "$37 or $24 now + $24 after 7 days ($48 total)",
+    "offers": [
+      {
+        "amountCents": 3700,
+        "available": true
+      }
+    ]
+  },
+  {
+    "slug": "from-profile-to-profit",
+    "priceText": "",
+    "offers": [
+      {
+        "amountCents": 9700,
+        "available": true
+      }
+    ]
+  }
+]

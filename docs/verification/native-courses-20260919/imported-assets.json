@@ -1,0 +1,53 @@
+{
+  "fullybookedtherapist.pdf": {
+    "title": "Fully Booked Toolkit \u2014 Start Here",
+    "mime": "application/pdf",
+    "size": 312887,
+    "sha256": "0a755675ce9ece13c2e55069d64e7fa44f24571cb5d0f7753cc5aa604dbf9e29",
+    "storage": "protected:import-0a755675ce9ece13c2e55069.pdf"
+  },
+  "client-consultation-call-script.pdf": {
+    "title": "Client Consultation Call Script",
+    "mime": "application/pdf",
+    "size": 8652994,
+    "sha256": "e13bc5095f36dd01b0e80171b7b178597a5d6e9cc13462fad166661172c119b3",
+    "storage": "protected:import-e13bc5095f36dd01b0e80171.pdf"
+  },
+  "from-profile-to-profit.pdf": {
+    "title": "Profile to Profit Directory Guide",
+    "mime": "application/pdf",
+    "size": 9590646,
+    "sha256": "7e22fc39b04758b96faf7ccbac419f96a516fc1081952a23e2b44b2f2725a739",
+    "storage": "protected:import-7e22fc39b04758b96faf7ccb.pdf"
+  },
+  "credential-training.mp4": {
+    "title": "Credentialing with Confidence",
+    "mime": "video/mp4",
+    "size": 80879496,
+    "sha256": "9a761c7f3727eb4d3a856ad6cff5f798bdc6ef4ef0d2b72cf28d8bc529ad05b6",
+    "storage": "protected:import-9a761c7f3727eb4d3a856ad6.mp4",
+    "durationSeconds": 3168
+  },
+  "billing-training.mp4": {
+    "title": "Boss Billing Blueprint",
+    "mime": "video/mp4",
+    "size": 81566056,
+    "sha256": "f1aedab2b810b6deb2922e1e7704434a22d8a070ef9d3d0d2cc150684a874fe1",
+    "storage": "protected:import-f1aedab2b810b6deb2922e1e.mp4",
+    "durationSeconds": 3466
+  },
+  "credential-tracker.pdf": {
+    "title": "Credential with Confidence Tracker",
+    "mime": "application/pdf",
+    "size": 160170,
+    "sha256": "f0ad4d7ea71a638dd9002ba0e6c842a1777d8a72d1776bc416eafab25f89b7a3",
+    "storage": "protected:import-f0ad4d7ea71a638dd9002ba0.pdf"
+  },
+  "caq-h-checklist.pdf": {
+    "title": "Steps to CAQH",
+    "mime": "application/pdf",
+    "size": 32381,
+    "sha256": "70ad2b8b1c600275ec1f5c5a85cf05bbdfdb3f4f404459931a72314b96c9d91c",
+    "storage": "protected:import-70ad2b8b1c600275ec1f5c5a.pdf"
+  }
+}

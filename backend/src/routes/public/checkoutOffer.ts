@@ -11,7 +11,7 @@ import { assertOfferDeliverable } from "../../services/downloadReadiness";
 import { asyncHandler } from "../../utils/asyncHandler";
 import { badRequest, forbidden, notFound, serviceUnavailable } from "../../utils/httpError";
 import { stripe } from "../../stripe/client";
-import { env, stripeEnabled } from "../../config/env";
+import { env, stripeEnabled, stripeTestMode } from "../../config/env";
 import { optionalMember } from "../../middleware/memberAuth";
 import { safeEqual } from "../../auth/tokens";
 import {
@@ -329,7 +329,15 @@ async function resolveStripeCustomerId(input: {
       [input.memberId]
     );
     const found = existing.rows[0]?.stripe_customer_id;
-    if (found) return found;
+    if (found) {
+      try {
+        const customer = await stripe().customers.retrieve(found);
+        if (!customer.deleted) return found;
+      } catch (error) {
+        // Live customer IDs cannot be reused in a sandbox (or another account).
+        if (!(error instanceof Error) || !("code" in error) || error.code !== "resource_missing") throw error;
+      }
+    }
   }
 
   const customer = await stripe().customers.create({
@@ -1472,11 +1480,11 @@ checkoutOfferRouter.get(
     // email was never going to be sent rather than that it has gone missing.
     const paymentSettings = await readSetting("customer_payments");
     const receiptExpected =
-      Boolean(order.email) &&
+      !stripeTestMode() && Boolean(order.email) &&
       paymentSettings.sendReceipts !== false &&
       (String(paymentSettings.receiptRule ?? "every") !== "nonzero" || order.total_cents > 0);
     const accessExpected =
-      Boolean(order.email) && !order.gift_recipient_email && order.send_welcome_email !== false;
+      !stripeTestMode() && Boolean(order.email) && !order.gift_recipient_email && order.send_welcome_email !== false;
 
     const receiptEmail = orderEmailState(receiptExpected, logged.get("purchase_receipt"));
     const accessEmail = orderEmailState(accessExpected, logged.get("purchase_access"));

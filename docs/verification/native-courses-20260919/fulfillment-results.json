@@ -1,0 +1,91 @@
+{
+  "results": [
+    {
+      "slug": "fully-booked-toolkit",
+      "downloads": [
+        {
+          "filename": "fullybookedtherapist.pdf",
+          "bytes": 312887,
+          "sha256": "0a755675ce9ece13c2e55069d64e7fa44f24571cb5d0f7753cc5aa604dbf9e29"
+        },
+        {
+          "filename": "client-consultation-call-script.pdf",
+          "bytes": 8652994,
+          "sha256": "e13bc5095f36dd01b0e80171b7b178597a5d6e9cc13462fad166661172c119b3"
+        },
+        {
+          "filename": "from-profile-to-profit.pdf",
+          "bytes": 9590646,
+          "sha256": "7e22fc39b04758b96faf7ccbac419f96a516fc1081952a23e2b44b2f2725a739"
+        }
+      ]
+    },
+    {
+      "slug": "from-profile-to-profit",
+      "downloads": [
+        {
+          "filename": "from-profile-to-profit.pdf",
+          "bytes": 9590646,
+          "sha256": "7e22fc39b04758b96faf7ccbac419f96a516fc1081952a23e2b44b2f2725a739"
+        }
+      ]
+    },
+    {
+      "orderId": 17,
+      "receiptPage": true,
+      "pdf": {
+        "filename": "receipt-R-2026-00017.pdf",
+        "bytes": 2607,
+        "sha256": "d0c27915b5564e490da1d50dba81a963a2c88b3d219fbe98211e1781f516e3cc"
+      }
+    },
+    {
+      "orderId": 19,
+      "receiptPage": true,
+      "pdf": {
+        "filename": "receipt-R-2026-00019.pdf",
+        "bytes": 2597,
+        "sha256": "379fbca81a5659165ab9ca398c1581658769f37176cc8d5a3e8b96bb3ad596fe"
+      }
+    },
+    {
+      "lesson": "credential-training",
+      "playback": true,
+      "duration": 3167.1,
+      "seekSeconds": 1200,
+      "rangeStatus": 206,
+      "downloads": [
+        {
+          "filename": "credential-tracker.pdf",
+          "bytes": 160170,
+          "sha256": "f0ad4d7ea71a638dd9002ba0e6c842a1777d8a72d1776bc416eafab25f89b7a3"
+        },
+        {
+          "filename": "caq-h-checklist.pdf",
+          "bytes": 32381,
+          "sha256": "70ad2b8b1c600275ec1f5c5a85cf05bbdfdb3f4f404459931a72314b96c9d91c"
+        }
+      ]
+    },
+    {
+      "lesson": "billing-training",
+      "playback": true,
+      "duration": 3465.578231,
+      "seekSeconds": 1200,
+      "rangeStatus": 206,
+      "downloads": []
+    },
+    {
+      "route": "/api/member/library",
+      "anonymousStatus": 401
+    },
+    {
+      "route": "/api/member/billing/orders/17/receipt",
+      "anonymousStatus": 401
+    },
+    {
+      "librarySignedOutRedirect": "login"
+    }
+  ],
+  "errors": []
+}

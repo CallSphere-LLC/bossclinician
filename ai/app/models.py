@@ -7,20 +7,39 @@ no alias plumbing needed, no drift risk between attribute and JSON key.
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field
 
 
+# Caps on every piece of caller-supplied text that ends up in a prompt.
+# Without them a single request can carry an arbitrarily large body straight
+# into a billed model call (and into this container's 512M). Each one is at
+# or above what the backend's own zod schemas already allow, so no existing
+# caller can trip them: message/topic/tone/keyword mirror
+# backend/src/validation/schemas.ts, and a history line gets the 8000 a voice
+# transcript line is allowed there.
+MAX_MESSAGE_CHARS = 4_000
+MAX_HISTORY_MESSAGES = 100  # only the last MAX_HISTORY_TURNS are replayed
+MAX_HISTORY_CONTENT_CHARS = 8_000
+MAX_QUALIFY_CHARS = 10_000
+MAX_TOPIC_CHARS = 500
+MAX_TONE_CHARS = 200
+MAX_KEYWORDS = 20
+MAX_KEYWORD_CHARS = 100
+
+
 class ChatHistoryMessage(BaseModel):
     role: Literal["user", "assistant"]
-    content: str
+    content: str = Field(max_length=MAX_HISTORY_CONTENT_CHARS)
 
 
 class ChatRequest(BaseModel):
-    sessionId: str
-    message: str
-    history: list[ChatHistoryMessage] | None = None
+    sessionId: str = Field(max_length=200)
+    message: str = Field(max_length=MAX_MESSAGE_CHARS)
+    history: list[ChatHistoryMessage] | None = Field(
+        default=None, max_length=MAX_HISTORY_MESSAGES
+    )
 
 
 class ChatResponse(BaseModel):
@@ -30,9 +49,11 @@ class ChatResponse(BaseModel):
 
 
 class BlogRequest(BaseModel):
-    topic: str
-    tone: str | None = None
-    keywords: list[str] | None = None
+    topic: str = Field(max_length=MAX_TOPIC_CHARS)
+    tone: str | None = Field(default=None, max_length=MAX_TONE_CHARS)
+    keywords: list[Annotated[str, Field(max_length=MAX_KEYWORD_CHARS)]] | None = Field(
+        default=None, max_length=MAX_KEYWORDS
+    )
 
 
 class BlogResponse(BaseModel):
@@ -43,7 +64,7 @@ class BlogResponse(BaseModel):
 
 
 class QualifyRequest(BaseModel):
-    text: str
+    text: str = Field(max_length=MAX_QUALIFY_CHARS)
 
 
 class QualifyResponse(BaseModel):

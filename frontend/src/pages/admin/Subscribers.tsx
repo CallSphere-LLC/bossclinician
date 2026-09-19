@@ -7,6 +7,7 @@ import type { Subscriber } from "@/types";
 import { formatDate } from "@/lib/format";
 import { Badge, Button, EmptyState, ErrorNotice, PageHeader } from "@/pages/admin/ui/primitives";
 import { humaniseKey, pluralize } from "@/pages/admin/ui/friendly";
+import { saveCsv } from "@/lib/formsApi";
 import { DataTable } from "@/pages/admin/ui/DataTable";
 
 /**
@@ -92,12 +93,7 @@ export default function Subscribers() {
       .join("\n");
 
     const blob = new Blob([header + rows], { type: "text/csv;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `subscribers-${new Date().toISOString().slice(0, 10)}.csv`;
-    link.click();
-    URL.revokeObjectURL(url);
+    saveCsv(blob, `subscribers-${new Date().toISOString().slice(0, 10)}.csv`);
     toast.success(`Downloaded ${pluralize(subscribers.length, "subscriber")}`);
   }
 

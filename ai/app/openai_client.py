@@ -8,6 +8,7 @@ import time
 from dataclasses import dataclass
 from typing import Any, Self
 
+import httpx2
 from openai import AsyncOpenAI
 
 from app.config import settings
@@ -15,6 +16,23 @@ from app.config import settings
 logger = logging.getLogger("bossclinician.ai")
 
 DEFAULT_BASE_URL = "https://api.openai.com/v1"
+
+# Left unset, the SDK's own default is a 600s read timeout with 2 internal
+# retries, so a single stalled upstream call keeps a request alive for up to
+# 30 minutes per attempt — and each service here attempts twice. Meanwhile the
+# only caller has long since walked away (the backend aborts /chat at 15s and
+# /generate/blog at 60s), so that work is pure waste: an open socket and a
+# pending task per abandoned request until the container's memory cap decides
+# the matter. Bound it instead.
+# read is the whole generation for a non-streaming call, so it sits just under
+# the most patient caller's own budget (60s, /generate/blog): nothing the caller
+# would still be waiting for gets cut short, and worst case drops from ~60
+# minutes to under 4.
+REQUEST_TIMEOUT = httpx2.Timeout(connect=5.0, read=55.0, write=15.0, pool=5.0)
+
+# The SDK's retry (which honours Retry-After on a 429) still earns its keep on
+# top of the service-level retry-then-fallback loop, but once, not twice.
+MAX_RETRIES = 1
 
 
 @functools.lru_cache(maxsize=1)
@@ -25,6 +43,8 @@ def get_client() -> AsyncOpenAI:
     return AsyncOpenAI(
         api_key=settings.openai_api_key,
         base_url=settings.openai_base_url or DEFAULT_BASE_URL,
+        timeout=REQUEST_TIMEOUT,
+        max_retries=MAX_RETRIES,
     )
 
 

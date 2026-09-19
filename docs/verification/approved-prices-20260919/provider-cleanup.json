@@ -1,0 +1,30 @@
+[
+  {
+    "action": "cancel test subscription",
+    "status": "canceled"
+  },
+  {
+    "action": "refund test charge",
+    "amountCents": 2400,
+    "status": "succeeded"
+  },
+  {
+    "action": "refund test charge",
+    "amountCents": 2400,
+    "status": "succeeded"
+  },
+  {
+    "action": "refund test charge",
+    "amountCents": 3700,
+    "status": "succeeded"
+  },
+  {
+    "action": "refund test charge",
+    "amountCents": 4700,
+    "status": "succeeded"
+  },
+  {
+    "action": "delete test customer",
+    "deleted": true
+  }
+]

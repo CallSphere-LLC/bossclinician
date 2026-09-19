@@ -1,0 +1,20 @@
+[
+  {
+    "persistent": false,
+    "blocked": 1,
+    "documents": 2,
+    "url": "https://bossclinician.callsphere.site/club",
+    "heading": [
+      "Build a Private PracticeYou Won’t Have to Undo Later."
+    ]
+  },
+  {
+    "persistent": true,
+    "blocked": 2,
+    "documents": 2,
+    "url": "https://bossclinician.callsphere.site/club",
+    "heading": [
+      "This page couldn’t load"
+    ]
+  }
+]

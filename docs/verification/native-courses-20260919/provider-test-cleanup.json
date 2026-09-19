@@ -1,0 +1,31 @@
+[
+  {
+    "orderId": 18,
+    "action": "cancel test intent",
+    "status": "canceled"
+  },
+  {
+    "orderId": 19,
+    "action": "test refund",
+    "status": "succeeded"
+  },
+  {
+    "orderId": 16,
+    "action": "already canceled",
+    "status": "canceled"
+  },
+  {
+    "orderId": 17,
+    "action": "test refund",
+    "status": "succeeded"
+  },
+  {
+    "orderId": 20,
+    "action": "test refund",
+    "status": "succeeded"
+  },
+  {
+    "action": "delete test customer",
+    "deleted": true
+  }
+]

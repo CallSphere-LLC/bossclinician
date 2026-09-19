@@ -1,0 +1,151 @@
+[
+  {
+    "width": 320,
+    "height": 568,
+    "theme": "light",
+    "modeSelection": true,
+    "exclusiveContent": true,
+    "draftPreserved": true,
+    "disclosureCancelled": true,
+    "withinViewport": true,
+    "collapsePreservesMode": true,
+    "errors": []
+  },
+  {
+    "width": 320,
+    "height": 568,
+    "theme": "dark",
+    "modeSelection": true,
+    "exclusiveContent": true,
+    "draftPreserved": true,
+    "disclosureCancelled": true,
+    "withinViewport": true,
+    "collapsePreservesMode": true,
+    "errors": []
+  },
+  {
+    "width": 390,
+    "height": 800,
+    "theme": "light",
+    "modeSelection": true,
+    "exclusiveContent": true,
+    "draftPreserved": true,
+    "disclosureCancelled": true,
+    "withinViewport": true,
+    "collapsePreservesMode": true,
+    "errors": []
+  },
+  {
+    "width": 390,
+    "height": 800,
+    "theme": "dark",
+    "modeSelection": true,
+    "exclusiveContent": true,
+    "draftPreserved": true,
+    "disclosureCancelled": true,
+    "withinViewport": true,
+    "collapsePreservesMode": true,
+    "errors": []
+  },
+  {
+    "width": 768,
+    "height": 800,
+    "theme": "light",
+    "modeSelection": true,
+    "exclusiveContent": true,
+    "draftPreserved": true,
+    "disclosureCancelled": true,
+    "withinViewport": true,
+    "collapsePreservesMode": true,
+    "errors": []
+  },
+  {
+    "width": 768,
+    "height": 800,
+    "theme": "dark",
+    "modeSelection": true,
+    "exclusiveContent": true,
+    "draftPreserved": true,
+    "disclosureCancelled": true,
+    "withinViewport": true,
+    "collapsePreservesMode": true,
+    "errors": []
+  },
+  {
+    "width": 1440,
+    "height": 1000,
+    "theme": "light",
+    "modeSelection": true,
+    "exclusiveContent": true,
+    "draftPreserved": true,
+    "disclosureCancelled": true,
+    "withinViewport": true,
+    "collapsePreservesMode": true,
+    "errors": []
+  },
+  {
+    "width": 1440,
+    "height": 1000,
+    "theme": "dark",
+    "modeSelection": true,
+    "exclusiveContent": true,
+    "draftPreserved": true,
+    "disclosureCancelled": true,
+    "withinViewport": true,
+    "collapsePreservesMode": true,
+    "errors": []
+  },
+  {
+    "width": 1920,
+    "height": 1080,
+    "theme": "light",
+    "modeSelection": true,
+    "exclusiveContent": true,
+    "draftPreserved": true,
+    "disclosureCancelled": true,
+    "withinViewport": true,
+    "collapsePreservesMode": true,
+    "errors": []
+  },
+  {
+    "width": 1920,
+    "height": 1080,
+    "theme": "dark",
+    "modeSelection": true,
+    "exclusiveContent": true,
+    "draftPreserved": true,
+    "disclosureCancelled": true,
+    "withinViewport": true,
+    "collapsePreservesMode": true,
+    "errors": []
+  },
+  {
+    "width": 844,
+    "height": 390,
+    "theme": "light",
+    "modeSelection": true,
+    "exclusiveContent": true,
+    "draftPreserved": true,
+    "disclosureCancelled": true,
+    "withinViewport": true,
+    "collapsePreservesMode": true,
+    "errors": []
+  },
+  {
+    "width": 844,
+    "height": 390,
+    "theme": "dark",
+    "modeSelection": true,
+    "exclusiveContent": true,
+    "draftPreserved": true,
+    "disclosureCancelled": true,
+    "withinViewport": true,
+    "collapsePreservesMode": true,
+    "errors": []
+  },
+  {
+    "pendingMicrophoneCancelled": true,
+    "lateMicrophoneStopped": true,
+    "providerAdmissions": 0
+  }
+]

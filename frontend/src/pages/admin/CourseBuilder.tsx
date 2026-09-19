@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Link, useNavigate, useParams } from "react-router";
 import { AnimatePresence, motion } from "motion/react";
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import {
   ArrowDown,
   ArrowLeft,
   ArrowUp,
   Bold,
   ChevronDown,
+  ChevronRight,
+  MoreHorizontal,
   Clock,
   Film,
   Italic,
@@ -228,6 +231,9 @@ export default function CourseBuilder() {
   /* Only the newest request may set the src: opening two lessons quickly must
      not leave the second one showing the first one's video. */
   const videoRequest = useRef(0);
+  /* Same rule for the downloads attached to a lesson: opening two lessons
+     quickly must not leave the second one listing the first one's files. */
+  const filesRequest = useRef(0);
   const notesRef = useRef<HTMLTextAreaElement>(null);
   const [confirm, confirmDialog] = useConfirm();
 
@@ -465,8 +471,20 @@ export default function CourseBuilder() {
     setLessonDraft({ moduleId, lesson, drip: dripChoice(lesson) });
     setPastingLink(false);
     showVideo(lesson.videoUrl ?? "");
-    if (lesson.id) adminApi.lessonFiles(lesson.id).then(setLessonFiles).catch(() => setLessonFiles([]));
-    else setLessonFiles([]);
+    const ticket = (filesRequest.current += 1);
+    // Cleared first, so the previous lesson's downloads are never on screen
+    // under this lesson's name while its own list is still on the way.
+    setLessonFiles([]);
+    if (lesson.id) {
+      adminApi
+        .lessonFiles(lesson.id)
+        .then((files) => {
+          if (filesRequest.current === ticket) setLessonFiles(files);
+        })
+        .catch(() => {
+          if (filesRequest.current === ticket) setLessonFiles([]);
+        });
+    }
   }
 
   function openAssessment(moduleId: number, kind: "graded" | "survey") {
@@ -634,27 +652,8 @@ export default function CourseBuilder() {
                       <ChevronDown className="size-4 text-ink-soft" />
                     </motion.span>
                   </button>
-                  {/* Order is the order students meet the course in, so it is
-                      changed here rather than being an implicit fact about when
-                      each section happened to be created. */}
-                  <Button
-                    variant="ghost"
-                    size="iconSm"
-                    aria-label={`Move ${mod.title} up`}
-                    disabled={index === 0}
-                    onClick={() => moveModule(index, -1)}
-                  >
-                    <ArrowUp />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="iconSm"
-                    aria-label={`Move ${mod.title} down`}
-                    disabled={index === modules.length - 1}
-                    onClick={() => moveModule(index, 1)}
-                  >
-                    <ArrowDown />
-                  </Button>
+                  <CourseOrderMenu title={mod.title} first={index === 0} last={index === modules.length - 1}
+                    onMove={(direction) => void moveModule(index, direction)} onDelete={() => void removeModule(mod)} />
                   <Button
                     variant="secondary"
                     size="sm"
@@ -668,15 +667,7 @@ export default function CourseBuilder() {
                     }
                   >
                     <Pencil />
-                    Edit section
-                  </Button>
-                  <Button
-                    variant="dangerGhost"
-                    size="iconSm"
-                    aria-label={`Delete ${mod.title}`}
-                    onClick={() => removeModule(mod)}
-                  >
-                    <Trash2 />
+                    <span className="hidden sm:inline">Edit section</span>
                   </Button>
                 </div>
 
@@ -698,7 +689,7 @@ export default function CourseBuilder() {
                           {mod.lessons.map((lesson, lessonIndex) => (
                             <li
                               key={lesson.id}
-                              className="flex items-center gap-3 px-5 py-3 transition-colors hover:bg-lilac-tint/25"
+                              className="flex flex-wrap items-center gap-3 px-5 py-3 transition-colors hover:bg-lilac-tint/25 sm:flex-nowrap"
                             >
                               <span
                                 className={cn(
@@ -717,7 +708,7 @@ export default function CourseBuilder() {
                               <button
                                 type="button"
                                 onClick={() => openLesson(mod.id, lesson)}
-                                className="min-w-0 flex-1 text-left"
+                                className="min-w-0 flex-1 basis-[calc(100%-3rem)] text-left sm:basis-auto"
                               >
                                 <span className="block truncate text-sm font-medium text-ink">
                                   {lesson.title}
@@ -732,39 +723,13 @@ export default function CourseBuilder() {
                               </button>
                               {lesson.preview && <Badge tone="gold">Free taster</Badge>}
                               {!lesson.published && <Badge tone="slate">{PUBLISH_LABEL.draft}</Badge>}
-                              <Button
-                                variant="ghost"
-                                size="iconSm"
-                                aria-label={`Move ${lesson.title} up`}
-                                disabled={lessonIndex === 0}
-                                onClick={() => moveLesson(mod.id, lessonIndex, -1)}
-                              >
-                                <ArrowUp />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="iconSm"
-                                aria-label={`Move ${lesson.title} down`}
-                                disabled={lessonIndex === mod.lessons.length - 1}
-                                onClick={() => moveLesson(mod.id, lessonIndex, 1)}
-                              >
-                                <ArrowDown />
-                              </Button>
-                              <Button
-                                variant="secondary"
-                                size="sm"
-                                onClick={() => openLesson(mod.id, lesson)}
-                              >
-                                <Pencil />
-                                Edit &amp; schedule
-                              </Button>
-                              <Button
-                                variant="dangerGhost"
-                                size="iconSm"
-                                aria-label={`Delete ${lesson.title}`}
-                                onClick={() => removeLesson(lesson)}
-                              >
-                                <Trash2 />
+                              <CourseOrderMenu title={lesson.title} first={lessonIndex === 0} last={lessonIndex === mod.lessons.length - 1}
+                                onMove={(direction) => void moveLesson(mod.id, lessonIndex, direction)} onDelete={() => void removeLesson(lesson)} />
+                              <Button variant="secondary" size="sm" className="group shrink-0"
+                                aria-label={`Edit ${lesson.title} and its release schedule`}
+                                onClick={() => openLesson(mod.id, lesson)}>
+                                <span className="hidden sm:inline">Edit &amp; schedule</span>
+                                <ChevronRight aria-hidden className="motion-safe:transition-transform motion-safe:duration-150 motion-safe:group-hover:translate-x-0.5 motion-safe:group-focus-visible:translate-x-0.5" />
                               </Button>
                             </li>
                           ))}
@@ -1465,5 +1430,39 @@ function VideoPickerModal({
         )}
       </div>
     </Modal>
+  );
+}
+
+/** Keep reordering available to keyboard and touch without arrows on every row. */
+function CourseOrderMenu({ title, first, last, onMove, onDelete }: {
+  title: string;
+  first: boolean;
+  last: boolean;
+  onMove: (direction: -1 | 1) => void;
+  onDelete: () => void;
+}) {
+  const itemClass = "flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-sm text-ink outline-none data-[highlighted]:bg-lilac-tint data-[disabled]:pointer-events-none data-[disabled]:opacity-40 [&>svg]:size-4";
+  return (
+    <DropdownMenu.Root>
+      <DropdownMenu.Trigger asChild>
+        <Button variant="ghost" size="iconSm" className="shrink-0" aria-label={`More actions for ${title}`}>
+          <MoreHorizontal aria-hidden />
+        </Button>
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Portal>
+        <DropdownMenu.Content align="end" sideOffset={6} className="z-50 min-w-44 rounded-xl border border-hairline bg-surface-raised p-1.5 shadow-xl">
+          <DropdownMenu.Item disabled={first} onSelect={() => onMove(-1)} className={itemClass}>
+            <ArrowUp aria-hidden />Move up
+          </DropdownMenu.Item>
+          <DropdownMenu.Item disabled={last} onSelect={() => onMove(1)} className={itemClass}>
+            <ArrowDown aria-hidden />Move down
+          </DropdownMenu.Item>
+          <DropdownMenu.Separator className="my-1 h-px bg-hairline" />
+          <DropdownMenu.Item onSelect={onDelete} className={cn(itemClass, "text-red-400")}>
+            <Trash2 aria-hidden />Delete
+          </DropdownMenu.Item>
+        </DropdownMenu.Content>
+      </DropdownMenu.Portal>
+    </DropdownMenu.Root>
   );
 }

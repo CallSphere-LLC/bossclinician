@@ -14,6 +14,7 @@ import {
   ShieldAlert,
   StickyNote,
   Trash2,
+  Users,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -48,6 +49,7 @@ import {
 } from "@/pages/admin/ui/primitives";
 import { Modal, useConfirm } from "@/pages/admin/ui/Dialog";
 import { friendlyError, humaniseKey, orNone, pluralize } from "@/pages/admin/ui/friendly";
+import { saveCsv } from "@/lib/formsApi";
 import ContactFilesCard from "@/pages/admin/ContactFilesCard";
 import ContactAccessCard from "@/pages/admin/ContactAccessCard";
 
@@ -252,15 +254,16 @@ export default function ContactDetail() {
     try {
       const payload = await contactsApi.export(person.id);
       const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = `${(person.name || person.email || "person")
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-")
-        .replace(/^-|-$/g, "")}-data.json`;
-      anchor.click();
-      URL.revokeObjectURL(url);
+      // The shared saver, not a bare anchor: a link never added to the document,
+      // whose object URL is revoked before the click returns, is a button that
+      // silently produces nothing in Safari. (It saves any blob, not only CSV.)
+      saveCsv(
+        blob,
+        `${(person.name || person.email || "person")
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/^-|-$/g, "")}-data.json`,
+      );
       toast.success("Person data downloaded");
     } catch (err) {
       toast.error(friendlyError(err, "download"));
@@ -406,6 +409,29 @@ export default function ContactDetail() {
             displayName={displayName}
             onChanged={load}
           />
+
+          <Card>
+            <CardHeader title="Communities" icon={<Users />} />
+            {(person.communities ?? []).length === 0 ? (
+              <EmptyState icon={<Users />} title="No communities yet" description="Their community memberships will appear here when they join." />
+            ) : (
+              <ul className="divide-y divide-hairline/60">
+                {person.communities.map((community) => (
+                  <li key={community.id} className="flex flex-wrap items-center gap-3 px-5 py-3.5">
+                    <div className="min-w-0 flex-1">
+                      <Link to={`/admin/community/${community.communityId}`} className="font-semibold text-plum hover:underline">
+                        {community.name}
+                      </Link>
+                      <p className="text-xs text-ink-soft">Joined {formatDate(community.joinedAt)}</p>
+                    </div>
+                    <Badge tone={community.banned || !community.memberActive ? "slate" : "green"}>
+                      {community.banned ? "Banned" : !community.memberActive ? "Account inactive" : community.role === "admin" ? "Admin" : community.role === "moderator" ? "Moderator" : "Member"}
+                    </Badge>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Card>
 
           <ContactFilesCard contactId={contactId} />
 

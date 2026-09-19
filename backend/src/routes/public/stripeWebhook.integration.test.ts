@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
 import express from "express";
 import { Client } from "pg";
 import type { AddressInfo } from "net";
@@ -724,5 +724,49 @@ describeDb("stripe webhook (integration)", () => {
     expect(recovered?.installmentsPaid).toBe(1);
     expect(recovered?.installments).toHaveLength(2);
     expect(recovered?.installments[1].status).toBe("scheduled");
+  });
+
+  it("uses the purchased weekly option instead of the offer's pay-in-full price", async () => {
+    const fixture = await planFixture("weeklyoption");
+    const order = (await client.query(`SELECT offer_id FROM orders WHERE id=$1`, [fixture.orderId])).rows[0];
+    await client.query(`UPDATE offers SET pricing_type='one_time',amount_cents=3700,interval=NULL,installment_count=NULL WHERE id=$1`, [order.offer_id]);
+    const option = (await client.query(`INSERT INTO offer_pricing_options (offer_id,label,pricing_type,amount_cents,interval,installment_count)
+      VALUES ($1,'Two payments, seven days apart','payment_plan',2400,'week',2) RETURNING id`, [order.offer_id])).rows[0];
+    await client.query(`UPDATE orders SET pricing_option_id=$2,subtotal_cents=2400,total_cents=2400 WHERE id=$1`, [fixture.orderId, option.id]);
+    const paymentLookup = vi.spyOn(stripeClient.stripe().invoicePayments, "list");
+    paymentLookup.mockResolvedValueOnce({ data: [{ payment: { type: "payment_intent", payment_intent: "pi_weekly_first" } }] } as never);
+    const invoice = { ...fixture.openingInvoice, payments: undefined, amount_due: 2400, amount_paid: 2400 };
+    expect((await deliver(envelope("evt_weekly_option_1", "invoice.paid", invoice))).status).toBe(200);
+    const schedule = await client.query(`SELECT p.interval,p.installment_cents,p.installment_count,
+      extract(epoch from max(i.due_at)-min(i.due_at))::int AS spacing_seconds
+      FROM payment_plans p JOIN payment_plan_installments i ON i.payment_plan_id=p.id
+      WHERE p.order_id=$1 GROUP BY p.id`, [fixture.orderId]);
+    expect(schedule.rows).toEqual([{ interval: "week", installment_cents: 2400, installment_count: 2, spacing_seconds: 604800 }]);
+    const nextInvoice = { ...invoice, id: "in_weeklyoption_second", created: invoice.created + 604800,
+      period_start: invoice.period_start + 604800, period_end: invoice.period_start + 1209600 };
+    paymentLookup.mockResolvedValueOnce({ data: [{ payment: { type: "payment_intent", payment_intent: "pi_weekly_second" } }] } as never);
+    expect((await deliver(envelope("evt_weekly_option_2", "invoice.paid", nextInvoice))).status).toBe(200);
+    const state = await planState(fixture.orderId);
+    expect(state?.status).toBe("completed");
+    expect(state?.installmentsPaid).toBe(2);
+    expect(state?.installments.map(item => item.status)).toEqual(["paid", "paid"]);
+    // A replay cannot turn two payments into three.
+    expect((await deliver(envelope("evt_weekly_option_2", "invoice.paid", nextInvoice))).status).toBe(200);
+    expect((await planState(fixture.orderId))?.installmentsPaid).toBe(2);
+    const ledger = await client.query(`SELECT stripe_payment_intent_id FROM transactions WHERE order_id=$1 AND kind='payment' ORDER BY id`, [fixture.orderId]);
+    expect(ledger.rows.map(row => row.stripe_payment_intent_id)).toEqual(["pi_weekly_first", "pi_weekly_second"]);
+    // A legacy ledger row with no payment ID can still be reconciled by its
+    // exact installment invoice; the refund must never disappear silently.
+    await client.query(`UPDATE transactions SET stripe_payment_intent_id=NULL WHERE order_id=$1 AND stripe_payment_intent_id='pi_weekly_second'`, [fixture.orderId]);
+    paymentLookup.mockResolvedValueOnce({ data: [{ invoice: nextInvoice.id }] } as never);
+    const refund = { id: "ch_weekly_second", payment_intent: "pi_weekly_second", amount: 2400, amount_refunded: 2400, currency: "usd" };
+    expect((await deliver(envelope("evt_weekly_refund", "charge.refunded", refund))).status).toBe(200);
+    expect((await client.query(`SELECT refunded_cents FROM orders WHERE id=$1`, [fixture.orderId])).rows[0].refunded_cents).toBe(2400);
+    const firstRefund = { ...refund, id: "ch_weekly_first", payment_intent: "pi_weekly_first" };
+    expect((await deliver(envelope("evt_weekly_refund_first", "charge.refunded", firstRefund))).status).toBe(200);
+    expect((await client.query(`SELECT refunded_cents,status FROM orders WHERE id=$1`, [fixture.orderId])).rows[0]).toEqual({ refunded_cents: 4800, status: "refunded" });
+    expect((await deliver(envelope("evt_weekly_refund", "charge.refunded", refund))).status).toBe(200);
+    expect((await client.query(`SELECT refunded_cents FROM orders WHERE id=$1`, [fixture.orderId])).rows[0].refunded_cents).toBe(4800);
+    paymentLookup.mockRestore();
   });
 });

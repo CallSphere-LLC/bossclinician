@@ -1,7 +1,7 @@
 import { motion } from "motion/react";
 import { useEntranceMotion } from "@/hooks/useEntranceMotion";
 import { Seo } from "@/components/Seo";
-import { BuyButton } from "@/components/BuyButton";
+import { Link } from "react-router";
 import { GlassCard, type Accent } from "@/components/luxe/GlassCard";
 import { LuxeButton } from "@/components/luxe/LuxeButton";
 import { LuxePageHero } from "@/components/luxe/LuxePageHero";
@@ -16,7 +16,7 @@ import {
   courseMeta,
   defaultCourseMeta,
 } from "@/content/courses";
-import { isPurchasable, type Course } from "@/types";
+import type { Course } from "@/types";
 
 /**
  * Courses — the Obsidian Luxe rebuild of the training library.
@@ -312,12 +312,17 @@ function MissionPortrait() {
 
 function CourseCard({ course, accent }: { course: Course; accent: Accent }) {
   const meta = courseMeta[course.slug] ?? defaultCourseMeta;
+  // `courses.features` is JSONB and the admin write schema types it as unknown,
+  // so nothing in the contract promises a list. Read it the same way the
+  // course's own sales page does rather than trusting `.length` in a render
+  // that the server runs.
+  const features = Array.isArray(course.features) ? (course.features as string[]) : [];
 
   return (
     <GlassCard as="article" accent={accent} className="group flex h-full flex-col overflow-hidden">
       {/* Cover. Graded down before it is composited so a daylight product shot
           sits *in* the near-black page instead of glowing on top of it. */}
-      <div className="relative aspect-[16/10] w-full overflow-hidden bg-night-deep">
+      <Link to={`/courses/${course.slug}`} aria-label={`View ${course.title}`} className="relative block aspect-[16/10] w-full overflow-hidden bg-night-deep">
         <img
           src={course.image}
           alt={meta.imageAlt ?? course.title}
@@ -336,11 +341,11 @@ function CourseCard({ course, accent }: { course: Course; accent: Accent }) {
           aria-hidden
           className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-gold/45 to-transparent"
         />
-      </div>
+      </Link>
 
       <div className="flex flex-1 flex-col px-6 pb-6 pt-5 sm:px-7 sm:pb-7">
         <h3 className="text-balance font-display text-[1.05rem] font-medium leading-[1.32] tracking-[0.04em] text-white sm:text-[1.12rem]">
-          {course.title}
+          <Link to={`/courses/${course.slug}`} className="hover:text-gold focus-visible:underline">{course.title}</Link>
         </h3>
 
         <p className="mt-2.5 text-pretty text-[0.9rem] font-medium leading-snug text-lilac">
@@ -349,12 +354,12 @@ function CourseCard({ course, accent }: { course: Course; accent: Accent }) {
 
         <p className="copy-luxe mt-4 text-pretty text-sm">{course.description}</p>
 
-        {course.features.length > 0 && (
+        {features.length > 0 && (
           <div className="mt-5">
             <p className="text-sm font-semibold text-white/85">{meta.featuresLabel}</p>
 
             <ul className="mt-3 space-y-2">
-              {course.features.map((f) => (
+              {features.map((f) => (
                 <li key={f} className="flex gap-2.5 text-sm leading-[1.5] text-orchid-dim">
                   <svg
                     aria-hidden
@@ -383,24 +388,9 @@ function CourseCard({ course, accent }: { course: Course; accent: Accent }) {
           )}
 
           <div className="mt-5">
-            {isPurchasable(course) ? (
-              <BuyButton slug={course.slug} label={meta.ctaLabel} />
-            ) : course.url.startsWith("http") ? (
-              <LuxeButton
-                variant="glass"
-                size="sm"
-                href={course.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className={CTA_CLASS}
-              >
-                {meta.ctaLabel}
-              </LuxeButton>
-            ) : (
-              <LuxeButton variant="glass" size="sm" to={course.url} className={CTA_CLASS}>
-                {meta.ctaLabel}
-              </LuxeButton>
-            )}
+            <LuxeButton variant="glass" size="sm" to={`/courses/${course.slug}`} className={CTA_CLASS}>
+              View course
+            </LuxeButton>
           </div>
         </div>
       </div>

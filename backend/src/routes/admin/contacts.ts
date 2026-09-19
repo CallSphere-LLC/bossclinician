@@ -56,6 +56,19 @@ const CONTACT_TAGS = `COALESCE((SELECT json_agg(json_build_object('slug', t.slug
                                  FROM contact_tags ct JOIN tags t ON t.id = ct.tag_id
                                 WHERE ct.contact_id = c.id), '[]'::json) AS tags`;
 
+// Prefer an explicit CRM link; legacy accounts may only match by email.
+const CONTACT_COMMUNITY_MEMBER_SQL = `m.contact_id = c.id OR (m.contact_id IS NULL AND m.email = c.email)`;
+const CONTACT_COMMUNITIES = `COALESCE((
+  SELECT json_agg(json_build_object(
+    'id', cm.id, 'communityId', co.id, 'name', co.name, 'role', cm.role,
+    'joinedAt', cm.joined_at, 'banned', cm.banned_at IS NOT NULL,
+    'memberActive', m.status = 'active'
+  ) ORDER BY co.name, cm.id)
+  FROM members m JOIN community_memberships cm ON cm.member_id = m.id
+  JOIN communities co ON co.id = cm.community_id
+  WHERE ${CONTACT_COMMUNITY_MEMBER_SQL}
+), '[]'::json) AS communities`;
+
 const idSchema = z.coerce.number().int().positive();
 
 function parseId(raw: string, label = "contact"): number {
@@ -89,6 +102,7 @@ interface ContactFilters {
   tag?: string;
   status?: string;
   untagged?: boolean;
+  community?: boolean;
   audience?: "new" | "subscribed" | "new_subscriber" | "customer" | "new_customer";
   optOut?: "manual" | "self";
   engagement?: "healthy" | "passive" | "unengaged" | "inactive";
@@ -100,7 +114,8 @@ const LAST_ENGAGED_SQL = `GREATEST(
   COALESCE(c.opted_in_at, c.created_at)
 )`;
 
-function buildFilters(filters: ContactFilters): { where: string; params: unknown[] } {
+/** The WHERE clause and its parameters. Exported so the shape can be tested without a database. */
+export function buildFilters(filters: ContactFilters): { where: string; params: unknown[] } {
   const clauses: string[] = [];
   const params: unknown[] = [];
 
@@ -137,6 +152,12 @@ function buildFilters(filters: ContactFilters): { where: string; params: unknown
       params.push(filters.status);
       clauses.push(`c.email_marketing_status = $${params.length}`);
     }
+  }
+
+  if (filters.community) {
+    clauses.push(`EXISTS (SELECT 1 FROM members m
+      JOIN community_memberships cm ON cm.member_id = m.id
+      WHERE (${CONTACT_COMMUNITY_MEMBER_SQL}) AND cm.banned_at IS NULL AND m.status = 'active')`);
   }
 
   if (filters.untagged) {
@@ -180,6 +201,7 @@ const listQuerySchema = z.object({
   q: z.string().trim().max(200).optional(),
   tag: z.string().trim().max(80).optional(),
   status: z.enum(EMAIL_STATUSES).optional(),
+  community: z.enum(["true", "false"]).transform((v) => v === "true").optional(),
   untagged: z.enum(["true", "false"]).transform((v) => v === "true").optional(),
   audience: z.enum(["new", "subscribed", "new_subscriber", "customer", "new_customer"]).optional(),
   optOut: z.enum(["manual", "self"]).optional(),
@@ -268,7 +290,7 @@ adminContactsRouter.get(
 
     const [items, total] = await Promise.all([
       pool.query(
-        `SELECT ${CONTACT_COLUMNS}, ${CONTACT_TAGS}
+        `SELECT ${CONTACT_COLUMNS}, ${CONTACT_TAGS}, ${CONTACT_COMMUNITIES}
            FROM contacts c
            ${where}
           ORDER BY ${SORTS[sort]}
@@ -323,7 +345,26 @@ const CSV_HEADERS = [
   "Added",
 ];
 
-const exportQuerySchema = listQuerySchema.pick({ q: true, tag: true, status: true, untagged: true });
+/**
+ * Every filter the list understands, because the CSV is the list as a file.
+ *
+ * `z.object` strips what it was not told about, so a key missing here is not a
+ * rejected request — it is a filter silently dropped. The People screen sends
+ * the whole filter set on the Export link, so picking only four of them meant
+ * "Community members only", the audience presets and the three insight tiles
+ * (unsubscribed, bounced, unengaged) all exported the entire contact list
+ * instead of the rows on screen.
+ */
+export const exportQuerySchema = listQuerySchema.pick({
+  q: true,
+  tag: true,
+  status: true,
+  untagged: true,
+  community: true,
+  audience: true,
+  optOut: true,
+  engagement: true,
+});
 
 interface ExportRow {
   email: string;
@@ -920,7 +961,7 @@ adminContactsRouter.post(
 
 async function loadContact(id: number): Promise<Record<string, unknown>> {
   const result = await pool.query(
-    `SELECT ${CONTACT_COLUMNS}, ${CONTACT_TAGS} FROM contacts c WHERE c.id = $1`,
+    `SELECT ${CONTACT_COLUMNS}, ${CONTACT_TAGS}, ${CONTACT_COMMUNITIES} FROM contacts c WHERE c.id = $1`,
     [id]
   );
   const row = result.rows[0];

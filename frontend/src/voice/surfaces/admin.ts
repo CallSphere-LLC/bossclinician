@@ -1571,7 +1571,7 @@ export const ADMIN_POLICY: VoiceSurfacePolicy = {
   surface: "admin",
   audience: "admin",
   agentName: "Boss Clinician AI",
-  voice: "coral",
+  voice: "marin",
   // The shared persona first and verbatim — see the note in public.ts. On this
   // surface the ordering matters twice over: the persona is what stops the
   // agent from answering as Yvette on the one screen where speaking for her

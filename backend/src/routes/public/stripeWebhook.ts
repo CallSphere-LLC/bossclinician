@@ -6,7 +6,7 @@ import { pool } from "../../db/pool";
 import { asyncHandler } from "../../utils/asyncHandler";
 import { stripe } from "../../stripe/client";
 import { env, stripeEnabled } from "../../config/env";
-import { sendMail } from "../../email/mailer";
+import { sendStripeMail as sendMail } from "../../services/stripeSideEffects";
 import { orderPaidNotification } from "../../email/templates";
 import {
   disputeAlert,
@@ -384,6 +384,56 @@ async function sendPurchaseEmails(order: OrderRow, result: FulfillResult): Promi
 }
 
 /**
+ * Takes back the coupon use a declined attempt gave up.
+ *
+ * `createPendingOrder` claims a redemption before the buyer ever reaches Stripe,
+ * and every path that closes a pending order releases it again, because an
+ * abandoned cart must not permanently consume one of fifty launch codes.
+ *
+ * A decline is not an abandonment. The Payment Element keeps the same
+ * PaymentIntent on the same order, so the buyer who retries with another card
+ * completes the order the release was taken from — and nothing ever re-claimed
+ * it. The sale then went through at the coupon's price with
+ * `coupon_redemptions.released_at` still set, and `validateCoupon` counts only
+ * unreleased rows: a `max_redemptions` cap lost none of its uses, and a
+ * `max_per_contact = 1` code became reusable by declining a card first.
+ *
+ * Run on every settled payment rather than only on the delivery that fulfilled,
+ * so a handler that dies between `fulfillPayment` and here is put right by the
+ * retry. It is a no-op on an order whose redemption was never released.
+ */
+async function reclaimOrderRedemption(orderId: number): Promise<void> {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const reclaimed = await client.query<{ coupon_id: number }>(
+      `UPDATE coupon_redemptions SET released_at = NULL
+        WHERE order_id = $1 AND released_at IS NOT NULL
+        RETURNING coupon_id`,
+      [orderId]
+    );
+    const couponId = reclaimed.rows[0]?.coupon_id;
+    if (couponId !== undefined) {
+      // Recomputed from the ledger, exactly as claimRedemption/releaseRedemption
+      // do, so the admin's counter cannot drift from what the cap is enforced on.
+      await client.query(
+        `UPDATE coupons SET redeemed = (
+           SELECT count(*) FROM coupon_redemptions
+            WHERE coupon_id = $1 AND released_at IS NULL
+         ) WHERE id = $1`,
+        [couponId]
+      );
+    }
+    await client.query("COMMIT");
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => undefined);
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+/**
  * Records a payment against an order and sends what a first payment sends.
  *
  * `fulfillPayment` is idempotent and reports `fulfilled: false` for a delivery
@@ -407,6 +457,11 @@ async function settleOrderPayment(
     stripeCustomerId: facts.stripeCustomerId,
     occurredAt: facts.occurredAt,
   });
+
+  // The order is paid now, whichever delivery got it there, so the coupon use a
+  // declined attempt handed back belongs to it again. Deliberately before the
+  // `fulfilled` gate: the delivery that settled the order may have died here.
+  await reclaimOrderRedemption(order.id);
 
   if (!result.fulfilled) {
     log(`order ${order.id} was already fulfilled; nothing to do`);
@@ -916,8 +971,11 @@ function invoiceMetadata(invoice: Stripe.Invoice): OfferMetadata {
   return readMetadata(invoice.parent?.subscription_details?.metadata);
 }
 
-function invoicePaymentIntentId(invoice: Stripe.Invoice): string | null {
-  for (const payment of invoice.payments?.data ?? []) {
+async function invoicePaymentIntentId(invoice: Stripe.Invoice): Promise<string | null> {
+  // Webhooks omit unexpanded invoice payments. Resolve their real payment IDs
+  // before writing the ledger so later refunds can find the original charge.
+  const payments = invoice.payments?.data ?? (await stripe().invoicePayments.list({ invoice: invoice.id, status: "paid", limit: 100 })).data;
+  for (const payment of payments) {
     const intentId = idOf(payment.payment?.payment_intent);
     if (intentId) return intentId;
   }
@@ -1177,7 +1235,8 @@ async function planInstallmentPricing(
 /**
  * Sets up the installment schedule when a payment plan's opening invoice settles.
  *
- * The plan's shape is read from the offer rather than from the event's metadata:
+ * The plan's shape is read from the purchased pricing option (or base offer)
+ * rather than from the event's metadata:
  * metadata is a string round-tripped through a third party, and `offers` is where
  * "3 x $1,250" is actually defined. Metadata only stands in if the offer has
  * since been deleted. The prices come from the order, which is the only place
@@ -1211,9 +1270,16 @@ async function startPaymentPlan(input: {
     interval_count: number;
     installment_count: number | null;
   }>(
-    `SELECT amount_cents, currency, interval, interval_count, installment_count
-       FROM offers WHERE id = $1`,
-    [offerId]
+    `SELECT COALESCE(p.amount_cents, o.amount_cents) AS amount_cents,
+            COALESCE(p.currency, o.currency) AS currency,
+            COALESCE(p.interval, o.interval) AS interval,
+            COALESCE(p.interval_count, o.interval_count) AS interval_count,
+            COALESCE(p.installment_count, o.installment_count) AS installment_count
+       FROM offers o
+       LEFT JOIN orders purchased ON purchased.id=$2 AND purchased.offer_id=o.id
+       LEFT JOIN offer_pricing_options p ON p.id=purchased.pricing_option_id AND p.offer_id=o.id
+      WHERE o.id = $1`,
+    [offerId, input.order.id]
   );
   const offer = offerRes.rows[0];
 
@@ -1490,7 +1556,7 @@ async function markInvoiceSettled(stripeInvoiceId: string): Promise<void> {
 async function handleInvoicePaid(invoice: Stripe.Invoice): Promise<void> {
   const stripeSubscriptionId = invoiceSubscriptionId(invoice);
   const meta = invoiceMetadata(invoice);
-  const paymentIntentId = invoicePaymentIntentId(invoice);
+  const paymentIntentId = await invoicePaymentIntentId(invoice);
   const paidAt =
     toDate(invoice.status_transitions?.paid_at) ?? toDate(invoice.created) ?? new Date();
 
@@ -2407,7 +2473,28 @@ function reconciledRefundKey(charge: Stripe.Charge): string {
 
 async function handleChargeRefunded(charge: Stripe.Charge): Promise<void> {
   const paymentIntentId = idOf(charge.payment_intent);
-  const transaction = await loadTransactionForCharge(paymentIntentId, charge.id);
+  let transaction = await loadTransactionForCharge(paymentIntentId, charge.id);
+
+  // Repair older installment ledger entries created from unexpanded invoice
+  // webhooks. The installment's invoice/transaction relationship is exact;
+  // never guess a payment from a customer, amount or date.
+  if (!transaction && paymentIntentId) {
+    const payments = await stripe().invoicePayments.list({
+      payment: { type: "payment_intent", payment_intent: paymentIntentId }, limit: 100,
+    });
+    const invoiceIds = payments.data.map(payment => idOf(payment.invoice)).filter((id): id is string => id !== null);
+    const matching = await pool.query<ChargeTransaction>(
+      `SELECT DISTINCT t.id,t.order_id,t.email FROM payment_plan_installments i
+       JOIN transactions t ON t.id=i.transaction_id
+       WHERE i.stripe_invoice_id=ANY($1::text[]) AND t.kind='payment'
+         AND t.stripe_payment_intent_id IS NULL`, [invoiceIds],
+    );
+    if (matching.rows.length === 1) {
+      transaction = matching.rows[0];
+      await pool.query(`UPDATE transactions SET stripe_payment_intent_id=$2,stripe_charge_id=$3 WHERE id=$1 AND stripe_payment_intent_id IS NULL`,
+        [transaction.id, paymentIntentId, charge.id]);
+    }
+  }
 
   if (!transaction || transaction.order_id === null) {
     log(`charge ${charge.id} refunded but no order-linked transaction found`);
@@ -2453,10 +2540,13 @@ async function handleChargeRefunded(charge: Stripe.Charge): Promise<void> {
   }
 
   if (refunds.length === 0 && charge.amount_refunded > 0) {
-    // No refund list on the payload: reconcile against what the order already
-    // knows about so only the unrecorded remainder is written.
-    const order = await loadOrderById(transaction.order_id);
-    const outstanding = charge.amount_refunded - (order?.refunded_cents ?? 0);
+    // The payload's running total belongs to this charge, not the whole order.
+    // Subtracting another installment's refund would silently lose this one.
+    const recorded = await pool.query<{ cents: number }>(
+      `SELECT COALESCE(SUM(amount_cents),0)::int AS cents FROM refunds WHERE transaction_id=$1`,
+      [transaction.id],
+    );
+    const outstanding = charge.amount_refunded - recorded.rows[0].cents;
     if (outstanding > 0) {
       const result = await recordRefund({
         orderId: transaction.order_id,

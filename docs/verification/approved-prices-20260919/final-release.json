@@ -1,0 +1,48 @@
+{
+  "release": "20260919224537-99df2fc",
+  "checks": [
+    {
+      "width": 320,
+      "directCourseBuyButton": true,
+      "sevenDayPlan": true,
+      "payNowCents": 2400,
+      "overflow": false
+    },
+    {
+      "width": 390,
+      "directCourseBuyButton": true,
+      "sevenDayPlan": true,
+      "payNowCents": 2400,
+      "overflow": false
+    },
+    {
+      "width": 768,
+      "directCourseBuyButton": true,
+      "sevenDayPlan": true,
+      "payNowCents": 2400,
+      "overflow": false
+    },
+    {
+      "width": 1440,
+      "directCourseBuyButton": true,
+      "sevenDayPlan": true,
+      "payNowCents": 2400,
+      "overflow": false
+    },
+    {
+      "width": 1920,
+      "directCourseBuyButton": true,
+      "sevenDayPlan": true,
+      "payNowCents": 2400,
+      "overflow": false
+    }
+  ],
+  "pricing": {
+    "oneTimeCents": 3700,
+    "installmentCents": 2400,
+    "interval": "week",
+    "count": 2,
+    "totalCents": 4800
+  },
+  "errors": []
+}

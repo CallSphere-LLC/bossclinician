@@ -1,3 +1,4 @@
+import { loadPublicCourseOffers } from "../services/courseOffers";
 import { pool } from "../db/pool";
 import { coursesRepo, resourcesRepo, testimonialsRepo } from "../db/repos";
 import { rowToCamel, rowsToCamel } from "../utils/case";
@@ -133,16 +134,7 @@ export async function loadCourseDetail(slug: string): Promise<Record<string, unk
     [course.id],
   );
 
-  const offers = await pool.query(
-    `SELECT DISTINCT o.slug, o.title, o.pricing_type, o.amount_cents, o.currency,
-                     o.interval, o.interval_count, o.installment_count, o.checkout_headline
-       FROM offers o
-       JOIN offer_products op ON op.offer_id = o.id
-       JOIN products p        ON p.id = op.product_id
-      WHERE p.course_id = $1 AND o.status = 'published'
-      ORDER BY o.amount_cents`,
-    [course.id],
-  );
+  const offers = await loadPublicCourseOffers(course.id);
 
   return {
     ...course,
@@ -153,17 +145,7 @@ export async function loadCourseDetail(slug: string): Promise<Record<string, unk
       sort: m.module_sort,
       lessons: m.lessons ?? [],
     })),
-    offers: offers.rows.map((o) => ({
-      slug: o.slug,
-      title: o.title,
-      pricingType: o.pricing_type,
-      amountCents: o.amount_cents,
-      currency: o.currency,
-      interval: o.interval,
-      intervalCount: o.interval_count,
-      installmentCount: o.installment_count,
-      checkoutHeadline: o.checkout_headline,
-    })),
+    offers,
     owned: false,
   };
 }

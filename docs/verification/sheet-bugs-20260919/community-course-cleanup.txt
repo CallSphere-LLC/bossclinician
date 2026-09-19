@@ -1,0 +1,8 @@
+courses=0
+communities=0
+members=0
+contacts=0
+email_messages=0
+login_attempts=0
+welcome_jobs=0
+scratch_databases=0

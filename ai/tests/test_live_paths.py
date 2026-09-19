@@ -187,3 +187,34 @@ def test_api_error_retries_once_then_falls_back(fake_openai: FakeOpenAI) -> None
     assert response.json() == chat_service.FALLBACK_RESPONSE.model_dump()
     assert len(fake_openai.requests) == chat_service.MAX_ATTEMPTS
 
+
+
+def test_client_bounds_how_long_one_upstream_call_can_hang(fake_openai: FakeOpenAI) -> None:
+    # Unset, the SDK default is a 600s read timeout with 2 internal retries —
+    # 30 minutes per service-level attempt on an upstream that never answers,
+    # long after the backend gave up (15s for /chat, 60s for /generate/blog).
+    client_under_test = openai_client.get_client()
+    assert client_under_test.timeout == openai_client.REQUEST_TIMEOUT
+    assert client_under_test.timeout.read is not None
+    assert client_under_test.timeout.read <= 60
+    assert client_under_test.max_retries == openai_client.MAX_RETRIES
+
+
+def test_upstream_timeout_falls_back_within_a_bounded_number_of_tries(
+    fake_openai: FakeOpenAI,
+) -> None:
+    def hang(request: httpx2.Request) -> httpx2.Response:
+        fake_openai.requests.append(request)
+        raise httpx2.ReadTimeout("upstream never answered", request=request)
+
+    mock_http = httpx2.AsyncClient(transport=httpx2.MockTransport(hang))
+    openai_client.get_client.cache_clear()
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(openai_client, "AsyncOpenAI", functools.partial(AsyncOpenAI, http_client=mock_http))
+        response = client.post("/chat", json={"sessionId": "s1", "message": "hi"})
+
+    assert response.status_code == 200
+    assert response.json() == chat_service.FALLBACK_RESPONSE.model_dump()
+    # Each service-level attempt is one SDK call, which retries MAX_RETRIES times.
+    expected = chat_service.MAX_ATTEMPTS * (openai_client.MAX_RETRIES + 1)
+    assert len(fake_openai.requests) == expected

@@ -1,0 +1,293 @@
+{
+  "release": "20260919223757-99df2fc",
+  "checks": [
+    {
+      "slug": "directory-makeover-audit",
+      "width": 320,
+      "cents": 6700,
+      "ready": false,
+      "overflow": false
+    },
+    {
+      "slug": "directory-makeover-audit",
+      "width": 390,
+      "cents": 6700,
+      "ready": false,
+      "overflow": false
+    },
+    {
+      "slug": "directory-makeover-audit",
+      "width": 768,
+      "cents": 6700,
+      "ready": false,
+      "overflow": false
+    },
+    {
+      "slug": "directory-makeover-audit",
+      "width": 1440,
+      "cents": 6700,
+      "ready": false,
+      "overflow": false
+    },
+    {
+      "slug": "directory-makeover-audit",
+      "width": 1920,
+      "cents": 6700,
+      "ready": false,
+      "overflow": false
+    },
+    {
+      "slug": "credential-with-confidence",
+      "width": 320,
+      "cents": 4700,
+      "ready": true,
+      "overflow": false
+    },
+    {
+      "slug": "credential-with-confidence",
+      "width": 390,
+      "cents": 4700,
+      "ready": true,
+      "overflow": false
+    },
+    {
+      "slug": "credential-with-confidence",
+      "width": 768,
+      "cents": 4700,
+      "ready": true,
+      "overflow": false
+    },
+    {
+      "slug": "credential-with-confidence",
+      "width": 1440,
+      "cents": 4700,
+      "ready": true,
+      "overflow": false
+    },
+    {
+      "slug": "credential-with-confidence",
+      "width": 1920,
+      "cents": 4700,
+      "ready": true,
+      "overflow": false
+    },
+    {
+      "slug": "marketing-mastery-for-therapists",
+      "width": 320,
+      "cents": 6700,
+      "ready": false,
+      "overflow": false
+    },
+    {
+      "slug": "marketing-mastery-for-therapists",
+      "width": 390,
+      "cents": 6700,
+      "ready": false,
+      "overflow": false
+    },
+    {
+      "slug": "marketing-mastery-for-therapists",
+      "width": 768,
+      "cents": 6700,
+      "ready": false,
+      "overflow": false
+    },
+    {
+      "slug": "marketing-mastery-for-therapists",
+      "width": 1440,
+      "cents": 6700,
+      "ready": false,
+      "overflow": false
+    },
+    {
+      "slug": "marketing-mastery-for-therapists",
+      "width": 1920,
+      "cents": 6700,
+      "ready": false,
+      "overflow": false
+    },
+    {
+      "slug": "therapist-niche-clarity-accelerator",
+      "width": 320,
+      "cents": 4700,
+      "ready": false,
+      "overflow": false
+    },
+    {
+      "slug": "therapist-niche-clarity-accelerator",
+      "width": 390,
+      "cents": 4700,
+      "ready": false,
+      "overflow": false
+    },
+    {
+      "slug": "therapist-niche-clarity-accelerator",
+      "width": 768,
+      "cents": 4700,
+      "ready": false,
+      "overflow": false
+    },
+    {
+      "slug": "therapist-niche-clarity-accelerator",
+      "width": 1440,
+      "cents": 4700,
+      "ready": false,
+      "overflow": false
+    },
+    {
+      "slug": "therapist-niche-clarity-accelerator",
+      "width": 1920,
+      "cents": 4700,
+      "ready": false,
+      "overflow": false
+    },
+    {
+      "slug": "rate-negotiation-letter-template",
+      "width": 320,
+      "cents": 700,
+      "ready": false,
+      "overflow": false
+    },
+    {
+      "slug": "rate-negotiation-letter-template",
+      "width": 390,
+      "cents": 700,
+      "ready": false,
+      "overflow": false
+    },
+    {
+      "slug": "rate-negotiation-letter-template",
+      "width": 768,
+      "cents": 700,
+      "ready": false,
+      "overflow": false
+    },
+    {
+      "slug": "rate-negotiation-letter-template",
+      "width": 1440,
+      "cents": 700,
+      "ready": false,
+      "overflow": false
+    },
+    {
+      "slug": "rate-negotiation-letter-template",
+      "width": 1920,
+      "cents": 700,
+      "ready": false,
+      "overflow": false
+    },
+    {
+      "slug": "prepare-to-profit-journal",
+      "width": 320,
+      "cents": 1700,
+      "ready": false,
+      "overflow": false
+    },
+    {
+      "slug": "prepare-to-profit-journal",
+      "width": 390,
+      "cents": 1700,
+      "ready": false,
+      "overflow": false
+    },
+    {
+      "slug": "prepare-to-profit-journal",
+      "width": 768,
+      "cents": 1700,
+      "ready": false,
+      "overflow": false
+    },
+    {
+      "slug": "prepare-to-profit-journal",
+      "width": 1440,
+      "cents": 1700,
+      "ready": false,
+      "overflow": false
+    },
+    {
+      "slug": "prepare-to-profit-journal",
+      "width": 1920,
+      "cents": 1700,
+      "ready": false,
+      "overflow": false
+    },
+    {
+      "slug": "client-consultation-call-script",
+      "width": 320,
+      "cents": 3700,
+      "ready": true,
+      "overflow": false
+    },
+    {
+      "slug": "client-consultation-call-script",
+      "width": 390,
+      "cents": 3700,
+      "ready": true,
+      "overflow": false
+    },
+    {
+      "slug": "client-consultation-call-script",
+      "width": 768,
+      "cents": 3700,
+      "ready": true,
+      "overflow": false
+    },
+    {
+      "slug": "client-consultation-call-script",
+      "width": 1440,
+      "cents": 3700,
+      "ready": true,
+      "overflow": false
+    },
+    {
+      "slug": "client-consultation-call-script",
+      "width": 1920,
+      "cents": 3700,
+      "ready": true,
+      "overflow": false
+    }
+  ],
+  "installments": {
+    "id": 7,
+    "label": "$24 now + $24 after 7 days ($48 total)",
+    "recommended": false,
+    "currency": "usd",
+    "amountCents": 2400,
+    "billing": {
+      "pricingType": "payment_plan",
+      "interval": "week",
+      "intervalCount": 1,
+      "installmentCount": 2,
+      "trialDays": 0,
+      "installmentCents": 2400,
+      "planTotalCents": 4800,
+      "minAmountCents": null
+    },
+    "quote": {
+      "lines": [
+        {
+          "kind": "offer",
+          "offerId": 38,
+          "productId": null,
+          "title": "CLIENT CONSULTATION CALL SCRIPT",
+          "quantity": 1,
+          "unitCents": 2400,
+          "amountCents": 2400
+        }
+      ],
+      "subtotalCents": 2400,
+      "discountCents": 0,
+      "taxableCents": 2400,
+      "taxCents": 0,
+      "totalCents": 2400,
+      "currency": "usd",
+      "formatted": {
+        "subtotal": "$24.00",
+        "discount": "$0.00",
+        "tax": "$0.00",
+        "total": "$24.00"
+      }
+    }
+  },
+  "errors": []
+}

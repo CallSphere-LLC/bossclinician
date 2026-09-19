@@ -57,6 +57,16 @@ export type EmailStatus =
   | "complained"
   | "unconfirmed";
 
+export interface ContactCommunity {
+  id: number;
+  communityId: number;
+  name: string;
+  role: string;
+  joinedAt: string;
+  banned: boolean;
+  memberActive: boolean;
+}
+
 export interface Contact {
   id: number;
   email: string;
@@ -79,6 +89,7 @@ export interface Contact {
   createdAt: string;
   updatedAt: string;
   tags: ContactTag[];
+  communities: ContactCommunity[];
   /**
    * The account behind this person, on every contact read.
    *
@@ -228,6 +239,7 @@ export interface ContactFilters {
   tag?: string;
   status?: EmailStatus;
   untagged?: boolean;
+  community?: boolean;
   audience?: "new" | "subscribed" | "new_subscriber" | "customer" | "new_customer";
   optOut?: "manual" | "self";
   engagement?: "healthy" | "passive" | "unengaged" | "inactive";
@@ -241,6 +253,7 @@ function toQuery(filters: ContactFilters): string {
   if (filters.q) qs.set("q", filters.q);
   if (filters.tag) qs.set("tag", filters.tag);
   if (filters.status) qs.set("status", filters.status);
+  if (filters.community) qs.set("community", "true");
   if (filters.untagged) qs.set("untagged", "true");
   if (filters.audience) qs.set("audience", filters.audience);
   if (filters.optOut) qs.set("optOut", filters.optOut);

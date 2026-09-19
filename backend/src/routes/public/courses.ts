@@ -3,6 +3,7 @@ import { asyncHandler } from "../../utils/asyncHandler";
 import { notFound } from "../../utils/httpError";
 import { coursesRepo } from "../../db/repos";
 import { pool } from "../../db/pool";
+import { loadPublicCourseOffers } from "../../services/courseOffers";
 import { optionalMember } from "../../middleware/memberAuth";
 
 export const coursesRouter = Router();
@@ -79,16 +80,7 @@ coursesRouter.get(
 
     // Offers are what this is actually bought through; a course may be sold at
     // several prices, so the page needs all of them rather than one.
-    const offers = await pool.query(
-      `SELECT DISTINCT o.slug, o.title, o.pricing_type, o.amount_cents, o.currency,
-                       o.interval, o.interval_count, o.installment_count, o.checkout_headline
-         FROM offers o
-         JOIN offer_products op ON op.offer_id = o.id
-         JOIN products p        ON p.id = op.product_id
-        WHERE COALESCE(p.course_id, p.legacy_course_id) = $1 AND o.status = 'published'
-        ORDER BY o.amount_cents`,
-      [course.id]
-    );
+    const offers = await loadPublicCourseOffers(course.id);
 
     let owned = false;
     if (req.member) {
@@ -112,17 +104,7 @@ coursesRouter.get(
         sort: m.module_sort,
         lessons: m.lessons ?? [],
       })),
-      offers: offers.rows.map((o) => ({
-        slug: o.slug,
-        title: o.title,
-        pricingType: o.pricing_type,
-        amountCents: o.amount_cents,
-        currency: o.currency,
-        interval: o.interval,
-        intervalCount: o.interval_count,
-        installmentCount: o.installment_count,
-        checkoutHeadline: o.checkout_headline,
-      })),
+      offers,
       owned,
     });
   })

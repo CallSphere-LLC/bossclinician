@@ -1,0 +1,26 @@
+[
+  {
+    "width": 390,
+    "live": true,
+    "communityNames": [
+      "unicorn community",
+      "The Boss"
+    ],
+    "filterReturnsContact76": true,
+    "profileShowsBoth": true,
+    "overflow": false,
+    "errors": []
+  },
+  {
+    "width": 1440,
+    "live": true,
+    "communityNames": [
+      "unicorn community",
+      "The Boss"
+    ],
+    "filterReturnsContact76": true,
+    "profileShowsBoth": true,
+    "overflow": false,
+    "errors": []
+  }
+]

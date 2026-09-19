@@ -22,6 +22,7 @@ import {
   getStripe,
   paymentElementOptions,
   stripeConfigured,
+  stripeTestMode,
 } from "@/components/checkout/stripeClient";
 import { useOfferQuote } from "@/components/checkout/useOfferQuote";
 import { useMember } from "@/hooks/useMember";
@@ -165,6 +166,11 @@ function CheckoutShell({ children }: { children: ReactNode }) {
         seam={false}
         aria-label="Checkout"
       >
+        {stripeTestMode() && (
+          <div role="status" className="mx-auto mb-8 max-w-5xl rounded-xl border border-gold/40 bg-gold/10 px-5 py-4 text-center text-sm text-gold">
+            Test checkout — no real money will be charged. Use Stripe test card 4242 4242 4242 4242 with any future expiry and any three-digit CVC.
+          </div>
+        )}
         {children}
       </Section>
     </div>
@@ -578,7 +584,20 @@ function CheckoutForm({ offer, pricingOption, mode, onAmountChange }: CheckoutFo
       }
 
       wallet = undefined;
-      if (offer.cartItems) writeCart([]);
+      // The money has moved. Nothing from here on may throw the buyer into the
+      // catch below, which would show "that payment didn't go through" over a
+      // card that went through and never navigate them to their receipt.
+      // `writeCart` is the one unguarded storage call on this page — every other
+      // one wraps its own try/catch — and localStorage rejects a write once the
+      // origin is at quota, which the chat widget's untrimmed history can reach.
+      // A stale cart is a cosmetic problem; a stranded paid customer is not.
+      if (offer.cartItems) {
+        try {
+          writeCart([]);
+        } catch {
+          // Left for the cart page to reconcile against what they now own.
+        }
+      }
       finish(checkout);
     } catch (err) {
       setPaymentError(commerceErrorMessage(err));
@@ -806,7 +825,7 @@ function CheckoutForm({ offer, pricingOption, mode, onAmountChange }: CheckoutFo
                       onConfirm={(event) => { void handleSubmit(undefined, event); }}
                     />
                     <PaymentElement
-                      options={paymentElementOptions(orderForm.collectAddress)}
+                      options={paymentElementOptions(orderForm.collectAddress, orderForm.collectPhone)}
                       onChange={() => setPaymentError(null)}
                     />
                     {mode === "setup" && (

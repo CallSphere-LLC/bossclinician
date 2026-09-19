@@ -1,0 +1,44 @@
+BEGIN
+SELECT 5
+DO
+CREATE TABLE
+DO
+DELETE 5
+DELETE 1
+DELETE 1
+    table_name    | deleted 
+------------------+---------
+ access_grants    |       3
+ contact_activity |       3
+ course_progress  |       1
+ domain_events    |       4
+ download_events  |      18
+ invoices         |       3
+ lesson_progress  |       2
+ member_sessions  |      36
+ order_items      |       5
+ refunds          |       3
+ transactions     |       9
+(11 rows)
+
+         ?column?          | count 
+---------------------------+-------
+ remaining_fixture_members |     0
+(1 row)
+
+         ?column?         | count 
+--------------------------+-------
+ remaining_fixture_orders |     0
+(1 row)
+
+          ?column?          | count 
+----------------------------+-------
+ remaining_fixture_contacts |     0
+(1 row)
+
+     ?column?     | count 
+------------------+-------
+ preserved_orders |     2
+(1 row)
+
+COMMIT

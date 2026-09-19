@@ -23,7 +23,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
 import { createPortal } from "react-dom";
-import { AnimatePresence, motion } from "motion/react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Loader2, Mic, PhoneOff } from "lucide-react";
 import type { ToolFn, VoiceContext, VoiceSurfacePolicy } from "@/voice/contract";
 import { createVoiceApiClient, useVoiceSession } from "@/voice/kernel";
@@ -69,13 +69,17 @@ function troubleWith(error: string | null): string {
   return "Something went wrong before we got started. Give it another try in a moment.";
 }
 
-export function VoiceConcierge({ policy, container, onActiveChange }: {
+export function VoiceConcierge({ policy, container, mode, onActiveChange }: {
   policy: VoiceSurfacePolicy;
   container: HTMLElement | null;
+  mode: "text" | "voice";
   onActiveChange: (active: boolean) => void;
 }) {
   const navigate = useNavigate();
   const location = useLocation();
+  const reducedMotion = useReducedMotion();
+  const preparationId = useRef(0);
+  const previousMode = useRef(mode);
 
   // Read through a ref, never captured: a tool asks where we are at the moment
   // it runs, and the answer has to include the query and the hash. Two entries
@@ -194,16 +198,31 @@ export function VoiceConcierge({ policy, container, onActiveChange }: {
     handle.status === "ending";
   const live = handle.status === "live";
   const talking = live || busy;
+  const talkingRef = useRef(talking);
+  talkingRef.current = talking;
 
+  /**
+   * What is reported is "there is a call", and nothing wider.
+   *
+   * The chat widget hangs two things off this: the dot that says a call is
+   * running, and — the one that matters — the approval card, which it mounts
+   * whenever this is false while the spoken concierge mounts it whenever it is
+   * true. The two have to be exact opposites. Counting the recording notice as
+   * activity made them overlap the wrong way round: the owner's card vanished
+   * from both for as long as the notice was on screen, with its ninety-second
+   * clock running on towards a "no" she was never shown.
+   */
   useEffect(() => {
-    onActiveChange(talking || preparing || gateOpen || correcting);
-  }, [onActiveChange, talking, preparing, gateOpen, correcting]);
+    onActiveChange(talking);
+  }, [onActiveChange, talking]);
 
   const beginCall = useCallback(async () => {
+    const attempt = ++preparationId.current;
     setGateOpen(false);
     userTurnRef.current = null;
     setPreparing(true);
     const decision = await lookUpGreeting();
+    if (attempt !== preparationId.current) return;
     greetingLookup.current = null;
     // The greeting is an input to the hook, so it has to be in place for the
     // render before the one that starts talking. Setting it here and arming the
@@ -214,7 +233,7 @@ export function VoiceConcierge({ policy, container, onActiveChange }: {
   }, [lookUpGreeting]);
 
   useEffect(() => {
-    if (!armed) return;
+    if (!armed || mode !== "voice") return;
     // Disarming immediately re-runs this effect, so nothing here may live in a
     // cleanup function: the second run would tear down the start that the first
     // one only just asked for.
@@ -223,14 +242,37 @@ export function VoiceConcierge({ policy, container, onActiveChange }: {
     // answer, and only an answer — taken or declined — is the walkthrough's to
     // remember; it records that itself, on the server and in this browser.
     void startRef.current().catch(() => undefined);
-  }, [armed]);
+  }, [armed, mode]);
 
   const endCall = useCallback(async () => {
+    preparationId.current++;
+    setPreparing(false);
+    setArmed(false);
     // Nothing the assistant asked for outlives the conversation it asked in.
     cancelPendingApprovals();
     await stopRef.current().catch(() => undefined);
     flushTranscript();
   }, [flushTranscript]);
+
+  // Switching to text also releases the microphone. Collapsing the assistant
+  // leaves the selected mode unchanged, so an ongoing call can continue.
+  useEffect(() => {
+    const previous = previousMode.current;
+    previousMode.current = mode;
+    if (mode !== "text" || previous === "text") return;
+    preparationId.current++;
+    greetingLookup.current = null;
+    setGateOpen(false);
+    setCorrecting(false);
+    setPreparing(false);
+    setArmed(false);
+    setPanelOpen(false);
+    // Only a call that had actually begun has anything to end. `endCall` also
+    // empties the approval queue, which the typed concierge shares — so looking
+    // at the Voice tab and coming straight back would otherwise decline a change
+    // the owner was still reading, without her having answered it.
+    if (talkingRef.current) void endCall();
+  }, [mode, endCall]);
 
   // A call can also end without anyone pressing anything — it has a hard
   // length limit — so the record is settled whenever the call comes to rest.
@@ -307,15 +349,15 @@ export function VoiceConcierge({ policy, container, onActiveChange }: {
       )}
 
       {container && createPortal(
-      <div className="flex min-w-0 flex-col gap-2" data-testid="chat-voice-controls">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col" data-testid="chat-voice-controls">
         <AnimatePresence>
           {showPanel && (
             <motion.div
               initial={{ opacity: 0, y: 10, scale: 0.98 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 10, scale: 0.98 }}
-              transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] as const }}
-              className="w-full min-w-0 rounded-2xl border border-hairline bg-surface-raised/95 p-3"
+              transition={{ duration: reducedMotion ? 0 : 0.2, ease: [0.22, 1, 0.36, 1] as const }}
+              className={cn("flex min-h-0 w-full min-w-0 flex-1 flex-col rounded-2xl border border-hairline bg-surface-raised p-4", (gateOpen || correcting || handle.status === "error") && "overflow-y-auto")}
             >
               {gateOpen ? (
                 <RecordingDisclosure
@@ -358,19 +400,20 @@ export function VoiceConcierge({ policy, container, onActiveChange }: {
                   </div>
                 </div>
               ) : (
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2">
+                <div className="flex min-h-0 flex-1 flex-col gap-4">
+                  <div className="flex shrink-0 items-center gap-3">
                     <VoiceOrb
                       speaking={handle.isSpeaking}
                       readLevels={live ? handle.readLevels : null}
                       surface={policy.surface}
-                      size={28}
+                      size={36}
                     />
-                    <p className="min-w-0 flex-1 truncate text-[0.72rem] font-semibold uppercase tracking-[0.16em] text-ink">
-                      {live ? "Boss Clinician AI" : "Getting ready"}
-                    </p>
+                    <div className="min-w-0 flex-1" role="status">
+                      <p className="text-sm font-semibold text-ink">{live ? (handle.isSpeaking ? "Speaking" : "Listening") : "Connecting…"}</p>
+                      <p className="mt-1 text-xs text-ink-soft">{live ? "Voice call is active" : "Getting your call ready"}</p>
+                    </div>
                     {live && handle.secondsRemaining !== null && (
-                      <span className="shrink-0 text-[0.62rem] tabular-nums text-ink-soft">
+                      <span className="max-w-16 text-right text-xs tabular-nums text-ink-soft">
                         {timeLeft(handle.secondsRemaining)}
                       </span>
                     )}
@@ -382,7 +425,7 @@ export function VoiceConcierge({ policy, container, onActiveChange }: {
                     </p>
                   )}
 
-                  <VoiceCaptions lines={handle.captions} live={live} className="max-h-28" />
+                  <VoiceCaptions lines={handle.captions} live={live} className="min-h-0 max-h-none flex-1 border-t border-hairline pt-4" />
 
                   <button
                     type="button"
@@ -390,7 +433,7 @@ export function VoiceConcierge({ policy, container, onActiveChange }: {
                       void endCall();
                       setPanelOpen(false);
                     }}
-                    className="inline-flex w-full items-center justify-center gap-2 rounded-full border border-hairline px-4 py-2.5 text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-ink-soft transition-colors hover:border-gold/50 hover:text-ink focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold"
+                    className="inline-flex min-h-11 w-full shrink-0 items-center justify-center gap-2 rounded-full border border-hairline bg-ink/[0.05] px-4 py-2.5 text-sm font-semibold text-ink transition-colors hover:border-gold/50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold"
                   >
                     <PhoneOff className="h-3.5 w-3.5" />
                     End call
@@ -402,18 +445,25 @@ export function VoiceConcierge({ policy, container, onActiveChange }: {
         </AnimatePresence>
 
         {!showPanel && (
+          <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-5 overflow-y-auto px-2 py-6 text-center">
+            <VoiceOrb speaking={false} surface={policy.surface} size={64} />
+            <div>
+              <p className="font-display text-xl text-ink">Let’s talk</p>
+              <p className="mt-2 text-sm leading-relaxed text-ink-soft">Ask a question out loud. You’ll see the conversation here as we talk.</p>
+            </div>
           <button
             type="button"
             onClick={onButton}
             aria-label={buttonLabel}
             aria-pressed={live}
+            disabled={busy || preparing}
             className={cn(
               "inline-flex w-full items-center justify-center gap-2 rounded-full px-4 py-2.5 text-xs font-semibold transition-colors",
               "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold",
               "hover:opacity-90",
               live
                 ? "border border-hairline bg-surface-raised/95 shadow-[0_18px_44px_-18px_rgba(0,0,0,0.75)] backdrop-blur"
-                : "bg-gold-foil text-night-deep shadow-[0_18px_44px_-16px_rgba(201,164,106,0.65)]",
+                : "bg-gold-foil text-night-deep",
             )}
           >
             {live ? (
@@ -430,7 +480,9 @@ export function VoiceConcierge({ policy, container, onActiveChange }: {
             )}
             <span>{buttonLabel}</span>
           </button>
+          </div>
         )}
+        <p className="shrink-0 pt-3 text-center text-xs leading-relaxed text-ink-soft">{talking ? "Switching to Text ends this call." : "Prefer typing? Switch to Text above."}</p>
       </div>, container)}
     </>
   );

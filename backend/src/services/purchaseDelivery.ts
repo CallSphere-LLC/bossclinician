@@ -1,4 +1,4 @@
-import { env } from "../config/env";
+import { env, stripeTestMode } from "../config/env";
 import { pool } from "../db/pool";
 import { publishDomainEvent } from "./domainEvents";
 import { purchaseReceipt, purchaseWelcome, type ReceiptLine } from "../email/commerceTemplates";
@@ -236,9 +236,21 @@ export async function deliverPurchase(
     // an access grant, with no money — and there is nothing to receipt.
     if (input.sendReceipt !== false) await ensureOrderReceipt(order.id);
 
+    // Sandbox billing holds back the envelope and nothing else.
+    //
+    // Returning here instead was the same bug in four places: the set-password
+    // link was never minted, so a guest checkout produced an account nobody
+    // could sign in to; the gift was never marked delivered; the buyer stayed in
+    // the sequence selling them what they had just bought; and the sale left no
+    // `domain_events` row, so no automation fired and the business had no record
+    // of it. None of that is a message. Only the sends below are, and each one
+    // is gated on its own — the addresses on a test order belong to real people.
+    const sandbox = stripeTestMode();
+
     const paymentSettings = await readSetting("customer_payments");
     const receiptRule = String(paymentSettings.receiptRule ?? "every");
     const receiptAllowed =
+      !sandbox &&
       input.sendReceipt !== false &&
       paymentSettings.sendReceipts !== false &&
       (receiptRule !== "nonzero" || order.total_cents > 0);
@@ -257,12 +269,17 @@ export async function deliverPurchase(
       setPasswordUrl = (await issueSetPasswordLink(input.memberId))?.url ?? null;
     }
 
-    if (order.gift_recipient_email && order.gift_member_id) {
+    // `deliverGift` is the gift email and the `gift_delivered_at` stamp in one
+    // transaction, and it rolls the stamp back when the transport refuses — so
+    // it cannot be half-run here. In sandbox the message is the part that must
+    // not go, which leaves the stamp unset until purchaseGift.ts can separate
+    // the two. The recipient's access grant does not come from here.
+    if (order.gift_recipient_email && order.gift_member_id && !sandbox) {
       const { deliverGift } = await import("./purchaseGift");
       await deliverGift(order);
     }
     const wantsWelcome = !order.gift_recipient_email && order.send_welcome_email !== false;
-    if (wantsWelcome && order.email) {
+    if (wantsWelcome && order.email && !sandbox) {
       const startUrl = `${env.publicSiteUrl}/library`;
       const fallback = purchaseWelcome({
         buyerName: order.billing_name,
@@ -302,7 +319,7 @@ export async function deliverPurchase(
       // What the transport said, so "welcome sent" means a welcome was sent.
       outcome.welcomeSent = welcome.sent;
       outcome.setPasswordLinkIncluded = welcome.sent && setPasswordUrl !== null;
-    } else if (setPasswordUrl !== null) {
+    } else if (setPasswordUrl !== null && !sandbox) {
       // The offer sends no welcome, but the buyer still has no way in. The
       // link cannot simply be dropped, so it goes as its own email — this is the
       // one branch where a third message is the right answer.
@@ -369,6 +386,7 @@ export function notifyOwnerOfSale(input: {
   amountCents: number;
   currency: string;
 }): void {
+  if (stripeTestMode()) return;
   // Still fire-and-forget for both callers; the address and the "someone buys
   // something" switch now come from settings, with NOTIFY_EMAIL as the fallback.
   void notificationRecipients("sale").then((to) => {

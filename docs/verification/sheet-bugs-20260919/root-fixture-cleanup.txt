@@ -1,0 +1,21 @@
+BEGIN
+DELETE 0
+DELETE 10
+DELETE 0
+DELETE 1
+DELETE 1
+COMMIT
+ ?column? | count 
+----------+-------
+ member   |     0
+ admin    |     0
+(2 rows)
+
+       ?column?        | count 
+-----------------------+-------
+ member_sessions       |     0
+ admin_sessions        |     0
+ community_memberships |     0
+ member_notifications  |     0
+(4 rows)
+

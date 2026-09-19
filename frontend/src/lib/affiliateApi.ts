@@ -1,4 +1,5 @@
 import { sessionFetch } from "@/lib/adminTransport";
+import { saveCsv } from "@/lib/formsApi";
 import { memberRequest } from "@/lib/memberApi";
 
 /**
@@ -418,14 +419,7 @@ export const adminAffiliateApi = {
     if (!res.ok) throw await parseError(res);
 
     const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = `partner-payments-${new Date().toISOString().slice(0, 10)}.csv`;
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
-    URL.revokeObjectURL(url);
+    saveCsv(blob, `partner-payments-${new Date().toISOString().slice(0, 10)}.csv`);
   },
 
   announcements: () =>

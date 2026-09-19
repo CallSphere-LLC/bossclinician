@@ -1,0 +1,147 @@
+{
+  "release": "20260919-sheet-merged-2246",
+  "checks": [
+    {
+      "slug": "directory-makeover-audit",
+      "cents": 6700,
+      "priceText": "1 profile: $67 · 2 profiles: $97 · 3 profiles: $147",
+      "sourceVerified": true
+    },
+    {
+      "slug": "fully-booked-toolkit",
+      "cents": 6700,
+      "priceText": "$67",
+      "sourceVerified": true
+    },
+    {
+      "slug": "credentialing-success-formula",
+      "cents": 1700,
+      "priceText": "$17",
+      "sourceVerified": true
+    },
+    {
+      "slug": "credential-with-confidence",
+      "cents": 4700,
+      "priceText": "$47",
+      "sourceVerified": false
+    },
+    {
+      "slug": "private-practice-starter-suite",
+      "cents": 2700,
+      "priceText": "$27",
+      "sourceVerified": true
+    },
+    {
+      "slug": "ramp-up-rate-formula",
+      "cents": 9700,
+      "priceText": "$97",
+      "sourceVerified": true
+    },
+    {
+      "slug": "provider-partnership-guide",
+      "cents": 9700,
+      "priceText": "$97",
+      "sourceVerified": true
+    },
+    {
+      "slug": "private-practice-protection-pack",
+      "cents": 9700,
+      "priceText": "$97",
+      "sourceVerified": true
+    },
+    {
+      "slug": "marketing-mastery-for-therapists",
+      "cents": 6700,
+      "priceText": "$67 (regular price $147)",
+      "sourceVerified": true
+    },
+    {
+      "slug": "therapist-niche-clarity-accelerator",
+      "cents": 4700,
+      "priceText": "$47",
+      "sourceVerified": false
+    },
+    {
+      "slug": "rate-negotiation-letter-template",
+      "cents": 700,
+      "priceText": "$7",
+      "sourceVerified": true
+    },
+    {
+      "slug": "prepare-to-profit-journal",
+      "cents": 1700,
+      "priceText": "$17",
+      "sourceVerified": false
+    },
+    {
+      "slug": "client-consultation-call-script",
+      "cents": 3700,
+      "priceText": "$37 or $24 now + $24 after 7 days ($48 total)",
+      "sourceVerified": true
+    },
+    {
+      "slug": "from-profile-to-profit",
+      "cents": 9700,
+      "priceText": "$97 or 2 monthly payments of $50 ($100 total)",
+      "sourceVerified": true
+    }
+  ],
+  "option": {
+    "id": 8,
+    "label": "2 monthly payments of $50 ($100 total)",
+    "recommended": false,
+    "currency": "usd",
+    "amountCents": 5000,
+    "billing": {
+      "pricingType": "payment_plan",
+      "interval": "month",
+      "intervalCount": 1,
+      "installmentCount": 2,
+      "trialDays": 0,
+      "installmentCents": 5000,
+      "planTotalCents": 10000,
+      "minAmountCents": null
+    },
+    "quote": {
+      "lines": [
+        {
+          "kind": "offer",
+          "offerId": 22,
+          "productId": null,
+          "title": "FROM PROFILE TO PROFIT",
+          "quantity": 1,
+          "unitCents": 5000,
+          "amountCents": 5000
+        }
+      ],
+      "subtotalCents": 5000,
+      "discountCents": 0,
+      "taxableCents": 5000,
+      "taxCents": 0,
+      "totalCents": 5000,
+      "currency": "usd",
+      "formatted": {
+        "subtotal": "$50.00",
+        "discount": "$0.00",
+        "tax": "$0.00",
+        "total": "$50.00"
+      }
+    }
+  },
+  "catalogWidths": [
+    320,
+    390,
+    768,
+    1440,
+    1920
+  ],
+  "detailPages": 14,
+  "checkoutWidths": [
+    320,
+    390,
+    768,
+    1440,
+    1920
+  ],
+  "errors": []
+}

@@ -1,0 +1,20 @@
+[
+  {
+    "persistent": false,
+    "blocked": 1,
+    "documents": 2,
+    "heading": "Your events",
+    "errors": [],
+    "automaticReloads": 1,
+    "manualRetryWorks": null
+  },
+  {
+    "persistent": true,
+    "blocked": 2,
+    "documents": 3,
+    "heading": "Your events",
+    "errors": [],
+    "automaticReloads": 1,
+    "manualRetryWorks": true
+  }
+]

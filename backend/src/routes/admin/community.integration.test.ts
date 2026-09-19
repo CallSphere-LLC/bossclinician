@@ -97,6 +97,77 @@ describeDb("community admin api (integration)", () => {
 
   /* --------------------------------------------------- admin sees it all */
 
+  it("notifies a newly added member once, including concurrent duplicate adds", async () => {
+    const communityId = await newCommunity();
+    const memberId = await insertMember(client, `${unique("welcome")}@example.test`);
+    const added = await Promise.all([
+      call("POST", `/admin/community/${communityId}/members`, { memberId }),
+      call("POST", `/admin/community/${communityId}/members`, { memberId }),
+    ]);
+    expect(added.map((result) => result.status)).toEqual([201, 201]);
+    const membershipId = added[0].body.id;
+    const notices = await client.query(
+      `SELECT kind, title, link FROM member_notifications WHERE member_id=$1`, [memberId],
+    );
+    expect(notices.rows).toEqual([expect.objectContaining({
+      kind: "community_membership_added", link: expect.stringMatching(/^\/community\/room-/),
+    })]);
+    const jobs = await client.query(
+      `SELECT payload FROM jobs WHERE kind='community.membershipWelcome' AND payload->>'membershipId'=$1`,
+      [String(membershipId)],
+    );
+    expect(jobs.rows).toEqual([{ payload: { membershipId } }]);
+    expect((await call("POST", `/admin/community/${communityId}/members`, { memberId, role: "moderator" })).status).toBe(201);
+    expect((await client.query(`SELECT id FROM member_notifications WHERE member_id=$1`, [memberId])).rowCount).toBe(1);
+  });
+
+  it("re-adding somebody who is already in keeps their role and what entitles them", async () => {
+    const communityId = await newCommunity();
+    const memberId = await insertMember(client, `${unique("re-add")}@example.test`);
+    // The shape the Stripe webhook writes for a plan that unlocks a room: the
+    // subscription is what keeps the door open, and services/access.ts reads
+    // `source` to know that. Rewriting it to 'manual' because a name was picked
+    // twice out of the unfiltered "Add someone" list would outlive the payment.
+    await client.query(
+      `INSERT INTO community_memberships (community_id, member_id, role, source)
+       VALUES ($1, $2, 'moderator', 'plan')`,
+      [communityId, memberId],
+    );
+
+    expect((await call("POST", `/admin/community/${communityId}/members`, { memberId })).status).toBe(201);
+
+    const row = await client.query<{ role: string; source: string }>(
+      `SELECT role, source FROM community_memberships WHERE community_id=$1 AND member_id=$2`,
+      [communityId, memberId],
+    );
+    expect(row.rows[0]).toEqual({ role: "moderator", source: "plan" });
+
+    // A role named in the request still moves.
+    expect((await call("POST", `/admin/community/${communityId}/members`, { memberId, role: "member" })).status).toBe(201);
+    expect((await client.query(
+      `SELECT role, source FROM community_memberships WHERE community_id=$1 AND member_id=$2`,
+      [communityId, memberId],
+    )).rows[0]).toEqual({ role: "member", source: "plan" });
+  });
+
+  it("rolls the membership and notification back when enqueueing its email fails", async () => {
+    const communityId = await newCommunity();
+    const memberId = await insertMember(client, `${unique("rollback-welcome")}@example.test`);
+    await client.query(`CREATE FUNCTION reject_welcome_job() RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN
+        IF NEW.kind = 'community.membershipWelcome' THEN RAISE EXCEPTION 'test queue failure'; END IF;
+        RETURN NEW;
+      END $$;
+      CREATE TRIGGER reject_welcome_job BEFORE INSERT ON jobs FOR EACH ROW EXECUTE FUNCTION reject_welcome_job()`);
+    try {
+      expect((await call("POST", `/admin/community/${communityId}/members`, { memberId })).status).toBe(500);
+      expect((await client.query(`SELECT id FROM community_memberships WHERE member_id=$1`, [memberId])).rowCount).toBe(0);
+      expect((await client.query(`SELECT id FROM member_notifications WHERE member_id=$1`, [memberId])).rowCount).toBe(0);
+    } finally {
+      await client.query("DROP TRIGGER reject_welcome_job ON jobs; DROP FUNCTION reject_welcome_job()");
+    }
+  });
+
   it("lists every channel in the community, restricted or not", async () => {
     const communityId = await newCommunity();
 
@@ -253,7 +324,7 @@ describeDb("community admin api (integration)", () => {
     expect((waiting.body as { id: number }[]).map((row) => row.id)).toEqual([scheduled.body.id]);
 
     // The sweeper leaves it alone while it is still in the future.
-    expect(await publishScheduledPosts()).toEqual({ published: 0 });
+    expect(await publishScheduledPosts()).toEqual({ published: 0, eventsFailed: 0 });
 
     // A past moment is refused rather than published immediately: publishing it
     // would hide what is almost always a timezone mistake.
@@ -267,7 +338,7 @@ describeDb("community admin api (integration)", () => {
       `UPDATE community_posts SET publish_at = now() - interval '1 minute' WHERE id = $1`,
       [scheduled.body.id],
     );
-    expect(await publishScheduledPosts()).toEqual({ published: 1 });
+    expect(await publishScheduledPosts()).toEqual({ published: 1, eventsFailed: 0 });
 
     const published = await client.query<{ status: string; publish_at: Date | null }>(
       `SELECT status, publish_at FROM community_posts WHERE id = $1`,

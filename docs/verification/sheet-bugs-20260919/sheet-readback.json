@@ -1,0 +1,36 @@
+{
+  "verifiedRelease": "20260919-sheet-merged-2246",
+  "verifiedAt": "2026-09-19T22:49:00Z",
+  "range": "Bugs!A10:C15",
+  "majorDimension": "ROWS",
+  "values": [
+    [
+      "when i add anyone/new member to any communty it should send an email/notification to that person",
+      "",
+      "Yes"
+    ],
+    [
+      "in course page too many arrow marks we can do something to make it look cleaner also there is a an arrow mark at the end of each lesson/module it will be more professional if it pushes out a little bit as we move the cursor from one lesson to another",
+      "",
+      "Yes"
+    ],
+    [
+      "i gave access to the course \"directory management\" from admin dashborad from contacts page(members) and it says i have the access but in the member/customer login the course is not showimg up in the library",
+      "",
+      "Yes"
+    ],
+    [
+      "meenakshi is in 2 communities and in 1 course but its just showing about the course members,it would be good if it can also show in which communities she is in and even in the dropdown box under evryone there is no option for community",
+      "",
+      "Yes"
+    ],
+    [
+      "in memebers/customer login , if i change any pages its not loading the page immediately its waiting until i click the refresh button and then the content is being loaded",
+      "",
+      "Yes"
+    ],
+    [
+      "change the new offer\""
+    ]
+  ]
+}

@@ -1,4 +1,4 @@
-import { lazy, type ComponentType, type FunctionComponent } from "react";
+import { lazy, useState, type ComponentType, type FunctionComponent } from "react";
 
 export type RouteComponent = FunctionComponent & {
   /** Resolves the page's chunk and makes this component render synchronously. */
@@ -20,18 +20,27 @@ export type RouteComponent = FunctionComponent & {
  */
 export function lazyRoute(factory: () => Promise<{ default: ComponentType }>): RouteComponent {
   let resolved: ComponentType | null = null;
-  const Lazy = lazy(factory);
+  let pending: Promise<{ default: ComponentType }> | null = null;
+  const load = () => {
+    pending ??= factory().then((module) => {
+      resolved = module.default;
+      return module;
+    }).catch((error: unknown) => {
+      pending = null;
+      throw error;
+    });
+    return pending;
+  };
+  const Lazy = lazy(load);
 
   const Route: FunctionComponent = () => {
-    const Ready = resolved;
-    return Ready ? <Ready /> : <Lazy />;
+    // Preloading must not change an already-mounted component's identity and
+    // discard form state when a visitor opens the menu for the current page.
+    const [Page] = useState(() => resolved ?? Lazy);
+    return <Page />;
   };
 
   return Object.assign(Route, {
-    preload: () =>
-      factory().then((module) => {
-        resolved = module.default;
-        return module;
-      }),
+    preload: load,
   });
 }

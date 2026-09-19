@@ -1,4 +1,5 @@
 import { sessionFetch } from "@/lib/adminTransport";
+import { saveCsv } from "@/lib/formsApi";
 import { ApiError } from "@/lib/api";
 
 /**
@@ -273,13 +274,6 @@ export const reportsApi = {
     if (!res.ok) throw new ApiError("That download didn't work.", res.status);
 
     const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `${name.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}.csv`;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(url);
+    saveCsv(blob, `${name.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}.csv`);
   },
 };

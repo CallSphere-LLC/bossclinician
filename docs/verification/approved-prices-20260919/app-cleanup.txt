@@ -1,0 +1,46 @@
+BEGIN
+SELECT 3
+DO
+SELECT 1
+DELETE 0
+DELETE 2
+CREATE TABLE
+DO
+DELETE 3
+DELETE 1
+DELETE 1
+    table_name    | deleted 
+------------------+---------
+ access_grants    |       2
+ contact_activity |       3
+ domain_events    |       2
+ email_messages   |       1
+ invoices         |       4
+ member_sessions  |      11
+ order_items      |       3
+ payment_plans    |       1
+ refunds          |       4
+ transactions     |       8
+(10 rows)
+
+         ?column?          | count 
+---------------------------+-------
+ remaining_fixture_members |     0
+(1 row)
+
+         ?column?         | count 
+--------------------------+-------
+ remaining_fixture_orders |     0
+(1 row)
+
+          ?column?          | count 
+----------------------------+-------
+ remaining_fixture_contacts |     0
+(1 row)
+
+     ?column?     | count 
+------------------+-------
+ preserved_orders |     2
+(1 row)
+
+COMMIT

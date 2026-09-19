@@ -9,6 +9,7 @@ import {
 } from "react";
 import { useLocation } from "react-router";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { MessageSquare, Mic } from "lucide-react";
 import type { ChatMessage } from "@/types";
 import type { VoiceSurfacePolicy } from "@/voice/contract";
 import { cn } from "@/lib/cn";
@@ -119,6 +120,7 @@ export function ChatWidget() {
   const [conciergeMounted, setConciergeMounted] = useState(false);
   const [voiceContainer, setVoiceContainer] = useState<HTMLDivElement | null>(null);
   const [voiceActive, setVoiceActive] = useState(false);
+  const [mode, setMode] = useState<"text" | "voice">("text");
   const scrollRef = useRef<HTMLDivElement>(null);
   const prefersReducedMotion = useReducedMotion();
 
@@ -149,7 +151,7 @@ export function ChatWidget() {
     if (open && scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages, streamingReply, open]);
+  }, [messages, streamingReply, open, mode]);
 
   /**
    * Once opened, the concierge's own overlays stay mounted for the rest of the
@@ -225,7 +227,7 @@ export function ChatWidget() {
           Its controls are portaled into the open panel; its page overlays stay outside. */}
       {conciergeMounted && (
         <Suspense fallback={null}>
-          <VoiceConcierge policy={policy} container={voiceContainer} onActiveChange={setVoiceActive} />
+          <VoiceConcierge policy={policy} container={voiceContainer} mode={mode} onActiveChange={setVoiceActive} />
         </Suspense>
       )}
 
@@ -261,16 +263,16 @@ export function ChatWidget() {
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 20, scale: 0.96 }}
               transition={panelTransition}
-              className="glass glass-edge mb-4 flex h-[28rem] max-h-[calc(100dvh-6rem)] w-[min(92vw,22rem)] flex-col overflow-hidden rounded-3xl sm:h-[32rem] sm:w-96"
+              className="glass glass-edge flex h-[34rem] max-h-[calc(100dvh-3rem)] w-[min(calc(100vw-2.5rem),24rem)] flex-col overflow-hidden rounded-3xl"
             >
-              <div className="relative flex items-center justify-between border-b border-white/[0.07] bg-night-raised/70 px-5 py-4 text-white">
+              <div className="relative flex shrink-0 items-center justify-between border-b border-hairline bg-surface-raised px-5 py-4 text-ink">
                 <div aria-hidden className="absolute inset-x-0 bottom-0 h-px bg-rule-gold opacity-50" />
                 <div>
                   <p className="font-display text-[0.95rem] font-semibold">
                     Boss <em className="text-foil italic">Clinician</em> Assistant
                   </p>
-                  <p className="mt-0.5 text-[0.68rem] uppercase tracking-[0.16em] text-gold/60">
-                    Usually replies instantly
+                  <p aria-live="polite" className="mt-1 text-xs text-ink-soft">
+                    {mode === "text" ? "Text mode · Ask a question" : "Voice mode · Talk with your assistant"}
                   </p>
                 </div>
                 <button
@@ -283,6 +285,27 @@ export function ChatWidget() {
                 </button>
               </div>
 
+              <div role="group" aria-label="Conversation mode" className="mx-4 my-3 flex shrink-0 gap-1 rounded-2xl border border-hairline bg-ink/[0.05] p-1">
+                {(["text", "voice"] as const).map((choice) => {
+                  const Icon = choice === "text" ? MessageSquare : Mic;
+                  return (
+                    <button
+                      key={choice}
+                      type="button"
+                      aria-pressed={mode === choice}
+                      aria-controls={`assistant-${choice}-panel`}
+                      title={choice === "text" && voiceActive ? "End voice call and switch to text" : undefined}
+                      onClick={() => setMode(choice)}
+                      className={cn("flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl text-sm font-semibold transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold", mode === choice ? "bg-[#4B2E83] text-[#fff] shadow-sm" : "text-ink-soft hover:bg-ink/[0.05] hover:text-ink")}
+                    >
+                      <Icon aria-hidden="true" className="h-4 w-4" />
+                      {choice === "text" ? "Text" : "Voice"}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div id="assistant-text-panel" className={cn("min-h-0 flex-1 flex-col", mode === "text" ? "flex" : "hidden")}>
               <div
                 ref={scrollRef}
                 role="log"
@@ -325,8 +348,8 @@ export function ChatWidget() {
                 )}
               </div>
 
-              {suggestions.length > 0 && !voiceActive && (
-                <div className="flex flex-wrap gap-2 border-t border-white/[0.07] px-4 py-3">
+              {suggestions.length > 0 && (
+                <div className="flex shrink-0 flex-wrap gap-2 border-t border-hairline px-4 py-3">
                   {suggestions.map((s) => (
                     <button
                       key={s}
@@ -339,8 +362,6 @@ export function ChatWidget() {
                   ))}
                 </div>
               )}
-
-              <div ref={setVoiceContainer} className="max-h-[55%] shrink-0 overflow-y-auto border-t border-white/[0.07] px-3 py-2" />
 
               <form onSubmit={handleSubmit} className="flex shrink-0 items-center gap-2 border-t border-white/[0.07] p-3">
                 <label htmlFor="chat-input" className="sr-only">
@@ -362,6 +383,8 @@ export function ChatWidget() {
                   <SendIcon />
                 </button>
               </form>
+              </div>
+              <div id="assistant-voice-panel" ref={setVoiceContainer} className={cn("min-h-0 flex-1 flex-col px-4 pb-4", mode === "voice" ? "flex" : "hidden")} />
             </motion.div>
           )}
         </AnimatePresence>

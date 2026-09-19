@@ -143,20 +143,20 @@ export default function BlogPost() {
         title={`${post.title} | Boss Clinician`}
         description={post.excerpt}
         type="article"
-        image={post.coverImage}
+        image={post.coverImage ?? undefined}
         author={post.author}
-        publishedTime={post.publishedAt}
-        modifiedTime={post.updatedAt ?? post.publishedAt}
+        publishedTime={post.publishedAt ?? undefined}
+        modifiedTime={post.updatedAt ?? post.publishedAt ?? undefined}
         tags={post.tags}
         jsonLd={[
           articleNode(origin, {
             title: post.title,
             description: post.excerpt,
             slug: post.slug,
-            coverImage: post.coverImage,
+            coverImage: post.coverImage ?? undefined,
             author: post.author,
-            publishedAt: post.publishedAt,
-            updatedAt: post.updatedAt ?? post.publishedAt,
+            publishedAt: post.publishedAt ?? undefined,
+            updatedAt: post.updatedAt ?? post.publishedAt ?? undefined,
             tags: post.tags,
             wordCount: countWords(post.bodyMd),
           }),
@@ -184,7 +184,7 @@ export default function BlogPost() {
           titleAccent={accent}
           tone="violet"
           actions={<ArticleMeta author={post.author} readMinutes={post.readMinutes} />}
-          aside={<CoverPlate src={post.coverImage} />}
+          aside={post.coverImage ? <CoverPlate src={post.coverImage} /> : undefined}
         />
 
         {/* ── The article ──────────────────────────────────────────────────

@@ -1,0 +1,153 @@
+{
+  "voice": "marin",
+  "sessionId": "a0079967-edf1-452b-9d63-6b3faae017d8",
+  "receivedLiveAudio": true,
+  "captionText": "Boss Clinician Assistant\n\nVoice mode · Talk with your assistant\n\nText\nVoice\n\nSpeaking\n\nVoice call is active\n\n5 minutes left\n\nBOSS CLINICIAN AI Hi, welcome! I'm Boss Clinician AI. I can take you around the site and explain what's on each page, one detail at a time. Would you like me\n\nEnd call\n\nSwitching to Text ends this call.",
+  "oneSessionAfterCollapse": true,
+  "switchToTextEndedCall": true,
+  "microphoneReleased": true,
+  "draftPreserved": true,
+  "requests": [
+    {
+      "path": "/api/voice/tour-progress",
+      "status": 200
+    },
+    {
+      "path": "/api/voice/tour-progress",
+      "status": 200
+    },
+    {
+      "path": "/api/voice/session",
+      "status": 200,
+      "voice": "marin",
+      "sessionId": "a0079967-edf1-452b-9d63-6b3faae017d8"
+    },
+    {
+      "path": "/api/voice/connect",
+      "status": 200
+    },
+    {
+      "path": "/api/voice/recording",
+      "status": 202
+    },
+    {
+      "path": "/api/voice/recording",
+      "status": 202
+    },
+    {
+      "path": "/api/voice/recording",
+      "status": 202
+    },
+    {
+      "path": "/api/voice/recording",
+      "status": 202
+    },
+    {
+      "path": "/api/voice/end",
+      "status": 200
+    },
+    {
+      "path": "/api/voice/transcript",
+      "status": 200
+    }
+  ],
+  "events": [
+    {
+      "type": "session.started",
+      "voice": "marin"
+    },
+    {
+      "type": "session.updated",
+      "voice": "marin"
+    },
+    {
+      "type": "session.output_transcript.delta"
+    },
+    {
+      "type": "session.output_transcript.delta"
+    },
+    {
+      "type": "session.instructions.appended"
+    },
+    {
+      "type": "session.output_transcript.delta"
+    },
+    {
+      "type": "session.thinking.appended"
+    },
+    {
+      "type": "session.instructions.appended"
+    },
+    {
+      "type": "session.output_transcript.delta"
+    },
+    {
+      "type": "session.output_transcript.delta"
+    },
+    {
+      "type": "session.output_transcript.delta"
+    },
+    {
+      "type": "session.output_transcript.delta"
+    },
+    {
+      "type": "session.output_transcript.delta"
+    },
+    {
+      "type": "session.output_transcript.delta"
+    },
+    {
+      "type": "session.output_transcript.delta"
+    },
+    {
+      "type": "session.output_transcript.delta"
+    },
+    {
+      "type": "session.output_transcript.delta"
+    },
+    {
+      "type": "session.output_transcript.delta"
+    },
+    {
+      "type": "session.output_transcript.delta"
+    },
+    {
+      "type": "session.output_transcript.delta"
+    },
+    {
+      "type": "session.output_transcript.delta"
+    },
+    {
+      "type": "session.output_transcript.delta"
+    },
+    {
+      "type": "session.output_transcript.delta"
+    },
+    {
+      "type": "session.output_transcript.delta"
+    },
+    {
+      "type": "session.output_transcript.delta"
+    },
+    {
+      "type": "session.output_transcript.delta"
+    },
+    {
+      "type": "session.output_transcript.delta"
+    },
+    {
+      "type": "session.output_transcript.delta"
+    },
+    {
+      "type": "session.output_transcript.delta"
+    },
+    {
+      "type": "session.output_transcript.delta"
+    },
+    {
+      "type": "session.closed",
+      "voice": "marin"
+    }
+  ],
+  "errors": []
+}

@@ -50,6 +50,7 @@ import {
   type BadgeProps,
 } from "@/pages/admin/ui/primitives";
 import { friendlyError, humaniseKey, pluralize } from "@/pages/admin/ui/friendly";
+import { saveCsv } from "@/lib/formsApi";
 import { DataTable, RowActions } from "@/pages/admin/ui/DataTable";
 import { Modal, useConfirm } from "@/pages/admin/ui/Dialog";
 
@@ -566,12 +567,7 @@ export default function Members() {
     setDownloading(true);
     try {
       const blob = await adminApi.membersExportCsv();
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `members-${new Date().toISOString().slice(0, 10)}.csv`;
-      link.click();
-      URL.revokeObjectURL(url);
+      saveCsv(blob, `members-${new Date().toISOString().slice(0, 10)}.csv`);
       toast.success("Your spreadsheet is downloading");
     } catch (err) {
       toast.error(friendlyError(err, "list"));

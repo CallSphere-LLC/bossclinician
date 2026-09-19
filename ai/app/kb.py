@@ -15,6 +15,10 @@ from app.config import settings
 
 logger = logging.getLogger("bossclinician.ai")
 
+# The heading build_kb.py writes for the section that must survive truncation.
+GUARDRAIL_HEADING = "\n## Guardrail Facts"
+ELISION = "\n\n[...knowledge base truncated to fit AI_KB_MAX_CHARS...]\n\n"
+
 _FALLBACK_KB = (
     "# Boss Clinician\n\n"
     "Boss Clinician is Yvette Howard, LCSW's coaching brand for therapists "
@@ -40,5 +44,24 @@ def load_knowledge_base() -> str:
             len(text),
             settings.kb_max_chars,
         )
-        text = text[: settings.kb_max_chars] + "\n\n[...truncated...]\n"
+        text = _truncate(text, settings.kb_max_chars)
     return text
+
+
+def _truncate(text: str, budget: int) -> str:
+    """Trim the middle, not the end.
+
+    build_kb.py puts the guardrail facts last, so a plain head truncation
+    drops exactly the part the model most needs to respect (no guaranteed
+    income, pricing on file may be stale, we don't bill insurance, the site
+    disclaimer). Keep the head and that trailing section, and elide between
+    them.
+    """
+    tail_start = text.rfind(GUARDRAIL_HEADING)
+    tail = text[tail_start:] if tail_start != -1 else ""
+    # A guardrail section large enough to crowd out the digest itself would be
+    # its own bug; take the head half of the budget back if that ever happens.
+    if len(tail) > budget // 2:
+        tail = tail[: budget // 2]
+    head = text[: budget - len(tail)]
+    return head + ELISION + tail

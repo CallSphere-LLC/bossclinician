@@ -1,8 +1,8 @@
-import {
-  loadStripe,
-  type Appearance,
-  type Stripe,
-  type StripePaymentElementOptions,
+import { loadStripe } from "@stripe/stripe-js/pure";
+import type {
+  Appearance,
+  Stripe,
+  StripePaymentElementOptions,
 } from "@stripe/stripe-js";
 import type { SiteTheme } from "@/lib/siteTheme";
 
@@ -17,7 +17,8 @@ import type { SiteTheme } from "@/lib/siteTheme";
  * Stripe's own default.
  */
 
-const PUBLISHABLE_KEY = (import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY as string | undefined) ?? "";
+import { STRIPE_PUBLISHABLE_KEY as PUBLISHABLE_KEY } from "@/lib/paymentMode";
+export { stripeTestMode } from "@/lib/paymentMode";
 
 let stripePromise: Promise<Stripe | null> | null = null;
 
@@ -168,20 +169,21 @@ export function appearanceForTheme(theme: SiteTheme): Appearance {
 /**
  * The Element's own field set.
  *
- * Name, email and phone are collected by the order form above it, so they are
- * `never` here and passed at confirmation instead — asking twice on a phone is
+ * Name and email are collected by the order form above it. Phone is hidden
+ * only when that form collects it too: every hidden field must be supplied
+ * at confirmation — asking twice on a phone is
  * how a checkout loses people. The address is the exception: when the offer does
  * not ask for one we let Stripe collect whatever the chosen payment method
  * requires, because some methods will not confirm without it.
  */
-export function paymentElementOptions(collectAddress: boolean): StripePaymentElementOptions {
+export function paymentElementOptions(collectAddress: boolean, collectPhone = false): StripePaymentElementOptions {
   return {
     layout: { type: "tabs", defaultCollapsed: false },
     fields: {
       billingDetails: {
         name: "never",
         email: "never",
-        phone: "never",
+        phone: collectPhone ? "never" : "auto",
         address: collectAddress ? "never" : "auto",
       },
     },

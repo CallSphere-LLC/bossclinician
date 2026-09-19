@@ -2,7 +2,7 @@ import { Link, useParams } from "react-router";
 import { motion } from "motion/react";
 import { Check, Clock, Lock, PlayCircle, ShieldCheck } from "lucide-react";
 import { Seo } from "@/components/Seo";
-import { BuyButton } from "@/components/BuyButton";
+import { stripeTestMode } from "@/lib/paymentMode";
 import { GlassCard } from "@/components/luxe/GlassCard";
 import { LuxeButton, LuxePill } from "@/components/luxe/LuxeButton";
 import { GoldRule, Section } from "@/components/luxe/Section";
@@ -15,7 +15,7 @@ import { cn } from "@/lib/cn";
 import { courseNode, productNode } from "@/seo/schema";
 import { useHeadContext } from "@/ssr/context";
 import { ssrKeys } from "@/ssr/keys";
-import { isPurchasable, type Course } from "@/types";
+import type { Course } from "@/types";
 
 /**
  * The sales page for one course.
@@ -49,6 +49,8 @@ interface CurriculumModule {
 }
 
 interface CourseOffer {
+  available: boolean;
+  unavailableReason: string;
   slug: string;
   title: string;
   pricingType: "one_time" | "subscription" | "payment_plan" | "free" | "pwyw";
@@ -298,6 +300,11 @@ export default function CourseDetail() {
                   />
                 )}
 
+                {stripeTestMode() && (
+                  <p role="status" className="mb-5 rounded-xl border border-gold/40 bg-gold/10 p-4 text-sm text-gold">
+                    Test mode — no real payments.
+                  </p>
+                )}
                 {course.owned ? (
                   <>
                     <p className="text-sm text-orchid">
@@ -315,32 +322,27 @@ export default function CourseDetail() {
                         {offer.checkoutHeadline && (
                           <p className="mt-1.5 text-sm text-orchid-dim">{offer.checkoutHeadline}</p>
                         )}
-                        <LuxeButton
+                        {offer.available ? <LuxeButton
                           to={`/checkout/${offer.slug}`}
                           variant="foil"
                           className="mt-4 w-full"
                         >
-                          {offer.pricingType === "free" ? "Get it free" : "Enroll now"}
-                        </LuxeButton>
+                          {offer.pricingType === "free" ? "Get it free" : "Buy course"}
+                        </LuxeButton> : (
+                          <p className="mt-4 text-sm leading-relaxed text-orchid-dim">{offer.unavailableReason}</p>
+                        )}
                       </div>
                     ))}
                   </div>
-                ) : isPurchasable(course) ? (
-                  <>
-                    {course.priceText && (
-                      <p className="font-display text-2xl text-ink">{course.priceText}</p>
-                    )}
-                    <BuyButton slug={course.slug} label="Enroll now" size="md" className="mt-4 block" />
-                  </>
                 ) : (
                   <>
                     <p className="text-sm leading-relaxed text-orchid">
                       {course.priceText
                         ? course.priceText
-                        : "Enrollment for this one opens by application."}
+                        : "Enrollment will open when this course’s price and materials are ready."}
                     </p>
-                    <LuxeButton to="/apply" variant="foil" className="mt-5 w-full">
-                      Apply to join
+                    <LuxeButton to="/contact" variant="foil" className="mt-5 w-full">
+                      Ask about this course
                     </LuxeButton>
                   </>
                 )}

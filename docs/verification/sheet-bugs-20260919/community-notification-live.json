@@ -1,0 +1,19 @@
+{
+  "memberId": 76,
+  "communityId": 12,
+  "membershipId": 36,
+  "notifications": 1,
+  "job": {
+    "status": "succeeded",
+    "result": {
+      "reason": "Membership is no longer active",
+      "outcome": "skipped"
+    },
+    "attempts": 1
+  },
+  "bellVisible": true,
+  "persistedAfterReload": true,
+  "outboundEmails": 0,
+  "release": "20260919-sheet-merged-2246",
+  "cleanup": "Synthetic community and member cleanup complete"
+}

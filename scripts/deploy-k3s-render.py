@@ -40,8 +40,11 @@ for name, docker_name in [('uploads', 'bossclinician_uploads_data'), ('protected
     volumes.append({'name': name, 'hostPath': {'path': path, 'type': 'Directory'}})
 
 objects = []
+frontend = container('frontend','frontend',80,'/index.html','96Mi')
+frontend['volumeMounts'] = [{'name': 'browser-assets', 'mountPath': '/srv/browser-assets', 'readOnly': True}]
+volumes.append({'name': 'browser-assets', 'hostPath': {'path': '/var/lib/bossclinician/browser-assets', 'type': 'Directory'}})
 for name, containers, mounts in [
-    ('boss-app', [backend, container('frontend','frontend',80,'/index.html','96Mi'), container('gateway','gateway',8080,'/api/health','96Mi')], volumes),
+    ('boss-app', [backend, frontend, container('gateway','gateway',8080,'/api/health','96Mi')], volumes),
     ('boss-ai', [container('ai','ai',8000,'/health','512Mi',True)], [])
 ]:
     objects.append({'apiVersion':'apps/v1','kind':'Deployment','metadata':{'name':name,'namespace':ns},'spec':{'replicas':1,'revisionHistoryLimit':2,'progressDeadlineSeconds':600,'strategy':{'type':'RollingUpdate','rollingUpdate':{'maxUnavailable':0,'maxSurge':1}},'selector':{'matchLabels':{'app':name}},'template':{'metadata':{'labels':{'app':name},'annotations':{'bossclinician/release':release}},'spec':{'nodeSelector':{'kubernetes.io/hostname':node},'automountServiceAccountToken':False,'terminationGracePeriodSeconds':45,'containers':containers,'volumes':mounts}}}})

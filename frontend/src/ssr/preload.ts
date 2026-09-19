@@ -20,3 +20,10 @@ export async function preloadPublicRoute(pathname: string): Promise<void> {
     }
   }
 }
+
+/** Speculation is optional and must never navigate or reload the current page. */
+export function warmPublicRoute(pathname: string): void {
+  const connection = (navigator as Navigator & { connection?: { saveData?: boolean; effectiveType?: string } }).connection;
+  if (connection?.saveData || /(^|-)2g$/.test(connection?.effectiveType ?? "")) return;
+  void preloadPublicRoute(pathname).catch(() => undefined);
+}
