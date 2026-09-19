@@ -97,6 +97,15 @@ export const avatarSections: AvatarSectionData[] = [
         ctaLabel: "Take the Free Quiz",
         href: "/practice-quiz",
       },
+      {
+        id: "marketing-plan",
+        tag: "Free Marketing Guide",
+        title: "5-Step Marketing Plan",
+        description:
+          "Why your marketing isn't working — and exactly what to do instead. A simple, sustainable system to attract aligned clients without posting every day or depending on platforms to send referrals.",
+        ctaLabel: "Get the Free 5-Step Marketing Plan",
+        href: "/resources",
+      },
     ],
     cta: {
       body: "Ready for the full foundation-building experience — live coaching, monthly kits, and a community that actually gets it?",
@@ -114,23 +123,15 @@ export const avatarSections: AvatarSectionData[] = [
       "You've been in practice 3 or more years. Calendar full, income capped, burnt out from back-to-back sessions. Ready to build something that actually works for your life.",
     cards: [
       {
-        id: "reset-audit",
-        tag: "Free Audit",
+        id: "free-masterclass",
+        tag: "Free Masterclass",
         badge: "Featured",
         featured: true,
-        title: "The Practice Reset Audit",
+        title:
+          "How to Create a Private Practice That Supports Your Income, Energy and Future — Without Seeing 25 to 30 Clients Forever",
         description:
-          "A free, fillable audit to identify exactly what's draining your time and income. Run every task through a 4-question clarity filter and walk away with a clear reset plan — and permission to stop what isn't working.",
-        ctaLabel: "Get the Free Audit",
-        href: "/resources",
-      },
-      {
-        id: "marketing-plan",
-        tag: "Free Marketing Guide",
-        title: "5-Step Marketing Plan",
-        description:
-          "Why your marketing isn't working — and exactly what to do instead. A simple, sustainable system to attract aligned clients without posting every day or depending on platforms to send referrals.",
-        ctaLabel: "Get the Free 5-Step Marketing Plan",
+          "For established clinicians whose practice is working, but who do not want their income, schedule, and future to depend on staying clinically maxed out. Learn why being fully booked can still leave you maxed out, where your practice may depend too heavily on you, and what needs to change if you want the practice to support your next season. Includes the complimentary Practice Freedom Audit.",
+        ctaLabel: "Watch the Free Masterclass",
         href: "/resources",
       },
     ],
