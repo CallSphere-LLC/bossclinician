@@ -35,6 +35,15 @@ interface GlassCardProps {
   interactive?: boolean;
   className?: string;
   style?: CSSProperties;
+  /**
+   * Narration markers for the voice concierge (see voice/contract.ts). A card is
+   * the unit the page reader and the pointer both want to treat as one thing —
+   * a stat tile, a plan, an account area — so the markers belong on the card
+   * rather than on something wrapped around it.
+   */
+  "data-narrate"?: string;
+  "data-narrate-label"?: string;
+  "data-narrate-skip"?: string;
   children: ReactNode;
 }
 
@@ -54,6 +63,7 @@ export function GlassCard({
   className,
   style,
   children,
+  ...narration
 }: GlassCardProps) {
   // Pointer position is written straight to CSS custom properties rather than
   // React state: hover must not re-render a card that contains an entire
@@ -67,6 +77,7 @@ export function GlassCard({
 
   return (
     <Tag
+      {...narration}
       onPointerMove={spotlight ? onPointerMove : undefined}
       style={
         {

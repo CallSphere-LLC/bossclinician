@@ -62,6 +62,16 @@ interface SectionProps {
   /** Escape hatch for full-bleed sections that lay out their own container. */
   bleed?: boolean;
   "aria-label"?: string;
+  /**
+   * Narration markers for the voice concierge (see voice/contract.ts). They are
+   * declared here rather than reached through a wrapper because `rest` already
+   * lands on the `<section>` element, and a band the agent should read aloud —
+   * or skip, as a scrolling logo strip should be — is a property of the section
+   * itself.
+   */
+  "data-narrate"?: string;
+  "data-narrate-label"?: string;
+  "data-narrate-skip"?: string;
   children: ReactNode;
 }
 

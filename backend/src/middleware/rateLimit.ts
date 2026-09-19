@@ -93,6 +93,52 @@ export const chatTranscriptLimiter = rateLimit({
 });
 
 /**
+ * The voice concierge's three routes.
+ *
+ * These are per-IP burst backstops and nothing more. The real per-caller
+ * ceiling is `SURFACE_LIMITS[surface].sessionsPerHour`, enforced against the
+ * signed-in person where there is one (services/voice/policy.ts), and that
+ * split matters here more than anywhere else on the site: req.ip is a constant
+ * in production (the `trust proxy` note in app.ts), so a limit tight enough to
+ * bound one abuser would bound every visitor at once. So these are sized to
+ * stop a runaway loop, and the identity-keyed budget is what stops a person.
+ *
+ * /connect is the expensive one — each success mints a billable audio session —
+ * but it cannot be reached at all without an admission /session already issued
+ * and counted, so it does not need a second tight cap of its own.
+ */
+export const voiceSessionLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: GENERIC_RATE_LIMIT_MESSAGE,
+});
+
+export const voiceConnectLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: GENERIC_RATE_LIMIT_MESSAGE,
+});
+
+/**
+ * Looser than chatLimiter, and for the same reason chatTranscriptLimiter is:
+ * one typed sentence is several requests here, not one. The browser executes
+ * the model's tool calls and comes straight back with the results, so walking
+ * somebody through a page legitimately costs three or four round trips before
+ * a single word is shown.
+ */
+export const voiceChatLimiter = rateLimit({
+  windowMs: 10 * 60 * 1000,
+  max: 120,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: GENERIC_RATE_LIMIT_MESSAGE,
+});
+
+/**
  * Member identity limiters.
  *
  * Separate instances from the admin ones above on purpose: sharing a counter

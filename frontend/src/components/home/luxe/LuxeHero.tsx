@@ -87,7 +87,14 @@ export function LuxeHero() {
           {/* lg padding is tighter than the 6rem the column used to carry: the
               tier rail now lives in this column, and on a 1536×864 laptop the
               old value pushed it past the fold. */}
-          <div className="relative z-10 pb-4 pt-14 sm:pt-16 lg:py-20 short:py-10 xl:pr-10">
+          {/* The first thing the concierge should read out on arrival: the
+              promise, the lede and the two buttons, without the decoration
+              either side of them. */}
+          <div
+            data-narrate=""
+            data-narrate-label="Build a private practice you can actually stay in"
+            className="relative z-10 pb-4 pt-14 sm:pt-16 lg:py-20 short:py-10 xl:pr-10"
+          >
             <motion.div {...rise(staticEntrance, 0.05)} className="flex items-center gap-4">
               <span aria-hidden className="rule-gold hidden w-10 shrink-0 sm:block" />
               {/* 0.6rem resolved to 9.6px on a phone — below the floor where a

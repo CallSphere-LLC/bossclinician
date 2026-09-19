@@ -48,6 +48,7 @@ import { adminMarketingOverviewRouter } from "./marketingOverview";
 import { adminCoachingSessionFilesRouter } from "./coachingSessionFiles";
 import { adminAuditLogRouter } from "./auditLog";
 import { adminContactAccessRouter } from "./contactAccess";
+import { adminVoiceSessionsRouter, adminVoiceRecordingRouter } from "./voiceSessions";
 
 export const adminRouter = Router();
 adminRouter.use(adminCsrf);
@@ -147,6 +148,10 @@ adminRouter.use("/media", requireAuth, moduleGate("website"), adminMediaRouter);
 adminRouter.use("/curriculum", requireAuth, moduleGate("products"), adminCurriculumRouter);
 adminRouter.use("/coaching", requireAuth, moduleGate("coaching"), adminCoachingSessionFilesRouter);
 adminRouter.use("/audit-log", requireAuth, requirePermission("admins.view"), adminAuditLogRouter);
+// The concierge's conversations, held to the same permission as the activity
+// log: they carry what customers said in their own words, and the audit of what
+// the assistant was approved to do inside this admin.
+adminRouter.use("/voice-sessions", requireAuth, requirePermission("admins.view"), adminVoiceSessionsRouter);
 adminRouter.use("/contact-access", requireAuth, moduleGate("contacts"), adminContactAccessRouter);
 adminRouter.use("/members", requireAuth, requirePermission("contacts.view"), adminMembersRouter);
 adminRouter.use("/community", requireAuth, moduleGate("community"), adminCommunityRouter);
@@ -183,3 +188,9 @@ adminRouter.use("/marketing-overview", requireAuth, requirePermission("marketing
 // Accepting an invite happens BEFORE the invitee has an account, so this one
 // router deliberately sits outside requireAuth. Its own token is the credential.
 adminRouter.use("/", adminInviteRouter);
+// Playing back a recording is the second router where the token IS the
+// credential, and for a concrete reason: the admin access cookie lives five
+// minutes and an <audio> element cannot refresh it, so a player holding a
+// cookie-gated URL falls silent part way through. The link is minted by the
+// authenticated route above, names one recording and dies in fifteen minutes.
+adminRouter.use("/", adminVoiceRecordingRouter);

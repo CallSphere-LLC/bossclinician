@@ -110,6 +110,10 @@ export default function Apply() {
       {/* ── The form ───────────────────────────────────────────────────────── */}
       <Section
         id="apply-form"
+        // The point of the page. Someone who asks "where do I apply" should be
+        // brought here and have this, not the letter above it, read to them.
+        data-narrate=""
+        data-narrate-label="Fill out the form below"
         surface="raised"
         space="lg"
         aurora="gold"

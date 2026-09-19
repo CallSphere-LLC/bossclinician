@@ -245,6 +245,11 @@ export default function Dashboard() {
               return (
                 <Card
                   key={tile.key}
+                  // Tagged for the voice concierge: these five are the figures
+                  // she asks for by name, and an explicit label beats the page
+                  // reader guessing which caption belongs to which number.
+                  data-narrate=""
+                  data-narrate-label={tile.label}
                   className={cn(
                     "overflow-hidden transition-colors",
                     chosen && "border-plum-bright/45",
@@ -729,7 +734,11 @@ function StatTile({
 }) {
   return (
     <Link to={to} className="group">
-      <Card className="h-full overflow-hidden p-5 transition-all duration-150 group-hover:-translate-y-0.5 group-hover:border-plum/30 group-hover:shadow-[0_18px_40px_-20px_rgba(0,0,0,0.55)]">
+      <Card
+        data-narrate=""
+        data-narrate-label={label}
+        className="h-full overflow-hidden p-5 transition-all duration-150 group-hover:-translate-y-0.5 group-hover:border-plum/30 group-hover:shadow-[0_18px_40px_-20px_rgba(0,0,0,0.55)]"
+      >
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <p className="text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-ink-soft">

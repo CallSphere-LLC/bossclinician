@@ -8,6 +8,7 @@ import { publicRouter } from "./routes/public";
 import { adminRouter } from "./routes/admin";
 import { memberAuthRouter } from "./routes/auth";
 import { memberRouter } from "./routes/member";
+import { voiceRouter } from "./routes/voice";
 import { accountReceiptsRouter } from "./routes/member/accountReceipts";
 import { seoRouter } from "./routes/public/seo";
 import { renderRouter } from "./routes/public/render";
@@ -69,6 +70,15 @@ export function createApp(): Express {
   // the bytes whatever they claim to be costs nothing.
   app.use("/api/email/webhook", express.raw({ type: () => true, limit: "1mb" }));
 
+  // The voice concierge's SDP exchange. Same rule as the two webhook parsers
+  // above and for the same mechanical reason: express.json() consumes the
+  // stream, and an SDP offer is not JSON — once it has been parsed (or, more
+  // precisely, refused) the bytes are gone and the broker has nothing to trade.
+  // Scoped to the one route, so nothing else on the site gains a text parser.
+  // 64kb matches the cap services/voice/liveSession.ts enforces on the offer
+  // itself; body-parser's own 413 is rendered by the error handler.
+  app.use("/api/voice/connect", express.text({ type: "application/sdp", limit: "64kb" }));
+
   app.use(express.json({ limit: "2mb" }));
   app.use(express.urlencoded({ extended: true }));
 
@@ -107,6 +117,11 @@ export function createApp(): Express {
   // authenticated by the /account/-scoped document cookie; nginx sends exactly
   // these here and every other /account URL to the SPA.
   app.use("/account", accountReceiptsRouter);
+  // The voice and text concierge. Its own mount rather than a router inside the
+  // public one, because it is not a public surface: it serves all three, and it
+  // decides which one a request gets from that request's own cookies. Ahead of
+  // publicRouter so /api/voice is never shadowed by a catch-all there.
+  app.use("/api/voice", voiceRouter);
   app.use("/api", publicRouter);
 
   // Server-rendered marketing HTML. Last, and matching only its own explicit

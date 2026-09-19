@@ -111,7 +111,25 @@ services:
     restart: unless-stopped
     logging: *logging
     security_opt: ["no-new-privileges:true"]
-    env_file: ./backend/.env
+    # Two files, in this order. The API needs OPENAI_API_KEY for the voice
+    # concierge: /api/voice/connect trades the browser's SDP offer with OpenAI
+    # server-side precisely so the key never reaches the page, and /api/voice/chat
+    # runs the same assistant typed. The key already lives in ai/.env, so it is
+    # read from there rather than copied — one secret in one file on this host,
+    # and no way for the two to drift apart or for one of them to be rotated
+    # alone. ai/.env also carries OPENAI_BASE_URL, which the API reads so both
+    # halves reach OpenAI by the same road. It carries OPENAI_MODEL too, and the
+    # API deliberately does NOT read that one: it names the AI service's chat
+    # model, while the concierge's models are pinned in
+    # backend/src/services/voice/contract.ts and handed to the browser from
+    # there. Reading it here would silently swap the brain behind the voice.
+    #
+    # backend/.env is listed LAST on purpose: later files win, so this service's
+    # own configuration always beats anything the AI service happens to set now
+    # or adds later.
+    env_file:
+      - ./ai/.env
+      - ./backend/.env
     environment:
       DATABASE_URL: postgres://boss:${DB_PASSWORD:?DB_PASSWORD is required}@db:5432/bossclinician
       AI_BASE_URL: http://ai:8000

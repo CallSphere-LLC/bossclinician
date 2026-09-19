@@ -82,6 +82,39 @@ export const env = {
 
   aiBaseUrl: process.env.AI_BASE_URL ?? "http://localhost:8000",
 
+  /**
+   * OpenAI, for the voice concierge — the only part of this app that talks to
+   * OpenAI from Node rather than through the Python service at AI_BASE_URL.
+   *
+   * It has to. `/api/voice/connect` trades the browser's SDP offer for an
+   * answer, and the whole point of doing that here is that the key never
+   * reaches the page; a proxy hop through a second service would only move the
+   * same secret one container further away for no gain. The key is not copied
+   * into backend/.env for it: docker-compose.yml hands this service the same
+   * `ai/.env` the AI service already reads, so there is one file on this host
+   * holding it.
+   *
+   * Blank is a supported state. The concierge routes answer 503 ("not
+   * configured") and nothing else in the app changes.
+   *
+   * The model NAMES are not here. They live in services/voice/contract.ts,
+   * where they are verified and where the browser is handed a copy of them, so
+   * the two halves of the concierge cannot name different models; the optional
+   * overrides sit beside them in services/voice/liveConfig.ts. In particular
+   * the AI service's own `OPENAI_MODEL` is deliberately not read — it names the
+   * model behind the old text chat, and ai/.env must not be able to swap the
+   * concierge's brain as a side effect of being shared.
+   */
+  openai: {
+    apiKey: (process.env.OPENAI_API_KEY ?? "").trim(),
+    // ai/.env ships OPENAI_BASE_URL empty, meaning "OpenAI itself" — so an
+    // empty string has to fall through to the default rather than become one.
+    baseUrl: (process.env.OPENAI_BASE_URL?.trim() || "https://api.openai.com/v1").replace(
+      /\/+$/,
+      ""
+    ),
+  },
+
   frontendOrigin: process.env.FRONTEND_ORIGIN ?? "*",
   adminOrigin: process.env.ADMIN_ORIGIN ?? (process.env.NODE_ENV === "production" ? "https://admin.bossclinician.callsphere.site" : ""),
 
@@ -152,6 +185,26 @@ export const env = {
   // ever sees it (and the client gets an opaque 413 with no JSON error).
   maxUploadMb: parseInt(process.env.MAX_UPLOAD_MB ?? "512", 10),
 
+  /**
+   * Where a voice conversation's audio is kept.
+   *
+   * `local` writes into the protected upload directory above — the one no
+   * static handler is mounted on — and is the default because this host has no
+   * AWS credentials. `s3` is the target: set the bucket and the region, supply
+   * credentials the standard way (AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY, or
+   * an instance role), and nothing else changes. Recordings already written
+   * keep playing after the switch, because a stored key says which store holds
+   * it rather than the environment deciding for every key at once.
+   */
+  voiceRecording: {
+    store: (process.env.VOICE_RECORDING_STORE ?? "local").trim().toLowerCase(),
+    bucket: (process.env.VOICE_RECORDING_BUCKET ?? "").trim(),
+    // AWS_REGION is what the SDK itself reads, so a deployment that already
+    // sets it does not have to say the same thing twice.
+    region: (process.env.VOICE_RECORDING_REGION ?? process.env.AWS_REGION ?? "").trim(),
+    prefix: (process.env.VOICE_RECORDING_PREFIX ?? "voice-recordings").trim(),
+  },
+
   // Stripe. Checkout stays disabled (routes 503) until the secret key is set,
   // so the app boots fine without it. The webhook secret comes from
   // `stripe listen` locally or the dashboard endpoint in production.
@@ -191,3 +244,6 @@ export const env = {
 };
 
 export const stripeEnabled = (): boolean => env.stripe.secretKey.length > 0;
+
+/** Whether the voice and text concierge can reach a model at all. */
+export const voiceEnabled = (): boolean => env.openai.apiKey.length > 0;

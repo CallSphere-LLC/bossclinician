@@ -172,7 +172,15 @@ function ContinueBand({ lesson }: { lesson: ContinueLesson }) {
   const partial = lesson.watchedPercent > 0 && lesson.watchedPercent < 100;
 
   return (
-    <GlassCard accent="gold" spotlight={false} className="p-5 sm:p-7">
+    <GlassCard
+      accent="gold"
+      spotlight={false}
+      // The one thing on this page worth reading first, and the thing the agent
+      // is asked for most: where did I get to.
+      data-narrate=""
+      data-narrate-label="Pick up where you left off"
+      className="p-5 sm:p-7"
+    >
       <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between sm:gap-8">
         <div className="min-w-0">
           <p className="text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-gold">

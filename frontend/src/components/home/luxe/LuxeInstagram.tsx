@@ -112,6 +112,8 @@ export function LuxeInstagram() {
       aurora="mixed"
       auroraIntensity={0.55}
       aria-label="Instagram"
+      // A feed of posts with nothing to say in words.
+      data-narrate-skip=""
     >
       <SectionTitle
         align="center"

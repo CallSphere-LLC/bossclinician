@@ -126,6 +126,9 @@ export const NAV_GROUPS: NavGroup[] = [
       { to: "/admin/tags", label: "Tags", ready: true },
       { to: "/admin/leads", label: "Leads Inbox", ready: true, badge: "leads" },
       { to: "/admin/conversations", label: "Conversations", ready: true },
+      // Calls taken by the assistant, with what was said, beside the written
+      // ones: the same question asked of a different channel.
+      { to: "/admin/voice-sessions", label: "Voice conversations", ready: true },
       { to: "/admin/members", label: "Members", ready: true },
       { to: "/admin/subscribers", label: "Subscribers", ready: true },
     ],

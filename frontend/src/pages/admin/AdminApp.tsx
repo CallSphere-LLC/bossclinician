@@ -23,6 +23,7 @@ import ContactDetail from "@/pages/admin/ContactDetail";
 import Tags from "@/pages/admin/Tags";
 import Segments from "@/pages/admin/Segments";
 import Conversations from "@/pages/admin/Conversations";
+import VoiceSessions from "@/pages/admin/VoiceSessions";
 import Members from "@/pages/admin/Members";
 import Subscribers from "@/pages/admin/Subscribers";
 import Analytics from "@/pages/admin/Analytics";
@@ -156,6 +157,10 @@ function ProtectedRoutes() {
         <Route path="/segments" element={<Segments />} />
         <Route path="/leads" element={<Leads />} />
         <Route path="/conversations" element={<Conversations />} />
+        {/* Every call the assistant has taken, with what was said. Next to the
+            written conversations because it is the same question asked of a
+            different channel. */}
+        <Route path="/voice-sessions" element={<VoiceSessions />} />
         <Route path="/members" element={<Members />} />
         <Route path="/subscribers" element={<Subscribers />} />
 

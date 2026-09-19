@@ -1,7 +1,7 @@
 import { Router } from "express";
 import crypto from "crypto";
-import { pool } from "../../db/pool";
 import { asyncHandler } from "../../utils/asyncHandler";
+import { recordInboxTurn } from "../../services/conversationInbox";
 import { chatSchema, chatTranscriptSchema } from "../../validation/schemas";
 import { badRequest } from "../../utils/httpError";
 import { env } from "../../config/env";
@@ -27,14 +27,9 @@ chatRouter.post(
     const { message } = parsed.data;
     const sessionId = parsed.data.sessionId ?? crypto.randomUUID();
 
-    await pool.query(
-      `INSERT INTO chat_sessions (id) VALUES ($1) ON CONFLICT (id) DO NOTHING`,
-      [sessionId]
-    );
-    await pool.query(
-      `INSERT INTO chat_messages (session_id, role, content) VALUES ($1, 'user', $2)`,
-      [sessionId, message]
-    );
+    // Written before the model is called, not after, so a question survives a
+    // model that never answers.
+    await recordInboxTurn({ sessionId, lines: [{ role: "user", content: message }] });
 
     let reply = FALLBACK_REPLY;
     let suggestions: string[] = [];
@@ -63,10 +58,7 @@ chatRouter.post(
       console.error("[chat] AI service unreachable, using fallback reply:", err);
     }
 
-    await pool.query(
-      `INSERT INTO chat_messages (session_id, role, content) VALUES ($1, 'assistant', $2)`,
-      [sessionId, reply]
-    );
+    await recordInboxTurn({ sessionId, lines: [{ role: "assistant", content: reply }] });
 
     res.json({ sessionId, reply, suggestions });
   })
@@ -89,22 +81,9 @@ chatRouter.post(
     const { sessionId, lines } = parsed.data;
 
     // A visitor can press Talk without ever typing, so the session row may not
-    // exist yet. The `voice` flag is merged rather than assigned: a session
-    // that also holds typed messages keeps whatever else it was carrying, and
-    // the inbox uses the flag to tell the two modes apart.
-    await pool.query(
-      `INSERT INTO chat_sessions (id, meta) VALUES ($1, '{"voice": true}'::jsonb)
-       ON CONFLICT (id) DO UPDATE SET meta = chat_sessions.meta || '{"voice": true}'::jsonb`,
-      [sessionId]
-    );
-
-    // One statement for the whole turn: unnest keeps the lines in the order
-    // they were spoken, which is the order the transcript is read back in.
-    await pool.query(
-      `INSERT INTO chat_messages (session_id, role, content)
-       SELECT $1, * FROM unnest($2::text[], $3::text[])`,
-      [sessionId, lines.map((line) => line.role), lines.map((line) => line.content)]
-    );
+    // exist yet, and the `voice` flag is what the inbox tells the two modes
+    // apart by. See services/conversationInbox.ts for why it is merged.
+    await recordInboxTurn({ sessionId, lines, meta: { voice: true } });
 
     res.status(201).json({ ok: true });
   })

@@ -32,6 +32,10 @@ export function LuxeCredBar({ className }: { className?: string }) {
     <motion.div
       role="region"
       aria-label="Credentials"
+      // Four credentials scrolling past on a loop. Read aloud it is four
+      // unconnected shouted phrases, and it repeats under the hero of the page
+      // the concierge opens on.
+      data-narrate-skip=""
       initial={reduce ? false : { opacity: 0 }}
       whileInView={{ opacity: 1 }}
       viewport={{ once: true, margin: "-12% 0px -8% 0px" }}

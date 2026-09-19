@@ -120,6 +120,9 @@ export default function Courses() {
 
       <Section
         id={LIBRARY_ID}
+        // The catalogue itself, as opposed to the manifesto above it.
+        data-narrate=""
+        data-narrate-label="The Boss Clinician training library"
         surface="base"
         space="md"
         aurora="mixed"

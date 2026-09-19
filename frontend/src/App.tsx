@@ -6,6 +6,7 @@ import { Layout } from "@/components/layout/Layout";
 import { AuthProvider } from "@/hooks/useAuth";
 import { MemberAuthProvider, RequireMember } from "@/hooks/useMember";
 import { lazyRoute, type RouteComponent } from "@/ssr/lazyRoute";
+import { MemberVoiceMount, PublicVoiceMount } from "@/voice/surfaces/mount";
 
 import NotFound from "@/pages/NotFound";
 
@@ -165,6 +166,10 @@ function memberRoutes() {
         element={
           <RequireMember>
             <Outlet />
+            {/* Beside the outlet rather than inside a page: the guard route is
+                the nearest element that survives a move from the library to the
+                account area, and an unmounted concierge is a dropped call. */}
+            <MemberVoiceMount />
           </RequireMember>
         }
       >
@@ -304,6 +309,14 @@ export default function App() {
 
         <Route path="/*" element={<PublicRoutes />} />
       </Routes>
+
+      {/* Outside the route table on purpose. The visitor's concierge has to
+          outlive every public navigation it makes, and `Layout` wraps only the
+          marketing pages — not the cart, not checkout, not the sign-in screens,
+          all of which someone may perfectly well ask to be taken to. It renders
+          nothing on the portal's and the admin's own addresses, which mount
+          their own. */}
+      <PublicVoiceMount />
     </MemberAuthProvider>
     </MemberPreviewBridge>
     </AdminOriginBoundary>

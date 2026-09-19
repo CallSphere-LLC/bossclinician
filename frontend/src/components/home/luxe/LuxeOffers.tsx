@@ -94,6 +94,10 @@ export function LuxeOffers() {
       // The hero and closing "Find Your Path" buttons jump here, as they do on
       // bossclinician.com (#offers). The scroll margin clears the sticky header.
       id="offers"
+      // Where "Find Your Path" lands, and the answer to the question a visitor
+      // most often asks out loud: which one of these is mine.
+      data-narrate=""
+      data-narrate-label="Find the offer built for your stage"
       className="scroll-mt-20"
       surface="base"
       space="lg"

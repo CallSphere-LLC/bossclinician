@@ -109,7 +109,14 @@ export default function Account() {
       <ul className="mt-6 grid gap-5 sm:grid-cols-2">
         {AREAS.map((area) => (
           <li key={area.to}>
-            <GlassCard accent="gold" className="h-full p-6 sm:p-7">
+            <GlassCard
+              accent="gold"
+              // Each card is one account area, and its own title is the label
+              // the agent will be asked to point at.
+              data-narrate=""
+              data-narrate-label={area.title}
+              className="h-full p-6 sm:p-7"
+            >
               <area.icon aria-hidden className="size-5 text-gold" />
               <h3 className="mt-4 font-display text-xl text-white">
                 {/* Stretched link: the whole card is the tap target, but only

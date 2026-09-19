@@ -19,6 +19,7 @@ import { adminApi } from "@/lib/api";
 import { pluralize } from "@/pages/admin/ui/friendly";
 import { NAV_GROUPS, groupForPath, type NavGroup } from "@/pages/admin/ui/nav";
 import { UploadTray } from "@/pages/admin/ui/UploadTray";
+import { AdminVoiceMount } from "@/voice/surfaces/mount";
 import { ConsoleThemeToggle } from "@/pages/admin/ui/ConsoleThemeToggle";
 
 /**
@@ -353,6 +354,11 @@ export function AdminLayout({ children }: { children: ReactNode }) {
           library has to keep running, and keep showing, while she works on a
           course three screens away. */}
       <UploadTray />
+
+      {/* Alongside the upload tray, and for the same reason: a conversation
+          begun on the dashboard has to keep running while the agent walks her
+          to the page they are talking about. */}
+      <AdminVoiceMount />
     </div>
   );
 }
