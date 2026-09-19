@@ -391,14 +391,14 @@ export function useVoiceSession(input: VoiceSessionInput): VoiceSessionHandle {
     loggedTurnsRef.current.clear();
     farewellSentRef.current = false;
 
-    const recordLine = (role: "user" | "agent", text: string | undefined) => {
+    const recordLine = (role: "user" | "agent", text: string | undefined, itemId?: string) => {
       const trimmed = text?.trim();
       if (!trimmed) return;
       // The same line arrives as both a provider event and a locally flushed
       // caption fragment. Persisting both would double every turn.
-      const key = `${role}:${trimmed}`;
-      if (loggedTurnsRef.current.has(key)) return;
-      loggedTurnsRef.current.add(key);
+      const key = itemId ? `${role}:${itemId}` : null;
+      if (key && loggedTurnsRef.current.has(key)) return;
+      if (key) loggedTurnsRef.current.add(key);
       inputRef.current.onTranscriptLine?.({
         role,
         text: trimmed,
@@ -468,7 +468,7 @@ export function useVoiceSession(input: VoiceSessionInput): VoiceSessionHandle {
       session.on("audio_start", () => setIsSpeaking(true));
       session.on("audio_stopped", () => setIsSpeaking(false));
 
-      session.on("transport_event", (event: { type?: string; live?: boolean; transcript?: string }) => {
+      session.on("transport_event", (event: { type?: string; live?: boolean; transcript?: string; item_id?: string }) => {
         ingestRealtimeCaptionEvent(event);
         // Locally projected caption events carry `live: true`. They describe a
         // transcript fragment, not the media, so letting them drive the
@@ -477,13 +477,13 @@ export function useVoiceSession(input: VoiceSessionInput): VoiceSessionHandle {
         if (speaking !== null) setIsSpeaking(speaking);
 
         if (event.type === "conversation.item.input_audio_transcription.completed") {
-          recordLine("user", event.transcript);
+          recordLine("user", event.transcript, event.item_id);
         }
         if (
           event.type === "response.output_audio_transcript.done" ||
           event.type === "response.audio_transcript.done"
         ) {
-          recordLine("agent", event.transcript);
+          recordLine("agent", event.transcript, event.item_id);
         }
       });
 

@@ -1,0 +1,47 @@
+[
+  {
+    "width": 320,
+    "singleClosedLauncher": true,
+    "voiceInsideChat": true,
+    "disclosureInsideChat": true,
+    "acceptVisible": true,
+    "noOverflow": true,
+    "errors": []
+  },
+  {
+    "width": 390,
+    "singleClosedLauncher": true,
+    "voiceInsideChat": true,
+    "disclosureInsideChat": true,
+    "acceptVisible": true,
+    "noOverflow": true,
+    "errors": []
+  },
+  {
+    "width": 768,
+    "singleClosedLauncher": true,
+    "voiceInsideChat": true,
+    "disclosureInsideChat": true,
+    "acceptVisible": true,
+    "noOverflow": true,
+    "errors": []
+  },
+  {
+    "width": 1440,
+    "singleClosedLauncher": true,
+    "voiceInsideChat": true,
+    "disclosureInsideChat": true,
+    "acceptVisible": true,
+    "noOverflow": true,
+    "errors": []
+  },
+  {
+    "width": 1920,
+    "singleClosedLauncher": true,
+    "voiceInsideChat": true,
+    "disclosureInsideChat": true,
+    "acceptVisible": true,
+    "noOverflow": true,
+    "errors": []
+  }
+]

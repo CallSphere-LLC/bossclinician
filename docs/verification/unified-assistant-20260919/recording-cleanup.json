@@ -1,0 +1,20 @@
+{
+  "sessions": [
+    {
+      "id": "b4fa2fd6-0085-48ec-bb87-8ace4ec86654",
+      "remainingObjects": 0,
+      "truncated": false
+    },
+    {
+      "id": "a6b187c6-3aa1-4231-bcf8-be41c72ee699",
+      "remainingObjects": 0,
+      "truncated": false
+    },
+    {
+      "id": "d5b66c09-89fe-4889-add9-4aa8a0b6b4ba",
+      "remainingObjects": 0,
+      "truncated": false
+    }
+  ],
+  "totalRemaining": 0
+}

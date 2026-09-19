@@ -8,7 +8,7 @@
  * address of the page as it stands right now, the app's own API client, and the
  * owner's approval queue — and hands it to the tool registry.
  *
- * What the visitor sees is a single button. Pressing it shows the recording
+ * The voice button lives inside the shared chat panel. Pressing it shows the recording
  * notice, and only once that has been read does the microphone open. From there
  * the orb moves to the real voice, the captions write down what is said, the
  * cursor points at whatever is being talked about, and — on the admin only —
@@ -22,6 +22,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
+import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
 import { Loader2, Mic, PhoneOff } from "lucide-react";
 import type { ToolFn, VoiceContext, VoiceSurfacePolicy } from "@/voice/contract";
@@ -68,7 +69,11 @@ function troubleWith(error: string | null): string {
   return "Something went wrong before we got started. Give it another try in a moment.";
 }
 
-export function VoiceConcierge({ policy }: { policy: VoiceSurfacePolicy }) {
+export function VoiceConcierge({ policy, container, onActiveChange }: {
+  policy: VoiceSurfacePolicy;
+  container: HTMLElement | null;
+  onActiveChange: (active: boolean) => void;
+}) {
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -83,6 +88,7 @@ export function VoiceConcierge({ policy }: { policy: VoiceSurfacePolicy }) {
   // when they run, not when the context is built, so an audit entry lands on
   // the conversation it actually belongs to.
   const sessionIdRef = useRef<string | null>(null);
+  const userTurnRef = useRef<{ id: number; text: string } | null>(null);
 
   const api = useMemo(() => createVoiceApiClient(policy.surface), [policy.surface]);
 
@@ -96,6 +102,7 @@ export function VoiceConcierge({ policy }: { policy: VoiceSurfacePolicy }) {
       surface: policy.surface,
       mode: "voice",
       getSessionId: () => sessionIdRef.current,
+      getUserTurn: () => userTurnRef.current,
       // Only the owner's console can change anything, so only the owner's
       // console is handed a way to ask.
       requestApproval: policy.surface === "admin" ? requestApproval : undefined,
@@ -139,6 +146,7 @@ export function VoiceConcierge({ policy }: { policy: VoiceSurfacePolicy }) {
 
   const onTranscriptLine = useCallback(
     (line: TranscriptLine) => {
+      if (line.role === "user") userTurnRef.current = { id: (userTurnRef.current?.id ?? 0) + 1, text: line.text };
       bufferedLines.current.push(line);
       if (!flushTimer.current) {
         flushTimer.current = setTimeout(flushTranscript, TRANSCRIPT_FLUSH_MS);
@@ -187,8 +195,13 @@ export function VoiceConcierge({ policy }: { policy: VoiceSurfacePolicy }) {
   const live = handle.status === "live";
   const talking = live || busy;
 
+  useEffect(() => {
+    onActiveChange(talking || preparing || gateOpen || correcting);
+  }, [onActiveChange, talking, preparing, gateOpen, correcting]);
+
   const beginCall = useCallback(async () => {
     setGateOpen(false);
+    userTurnRef.current = null;
     setPreparing(true);
     const decision = await lookUpGreeting();
     greetingLookup.current = null;
@@ -289,18 +302,12 @@ export function VoiceConcierge({ policy }: { policy: VoiceSurfacePolicy }) {
     <>
       <VoiceSpotlight speaking={live ? handle.isSpeaking : undefined} />
       <VoiceTourBar />
-      {policy.surface === "admin" && (
+      {policy.surface === "admin" && talking && (
         <ApprovalHost onUndelivered={(text) => sayRef.current(text)} />
       )}
 
-      {/*
-        The column sits clear of the floor of the window on purpose. The public
-        pages already keep a chat bubble in the bottom-right corner and the
-        console keeps its upload tray there, so the concierge docks one step
-        above both rather than landing on top of whichever one is showing.
-        Fixed and width-capped, so nothing here can widen the page on a phone.
-      */}
-      <div className="pointer-events-none fixed bottom-[5.5rem] right-4 z-[70] flex flex-col items-end gap-3 pb-[env(safe-area-inset-bottom)] print:hidden sm:bottom-[6.5rem] sm:right-6">
+      {container && createPortal(
+      <div className="flex min-w-0 flex-col gap-2" data-testid="chat-voice-controls">
         <AnimatePresence>
           {showPanel && (
             <motion.div
@@ -308,7 +315,7 @@ export function VoiceConcierge({ policy }: { policy: VoiceSurfacePolicy }) {
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 10, scale: 0.98 }}
               transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] as const }}
-              className="pointer-events-auto w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-hairline bg-surface-raised/95 p-4 shadow-[0_28px_70px_-28px_rgba(0,0,0,0.75)] backdrop-blur"
+              className="w-full min-w-0 rounded-2xl border border-hairline bg-surface-raised/95 p-3"
             >
               {gateOpen ? (
                 <RecordingDisclosure
@@ -375,7 +382,7 @@ export function VoiceConcierge({ policy }: { policy: VoiceSurfacePolicy }) {
                     </p>
                   )}
 
-                  <VoiceCaptions lines={handle.captions} live={live} />
+                  <VoiceCaptions lines={handle.captions} live={live} className="max-h-28" />
 
                   <button
                     type="button"
@@ -394,21 +401,16 @@ export function VoiceConcierge({ policy }: { policy: VoiceSurfacePolicy }) {
           )}
         </AnimatePresence>
 
-        <div className="pointer-events-auto flex items-center gap-2">
-          {!showPanel && (
-            <span className="hidden rounded-full border border-hairline bg-surface-raised/90 px-3 py-1.5 text-[0.6rem] font-semibold uppercase tracking-[0.16em] text-ink-soft backdrop-blur sm:inline-flex">
-              Ask Boss Clinician AI
-            </span>
-          )}
+        {!showPanel && (
           <button
             type="button"
             onClick={onButton}
             aria-label={buttonLabel}
             aria-pressed={live}
             className={cn(
-              "inline-flex h-14 w-14 items-center justify-center rounded-full transition-[transform,box-shadow] duration-200",
+              "inline-flex w-full items-center justify-center gap-2 rounded-full px-4 py-2.5 text-xs font-semibold transition-colors",
               "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold",
-              "motion-safe:hover:-translate-y-0.5",
+              "hover:opacity-90",
               live
                 ? "border border-hairline bg-surface-raised/95 shadow-[0_18px_44px_-18px_rgba(0,0,0,0.75)] backdrop-blur"
                 : "bg-gold-foil text-night-deep shadow-[0_18px_44px_-16px_rgba(201,164,106,0.65)]",
@@ -426,9 +428,10 @@ export function VoiceConcierge({ policy }: { policy: VoiceSurfacePolicy }) {
             ) : (
               <Mic className="h-5 w-5" />
             )}
+            <span>{buttonLabel}</span>
           </button>
-        </div>
-      </div>
+        )}
+      </div>, container)}
     </>
   );
 }

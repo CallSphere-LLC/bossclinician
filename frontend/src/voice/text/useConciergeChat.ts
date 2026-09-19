@@ -100,6 +100,8 @@ export type ConciergeChatHandle = {
   send: (text: string) => Promise<ConciergeTurn | null>;
   /** Put a line in the panel the agent did not have to be asked for. */
   say: (text: string) => void;
+  /** Replace the opening greeting before any human message; never interrupt a conversation. */
+  greet: (text: string) => void;
 };
 
 export function useConciergeChat(input: {
@@ -131,6 +133,7 @@ export function useConciergeChat(input: {
   const demotedRef = useRef<VoiceSurface | null>(null);
   const startedAtRef = useRef<number | null>(null);
   const sendingRef = useRef(false);
+  const userTurnRef = useRef<{ id: number; text: string } | null>(null);
   const messagesRef = useRef(messages);
   messagesRef.current = messages;
 
@@ -153,6 +156,7 @@ export function useConciergeChat(input: {
       surface: policy.surface,
       mode: "text",
       getSessionId: () => sessionIdRef.current,
+      getUserTurn: () => userTurnRef.current,
       call: apiClient(),
       // Only the owner's surface can be asked to approve anything, so only it
       // is handed the means to ask. A member's concierge has no approval path
@@ -190,6 +194,12 @@ export function useConciergeChat(input: {
 
   const append = useCallback((...lines: ChatMessage[]) => {
     if (lines.length > 0) setMessages((prev) => [...prev, ...lines]);
+  }, []);
+
+  const greet = useCallback((text: string) => {
+    setMessages((previous) => previous.some((line) => line.role === "user")
+      ? previous
+      : [{ role: "assistant", content: text }]);
   }, []);
 
   const say = useCallback(
@@ -270,6 +280,7 @@ export function useConciergeChat(input: {
       }
 
       if (sendingRef.current) return null;
+      userTurnRef.current = { id: (userTurnRef.current?.id ?? 0) + 1, text: trimmed };
       sendingRef.current = true;
       setSending(true);
       setError(null);
@@ -356,5 +367,5 @@ export function useConciergeChat(input: {
     [append, apiClient, conciergeTools, failureMessage, persist, policy.surface, say],
   );
 
-  return { messages, sending, streamingReply, error, sessionId, pendingApproval, send, say };
+  return { messages, sending, streamingReply, error, sessionId, pendingApproval, send, say, greet };
 }

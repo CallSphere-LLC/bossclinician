@@ -12,6 +12,18 @@
 .retreat-page * {
   box-sizing: border-box;
 }
+/* This editorial palette stays legible in either site appearance. The shared
+   light theme otherwise paints every section/header white. */
+html[data-site-theme] .theme-luxe .retreat-page :is(.retreat-hero, .retreat-band, .retreat-gallery) {
+  background-color: var(--retreat-section-background, var(--retreat-forest));
+}
+html[data-site-theme] .theme-luxe .retreat-page .retreat-heading {
+  background: transparent;
+  box-shadow: none;
+}
+.retreat-page :is(h1, h2, h3, h4) {
+  color: inherit;
+}
 .retreat-page p {
   margin: 0 0 1.2rem;
 }
@@ -55,6 +67,7 @@
   scroll-margin-top: 100px;
 }
 .retreat-light {
+  --retreat-section-background: var(--retreat-ivory);
   background: var(--retreat-ivory);
   color: var(--retreat-forest);
 }
@@ -81,6 +94,7 @@
   text-align: left;
 }
 .retreat-hero {
+  --retreat-section-background: var(--retreat-deep);
   position: relative;
   isolation: isolate;
   padding: 110px 0 90px;
@@ -253,7 +267,7 @@
   display: block;
   font-family: "Playfair Display", Georgia, serif;
   font-size: 2.5rem;
-  color: #8b773d;
+  color: #76632f;
   margin-bottom: 20px;
 }
 .retreat-page ul {
@@ -281,7 +295,8 @@
   left: 0;
   right: 0;
   padding: 35px 15px 20px;
-  background: linear-gradient(transparent, #1e2c14dd);
+  background: linear-gradient(#1e2c14bd, #1e2c14f2);
+  color: var(--retreat-ivory);
   text-align: center;
   letter-spacing: 0.18em;
   font-size: 0.7rem;

@@ -307,6 +307,7 @@ export async function travelTo(
 /* ------------------------------------------------------------------ */
 
 export type NavigationDeps = {
+  canNavigate?: () => boolean;
   policy: VoiceSurfacePolicy;
   history: GuidedHistory;
   /** Dropping the pointer before a route change stops it hovering over a
@@ -343,6 +344,7 @@ export function buildNavigateTool(
       additionalProperties: false,
     },
     execute: async (args: { destination?: string; path?: string }) => {
+      if (!ctx.getUserTurn?.() || deps.canNavigate?.() === false) return "Stay here. Navigation needs a new explicit user request; do not bypass the guided tour consent or pace. Use the tour tools for a walkthrough.";
       const resolved = resolveDestination(deps.policy, {
         destination: args?.destination,
         path: args?.path,
@@ -367,6 +369,7 @@ export function buildGoBackTool(
     strict: false,
     parameters: { type: "object", properties: {}, required: [], additionalProperties: false },
     execute: async () => {
+      if (!ctx.getUserTurn?.() || deps.canNavigate?.() === false) return "Stay here and wait for a new explicit request before navigating.";
       const previous = deps.history.entries[deps.history.index - 1];
       if (!previous) {
         return `This is where the journey started, so there is nothing behind it. Ask where they would like to go next.\n\n${snapshotToPrompt(readCurrentPage())}`;

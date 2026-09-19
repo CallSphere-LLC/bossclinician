@@ -518,9 +518,9 @@ export const MEMBER_POLICY: VoiceSurfacePolicy = {
     ].join(" "),
   ].join(" "),
   greeting:
-    "Welcome back — I'm Boss Clinician AI. I can take you to anything in your portal, read a page out to you, or find something you bought. What are you after?",
+    "Welcome back! I'm Boss Clinician AI. I can take you to pages in your portal and explain what’s on them in simple language, one detail at a time. What would you like help with?",
   firstVisitGreeting:
-    "Hello, I'm Boss Clinician AI, and this is your portal. Would you like me to walk you through your portal, or would you rather just ask me things?",
+    "Welcome back! I'm Boss Clinician AI. I can take you around the portal and explain what’s on each page in simple language, one detail at a time. Would you like me to show you around? You can ask questions or say next or stop anytime.",
   tour: TOUR,
   tools: [
     "navigate_to",

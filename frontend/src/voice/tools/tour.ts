@@ -209,7 +209,26 @@ export async function saveTourProgress(ctx: VoiceContext, progress: TourProgress
 /* ------------------------------------------------------------------ */
 
 /** Per-call state: the itinerary position, held in memory between tool calls. */
-export type TourState = { cursor: TourCursor; running: boolean; paused: boolean };
+export type TourState = { cursor: TourCursor; running: boolean; paused: boolean; consumedTurn?: number };
+
+/** Conservative recognition of the actual human utterance, shared by both channels. */
+export function tourIntent(text: string): "start" | "next" | null {
+  const words = text.toLowerCase().replace(/[’']/g, "'").trim();
+  if (/\b(no|nope|stop|not|don't|later|wait|but)\b/.test(words)) return null;
+  if (/\b(show me around|walk me through|start (?:the |a )?(?:guided )?(?:tour|walkthrough)|take me (?:on|through) (?:a |the )?(?:tour|site|portal|dashboard)|resume (?:the |my )?(?:tour|walkthrough))\b/.test(words)) return "start";
+  if (/^(?:(?:yes|yeah|yep|sure|okay|ok|absolutely|please)[,.! ]*)?(?:next(?: (?:please|step|detail|page|section))?|continue|carry on|go on|go ahead|i'm ready|ready|keep going)[.! ]*(?:please[.! ]*)?$/.test(words)) return "next";
+  if (/^(?:yes|yeah|yep|sure|okay|ok|absolutely|please)(?:[,.! ]+(?:please|let's (?:start|do it)|show me|i'd like that|that sounds (?:good|great)))?[.! ]*$/.test(words)) return "start";
+  return null;
+}
+
+function consumeTourTurn(ctx: VoiceContext, state: TourState, starting: boolean): boolean {
+  const turn = ctx.getUserTurn?.();
+  if (!turn || turn.id === state.consumedTurn) return false;
+  const intent = tourIntent(turn.text);
+  if (!intent || (starting && intent !== "start")) return false;
+  state.consumedTurn = turn.id;
+  return true;
+}
 
 export function createTourState(): TourState {
   return { cursor: TOUR_START, running: false, paused: false };
@@ -399,7 +418,7 @@ async function performStep(
       `Stop ${step.stopIndex + 1} of ${total} — you have taken them to ${arrival.label} (${arrival.path}).`,
       `What this page is for: ${step.stop.purpose}`,
       snapshotToPrompt(arrival.snapshot),
-      "Introduce the page in one or two sentences, then call next_tour_stop to point at the first thing on it.",
+      "Introduce this page simply in one or two sentences. Invite questions or say they can say next when ready. STOP here: do not call another tour or navigation tool until a new user request.",
     ].join("\n\n");
   }
 
@@ -414,7 +433,7 @@ async function performStep(
   return [
     `Stop ${step.stopIndex + 1} of ${total}, point ${step.beatIndex + 1}: "${step.beat.focus}". ${pointing}`,
     `Say this in your own warm words: ${step.beat.say}`,
-    "Then pause briefly for a question, and call next_tour_stop to carry on.",
+    "Explain only this detail in simple language. Wait for their next or continue before another step; answer questions here without advancing. Do not call another tour or navigation tool in this turn.",
   ].join("\n");
 }
 
@@ -426,7 +445,7 @@ export function buildStartTourTool(toolFn: ToolFn, ctx: VoiceContext, deps: Tour
   return toolFn({
     name: "start_guided_tour",
     description:
-      "Begin the walkthrough, after they have said yes to being shown around. It takes them to the first page, reads it, and tells you what to say. If they have been round before, it will say so — do not offer it again in that case.",
+      "Begin the walkthrough, after they have said yes to being shown around. It takes them to one page and tells you what to explain, then waits for their next request. An explicit request can restart a previously declined or completed tour.",
     strict: false,
     parameters: { type: "object", properties: {}, required: [], additionalProperties: false },
     execute: async () => {
@@ -434,11 +453,14 @@ export function buildStartTourTool(toolFn: ToolFn, ctx: VoiceContext, deps: Tour
         return "There is no walkthrough for this part of the app. Offer to answer questions instead.";
       }
 
+      if (deps.state.running) return "The walkthrough is already running. Wait for a new next or continue from the person before next_tour_stop.";
+      if (!consumeTourTurn(ctx, deps.state, true)) {
+        return "No new explicit tour consent was received. Stay here, warmly offer to show them around, and wait for their yes. Do not navigate or call more tour tools.";
+      }
       const progress = await loadTourProgress(ctx, deps.policy.surface);
       const resume = resumeCursor(progress, deps.policy.tour);
-      if (resume.completed) {
-        return "They have already been shown around, or said no thank you before. Do not offer the walkthrough again — just ask what they are here to do.";
-      }
+      // Prior decline suppresses unsolicited offers, not a new explicit request.
+      if (resume.completed) resume.cursor = TOUR_START;
 
       deps.state.running = true;
       deps.state.paused = false;
@@ -458,18 +480,17 @@ export function buildNextTourStopTool(toolFn: ToolFn, ctx: VoiceContext, deps: T
   return toolFn({
     name: "next_tour_stop",
     description:
-      "Move the walkthrough on: point at the next thing on this page, or travel to the next page when this one is finished. Call it after you have said each piece, and after answering any question they asked along the way.",
+      "Move the walkthrough on: point at the next thing on this page, or travel to the next page when this one is finished. Call it only after a NEW user next or continue, at most once per user turn. Questions do not advance the walkthrough.",
     strict: false,
     parameters: { type: "object", properties: {}, required: [], additionalProperties: false },
     execute: async () => {
       if (!deps.state.running) {
         return "No walkthrough is running. Offer to show them around, and call start_guided_tour only if they say yes.";
       }
-      if (deps.state.paused) {
-        // They pressed pause on the bar. The call is still live and questions
-        // are welcome; moving on is the one thing that waits for them.
-        return "They have paused the walkthrough. Stay on this page, answer whatever they ask, and only carry on when they say they are ready.";
+      if (!consumeTourTurn(ctx, deps.state, false)) {
+        return "Wait here for a new next or continue from the person. Answer questions without advancing; do not call more tour or navigation tools in this turn.";
       }
+      deps.state.paused = false;
       const next = advanceTour(deps.state.cursor, deps.policy.tour, canFocus);
       deps.state.cursor = next.cursor;
       publishTour();

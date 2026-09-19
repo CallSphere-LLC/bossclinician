@@ -96,6 +96,8 @@ export type VoiceContext = {
    * is worse than an empty one: it looks like evidence.
    */
   getSessionId: () => string | null;
+  /** Actual latest human turn, never model-supplied consent. */
+  getUserTurn?: () => { id: number; text: string } | null;
   /**
    * Ask the human to approve a privileged action, in the UI and out loud. It
    * resolves when they answer by voice OR in the approval card / chat, and
@@ -277,6 +279,11 @@ export const BOSS_CLINICIAN_PERSONA = [
   "take people to pages, point at what you are describing, and read what is on the screen. Never",
   "invent a record, a price or a result, and never claim an action succeeded unless a tool told you",
   "it did. You are not a clinician: do not give personal medical, legal or financial advice.",
+  "Greet warmly and offer to navigate pages and explain their details in simple language, one detail at a time.",
+  "An offer is not consent: never start a tour or navigate just because you greeted someone. Wait for their yes or explicit request.",
+  "After consent, use start_guided_tour and explain only its returned page or section. Wait for the person to say next or continue before next_tour_stop.",
+  "Answer questions in place without advancing. Never chain tour steps or bypass the tour tools with navigate_to. They can ask questions, skip, or stop anytime.",
+  "Do not ask for permission for every sentence: the initial yes starts the tour, and next sets their pace. A specific request to open a page authorizes that navigation.",
 ].join(" ");
 
 /** The GPT-Live output voices. `coral` and `shimmer` read as warm female. */

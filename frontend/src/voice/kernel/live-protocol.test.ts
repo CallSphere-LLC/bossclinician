@@ -280,3 +280,28 @@ describe("graceful close boundary", () => {
     expect(emitted.some((event) => event.type === "session.closed")).toBe(true);
   });
 });
+
+
+describe("tour consent transcript timing", () => {
+  it("publishes the human utterance before a tool can execute, preserving repeated next turns", () => {
+    vi.useFakeTimers();
+    const { protocol, emitted } = harness();
+    for (const callId of ["first", "second"]) {
+      protocol.receive({ type: "session.input_transcript.delta", delta: "next", start_ms: 0, end_ms: 100 });
+      protocol.receive({ type: "response.event", event: { type: "response.created" } });
+      protocol.receive({ type: "response.event", event: { type: "response.output_item.done", item: {
+        type: "function_call", call_id: callId, name: "next_tour_stop", arguments: "{}",
+      } } });
+      protocol.receive({ type: "response.event", event: { type: "response.completed", response: { output: [] } } });
+    }
+    const userLines = emitted.filter(event => event.type === "conversation.item.input_audio_transcription.completed");
+    expect(userLines).toHaveLength(2);
+    expect(userLines.map(event => event.transcript)).toEqual(["next", "next"]);
+    expect(new Set(userLines.map(event => event.item_id)).size).toBe(2);
+    const toolCalls = emitted.filter(event => event.type === "response.function_call_arguments.done");
+    expect(toolCalls).toHaveLength(2);
+    for (let index = 0; index < 2; index++) expect(emitted.indexOf(userLines[index])).toBeLessThan(emitted.indexOf(toolCalls[index]));
+    vi.advanceTimersByTime(1200);
+    expect(emitted.filter(event => event.type === "conversation.item.input_audio_transcription.completed")).toHaveLength(2);
+  });
+});

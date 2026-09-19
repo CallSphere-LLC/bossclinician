@@ -1589,9 +1589,9 @@ export const ADMIN_POLICY: VoiceSurfacePolicy = {
     ].join(" "),
   ].join(" "),
   greeting:
-    "Hello — I'm Boss Clinician AI. I can take you to any screen, read the numbers out, or set something up for you once you've said yes to it. What would you like to look at?",
+    "Hi, welcome! I'm Boss Clinician AI. I can take you to pages in your dashboard and explain what’s on them in simple language, one detail at a time. What would you like help with?",
   firstVisitGreeting:
-    "Hello, I'm Boss Clinician AI, and I work in here with you. Would you like me to walk you through the whole dashboard, or would you rather just ask me things?",
+    "Hi, welcome! I'm Boss Clinician AI. I can take you around the dashboard and explain what’s on each page in simple language, one detail at a time. Would you like me to show you around? You can ask questions or say next or stop anytime.",
   tour: TOUR,
   tools: [
     "admin_operation_catalog",

@@ -1,0 +1,1300 @@
+{
+  "observations": [
+    {
+      "phase": "greeting",
+      "url": "https://bossclinician.callsphere.site/club",
+      "text": "Boss Clinician Assistant\n\nUSUALLY REPLIES INSTANTLY\n\nHi, welcome! I'm Boss Clinician AI. I can take you around the site and explain what\u2019s on each page in simple language, one detail at a time. Would you like me to show you around? You can ask questions or say next or stop anytime.\n\nYes, show me around\nNo thanks, I'll ask\nTalk to Boss Clinician AI\nMessage"
+    },
+    {
+      "phase": "voice-before-consent",
+      "url": "https://bossclinician.callsphere.site/club",
+      "text": "Boss Clinician Assistant\n\nUSUALLY REPLIES INSTANTLY\n\nHi, welcome! I'm Boss Clinician AI. I can take you around the site and explain what\u2019s on each page in simple language, one detail at a time. Would you like me to show you around? You can ask questions or say next or stop anytime.\n\nBOSS CLINICIAN AI\n\n5 minutes left\n\nBOSS CLINICIAN AIHey, welcome! I'm Boss Clinician AI. I can take you around the site and explain what's on each page in simple language, one detail at a time. Would you like me to show you around? You can ask questions or say next or stop anytime.\n\nEND CALL\nMessage"
+    },
+    {
+      "phase": "voice-first-step",
+      "url": "https://bossclinician.callsphere.site/",
+      "text": "Boss Clinician Assistant\n\nUSUALLY REPLIES INSTANTLY\n\nHi, welcome! I'm Boss Clinician AI. I can take you around the site and explain what\u2019s on each page in simple language, one detail at a time. Would you like me to show you around? You can ask questions or say next or stop anytime.\n\nBOSS CLINICIAN AI\n\n4 minutes left\n\nBOSS CLINICIAN AIHey, welcome! I'm Boss Clinician AI. I can take you around the site and explain what's on each page in simple language, one detail at a time. Would you like me to show you around? You can ask questions or say next or stop anytime.\n\nYOUYes please, show me around and explain the details one at a time\n\nBOSS CLINICIAN AISure!\n\nBOSS CLINICIAN AI Okay\u2014I've taken you to the\n\nEND CALL\nMessage"
+    },
+    {
+      "phase": "same-call-after-collapse",
+      "sessionCount": 1
+    },
+    {
+      "phase": "voice-after-next",
+      "url": "https://bossclinician.callsphere.site/",
+      "text": "Boss Clinician Assistant\n\nUSUALLY REPLIES INSTANTLY\n\nHi, welcome! I'm Boss Clinician AI. I can take you around the site and explain what\u2019s on each page in simple language, one detail at a time. Would you like me to show you around? You can ask questions or say next or stop anytime.\n\nBOSS CLINICIAN AI\n\n4 minutes left\n\nBOSS CLINICIAN AIHey, welcome! I'm Boss Clinician AI. I can take you around the site and explain what's on each page in simple language, one detail at a time. Would you like me to show you around? You can ask questions or say next or stop anytime.\n\nYOUYes please, show me around and explain the details one at a time\n\nBOSS CLINICIAN AISure!\n\nBOSS CLINICIAN AIOkay\u2014I've taken you to the home page. It\u2019s about building a private practice that supports your income and your life without wearing you out. That\u2019s the first detail.\n\nBOSS CLINICIAN AIWhat would you like to know here?\n\nYOUNext, please\n\nBOSS CLINICIAN AIOkay, moving to the next stop.\n\nBOSS CLINICIAN AI Here, \u201cA community that actually gets it\u201d means connecting with other clinicians\n\nEND CALL\nMessage"
+    }
+  ],
+  "requests": [
+    {
+      "path": "/api/voice/tour-progress",
+      "status": 200
+    },
+    {
+      "path": "/api/voice/tour-progress",
+      "status": 200
+    },
+    {
+      "path": "/api/voice/session",
+      "status": 200,
+      "sessionId": "a6b187c6-3aa1-4231-bcf8-be41c72ee699"
+    },
+    {
+      "path": "/api/voice/connect",
+      "status": 200
+    },
+    {
+      "path": "/api/voice/recording",
+      "status": 202
+    },
+    {
+      "path": "/api/voice/recording",
+      "status": 202
+    },
+    {
+      "path": "/api/voice/recording",
+      "status": 202
+    },
+    {
+      "path": "/api/voice/recording",
+      "status": 202
+    },
+    {
+      "path": "/api/voice/recording",
+      "status": 202
+    },
+    {
+      "path": "/api/voice/transcript",
+      "status": 200
+    },
+    {
+      "path": "/api/voice/recording",
+      "status": 202
+    },
+    {
+      "path": "/api/voice/recording",
+      "status": 202
+    },
+    {
+      "path": "/api/voice/recording",
+      "status": 202
+    },
+    {
+      "path": "/api/voice/recording",
+      "status": 202
+    },
+    {
+      "path": "/api/voice/recording",
+      "status": 202
+    },
+    {
+      "path": "/api/voice/tour-progress",
+      "status": 200
+    },
+    {
+      "path": "/api/voice/tour-progress",
+      "status": 200
+    },
+    {
+      "path": "/api/voice/transcript",
+      "status": 200
+    },
+    {
+      "path": "/api/voice/recording",
+      "status": 202
+    },
+    {
+      "path": "/api/voice/recording",
+      "status": 202
+    },
+    {
+      "path": "/api/voice/recording",
+      "status": 202
+    },
+    {
+      "path": "/api/voice/recording",
+      "status": 202
+    },
+    {
+      "path": "/api/voice/recording",
+      "status": 202
+    },
+    {
+      "path": "/api/voice/recording",
+      "status": 202
+    },
+    {
+      "path": "/api/voice/transcript",
+      "status": 200
+    },
+    {
+      "path": "/api/voice/recording",
+      "status": 202
+    },
+    {
+      "path": "/api/voice/recording",
+      "status": 202
+    },
+    {
+      "path": "/api/voice/recording",
+      "status": 202
+    },
+    {
+      "path": "/api/voice/recording",
+      "status": 202
+    },
+    {
+      "path": "/api/voice/recording",
+      "status": 202
+    },
+    {
+      "path": "/api/voice/transcript",
+      "status": 200
+    },
+    {
+      "path": "/api/voice/recording",
+      "status": 202
+    },
+    {
+      "path": "/api/voice/recording",
+      "status": 202
+    },
+    {
+      "path": "/api/voice/recording",
+      "status": 202
+    },
+    {
+      "path": "/api/voice/recording",
+      "status": 202
+    },
+    {
+      "path": "/api/voice/end",
+      "status": 200
+    },
+    {
+      "path": "/api/voice/transcript",
+      "status": 200
+    }
+  ],
+  "events": [
+    {
+      "type": "session.started"
+    },
+    {
+      "type": "session.updated"
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": " Hey,"
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": " welcome!"
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": " I'm"
+    },
+    {
+      "type": "session.instructions.appended"
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": " Boss"
+    },
+    {
+      "type": "session.thinking.appended"
+    },
+    {
+      "type": "session.instructions.appended"
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": " Clinician"
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": " AI."
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": " I can"
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": " take"
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": " you around"
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": " the"
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": " site"
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": " and explain"
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": " what's"
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": " on"
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": " each"
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": " page"
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": " in simple"
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": " language,"
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": " one"
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": " detail"
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": " at a"
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": " time."
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": " Would"
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": " you"
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": " like"
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": " me to"
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": " show"
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": " you around"
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": "?"
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": " You"
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": " can"
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": " ask"
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": " questions"
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": " or"
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": " say"
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": " next"
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": " or stop"
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": " anytime."
+    },
+    {
+      "type": "session.usage.updated"
+    },
+    {
+      "type": "session.input_transcript.delta",
+      "delta": " Yes"
+    },
+    {
+      "type": "session.input_transcript.delta",
+      "delta": " please"
+    },
+    {
+      "type": "session.input_transcript.delta",
+      "delta": ", show"
+    },
+    {
+      "type": "session.input_transcript.delta",
+      "delta": " me"
+    },
+    {
+      "type": "session.input_transcript.delta",
+      "delta": " around"
+    },
+    {
+      "type": "session.input_transcript.delta",
+      "delta": " and"
+    },
+    {
+      "type": "session.input_transcript.delta",
+      "delta": " explain"
+    },
+    {
+      "type": "session.input_transcript.delta",
+      "delta": " the"
+    },
+    {
+      "type": "session.input_transcript.delta",
+      "delta": " details"
+    },
+    {
+      "type": "session.input_transcript.delta",
+      "delta": " one at a"
+    },
+    {
+      "type": "session.input_transcript.delta",
+      "delta": " time"
+    },
+    {
+      "type": "session.delegation.created"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.created"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.in_progress"
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": " Sure!"
+    },
+    {
+      "type": "session.usage.updated"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_item.added",
+      "name": "start_guided_tour"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.function_call_arguments.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.function_call_arguments.done",
+      "arguments": "{}"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_item.done",
+      "name": "start_guided_tour"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.completed"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.created"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.in_progress"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_item.added",
+      "name": "point_at"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.function_call_arguments.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.function_call_arguments.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.function_call_arguments.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.function_call_arguments.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.function_call_arguments.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.function_call_arguments.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.function_call_arguments.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.function_call_arguments.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.function_call_arguments.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.function_call_arguments.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.function_call_arguments.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.function_call_arguments.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.function_call_arguments.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.function_call_arguments.done",
+      "arguments": "{\"target\":\"Build a private practice you can actually stay in\"}"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_item.done",
+      "name": "point_at"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.completed"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.created"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.in_progress"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_item.added"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.content_part.added"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.done"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.content_part.done"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_item.done"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.completed"
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": " Okay\u2014"
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": "I've"
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": " taken"
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": " you"
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": " to the"
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": " home"
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": " page."
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": " It\u2019s"
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": " about"
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": " building"
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": " a private"
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": " practice"
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": " that"
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": " supports"
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": " your"
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": " income"
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": " and"
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": " your"
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": " life"
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": " without"
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": " wearing"
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": " you"
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": " out."
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": " That\u2019s"
+    },
+    {
+      "type": "session.usage.updated"
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": " the first"
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": " detail."
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": " What would"
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": " you like"
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": " to know"
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": " here?"
+    },
+    {
+      "type": "session.usage.updated"
+    },
+    {
+      "type": "session.input_transcript.delta",
+      "delta": " Next"
+    },
+    {
+      "type": "session.input_transcript.delta",
+      "delta": ", please"
+    },
+    {
+      "type": "session.delegation.created"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.created"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.in_progress"
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": " Okay,"
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": " moving"
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": " to the"
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": " next"
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": " stop."
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_item.added",
+      "name": "next_tour_stop"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.function_call_arguments.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.function_call_arguments.done",
+      "arguments": "{}"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_item.done",
+      "name": "next_tour_stop"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.completed"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.created"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.in_progress"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_item.added"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_item.done"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_item.added",
+      "name": "point_at"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.function_call_arguments.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.function_call_arguments.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.function_call_arguments.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.function_call_arguments.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.function_call_arguments.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.function_call_arguments.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.function_call_arguments.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.function_call_arguments.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.function_call_arguments.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.function_call_arguments.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.function_call_arguments.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.function_call_arguments.done",
+      "arguments": "{\"target\":\"A community that actually gets it.\"}"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_item.done",
+      "name": "point_at"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.completed"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.created"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.in_progress"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_item.added"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.content_part.added"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.delta"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_text.done"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.content_part.done"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.output_item.done"
+    },
+    {
+      "type": "response.event",
+      "eventType": "response.completed"
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": " Here,"
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": " \u201cA"
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": " community"
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": " that actually"
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": " gets"
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": " it\u201d"
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": " means"
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": " connecting"
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": " with"
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": " other"
+    },
+    {
+      "type": "session.output_transcript.delta",
+      "delta": " clinicians"
+    },
+    {
+      "type": "session.closed"
+    }
+  ],
+  "errors": [],
+  "verified": {
+    "startTourCalls": 1,
+    "nextDetailCalls": 1,
+    "sameVoiceSessionAfterNavigationAndCollapse": true,
+    "endPersisted": true
+  }
+}

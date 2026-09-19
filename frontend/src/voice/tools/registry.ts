@@ -64,9 +64,15 @@ type Factory = (toolFn: ToolFn, ctx: VoiceContext, state: SessionState) => Conci
 
 const FACTORIES: Record<VoiceToolName, Factory> = {
   navigate_to: (toolFn, ctx, state) =>
-    buildNavigateTool(toolFn, ctx, { policy: state.policy, history: state.history, onDepart: state.onDepart }),
+    buildNavigateTool(toolFn, ctx, { policy: state.policy, history: state.history, onDepart: state.onDepart, canNavigate: () => {
+      const turn = ctx.getUserTurn?.();
+      return !state.tour.running || (!!turn && state.tour.consumedTurn !== turn.id && /\b(open|go to|take me to|show me|navigate|back|return)\b/i.test(turn.text));
+    } }),
   go_back: (toolFn, ctx, state) =>
-    buildGoBackTool(toolFn, ctx, { policy: state.policy, history: state.history, onDepart: state.onDepart }),
+    buildGoBackTool(toolFn, ctx, { policy: state.policy, history: state.history, onDepart: state.onDepart, canNavigate: () => {
+      const turn = ctx.getUserTurn?.();
+      return !state.tour.running || (!!turn && state.tour.consumedTurn !== turn.id && /\b(open|go to|take me to|show me|navigate|back|return)\b/i.test(turn.text));
+    } }),
   read_current_page: (toolFn, ctx) => buildReadPageTool(toolFn, ctx),
   point_at: (toolFn, ctx) => buildPointAtTool(toolFn, ctx),
   stop_pointing: (toolFn, ctx) => buildStopPointingTool(toolFn, ctx),

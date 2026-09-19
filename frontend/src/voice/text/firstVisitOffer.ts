@@ -92,24 +92,14 @@ export function useFirstVisitOffer(input: {
 
   useEffect(() => {
     if (!active || decidedRef.current === policy.surface) return;
-    decidedRef.current = policy.surface;
     let live = true;
 
     void (async () => {
       const decision = await decideGreeting(policy, context());
       if (!live) return;
-      if (decision.firstVisit) {
-        // Nothing is written for having asked. Only an explicit no is worth
-        // remembering: someone who read the offer and said nothing has not
-        // turned anything down, and holding the question against them would
-        // cost a newcomer the one walkthrough they were ever going to get.
-        setOpeningLine(decision.greeting);
-        setOffering(true);
-        return;
-      }
-      // Someone part-way round is not a newcomer, but they should still be told
-      // the door is open — the resume line `decideGreeting` already wrote.
-      if (decision.resumeIndex !== null) setOpeningLine(decision.greeting);
+      decidedRef.current = policy.surface;
+      setOpeningLine(decision.greeting);
+      setOffering(decision.firstVisit || decision.resumeIndex !== null);
     })();
 
     return () => {

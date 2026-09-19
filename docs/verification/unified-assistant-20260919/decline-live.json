@@ -1,0 +1,46 @@
+{
+  "observations": [
+    {
+      "phase": "greeting",
+      "url": "https://bossclinician.callsphere.site/club",
+      "text": "Boss Clinician Assistant\n\nUSUALLY REPLIES INSTANTLY\n\nHi, welcome! I'm Boss Clinician AI. I can take you around the site and explain what’s on each page in simple language, one detail at a time. Would you like me to show you around? You can ask questions or say next or stop anytime.\n\nYes, show me around\nNo thanks, I'll ask\nTalk to Boss Clinician AI\nMessage"
+    },
+    {
+      "phase": "decline-respected",
+      "url": "https://bossclinician.callsphere.site/club",
+      "text": "Boss Clinician Assistant\n\nUSUALLY REPLIES INSTANTLY\n\nHi, welcome! I'm Boss Clinician AI. I can take you around the site and explain what’s on each page in simple language, one detail at a time. Would you like me to show you around? You can ask questions or say next or stop anytime.\n\nNo thanks. Please stay on this page.\n\nOf course—we’ll stay on this page. I’m here if you have any questions.\n\nTalk to Boss Clinician AI\nMessage"
+    }
+  ],
+  "requests": [
+    {
+      "path": "/api/voice/tour-progress",
+      "status": 200
+    },
+    {
+      "path": "/api/voice/chat",
+      "status": 200,
+      "sessionId": "d5b66c09-89fe-4889-add9-4aa8a0b6b4ba",
+      "toolEvents": []
+    },
+    {
+      "path": "/api/voice/tour-progress",
+      "status": 200
+    },
+    {
+      "path": "/api/voice/chat",
+      "status": 200,
+      "sessionId": "d5b66c09-89fe-4889-add9-4aa8a0b6b4ba",
+      "toolEvents": []
+    },
+    {
+      "path": "/api/voice/tour-progress",
+      "status": 200
+    },
+    {
+      "path": "/api/voice/transcript",
+      "status": 200
+    }
+  ],
+  "events": [],
+  "errors": []
+}

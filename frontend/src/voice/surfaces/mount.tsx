@@ -24,19 +24,7 @@ import { ADMIN_POLICY, MEMBER_POLICY, PUBLIC_POLICY, policyForPath } from "@/voi
  * that pages render for themselves.
  */
 
-const VoiceConcierge = lazy(() =>
-  import("@/voice/ui").then((module) => ({ default: module.VoiceConcierge })),
-);
-
-/**
- * The typed half of the same concierge.
- *
- * `Layout` already renders the widget for the public site, so only the portal
- * and the admin need it from here — and they need it badly, because the widget
- * now carries the whole tool set, the cursor, the page reading and the
- * walkthrough. Left mounted on the marketing pages alone, every one of those
- * capabilities is unreachable for the people who own the product.
- */
+/** One shared chat launcher owns both typed and spoken conversations. */
 const ChatWidget = lazy(() =>
   import("@/components/ChatWidget").then((module) => ({ default: module.ChatWidget })),
 );
@@ -55,20 +43,16 @@ const ChatWidget = lazy(() =>
 function VoiceMount({
   policy,
   theme,
-  chat = false,
 }: {
   policy: VoiceSurfacePolicy;
   theme?: string;
-  /** Also bring the typed concierge. False where a shell already renders it. */
-  chat?: boolean;
 }) {
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
   if (!mounted) return null;
   const concierge = (
     <Suspense fallback={null}>
-      <VoiceConcierge policy={policy} />
-      {chat && <ChatWidget />}
+      <ChatWidget key={policy.surface} />
     </Suspense>
   );
   return theme ? <div className={theme}>{concierge}</div> : concierge;
@@ -104,7 +88,7 @@ export function PublicVoiceMount() {
  * the account area, which is exactly the move the agent is there to make.
  */
 export function MemberVoiceMount() {
-  return <VoiceMount policy={MEMBER_POLICY} theme="theme-luxe" chat />;
+  return <VoiceMount policy={MEMBER_POLICY} theme="theme-luxe" />;
 }
 
 /**
@@ -114,5 +98,5 @@ export function MemberVoiceMount() {
  * its own: it is already in the themed subtree.
  */
 export function AdminVoiceMount() {
-  return <VoiceMount policy={ADMIN_POLICY} chat />;
+  return <VoiceMount policy={ADMIN_POLICY} />;
 }

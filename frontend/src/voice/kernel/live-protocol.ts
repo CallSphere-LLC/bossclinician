@@ -114,6 +114,8 @@ export class LiveProtocol {
       const inner = event.event;
       if (inner?.type === "response.created") { this.active = true; this.calls = []; this.emit({ ...inner, delegation_id: event.delegation_id }); }
       if (inner?.type === "response.output_item.done" && inner.item?.type === "function_call") {
+        // Make the actual utterance visible to consent guards before executing tools.
+        this.flushRole("user");
         const item = inner.item;
         if (!this.pending.has(item.call_id) && !this.completed.has(item.call_id)) { this.calls.push(item); this.pending.add(item.call_id); }
       }

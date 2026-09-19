@@ -1,0 +1,77 @@
+{
+  "observations": [
+    {
+      "phase": "greeting",
+      "url": "https://bossclinician.callsphere.site/club",
+      "text": "Boss Clinician Assistant\n\nUSUALLY REPLIES INSTANTLY\n\nHi, welcome! I'm Boss Clinician AI. I can take you around the site and explain what’s on each page in simple language, one detail at a time. Would you like me to show you around? You can ask questions or say next or stop anytime.\n\nYes, show me around\nNo thanks, I'll ask\nTalk to Boss Clinician AI\nMessage"
+    },
+    {
+      "phase": "text-first-step",
+      "url": "https://bossclinician.callsphere.site/",
+      "text": "Boss Clinician Assistant\n\nUSUALLY REPLIES INSTANTLY\n\nHi, welcome! I'm Boss Clinician AI. I can take you around the site and explain what’s on each page in simple language, one detail at a time. Would you like me to show you around? You can ask questions or say next or stop anytime.\n\nYes, please show me around and explain the details one by one in simple language.\n\nWe’re on the Home page, where the main headline explains the goal: helping therapists build a private practice that supports their income and life without wearing them out.\n\nYou can ask a question, or say **next** when you’re ready for the next detail.\n\nTalk to Boss Clinician AI\nMessage"
+    },
+    {
+      "phase": "waits-for-visitor",
+      "url": "https://bossclinician.callsphere.site/"
+    },
+    {
+      "phase": "text-next-step",
+      "url": "https://bossclinician.callsphere.site/",
+      "text": "Boss Clinician Assistant\n\nUSUALLY REPLIES INSTANTLY\n\nHi, welcome! I'm Boss Clinician AI. I can take you around the site and explain what’s on each page in simple language, one detail at a time. Would you like me to show you around? You can ask questions or say next or stop anytime.\n\nYes, please show me around and explain the details one by one in simple language.\n\nWe’re on the Home page, where the main headline explains the goal: helping therapists build a private practice that supports their income and life without wearing them out.\n\nYou can ask a question, or say **next** when you’re ready for the next detail.\n\nNext please.\n\n**“Build a private practice you can actually stay in”** means the goal isn’t just to help you open a practice. It’s to help you build one that fits your life and that you’ll still enjoy running years from now.\n\nSay **next** when you’re ready for the next detail.\n\nTalk to Boss Clinician AI\nMessage"
+    }
+  ],
+  "requests": [
+    {
+      "path": "/api/voice/tour-progress",
+      "status": 200
+    },
+    {
+      "path": "/api/voice/chat",
+      "status": 200,
+      "sessionId": "b4fa2fd6-0085-48ec-bb87-8ace4ec86654",
+      "toolEvents": []
+    },
+    {
+      "path": "/api/voice/tour-progress",
+      "status": 200
+    },
+    {
+      "path": "/api/voice/tour-progress",
+      "status": 200
+    },
+    {
+      "path": "/api/voice/chat",
+      "status": 200,
+      "sessionId": "b4fa2fd6-0085-48ec-bb87-8ace4ec86654",
+      "toolEvents": []
+    },
+    {
+      "path": "/api/voice/chat",
+      "status": 200,
+      "sessionId": "b4fa2fd6-0085-48ec-bb87-8ace4ec86654",
+      "toolEvents": []
+    },
+    {
+      "path": "/api/voice/transcript",
+      "status": 200
+    },
+    {
+      "path": "/api/voice/chat",
+      "status": 200,
+      "sessionId": "b4fa2fd6-0085-48ec-bb87-8ace4ec86654",
+      "toolEvents": []
+    },
+    {
+      "path": "/api/voice/chat",
+      "status": 200,
+      "sessionId": "b4fa2fd6-0085-48ec-bb87-8ace4ec86654",
+      "toolEvents": []
+    },
+    {
+      "path": "/api/voice/transcript",
+      "status": 200
+    }
+  ],
+  "events": [],
+  "errors": []
+}

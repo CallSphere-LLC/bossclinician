@@ -1,0 +1,146 @@
+{
+  "verifiedAt": "2026-09-19T19:28:10.771407+00:00",
+  "release": "20260919192607-ec79b4f",
+  "sourceSha256": "f3089cb708b1118c8e2ac745391ea12aed9144d7951e3ce56b9238cd5d6f7b66",
+  "checkoutMatchesDeployedSource": true,
+  "images": [
+    {
+      "component": "backend",
+      "ref": "docker.io/library/bossclinician-k3-backend:20260919192607-ec79b4f",
+      "imageId": "sha256:4f3719bde11b33e6ad41e8d44c12fbbcddb6575ac593a30b56c7f39d0b7208d6",
+      "sourceSha256": "f3089cb708b1118c8e2ac745391ea12aed9144d7951e3ce56b9238cd5d6f7b66"
+    },
+    {
+      "component": "frontend",
+      "ref": "docker.io/library/bossclinician-k3-frontend:20260919192607-ec79b4f",
+      "imageId": "sha256:b4e23c9b77b5c86c91df6345399b5a6043223ed84d9d9ea11c376b8f662f5718",
+      "sourceSha256": "f3089cb708b1118c8e2ac745391ea12aed9144d7951e3ce56b9238cd5d6f7b66"
+    },
+    {
+      "component": "ai",
+      "ref": "docker.io/library/bossclinician-k3-ai:20260919192607-ec79b4f",
+      "imageId": "sha256:c9dcf4560f74f4720e1a1286a9cea75d3f26f00b26b74d5a76da07e4e5608bcd",
+      "sourceSha256": "f3089cb708b1118c8e2ac745391ea12aed9144d7951e3ce56b9238cd5d6f7b66"
+    },
+    {
+      "component": "gateway",
+      "ref": "docker.io/library/bossclinician-k3-gateway:20260919192607-ec79b4f",
+      "imageId": "sha256:32d04d9f3dc990e851a6596b5d4914c457834afedad387c29573ad54f134e375",
+      "sourceSha256": "f3089cb708b1118c8e2ac745391ea12aed9144d7951e3ce56b9238cd5d6f7b66"
+    }
+  ],
+  "health": {
+    "ok": true,
+    "service": "bossclinician-backend",
+    "release": "20260919192607-ec79b4f",
+    "time": "2026-09-19T19:28:09.268Z"
+  },
+  "pods": [
+    {
+      "name": "boss-ai-689f8854b4-wlbtc",
+      "ip": "10.42.0.105",
+      "containers": [
+        {
+          "name": "ai",
+          "ready": true,
+          "restarts": 0,
+          "image": "docker.io/library/bossclinician-k3-ai:20260919192607-ec79b4f"
+        }
+      ]
+    },
+    {
+      "name": "boss-app-57974956b-pgjmt",
+      "ip": "10.42.0.106",
+      "containers": [
+        {
+          "name": "backend",
+          "ready": true,
+          "restarts": 0,
+          "image": "docker.io/library/bossclinician-k3-backend:20260919192607-ec79b4f"
+        },
+        {
+          "name": "frontend",
+          "ready": true,
+          "restarts": 0,
+          "image": "docker.io/library/bossclinician-k3-frontend:20260919192607-ec79b4f"
+        },
+        {
+          "name": "gateway",
+          "ready": true,
+          "restarts": 0,
+          "image": "docker.io/library/bossclinician-k3-gateway:20260919192607-ec79b4f"
+        }
+      ]
+    }
+  ],
+  "publicRouting": [
+    {
+      "ports": [
+        {
+          "name": "http",
+          "port": 8080,
+          "protocol": "TCP"
+        }
+      ],
+      "endpoints": [
+        {
+          "addresses": [
+            "10.42.0.106"
+          ],
+          "conditions": {
+            "ready": true,
+            "serving": true,
+            "terminating": false
+          },
+          "nodeName": "ns525614",
+          "targetRef": {
+            "kind": "Pod",
+            "name": "boss-app-57974956b-pgjmt",
+            "namespace": "bossclinician",
+            "uid": "5d26018d-212d-4b39-81b1-435452f6c799"
+          }
+        }
+      ]
+    }
+  ],
+  "compose": [
+    {
+      "service": "ai",
+      "id": "9359d7272c2490970c7278e8b196dbbc30b2ad100d3c999d8c9493d59099d672",
+      "state": "exited"
+    },
+    {
+      "service": "backend",
+      "id": "08102293981d59bb8918bc8539f2e367126cf1fe22bfcd7c3c4289dc2d2d2ed5",
+      "state": "exited"
+    },
+    {
+      "service": "coturn",
+      "id": "1cb85b0eb89cecd0e1c6ca32ebe141d0a3bc12f8ceb760a2132000774215a334",
+      "state": "running"
+    },
+    {
+      "service": "db",
+      "id": "d37e9c0bb00123d6cb7f23d2dccaaed4acd96fe5e16d005f98b4a90525d02962",
+      "state": "running"
+    },
+    {
+      "service": "db-bridge",
+      "id": "42152c099d7560fb8ce9e8116b803fdc60e78888cd924569f7789b8d4a0b2d42",
+      "state": "running"
+    },
+    {
+      "service": "frontend",
+      "id": "1f014b52225f003daf79eea1fd670bbac92f209f6b4d2de16f4620e9e12ad406",
+      "state": "exited"
+    },
+    {
+      "service": "nginx",
+      "id": "8f3dbdb629965dd5205a0738199ee4a5b67c717c3ed27eac5352782ed93cf7f1",
+      "state": "exited"
+    }
+  ],
+  "retentionDryRun": "Retention checked 12 Boss K3 refs; kept current workloads, containers and three newest tags per component.\n",
+  "retentionTimerEnabled": "enabled",
+  "retentionTimerActive": "active"
+}

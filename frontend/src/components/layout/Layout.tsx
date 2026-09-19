@@ -3,7 +3,6 @@ import { useLocation } from "react-router";
 import { useEffect } from "react";
 import { Header } from "./Header";
 import { Footer } from "./Footer";
-import { ChatWidget } from "@/components/ChatWidget";
 import { FloatingCall } from "@/components/community/FloatingCall";
 import { cn } from "@/lib/cn";
 
@@ -52,7 +51,6 @@ export function Layout({ children }: { children: ReactNode }) {
       <Footer />
       {/* A community call in progress follows the member onto the public pages too. */}
       <FloatingCall />
-      <ChatWidget />
     </div>
   );
 }

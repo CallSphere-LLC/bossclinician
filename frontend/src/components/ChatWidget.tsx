@@ -6,7 +6,6 @@ import {
   useRef,
   useState,
   type FormEvent,
-  type MouseEvent,
 } from "react";
 import { useLocation } from "react-router";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
@@ -19,7 +18,7 @@ import { policyForPath } from "@/voice/surfaces";
 import { readApprovalAnswer, useConciergeChat, useFirstVisitOffer } from "@/voice/text";
 
 /**
- * The cursor and the approval card belong to the voice slice and are pulled in
+ * The voice controls and approval card belong to the voice slice and are pulled in
  * only once somebody opens the panel.
  *
  * Two reasons, both hard requirements rather than tidiness: this widget is
@@ -27,15 +26,14 @@ import { readApprovalAnswer, useConciergeChat, useFirstVisitOffer } from "@/voic
  * the DOM; and a visitor who never opens the chat should not pay for the
  * concierge's bundle on first paint.
  */
-const VoiceSpotlight = lazy(() =>
-  import("@/voice/ui").then((module) => ({ default: module.VoiceSpotlight })),
+const VoiceConcierge = lazy(() =>
+  import("@/voice/ui").then((module) => ({ default: module.VoiceConcierge })),
 );
 const ApprovalHost = lazy(() =>
   import("@/voice/ui").then((module) => ({ default: module.ApprovalHost })),
 );
 
 const HISTORY_KEY = "bc_chat_history";
-const TEASER_DISMISSED_KEY = "bc_chat_teaser_dismissed";
 
 /**
  * Both readers are guarded rather than left to throw.
@@ -55,16 +53,8 @@ function loadHistory(): ChatMessage[] {
   }
 }
 
-function teaserDismissed(): boolean {
-  try {
-    return localStorage.getItem(TEASER_DISMISSED_KEY) === "1";
-  } catch {
-    return false;
-  }
-}
-
 const PUBLIC_GREETING =
-  "Hi, I'm Boss Clinician AI. Ask me about working with Yvette, the B.O.S.S Blueprint, or where to start!";
+  "Hi, welcome! I'm Boss Clinician AI.";
 
 /**
  * What the panel opens with.
@@ -81,15 +71,6 @@ function panelGreeting(policy: VoiceSurfacePolicy): string {
 const FAILURE_MESSAGE =
   `I'm having trouble connecting right now. Please email ${footer.contactEmail} or try again shortly.`;
 
-/**
- * The walkthrough offer, in the form it takes for someone typing.
- *
- * The policy's `firstVisitGreeting` is written to be spoken, so it is followed
- * by the one sentence that changes when the answer has to be typed rather than
- * said. The two buttons below it are the same answer by other means — a
- * decision this size should never require finding the right words first.
- */
-const TYPED_TOUR_CUE = "Type yes and I'll take you round, or just ask me anything.";
 const TOUR_CHOICES = ["Yes, show me around", "No thanks, I'll ask"];
 
 const STARTER_SUGGESTIONS = [
@@ -97,133 +78,6 @@ const STARTER_SUGGESTIONS = [
   "Tell me about the B.O.S.S. Boardroom",
   "I'm seeing too many clients — help",
 ];
-
-// Short rotating lines shown near the launcher — derived from real site content
-// (services, pain points, and offers in src/content/site.ts and content/courses.ts).
-// Each line must stand alone: they swap in place, so nothing is on screen to
-// continue from. Keep them 3-5 words and under ~28 characters so they fit the
-// bubble on one line at its narrowest (min(80vw, 17rem)).
-const TEASER_LINES = [
-  "Start your private practice",
-  "Leaving Alma or Headway?",
-  "Raise your rates",
-  "Get credentialed faster",
-  "Find your ideal clients",
-  "Grow into a group practice",
-  "Pass your next audit",
-  "Book your free masterclass",
-];
-
-const TEASER_INTERVAL_MS = 3600;
-
-/** How long the teaser stays on screen before retracting to just the launcher. */
-const TEASER_VISIBLE_MS = 11000;
-
-function ChatTeaser({ onOpen }: { onOpen: () => void }) {
-  const prefersReducedMotion = useReducedMotion();
-  const [dismissed, setDismissed] = useState(teaserDismissed);
-  const [visible, setVisible] = useState(false);
-  const [index, setIndex] = useState(0);
-
-  useEffect(() => {
-    const show = setTimeout(() => setVisible(true), 900);
-    // Retract on its own. The bubble is ~272px wide and anchored above the
-    // launcher, which on a 390px screen parks it permanently over whatever is
-    // in the lower-right — on the home page that is the Instagram grid and the
-    // Follow CTA. Retracting keeps the prompt without letting it hold a corner
-    // of the viewport hostage; the launcher stays, so the chat is still one tap
-    // away, and nothing is written to storage so it returns on the next visit.
-    const hide = setTimeout(() => setVisible(false), 900 + TEASER_VISIBLE_MS);
-    return () => {
-      clearTimeout(show);
-      clearTimeout(hide);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (dismissed || prefersReducedMotion) return;
-    const timer = setInterval(() => {
-      setIndex((i) => (i + 1) % TEASER_LINES.length);
-    }, TEASER_INTERVAL_MS);
-    return () => clearInterval(timer);
-  }, [dismissed, prefersReducedMotion]);
-
-  function dismiss(e: MouseEvent) {
-    e.stopPropagation();
-    setDismissed(true);
-    try {
-      localStorage.setItem(TEASER_DISMISSED_KEY, "1");
-    } catch {
-      // The bubble stays gone for this visit either way.
-    }
-  }
-
-  return (
-    <AnimatePresence>
-      {visible && !dismissed && (
-        <motion.div
-          initial={{ opacity: 0, y: prefersReducedMotion ? 0 : 12, scale: prefersReducedMotion ? 1 : 0.96 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          exit={{ opacity: 0, y: prefersReducedMotion ? 0 : 8, scale: prefersReducedMotion ? 1 : 0.96 }}
-          transition={
-            prefersReducedMotion
-              ? { duration: 0.15 }
-              : { type: "spring", stiffness: 320, damping: 28 }
-          }
-          className="absolute bottom-full right-0 z-10 mb-3 w-[min(80vw,17rem)] sm:w-72"
-        >
-          <button
-            type="button"
-            onClick={onOpen}
-            aria-label="Open the Boss Clinician chat assistant"
-            className="glass glass-edge group relative block w-full rounded-2xl px-4 py-3 pr-8 text-left transition-transform duration-300 ease-luxe hover:-translate-y-0.5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold"
-          >
-            <span className="block text-[0.6rem] font-semibold uppercase tracking-[0.2em] text-gold/85">
-              Boss Clinician Assistant
-            </span>
-            <span
-              aria-hidden="true"
-              className="relative mt-1.5 block min-h-[1.5rem] text-sm leading-snug text-white/85"
-            >
-              <AnimatePresence mode="wait">
-                {prefersReducedMotion ? (
-                  <span className="block">{TEASER_LINES[0]}</span>
-                ) : (
-                  <motion.span
-                    key={index}
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -8 }}
-                    transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
-                    className="block"
-                  >
-                    {TEASER_LINES[index]}
-                  </motion.span>
-                )}
-              </AnimatePresence>
-            </span>
-            {/* speech-bubble tail pointing at the launcher */}
-            <span
-              aria-hidden="true"
-              className="absolute -bottom-1.5 right-6 h-3 w-3 rotate-45 border-b border-r border-white/12 bg-night-raised"
-            />
-          </button>
-          <button
-            type="button"
-            onClick={dismiss}
-            aria-label="Dismiss chat suggestion"
-            // 21x21 was an awkward miss-tap next to the teaser's own click
-            // area; the padded box reaches a comfortable touch size while the
-            // glyph stays small.
-            className="absolute right-0.5 top-0.5 flex h-11 w-11 items-center justify-center rounded-full text-white/35 transition-colors hover:bg-ink/10 hover:text-white"
-          >
-            <CloseIcon size={13} />
-          </button>
-        </motion.div>
-      )}
-    </AnimatePresence>
-  );
-}
 
 export function ChatWidget() {
   const [open, setOpen] = useState(false);
@@ -263,6 +117,8 @@ export function ChatWidget() {
   const [suggestions, setSuggestions] = useState<string[]>(STARTER_SUGGESTIONS);
   const [input, setInput] = useState("");
   const [conciergeMounted, setConciergeMounted] = useState(false);
+  const [voiceContainer, setVoiceContainer] = useState<HTMLDivElement | null>(null);
+  const [voiceActive, setVoiceActive] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const prefersReducedMotion = useReducedMotion();
 
@@ -314,7 +170,7 @@ export function ChatWidget() {
   useEffect(() => {
     if (!offer.openingLine || offeredRef.current === policy.surface) return;
     offeredRef.current = policy.surface;
-    concierge.say(offer.offering ? `${offer.openingLine} ${TYPED_TOUR_CUE}` : offer.openingLine);
+    concierge.greet(offer.openingLine);
     if (offer.offering) setSuggestions(TOUR_CHOICES);
   }, [concierge, offer.openingLine, offer.offering, policy.surface]);
 
@@ -365,15 +221,11 @@ export function ChatWidget() {
 
   return (
     <>
-      {/*
-       * The cursor is rendered outside the launcher's fixed corner on purpose.
-       * It points at things across the whole page, and inside a panel that
-       * clips its overflow and carries its own transforms it would be both
-       * cropped and misplaced.
-       */}
+      {/* Keep the call mounted while the chat is collapsed or changes pages.
+          Its controls are portaled into the open panel; its page overlays stay outside. */}
       {conciergeMounted && (
         <Suspense fallback={null}>
-          <VoiceSpotlight />
+          <VoiceConcierge policy={policy} container={voiceContainer} onActiveChange={setVoiceActive} />
         </Suspense>
       )}
 
@@ -384,7 +236,7 @@ export function ChatWidget() {
        * words it could not deliver — she was still typing when the question
        * timed out — are handed back to the conversation rather than lost.
        */}
-      {conciergeMounted && policy.surface === "admin" && (
+      {conciergeMounted && !voiceActive && policy.surface === "admin" && (
         <Suspense fallback={null}>
           <ApprovalHost
             onUndelivered={(text) => {
@@ -435,7 +287,7 @@ export function ChatWidget() {
                 ref={scrollRef}
                 role="log"
                 aria-live="polite"
-                className="flex-1 space-y-3 overflow-y-auto px-4 py-4"
+                className="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4"
               >
                 {messages.map((m, i) => (
                   <div
@@ -473,7 +325,7 @@ export function ChatWidget() {
                 )}
               </div>
 
-              {suggestions.length > 0 && (
+              {suggestions.length > 0 && !voiceActive && (
                 <div className="flex flex-wrap gap-2 border-t border-white/[0.07] px-4 py-3">
                   {suggestions.map((s) => (
                     <button
@@ -488,7 +340,9 @@ export function ChatWidget() {
                 </div>
               )}
 
-              <form onSubmit={handleSubmit} className="flex items-center gap-2 border-t border-white/[0.07] p-3">
+              <div ref={setVoiceContainer} className="max-h-[55%] shrink-0 overflow-y-auto border-t border-white/[0.07] px-3 py-2" />
+
+              <form onSubmit={handleSubmit} className="flex shrink-0 items-center gap-2 border-t border-white/[0.07] p-3">
                 <label htmlFor="chat-input" className="sr-only">
                   {pendingApproval ? "Answer yes or no to the change waiting above" : "Message"}
                 </label>
@@ -497,7 +351,7 @@ export function ChatWidget() {
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   placeholder={pendingApproval ? "Type yes or no…" : "Ask a question…"}
-                  className="flex-1 rounded-full border border-white/12 bg-white/[0.05] px-4 py-2.5 text-sm text-white outline-none transition-colors duration-300 placeholder:text-white/30 focus-visible:border-gold/55"
+                  className="min-w-0 flex-1 rounded-full border border-white/12 bg-white/[0.05] px-4 py-2.5 text-sm text-white outline-none transition-colors duration-300 placeholder:text-white/30 focus-visible:border-gold/55"
                 />
                 <button
                   type="submit"
@@ -511,8 +365,6 @@ export function ChatWidget() {
             </motion.div>
           )}
         </AnimatePresence>
-
-        {!open && <ChatTeaser onOpen={() => setOpen(true)} />}
 
         {/*
          * The launcher is hidden while the panel is open.
@@ -545,6 +397,7 @@ export function ChatWidget() {
               )}
             >
               <ChatIcon />
+              {voiceActive && <span aria-label="Voice call active" className="absolute right-0 top-0 h-3 w-3 rounded-full bg-emerald-400 ring-2 ring-night-deep" />}
             </motion.button>
           </div>
         )}

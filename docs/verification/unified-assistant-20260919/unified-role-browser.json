@@ -1,0 +1,58 @@
+{
+  "checks": [
+    {
+      "role": "admin",
+      "width": 320,
+      "closedChatLaunchers": 1,
+      "closedVoiceLaunchers": 0,
+      "voiceInsidePanel": true,
+      "disclosureInsidePanel": true,
+      "warmGreeting": true,
+      "tourOptIn": true,
+      "navigation": "https://admin.bossclinician.callsphere.site/admin/settings",
+      "singleWidgetAfterNavigation": true,
+      "horizontalOverflow": false
+    },
+    {
+      "role": "admin",
+      "width": 1440,
+      "closedChatLaunchers": 1,
+      "closedVoiceLaunchers": 0,
+      "voiceInsidePanel": true,
+      "disclosureInsidePanel": true,
+      "warmGreeting": true,
+      "tourOptIn": true,
+      "navigation": "https://admin.bossclinician.callsphere.site/admin/settings",
+      "singleWidgetAfterNavigation": true,
+      "horizontalOverflow": false
+    },
+    {
+      "role": "member",
+      "width": 320,
+      "closedChatLaunchers": 1,
+      "closedVoiceLaunchers": 0,
+      "voiceInsidePanel": true,
+      "disclosureInsidePanel": true,
+      "warmGreeting": true,
+      "tourOptIn": true,
+      "navigation": "https://bossclinician.callsphere.site/downloads",
+      "singleWidgetAfterNavigation": true,
+      "horizontalOverflow": false
+    },
+    {
+      "role": "member",
+      "width": 1440,
+      "closedChatLaunchers": 1,
+      "closedVoiceLaunchers": 0,
+      "voiceInsidePanel": true,
+      "disclosureInsidePanel": true,
+      "warmGreeting": true,
+      "tourOptIn": true,
+      "navigation": "https://bossclinician.callsphere.site/downloads",
+      "singleWidgetAfterNavigation": true,
+      "horizontalOverflow": false
+    }
+  ],
+  "errors": [],
+  "forbiddenProviderRequests": []
+}
