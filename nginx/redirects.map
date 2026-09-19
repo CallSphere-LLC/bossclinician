@@ -2,7 +2,7 @@
 # Source: the `redirects` table. Regenerate with:
 #   docker compose exec backend node scripts/generate-nginx-redirects.js
 #   docker compose exec nginx nginx -s reload
-# Generated from 122 rows.
+# Generated from 168 rows.
 
 # The podcast episode paths (/podcasts/<show>/episodes/<id>) overflow the
 # 64-byte default bucket, and nginx refuses to start rather than truncating.
@@ -14,11 +14,14 @@ map $uri $redirect_target {
     default '';
     /5-step-marketing /resources;
     /about_yvette /about;
+    /aboutyvette /about;
+    /account/login /login;
     /all-courses /courses;
     /audit-private-practice-replay /resources;
     /blog/alma-vs-private-pay-group-practice-numbers /blog;
     /blog/how-to-stop-seeing-25-clients-a-week /blog/how-to-stop-seeing-25-clients-a-week-and-still-hit-your-income-goals;
     /blog/is-talkspace-right-for-your-practice-goals /blog;
+    /boardroom /work-with-me;
     /boss-assessment /practice-quiz;
     /boss-builders-sales-page /work-with-me;
     /boss-clinician-home /;
@@ -30,50 +33,76 @@ map $uri $redirect_target {
     /confirmation-boss-clinician-lounge /checkout/success;
     /confirmation-page-1 /checkout/success;
     /continuing-education-boss-clinician /courses;
+    /create-account /signup;
     /credential-with-confidencekit-confirmed /checkout/success;
     /credentialingsuccess /courses/credentialing-success-formula;
+    /credentialsolo /courses/credential-with-confidence;
     /credentialwithconfidencekit /courses/credential-with-confidence;
     /csfgrouppractices /courses/credentialing-success-formula;
     /cwcsolopractice /courses/credential-with-confidence;
+    /dos-and-donts-ty /resources;
+    /dos-donts-ty /resources;
     /evergreen-masterclass-register /resources;
     /financialdisclaimer /financial-disclaimer;
+    /forgot /forgot-password;
+    /freedom-masterclass /resources;
     /fullybooked /courses/fully-booked-toolkit;
     /fullybookedtherapist /courses/fully-booked-toolkit;
     /heyyvettehere /about;
     /hire-form /practice-quiz;
     /hiring-quiz /practice-quiz;
     /insurance-guide /resources;
+    /join /signup;
     /kickstartguide /resources;
     /leap-accelerator-thank-you /work-with-me;
     /link-in-bio /resource-hub;
+    /log-in /login;
+    /log-out /logout;
     /marketing-step-form /resources;
+    /masterclass /resources;
     /masterclass-review-sheet /resources;
+    /member/login /login;
+    /members /login;
+    /members/login /login;
     /next-steps-consult /apply;
     /offer-quiz /practice-quiz;
+    /offers/5rwmdhlj /lounge;
+    /offers/5rwmdhlj/checkout /lounge;
+    /offers/awvko5oi /lounge;
+    /offers/awvko5oi/checkout /lounge;
     /offers/boofdeo2 /retreats;
     /offers/boofdeo2/checkout /retreats;
     /offers/eghehsbl /store;
     /offers/eghehsbl/checkout /store;
     /offers/gswshbtx /store;
     /offers/gswshbtx/checkout /store;
+    /offers/tzgjalku /club;
+    /offers/tzgjalku/checkout /club;
+    /offers/ugqhxnvs /courses/credential-with-confidence;
+    /offers/ugqhxnvs/checkout /courses/credential-with-confidence;
     /offers/ykwzvqdz /store;
     /offers/ykwzvqdz/checkout /store;
     /offers/z9zxy5pi /retreats;
     /offers/z9zxy5pi/checkout /retreats;
     /on-demand-audit-your-private-practice /resources;
-    /podcasts/lyrical-reflections/episodes/2148691037 /podcasts/lyrical-reflections;
-    /podcasts/lyrical-reflections/episodes/2148691038 /podcasts/lyrical-reflections;
-    /podcasts/lyrical-reflections/episodes/2148691039 /podcasts/lyrical-reflections;
-    /podcasts/lyrical-reflections/episodes/2148691040 /podcasts/lyrical-reflections;
-    /podcasts/lyrical-reflections/episodes/2148691041 /podcasts/lyrical-reflections;
-    /podcasts/lyrical-reflections/episodes/2148691042 /podcasts/lyrical-reflections;
-    /podcasts/lyrical-reflections/episodes/2148691043 /podcasts/lyrical-reflections;
-    /podcasts/lyrical-reflections/episodes/2148691044 /podcasts/lyrical-reflections;
-    /podcasts/lyrical-reflections/episodes/2148691045 /podcasts/lyrical-reflections;
+    /opt-in /resources;
+    /password/new /forgot-password;
+    /password/reset /forgot-password;
+    /podcasts/lyrical-reflections /blog;
+    /podcasts/lyrical-reflections/episodes/2148691037 /blog;
+    /podcasts/lyrical-reflections/episodes/2148691038 /blog;
+    /podcasts/lyrical-reflections/episodes/2148691039 /blog;
+    /podcasts/lyrical-reflections/episodes/2148691040 /blog;
+    /podcasts/lyrical-reflections/episodes/2148691041 /blog;
+    /podcasts/lyrical-reflections/episodes/2148691042 /blog;
+    /podcasts/lyrical-reflections/episodes/2148691043 /blog;
+    /podcasts/lyrical-reflections/episodes/2148691044 /blog;
+    /podcasts/lyrical-reflections/episodes/2148691045 /blog;
     /practice-planner /courses/prepare-to-profit-journal;
     /practice-planner-thank-you /resources;
     /practice-protection-pack /courses/private-practice-protection-pack;
     /practice-reset-audit-ty /resources;
+    /practice-reset-snapshot /lounge;
     /practice-set-up-quiz /practice-quiz;
     /practice-set-up-quiz-ty /practice-quiz;
     /privacy-policy-8b664a08-e1e5-4f19-8d9a-5cb8f33bf104 /privacy-policy;
@@ -86,11 +115,13 @@ map $uri $redirect_target {
     /protectionpackthanks /checkout/success;
     /rampedrevenue /courses/ramp-up-rate-formula;
     /ready-quiz /practice-quiz;
+    /register /signup;
     /reluctant-form /practice-quiz;
     /replay-audit-your-ppractice-edu /resources;
     /replay-audit-your-practice /resources;
     /reset-audit /resources;
     /reset-audit-form /resources;
+    /reset-password /forgot-password;
     /reset-planner-form /practice-reset-planner;
     /resource_redirect/landing_pages/2150414734 /courses/fully-booked-toolkit;
     /resource_redirect/landing_pages/2150427089 /courses/from-profile-to-profit;
@@ -100,15 +131,29 @@ map $uri $redirect_target {
     /resource_redirect/landing_pages/2151104751 /courses/ramp-up-rate-formula;
     /resource_redirect/landing_pages/2151230875 /courses/provider-partnership-guide;
     /resource_redirect/landing_pages/2151230877 /courses/private-practice-protection-pack;
+    /resource_redirect/landing_pages/2151298575 /club;
+    /resource_redirect/landing_pages/2151702199 /apply;
     /resource_redirect/landing_pages/2151750533 /courses/directory-makeover-audit;
+    /resource_redirect/landing_pages/2152186082 /about;
+    /resource_redirect/landing_pages/2152229660 /lounge;
+    /resource_redirect/offers/5rwmdhlj /lounge;
     /resource_redirect/offers/7n6ffee2 /courses/rate-negotiation-letter-template;
+    /resource_redirect/offers/awvko5oi /lounge;
     /resource_redirect/offers/jfvdgdjf /courses/prepare-to-profit-journal;
     /resource_redirect/offers/jgx2ulva /courses/marketing-mastery-for-therapists;
+    /resource_redirect/offers/tzgjalku /club;
+    /resource_redirect/offers/ugqhxnvs /courses/credential-with-confidence;
     /resource_redirect/offers/wmz5rngn /courses/therapist-niche-clarity-accelerator;
     /resource_redirect/offers/yhc3aisz /courses/client-consultation-call-script;
     /resourcehub /resource-hub;
+    /retreat-needed-quiz /retreats;
     /retreat-thank-you-page /retreats;
     /retreatagreement /terms;
+    /sign-in /login;
+    /sign-out /logout;
+    /sign-up /signup;
+    /signin /login;
+    /signout /logout;
     /start-your-own-private-practice-quiz /practice-quiz;
     /starterconfirmed /checkout/success;
     /startersuitecourse /courses/private-practice-starter-suite;
@@ -121,13 +166,22 @@ map $uri $redirect_target {
     /thank-you-fullybooked /checkout/success;
     /thank-you-rate-renegotiate /checkout/success;
     /the-boss-builders-collective-thank-you-page /work-with-me;
+    /the-club-ty /checkout/success;
     /the-directory-makeover-audit /courses/directory-makeover-audit;
-    /the-lounge-suite /work-with-me;
+    /the-lounge-suite /lounge;
     /turn-doctor-referrals-into-ideal-client /courses/provider-partnership-guide;
+    /users/sign_in /login;
+    /users/sign_up /signup;
     /visionary-form /practice-quiz;
     /webinar-waitlist-thank-you /resources;
 }
 
 map $uri $redirect_target_temp {
     default '';
+    /doc-registration /resources;
+    /offers/pq696zyw /resources;
+    /offers/pq696zyw/checkout /resources;
+    /offers/syqkeslz /resources;
+    /offers/syqkeslz/checkout /resources;
+    /replay-documentation /resources;
 }
