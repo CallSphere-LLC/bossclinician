@@ -12,7 +12,10 @@ type OfferAccent = "green" | "plum" | "gold";
 interface Offer {
   ribbon: string;
   name: string;
-  desc: string;
+  /** The one-line promise set in bold under the tier name on bossclinician.com. */
+  tagline: string;
+  /** One string per paragraph, verbatim from bossclinician.com. */
+  desc: readonly string[];
   audience: string;
   cta: string;
   /** Internal route of the offer's own sales page. */
@@ -33,29 +36,39 @@ const QUIZ_HREF = "/practice-quiz";
  */
 const OFFERS: readonly Offer[] = [
   {
-    ribbon: "6-MONTH COACHING PROGRAM",
-    name: "Boss Clinician Club",
-    desc: "A 6-month coaching program for clinicians building from the ground up. Get the structure, tools, and guided strategy to do it right, without guessing at every step. This is your foundation, your roadmap, and your support system for the first six months.",
-    audience: "For: The Depleted Clinician, just starting or rebuilding",
-    cta: "Learn About the Club",
+    ribbon: "6-MONTH PROGRAM",
+    name: "The Club",
+    tagline: "Build a private practice you won't have to undo later.",
+    desc: [
+      "For clinicians building their foundation, attracting clients, and learning how to run the business side of private practice with more confidence and less guessing.",
+    ],
+    audience: "For: The clinician building or rebuilding",
+    cta: "Explore the Club",
     to: "/club",
     accent: "green",
   },
   {
     ribbon: "MEMBERSHIP",
-    name: "Boss Clinician Lounge",
-    desc: "For the fully booked clinician who has hit the income ceiling, is exhausted from splitting rates with platforms, and needs a real strategy, not more content, to scale sustainably without working more hours.",
-    audience: "For: The Maxed Out Clinician, established but capped",
-    cta: "Join the Lounge",
+    name: "The Lounge",
+    tagline: "Make the practice you already built work better for the life you actually want.",
+    desc: [
+      "For established clinicians whose practice is full or nearly full, but still requires more time, energy, or clinical output than they want to maintain long-term.",
+      "Strengthen your income model, reduce how much the practice depends on your maximum capacity, build better systems, and create more room for the life and future you actually want.",
+    ],
+    audience: "For: The Maxed Out Clinician",
+    cta: "Explore the Lounge",
     to: "/lounge",
     accent: "plum",
   },
   {
     ribbon: "MASTERMIND",
-    name: "Boss Clinician Boardroom",
-    desc: "An exclusive mastermind for group practice owners and scaling clinicians ready for peer-level strategy, CEO leadership development, and a room full of people building at the same level, with Yvette guiding the room.",
-    audience: "For: The Stretched Thin Clinician, leading a team or scaling",
-    cta: "Apply for the Boardroom",
+    name: "The Boardroom",
+    tagline: "Build a practice that can grow beyond you.",
+    desc: [
+      "For group-practice owners and scaling clinicians who need stronger leadership, team systems, and CEO-level decision-making as the business becomes bigger than one person.",
+    ],
+    audience: "For: The Stretched Thin Clinician",
+    cta: "Explore the Boardroom",
     to: "/work-with-me",
     accent: "gold",
   },
@@ -78,6 +91,10 @@ export function LuxeOffers() {
 
   return (
     <Section
+      // The hero and closing "Find Your Path" buttons jump here, as they do on
+      // bossclinician.com (#offers). The scroll margin clears the sticky header.
+      id="offers"
+      className="scroll-mt-20"
       surface="base"
       space="lg"
       aurora="mixed"
@@ -86,7 +103,7 @@ export function LuxeOffers() {
     >
       <SectionTitle
         align="center"
-        eyebrow="Find Your Place in the Community"
+        eyebrow="Find the Offer Built for Your Stage"
         title="Wherever you are in your practice, there's a seat at this table."
       />
 
@@ -145,9 +162,19 @@ export function LuxeOffers() {
                     {offer.name}
                   </h3>
 
-                  {/* flex-1 here — not on a wrapper — is what bottom-aligns all
-                      three CTAs across cards of unequal copy length. */}
-                  <p className="copy-luxe mt-5 flex-1 text-pretty text-sm">{offer.desc}</p>
+                  {/* flex-1 on the body-copy block (below) is what bottom-aligns
+                      all three CTAs across cards of unequal copy length. */}
+                  <p className="mt-3 text-pretty text-[0.95rem] font-semibold leading-snug text-white">
+                    {offer.tagline}
+                  </p>
+
+                  <div className="mt-4 flex-1 space-y-3">
+                    {offer.desc.map((paragraph) => (
+                      <p key={paragraph} className="copy-luxe text-pretty text-sm">
+                        {paragraph}
+                      </p>
+                    ))}
+                  </div>
 
                   <div aria-hidden className="rule-faint mt-8 w-full" />
 

@@ -128,7 +128,7 @@ const INTRO_FILM = {
 const STORY_FILM = {
   src720: "/videos/club-mike-testimonial-v1-720.mp4",
   src540: "/videos/club-mike-testimonial-v1-540.mp4",
-  poster: "/videos/club-mike-testimonial-v1-poster.jpg",
+  poster: "/videos/club-mike-testimonial-v1-poster-alt.jpg",
 };
 
 /**

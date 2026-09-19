@@ -106,24 +106,26 @@ export function LuxeMasterclass() {
           {...rise(reduce, 0.16)}
           className="text-balance font-display text-[2rem] font-medium leading-[1.1] text-white sm:text-[2.8rem] lg:text-[3.3rem]"
         >
-          How to Work Less, Earn More, and Finally Feel Free in Your Own Therapy Practice
+          How to Create a Private Practice That Supports Your Income, Energy and Future
         </motion.h2>
 
         <motion.p
           {...rise(reduce, 0.28)}
           className="text-foil mt-5 text-balance font-display text-xl italic sm:text-2xl"
         >
-          Without adding more clients, more hours, or more hustle.
+          Without seeing 25 to 30 clients forever.
         </motion.p>
 
         <motion.p {...rise(reduce, 0.38)} className="copy-luxe mx-auto mt-7 max-w-xl text-pretty">
-          Learn the step-by-step framework to start, grow, or scale your private practice, without
-          guessing, without platforms, and without another 60-hour week. Masterclass Guide included.
+          A free masterclass for established clinicians whose practice is working, but who do not
+          want their income, schedule, and future to depend on staying clinically maxed out. Learn
+          why being fully booked can still leave you maxed out, and what needs to change so the
+          practice supports your next season. Includes the complimentary Practice Freedom Audit.
         </motion.p>
 
         <motion.div {...rise(reduce, 0.48)}>
           <LuxeButton variant="foil" size="lg" to={OFFER_ROUTE} className="mt-10">
-            Watch for Free
+            Watch the Free Masterclass
           </LuxeButton>
         </motion.div>
       </div>

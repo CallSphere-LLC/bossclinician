@@ -31,8 +31,8 @@ export default function Home() {
   return (
     <>
       <Seo
-        title="Boss Clinician | Private Practice Strategist for Therapists · Yvette Howard, LCSW"
-        description="Boss Clinician helps therapists and clinicians build profitable, sustainable private practices — without depending on Alma, Headway, Talkspace, or any platform. Community, mastermind, and strategy for every stage."
+        title="Build a Private Practice You Can Actually Stay In | Boss Clinician"
+        description="Boss Clinician helps therapists at every stage of practice ownership: build the foundation, make your practice sustainable, and lead beyond yourself. Build it. Sustain it. Lead it. Leave it on your terms."
       />
       <LuxeHero />
       <LuxeCredBar />

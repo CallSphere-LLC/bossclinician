@@ -14,14 +14,14 @@ interface Paragraph {
 
 const PARAGRAPHS: readonly Paragraph[] = [
   {
-    text: "Platforms take their cut. Insurance dictates your rates. You're the clinician, the marketer, the admin, and the CEO, all at once. And nobody taught you how to do any of that.",
+    text: "Your income still depends too heavily on your clinical hours. Taking time off feels expensive. You're carrying too many roles. And as your practice grows, the decisions get bigger, but nobody taught you how to build a business that can evolve with your life and career.",
     // Larger and brighter than its sibling: this is the accusation, and it has
     // to land before the reassurance does.
     className: "mt-10 text-[1.05rem] leading-[1.9] text-orchid sm:text-[1.15rem]",
     delay: 0.52,
   },
   {
-    text: "Whether you're just getting started, completely maxed out, or running a team that's running you, the answer is the same: structure, strategy, and the right community.",
+    text: "Whether you're just starting, completely maxed out, or leading a team, the answer is the same: structure, strategy, and the right community for the stage you are in.",
     // Ranked second by size alone. `orchid-dim` (the .copy-luxe default) is the
     // darkest body colour that still clears 4.5:1 on night-deep, so buying more
     // hierarchy by dimming further is not on the table.
@@ -96,14 +96,14 @@ export function LuxeKeepItReal() {
           {...rise(reduce, 0.2)}
           className="relative block text-[2.1rem] leading-[1.08] sm:text-[3.2rem] lg:text-[4.2rem] lg:tracking-[-0.015em]"
         >
-          You built your practice to create freedom.
+          You became a therapist to build a career on your terms.
         </motion.span>
 
         <motion.span
           {...rise(reduce, 0.32)}
           className="text-foil relative mt-3 block font-display italic text-[1.95rem] leading-[1.12] sm:text-[3rem] lg:text-[3.95rem] lg:tracking-[-0.015em]"
         >
-          So why does it still feel like you work for someone else?
+          So why does running your practice still feel like someone else is in charge?
         </motion.span>
       </h2>
 

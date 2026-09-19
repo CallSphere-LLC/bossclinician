@@ -134,7 +134,7 @@ export function VideoBand({
         "relative isolate flex items-center overflow-hidden bg-night-deep text-white",
         // Generous, but a fraction of the source page's 240px: section padding
         // is symmetric, so every pixel here is paid twice against its neighbours.
-        "py-16 sm:py-20 lg:py-28 short:py-14",
+        "py-12 sm:py-14 lg:py-20 2xl:py-24 short:py-10",
         className,
       )}
       {...rest}

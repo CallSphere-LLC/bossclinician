@@ -6,12 +6,11 @@ import { LuxeButton } from "@/components/luxe/LuxeButton";
 const EASE_LUXE: [number, number, number, number] = [0.22, 1, 0.36, 1];
 const VIEWPORT = { once: true, margin: "-12% 0px -8% 0px" } as const;
 
-// Neither /boss-clinician-boardroom nor /masterclass exists as a route yet, so
-// the Boardroom application lands on Work With Me (where the tiers and their
-// application forms live) and the masterclass on the Resource Hub (where it is
-// actually hosted). Repoint both when the dedicated routes ship.
-const BOARDROOM_ROUTE = "/work-with-me";
+// /freedom-masterclass does not exist as a route yet (the server 301s it to
+// /resources, where the masterclass is actually hosted), so the button goes
+// straight there. Repoint it when the dedicated route ships.
 const MASTERCLASS_ROUTE = "/resources";
+const QUIZ_ROUTE = "/practice-quiz";
 
 /**
  * One rise recipe for the closing stack; only the delay changes. Reduced-motion
@@ -47,7 +46,7 @@ export function LuxeFinalCTA() {
       space="xl"
       aurora="mixed"
       auroraIntensity={1.2}
-      aria-label="Ready to build a practice that's actually yours"
+      aria-label="Every stage has a next step"
       containerClassName="max-w-4xl text-center"
     >
       <div className="relative">
@@ -81,37 +80,38 @@ export function LuxeFinalCTA() {
         />
 
         <motion.span {...rise(reduce, 0.04)} className="eyebrow-luxe">
-          READY TO BUILD A PRACTICE THAT'S ACTUALLY YOURS?
+          EVERY STAGE HAS A NEXT STEP. THIS IS YOURS.
         </motion.span>
 
         {/* The largest type on the page. Both lines live in one h2 so the
             section keeps a single heading; the spans carry the stagger. */}
         <h2 className="text-balance font-display text-[2.6rem] font-normal leading-[1.02] tracking-tight text-white sm:text-[4.2rem] lg:text-[5.6rem]">
           <motion.span {...rise(reduce, 0.14)} className="block">
-            Own your practice.
+            Build it. Sustain it.
           </motion.span>
           <motion.span
             {...rise(reduce, 0.28)}
             className="text-foil mt-1 block font-display italic sm:mt-1.5"
           >
-            Build your legacy.
+            Lead it.
           </motion.span>
         </h2>
 
         <motion.p {...rise(reduce, 0.44)} className="copy-luxe mx-auto mt-8 max-w-xl text-pretty">
-          Whether you're just starting, fully booked, or building a team, your next step starts
-          with finding the right community.
+          Wherever you are in practice ownership, the goal is the same: a practice that supports
+          your income, your energy, and your future, without depending on you for everything. Start
+          with the stage you are in.
         </motion.p>
 
         <motion.div
           {...rise(reduce, 0.58)}
           className="mt-8 flex flex-wrap items-center justify-center gap-4"
         >
-          <LuxeButton variant="foil" size="lg" to="/work-with-me">
+          <LuxeButton variant="foil" size="lg" href="#offers">
             Find Your Path
           </LuxeButton>
-          <LuxeButton variant="outline" size="lg" to={BOARDROOM_ROUTE}>
-            Apply for the Boardroom
+          <LuxeButton variant="outline" size="lg" to={MASTERCLASS_ROUTE}>
+            Watch the Free Masterclass
           </LuxeButton>
         </motion.div>
 
@@ -122,13 +122,13 @@ export function LuxeFinalCTA() {
           {...rise(reduce, 0.7)}
           className="mt-8 flex flex-wrap items-center justify-center gap-x-2.5 text-sm text-orchid-faint"
         >
-          Or start with the free masterclass:
+          Not sure where you fit?
           <LuxeButton
             variant="quiet"
-            to={MASTERCLASS_ROUTE}
+            to={QUIZ_ROUTE}
             className="min-h-[44px] text-[0.72rem] tracking-[0.14em]"
           >
-            Watch now →
+            Take the 2-minute quiz →
           </LuxeButton>
         </motion.p>
 

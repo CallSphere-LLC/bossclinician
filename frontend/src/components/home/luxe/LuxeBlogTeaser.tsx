@@ -54,7 +54,7 @@ const TEASERS: readonly Teaser[] = [
     category: "Private Practice Strategy",
     title: "Is Talkspace Right for Your Long-Term Practice Goals? A Therapist's Honest Take",
     excerpt:
-      "After a year seeing 80–100 clients on the platform, here's what I learned, and why I built my own practice instead.",
+      "After a year seeing 80 to 100 clients on the platform, here's what I learned, and why I built my own practice instead.",
     fallbackTo: "/blog",
     accent: "green",
   },
@@ -70,7 +70,7 @@ const TEASERS: readonly Teaser[] = [
     category: "Income Strategy",
     title: "How to Stop Seeing 25+ Clients a Week and Still Hit Your Income Goals",
     excerpt:
-      "The math most therapists have never done, and how changing your rates changes everything.",
+      "The math behind caseload, income, and capacity, and how to build a model that does not require your maximum clinical output.",
     localSlug: "how-to-stop-seeing-25-clients-a-week-and-still-hit-your-income-goals",
     fallbackTo: "/blog/how-to-stop-seeing-25-clients-a-week-and-still-hit-your-income-goals",
     accent: "gold",

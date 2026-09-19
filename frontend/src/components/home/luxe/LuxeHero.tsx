@@ -10,21 +10,16 @@ import { Container } from "@/components/ui/Container";
 const EASE: [number, number, number, number] = [0.22, 1, 0.36, 1];
 
 /**
- * Kept as data so the separators can be rendered as decoration, not copy.
- *
- * `short` drops the shared "Boss Clinician" prefix for the desktop rail, where
- * the brand is printed once at the head of the strip — setting it three times
- * in a row is repetition, not branding. The full name still ships to assistive
- * tech and crawlers via an sr-only prefix, so nothing is lost by hoisting it.
+ * The hero sign-off line from bossclinician.com, verbatim: "Build it. · Sustain
+ * it. · Lead it. · Leave it on your terms." Kept as data so the separators can
+ * be rendered as decoration, not copy. `short` is what the desktop rail prints
+ * and `name` what the phone plaque prints; here they are the same words.
  */
 const TIERS = [
-  { name: "Boss Clinician Club", short: "Club", tone: "text-orchid" },
-  { name: "Boss Clinician Lounge", short: "Lounge", tone: "text-white/85" },
-  {
-    name: "Boss Clinician Boardroom Mastermind",
-    short: "Boardroom Mastermind",
-    tone: "text-gold-bright",
-  },
+  { name: "Build it.", short: "Build it.", tone: "text-orchid" },
+  { name: "Sustain it.", short: "Sustain it.", tone: "text-white/85" },
+  { name: "Lead it.", short: "Lead it.", tone: "text-white/85" },
+  { name: "Leave it on your terms.", short: "Leave it on your terms.", tone: "text-gold-bright" },
 ];
 
 /**
@@ -107,12 +102,12 @@ export function LuxeHero() {
                 block. The h1 itself no longer carries a rise — stacking a block
                 fade under a per-word reveal reads as two competing animations.
                 KineticText collapses to plain text under reduced motion. */}
-            <h1 className="mt-6 text-balance font-display text-[3rem] font-normal leading-[1.03] tracking-[-0.02em] text-white sm:mt-7 sm:text-[3.6rem] md:text-[4.2rem] lg:text-[3.5rem] xl:text-[4.5rem] 2xl:text-[5.2rem]">
+            <h1 className="mt-6 text-balance font-display text-[3rem] font-normal leading-[1.03] tracking-[-0.02em] text-white sm:mt-7 sm:text-[3.6rem] md:text-[4.2rem] lg:text-[3.1rem] xl:text-[3.7rem] 2xl:text-[4.5rem]">
               <span className="block">
-                <KineticText text="Own your practice." immediate delay={0.16} />
+                <KineticText text="Build a private practice" immediate delay={0.16} />
               </span>
               <span className="text-foil mt-1.5 block font-display italic">
-                <KineticText text="Build your legacy." immediate delay={0.42} />
+                <KineticText text="you can actually stay in." immediate delay={0.42} />
               </span>
             </h1>
 
@@ -120,16 +115,16 @@ export function LuxeHero() {
               {...rise(staticEntrance, 0.24)}
               className="copy-luxe mt-7 max-w-[34rem] text-pretty sm:mt-8 sm:text-[1.04rem] lg:text-[1.08rem]"
             >
-              The community, strategy, and structure therapists and clinicians need to build
-              profitable, sustainable private practices, without platforms, without burnout,
-              without doing it alone.
+              Boss Clinician helps therapists build, sustain, and lead private practices that
+              support their income, energy, life, and future, without requiring them to max
+              themselves out to maintain them.
             </motion.p>
 
             <motion.div
               {...rise(staticEntrance, 0.34)}
               className="mt-9 flex flex-wrap items-center gap-3 sm:mt-8 sm:gap-4"
             >
-              <LuxeButton to="/work-with-me" variant="foil" size="lg">
+              <LuxeButton href="#offers" variant="foil" size="lg">
                 Find Your Path
                 <svg
                   viewBox="0 0 16 16"
@@ -148,7 +143,7 @@ export function LuxeHero() {
                 <svg viewBox="0 0 16 16" aria-hidden className="h-3 w-3" fill="currentColor">
                   <path d="M4.8 3.1 12.6 8l-7.8 4.9Z" />
                 </svg>
-                Watch Free Masterclass
+                Watch the Free Masterclass
               </LuxeButton>
             </motion.div>
 
@@ -160,7 +155,7 @@ export function LuxeHero() {
               <span aria-hidden className="rule-faint hidden w-16 shrink-0 sm:block" />
             </motion.p>
 
-            {/* ── Tier rail (desktop) ─────────────────────────────────────
+            {/* ── Sign-off rail (desktop; holds the "Build it. · Sustain it. …" line) ─────────────────────────────────────
                 Below lg the tiers stay on the portrait as a plaque, where
                 there is dead space under the face. From lg the portrait is a
                 full-height column and the plaque sat over the subject, so the
@@ -184,8 +179,9 @@ export function LuxeHero() {
                 </div>
                 <span aria-hidden className="hidden h-7 w-px shrink-0 bg-ink/10 xl:block" />
                 {/* Hairline separators, not dots, and a tone that warms toward
-                    the flagship — the ladder (Club → Lounge → Boardroom) is
-                    what the old single-colour dotted run flattened away. */}
+                    the last phrase — the progression (Build → Sustain → Lead →
+                    Leave on your terms) is what a single-colour dotted run
+                    would flatten away. */}
                 <ul className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
                   {TIERS.map((tier, i) => (
                     <Fragment key={tier.name}>
@@ -193,7 +189,6 @@ export function LuxeHero() {
                       <li
                         className={`whitespace-nowrap text-[0.78rem] font-medium tracking-[0.07em] ${tier.tone}`}
                       >
-                        <span className="sr-only">Boss Clinician </span>
                         {tier.short}
                       </li>
                     </Fragment>
@@ -219,10 +214,10 @@ export function LuxeHero() {
                 className="absolute inset-x-0 top-[7%] h-[112%] will-change-transform"
               >
                 <img
-                  src="/images/yvette-hero-portrait.jpg"
-                  alt="Yvette Howard, LCSW, Private Practice Strategist and founder of Boss Clinician"
+                  src="/images/yvette-hero-seated.jpg"
+                  alt="Yvette Howard, LCSW, Private Practice Strategist and founder of Boss Clinician, seated at her desk in a purple suit"
                   width={960}
-                  height={1440}
+                  height={1309}
                   decoding="async"
                   // The camelCase prop, not the lowercase attribute React 18
                   // needed smuggling through a spread: React 19 maps

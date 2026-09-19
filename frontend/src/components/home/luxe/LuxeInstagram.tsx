@@ -116,7 +116,7 @@ export function LuxeInstagram() {
       <SectionTitle
         align="center"
         eyebrow="FOLLOW ALONG ON INSTAGRAM"
-        title="More strategy. Keeping it real. From a therapist who's been there."
+        title="More strategy. Less fluff. Every day."
         className="max-w-3xl"
         titleClassName="text-[1.8rem] leading-[1.14] sm:text-[2.4rem] lg:text-[2.8rem]"
       />
@@ -172,6 +172,9 @@ export function LuxeInstagram() {
             />
           </svg>
         </LuxeButton>
+        <p className="mt-4 text-pretty text-xs text-orchid-faint">
+          Join thousands of clinicians building smarter practices
+        </p>
       </motion.div>
     </Section>
   );

@@ -18,6 +18,7 @@ import { GoldRule, Section, SectionTitle } from "@/components/luxe/Section";
 import { RevealGroup, RevealItem } from "@/components/ui/Reveal";
 import { LOUNGE_MEMBER_ROUTE, LOUNGE_VIP_ROUTE, lounge } from "@/content/lounge";
 import { useEntranceMotion } from "@/hooks/useEntranceMotion";
+import { cn } from "@/lib/cn";
 import { ORGANIZATION_ID, absoluteUrl, faqPageNode } from "@/seo/schema";
 import type { JsonLdNode } from "@/seo/types";
 import { useHeadContext } from "@/ssr/context";
@@ -34,10 +35,98 @@ import { useHeadContext } from "@/ssr/context";
  *
  * Mid-page actions scroll to the pricing band (`#join`), as the source's do;
  * only the tier buttons leave the page.
+ *
+ * The photographs are the source page's own, self-hosted under
+ * /images/lounge and set in the section each one sits in there.
  */
 
 const PORTRAIT = "/images/758479b0818b.png";
 const JOIN_ANCHOR = "#join";
+
+interface Photo {
+  src: string;
+  alt: string;
+  /** Intrinsic size of the file served, so the slot is reserved before load. */
+  width: number;
+  height: number;
+}
+
+const PHOTOS = {
+  hero: {
+    src: "/images/lounge/hero-the-lounge-yvette-mug.webp",
+    alt: "Yvette Howard holding a mug, set against the words The Lounge",
+    width: 1200,
+    height: 990,
+  },
+  seated: {
+    src: "/images/lounge/yvette-seated-boss-clinician-tee.jpg",
+    alt: "Yvette Howard seated, mid-conversation, in a Boss Clinician tee",
+    width: 1165,
+    height: 1440,
+  },
+  laptop: {
+    src: "/images/lounge/yvette-working-at-laptop.jpg",
+    alt: "Yvette Howard working at her laptop with a coffee beside her",
+    width: 1170,
+    height: 902,
+  },
+  oval: {
+    src: "/images/lounge/yvette-laptop-oval.webp",
+    alt: "Yvette Howard working on her laptop from the living-room floor",
+    width: 800,
+    height: 1000,
+  },
+  // Scene-setting stock photograph; the copy beside it carries the meaning.
+  workspace: {
+    src: "/images/lounge/desk-chair-workspace.jpg",
+    alt: "",
+    width: 972,
+    height: 1200,
+  },
+  devices: {
+    src: "/images/lounge/lounge-devices-mockup.webp",
+    alt: "The Lounge member area shown on a desktop monitor, a laptop and a tablet",
+    width: 1718,
+    height: 916,
+  },
+  mug: {
+    src: "/images/lounge/yvette-with-mug.jpg",
+    alt: "Yvette Howard smiling, holding a business coach mug",
+    width: 696,
+    height: 1110,
+  },
+  founder: {
+    src: "/images/lounge/yvette-founder-portrait.jpg",
+    alt: "Yvette Howard, LCSW",
+    width: 977,
+    height: 1440,
+  },
+} as const satisfies Record<string, Photo>;
+
+/** A photograph mounted the way FounderLetter mounts its portrait. */
+function Plate({
+  photo,
+  className,
+  imgClassName,
+}: {
+  photo: Photo;
+  className?: string;
+  imgClassName?: string;
+}) {
+  return (
+    <GlassCard interactive={false} spotlight={false} className={cn("overflow-hidden p-2", className)}>
+      <img
+        src={photo.src}
+        alt={photo.alt}
+        width={photo.width}
+        height={photo.height}
+        loading="lazy"
+        decoding="async"
+        className={cn("h-auto w-full max-w-full rounded-xl object-cover", imgClassName)}
+      />
+    </GlassCard>
+  );
+}
 
 const TIER_ROUTE: Record<string, string> = {
   member: LOUNGE_MEMBER_ROUTE,
@@ -90,7 +179,18 @@ export default function Lounge() {
         title={lounge.hero.title}
         titleAccent={lounge.hero.titleAccent}
         tone="violet"
-        align="center"
+        align="left"
+        aside={
+          // Transparent lockup — no frame, and above the fold so not lazy.
+          <img
+            src={PHOTOS.hero.src}
+            alt={PHOTOS.hero.alt}
+            width={PHOTOS.hero.width}
+            height={PHOTOS.hero.height}
+            decoding="async"
+            className="mx-auto h-auto w-full max-w-[22rem] sm:max-w-md lg:max-w-none"
+          />
+        }
         lede={
           <>
             <span className="block">{lounge.hero.lede[0]}</span>
@@ -125,8 +225,8 @@ export default function Lounge() {
         title={lounge.founder.title}
         paragraphs={lounge.founder.paragraphs}
         signature={lounge.founder.signature}
-        image={PORTRAIT}
-        imageAlt="Yvette Howard, LCSW"
+        image={PHOTOS.founder.src}
+        imageAlt={PHOTOS.founder.alt}
       />
       <ProgramFaq eyebrow={lounge.faq.eyebrow} title={lounge.faq.title} items={lounge.faq.items}>
         <Cta label={lounge.faq.cta} to={JOIN_ANCHOR} />
@@ -160,17 +260,41 @@ function FactSection() {
       aurora="plum"
       auroraIntensity={0.45}
       aria-label="The fact"
-      containerClassName="max-w-3xl"
+      containerClassName="max-w-5xl"
     >
-      <SectionTitle title={lounge.fact.title} titleClassName="text-[1.6rem] sm:text-[2rem] lg:text-[2.3rem]" />
-      <motion.div {...rise(reduce, 0.1)} className="mt-10">
-        <p className="text-pretty font-display text-[1.2rem] italic leading-[1.45] text-orchid">
-          {lounge.fact.leadIn}
-        </p>
-        <p className="mt-3 text-pretty font-display text-[1.35rem] leading-[1.4] text-white sm:text-[1.55rem]">
-          {lounge.fact.lead}
-        </p>
-        <Prose paragraphs={lounge.fact.paragraphs} className="mt-8" />
+      <SectionTitle
+        title={lounge.fact.title}
+        className="max-w-3xl"
+        titleClassName="text-[1.6rem] sm:text-[2rem] lg:text-[2.3rem]"
+      />
+
+      {/* The source's two image rows: portrait beside the turn, then the
+          laptop photograph beside the argument. Each stacks on a phone. */}
+      <motion.div
+        {...rise(reduce, 0.1)}
+        className="mt-10 grid items-center gap-8 lg:grid-cols-[0.75fr_1.25fr] lg:gap-14"
+      >
+        <Plate
+          photo={PHOTOS.seated}
+          className="mx-auto w-full max-w-[17rem] sm:max-w-xs"
+          imgClassName="aspect-[4/5] object-top"
+        />
+        <div>
+          <p className="text-pretty font-display text-[1.2rem] italic leading-[1.45] text-orchid">
+            {lounge.fact.leadIn}
+          </p>
+          <p className="mt-3 text-pretty font-display text-[1.35rem] leading-[1.4] text-white sm:text-[1.55rem]">
+            {lounge.fact.lead}
+          </p>
+        </div>
+      </motion.div>
+
+      <motion.div
+        {...rise(reduce, 0.1)}
+        className="mt-10 grid items-center gap-8 lg:grid-cols-[1.1fr_0.9fr] lg:gap-14"
+      >
+        <Prose paragraphs={lounge.fact.paragraphs} />
+        <Plate photo={PHOTOS.laptop} className="mx-auto w-full max-w-md lg:max-w-none" />
       </motion.div>
       <Pull className="mt-12">
         <span className="not-italic text-[0.8em] font-semibold uppercase tracking-[0.14em] text-gold">
@@ -187,11 +311,29 @@ function GoodNewsSection() {
   const reduce = useEntranceMotion();
 
   return (
-    <Section surface="raised" space="lg" aria-label={lounge.goodNews.title} containerClassName="max-w-3xl">
-      <SectionTitle eyebrow={lounge.goodNews.eyebrow} title={lounge.goodNews.title} />
-      <motion.div {...rise(reduce, 0.1)} className="mt-10">
-        <Prose paragraphs={lounge.goodNews.paragraphs} />
-      </motion.div>
+    <Section surface="raised" space="lg" aria-label={lounge.goodNews.title} containerClassName="max-w-5xl">
+      <div className="grid items-center gap-8 lg:grid-cols-[0.8fr_1.2fr] lg:gap-14">
+        {/* Desktop-only on the source too; a phone goes straight to the copy. */}
+        <Plate photo={PHOTOS.workspace} className="hidden lg:block" imgClassName="aspect-[4/5]" />
+
+        <div>
+          {/* Cut to an oval with a transparent ground — it needs no frame. */}
+          <motion.img
+            {...rise(reduce)}
+            src={PHOTOS.oval.src}
+            alt={PHOTOS.oval.alt}
+            width={PHOTOS.oval.width}
+            height={PHOTOS.oval.height}
+            loading="lazy"
+            decoding="async"
+            className="mx-auto mb-7 h-auto w-40 max-w-full sm:w-48"
+          />
+          <SectionTitle eyebrow={lounge.goodNews.eyebrow} title={lounge.goodNews.title} />
+          <motion.div {...rise(reduce, 0.1)} className="mt-10">
+            <Prose paragraphs={lounge.goodNews.paragraphs} />
+          </motion.div>
+        </div>
+      </div>
       <Pull className="mt-12">{lounge.goodNews.closing}</Pull>
     </Section>
   );
@@ -278,6 +420,15 @@ function StepIntoSection() {
 
       <motion.div {...rise(reduce, 0.1)} className="mt-14 text-left">
         <GlassCard accent="gold" interactive={false} className="p-7 sm:p-10">
+          <img
+            src={PHOTOS.devices.src}
+            alt={PHOTOS.devices.alt}
+            width={PHOTOS.devices.width}
+            height={PHOTOS.devices.height}
+            loading="lazy"
+            decoding="async"
+            className="mx-auto mb-7 h-auto w-full max-w-full"
+          />
           <span className="text-[0.68rem] font-bold uppercase tracking-[0.22em] text-gold/80">
             {lounge.stepInto.curriculumEyebrow}
           </span>
@@ -326,15 +477,24 @@ function DifferentSection() {
   const reduce = useEntranceMotion();
 
   return (
-    <Section surface="base" space="lg" aria-label={lounge.different.title} containerClassName="max-w-3xl">
+    <Section surface="base" space="lg" aria-label={lounge.different.title} containerClassName="max-w-5xl">
       <SectionTitle title={lounge.different.title} />
-      <motion.div {...rise(reduce, 0.1)} className="mt-10">
-        <Prose paragraphs={lounge.different.paragraphs} />
-      </motion.div>
-      <Pull className="mt-10">{lounge.different.pivot}</Pull>
-      <motion.div {...rise(reduce, 0.1)} className="mt-10">
-        <Prose paragraphs={lounge.different.after} />
-      </motion.div>
+      <div className="mt-10 grid items-start gap-8 lg:grid-cols-[0.75fr_1.25fr] lg:gap-14">
+        <motion.div {...rise(reduce)} className="mx-auto w-full max-w-[17rem] sm:max-w-xs lg:sticky lg:top-28">
+          {/* Natural ratio: a 4/5 crop would cut the mug out of the frame. */}
+          <Plate photo={PHOTOS.mug} />
+        </motion.div>
+
+        <div>
+          <motion.div {...rise(reduce, 0.1)}>
+            <Prose paragraphs={lounge.different.paragraphs} />
+          </motion.div>
+          <Pull className="mt-10">{lounge.different.pivot}</Pull>
+          <motion.div {...rise(reduce, 0.1)} className="mt-10">
+            <Prose paragraphs={lounge.different.after} />
+          </motion.div>
+        </div>
+      </div>
     </Section>
   );
 }

@@ -15,15 +15,15 @@ interface Stage {
 /** Green → gold → plum, so the three stages read as one progression. */
 const STAGES: readonly Stage[] = [
   {
-    label: "Just Starting Out",
+    label: "Building It",
     dot: "bg-green-bright shadow-[0_0_10px_rgba(107,168,145,0.6)]",
   },
   {
-    label: "Fully Booked and Burning Out",
+    label: "Sustaining It",
     dot: "bg-gold shadow-[0_0_10px_rgba(201,164,106,0.6)]",
   },
   {
-    label: "Running a Group Practice",
+    label: "Leading It",
     dot: "bg-plum-bright shadow-[0_0_10px_rgba(123,94,167,0.75)]",
   },
 ];
@@ -78,7 +78,7 @@ export function LuxeQuiz() {
 
         <h2 className="text-balance font-display text-[1.9rem] font-medium leading-[1.12] text-white sm:text-[2.6rem] lg:text-[3rem]">
           Is Your Practice Set Up to{" "}
-          <span className="text-foil italic">Pay You</span>, or Just Keep You
+          <span className="text-foil italic">Pay You</span> or Just Keep You
           Busy?
         </h2>
 

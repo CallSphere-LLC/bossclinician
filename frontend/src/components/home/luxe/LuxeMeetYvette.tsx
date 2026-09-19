@@ -7,17 +7,18 @@ const EASE_LUXE: [number, number, number, number] = [0.22, 1, 0.36, 1];
 const VIEWPORT = { once: true, margin: "-12% 0px -8% 0px" } as const;
 
 /**
- * The founder story, verbatim and in order. Paragraph one stays a single
- * unbroken string here (rather than being pre-split around its drop cap) so the
- * source copy can be diffed against the live site without reassembly.
+ * The "Meet Your Strategist" copy from the bossclinician.com home page,
+ * verbatim and in order. The long founder story lives on /about; the home page
+ * carries this shorter version. Paragraph one stays a single unbroken string
+ * (rather than being pre-split around its drop cap) so the source copy can be
+ * diffed against the live site without reassembly.
  */
 const STORY: readonly string[] = [
-  "I'm Yvette Howard, LCSW. And I know what holding everything together feels like, because I lived it. My story did not start in a coaching program. It started in a dialysis clinic, watching patients sit hooked up to machines for hours, alone, scared, and emotionally drained, while no one tended to the part of them that hurt the most. They were treated, but they weren't seen.",
-  "What struck me most was what those patients kept telling me: they didn't want to see a therapist. Not because they didn't need support. They desperately did. But because they didn't believe a therapist would ever truly understand what it meant to live with a serious medical condition. That gap between what they needed and what they trusted enough to access became the foundation of my clinical identity.",
-  "In 2018 I started building my private practice while still working at the clinic, serving clients who looked like my dialysis patients, people navigating the emotional weight of chronic illness who had been underserved by traditional mental health care. By the time I found out I was pregnant in 2019, I had 15 to 20 clients of my own and enough momentum to make the leap. So I left the clinic and went full-time.",
-  "As my practice grew, so did I. My niche evolved from medically complex clients to something even closer to my own lived experience: BIPOC women struggling with self-esteem and relationship issues. Women who had been told their struggles weren't serious enough, or who had never seen themselves reflected in the therapist sitting across from them. That became my work. That became my people.",
-  "I pushed to see 25 to 30 clients a week thinking that's what building a real practice required, and burned out. I tried Talkspace thinking it would help, and instead found myself managing 80 to 100 clients a week, waking up to messages I had to answer in a set window, never fully sure if someone was in crisis. Then I tried Alma for my growing group practice and got more insurance clients instead of the cash pay referrals they promised. I left both.",
-  "What I built instead is a multi-six-figure group practice, on my own terms, with a W2 team, an admin staff, and the freedom to work three days a week. And eventually, Boss Clinician: the community, strategy, and mastermind I wish I'd had from day one.",
+  "I started my private practice in 2018, went full-time in 2019, and eventually built a multi-six-figure group practice.",
+  "Along the way, I learned that growth alone does not create freedom.",
+  "I've experienced the full caseload, the platforms, the insurance decisions, the hiring, the leadership challenges, the systems, and the point where a business can look successful on paper while still asking too much of the owner.",
+  "That's why I created Boss Clinician.",
+  "Today, I help therapists build, sustain, and lead private practices that support their income, energy, life, and future, without requiring them to max themselves out to maintain them.",
 ];
 
 const CLOSING =
@@ -84,10 +85,10 @@ export function LuxeMeetYvette() {
 
               <div className="relative overflow-hidden rounded-2xl border border-gold/25 shadow-[0_44px_100px_-36px_rgba(0,0,0,0.95)]">
                 <img
-                  src="/images/yvette-meet-portrait.jpg"
-                  alt="Yvette Howard, LCSW, founder of Boss Clinician, holding a mug"
-                  width={960}
-                  height={1200}
+                  src="/images/home/yvette-meet-business-coach-mug.jpg"
+                  alt="Yvette Howard, LCSW, founder of Boss Clinician, smiling and holding a mug that reads business coach"
+                  width={1647}
+                  height={1365}
                   loading="lazy"
                   decoding="async"
                   className="aspect-[4/5] w-full object-cover object-top"
