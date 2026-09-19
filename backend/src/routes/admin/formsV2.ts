@@ -93,7 +93,7 @@ const fieldSchema = z.object({
 
 type FormField = z.infer<typeof fieldSchema>;
 
-const formSchema = z.object({
+export const formSchema = z.object({
   name: z.string().trim().min(1, "Give this form a name").max(200),
   description: z.string().max(2000).optional(),
   descriptionMd: z.string().max(20_000).optional(),

@@ -69,6 +69,7 @@ export class RealtimeSession extends Events {
   transport: OpenAIRealtimeWebRTC;
   private dc: RTCDataChannel | null = null;
   private closed = false;
+  private closing = false;
   private queue = Promise.resolve();
   private audioContext?: AudioContext;
   private meterTimer?: ReturnType<typeof setInterval>;
@@ -146,7 +147,7 @@ export class RealtimeSession extends Events {
           // Serialised on purpose. Two tools that both navigate would race, and
           // the model's next turn would describe a page nobody is looking at.
           this.queue = this.queue.then(async () => {
-            if (this.closed) return;
+            if (this.closed || this.closing) return;
             const call = event as unknown as { name: string; arguments?: string; call_id: string };
             let output: unknown;
             try {
@@ -260,7 +261,14 @@ export class RealtimeSession extends Events {
     }, 600);
   }
 
+  /** Freeze tool dispatch before recorder shutdown or provider finalization can await. */
+  beginClose() {
+    this.closing = true;
+    if (this.transport.protocol) this.transport.protocol.closing = true;
+  }
+
   close() {
+    this.beginClose();
     this.transport.protocol?.flush();
     return closeLivePeer(this.transport.connectionState.peerConnection || null, this.dc, () =>
       this.finish(),

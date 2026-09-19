@@ -25,7 +25,7 @@ import { identityFromRequest } from "./session";
 
 export const voiceChatRouter = Router();
 
-const messageSchema = z.union([
+export const messageSchema = z.union([
   z.object({
     role: z.enum(["user", "assistant"]),
     content: z.string().max(MAX_CHAT_CONTENT_CHARS),
@@ -34,6 +34,10 @@ const messageSchema = z.union([
     role: z.literal("tool"),
     toolCallId: z.string().min(1).max(128),
     name: z.string().max(64),
+    arguments: z.record(z.string(), z.json()).refine(
+      (value) => JSON.stringify(value).length <= MAX_CHAT_CONTENT_CHARS,
+      "Tool arguments are too large",
+    ).optional(),
     content: z.string().max(MAX_CHAT_CONTENT_CHARS),
   }),
 ]);
@@ -47,7 +51,7 @@ const chatSchema = z.object({
     .array(
       z.object({
         name: z.string().max(64),
-        description: z.string().max(2048),
+        description: z.string().max(16000),
         parameters: z.record(z.string(), z.unknown()),
       }),
     )
@@ -129,7 +133,25 @@ voiceChatRouter.post(
       }));
     }
 
+    const streaming = (req.get("accept") ?? "").includes("text/event-stream");
+    const cancelled = new AbortController();
+    const onClose = () => { if (!res.writableEnded) cancelled.abort(); };
+    res.on("close", onClose);
+    const emit = (event: string, data: unknown) => {
+      if (!res.destroyed) res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    };
+    if (streaming) {
+      res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
+      res.setHeader("Cache-Control", "no-cache, no-transform");
+      res.setHeader("X-Accel-Buffering", "no");
+      res.flushHeaders();
+      emit("session", { sessionId, surface });
+    }
+
     const turn = await conciergeTurn({
+      stream: streaming,
+      signal: cancelled.signal,
+      onDelta: streaming ? (text) => emit("delta", { text }) : undefined,
       surface,
       instructions:
         `${conciergeInstructions(surface)}\n\n` +
@@ -142,7 +164,11 @@ voiceChatRouter.post(
     });
 
     if (!turn.ok) {
-      res.status(turn.status).json({ error: turn.error });
+      res.removeListener("close", onClose);
+      if (streaming) {
+        emit("error", { error: turn.error });
+        res.end();
+      } else res.status(turn.status).json({ error: turn.error });
       return;
     }
 
@@ -153,12 +179,22 @@ voiceChatRouter.post(
     // appended — the request carries the whole conversation, and the browser
     // comes straight back with tool results, so a naive "write the messages"
     // would record the same exchange several times over.
-    await recordInboxTurn({
-      sessionId,
-      lines: inboxLines(parsed.data.messages, turn.reply),
-      meta: { concierge: true, surface },
-    });
+    // The contacts inbox is for public visitor conversations. Member/account
+    // and admin-operation replies belong only in the permission-gated voice log.
+    if (surface === "public") {
+      await recordInboxTurn({
+        sessionId,
+        lines: inboxLines(parsed.data.messages, turn.reply),
+        meta: { concierge: true, surface },
+      });
+    }
 
+    res.removeListener("close", onClose);
+    if (streaming) {
+      emit("done", { sessionId, surface, reply: turn.reply, toolCalls: turn.toolCalls });
+      res.end();
+      return;
+    }
     res.setHeader("Cache-Control", "no-store");
     // The surface the SERVER decided, so a signed-out person on an admin URL
     // can be told the concierge is the public one rather than left thinking it
@@ -192,13 +228,11 @@ function inboxLines(messages: ChatMessage[], reply: string | null): InboxLine[] 
  *
  * A tool result cannot stand on its own there — the model has to see the call
  * that produced it — so each one is paired with the call it answers. The
- * arguments of that call are reconstructed as `{}`, because the frozen contract
- * (`ConciergeChatMessage`) carries a tool result's name and output but not the
- * arguments it was invoked with. In practice the tools report what they did in
- * their own output ("navigated to /club"), so the turn stays grounded; if that
- * ever stops being true, the contract is the thing to change, not this.
+ * original arguments must accompany the result. Inventing an empty call makes
+ * the model forget which schema or record it already requested and can cause
+ * repeated discovery instead of moving on to the approval step.
  */
-function toModelInput(messages: ChatMessage[]): Record<string, unknown>[] {
+export function toModelInput(messages: ChatMessage[]): Record<string, unknown>[] {
   const input: Record<string, unknown>[] = [];
   for (const message of messages) {
     if (message.role === "tool") {
@@ -206,7 +240,7 @@ function toModelInput(messages: ChatMessage[]): Record<string, unknown>[] {
         type: "function_call",
         call_id: message.toolCallId,
         name: message.name,
-        arguments: "{}",
+        arguments: JSON.stringify(message.arguments ?? {}),
       });
       input.push({
         type: "function_call_output",

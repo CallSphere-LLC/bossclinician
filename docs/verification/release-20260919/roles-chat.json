@@ -1,0 +1,50 @@
+[
+  {
+    "role": "member",
+    "own": "Boss Clinician Assistant\n\nUSUALLY REPLIES INSTANTLY\n\nWelcome back — I'm Boss Clinician AI. I can take you to anything in your portal, read a page out to you, or find something you bought. What are you after?\n\nWelcome back — I'm Boss Clinician AI. I can take you to anything in your portal, read a page out to you, or find something you bought. What are you after? We were part-way through showing you around last time — say the word and I will pick up right where we stopped.\n\nPlease check my own account and tell me which courses I own and whether I have any purchases.\n\nYour account shows:\n- **Courses owned:** None yet.\n- **Purchases:** 0, totalling **$0.00**.\n\nWould you like me to open your Purchases page?\n\nMessage",
+    "url": "https://bossclinician.callsphere.site/account",
+    "responses": [
+      {
+        "path": "/api/voice/tour-progress",
+        "status": 200
+      },
+      {
+        "path": "/api/voice/chat",
+        "status": 200,
+        "surface": "member",
+        "sessionId": "2f43b852-dac6-4f27-88ba-ce29861578b9",
+        "deltas": 0
+      },
+      {
+        "path": "/api/voice/chat",
+        "status": 200,
+        "surface": "member",
+        "sessionId": "2f43b852-dac6-4f27-88ba-ce29861578b9",
+        "deltas": 40
+      },
+      {
+        "path": "/api/voice/transcript",
+        "status": 200
+      },
+      {
+        "path": "/api/voice/chat",
+        "status": 200,
+        "surface": "member",
+        "sessionId": "2f43b852-dac6-4f27-88ba-ce29861578b9",
+        "deltas": 0
+      },
+      {
+        "path": "/api/voice/chat",
+        "status": 200,
+        "surface": "member",
+        "sessionId": "2f43b852-dac6-4f27-88ba-ce29861578b9",
+        "deltas": 29
+      },
+      {
+        "path": "/api/voice/transcript",
+        "status": 200
+      }
+    ],
+    "errors": []
+  }
+]

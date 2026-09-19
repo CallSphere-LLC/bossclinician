@@ -1,18 +1,15 @@
 name: CI
 
-# Every change runs this suite. Pull requests and pushes to any branch other
-# than main trigger it directly. Main runs it through deploy.yml, which calls
-# this file and deploys only when every job below passed for that exact commit.
+# Every change, including main, runs validation only. Production is deployed
+# directly on K3s from the host; no workflow can change the production cluster.
 #
 # Nothing here runs on the production host: every job is on a GitHub-hosted
 # runner, and scripts/ci/tests/test_workflows.py fails the build if one is not.
 on:
   pull_request:
   push:
-    # Not main (deploy.yml runs CI for it) and not Dependabot's branches, which
-    # always come with a pull request: running both doubled every Dependabot
-    # update's CI and queued a production deploy behind them.
-    branches-ignore: [main, 'dependabot/**']
+    # Dependabot branches already run CI through their pull requests.
+    branches-ignore: ['dependabot/**']
   workflow_call:
     inputs:
       ref:

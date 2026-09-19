@@ -1,0 +1,21 @@
+[
+  {
+    "step": "create",
+    "tagId": 61,
+    "approval": "Apply an admin change\n\ncreate tags. Review the exact values below before approving.\n\nREVIEW REQUIRED\nRecord\ntags (new)\nname\nRelease QA Voice 20260919\ndescription\ntemporary manual release verification\n\nReview the values above, then click Approve to confirm this change. A spoken or typed yes does not approve it.\n\nAnything to add before you answer\n\nA note does not change these values. To revise them, choose No and ask for a new proposal.\n\nApprove\nNo\n\nIf you say nothing, I will leave it alone in 1 min 30 sec.",
+    "persisted": {
+      "id": 61,
+      "name": "Release QA Voice 20260919",
+      "slug": "release-qa-voice-20260919",
+      "colour": "",
+      "description": "temporary manual release verification",
+      "contactCount": 0,
+      "createdAt": "2026-09-19T18:30:33.858Z",
+      "updatedAt": "2026-09-19T18:30:33.858Z"
+    }
+  },
+  {
+    "error": "locator.waitFor: Timeout 90000ms exceeded.",
+    "text": "Boss Clinician Assistant\n\nUSUALLY REPLIES INSTANTLY\n\nHello \u2014 I'm Boss Clinician AI. I can take you to any screen, read the numbers out, or set something up for you once you've said yes to it. What would you like to look at?\n\nHello \u2014 I'm Boss Clinician AI. I can take you to any screen, read the numbers out, or set something up for you once you've said yes to it. What would you like to look at? We were part-way through showing you around last time \u2014 say the word and I will pick up right where we stopped.\n\nCreate a tag named Release QA Voice 20260919 with description temporary manual release verification. Use the admin operation catalog and ask for my approval.\n\nI\u2019ll create the tag **Release QA Voice 20260919** with the description **temporary manual release verification**. Nothing will change until you approve it on the card.\n\nCreated **Release QA Voice 20260919** with the description \u201ctemporary manual release verification.\u201d\n\nUpdate tag 61 (Release QA Voice 20260919), set its description to verified exact-payload update. Read its catalog schema and ask for my approval.\n\nThe assistant kept working without answering, so I stopped it.\n\nMessage"
+  }
+]

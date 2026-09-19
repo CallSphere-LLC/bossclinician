@@ -208,7 +208,7 @@ function SessionsCard({ reloadToken }: { reloadToken: number }) {
     <GlassCard spotlight={false} interactive={false} className="p-6 sm:p-8">
       <h2 className="font-display text-xl text-white">Where you are signed in</h2>
       <p className="copy-luxe mt-2 max-w-lg text-sm">
-        If you do not recognise something here, sign it out and change your password.
+        Sessions expire 30 days after sign-in, even when you stay active. If you do not recognise a device, sign it out and change your password.
       </p>
 
       <div aria-live="polite" className="mt-6">

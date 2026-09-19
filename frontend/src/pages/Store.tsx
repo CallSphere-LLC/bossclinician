@@ -31,11 +31,11 @@ import { useHeadContext } from "@/ssr/context";
 
 /* ── Copy, verbatim from the live page ───────────────────────────────────── */
 
-const EYEBROW = "Work with Me";
+const EYEBROW = "The Boss Clinician Store";
 
 const HEADLINE = "Build a smoother, more profitable practice with support!";
 
-const SERVICES_HEADING = "BOSS CLINICIAN CONSULTING SERVICES";
+const SERVICES_HEADING = "THE BOSS BOARDROOM";
 
 /**
  * Break the headline at its natural clause so the second half can be set in
@@ -66,22 +66,6 @@ interface Service {
  * change, while geometry, type scale and CTA weight stay identical.
  */
 const SERVICES: readonly Service[] = [
-  {
-    name: "Practice Reset Intensive",
-    price: "$3,500.00 USD",
-    to: "/apply",
-    image:
-      "/images/migrated-4401fc275fd1.png",
-    accent: "green",
-  },
-  {
-    name: "Scale and Reclaim Suite",
-    price: "$6,500.00 USD",
-    to: "/apply",
-    image:
-      "/images/migrated-b78db00e7904.png",
-    accent: "plum",
-  },
   {
     name: "The Boss Boardroom",
     price: "$12,000.00 USD",
@@ -170,7 +154,7 @@ export default function Store() {
         space="md"
         aurora="mixed"
         auroraIntensity={0.55}
-        aria-label="Boss Clinician consulting services"
+        aria-label="The Boss Boardroom"
       >
         {/* The live heading is a single all-caps line. Caps at the default
             SectionTitle scale would run to three lines on a phone, so the size
@@ -183,9 +167,13 @@ export default function Store() {
         {/* Straight from one column to three: at 640px a half-width card is
             still a comfortable measure, but a 2-up grid of three items leaves
             an orphan, which reads as a missing fourth service. */}
+        <div className="mt-8 flex flex-wrap justify-center gap-4">
+          <LuxeButton to="/courses" variant="outline">Explore Courses</LuxeButton>
+          <LuxeButton to="/resources" variant="outline">Browse Free Resources</LuxeButton>
+        </div>
         <RevealGroup
           as="ul"
-          className="mx-auto mt-10 grid max-w-md list-none grid-cols-1 items-stretch gap-6 sm:max-w-xl sm:gap-7 lg:max-w-none lg:grid-cols-3"
+          className="mx-auto mt-10 grid max-w-md list-none grid-cols-1 items-stretch gap-6 sm:max-w-xl sm:gap-7 lg:max-w-xl"
         >
           {SERVICES.map((service) => (
             <RevealItem key={service.name} as="li" className="h-full">

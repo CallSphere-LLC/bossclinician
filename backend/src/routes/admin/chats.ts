@@ -2,6 +2,7 @@ import { Router } from "express";
 import { pool } from "../../db/pool";
 import { rowToCamel, rowsToCamel } from "../../utils/case";
 import { asyncHandler } from "../../utils/asyncHandler";
+import { can } from "../../services/permissions";
 import { notFound } from "../../utils/httpError";
 
 /** Visitor conversations with the AI widget. Mounted at /admin/chats. */
@@ -36,7 +37,7 @@ const PREVIEW_CHARS = 140;
 
 adminChatsRouter.get(
   "/",
-  asyncHandler(async (_req, res) => {
+  asyncHandler(async (req, res) => {
     // One pass over the join rather than a per-session preview query: the
     // opening question is the first element of the user-only content array,
     // which array_agg(... ) FILTER gives us alongside the count and last-seen
@@ -54,10 +55,11 @@ adminChatsRouter.get(
               ) AS preview
        FROM chat_sessions s
        LEFT JOIN chat_messages m ON m.session_id = s.id
+       WHERE ($2::boolean OR COALESCE(s.meta->>'surface', 'public') NOT IN ('admin', 'member'))
        GROUP BY s.id
        ORDER BY s.started_at DESC
        LIMIT 200`,
-      [PREVIEW_CHARS],
+      [PREVIEW_CHARS, can(req.user?.role ?? "", "admins.view")],
     );
     res.json(rowsToCamel<ChatSessionSummary>(result.rows));
   }),
@@ -66,7 +68,7 @@ adminChatsRouter.get(
 adminChatsRouter.get(
   "/:id",
   asyncHandler(async (req, res) => {
-    const session = await pool.query("SELECT * FROM chat_sessions WHERE id = $1", [req.params.id]);
+    const session = await pool.query("SELECT * FROM chat_sessions WHERE id = $1 AND ($2::boolean OR COALESCE(meta->>'surface', 'public') NOT IN ('admin', 'member'))", [req.params.id, can(req.user?.role ?? "", "admins.view")]);
     if (session.rowCount === 0) throw notFound("Conversation not found");
 
     // id breaks ties: a question and its reply can land in the same timestamp
@@ -87,7 +89,7 @@ adminChatsRouter.delete(
   "/:id",
   asyncHandler(async (req, res) => {
     // chat_messages cascades on the session FK, so this is the whole delete.
-    const result = await pool.query("DELETE FROM chat_sessions WHERE id = $1", [req.params.id]);
+    const result = await pool.query("DELETE FROM chat_sessions WHERE id = $1 AND ($2::boolean OR COALESCE(meta->>'surface', 'public') NOT IN ('admin', 'member'))", [req.params.id, can(req.user?.role ?? "", "admins.view")]);
     if (result.rowCount === 0) throw notFound("Conversation not found");
     res.json({ ok: true });
   }),

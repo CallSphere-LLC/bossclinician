@@ -1,0 +1,770 @@
+[
+  {
+    "role": "admin",
+    "path": "/admin",
+    "url": "https://admin.bossclinician.callsphere.site/admin",
+    "status": 200,
+    "heading": [
+      "Welcome back, Release."
+    ],
+    "voice": 1,
+    "errors": [],
+    "apiFailures": []
+  },
+  {
+    "role": "admin",
+    "path": "/admin/products",
+    "url": "https://admin.bossclinician.callsphere.site/admin/products",
+    "status": 200,
+    "heading": [
+      "All Products"
+    ],
+    "voice": 1,
+    "errors": [],
+    "apiFailures": []
+  },
+  {
+    "role": "admin",
+    "path": "/admin/catalogue",
+    "url": "https://admin.bossclinician.callsphere.site/admin/catalogue",
+    "status": 200,
+    "heading": [
+      "Your catalogue"
+    ],
+    "voice": 1,
+    "errors": [],
+    "apiFailures": []
+  },
+  {
+    "role": "admin",
+    "path": "/admin/downloads",
+    "url": "https://admin.bossclinician.callsphere.site/admin/downloads",
+    "status": 200,
+    "heading": [
+      "Downloads"
+    ],
+    "voice": 1,
+    "errors": [],
+    "apiFailures": []
+  },
+  {
+    "role": "admin",
+    "path": "/admin/courses",
+    "url": "https://admin.bossclinician.callsphere.site/admin/courses",
+    "status": 200,
+    "heading": [
+      "Courses"
+    ],
+    "voice": 1,
+    "errors": [],
+    "apiFailures": []
+  },
+  {
+    "role": "admin",
+    "path": "/admin/community",
+    "url": "https://admin.bossclinician.callsphere.site/admin/community",
+    "status": 200,
+    "heading": [
+      "Community"
+    ],
+    "voice": 1,
+    "errors": [],
+    "apiFailures": []
+  },
+  {
+    "role": "admin",
+    "path": "/admin/media",
+    "url": "https://admin.bossclinician.callsphere.site/admin/media",
+    "status": 200,
+    "heading": [
+      "Media Library"
+    ],
+    "voice": 1,
+    "errors": [],
+    "apiFailures": []
+  },
+  {
+    "role": "admin",
+    "path": "/admin/coaching",
+    "url": "https://admin.bossclinician.callsphere.site/admin/coaching",
+    "status": 200,
+    "heading": [
+      "Coaching"
+    ],
+    "voice": 1,
+    "errors": [],
+    "apiFailures": []
+  },
+  {
+    "role": "admin",
+    "path": "/admin/podcasts",
+    "url": "https://admin.bossclinician.callsphere.site/admin/podcasts",
+    "status": 200,
+    "heading": [
+      "Podcasts"
+    ],
+    "voice": 1,
+    "errors": [],
+    "apiFailures": []
+  },
+  {
+    "role": "admin",
+    "path": "/admin/newsletters",
+    "url": "https://admin.bossclinician.callsphere.site/admin/newsletters",
+    "status": 200,
+    "heading": [
+      "Newsletters"
+    ],
+    "voice": 1,
+    "errors": [],
+    "apiFailures": []
+  },
+  {
+    "role": "admin",
+    "path": "/admin/offers",
+    "url": "https://admin.bossclinician.callsphere.site/admin/offers",
+    "status": 200,
+    "heading": [
+      "Offers"
+    ],
+    "voice": 1,
+    "errors": [],
+    "apiFailures": []
+  },
+  {
+    "role": "admin",
+    "path": "/admin/sales/payments",
+    "url": "https://admin.bossclinician.callsphere.site/admin/sales/payments",
+    "status": 200,
+    "heading": [
+      "Payments"
+    ],
+    "voice": 1,
+    "errors": [],
+    "apiFailures": []
+  },
+  {
+    "role": "admin",
+    "path": "/admin/sales/plans",
+    "url": "https://admin.bossclinician.callsphere.site/admin/sales/plans",
+    "status": 200,
+    "heading": [
+      "Plans & Pricing"
+    ],
+    "voice": 1,
+    "errors": [],
+    "apiFailures": []
+  },
+  {
+    "role": "admin",
+    "path": "/admin/sales/subscriptions",
+    "url": "https://admin.bossclinician.callsphere.site/admin/sales/subscriptions",
+    "status": 200,
+    "heading": [
+      "Subscriptions"
+    ],
+    "voice": 1,
+    "errors": [],
+    "apiFailures": []
+  },
+  {
+    "role": "admin",
+    "path": "/admin/sales/invoices",
+    "url": "https://admin.bossclinician.callsphere.site/admin/sales/invoices",
+    "status": 200,
+    "heading": [
+      "Invoices & receipts"
+    ],
+    "voice": 1,
+    "errors": [],
+    "apiFailures": []
+  },
+  {
+    "role": "admin",
+    "path": "/admin/sales/coupons",
+    "url": "https://admin.bossclinician.callsphere.site/admin/sales/coupons",
+    "status": 200,
+    "heading": [
+      "Coupons"
+    ],
+    "voice": 1,
+    "errors": [],
+    "apiFailures": []
+  },
+  {
+    "role": "admin",
+    "path": "/admin/sales/payouts",
+    "url": "https://admin.bossclinician.callsphere.site/admin/sales/payouts",
+    "status": 200,
+    "heading": [
+      "Payouts"
+    ],
+    "voice": 1,
+    "errors": [],
+    "apiFailures": []
+  },
+  {
+    "role": "admin",
+    "path": "/admin/partners",
+    "url": "https://admin.bossclinician.callsphere.site/admin/partners",
+    "status": 200,
+    "heading": [
+      "Partners"
+    ],
+    "voice": 1,
+    "errors": [],
+    "apiFailures": []
+  },
+  {
+    "role": "admin",
+    "path": "/admin/blog",
+    "url": "https://admin.bossclinician.callsphere.site/admin/blog",
+    "status": 200,
+    "heading": [
+      "Blog Posts"
+    ],
+    "voice": 1,
+    "errors": [],
+    "apiFailures": []
+  },
+  {
+    "role": "admin",
+    "path": "/admin/testimonials",
+    "url": "https://admin.bossclinician.callsphere.site/admin/testimonials",
+    "status": 200,
+    "heading": [
+      "Testimonials"
+    ],
+    "voice": 1,
+    "errors": [],
+    "apiFailures": []
+  },
+  {
+    "role": "admin",
+    "path": "/admin/resources",
+    "url": "https://admin.bossclinician.callsphere.site/admin/resources",
+    "status": 200,
+    "heading": [
+      "Resources"
+    ],
+    "voice": 1,
+    "errors": [],
+    "apiFailures": []
+  },
+  {
+    "role": "admin",
+    "path": "/admin/pages",
+    "url": "https://admin.bossclinician.callsphere.site/admin/pages",
+    "status": 200,
+    "heading": [
+      "Pages"
+    ],
+    "voice": 1,
+    "errors": [],
+    "apiFailures": []
+  },
+  {
+    "role": "admin",
+    "path": "/admin/marketing/overview",
+    "url": "https://admin.bossclinician.callsphere.site/admin/marketing/overview",
+    "status": 200,
+    "heading": [
+      "Overview"
+    ],
+    "voice": 1,
+    "errors": [],
+    "apiFailures": []
+  },
+  {
+    "role": "admin",
+    "path": "/admin/marketing/events",
+    "url": "https://admin.bossclinician.callsphere.site/admin/marketing/events",
+    "status": 200,
+    "heading": [
+      "Events"
+    ],
+    "voice": 1,
+    "errors": [],
+    "apiFailures": []
+  },
+  {
+    "role": "admin",
+    "path": "/admin/marketing/campaigns",
+    "url": "https://admin.bossclinician.callsphere.site/admin/marketing/campaigns",
+    "status": 200,
+    "heading": [
+      "Email Campaigns"
+    ],
+    "voice": 1,
+    "errors": [],
+    "apiFailures": []
+  },
+  {
+    "role": "admin",
+    "path": "/admin/marketing/funnels",
+    "url": "https://admin.bossclinician.callsphere.site/admin/marketing/funnels?funnel=3",
+    "status": 200,
+    "heading": [
+      "Funnels"
+    ],
+    "voice": 1,
+    "errors": [],
+    "apiFailures": []
+  },
+  {
+    "role": "admin",
+    "path": "/admin/marketing/sequences",
+    "url": "https://admin.bossclinician.callsphere.site/admin/marketing/sequences",
+    "status": 200,
+    "heading": [
+      "Email sequences"
+    ],
+    "voice": 1,
+    "errors": [],
+    "apiFailures": []
+  },
+  {
+    "role": "admin",
+    "path": "/admin/marketing/automations-v2",
+    "url": "https://admin.bossclinician.callsphere.site/admin/marketing/automations-v2",
+    "status": 200,
+    "heading": [
+      "Automations"
+    ],
+    "voice": 1,
+    "errors": [],
+    "apiFailures": []
+  },
+  {
+    "role": "admin",
+    "path": "/admin/marketing/emails",
+    "url": "https://admin.bossclinician.callsphere.site/admin/marketing/emails",
+    "status": 200,
+    "heading": [
+      "Automatic emails"
+    ],
+    "voice": 1,
+    "errors": [],
+    "apiFailures": []
+  },
+  {
+    "role": "admin",
+    "path": "/admin/marketing/quizzes",
+    "url": "https://admin.bossclinician.callsphere.site/admin/marketing/quizzes",
+    "status": 200,
+    "heading": [
+      "Quizzes"
+    ],
+    "voice": 1,
+    "errors": [],
+    "apiFailures": []
+  },
+  {
+    "role": "admin",
+    "path": "/admin/marketing/events-v2",
+    "url": "https://admin.bossclinician.callsphere.site/admin/marketing/events-v2",
+    "status": 200,
+    "heading": [
+      "Events"
+    ],
+    "voice": 1,
+    "errors": [],
+    "apiFailures": []
+  },
+  {
+    "role": "admin",
+    "path": "/admin/marketing/forms-v2",
+    "url": "https://admin.bossclinician.callsphere.site/admin/marketing/forms-v2",
+    "status": 200,
+    "heading": [
+      "Forms"
+    ],
+    "voice": 1,
+    "errors": [],
+    "apiFailures": []
+  },
+  {
+    "role": "admin",
+    "path": "/admin/contacts",
+    "url": "https://admin.bossclinician.callsphere.site/admin/contacts",
+    "status": 200,
+    "heading": [
+      "People"
+    ],
+    "voice": 1,
+    "errors": [],
+    "apiFailures": []
+  },
+  {
+    "role": "admin",
+    "path": "/admin/contacts/insights",
+    "url": "https://admin.bossclinician.callsphere.site/admin/contacts/insights",
+    "status": 200,
+    "heading": [
+      "Insights"
+    ],
+    "voice": 1,
+    "errors": [],
+    "apiFailures": []
+  },
+  {
+    "role": "admin",
+    "path": "/admin/segments",
+    "url": "https://admin.bossclinician.callsphere.site/admin/segments",
+    "status": 200,
+    "heading": [
+      "Groups"
+    ],
+    "voice": 1,
+    "errors": [],
+    "apiFailures": []
+  },
+  {
+    "role": "admin",
+    "path": "/admin/tags",
+    "url": "https://admin.bossclinician.callsphere.site/admin/tags",
+    "status": 200,
+    "heading": [
+      "Tags"
+    ],
+    "voice": 1,
+    "errors": [],
+    "apiFailures": []
+  },
+  {
+    "role": "admin",
+    "path": "/admin/leads",
+    "url": "https://admin.bossclinician.callsphere.site/admin/leads",
+    "status": 200,
+    "heading": [
+      "Enquiries"
+    ],
+    "voice": 1,
+    "errors": [],
+    "apiFailures": []
+  },
+  {
+    "role": "admin",
+    "path": "/admin/conversations",
+    "url": "https://admin.bossclinician.callsphere.site/admin/conversations",
+    "status": 200,
+    "heading": [
+      "Conversations"
+    ],
+    "voice": 1,
+    "errors": [],
+    "apiFailures": []
+  },
+  {
+    "role": "admin",
+    "path": "/admin/voice-sessions",
+    "url": "https://admin.bossclinician.callsphere.site/admin/voice-sessions",
+    "status": 200,
+    "heading": [
+      "Voice conversations"
+    ],
+    "voice": 1,
+    "errors": [],
+    "apiFailures": []
+  },
+  {
+    "role": "admin",
+    "path": "/admin/members",
+    "url": "https://admin.bossclinician.callsphere.site/admin/members",
+    "status": 200,
+    "heading": [
+      "Members"
+    ],
+    "voice": 1,
+    "errors": [],
+    "apiFailures": []
+  },
+  {
+    "role": "admin",
+    "path": "/admin/subscribers",
+    "url": "https://admin.bossclinician.callsphere.site/admin/subscribers",
+    "status": 200,
+    "heading": [
+      "Subscribers"
+    ],
+    "voice": 1,
+    "errors": [],
+    "apiFailures": []
+  },
+  {
+    "role": "admin",
+    "path": "/admin/analytics",
+    "url": "https://admin.bossclinician.callsphere.site/admin/analytics",
+    "status": 200,
+    "heading": [
+      "Overview"
+    ],
+    "voice": 1,
+    "errors": [],
+    "apiFailures": []
+  },
+  {
+    "role": "admin",
+    "path": "/admin/analytics/reports",
+    "url": "https://admin.bossclinician.callsphere.site/admin/analytics/reports",
+    "status": 200,
+    "heading": [
+      "Your numbers"
+    ],
+    "voice": 1,
+    "errors": [],
+    "apiFailures": []
+  },
+  {
+    "role": "admin",
+    "path": "/admin/settings",
+    "url": "https://admin.bossclinician.callsphere.site/admin/settings",
+    "status": 200,
+    "heading": [
+      "Settings"
+    ],
+    "voice": 1,
+    "errors": [],
+    "apiFailures": []
+  },
+  {
+    "role": "admin",
+    "path": "/admin/settings/team",
+    "url": "https://admin.bossclinician.callsphere.site/admin/settings/team",
+    "status": 200,
+    "heading": [
+      "Who can get in"
+    ],
+    "voice": 1,
+    "errors": [],
+    "apiFailures": []
+  },
+  {
+    "role": "admin",
+    "path": "/admin/settings/connections",
+    "url": "https://admin.bossclinician.callsphere.site/admin/settings/connections",
+    "status": 200,
+    "heading": [
+      "Connections"
+    ],
+    "voice": 1,
+    "errors": [],
+    "apiFailures": []
+  },
+  {
+    "role": "admin",
+    "path": "/admin/settings/availability",
+    "url": "https://admin.bossclinician.callsphere.site/admin/settings/availability",
+    "status": 200,
+    "heading": [
+      "Coaching availability"
+    ],
+    "voice": 1,
+    "errors": [],
+    "apiFailures": []
+  },
+  {
+    "role": "admin",
+    "path": "/admin/settings/advanced",
+    "url": "https://admin.bossclinician.callsphere.site/admin/settings/advanced",
+    "status": 200,
+    "heading": [
+      "Website Details"
+    ],
+    "voice": 1,
+    "errors": [],
+    "apiFailures": []
+  },
+  {
+    "role": "admin",
+    "path": "/admin/settings/activity",
+    "url": "https://admin.bossclinician.callsphere.site/admin/settings/activity",
+    "status": 200,
+    "heading": [
+      "Activity log"
+    ],
+    "voice": 1,
+    "errors": [],
+    "apiFailures": []
+  },
+  {
+    "role": "admin",
+    "path": "/admin/settings/email/log",
+    "url": "https://admin.bossclinician.callsphere.site/admin/settings/email/log",
+    "status": 200,
+    "heading": [
+      "Delivery log"
+    ],
+    "voice": 1,
+    "errors": [],
+    "apiFailures": []
+  },
+  {
+    "role": "member",
+    "path": "/library",
+    "url": "https://bossclinician.callsphere.site/library",
+    "status": 200,
+    "heading": [
+      "Your library"
+    ],
+    "voice": 1,
+    "errors": [],
+    "apiFailures": []
+  },
+  {
+    "role": "member",
+    "path": "/downloads",
+    "url": "https://bossclinician.callsphere.site/downloads",
+    "status": 200,
+    "heading": [
+      "Your downloads"
+    ],
+    "voice": 1,
+    "errors": [],
+    "apiFailures": []
+  },
+  {
+    "role": "member",
+    "path": "/community",
+    "url": "https://bossclinician.callsphere.site/community",
+    "status": 200,
+    "heading": [
+      "Community"
+    ],
+    "voice": 1,
+    "errors": [],
+    "apiFailures": []
+  },
+  {
+    "role": "member",
+    "path": "/coaching",
+    "url": "https://bossclinician.callsphere.site/coaching",
+    "status": 200,
+    "heading": [
+      "Coaching"
+    ],
+    "voice": 1,
+    "errors": [],
+    "apiFailures": []
+  },
+  {
+    "role": "member",
+    "path": "/my-events",
+    "url": "https://bossclinician.callsphere.site/my-events",
+    "status": 200,
+    "heading": [
+      "Your events"
+    ],
+    "voice": 1,
+    "errors": [],
+    "apiFailures": []
+  },
+  {
+    "role": "member",
+    "path": "/podcasts",
+    "url": "https://bossclinician.callsphere.site/podcasts",
+    "status": 200,
+    "heading": [
+      "Podcasts"
+    ],
+    "voice": 1,
+    "errors": [],
+    "apiFailures": []
+  },
+  {
+    "role": "member",
+    "path": "/newsletters",
+    "url": "https://bossclinician.callsphere.site/newsletters",
+    "status": 200,
+    "heading": [
+      "Newsletters"
+    ],
+    "voice": 1,
+    "errors": [],
+    "apiFailures": []
+  },
+  {
+    "role": "member",
+    "path": "/account",
+    "url": "https://bossclinician.callsphere.site/account",
+    "status": 200,
+    "heading": [
+      "Your account"
+    ],
+    "voice": 1,
+    "errors": [],
+    "apiFailures": []
+  },
+  {
+    "role": "member",
+    "path": "/account/profile",
+    "url": "https://bossclinician.callsphere.site/account/profile",
+    "status": 200,
+    "heading": [
+      "Your details"
+    ],
+    "voice": 1,
+    "errors": [],
+    "apiFailures": []
+  },
+  {
+    "role": "member",
+    "path": "/account/security",
+    "url": "https://bossclinician.callsphere.site/account/security",
+    "status": 200,
+    "heading": [
+      "Password & devices"
+    ],
+    "voice": 1,
+    "errors": [],
+    "apiFailures": []
+  },
+  {
+    "role": "member",
+    "path": "/account/billing",
+    "url": "https://bossclinician.callsphere.site/account/billing",
+    "status": 200,
+    "heading": [
+      "Billing"
+    ],
+    "voice": 1,
+    "errors": [],
+    "apiFailures": []
+  },
+  {
+    "role": "member",
+    "path": "/account/purchases",
+    "url": "https://bossclinician.callsphere.site/account/purchases",
+    "status": 200,
+    "heading": [
+      "Purchases"
+    ],
+    "voice": 1,
+    "errors": [],
+    "apiFailures": []
+  },
+  {
+    "role": "member",
+    "path": "/account/email",
+    "url": "https://bossclinician.callsphere.site/account/email",
+    "status": 200,
+    "heading": [
+      "Email preferences"
+    ],
+    "voice": 1,
+    "errors": [],
+    "apiFailures": []
+  },
+  {
+    "role": "member",
+    "path": "/partners/dashboard",
+    "url": "https://bossclinician.callsphere.site/partners/dashboard",
+    "status": 200,
+    "heading": [
+      "Partner program"
+    ],
+    "voice": 1,
+    "errors": [],
+    "apiFailures": []
+  }
+]

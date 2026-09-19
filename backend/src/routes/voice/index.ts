@@ -1,3 +1,4 @@
+import { voiceAdminCatalogRouter } from "./adminCatalog";
 import { Router } from "express";
 import { memberAuthCsrf } from "../../auth/memberCsrf";
 import { voiceSessionRouter } from "./session";
@@ -7,6 +8,7 @@ import { voiceTranscriptRouter } from "./transcript";
 import { voiceRecordingRouter } from "./recording";
 import { voiceTourProgressRouter } from "./tourProgress";
 import { voiceApprovalRouter } from "./approval";
+import { voiceEndRouter } from "./end";
 
 /**
  * /api/voice — everything a concierge conversation touches.
@@ -49,3 +51,6 @@ voiceRouter.use(voiceTranscriptRouter);
 voiceRouter.use(voiceRecordingRouter);
 voiceRouter.use(voiceTourProgressRouter);
 voiceRouter.use(voiceApprovalRouter);
+voiceRouter.use(voiceEndRouter);
+
+voiceRouter.use(voiceAdminCatalogRouter);

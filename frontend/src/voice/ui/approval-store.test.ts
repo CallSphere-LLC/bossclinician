@@ -59,10 +59,11 @@ describe("approval store", () => {
 
     expect(store.answerByVoice("act-1", true)).toEqual({
       accepted: false,
-      reason: "needs-click-or-typed",
+      reason: "needs-click",
     });
     expect(store.getSnapshot()).toHaveLength(1);
 
+    expect(store.answerByChat("act-1", true)).toEqual({ accepted: false, reason: "needs-click" });
     store.answerByClick("act-1", true);
     await expect(outcome).resolves.toEqual({ approved: true, via: "click" });
   });

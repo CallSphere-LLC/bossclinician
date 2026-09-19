@@ -125,7 +125,7 @@ export default function Login() {
       documentTitle="Sign in · Boss Clinician"
       description="Sign in to your Boss Clinician account."
       title="Welcome back"
-      subtitle="Sign in to pick up where you left off."
+      subtitle="Sign in to pick up where you left off. Your session lasts up to 30 days."
       footer={
         <>
           New here? <AuthLink to="/signup">Create your account</AuthLink>

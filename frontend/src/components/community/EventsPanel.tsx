@@ -1,3 +1,4 @@
+import { Link } from "react-router";
 import { useEffect, useState } from "react";
 import { CalendarDays, Users } from "lucide-react";
 import { toast } from "sonner";
@@ -49,7 +50,9 @@ export function EventsPanel({ communitySlug }: { communitySlug: string }) {
       } catch (err) {
         if (cancelled) return;
         setError(
-          err instanceof MemberApiError ? err.message : "We could not load the calendar.",
+          err instanceof MemberApiError
+            ? err.message
+            : "We could not load the calendar.",
         );
       }
     })();
@@ -62,7 +65,9 @@ export function EventsPanel({ communitySlug }: { communitySlug: string }) {
     if (saving !== null || event.myStatus === status) return;
     const before = events ?? [];
     setSaving(event.id);
-    setEvents(before.map((e) => (e.id === event.id ? { ...e, myStatus: status } : e)));
+    setEvents(
+      before.map((e) => (e.id === event.id ? { ...e, myStatus: status } : e)),
+    );
 
     try {
       const result = await communityApi.rsvp(event.id, status);
@@ -76,7 +81,9 @@ export function EventsPanel({ communitySlug }: { communitySlug: string }) {
     } catch (err) {
       setEvents(before);
       toast.error(
-        err instanceof MemberApiError ? err.message : "Your RSVP did not save. Please try again.",
+        err instanceof MemberApiError
+          ? err.message
+          : "Your RSVP did not save. Please try again.",
       );
     } finally {
       setSaving(null);
@@ -94,12 +101,19 @@ export function EventsPanel({ communitySlug }: { communitySlug: string }) {
     >
       <ul className="flex flex-col gap-5">
         {events?.map((event) => (
-          <li key={event.id} className="border-b border-white/[0.07] pb-5 last:border-0 last:pb-0">
-            <p className="font-semibold leading-snug text-white">{event.title}</p>
+          <li
+            key={event.id}
+            className="border-b border-white/[0.07] pb-5 last:border-0 last:pb-0"
+          >
+            <p className="font-semibold leading-snug text-white">
+              {event.title}
+            </p>
 
             {event.startsAt && (
               <p className="mt-1 text-xs text-orchid">
-                <time dateTime={event.startsAt}>{formatDateTime(event.startsAt)}</time>
+                <time dateTime={event.startsAt}>
+                  {formatDateTime(event.startsAt)}
+                </time>
                 {event.durationMinutes > 0 && ` · ${event.durationMinutes} min`}
               </p>
             )}
@@ -110,6 +124,23 @@ export function EventsPanel({ communitySlug }: { communitySlug: string }) {
               </p>
             )}
 
+            <div className="mt-3">
+              {safeLink(event.locationUrl) ? (
+                <a
+                  className="inline-flex min-h-11 items-center text-sm font-semibold text-gold underline"
+                  href={safeLink(event.locationUrl)}
+                >
+                  Join event
+                </a>
+              ) : (
+                <Link
+                  className="inline-flex min-h-11 items-center text-sm font-semibold text-gold underline"
+                  to={`/community/${communitySlug}/live`}
+                >
+                  Join live room
+                </Link>
+              )}
+            </div>
             <p className="mt-2 flex items-center gap-1.5 text-xs text-orchid-faint">
               <Users aria-hidden className="size-3.5" />
               {event.goingCount} going

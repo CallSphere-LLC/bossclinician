@@ -30,11 +30,11 @@ OUTPUT_MD = AI_DIR / "knowledge" / "site.md"
 PAGE_ORDER: list[tuple[str, str]] = [
     ("home", "Homepage — The Offer at a Glance"),
     ("about_yvette", "About Yvette Howard, LCSW"),
-    ("work-with-me", "1:1 Coaching — Boss Clinician Consulting"),
+    ("work-with-me", "The Boss Boardroom"),
     ("all-courses", "Courses & Digital Resources Library"),
     ("resources", "Free Resources & The Masterclass"),
-    ("apply", "How to Apply for 1:1 Coaching"),
-    ("store", "Consulting Packages & Pricing (as scraped)"),
+    ("apply", "How to Apply for the Boss Boardroom"),
+    ("store", "The Boss Boardroom & Pricing"),
     ("quiz", "Private Practice Readiness Quiz"),
     ("contact", "Contact & Membership / Program Notes"),
 ]
@@ -191,7 +191,7 @@ def build() -> str:
         "grinding through insurance panels and high caseloads — build "
         "profitable, sustainable private practices they fully own. Core IP: "
         "the **B.O.S.S Blueprint**, a five-pillar framework taught through "
-        "1:1 coaching (\"Boss Clinician Consulting\"), courses/templates, a "
+        "the Club, Lounge and Boardroom, courses/templates, a "
         "free masterclass, and group programs.\n"
     )
 

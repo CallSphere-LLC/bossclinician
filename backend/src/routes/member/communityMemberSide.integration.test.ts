@@ -41,6 +41,7 @@ describeDb("community, member side (integration)", () => {
     const { memberCommunityRouter } = await import("./community");
     const { memberCommunityDmRouter } = await import("./communityDm");
     const { memberCommunityProfileRouter } = await import("./communityMemberProfile");
+    const { memberCommunityLiveRouter } = await import("./communityLive");
     const { errorHandler } = await import("../../middleware/errorHandler");
     signMemberAccessToken = (await import("../../auth/memberSession")).signMemberAccessToken;
     publishScheduledPosts = (await import("../../jobs/communityJobs")).publishScheduledPosts;
@@ -49,6 +50,7 @@ describeDb("community, member side (integration)", () => {
     app.use(express.json());
     app.use("/api/member/community", requireMember, memberCommunityDmRouter);
     app.use("/api/member/community", requireMember, memberCommunityProfileRouter);
+    app.use("/api/member/community", requireMember, memberCommunityLiveRouter);
     app.use("/api/member/community", requireMember, memberCommunityRouter);
     app.use(errorHandler);
 
@@ -62,6 +64,32 @@ describeDb("community, member side (integration)", () => {
     const { pool } = await import("../../db/pool");
     await pool.end().catch(() => undefined);
     await db?.drop();
+  });
+
+  it("keeps call history personal, persists duration, and remains available after the room is disabled", async () => {
+    const room = await newCommunity();
+    const me = await newMember("History owner");
+    const other = await newMember("Other participant");
+    await join(room.id, me.id);
+    await client.query(
+      `INSERT INTO community_live_visits (community_id,member_id,peer_id,joined_at,left_at)
+       VALUES ($1,$2,'history-ended',now()-interval '80 seconds',now()-interval '15 seconds'),
+              ($1,$2,'history-interrupted',now(),NULL),
+              ($1,$3,'other-private',now()-interval '90 seconds',now())`,
+      [room.id, me.id, other.id],
+    );
+    const result = await call("GET", `/api/member/community/${room.slug}/live/history`, me.token);
+    expect(result.status).toBe(200);
+    expect(result.body.items).toHaveLength(2);
+    expect(result.body.items[0]).toMatchObject({ seconds: null, inProgress: false, interrupted: true });
+    expect(result.body.items[1]).toMatchObject({ seconds: 65, inProgress: false, interrupted: false });
+    expect(result.body.items[1].joinedAt).toBeTruthy();
+    expect(result.body.items[1].leftAt).toBeTruthy();
+    expect(result.body.items.every((row: Record<string, unknown>) => !("peerId" in row) && !("memberId" in row))).toBe(true);
+    await client.query("UPDATE communities SET live_room_enabled=false WHERE id=$1", [room.id]);
+    expect((await call("GET", `/api/member/community/${room.slug}/live/history`, me.token)).status).toBe(200);
+    await client.query("UPDATE community_memberships SET banned_at=now() WHERE community_id=$1 AND member_id=$2", [room.id, me.id]);
+    expect((await call("GET", `/api/member/community/${room.slug}/live/history`, me.token)).status).toBe(403);
   });
 
   /* ------------------------------------------------------------- fixtures */

@@ -30,16 +30,6 @@ export function MasterclassBand() {
             Watch for Free
           </Button>
 
-          <div className="mt-11 inline-flex flex-col items-start gap-4 rounded-[2px] border border-white/10 bg-white/[0.06] px-6 py-4 text-left sm:flex-row sm:items-center">
-            <span className="text-sm leading-relaxed text-white/65">
-              <strong className="block text-white">Also Free: The Practice Reset Planner</strong>
-              30 days to work less, earn more, and rebuild your practice your way.
-            </span>
-            {/* TODO: point to /practice-reset-planner once that route exists */}
-            <Button to="/resources" variant="outline-light" size="sm" className="shrink-0">
-              Download
-            </Button>
-          </div>
         </motion.div>
       </Container>
     </section>

@@ -56,7 +56,7 @@ class WorkflowContractTests(unittest.TestCase):
             for name, job in load(path).get("jobs", {}).items():
                 if "self-hosted" in runs_on(job) or "bossclinician" in runs_on(job):
                     self_hosted.add((path.name, name))
-        self.assertEqual(self_hosted, {("deploy.yml", "deploy")})
+        self.assertEqual(self_hosted, set())
 
     def test_no_workflow_runs_untrusted_code_with_elevated_triggers(self):
         for path in sorted(WORKFLOWS.glob("*.y*ml")):
@@ -70,7 +70,7 @@ class WorkflowContractTests(unittest.TestCase):
         on = self.ci["on"]
         self.assertIn("pull_request", on)
         # Dependabot branches get CI from their pull request only, never twice.
-        self.assertEqual(on["push"]["branches-ignore"], ["main", "dependabot/**"])
+        self.assertEqual(on["push"]["branches-ignore"], ["dependabot/**"])
         self.assertIn("ref", on["workflow_call"]["inputs"])
 
     def test_ci_keeps_every_suite(self):
@@ -98,42 +98,18 @@ class WorkflowContractTests(unittest.TestCase):
 
     # --- Deploy ------------------------------------------------------------------
 
-    def test_deploy_triggers_only_on_main_and_manual_dispatch(self):
-        on = self.deploy["on"]
-        self.assertEqual(set(on), {"push", "workflow_dispatch"})
-        self.assertEqual(on["push"], {"branches": ["main"]})
+    def test_deploy_workflow_has_no_automatic_trigger(self):
+        self.assertEqual(set(self.deploy["on"]), {"workflow_dispatch"})
 
-    def test_ci_tests_the_exact_commit_the_deploy_ships(self):
-        jobs = self.deploy["jobs"]
-        self.assertEqual(jobs["ci"]["uses"], "./.github/workflows/ci.yml")
-        self.assertEqual(jobs["ci"]["with"]["ref"], "${{ needs.resolve.outputs.sha }}")
-        deploy_step = next(s for s in steps(jobs["deploy"]) if "deploy-release.sh" in s.get("run", ""))
-        self.assertEqual(deploy_step["env"]["TARGET_SHA"], "${{ needs.resolve.outputs.sha }}")
-
-    def test_server_fetches_with_the_jobs_own_short_lived_token(self):
-        deploy_step = next(s for s in steps(self.deploy["jobs"]["deploy"]) if "deploy-release.sh" in s.get("run", ""))
-        self.assertEqual(deploy_step["env"]["GIT_FETCH_TOKEN"], "${{ github.token }}")
-        self.assertNotIn("secrets.", str(deploy_step["env"]), "no long-lived secret should reach the server")
-
-    def test_deploy_job_waits_for_ci_and_is_main_only(self):
-        job = self.deploy["jobs"]["deploy"]
-        self.assertTrue({"ci", "resolve"} <= set(job["needs"]))
-        self.assertIn("refs/heads/main", job["if"])
-        # A status function in `if` would replace the implicit success() and let
-        # the deploy run after a failed CI.
-        self.assertNotRegex(job["if"], r"\b(always|failure|cancelled)\(\)")
-        self.assertEqual(runs_on(job), ["self-hosted", "bossclinician"])
-        self.assertIn("timeout-minutes", job)
-
-    def test_deploys_queue_and_are_never_cancelled_midway(self):
-        concurrency = self.deploy["jobs"]["deploy"]["concurrency"]
-        self.assertEqual(concurrency["group"], "production")
-        self.assertIs(concurrency["cancel-in-progress"], False)
-
-    def test_resolve_refuses_commits_not_on_main(self):
-        script = next(s["run"] for s in steps(self.deploy["jobs"]["resolve"]) if "run" in s)
-        self.assertIn("merge-base --is-ancestor", script)
-        self.assertIn("refs/heads/main", self.deploy["jobs"]["resolve"]["if"])
+    def test_no_workflow_can_deploy_to_production(self):
+        for path in sorted(WORKFLOWS.glob("*.y*ml")):
+            for job in load(path).get("jobs", {}).values():
+                self.assertNotIn("self-hosted", runs_on(job))
+                for step in steps(job):
+                    command = step.get("run", "")
+                    self.assertNotIn("scripts/ci/deploy-release.sh", command)
+                    self.assertNotIn("kubectl apply", command)
+                    self.assertNotIn("k3s-cutover.sh", command)
 
     # --- both ---------------------------------------------------------------------
 
@@ -164,17 +140,6 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertEqual(job["if"], "github.event_name == 'pull_request'")
         self.assertTrue(any(str(s.get("uses", "")).startswith("actions/dependency-review-action@") for s in steps(job)))
 
-    def test_attestation_cannot_fail_a_deploy(self):
-        job = self.deploy["jobs"]["deploy"]
-        names = [s.get("name", "") for s in steps(job)]
-        attest = [s for s in steps(job) if str(s.get("uses", "")).startswith("actions/attest@")]
-        self.assertEqual(len(attest), 1)
-        self.assertIs(attest[0].get("continue-on-error"), True)
-        prepare = next(s for s in steps(job) if "attestation subjects" in s.get("name", ""))
-        self.assertIs(prepare.get("continue-on-error"), True)
-        # After the rollout, never before it.
-        rollout = next(i for i, s in enumerate(steps(job)) if "deploy-release.sh" in s.get("run", ""))
-        self.assertLess(rollout, names.index(prepare["name"]))
 
 
 class ComposeContractTests(unittest.TestCase):
@@ -191,11 +156,13 @@ class ComposeContractTests(unittest.TestCase):
         self.assertIn("ARG APP_RELEASE", api_stage)
         self.assertIn("ENV APP_RELEASE", api_stage)
 
-    def test_production_nginx_binding_matches_the_k8s_endpoint(self):
-        # DEPLOY.md: these two move together, or every request is a silent 502.
-        compose = load(REPO_ROOT / "docker-compose.yml")
-        host_ip = compose["services"]["nginx"]["ports"][0].split(":")[0]
-        self.assertIn(f"ip: {host_ip}", (REPO_ROOT / "k8s/ingress.yaml").read_text())
+    def test_production_ingress_uses_native_app_selector(self):
+        ingress = (REPO_ROOT / "k8s/ingress.yaml").read_text()
+        docs = list(yaml.safe_load_all(ingress))
+        service = next(d for d in docs if d["kind"] == "Service")
+        self.assertEqual(service["spec"]["selector"], {"app": "boss-app"})
+        self.assertEqual(service["spec"]["ports"][0]["targetPort"], 8080)
+        self.assertFalse(any(d["kind"] == "Endpoints" for d in docs))
 
 
 if __name__ == "__main__":

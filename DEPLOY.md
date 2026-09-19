@@ -1,3 +1,59 @@
+# Deploy — Boss Clinician
+
+## Current production: direct K3s releases (2026-09-19)
+
+Run `./scripts/deploy-k3s.sh` on this host after validation. It builds the local
+working tree with a unique timestamp/commit release ID, imports immutable images
+into K3s, rolls out API/static frontend/gateway together and the AI service,
+checks readiness and the exact release through public HTTPS, then runs scoped
+image retention. Every image carries `io.bossclinician.source-sha256`, hashing actual deployment
+inputs including uncommitted/new files. A source manifest is saved under
+`/var/lib/bossclinician/releases/<release>/source-manifest.json`; compare it with
+`python3 scripts/release-source-manifest.py` after the final commit. The release
+refuses to proceed if source changes while images build. Secrets and generated
+outputs are excluded. It does not fetch or push Git. Push source only after live
+verification; GitHub Actions now run validation only, including on main.
+
+For a first migration or a release requiring inspection, use
+`./scripts/deploy-k3s.sh stage`. Inspect service `boss-web-preview`, then call
+`./scripts/k3s-cutover.sh <release>` to change the existing `boss-web` selector.
+The stage command leaves ingress routing unchanged on the first migration.
+Once the service already selects K3s pods, a normal deployment rolls out live.
+`APP_RELEASE=<unique-id>` can select a release ID; never reuse one.
+
+The deployment pins app pods to this host because uploaded data stays in the
+existing Docker volumes. Public and protected uploads remain separate and use
+`hostPath` with `type: Directory` (missing storage fails closed). Postgres stays
+in its existing Compose container and volume; it is neither copied nor reset.
+A tiny `db-bridge` container publishes Postgres only on the private CNI gateway
+`10.42.0.1:15432`; its Docker DNS resolver follows the database after restarts.
+The existing Boss Clinician TURN relay also stays running with its existing
+ports and secret, independent of the neighboring telehealth relay.
+
+Effective env files are read through Compose and sent directly to immutable,
+release-specific Kubernetes Secrets; they are never written into manifests or
+logs. Previous ReplicaSets retain their own configuration for rollback.
+
+After confirming the K3s release, stop only the former application containers:
+`docker compose stop nginx backend frontend ai`. Leave `db`, `coturn`, and
+`db-bridge` running. Keep the stopped app containers for initial rollback.
+`docker compose start ai backend frontend nginx` restores that fallback; then
+restore the selectorless service and endpoint `10.42.0.1:8088` if required.
+For subsequent K3s rollbacks use `kubectl -n bossclinician rollout undo deployment/boss-app`
+and `rollout undo deployment/boss-ai`, wait for readiness, and recheck HTTPS.
+
+Image cleanup is scoped to `bossclinician-k3-*`. It retains every image referenced
+by cluster workloads (including rollback ReplicaSets) or Docker containers and
+at least the three newest tags per component. `sudo python3 scripts/prune-k3s-images.py
+--dry-run` shows candidates. Cleanup runs after successful releases and daily via
+`bossclinician-image-prune.timer`; it never deletes data, volumes, other apps'
+images, or shared build caches. Builds remain serialized by the shared host lock.
+The old Compose deploy script is retained only as an explicit recovery tool.
+
+## Historical Compose deployment reference
+
+The following describes the prior deployment. Use the K3s procedure above for production.
+
 # Deploy — bossclinician.callsphere.site
 
 ## Server topology (discovered 2026-07-26)

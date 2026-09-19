@@ -46,7 +46,7 @@ const PUBLIC_TOOLS = [
 const MEMBER_TOOLS = [...PUBLIC_TOOLS, "my_account_summary"] as const;
 
 /** The owner's two-step privileged path: propose, get approval, then run. */
-const ADMIN_TOOLS = [...MEMBER_TOOLS, "propose_admin_action", "run_approved_action"] as const;
+const ADMIN_TOOLS = [...MEMBER_TOOLS, "propose_admin_action", "run_approved_action", "admin_operation_catalog"] as const;
 
 export const SURFACE_TOOLS: Record<VoiceSurface, readonly string[]> = {
   public: PUBLIC_TOOLS,
@@ -97,7 +97,7 @@ export function admissibleTools(
     seen.add(tool.name);
     kept.push({
       name: tool.name,
-      description: typeof tool.description === "string" ? tool.description.slice(0, 1024) : "",
+      description: typeof tool.description === "string" ? tool.description.slice(0, 16000) : "",
       parameters:
         tool.parameters && typeof tool.parameters === "object"
           ? tool.parameters

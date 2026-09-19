@@ -1,0 +1,23 @@
+{
+  "detail": [
+    {
+      "id": "ad951b72-ceb6-415d-858c-8229f75327d1",
+      "status": 200,
+      "surface": "admin",
+      "messageCount": 5
+    },
+    {
+      "id": "a53fc3ca-c0a3-4ba5-a9d7-2e981f6b8cb1",
+      "status": 200,
+      "surface": "member",
+      "messageCount": 4
+    }
+  ],
+  "list": {
+    "status": 200,
+    "exposedPrivateIds": [
+      "ad951b72-ceb6-415d-858c-8229f75327d1",
+      "a53fc3ca-c0a3-4ba5-a9d7-2e981f6b8cb1"
+    ]
+  }
+}

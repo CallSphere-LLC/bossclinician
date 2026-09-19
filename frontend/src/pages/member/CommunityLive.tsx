@@ -13,6 +13,8 @@ import {
   VolumeX,
   VideoOff,
 } from "lucide-react";
+import { CallDuration } from "@/components/community/CallDuration";
+import { CallHistory } from "@/components/community/CallHistory";
 import { CommunityLayout } from "@/components/community/CommunityLayout";
 import { LiveVideoTile } from "@/components/community/LiveVideoTile";
 import { LuxeButton } from "@/components/luxe/LuxeButton";
@@ -177,7 +179,9 @@ function LiveRoom({ slug }: { slug: string }) {
    */
   const stagePeer = useMemo(() => {
     if (pinnedPeerId === UNPINNED) return null;
-    const pinned = pinnedPeerId ? others.find((peer) => peer.peerId === pinnedPeerId) : undefined;
+    const pinned = pinnedPeerId
+      ? others.find((peer) => peer.peerId === pinnedPeerId)
+      : undefined;
     return pinned ?? others.find((peer) => peer.sharing) ?? null;
   }, [others, pinnedPeerId]);
   // A sharer who stops, or a pinned person who leaves, clears an explicit
@@ -187,11 +191,16 @@ function LiveRoom({ slug }: { slug: string }) {
     if (!anyoneSharing && pinnedPeerId === UNPINNED) setPinnedPeerId(null);
   }, [anyoneSharing, pinnedPeerId]);
 
-  const occupancy = inRoom ? others.length + 1 : room?.occupancy ?? 0;
+  const occupancy = inRoom ? others.length + 1 : (room?.occupancy ?? 0);
 
   if (loadError) {
     return (
-      <GlassCard accent="gold" spotlight={false} interactive={false} className="p-8 text-center">
+      <GlassCard
+        accent="gold"
+        spotlight={false}
+        interactive={false}
+        className="p-8 text-center"
+      >
         <p className="copy-luxe">{loadError}</p>
       </GlassCard>
     );
@@ -218,6 +227,11 @@ function LiveRoom({ slug }: { slug: string }) {
           </p>
         </div>
         <p className="text-xs uppercase tracking-[0.14em] text-white/50">
+          {inRoom && (
+            <span className="mb-2 block text-gold">
+              <CallDuration joinedAt={call.joinedAt} />
+            </span>
+          )}
           {occupancy === 0
             ? "Nobody here yet"
             : `${occupancy} of ${room.capacity} in the room`}
@@ -225,13 +239,23 @@ function LiveRoom({ slug }: { slug: string }) {
       </header>
 
       {!room.open && !inRoom && (
-        <GlassCard accent="gold" spotlight={false} interactive={false} className="p-6">
+        <GlassCard
+          accent="gold"
+          spotlight={false}
+          interactive={false}
+          className="p-6"
+        >
           <p className="copy-luxe text-sm">{room.closedReason}</p>
         </GlassCard>
       )}
 
       {call.error && (
-        <GlassCard accent="gold" spotlight={false} interactive={false} className="p-6">
+        <GlassCard
+          accent="gold"
+          spotlight={false}
+          interactive={false}
+          className="p-6"
+        >
           <p className="flex items-start gap-3 text-sm text-red-300">
             <ShieldAlert aria-hidden className="mt-0.5 size-4 shrink-0" />
             {call.error}
@@ -245,17 +269,23 @@ function LiveRoom({ slug }: { slug: string }) {
       <div aria-live="polite">
         {reconnecting && (
           <p className="flex items-start gap-3 rounded-xl border border-gold/30 bg-gold/[0.08] px-4 py-3 text-sm text-orchid">
-            <Loader2 aria-hidden className="mt-0.5 size-4 shrink-0 animate-spin text-gold" />
+            <Loader2
+              aria-hidden
+              className="mt-0.5 size-4 shrink-0 animate-spin text-gold"
+            />
             <span>
               <span className="font-semibold text-white">
-                {call.online ? "Reconnecting you to the room…" : "You're offline."}
+                {call.online
+                  ? "Reconnecting you to the room…"
+                  : "You're offline."}
               </span>{" "}
               {call.online
                 ? "Your camera and microphone are still on. Stay on this page and the call picks up by itself."
                 : "We'll bring you back into the room as soon as your connection returns."}
               {call.reconnectAttempt > 3 && call.online && (
                 <span className="block pt-1 text-xs text-orchid-dim">
-                  Still trying (attempt {call.reconnectAttempt}). You can also press Leave and join again.
+                  Still trying (attempt {call.reconnectAttempt}). You can also
+                  press Leave and join again.
                 </span>
               )}
             </span>
@@ -263,7 +293,9 @@ function LiveRoom({ slug }: { slug: string }) {
         )}
         {justResumed && !reconnecting && (
           <p className="rounded-xl border border-gold/30 bg-gold/[0.08] px-4 py-3 text-sm text-orchid">
-            <span className="font-semibold text-white">You're back in the room.</span>
+            <span className="font-semibold text-white">
+              You're back in the room.
+            </span>
           </p>
         )}
       </div>
@@ -279,7 +311,12 @@ function LiveRoom({ slug }: { slug: string }) {
       )}
 
       {!inRoom ? (
-        <GlassCard accent="gold" spotlight={false} interactive={false} className="space-y-5 p-6 sm:p-8">
+        <GlassCard
+          accent="gold"
+          spotlight={false}
+          interactive={false}
+          className="space-y-5 p-6 sm:p-8"
+        >
           {room.roster.length > 0 ? (
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-white/50">
@@ -292,7 +329,11 @@ function LiveRoom({ slug }: { slug: string }) {
                     className="flex min-h-10 items-center gap-2 rounded-full border border-white/10 px-3 py-1.5 text-sm text-white/80"
                   >
                     {peer.avatarUrl ? (
-                      <img src={peer.avatarUrl} alt="" className="size-6 rounded-full object-cover" />
+                      <img
+                        src={peer.avatarUrl}
+                        alt=""
+                        className="size-6 rounded-full object-cover"
+                      />
                     ) : (
                       <span className="grid size-6 place-items-center rounded-full bg-ink/10 text-[0.6rem] font-bold">
                         {peer.name.charAt(0).toUpperCase()}
@@ -317,7 +358,11 @@ function LiveRoom({ slug }: { slug: string }) {
             disabled={joining || room.full || (!room.open && !room.youAreHost)}
             onClick={() => void join()}
           >
-            {joining ? "Joining…" : room.full ? "The room is full" : `Join ${label.toLowerCase()}`}
+            {joining
+              ? "Joining…"
+              : room.full
+                ? "The room is full"
+                : `Join ${label.toLowerCase()}`}
           </LuxeButton>
 
           <p className="text-xs text-white/45">
@@ -343,7 +388,9 @@ function LiveRoom({ slug }: { slug: string }) {
                 sharing={stagePeer.sharing}
                 pinned={pinnedPeerId === stagePeer.peerId}
                 onTogglePin={() =>
-                  setPinnedPeerId((current) => (current === stagePeer.peerId ? UNPINNED : stagePeer.peerId))
+                  setPinnedPeerId((current) =>
+                    current === stagePeer.peerId ? UNPINNED : stagePeer.peerId,
+                  )
                 }
               />
             )}
@@ -411,7 +458,9 @@ function LiveRoom({ slug }: { slug: string }) {
               />
               <button
                 type="button"
-                onClick={() => void (call.sharing ? stopScreenShare() : startScreenShare())}
+                onClick={() =>
+                  void (call.sharing ? stopScreenShare() : startScreenShare())
+                }
                 className={cn(
                   "inline-flex min-h-11 items-center gap-2 rounded-full border px-4 text-sm font-semibold transition-colors",
                   call.sharing
@@ -429,7 +478,11 @@ function LiveRoom({ slug }: { slug: string }) {
                   setSounds(!sounds);
                 }}
                 aria-pressed={sounds}
-                title={sounds ? "A sound plays when someone joins or leaves" : "Join and leave sounds are off"}
+                title={
+                  sounds
+                    ? "A sound plays when someone joins or leaves"
+                    : "Join and leave sounds are off"
+                }
                 className={cn(
                   "inline-flex min-h-11 items-center gap-2 rounded-full border px-4 text-sm font-semibold transition-colors",
                   sounds
@@ -437,7 +490,11 @@ function LiveRoom({ slug }: { slug: string }) {
                     : "border-white/15 text-white/50 hover:border-white/30",
                 )}
               >
-                {sounds ? <Volume2 aria-hidden className="size-4" /> : <VolumeX aria-hidden className="size-4" />}
+                {sounds ? (
+                  <Volume2 aria-hidden className="size-4" />
+                ) : (
+                  <VolumeX aria-hidden className="size-4" />
+                )}
                 {sounds ? "Sounds on" : "Sounds off"}
               </button>
               <button
@@ -463,7 +520,8 @@ function LiveRoom({ slug }: { slug: string }) {
             <div className="mt-3 min-h-0 flex-1 space-y-2.5 overflow-y-auto pr-1">
               {call.chat.length === 0 ? (
                 <p className="text-xs text-white/45">
-                  Nothing said yet. Chat here stays in the room and is not saved.
+                  Nothing said yet. Chat here stays in the room and is not
+                  saved.
                 </p>
               ) : (
                 call.chat.map((message) => (
@@ -510,6 +568,7 @@ function LiveRoom({ slug }: { slug: string }) {
           </GlassCard>
         </div>
       )}
+      <CallHistory slug={slug} refreshKey={call.status} />
     </div>
   );
 }

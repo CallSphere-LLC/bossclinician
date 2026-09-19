@@ -21,7 +21,6 @@ import { motion } from "motion/react";
 import { AlertTriangle, Check, ShieldCheck, X } from "lucide-react";
 import type { ApprovalRequest } from "@/voice/contract";
 import {
-  answerApprovalByChat,
   answerApprovalByClick,
   getApprovalServerSnapshot,
   getApprovalSnapshot,
@@ -29,15 +28,6 @@ import {
   type PendingApproval,
 } from "./approval-store";
 import { useOnlyOne } from "./only-one";
-
-/** A value long enough to swamp the card is cut; the point is recognition. */
-const MAX_VALUE_CHARS = 180;
-
-function shorten(value: string): string {
-  const trimmed = value.trim();
-  if (!trimmed) return "—";
-  return trimmed.length > MAX_VALUE_CHARS ? `${trimmed.slice(0, MAX_VALUE_CHARS)}…` : trimmed;
-}
 
 function countdown(msLeft: number): string {
   const seconds = Math.max(0, Math.round(msLeft / 1000));
@@ -84,12 +74,8 @@ export function ApprovalCard({
 
   function answer(approved: boolean) {
     const typed = note.trim();
-    // Typing is answering. A card she wrote on is recorded as a typed answer,
-    // a bare press as a click, because the record of how she agreed matters as
-    // much as the fact that she did.
-    const result = typed
-      ? answerApprovalByChat(request.actionId, approved, typed)
-      : answerApprovalByClick(request.actionId, approved);
+    // Pressing the button is explicit consent, including when a note is attached.
+    const result = answerApprovalByClick(request.actionId, approved, typed || undefined);
 
     // If the request had already settled — she was mid-sentence when the clock
     // ran out — her words would otherwise vanish. Hand them to the conversation
@@ -133,12 +119,12 @@ export function ApprovalCard({
         </div>
         {permanent && (
           <span className="shrink-0 rounded-full bg-[color-mix(in_srgb,var(--danger)_16%,transparent)] px-2.5 py-1 text-[0.58rem] font-semibold uppercase tracking-[0.14em] text-[color:var(--danger)]">
-            Permanent
+            Review required
           </span>
         )}
       </div>
 
-      <div className="space-y-3 px-4 py-3">
+      <div className="max-h-[65vh] space-y-3 overflow-y-auto px-4 py-3">
         {request.details.length > 0 && (
           <dl className="divide-y divide-[var(--border-subtle)] overflow-hidden rounded-xl border border-[var(--border-subtle)]">
             {request.details.map((detail, index) => (
@@ -146,8 +132,8 @@ export function ApprovalCard({
                 <dt className="w-[38%] shrink-0 break-words font-medium text-[var(--text-secondary)]">
                   {detail.label}
                 </dt>
-                <dd className="min-w-0 flex-1 break-words text-[var(--text-primary)]">
-                  {shorten(detail.value)}
+                <dd className="min-w-0 flex-1 whitespace-pre-wrap break-words text-[var(--text-primary)]">
+                  {detail.value || "(empty)"}
                 </dd>
               </div>
             ))}
@@ -156,8 +142,7 @@ export function ApprovalCard({
 
         {permanent && (
           <p className="text-[0.74rem] font-medium leading-relaxed text-[color:var(--danger)]">
-            This one cannot be undone, so I will not act on a spoken yes — press the button or write
-            your answer below.
+            Review the values above, then click Approve to confirm this change. A spoken or typed yes does not approve it.
           </p>
         )}
 
@@ -167,10 +152,11 @@ export function ApprovalCard({
             type="text"
             value={note}
             onChange={(event) => setNote(event.target.value)}
-            placeholder="Anything to add? e.g. yes, but keep it a draft"
+            placeholder="Optional note for the approval record"
             className="w-full rounded-lg border border-[var(--border-strong)] bg-[var(--bg-surface)] px-3 py-2 text-[0.78rem] text-[var(--text-primary)] placeholder:text-[var(--text-muted)] focus:border-[color:var(--accent)] focus:outline-none"
           />
         </label>
+        <p className="text-[0.72rem] text-[var(--text-secondary)]">A note does not change these values. To revise them, choose No and ask for a new proposal.</p>
 
         <div className="flex flex-wrap items-center gap-2">
           <button
@@ -184,7 +170,7 @@ export function ApprovalCard({
             }`}
           >
             <Check className="h-3.5 w-3.5" />
-            {permanent ? "Yes, do it permanently" : "Yes, do it"}
+            Approve
           </button>
           <button
             type="button"

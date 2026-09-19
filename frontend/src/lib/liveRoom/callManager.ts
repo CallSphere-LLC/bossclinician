@@ -66,6 +66,8 @@ export interface RoomChatMessage {
 }
 
 export interface RoomSnapshot {
+  /** First successful connection; retained across page changes and reconnects. */
+  joinedAt: number | null;
   slug: string | null;
   status: RoomStatus;
   error: string | null;
@@ -118,6 +120,7 @@ interface PeerLeg {
 
 let slug: string | null = null;
 let status: RoomStatus = "idle";
+let joinedAt: number | null = null;
 let error: string | null = null;
 let localStream: MediaStream | null = null;
 let screenStream: MediaStream | null = null;
@@ -169,6 +172,7 @@ const listeners = new Set<(snapshot: RoomSnapshot) => void>();
 function idle(): RoomSnapshot {
   return {
     slug: null,
+    joinedAt: null,
     status: "idle",
     error: null,
     localStream: null,
@@ -186,6 +190,7 @@ function idle(): RoomSnapshot {
 function snapshot(): RoomSnapshot {
   return {
     slug,
+    joinedAt,
     status,
     error,
     localStream,
@@ -705,6 +710,7 @@ async function openStream(): Promise<void> {
 
   stream.onopen = () => {
     if (source !== stream) return;
+    joinedAt ??= Date.now();
     lastEventAt = Date.now();
     const resumed = reconnectSince !== 0;
     reconnectAttempt = 0;
@@ -873,6 +879,7 @@ export async function leaveRoom(): Promise<void> {
   screenStream = null;
 
   slug = null;
+  joinedAt = null;
   rawPeerId = "";
   myPeerId = "";
   status = "left";

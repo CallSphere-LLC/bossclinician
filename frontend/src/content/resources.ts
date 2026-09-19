@@ -4,12 +4,12 @@ export const resources: Resource[] = [
   {
     id: "r-masterclass",
     slug: "free-masterclass",
-    title: "The 4-Step Blueprint to Building a Profitable Private Practice",
+    title: "How to Create a Private Practice That Supports Your Income, Energy and Future — Without Seeing 25 to 30 Clients Forever",
     description:
-      "This FREE masterclass breaks it all down for you. You'll learn a simple 4-step framework to start or grow your private practice with more confidence and less chaos. No guesswork. No overwhelm.",
+      "A free masterclass for established clinicians who want their practice to support their next season. Includes the complimentary Practice Freedom Audit.",
     image: "/images/24ea3347f734.png",
     ctaLabel: "Watch Free Masterclass",
-    ctaUrl: "/apply",
+    ctaUrl: "https://www.bossclinician.com/freedom-masterclass",
     kind: "masterclass",
     sort: 1,
     published: true,

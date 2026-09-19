@@ -1,0 +1,372 @@
+{
+  "spreadsheetId": "13RTFcjDK5omngi_MalSxNNNgd4DQt8HumCBu0YnVdCs",
+  "updatedRange": "Bugs!C2:C9",
+  "rows": [
+    {
+      "row": 1,
+      "task": "Bug",
+      "fixed": "Fixed?",
+      "format": {
+        "borders": {
+          "top": {
+            "style": "SOLID",
+            "width": 1
+          },
+          "bottom": {
+            "style": "SOLID",
+            "width": 1
+          },
+          "left": {
+            "style": "SOLID",
+            "width": 1
+          },
+          "right": {
+            "style": "SOLID",
+            "width": 1
+          }
+        },
+        "horizontalAlignment": "CENTER"
+      }
+    },
+    {
+      "row": 2,
+      "task": "In kajabi while we are creating an access group it's asking if it's free or paid if paid admin needs to set a price and and we don't have that in our dashboard.",
+      "fixed": "Yes",
+      "format": {
+        "borders": {
+          "top": {
+            "style": "SOLID",
+            "width": 1
+          },
+          "bottom": {
+            "style": "SOLID",
+            "width": 1
+          },
+          "left": {
+            "style": "SOLID",
+            "width": 1
+          },
+          "right": {
+            "style": "SOLID",
+            "width": 1
+          }
+        },
+        "horizontalAlignment": "CENTER"
+      }
+    },
+    {
+      "row": 3,
+      "task": "How long an admin/customer can stay logged in?We have to set a session time out",
+      "fixed": "Yes",
+      "format": {
+        "borders": {
+          "top": {
+            "style": "SOLID",
+            "width": 1
+          },
+          "bottom": {
+            "style": "SOLID",
+            "width": 1
+          },
+          "left": {
+            "style": "SOLID",
+            "width": 1
+          },
+          "right": {
+            "style": "SOLID",
+            "width": 1
+          }
+        },
+        "horizontalAlignment": "CENTER"
+      }
+    },
+    {
+      "row": 4,
+      "task": "For video calling, It should show call duration just like it shows in any VC apps",
+      "fixed": "Yes",
+      "format": {
+        "borders": {
+          "top": {
+            "style": "SOLID",
+            "width": 1
+          },
+          "bottom": {
+            "style": "SOLID",
+            "width": 1
+          },
+          "left": {
+            "style": "SOLID",
+            "width": 1
+          },
+          "right": {
+            "style": "SOLID",
+            "width": 1
+          }
+        },
+        "horizontalAlignment": "CENTER"
+      }
+    },
+    {
+      "row": 5,
+      "task": "As we have multiple communities it would look cleaner if we can differentiate between communities or highlight the communities(just the name) in the sidebar.",
+      "fixed": "Yes",
+      "format": {
+        "borders": {
+          "top": {
+            "style": "SOLID",
+            "width": 1
+          },
+          "bottom": {
+            "style": "SOLID",
+            "width": 1
+          },
+          "left": {
+            "style": "SOLID",
+            "width": 1
+          },
+          "right": {
+            "style": "SOLID",
+            "width": 1
+          }
+        },
+        "horizontalAlignment": "CENTER"
+      }
+    },
+    {
+      "row": 6,
+      "task": "Clicking 'paying members only' just saves the setting and shows a 'community created' pop-up, but no payment method is being set. Because Kajabi applies payments to access groups rather than multiple communities, we need to determine if we should set the payment plan for the overall community or for the access groups.\"",
+      "fixed": "Yes",
+      "format": {
+        "borders": {
+          "top": {
+            "style": "SOLID",
+            "width": 1
+          },
+          "bottom": {
+            "style": "SOLID",
+            "width": 1
+          },
+          "left": {
+            "style": "SOLID",
+            "width": 1
+          },
+          "right": {
+            "style": "SOLID",
+            "width": 1
+          }
+        },
+        "horizontalAlignment": "CENTER"
+      }
+    },
+    {
+      "row": 7,
+      "task": "Open any community→events—->schedule an event.Do we need “where do they join? Paste your zoom meet link” when we already have our own VC",
+      "fixed": "Yes",
+      "format": {
+        "borders": {
+          "top": {
+            "style": "SOLID",
+            "width": 1
+          },
+          "bottom": {
+            "style": "SOLID",
+            "width": 1
+          },
+          "left": {
+            "style": "SOLID",
+            "width": 1
+          },
+          "right": {
+            "style": "SOLID",
+            "width": 1
+          }
+        },
+        "horizontalAlignment": "CENTER"
+      }
+    },
+    {
+      "row": 8,
+      "task": "Nice to have history of her calls",
+      "fixed": "Yes",
+      "format": {
+        "borders": {
+          "top": {
+            "style": "SOLID",
+            "width": 1
+          },
+          "bottom": {
+            "style": "SOLID",
+            "width": 1
+          },
+          "left": {
+            "style": "SOLID",
+            "width": 1
+          },
+          "right": {
+            "style": "SOLID",
+            "width": 1
+          }
+        },
+        "horizontalAlignment": "CENTER"
+      }
+    },
+    {
+      "row": 9,
+      "task": "Nice to have the design like kajabi lounge page as its showing channels access groups etc to the left in a row",
+      "fixed": "Yes",
+      "format": {
+        "borders": {
+          "top": {
+            "style": "SOLID",
+            "width": 1
+          },
+          "bottom": {
+            "style": "SOLID",
+            "width": 1
+          },
+          "left": {
+            "style": "SOLID",
+            "width": 1
+          },
+          "right": {
+            "style": "SOLID",
+            "width": 1
+          }
+        },
+        "horizontalAlignment": "CENTER"
+      }
+    },
+    {
+      "row": 10,
+      "task": "",
+      "fixed": "No",
+      "format": {
+        "borders": {
+          "top": {
+            "style": "SOLID",
+            "width": 1
+          },
+          "bottom": {
+            "style": "SOLID",
+            "width": 1
+          },
+          "left": {
+            "style": "SOLID",
+            "width": 1
+          },
+          "right": {
+            "style": "SOLID",
+            "width": 1
+          }
+        },
+        "horizontalAlignment": "CENTER"
+      }
+    },
+    {
+      "row": 11,
+      "task": "",
+      "fixed": "No",
+      "format": {
+        "borders": {
+          "top": {
+            "style": "SOLID",
+            "width": 1
+          },
+          "bottom": {
+            "style": "SOLID",
+            "width": 1
+          },
+          "left": {
+            "style": "SOLID",
+            "width": 1
+          },
+          "right": {
+            "style": "SOLID",
+            "width": 1
+          }
+        },
+        "horizontalAlignment": "CENTER"
+      }
+    },
+    {
+      "row": 12,
+      "task": "",
+      "fixed": "No",
+      "format": {
+        "borders": {
+          "top": {
+            "style": "SOLID",
+            "width": 1
+          },
+          "bottom": {
+            "style": "SOLID",
+            "width": 1
+          },
+          "left": {
+            "style": "SOLID",
+            "width": 1
+          },
+          "right": {
+            "style": "SOLID",
+            "width": 1
+          }
+        },
+        "horizontalAlignment": "CENTER"
+      }
+    },
+    {
+      "row": 13,
+      "task": "",
+      "fixed": "No",
+      "format": {
+        "borders": {
+          "top": {
+            "style": "SOLID",
+            "width": 1
+          },
+          "bottom": {
+            "style": "SOLID",
+            "width": 1
+          },
+          "left": {
+            "style": "SOLID",
+            "width": 1
+          },
+          "right": {
+            "style": "SOLID",
+            "width": 1
+          }
+        },
+        "horizontalAlignment": "CENTER"
+      }
+    },
+    {
+      "row": 14,
+      "task": "",
+      "fixed": "No",
+      "format": {
+        "borders": {
+          "top": {
+            "style": "SOLID",
+            "width": 1
+          },
+          "bottom": {
+            "style": "SOLID",
+            "width": 1
+          },
+          "left": {
+            "style": "SOLID",
+            "width": 1
+          },
+          "right": {
+            "style": "SOLID",
+            "width": 1
+          }
+        },
+        "horizontalAlignment": "CENTER"
+      }
+    }
+  ],
+  "readbackPassed": true,
+  "visualCheck": "Authenticated sheet browser unavailable. CellData readback confirms preserved borders and centered alignment; only userEnteredValue changed."
+}

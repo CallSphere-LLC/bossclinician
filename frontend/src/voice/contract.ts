@@ -63,6 +63,7 @@ export type VoiceToolName =
   | "stop_pointing"
   | "search_site"
   | "my_account_summary"
+  | "admin_operation_catalog"
   | "propose_admin_action"
   | "run_approved_action"
   | "start_guided_tour"
@@ -116,6 +117,7 @@ export type VoiceContext = {
  * Injected so a tool never owns a fetch client and a test never needs a server.
  */
 export type VoiceApiClient = {
+  patch?: <T>(path: string, body?: unknown) => Promise<T>;
   get<T>(path: string): Promise<T>;
   post<T>(path: string, body?: unknown): Promise<T>;
   /**
@@ -343,7 +345,7 @@ export type VoiceTranscriptAppend = {
  */
 export type ConciergeChatMessage =
   | { role: "user" | "assistant"; content: string }
-  | { role: "tool"; toolCallId: string; name: string; content: string };
+  | { role: "tool"; toolCallId: string; name: string; arguments?: Record<string, unknown>; content: string };
 
 export type ConciergeChatRequest = {
   sessionId: string | null;

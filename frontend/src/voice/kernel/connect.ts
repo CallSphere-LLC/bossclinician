@@ -73,7 +73,7 @@ export function describeVoiceError(candidate: unknown): string {
  * server's decision, not ours.
  */
 export async function requestAdmission(input: VoiceSessionRequest): Promise<VoiceSessionResponse> {
-  return createVoiceApiClient().post<VoiceSessionResponse>("/voice/session", input);
+  return createVoiceApiClient(input.surface).post<VoiceSessionResponse>("/voice/session", input);
 }
 
 /**

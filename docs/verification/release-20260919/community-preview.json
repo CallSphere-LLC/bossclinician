@@ -1,0 +1,131 @@
+{
+  "checks": [
+    "Free and monthly49 groups persist after reload",
+    {
+      "checkout": "https://bossclinician.callsphere.site/checkout/community-9-group-7",
+      "body": "ORDER SUMMARY\n\nQA Release Community 20260919 — QA Free\n\nFREE\nQA Release Community 20260919 — QA Free\n$0.00\nSubtotal\n$0.00\nTOTAL\n$0.00\n\nNo payment needed — access is granted as soon as you finish.\n\nPayments are processed by Stripe over an encrypted connection. Your card details never touch this site.\n\nSECURE CHECKOUT\nQA Release Community 20260919 — QA Free\nAdd to cart\nView cart\nYour details\nEMAIL ADDRESS*\n\nYour receipt and access details go here.\n\nFULL NAME*\nSend as a gift\nBuy this for someone else\nFinish up\nDISCOUNT CODE\n\nThere's nothing to pay — finish below and your access is granted straight away.\n\nGET INSTANT ACCESS\n\nSecured by Stripe. Questions before you buy? We're one email away.\n\nASK BOSS CLINICIAN AI"
+    },
+    {
+      "checkout": "https://bossclinician.callsphere.site/checkout/community-9-group-8",
+      "body": "ORDER SUMMARY\n\nQA Release Community 20260919 — QA Monthly\n\nMEMBERSHIP\nQA Release Community 20260919 — QA Monthly\n$49.00\nSubtotal\n$49.00\nDUE TODAY\n$49.00\n\n$49.00 a month, starting today.\n\nIt renews monthly until you cancel, and you can cancel any time from your account.\n\nPayments are processed by Stripe over an encrypted connection. Your card details never touch this site.\n\nSECURE CHECKOUT\nQA Release Community 20260919 — QA Monthly\nYour details\nEMAIL ADDRESS*\n\nYour receipt and access details go here.\n\nFULL NAME*\nPayment\nDISCOUNT CODE\n\nPAY $49.00\n\n$49.00 a month, starting today.\n\nSecured by Stripe. Questions before you buy? We're one email away.\n\nASK BOSS CLINICIAN AI"
+    },
+    "Pricing/community navigation fits320/390/768/1440/1920",
+    {
+      "club": [
+        {
+          "text": "JOIN THE CLUB",
+          "href": "https://www.bossclinician.com/offers/tzgjALKU/checkout"
+        },
+        {
+          "text": "I'M READY TO JOIN!!",
+          "href": "https://www.bossclinician.com/offers/tzgjALKU/checkout"
+        },
+        {
+          "text": "I'M READY FOR THE CLUB",
+          "href": "https://www.bossclinician.com/offers/tzgjALKU/checkout"
+        },
+        {
+          "text": "JOIN THE CLUB",
+          "href": "https://www.bossclinician.com/offers/tzgjALKU/checkout"
+        },
+        {
+          "text": "JOIN THE CLUB",
+          "href": "https://www.bossclinician.com/offers/tzgjALKU/checkout"
+        },
+        {
+          "text": "GET ME IN THE CLUB",
+          "href": "https://www.bossclinician.com/offers/tzgjALKU/checkout"
+        },
+        {
+          "text": "SAY LESS.. I'M READY TO JOIN THE CLUB",
+          "href": "https://www.bossclinician.com/offers/tzgjALKU/checkout"
+        }
+      ]
+    },
+    "Club CTA browser navigation exact explicit target; external provider page not charged"
+  ],
+  "fixtures": [
+    {
+      "community": {
+        "id": 9,
+        "slug": "qa-release-community-20260919",
+        "name": "QA Release Community 20260919",
+        "description": "",
+        "coverImage": "",
+        "access": "paid",
+        "published": true,
+        "createdAt": "2026-09-19T18:23:58.933Z",
+        "updatedAt": "2026-09-19T18:23:58.933Z",
+        "liveRoomEnabled": false,
+        "liveRoomAccess": "always",
+        "liveRoomAlias": "",
+        "liveRoomCapacity": 8,
+        "guidelinesMd": "",
+        "guidelinesUpdatedAt": null,
+        "leaderboardWeekly": true,
+        "leaderboardMonthly": true,
+        "leaderboardAllTime": true,
+        "pointsPerTitle": 0
+      }
+    },
+    {
+      "group": {
+        "id": 7,
+        "communityId": 9,
+        "name": "QA Free",
+        "description": "",
+        "sort": 0,
+        "createdAt": "2026-09-19T18:23:59.250Z",
+        "checkoutOfferId": 16,
+        "checkoutSlug": "community-9-group-7",
+        "pricingType": "free",
+        "amountCents": 0,
+        "currency": "usd",
+        "interval": null
+      }
+    },
+    {
+      "group": {
+        "id": 8,
+        "communityId": 9,
+        "name": "QA Monthly",
+        "description": "",
+        "sort": 0,
+        "createdAt": "2026-09-19T18:23:59.366Z",
+        "checkoutOfferId": 17,
+        "checkoutSlug": "community-9-group-8",
+        "pricingType": "subscription",
+        "amountCents": 4900,
+        "currency": "usd",
+        "interval": "month"
+      }
+    },
+    {
+      "event": {
+        "id": 3,
+        "communityId": 9,
+        "title": "QA Native Event",
+        "description": "",
+        "startsAt": "2026-10-01T18:00:00.000Z",
+        "durationMinutes": 60,
+        "locationUrl": "",
+        "published": true,
+        "createdAt": "2026-09-19T18:24:59.545Z"
+      }
+    },
+    {
+      "event": {
+        "id": 4,
+        "communityId": 9,
+        "title": "QA External Event",
+        "description": "",
+        "startsAt": "2026-10-01T18:00:00.000Z",
+        "durationMinutes": 60,
+        "locationUrl": "https://example.com/qa-meeting",
+        "published": true,
+        "createdAt": "2026-09-19T18:25:00.677Z"
+      }
+    }
+  ],
+  "errors": []
+}

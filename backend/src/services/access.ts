@@ -303,7 +303,7 @@ const COMMUNITY_IS_SOLD = `(
 const COMMUNITY_IS_GRANTED = `(EXISTS (
     SELECT 1 FROM access_grants g
       JOIN products gp ON gp.id = g.product_id
-     WHERE g.member_id = $1 AND gp.kind = 'community' AND gp.community_id = c.id
+     WHERE g.member_id = $1 AND gp.kind IN ('community', 'access_group') AND gp.community_id = c.id
        AND g.status = 'active' AND (g.expires_at IS NULL OR g.expires_at > now())
   ) OR EXISTS (
     -- Entitlements that never take the shape of a grant. A membership created

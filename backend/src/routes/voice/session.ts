@@ -1,9 +1,9 @@
 import { Router, type Request, type RequestHandler, type Response } from "express";
 import { z } from "zod";
 import { asyncHandler } from "../../utils/asyncHandler";
-import { badRequest, serviceUnavailable, HttpError } from "../../utils/httpError";
+import { badRequest, serviceUnavailable, unauthorized, HttpError } from "../../utils/httpError";
 import { voiceEnabled } from "../../config/env";
-import { ADMIN_ACCESS_COOKIE, requireAdminHost } from "../../auth/adminSession";
+import { ADMIN_ACCESS_COOKIE, ADMIN_REFRESH_COOKIE, requireAdminHost } from "../../auth/adminSession";
 import { requireAuth } from "../../middleware/auth";
 import { optionalMember } from "../../middleware/memberAuth";
 import { voiceSessionLimiter } from "../../middleware/rateLimit";
@@ -83,6 +83,12 @@ export async function identityFromRequest(req: Request, res: Response): Promise<
   await settle(optionalMember, req, res);
   if (req.member) return { audience: "member", memberId: req.member.id };
 
+  // A supplied credential that has expired must trigger the app's shared
+  // refresh-and-retry path. Only a truly anonymous request may be demoted.
+  if (req.headers.authorization || (wrongHost === undefined &&
+      (req.cookies?.[ADMIN_ACCESS_COOKIE] || req.cookies?.[ADMIN_REFRESH_COOKIE]))) {
+    throw unauthorized("Your session needs refreshing. Please sign in again if it has ended.");
+  }
   return { audience: "anonymous" };
 }
 

@@ -39,8 +39,8 @@ export default function WorkWithMe() {
           gives. The nodes are built from the same `workWithMe.faqs` the band
           renders, which is what stops the markup and the page disagreeing. */}
       <Seo
-        title="Work With Me | Practice Reset Intensive & Boss Boardroom"
-        description="Three strategic partnerships for clinicians ready to grow — The Practice Reset Intensive, Scale and Reclaim Suite, and Boss Boardroom. Apply to work with Boss Clinician."
+        title="Work With Me | The Boss Boardroom"
+        description="An advanced mastermind for established practice owners who want higher-level strategy, peer collaboration, accountability, and support with scaling their business."
         image={HERO_PORTRAIT}
         jsonLd={[faqPageNode(origin, "/work-with-me", workWithMe.faqs)]}
       />
@@ -605,9 +605,14 @@ function PathwaysSection() {
    ══════════════════════════════════════════════════════════════════════════ */
 
 /**
- * Three parallel tiers, so accent is the only thing that differs between the
- * cards: identical geometry, type scale and CTA weight keep them reading as
- * siblings rather than as a good/better/best upsell ladder.
+ * One engagement, since the two one-to-one tiers this band used to carry were
+ * withdrawn. The card keeps the geometry it had as one of three, because a
+ * lone offer stretched across the old three-column grid reads as two cards
+ * that failed to load; the grid is capped at a single centred column instead.
+ *
+ * The accent is pinned to gold rather than taken from the cycle: the Boardroom
+ * is gold on the home page and in the store, and a flagship that changes colour
+ * between surfaces reads as a different product.
  */
 function OffersSection() {
   const reduce = useEntranceMotion();
@@ -618,25 +623,25 @@ function OffersSection() {
       space="md"
       aurora="mixed"
       auroraIntensity={0.7}
-      aria-label="Strategic partnerships"
+      aria-label="The Boss Boardroom"
     >
       <SectionTitle
         align="center"
         eyebrow="I don't sell calls. I build Bosses."
-        title="Choose the strategic partnership that matches your current season."
-        body="Every engagement is high-touch, personalized, and built around your specific practice — not a cookie-cutter program."
+        title="The Boss Clinician Boardroom — Mastermind"
+        body="An advanced mastermind for established practice owners who want higher-level strategy, peer collaboration, accountability, and support with scaling their business."
       />
 
       <RevealGroup
         as="ul"
-        className="mx-auto mt-10 grid max-w-md list-none grid-cols-1 items-stretch gap-7 sm:max-w-xl lg:max-w-none lg:grid-cols-3"
+        className="mx-auto mt-10 grid max-w-md list-none grid-cols-1 items-stretch gap-7 sm:max-w-xl"
       >
-        {workWithMe.offers.map((offer, i) => {
-          const tone = TONE[toneAt(i)];
+        {workWithMe.offers.map((offer) => {
+          const tone = TONE.gold;
 
           return (
             <RevealItem key={offer.name} as="li" className="h-full">
-              <GlassCard accent={toneAt(i)} className="flex h-full flex-col overflow-hidden">
+              <GlassCard accent="gold" className="flex h-full flex-col overflow-hidden">
                 {/* Duration ribbon, bled to the clipped corners so it reads as a
                     band printed on the panel rather than a chip inside it. */}
                 <div className={cn("relative px-7 py-3.5 sm:px-8", tone.ribbon)}>
@@ -672,8 +677,9 @@ function OffersSection() {
                     {offer.name}
                   </h3>
 
-                  {/* flex-1 on the list — not on a wrapper — is what bottom-aligns
-                      all three CTAs across cards of unequal copy length. */}
+                  {/* flex-1 on the list — not on a wrapper — is what keeps the
+                      CTA pinned to the foot of the card however long the
+                      feature list runs. */}
                   <ul className="mt-6 flex-1 space-y-3">
                     {offer.features.map((f) => (
                       <li key={f} className="copy-luxe flex gap-3 text-pretty text-sm">
@@ -949,7 +955,7 @@ function EnquirySection() {
         align="center"
         eyebrow="Still deciding?"
         title="Not ready to apply? Ask me first."
-        body="Tell me where your practice is right now and I'll tell you honestly whether one of these partnerships is the right container for this season — and which pathway I'd put you in."
+        body="Tell me where your practice is right now and I'll tell you honestly whether the Boardroom is the right container for this season — and which pathway I'd put you in."
       />
 
       <motion.div {...rise(reduce, 0.12)} className="mx-auto mt-10 max-w-3xl">

@@ -57,21 +57,21 @@ export const programsMenu: NavMenu = {
     {
       label: "Boss Clinician Club",
       to: "/club",
-      description: "Six months of coaching to build your practice on the right foundation.",
+      description: "A structured 6-month program designed to help practice owners strengthen operations, leadership, growth, and profitability with ongoing coaching and accountability.",
       badge: "6-Month Program",
       badgeTone: "green",
     },
     {
       label: "Boss Clinician Lounge",
       to: "/lounge",
-      description: "A membership for established therapists easing caseload pressure.",
+      description: "A flexible monthly membership offering ongoing business support, resources, training, and community for clinicians building and growing their practices.",
       badge: "Monthly",
       badgeTone: "plum",
     },
     {
       label: "Boardroom Mastermind",
       to: "/work-with-me",
-      description: "Private strategy for clinicians ready to lead, hire and scale.",
+      description: "An advanced mastermind for established practice owners who want higher-level strategy, peer collaboration, accountability, and support with scaling their business.",
       badge: "Apply",
       badgeTone: "gold",
     },
@@ -158,10 +158,8 @@ export const footer = {
   resourceLinks: [
     { label: "Resource Hub", to: "/resource-hub" },
     { label: "Free Masterclass", to: "/resources" },
-    { label: "Practice Reset Planner", to: "/practice-reset-planner" },
     { label: "Offer Quiz", to: "/practice-quiz" },
     { label: "Group Practice Assessment", to: "/resource-hub" },
-    { label: "Practice Reset Audit", to: "/resource-hub" },
     { label: "5-Step Marketing Plan", to: "/resource-hub" },
     { label: "Hiring Readiness Quiz", to: "/resource-hub" },
   ] satisfies NavLinkItem[],
@@ -188,7 +186,7 @@ export const home = {
   heroSubheading: "That's not a problem — it's a sign you're ready for more.",
   heroBody:
     "I help therapists and clinicians break free from Alma, Headway, Talkspace, and similar platforms and build a profitable, sustainable practice that's fully their own — no algorithm, no rate split, no one else's rules.",
-  heroCta: "Apply for 1:1 Coaching",
+  heroCta: "Explore the Boss Clinician Programs",
   valueProps: [
     {
       title: "More Freedom",
@@ -218,11 +216,11 @@ export const home = {
   pillars: [
     {
       title: "PROVEN",
-      body: "My individual services are founded on the B.O.S.S Blueprint that's been used to build multi-six-figure practices.",
+      body: "Our programs are founded on the B.O.S.S Blueprint that's been used to build multi-six-figure practices.",
     },
     {
       title: "PERSONAL",
-      body: "One-on-one coaching with me (not a group) so you get tailored support, not generic content.",
+      body: "Find support for your stage of practice through the Club, Lounge, or Boardroom.",
     },
     {
       title: "PREMIUM",
@@ -237,13 +235,13 @@ export const home = {
       cta: "Watch Free Masterclass",
     },
     {
-      title: "Apply for the 1:1 Package That Best Fits Your Needs",
-      body: 'If the masterclass leaves you thinking, "This is exactly what I need," submit your application to work with me privately. We\'ll review where you are, where you want to go, and determine if this high-touch level of service is the right fit.',
+      title: "Find the Program That Best Fits Your Needs",
+      body: 'If the masterclass leaves you thinking, "This is exactly what I need," explore the Club, Lounge, and Boardroom. We\'ll review where you are, where you want to go, and determine if this high-touch level of service is the right fit.',
       cta: "Work With Me",
     },
     {
       title: "Build Your Business with High-Level Support",
-      body: "If accepted, we'll begin your personalized plan with biweekly coaching calls, daily Voxer messaging support, accountability, and your CEO roadmap to start, grow, or expand your practice with clarity and confidence.",
+      body: "Choose the program that fits your season and get the structure, accountability, and community to build your practice with clarity and confidence.",
       cta: null,
     },
   ],
@@ -346,11 +344,11 @@ export const about = {
 };
 
 export const workWithMe = {
-  eyebrow: "Private Practice Strategy for Clinicians",
+  eyebrow: "Boss Clinician Boardroom — Mastermind",
   heading: "Built to heal others.",
   subheading: "Now let's build something that sustains you.",
   intro:
-    "You've done everything right. Now it's time to build a practice that works for your life — not the other way around. Let's see if we're a fit.",
+    "An advanced mastermind for established practice owners who want higher-level strategy, peer collaboration, accountability, and support with scaling their business.",
   storyQuote: '"I know this season because I lived it."',
   storyDetail:
     '"My days used to look like 25+ sessions, a full day at the dialysis center, bedtime routines, and late-night note taking — because it was the only time I had."',
@@ -403,9 +401,8 @@ export const workWithMe = {
     "You want someone to make every decision for you rather than developing your own leadership identity",
     "You're not yet ready to fully commit — financially, mentally, or energetically",
   ],
-  partnershipHeading: "This isn't hourly consulting. It's a strategic partnership.",
-  partnershipBody:
-    "Most coaching in this space is transactional — buy an hour, ask a question, hope it sticks. My work is different. Before we even begin, you'll complete a Practice Clarity Assessment that most clinicians have never done on themselves. Then we build a strategy that matches exactly where you are, where you're going, and what your practice actually needs — and we walk through it together for 3, 6, or 12 months with structure, support, and real accountability.",
+  partnershipHeading: "Higher-level strategy. Peer collaboration. Accountability.",
+  partnershipBody: "An advanced mastermind for established practice owners who want higher-level strategy, peer collaboration, accountability, and support with scaling their business.",
   comparison: {
     hourly: [
       "Pay per hour, get per hour",
@@ -416,7 +413,7 @@ export const workWithMe = {
       "Transactional",
     ],
     bossClinician: [
-      "Defined 3, 6, or 12 month arc with clear milestones",
+      "Higher-level strategy with clear milestones",
       "Proactive — strategy built around where you actually are",
       "CEO Baseline Audit before work begins",
       "Personalized strategy built around your specific season",
@@ -481,51 +478,25 @@ export const workWithMe = {
       ],
     },
   ],
+  // One entry, and deliberately so. The Practice Reset Intensive and the Scale
+  // and Reclaim Suite were the two one-to-one engagements, and Yvette has
+  // stopped offering one-to-one work — so the page that sold them cannot keep
+  // listing them. The Boardroom stays because it is the twelve-month room she
+  // still runs, and every surrounding string that counted to three (the arc,
+  // the payment-plan note, the onboarding step) has been rewritten to describe
+  // one engagement rather than a menu.
   offers: [
     {
-      name: "Practice Reset Intensive",
-      duration: "3 Months",
-      features: [
-        "6 private strategy sessions (50 minutes each)",
-        "Full audit of your current practice — income, clients, and systems",
-        "Clarity on your ideal client and niche positioning",
-        "Pricing strategy and signature offer development",
-        "Psychology Today and website positioning support",
-        "Daily Voxer access for real-time support between sessions",
-        "Templates, scripts, and resources as needed",
-        "Psychology Today profile — fully rewritten for you",
-        "Personalized website audit with a custom template",
-        "Video bio script written for you",
-      ],
-    },
-    {
-      name: "Scale and Reclaim Suite",
-      duration: "6 Months",
-      features: [
-        "12 private strategy sessions (50 minutes each)",
-        "Complete practice audit and rebuild roadmap",
-        "Consistent client flow and referral pipeline strategy",
-        "Income stabilization and cash pay client strategy",
-        "Marketing strategy and visibility planning",
-        "Offer structuring and premium pricing support",
-        "Priority Voxer access — voice and text messaging",
-        "Templates, systems, and CEO decision-making support",
-        "Psychology Today profile — fully rewritten for you",
-        "Marketing materials review and edit",
-        "Custom referral template built for your specific niche",
-      ],
-    },
-    {
       name: "Boss Boardroom",
-      duration: "12 Months",
+      duration: "Mastermind",
       features: [
-        "24 private strategy sessions (50 minutes each)",
+        "Higher-level strategy for established practice owners",
         "Quarterly 90-day CEO planning and practice audit",
         "Full scaling strategy — hiring, team structure, group practice",
         "W2 vs 1099 transition support and systems buildout",
         "Advanced income strategy and multiple revenue streams",
         "Leadership identity and CEO confidence coaching",
-        "Priority Voxer access — voice and text messaging",
+        "Peer collaboration and ongoing accountability",
         "Insurance credentialing handled entirely by admin team",
         "Psychology Today profile — fully rewritten for you",
         "Full website audit — custom template provided",
@@ -537,7 +508,7 @@ export const workWithMe = {
   policies: [
     {
       title: "PAYMENT PLANS",
-      body: "Available for all packages. No interest. No credit checks. Just support that meets you where you are.",
+      body: "Available for the Boardroom. No interest. No credit checks. Just support that meets you where you are.",
     },
     {
       title: "REFUND POLICY",
@@ -554,16 +525,16 @@ export const workWithMe = {
       body: "Fill out a short application so I can understand where you are and what you're building. If we're a strong fit I'll reach out to schedule a complimentary strategy call.",
     },
     {
-      title: "Choose your offer and onboard",
-      body: "Once we agree on the right container for your goals, you'll receive onboarding instructions, portal access, and your session scheduling link. We get to work immediately.",
+      title: "Accept your seat and onboard",
+      body: "Once we agree the Boardroom is the right container for your goals, you'll receive onboarding instructions, portal access, and your session scheduling link. We get to work immediately.",
     },
     {
-      title: "We meet every other week — just you and me",
-      body: "Bi-weekly private strategy sessions with full focus on your goals, your decisions, and your next moves as a CEO. No generic advice. No cookie-cutter roadmaps.",
+      title: "Collaborate with established practice owners",
+      body: "Higher-level strategy and peer collaboration help you work through your goals, decisions, and next steps as a practice owner.",
     },
     {
-      title: "Access me daily between sessions",
-      body: "Clarity doesn't always happen on session days. Use Voxer to ask questions, get feedback, talk through decisions, and get unstuck in real time.",
+      title: "Stay accountable as you implement",
+      body: "Bring your questions, share progress, and build with the support and accountability of the mastermind.",
     },
     {
       title: "Build, implement, and grow",
@@ -585,7 +556,7 @@ export const workWithMe = {
     },
     {
       q: "Is Boss Boardroom right for group practices?",
-      a: "Yes — the 12 Month Private Practice Strategy Partnership is specifically designed for clinicians who are scaling into or already running a group practice and need advanced support with hiring, team structure, W2 transitions, systems, and sustainable leadership.",
+      a: "Yes — the Boss Clinician Boardroom mastermind is specifically designed for clinicians who are scaling into or already running a group practice and need advanced support with hiring, team structure, W2 transitions, systems, and sustainable leadership.",
     },
     {
       q: "Do you work with clinicians beyond therapists?",
@@ -593,7 +564,7 @@ export const workWithMe = {
     },
     {
       q: "What's your refund policy?",
-      a: "There are no refunds. Private strategy work requires deep commitment, energy, and full presence from both of us. When you enter this partnership you are committing to the process — and I am committing fully to you.",
+      a: "There are no refunds. Mastermind participation requires deep commitment, energy, and full presence from both of us. When you enter this partnership you are committing to the process — and I am committing fully to you.",
     },
   ],
   testimonialQuotes: [

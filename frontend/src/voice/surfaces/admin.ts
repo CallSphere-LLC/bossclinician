@@ -1594,6 +1594,7 @@ export const ADMIN_POLICY: VoiceSurfacePolicy = {
     "Hello, I'm Boss Clinician AI, and I work in here with you. Would you like me to walk you through the whole dashboard, or would you rather just ask me things?",
   tour: TOUR,
   tools: [
+    "admin_operation_catalog",
     "navigate_to",
     "go_back",
     "read_current_page",

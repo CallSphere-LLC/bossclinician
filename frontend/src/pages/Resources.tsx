@@ -70,8 +70,31 @@ function rise(reduce: boolean | null, delay: number) {
 }
 
 export default function Resources() {
-  const { data: resources, loading } = useCollection(api.resources, fallbackResources, ssrKeys.resources());
-  const published = resources.filter((r) => r.published).sort((a, b) => a.sort - b.sort);
+  const { data: resources, loading } = useCollection(
+    api.resources,
+    fallbackResources,
+    ssrKeys.resources(),
+  );
+  const published = resources
+    .filter(
+      (r) => r.published && !/practice[ -]reset (planner|audit)/i.test(r.title),
+    )
+    .map((resource) =>
+      resource.kind === "masterclass"
+        ? {
+            ...resource,
+            title: fallbackResources[0].title,
+            description: fallbackResources[0].description,
+            ctaLabel: "Watch the Free Masterclass",
+            ctaUrl: "https://www.bossclinician.com/freedom-masterclass",
+          }
+        : resource,
+    )
+    .sort(
+      (a, b) =>
+        Number(b.kind === "masterclass") - Number(a.kind === "masterclass") ||
+        a.sort - b.sort,
+    );
   const [masterclass, ...rest] = published;
 
   return (
@@ -106,7 +129,12 @@ export default function Resources() {
       )}
 
       {/* ── Everything else ─────────────────────────────────────────────── */}
-      <Section surface="raised" space="md" aurora="violet" auroraIntensity={0.35}>
+      <Section
+        surface="raised"
+        space="md"
+        aurora="violet"
+        auroraIntensity={0.35}
+      >
         {loading && rest.length === 0 ? (
           <p className="copy-luxe text-center" role="status">
             Loading resources…
@@ -161,7 +189,9 @@ function MasterclassFeature({ resource }: { resource: Resource }) {
 
             <GoldRule className="mt-6" />
 
-            <p className="copy-luxe mt-6 max-w-[52ch] text-pretty">{resource.description}</p>
+            <p className="copy-luxe mt-6 max-w-[52ch] text-pretty">
+              {resource.description}
+            </p>
 
             <LuxeButton
               variant="foil"
@@ -228,7 +258,9 @@ function ResourceCard({ resource }: { resource: Resource }) {
 
         {/* flex-1 here — not on a wrapper — is what bottom-aligns every CTA
             across cards of unequal copy length. */}
-        <p className="copy-luxe mt-3 flex-1 text-pretty text-sm">{resource.description}</p>
+        <p className="copy-luxe mt-3 flex-1 text-pretty text-sm">
+          {resource.description}
+        </p>
 
         <LuxeButton
           variant="glass"
@@ -306,7 +338,10 @@ function Plate({ src, alt, ratio, className, imgClassName }: PlateProps) {
         aria-hidden
         className="absolute inset-0 bg-[radial-gradient(115%_80%_at_50%_26%,transparent_26%,rgba(10,7,19,0.5)_66%,rgba(6,4,11,0.9)_100%)]"
       />
-      <div aria-hidden className="absolute inset-0 bg-glow-violet/15 mix-blend-soft-light" />
+      <div
+        aria-hidden
+        className="absolute inset-0 bg-glow-violet/15 mix-blend-soft-light"
+      />
       <div
         aria-hidden
         className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-b from-transparent to-night/90"

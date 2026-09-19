@@ -1,3 +1,13 @@
+# Production release policy (2026-09-19)
+
+Production now deploys directly on K3s with `./scripts/deploy-k3s.sh`.
+Git pushes run CI validation only and never trigger a deployment. The manual
+Deployment instructions workflow also cannot deploy or access the host.
+See [DEPLOY.md](../DEPLOY.md#current-production-direct-k3s-releases-2026-09-19)
+for the current release, rollback, data preservation and image retention process.
+
+The historical pipeline implementation below is retained for reference only.
+
 # CI/CD: how a change reaches bossclinician.callsphere.site
 
 **The rule:** code changes on your computer, goes to GitHub, and reaches

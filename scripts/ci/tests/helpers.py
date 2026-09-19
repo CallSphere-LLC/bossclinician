@@ -244,6 +244,7 @@ def run_deploy(scenario: Scenario, stubs: Stubs, target: str, event: str = "push
         "TARGET_SHA": target,
         "EVENT_NAME": event,
         "DEPLOY_DIR": str(scenario.server),
+        "DEPLOY_SH": str(REPO_ROOT / "scripts/deploy-compose-legacy.sh"),
         "LOCK_DIR": str(scenario.tmp / "lock"),
         "MIN_FREE_GB": "0",
         "GATE_ATTEMPTS": "2",

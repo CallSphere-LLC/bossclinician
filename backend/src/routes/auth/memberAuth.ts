@@ -654,12 +654,12 @@ memberAuthRoutes.post(
       throw unauthorized("Please sign in to continue");
     }
 
-    setRefreshCookie(res, outcome.refreshToken);
+    setRefreshCookie(res, outcome.refreshToken, outcome.expiresAt);
     // Rotation revoked the row the previous document cookie pointed at.
     await setDocumentCookie(res, outcome.refreshToken);
     res.json({
       member: profile,
-      accessToken: signMemberAccessToken({ sub: profile.id, email: profile.email }),
+      accessToken: signMemberAccessToken({ sub: profile.id, email: profile.email }, outcome.expiresAt),
     });
   })
 );

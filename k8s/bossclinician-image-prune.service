@@ -1,0 +1,8 @@
+[Unit]
+Description=Retain active and rollback Boss Clinician K3s images
+After=k3s.service docker.service
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/bossclinician
+ExecStart=/usr/bin/python3 /opt/bossclinician/scripts/prune-k3s-images.py
+Nice=10

@@ -1,0 +1,22 @@
+[
+  {
+    "path": "/admin/community/9/access-groups/7",
+    "status": 204
+  },
+  {
+    "path": "/admin/community/9/access-groups/8",
+    "status": 204
+  },
+  {
+    "path": "/admin/community/9",
+    "status": 204
+  },
+  {
+    "deletedCommunityRead": 404,
+    "archivedOffers": [
+      16,
+      17
+    ],
+    "note": "Root to remove generated archived offers/products after confirming no orders; member66 belongs to voice fixture."
+  }
+]

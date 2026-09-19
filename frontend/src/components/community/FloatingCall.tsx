@@ -12,6 +12,7 @@ import {
   Video,
   VideoOff,
 } from "lucide-react";
+import { CallDuration } from "./CallDuration";
 import { cn } from "@/lib/cn";
 import {
   getIdleSnapshot,
@@ -59,9 +60,13 @@ function RemoteAudio({ stream }: { stream: MediaStream | null }) {
   return <audio ref={ref} autoPlay className="hidden" />;
 }
 
-function pickSpotlight(participants: RemoteParticipant[]): RemoteParticipant | null {
+function pickSpotlight(
+  participants: RemoteParticipant[],
+): RemoteParticipant | null {
   return (
-    participants.find((p) => p.connected && p.stream && p.stream.getVideoTracks().length > 0) ??
+    participants.find(
+      (p) => p.connected && p.stream && p.stream.getVideoTracks().length > 0,
+    ) ??
     participants.find((p) => p.connected) ??
     participants[0] ??
     null
@@ -162,7 +167,8 @@ export function FloatingCall() {
     const el = videoRef.current;
     if (!el) return;
     try {
-      if (document.pictureInPictureElement) await document.exitPictureInPicture();
+      if (document.pictureInPictureElement)
+        await document.exitPictureInPicture();
       else await el.requestPictureInPicture();
     } catch {
       /* refused by the browser, or no video track to show */
@@ -204,7 +210,10 @@ export function FloatingCall() {
           // Audio comes from the <audio> elements above, so this never doubles it
           // — and your own picture must never play your own microphone back.
           muted
-          className={cn("h-full w-full object-cover", showingSelf && "scale-x-[-1]")}
+          className={cn(
+            "h-full w-full object-cover",
+            showingSelf && "scale-x-[-1]",
+          )}
         />
         {room.status === "reconnecting" && (
           <div className="absolute inset-0 grid place-items-center bg-black/55">
@@ -213,7 +222,7 @@ export function FloatingCall() {
         )}
         <span className="absolute left-2 top-2 inline-flex items-center gap-1.5 rounded-full bg-black/60 px-2.5 py-1 text-[0.62rem] font-semibold uppercase tracking-[0.14em]">
           <span aria-hidden className="size-1.5 rounded-full bg-red-500" />
-          In a call
+          In a call <CallDuration joinedAt={room.joinedAt} />
         </span>
       </div>
 
@@ -228,9 +237,16 @@ export function FloatingCall() {
             aria-pressed={!room.micOn}
             aria-label={room.micOn ? "Mute" : "Unmute"}
             title={room.micOn ? "Mute" : "Unmute"}
-            className={cn(control, !room.micOn && "border-red-400/60 bg-red-500/20")}
+            className={cn(
+              control,
+              !room.micOn && "border-red-400/60 bg-red-500/20",
+            )}
           >
-            {room.micOn ? <Mic aria-hidden className="size-4" /> : <MicOff aria-hidden className="size-4" />}
+            {room.micOn ? (
+              <Mic aria-hidden className="size-4" />
+            ) : (
+              <MicOff aria-hidden className="size-4" />
+            )}
           </button>
           <button
             type="button"
@@ -238,17 +254,32 @@ export function FloatingCall() {
             aria-pressed={!room.camOn}
             aria-label={room.camOn ? "Turn camera off" : "Turn camera on"}
             title={room.camOn ? "Turn camera off" : "Turn camera on"}
-            className={cn(control, !room.camOn && "border-red-400/60 bg-red-500/20")}
+            className={cn(
+              control,
+              !room.camOn && "border-red-400/60 bg-red-500/20",
+            )}
           >
-            {room.camOn ? <Video aria-hidden className="size-4" /> : <VideoOff aria-hidden className="size-4" />}
+            {room.camOn ? (
+              <Video aria-hidden className="size-4" />
+            ) : (
+              <VideoOff aria-hidden className="size-4" />
+            )}
           </button>
           {pipSupported && (
             <button
               type="button"
               onClick={() => void togglePip()}
               aria-pressed={pipOn}
-              aria-label={pipOn ? "Close the floating window" : "Pop the video out into a floating window"}
-              title={pipOn ? "Close the floating window" : "Float over other tabs and apps"}
+              aria-label={
+                pipOn
+                  ? "Close the floating window"
+                  : "Pop the video out into a floating window"
+              }
+              title={
+                pipOn
+                  ? "Close the floating window"
+                  : "Float over other tabs and apps"
+              }
               className={cn(control, pipOn && "border-gold/60 bg-gold/20")}
             >
               <PictureInPicture2 aria-hidden className="size-4" />
@@ -260,7 +291,11 @@ export function FloatingCall() {
             aria-expanded={chatOpen}
             aria-label={unread > 0 ? `Chat, ${unread} new` : "Chat"}
             title="Chat"
-            className={cn(control, "relative", chatOpen && "border-gold/60 bg-gold/20")}
+            className={cn(
+              control,
+              "relative",
+              chatOpen && "border-gold/60 bg-gold/20",
+            )}
           >
             <MessageSquare aria-hidden className="size-4" />
             {unread > 0 && !chatOpen && (
@@ -296,11 +331,21 @@ export function FloatingCall() {
               className="max-h-44 space-y-2 overflow-y-auto pr-1 text-xs"
             >
               {messages.length === 0 ? (
-                <p className="text-white/50">Nothing said yet. Chat stays in the room and is not saved.</p>
+                <p className="text-white/50">
+                  Nothing said yet. Chat stays in the room and is not saved.
+                </p>
               ) : (
                 messages.map((message) => (
-                  <p key={message.id} className="break-words leading-relaxed text-white/85">
-                    <span className={cn("font-semibold", message.mine ? "text-gold" : "text-white")}>
+                  <p
+                    key={message.id}
+                    className="break-words leading-relaxed text-white/85"
+                  >
+                    <span
+                      className={cn(
+                        "font-semibold",
+                        message.mine ? "text-gold" : "text-white",
+                      )}
+                    >
                       {message.mine ? "You" : message.name}
                     </span>{" "}
                     {message.text}

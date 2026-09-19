@@ -1,0 +1,99 @@
+{
+  "checks": [
+    {
+      "participant": 0,
+      "joined": true
+    },
+    {
+      "participant": 1,
+      "joined": true
+    },
+    {
+      "participant": 0,
+      "timer": "00:08",
+      "videos": [
+        {
+          "readyState": 4,
+          "width": 640,
+          "height": 480,
+          "tracks": [
+            {
+              "kind": "audio",
+              "readyState": "live"
+            },
+            {
+              "kind": "video",
+              "readyState": "live"
+            }
+          ]
+        },
+        {
+          "readyState": 4,
+          "width": 640,
+          "height": 480,
+          "tracks": [
+            {
+              "kind": "audio",
+              "readyState": "live"
+            },
+            {
+              "kind": "video",
+              "readyState": "live"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "participant": 1,
+      "timer": "00:05",
+      "videos": [
+        {
+          "readyState": 4,
+          "width": 640,
+          "height": 480,
+          "tracks": [
+            {
+              "kind": "audio",
+              "readyState": "live"
+            },
+            {
+              "kind": "video",
+              "readyState": "live"
+            }
+          ]
+        },
+        {
+          "readyState": 4,
+          "width": 640,
+          "height": 480,
+          "tracks": [
+            {
+              "kind": "audio",
+              "readyState": "live"
+            },
+            {
+              "kind": "video",
+              "readyState": "live"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "floatingTimer": "00:08",
+      "route": "https://bossclinician.callsphere.site/library"
+    },
+    {
+      "participant": 0,
+      "historyVisible": true,
+      "historyExcerpt": "Your call history\nRefresh history\n\nSep 19, 6:43 PM\n\nEnded Sep 19, 6:43 PM\n\n00:09\n\nSep 19, 6:42 PM\n\nEnded Sep 19, 6:42 PM\n\n00:47\n\nSep 19, 6:26 PM\n\nEnded Sep 19, 6:26 PM\n\n00:08\n\nSep 19, 6:24 PM\n\nEnded Sep 19, 6:24 PM\n\n00:08"
+    },
+    {
+      "participant": 1,
+      "historyVisible": true,
+      "historyExcerpt": "Your call history\nRefresh history\n\nSep 19, 6:43 PM\n\nEnded Sep 19, 6:43 PM\n\n00:06\n\nSep 19, 6:42 PM\n\nEnded Sep 19, 6:42 PM\n\n00:44\n\nSep 19, 6:26 PM\n\nEnded Sep 19, 6:26 PM\n\n00:06\n\nSep 19, 6:24 PM\n\nEnded Sep 19, 6:24 PM\n\n00:06"
+    }
+  ],
+  "errors": []
+}

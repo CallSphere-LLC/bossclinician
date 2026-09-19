@@ -10,16 +10,8 @@
  * "curriculum pace" slider, whose one worked example is kept as static copy.
  */
 
-/**
- * Where "Join" goes.
- *
- * The source buttons open the Kajabi checkout (/offers/tzgjALKU/checkout). No
- * Club offer exists in this app yet, so the join buttons go to the application
- * form. When the offer is published in the admin, change this one constant to
- * `/checkout/<offer-slug>`; migration 064 already redirects the Kajabi
- * checkout path to this page.
- */
-export const CLUB_JOIN_ROUTE = "/apply";
+/** Every Join action uses the owner-specified hosted Club checkout. */
+export const CLUB_JOIN_ROUTE = "https://www.bossclinician.com/offers/tzgjALKU/checkout";
 
 export const club = {
   seo: {
@@ -35,7 +27,7 @@ export const club = {
     title: "Build a Private Practice",
     titleAccent: "You Won’t Have to Undo Later.",
     lede: [
-      "A six-month coaching program for therapists and psychiatric providers who want to build the business side of private practice with the right foundation, strategy, and support — without guessing their way through it.",
+      "A structured 6-month program designed to help practice owners strengthen operations, leadership, growth, and profitability with ongoing coaching and accountability.",
       "Whether you’re starting from scratch, building while employed, or rebuilding after a false start, The Club helps you make smarter decisions now so future-you doesn’t have to come back and fix them later.",
     ],
     cta: "JOIN THE CLUB",

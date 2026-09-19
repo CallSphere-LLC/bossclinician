@@ -1,0 +1,18 @@
+[
+  {
+    "role": "admin",
+    "sessionId": "228",
+    "lifetimeSeconds": 28800,
+    "rotationPreservedDeadline": true,
+    "expiredRefreshStatus": 401,
+    "protectedReloadRedirect": "/admin/login"
+  },
+  {
+    "role": "member",
+    "sessionId": "904",
+    "lifetimeSeconds": 2592000,
+    "rotationPreservedDeadline": true,
+    "expiredRefreshStatus": 401,
+    "protectedReloadRedirect": "/login"
+  }
+]

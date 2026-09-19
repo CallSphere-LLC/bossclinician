@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { Link, useParams } from "react-router";
+import { Link, useParams, useSearchParams } from "react-router";
+import { publicSiteUrl } from "@/lib/siteOrigins";
+import {
+  GroupPricingFields,
+  groupPricingForm,
+  groupPricingPayload,
+} from "./AccessGroupPricing";
 import * as Tabs from "@radix-ui/react-tabs";
 import { motion } from "motion/react";
 import {
@@ -38,6 +44,7 @@ import type {
   Challenge,
   ChallengeEntry,
   CommunityBadge,
+  Community as AdminCommunity,
   CommunityChannel,
   CommunityDetail as CommunityDetailType,
   CommunityEvent,
@@ -89,6 +96,7 @@ const TAB_LIST = [
   { value: "groups", label: "Access groups", icon: Layers },
   { value: "challenges", label: "Challenges", icon: Target },
   { value: "events", label: "Events", icon: CalendarDays },
+  { value: "history", label: "Call history", icon: Video },
   { value: "badges", label: "Badges", icon: Award },
   { value: "points", label: "Points", icon: Sparkles },
   { value: "review", label: "Review feed", icon: ShieldAlert },
@@ -113,7 +121,10 @@ const CHANNEL_VISIBILITY = [
 ] as const;
 
 function channelFormatLabel(format: string): string {
-  return CHANNEL_FORMATS.find((option) => option.value === format)?.label ?? "Posts & comments";
+  return (
+    CHANNEL_FORMATS.find((option) => option.value === format)?.label ??
+    "Posts & comments"
+  );
 }
 
 /** What a person can do in the space, rather than the word stored against them. */
@@ -126,6 +137,7 @@ const ROLE_LABEL: Record<string, string> = {
 export default function CommunityDetail() {
   const { id } = useParams();
   const communityId = Number(id);
+  const [searchParams] = useSearchParams();
   const [community, setCommunity] = useState<CommunityDetailType | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -168,36 +180,49 @@ export default function CommunityDetail() {
         actions={
           community && (
             <Badge tone={community.access === "paid" ? "gold" : "neutral"}>
-              {community.access === "paid" ? "Paid community" : "Free community"}
+              {community.access === "paid"
+                ? "Paid community"
+                : "Free community"}
             </Badge>
           )
         }
       />
 
-      <Tabs.Root defaultValue="channels">
+      <Tabs.Root
+        defaultValue={
+          searchParams.get("tab") === "groups" ? "groups" : "channels"
+        }
+        className="grid min-w-0 grid-cols-1 gap-5 lg:grid-cols-[190px_minmax(0,1fr)]"
+      >
         {/* Wraps rather than scrolls. This started as five tabs in a row and is
             now ten; `overflow-x-auto` kept them reachable in principle but
             clipped the last three at the card's edge with no visible hint that
             anything was there, which is indistinguishable from them being
             missing. Wrapping costs a second line on a narrow window and shows
             every tab at every width. */}
-        <Tabs.List className="flex flex-wrap gap-1 rounded-xl border border-hairline/70 bg-surface p-1.5">
-          {TAB_LIST.map((tab) => {
-            const Icon = tab.icon;
-            return (
-              <Tabs.Trigger
-                key={tab.value}
-                value={tab.value}
-                className="flex min-h-11 shrink-0 items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-semibold text-ink-soft transition-colors hover:text-plum data-[state=active]:bg-brand-gradient data-[state=active]:text-white"
-              >
-                <Icon className="size-4" />
-                {tab.label}
-              </Tabs.Trigger>
-            );
-          })}
-        </Tabs.List>
+        <aside className="min-w-0 space-y-3 lg:sticky lg:top-24 lg:self-start">
+          <AdminCommunitySwitcher activeId={communityId} />
+          <Tabs.List
+            aria-label="Community management"
+            className="flex flex-wrap gap-1 self-start rounded-xl border border-hairline/70 bg-surface p-1.5 lg:flex-col"
+          >
+            {TAB_LIST.map((tab) => {
+              const Icon = tab.icon;
+              return (
+                <Tabs.Trigger
+                  key={tab.value}
+                  value={tab.value}
+                  className="flex min-h-11 shrink-0 items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-semibold text-ink-soft transition-colors hover:text-plum data-[state=active]:bg-brand-gradient data-[state=active]:text-white"
+                >
+                  <Icon className="size-4" />
+                  {tab.label}
+                </Tabs.Trigger>
+              );
+            })}
+          </Tabs.List>
+        </aside>
 
-        <div className="mt-5">
+        <div className="min-w-0">
           <Tabs.Content value="channels">
             <ChannelsTab
               communityId={communityId}
@@ -214,6 +239,9 @@ export default function CommunityDetail() {
           </Tabs.Content>
           <Tabs.Content value="events">
             <EventsTab communityId={communityId} />
+          </Tabs.Content>
+          <Tabs.Content value="history">
+            <CallHistoryTab communityId={communityId} />
           </Tabs.Content>
           <Tabs.Content value="badges">
             <BadgesTab communityId={communityId} />
@@ -253,7 +281,11 @@ export default function CommunityDetail() {
  * position the member sees it in, so the two views agree.
  */
 const LIVE_ROOM_ACCESS = [
-  { value: "always", label: "Always open", help: "Members can gather in there whenever they like." },
+  {
+    value: "always",
+    label: "Always open",
+    help: "Members can gather in there whenever they like.",
+  },
   {
     value: "hosted",
     label: "Only when you're in",
@@ -281,7 +313,10 @@ function LiveRoomPanel({
   const [visits, setVisits] = useState<AdminLiveVisit[] | null>(null);
 
   useEffect(() => {
-    adminApi.communityLiveVisits(communityId).then(setVisits).catch(() => setVisits([]));
+    adminApi
+      .communityLiveVisits(communityId)
+      .then(setVisits)
+      .catch(() => setVisits([]));
   }, [communityId]);
 
   const label = form.liveRoomAlias.trim() || "Live room";
@@ -296,7 +331,9 @@ function LiveRoomPanel({
     // window.open that happens inside the click itself, and an await ends that.
     const tab = window.open("", "_blank");
     if (!tab) {
-      toast.error("Your browser blocked the new tab. Allow pop-ups for the admin and press Join again.");
+      toast.error(
+        "Your browser blocked the new tab. Allow pop-ups for the admin and press Join again.",
+      );
       return;
     }
     tab.opener = null;
@@ -347,9 +384,9 @@ function LiveRoomPanel({
             {joining ? "Opening…" : "Join the live room as host"}
           </Button>
           <p className="mt-2.5 text-xs leading-relaxed text-ink-soft">
-            Opens the room in a new tab, signed in on the member site as the host. The
-            link works once and expires in two minutes. If you're signed in there as
-            someone else, it swaps you over.
+            Opens the room in a new tab, signed in on the member site as the
+            host. The link works once and expires in two minutes. If you're
+            signed in there as someone else, it swaps you over.
           </p>
         </div>
       )}
@@ -364,7 +401,9 @@ function LiveRoomPanel({
               <button
                 key={String(option.value)}
                 type="button"
-                onClick={() => setForm((f) => ({ ...f, liveRoomEnabled: option.value }))}
+                onClick={() =>
+                  setForm((f) => ({ ...f, liveRoomEnabled: option.value }))
+                }
                 className={cn(
                   "min-h-11 flex-1 rounded-xl px-3 py-2.5 text-sm font-semibold transition-colors",
                   form.liveRoomEnabled === option.value
@@ -387,7 +426,9 @@ function LiveRoomPanel({
             id="live-alias"
             value={form.liveRoomAlias}
             maxLength={60}
-            onChange={(e) => setForm((f) => ({ ...f, liveRoomAlias: e.target.value }))}
+            onChange={(e) =>
+              setForm((f) => ({ ...f, liveRoomAlias: e.target.value }))
+            }
             placeholder="Office Hours"
           />
         </Field>
@@ -398,7 +439,9 @@ function LiveRoomPanel({
               <button
                 key={option.value}
                 type="button"
-                onClick={() => setForm((f) => ({ ...f, liveRoomAccess: option.value }))}
+                onClick={() =>
+                  setForm((f) => ({ ...f, liveRoomAccess: option.value }))
+                }
                 className={cn(
                   "rounded-xl px-3.5 py-3 text-left text-sm transition-colors",
                   form.liveRoomAccess === option.value
@@ -407,7 +450,9 @@ function LiveRoomPanel({
                 )}
               >
                 <span className="block font-semibold">{option.label}</span>
-                <span className="mt-0.5 block text-xs opacity-80">{option.help}</span>
+                <span className="mt-0.5 block text-xs opacity-80">
+                  {option.help}
+                </span>
               </button>
             ))}
           </div>
@@ -425,7 +470,12 @@ function LiveRoomPanel({
             max={16}
             className="w-28"
             value={form.liveRoomCapacity}
-            onChange={(e) => setForm((f) => ({ ...f, liveRoomCapacity: Number(e.target.value) }))}
+            onChange={(e) =>
+              setForm((f) => ({
+                ...f,
+                liveRoomCapacity: Number(e.target.value),
+              }))
+            }
           />
         </Field>
 
@@ -446,15 +496,22 @@ function LiveRoomPanel({
         ) : (
           <ul className="mt-3 space-y-1.5">
             {visits.slice(0, 20).map((visit) => (
-              <li key={String(visit.id)} className="flex flex-wrap items-center gap-2 text-sm">
+              <li
+                key={String(visit.id)}
+                className="flex flex-wrap items-center gap-2 text-sm"
+              >
                 <span className="min-w-0 flex-1 truncate text-ink">
                   {visit.memberName || visit.email}
                 </span>
-                <span className="text-xs text-ink-soft">{formatRelative(visit.joinedAt)}</span>
+                <span className="text-xs text-ink-soft">
+                  {formatRelative(visit.joinedAt)}
+                </span>
                 {visit.seconds === null ? (
                   <Badge tone="green">In there now</Badge>
                 ) : (
-                  <Badge tone="neutral">{Math.max(1, Math.round(visit.seconds / 60))} min</Badge>
+                  <Badge tone="neutral">
+                    {Math.max(1, Math.round(visit.seconds / 60))} min
+                  </Badge>
                 )}
               </li>
             ))}
@@ -505,10 +562,14 @@ function channelToForm(channel: CommunityChannel): ChannelForm {
     format: channel.format,
     visibility: channel.visibility,
     coverImage: channel.coverImage ?? "",
-    accessGroupId: channel.accessGroupId == null ? "" : String(channel.accessGroupId),
+    accessGroupId:
+      channel.accessGroupId == null ? "" : String(channel.accessGroupId),
     viewModes: channel.viewModes?.length ? channel.viewModes : ["feed"],
     defaultViewMode:
-      channel.viewMode || channel.defaultViewMode || channel.viewModes?.[0] || "feed",
+      channel.viewMode ||
+      channel.defaultViewMode ||
+      channel.viewModes?.[0] ||
+      "feed",
   };
 }
 
@@ -516,7 +577,8 @@ function channelToForm(channel: CommunityChannel): ChannelForm {
 function channelToPayload(form: ChannelForm): Record<string, unknown> {
   return {
     ...form,
-    accessGroupId: form.accessGroupId === "" ? null : Number(form.accessGroupId),
+    accessGroupId:
+      form.accessGroupId === "" ? null : Number(form.accessGroupId),
     // The layout the member side renders (`view_mode`): the one it opens in.
     viewMode: form.defaultViewMode,
   };
@@ -546,7 +608,11 @@ function ChannelFields({
           required
         />
       </Field>
-      <Field label="What's it for?" hint="shown under the channel name" htmlFor={`${idPrefix}-desc`}>
+      <Field
+        label="What's it for?"
+        hint="shown under the channel name"
+        htmlFor={`${idPrefix}-desc`}
+      >
         <Input
           id={`${idPrefix}-desc`}
           value={form.description}
@@ -669,7 +735,9 @@ function ChannelFields({
           >
             {form.viewModes.map((mode) => (
               <option key={mode} value={mode}>
-                Opens as {CHANNEL_VIEW_MODES.find((m) => m.value === mode)?.label ?? mode}
+                Opens as{" "}
+                {CHANNEL_VIEW_MODES.find((m) => m.value === mode)?.label ??
+                  mode}
               </option>
             ))}
           </select>
@@ -735,8 +803,13 @@ function ChannelInvites({
       ) : (
         <ul className="space-y-1.5">
           {invites.map((row) => (
-            <li key={String(row.memberId)} className="flex items-center gap-2 text-sm">
-              <span className="min-w-0 flex-1 truncate text-ink">{row.name || row.email}</span>
+            <li
+              key={String(row.memberId)}
+              className="flex items-center gap-2 text-sm"
+            >
+              <span className="min-w-0 flex-1 truncate text-ink">
+                {row.name || row.email}
+              </span>
               <Button
                 variant="dangerGhost"
                 size="iconSm"
@@ -745,7 +818,10 @@ function ChannelInvites({
                 onClick={async () => {
                   setBusy(true);
                   try {
-                    await adminApi.channelInviteRemove(Number(channel.id), Number(row.memberId));
+                    await adminApi.channelInviteRemove(
+                      Number(channel.id),
+                      Number(row.memberId),
+                    );
                     load();
                   } catch (err) {
                     toast.error(friendlyError(err, "invite"));
@@ -784,7 +860,10 @@ function ChannelInvites({
           onClick={async () => {
             setBusy(true);
             try {
-              await adminApi.channelInviteAdd(Number(channel.id), Number(selected));
+              await adminApi.channelInviteAdd(
+                Number(channel.id),
+                Number(selected),
+              );
               setSelected("");
               load();
               toast.success("They can see this channel now.");
@@ -839,11 +918,21 @@ function ChannelsTab({
   const [members, setMembers] = useState<CommunityMembership[]>([]);
 
   useEffect(() => {
-    adminApi.accessGroups(communityId).then(setGroups).catch(() => setGroups([]));
-    adminApi.communityMembers(communityId).then(setMembers).catch(() => setMembers([]));
+    adminApi
+      .accessGroups(communityId)
+      .then(setGroups)
+      .catch(() => setGroups([]));
+    adminApi
+      .communityMembers(communityId)
+      .then(setMembers)
+      .catch(() => setMembers([]));
   }, [communityId]);
 
-  const [composer, setComposer] = useState({ body: "", mediaUrl: "", mediaLabel: "" });
+  const [composer, setComposer] = useState({
+    body: "",
+    mediaUrl: "",
+    mediaLabel: "",
+  });
   const [attaching, setAttaching] = useState(false);
   /** "" is "post it now"; anything else is the local time she picked. */
   const [publishAt, setPublishAt] = useState("");
@@ -865,7 +954,11 @@ function ChannelsTab({
     adminApi
       .channelPosts(channelId)
       .then(setPosts)
-      .catch(() => toast.error("We couldn't load what's in this channel. Try again in a moment."));
+      .catch(() =>
+        toast.error(
+          "We couldn't load what's in this channel. Try again in a moment.",
+        ),
+      );
   }, []);
 
   useEffect(() => {
@@ -895,7 +988,10 @@ function ChannelsTab({
     if (!editing || !editForm.name.trim()) return;
     setSavingChannel(true);
     try {
-      await adminApi.channelUpdate(Number(editing.id), channelToPayload(editForm));
+      await adminApi.channelUpdate(
+        Number(editing.id),
+        channelToPayload(editForm),
+      );
       toast.success("Channel saved");
       setEditing(null);
       onChange();
@@ -977,7 +1073,9 @@ function ChannelsTab({
         // yet in the channel, and the list marks it "waiting to go out" in the
         // place it will actually appear.
         loadPosts(Number(active.id));
-        toast.success(`Scheduled for ${formatDateTime(when)} — it's on the Scheduled tab.`);
+        toast.success(
+          `Scheduled for ${formatDateTime(when)} — it's on the Scheduled tab.`,
+        );
       } else {
         setPosts((prev) => (prev ? [created, ...prev] : [created]));
         toast.success("Posted — your members can see it now");
@@ -991,8 +1089,15 @@ function ChannelsTab({
 
   async function togglePin(p: CommunityPost) {
     try {
-      const updated = await adminApi.postUpdate(Number(p.id), { pinned: !p.pinned });
-      setPosts((prev) => prev?.map((x) => (x.id === p.id ? { ...x, pinned: updated.pinned } : x)) ?? prev);
+      const updated = await adminApi.postUpdate(Number(p.id), {
+        pinned: !p.pinned,
+      });
+      setPosts(
+        (prev) =>
+          prev?.map((x) =>
+            x.id === p.id ? { ...x, pinned: updated.pinned } : x,
+          ) ?? prev,
+      );
     } catch (err) {
       toast.error(friendlyError(err, "post"));
     }
@@ -1001,7 +1106,8 @@ function ChannelsTab({
   async function removePost(p: CommunityPost) {
     const ok = await confirm({
       title: "Delete this post?",
-      description: "The comments and reactions on it go too, and you can't get them back.",
+      description:
+        "The comments and reactions on it go too, and you can't get them back.",
       confirmLabel: "Delete",
       destructive: true,
     });
@@ -1023,7 +1129,11 @@ function ChannelsTab({
           /* Every channel in the community, whatever its visibility and whoever
              is in it. This list is not a member's view of the room: a channel
              its owner cannot see is a channel its owner cannot fix. */
-          subtitle={channels ? `${pluralize(channels.length, "channel", "channels")} in here` : undefined}
+          subtitle={
+            channels
+              ? `${pluralize(channels.length, "channel", "channels")} in here`
+              : undefined
+          }
           action={
             <div className="flex gap-1">
               {channels && channels.length > 1 && (
@@ -1037,7 +1147,11 @@ function ChannelsTab({
                   {reordering ? "Done" : "Reorder"}
                 </Button>
               )}
-              <Button variant="secondary" size="sm" onClick={() => setCreating(true)}>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setCreating(true)}
+              >
                 <Plus />
                 New
               </Button>
@@ -1062,7 +1176,9 @@ function ChannelsTab({
                 {community.liveRoomAlias?.trim() || "Live room"}
               </span>
               {!community.liveRoomEnabled && (
-                <span className="text-[0.6rem] font-bold uppercase text-ink-soft/60">Off</span>
+                <span className="text-[0.6rem] font-bold uppercase text-ink-soft/60">
+                  Off
+                </span>
               )}
             </button>
           )}
@@ -1094,7 +1210,9 @@ function ChannelsTab({
                     )}
                   >
                     <Hash className="size-4 shrink-0 opacity-60" />
-                    <span className="min-w-0 flex-1 truncate">{channel.name}</span>
+                    <span className="min-w-0 flex-1 truncate">
+                      {channel.name}
+                    </span>
                     {channel.visibility === "private" && (
                       <Lock
                         aria-label="Invited members only"
@@ -1150,7 +1268,11 @@ function ChannelsTab({
       </Card>
 
       {showLive && community ? (
-        <LiveRoomPanel communityId={communityId} community={community} onChange={onChange} />
+        <LiveRoomPanel
+          communityId={communityId}
+          community={community}
+          onChange={onChange}
+        />
       ) : (
         <Card>
           {/* The channel's own name, never its web address — she named it
@@ -1158,7 +1280,9 @@ function ChannelsTab({
           <CardHeader
             title={active ? active.name : "No channel picked yet"}
             subtitle={
-              active ? active.description || channelFormatLabel(active.format) : undefined
+              active
+                ? active.description || channelFormatLabel(active.format)
+                : undefined
             }
             action={
               active && (
@@ -1171,7 +1295,9 @@ function ChannelsTab({
                         : "Invite only — nobody yet"}
                     </Badge>
                   )}
-                  {active.accessGroupName && <Badge tone="plum">{active.accessGroupName} only</Badge>}
+                  {active.accessGroupName && (
+                    <Badge tone="plum">{active.accessGroupName} only</Badge>
+                  )}
                   <Button
                     variant="secondary"
                     size="sm"
@@ -1193,18 +1319,25 @@ function ChannelsTab({
               <Textarea
                 rows={3}
                 value={composer.body}
-                onChange={(e) => setComposer((c) => ({ ...c, body: e.target.value }))}
+                onChange={(e) =>
+                  setComposer((c) => ({ ...c, body: e.target.value }))
+                }
                 placeholder={`Share something with ${active.name}…`}
                 aria-label="Write a post"
               />
 
               {attaching && (
                 <div className="mt-2.5 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-                  <Field label="Link to a picture, video or file" htmlFor="post-media">
+                  <Field
+                    label="Link to a picture, video or file"
+                    htmlFor="post-media"
+                  >
                     <Input
                       id="post-media"
                       value={composer.mediaUrl}
-                      onChange={(e) => setComposer((c) => ({ ...c, mediaUrl: e.target.value }))}
+                      onChange={(e) =>
+                        setComposer((c) => ({ ...c, mediaUrl: e.target.value }))
+                      }
                       placeholder="https://…/worksheet.pdf"
                     />
                   </Field>
@@ -1216,7 +1349,12 @@ function ChannelsTab({
                     <Input
                       id="post-media-label"
                       value={composer.mediaLabel}
-                      onChange={(e) => setComposer((c) => ({ ...c, mediaLabel: e.target.value }))}
+                      onChange={(e) =>
+                        setComposer((c) => ({
+                          ...c,
+                          mediaLabel: e.target.value,
+                        }))
+                      }
                       placeholder="This week's worksheet"
                     />
                   </Field>
@@ -1261,16 +1399,28 @@ function ChannelsTab({
                       // Defaults to an hour from now rather than to an empty box:
                       // "in a bit" is what "post at a time" almost always means,
                       // and a past time is refused by the endpoint anyway.
-                      setPublishAt((current) => (current === "" ? defaultScheduleTime() : ""))
+                      setPublishAt((current) =>
+                        current === "" ? defaultScheduleTime() : "",
+                      )
                     }
                   >
                     <Clock />
-                    {publishAt === "" ? "Post at a time" : "Post it now instead"}
+                    {publishAt === ""
+                      ? "Post at a time"
+                      : "Post it now instead"}
                   </Button>
                 </div>
-                <Button type="submit" size="sm" disabled={!composer.body.trim() || posting}>
+                <Button
+                  type="submit"
+                  size="sm"
+                  disabled={!composer.body.trim() || posting}
+                >
                   {publishAt === "" ? <Send /> : <CalendarClock />}
-                  {posting ? "Saving…" : publishAt === "" ? "Post" : "Schedule it"}
+                  {posting
+                    ? "Saving…"
+                    : publishAt === ""
+                      ? "Post"
+                      : "Schedule it"}
                 </Button>
               </div>
             </form>
@@ -1310,15 +1460,21 @@ function ChannelsTab({
                     </span>
                     <div className="min-w-0 flex-1">
                       <p className="flex flex-wrap items-center gap-2 text-sm">
-                        <span className="font-semibold text-ink">{p.authorName || "Host"}</span>
-                        <span className="text-xs text-ink-soft">{formatRelative(p.createdAt)}</span>
+                        <span className="font-semibold text-ink">
+                          {p.authorName || "Host"}
+                        </span>
+                        <span className="text-xs text-ink-soft">
+                          {formatRelative(p.createdAt)}
+                        </span>
                         {p.pinned && (
                           <Badge tone="gold">
                             <Pin className="size-3" />
                             Pinned
                           </Badge>
                         )}
-                        {p.status === "hidden" && <Badge tone="slate">Hidden from members</Badge>}
+                        {p.status === "hidden" && (
+                          <Badge tone="slate">Hidden from members</Badge>
+                        )}
                         {p.status === "scheduled" && (
                           <Badge tone="blue">
                             <Clock className="size-3" />
@@ -1326,7 +1482,9 @@ function ChannelsTab({
                           </Badge>
                         )}
                       </p>
-                      {p.title && <p className="mt-1 font-semibold text-ink">{p.title}</p>}
+                      {p.title && (
+                        <p className="mt-1 font-semibold text-ink">{p.title}</p>
+                      )}
                       <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-ink-soft">
                         {p.body}
                       </p>
@@ -1368,7 +1526,11 @@ function ChannelsTab({
         description="A room inside this community for one kind of conversation."
         footer={
           <>
-            <Button variant="secondary" size="sm" onClick={() => setCreating(false)}>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setCreating(false)}
+            >
               Cancel
             </Button>
             <Button size="sm" type="submit" form="new-channel">
@@ -1402,10 +1564,19 @@ function ChannelsTab({
               <Trash2 />
               Delete channel
             </Button>
-            <Button variant="secondary" size="sm" onClick={() => setEditing(null)}>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setEditing(null)}
+            >
               Cancel
             </Button>
-            <Button size="sm" type="submit" form="edit-channel" disabled={savingChannel}>
+            <Button
+              size="sm"
+              type="submit"
+              form="edit-channel"
+              disabled={savingChannel}
+            >
               {savingChannel ? "Saving…" : "Save channel"}
             </Button>
           </>
@@ -1422,8 +1593,8 @@ function ChannelsTab({
             <ChannelInvites channel={editing} members={members} />
           )}
           <p className="text-xs text-ink-soft">
-            The channel's web address stays as it is when you rename it, so links
-            your members already have keep working.
+            The channel's web address stays as it is when you rename it, so
+            links your members already have keep working.
           </p>
         </form>
       </Modal>
@@ -1447,9 +1618,21 @@ function defaultScheduleTime(): string {
 
 /** Kajabi's three, with its own words for what each is good for. */
 const CHANNEL_VIEW_MODES = [
-  { value: "feed", label: "Feed", help: "Cards to scroll through — text and pictures." },
-  { value: "forum", label: "Forum", help: "A compact table for scanning topics and replies." },
-  { value: "gallery", label: "Gallery", help: "A grid, for channels that are mostly images." },
+  {
+    value: "feed",
+    label: "Feed",
+    help: "Cards to scroll through — text and pictures.",
+  },
+  {
+    value: "forum",
+    label: "Forum",
+    help: "A compact table for scanning topics and replies.",
+  },
+  {
+    value: "gallery",
+    label: "Gallery",
+    help: "A grid, for channels that are mostly images.",
+  },
 ] as const;
 
 /* ----------------------------------------------------------------- Members */
@@ -1482,8 +1665,12 @@ function membershipIsPresent(m: CommunityMembership): boolean {
 }
 
 function MembersTab({ communityId }: { communityId: number }) {
-  const [memberships, setMemberships] = useState<CommunityMembership[] | null>(null);
-  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[] | null>(null);
+  const [memberships, setMemberships] = useState<CommunityMembership[] | null>(
+    null,
+  );
+  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[] | null>(
+    null,
+  );
   const [period, setPeriod] = useState<LeaderboardPeriod>("all");
   const [allMembers, setAllMembers] = useState<Member[]>([]);
   const [groups, setGroups] = useState<AdminAccessGroup[]>([]);
@@ -1493,17 +1680,29 @@ function MembersTab({ communityId }: { communityId: number }) {
   const [tiersFor, setTiersFor] = useState<CommunityMembership | null>(null);
 
   const load = useCallback(() => {
-    adminApi.communityMembers(communityId).then(setMemberships).catch(() => undefined);
-    adminApi.accessGroups(communityId).then(setGroups).catch(() => setGroups([]));
+    adminApi
+      .communityMembers(communityId)
+      .then(setMemberships)
+      .catch(() => undefined);
+    adminApi
+      .accessGroups(communityId)
+      .then(setGroups)
+      .catch(() => setGroups([]));
   }, [communityId]);
 
   useEffect(load, [load]);
   useEffect(() => {
     setLeaderboard(null);
-    adminApi.leaderboard(communityId, period).then(setLeaderboard).catch(() => setLeaderboard([]));
+    adminApi
+      .leaderboard(communityId, period)
+      .then(setLeaderboard)
+      .catch(() => setLeaderboard([]));
   }, [communityId, period]);
   useEffect(() => {
-    adminApi.membersList().then(setAllMembers).catch(() => undefined);
+    adminApi
+      .membersList()
+      .then(setAllMembers)
+      .catch(() => undefined);
   }, []);
 
   const [confirm, confirmDialog] = useConfirm();
@@ -1525,14 +1724,17 @@ function MembersTab({ communityId }: { communityId: number }) {
   async function remove(membership: CommunityMembership) {
     const ok = await confirm({
       title: `Remove ${membership.name || membership.email}?`,
-      description: "They lose access to this community, and their points go with them.",
+      description:
+        "They lose access to this community, and their points go with them.",
       confirmLabel: "Yes, remove them",
       destructive: true,
     });
     if (!ok) return;
     try {
       await adminApi.membershipDelete(Number(membership.id));
-      setMemberships((prev) => prev?.filter((m) => m.id !== membership.id) ?? prev);
+      setMemberships(
+        (prev) => prev?.filter((m) => m.id !== membership.id) ?? prev,
+      );
       toast.success("Removed from this community");
     } catch (err) {
       toast.error(friendlyError(err, "member"));
@@ -1573,12 +1775,17 @@ function MembersTab({ communityId }: { communityId: number }) {
         ) : (
           <ul className="divide-y divide-hairline/60">
             {memberships.map((m) => (
-              <li key={m.id} className="flex flex-wrap items-center gap-3 px-5 py-3.5">
+              <li
+                key={m.id}
+                className="flex flex-wrap items-center gap-3 px-5 py-3.5"
+              >
                 <span className="grid size-9 shrink-0 place-items-center rounded-full bg-lilac-tint text-xs font-bold text-plum-deep">
                   {(m.name || m.email).slice(0, 1).toUpperCase()}
                 </span>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold text-ink">{m.name || m.email}</p>
+                  <p className="truncate text-sm font-semibold text-ink">
+                    {m.name || m.email}
+                  </p>
                   <p className="truncate text-xs text-ink-soft">{m.email}</p>
                 </div>
                 {/* Why they are not one of the people counted above. */}
@@ -1663,7 +1870,10 @@ function MembersTab({ communityId }: { communityId: number }) {
               // points and invent a winner.
               const rank = entry.rank ?? i + 1;
               return (
-                <li key={entry.email || String(entry.memberId)} className="flex items-center gap-3 px-5 py-3">
+                <li
+                  key={entry.email || String(entry.memberId)}
+                  className="flex items-center gap-3 px-5 py-3"
+                >
                   <span
                     className={cn(
                       "grid size-7 shrink-0 place-items-center rounded-full text-xs font-bold",
@@ -1698,10 +1908,19 @@ function MembersTab({ communityId }: { communityId: number }) {
         description="You can only add people who are already in your Members list — add them there first, then come back."
         footer={
           <>
-            <Button variant="secondary" size="sm" onClick={() => setAdding(false)}>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setAdding(false)}
+            >
               Cancel
             </Button>
-            <Button size="sm" type="submit" form="add-member" disabled={!selected}>
+            <Button
+              size="sm"
+              type="submit"
+              form="add-member"
+              disabled={!selected}
+            >
               Add them
             </Button>
           </>
@@ -1771,7 +1990,11 @@ function MemberTiersModal({
     <Modal
       open={membership !== null}
       onOpenChange={(open) => !open && onClose()}
-      title={membership ? `Tiers for ${membership.name || membership.email}` : "Tiers"}
+      title={
+        membership
+          ? `Tiers for ${membership.name || membership.email}`
+          : "Tiers"
+      }
       description="Turning one on lets them into every channel limited to it."
       footer={
         <Button variant="secondary" size="sm" onClick={onClose}>
@@ -1795,7 +2018,9 @@ function MemberTiersModal({
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-semibold text-ink">{group.name}</p>
                   {group.description && (
-                    <p className="truncate text-xs text-ink-soft">{group.description}</p>
+                    <p className="truncate text-xs text-ink-soft">
+                      {group.description}
+                    </p>
                   )}
                 </div>
                 <Button
@@ -1821,7 +2046,9 @@ function MemberTiersModal({
                       }
                       onSaved();
                       onClose();
-                      toast.success(on ? "Taken out of the tier." : "Added to the tier.");
+                      toast.success(
+                        on ? "Taken out of the tier." : "Added to the tier.",
+                      );
                     } catch (err) {
                       toast.error(friendlyError(err, "access group"));
                     } finally {
@@ -1861,7 +2088,8 @@ function challengeDates(challenge: Challenge): string {
   if (challenge.startsAt && challenge.endsAt) {
     return `Runs ${formatDateTime(challenge.startsAt)} to ${formatDateTime(challenge.endsAt)}`;
   }
-  if (challenge.startsAt) return `Starts ${formatDateTime(challenge.startsAt)} · no end date`;
+  if (challenge.startsAt)
+    return `Starts ${formatDateTime(challenge.startsAt)} · no end date`;
   if (challenge.endsAt) return `Ends ${formatDateTime(challenge.endsAt)}`;
   return "No dates set — this one runs until you delete it";
 }
@@ -1869,7 +2097,13 @@ function challengeDates(challenge: Challenge): string {
 function ChallengesTab({ communityId }: { communityId: number }) {
   const [challenges, setChallenges] = useState<Challenge[] | null>(null);
   const [creating, setCreating] = useState(false);
-  const [form, setForm] = useState({ title: "", description: "", points: 10, startsAt: "", endsAt: "" });
+  const [form, setForm] = useState({
+    title: "",
+    description: "",
+    points: 10,
+    startsAt: "",
+    endsAt: "",
+  });
   const [entriesFor, setEntriesFor] = useState<Challenge | null>(null);
   const [entries, setEntries] = useState<ChallengeEntry[] | null>(null);
 
@@ -1885,7 +2119,10 @@ function ChallengesTab({ communityId }: { communityId: number }) {
   useEffect(() => {
     if (!entriesFor) return;
     setEntries(null);
-    adminApi.challengeEntries(entriesFor.id).then(setEntries).catch(() => undefined);
+    adminApi
+      .challengeEntries(entriesFor.id)
+      .then(setEntries)
+      .catch(() => undefined);
   }, [entriesFor]);
 
   async function create(e: FormEvent) {
@@ -1902,7 +2139,13 @@ function ChallengesTab({ communityId }: { communityId: number }) {
       });
       toast.success("Challenge created");
       setCreating(false);
-      setForm({ title: "", description: "", points: 10, startsAt: "", endsAt: "" });
+      setForm({
+        title: "",
+        description: "",
+        points: 10,
+        startsAt: "",
+        endsAt: "",
+      });
       load();
     } catch (err) {
       toast.error(friendlyError(err, "challenge"));
@@ -1912,8 +2155,11 @@ function ChallengesTab({ communityId }: { communityId: number }) {
   async function approve(entry: ChallengeEntry) {
     try {
       await adminApi.entryApprove(entry.id);
-      setEntries((prev) =>
-        prev?.map((x) => (x.id === entry.id ? { ...x, approved: true } : x)) ?? prev,
+      setEntries(
+        (prev) =>
+          prev?.map((x) =>
+            x.id === entry.id ? { ...x, approved: true } : x,
+          ) ?? prev,
       );
       toast.success("Approved — their points have gone up");
       load();
@@ -1968,12 +2214,16 @@ function ChallengesTab({ communityId }: { communityId: number }) {
                     "Nobody's entered yet"
                   ) : (
                     <>
-                      <strong className="text-ink">{c.approvedCount}</strong> of {c.entryCount}{" "}
-                      approved
+                      <strong className="text-ink">{c.approvedCount}</strong> of{" "}
+                      {c.entryCount} approved
                     </>
                   )}
                 </span>
-                <Button variant="secondary" size="sm" onClick={() => setEntriesFor(c)}>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setEntriesFor(c)}
+                >
                   See who's entered
                 </Button>
               </div>
@@ -1989,7 +2239,11 @@ function ChallengesTab({ communityId }: { communityId: number }) {
         description="Something for your members to do, with points for finishing it."
         footer={
           <>
-            <Button variant="secondary" size="sm" onClick={() => setCreating(false)}>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setCreating(false)}
+            >
               Cancel
             </Button>
             <Button size="sm" type="submit" form="new-challenge">
@@ -2003,7 +2257,9 @@ function ChallengesTab({ communityId }: { communityId: number }) {
             <Input
               id="challenge-title"
               value={form.title}
-              onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, title: e.target.value }))
+              }
               placeholder="10-day client attraction sprint"
               required
               autoFocus
@@ -2014,7 +2270,9 @@ function ChallengesTab({ communityId }: { communityId: number }) {
               id="challenge-desc"
               rows={3}
               value={form.description}
-              onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, description: e.target.value }))
+              }
               placeholder="Reach out to one past client a day for ten days, and share how it went."
             />
           </Field>
@@ -2025,7 +2283,9 @@ function ChallengesTab({ communityId }: { communityId: number }) {
                 type="number"
                 min={0}
                 value={form.points}
-                onChange={(e) => setForm((f) => ({ ...f, points: Number(e.target.value) }))}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, points: Number(e.target.value) }))
+                }
               />
             </Field>
             <Field label="Starts" hint="optional" htmlFor="challenge-starts">
@@ -2033,7 +2293,9 @@ function ChallengesTab({ communityId }: { communityId: number }) {
                 id="challenge-starts"
                 type="date"
                 value={form.startsAt}
-                onChange={(e) => setForm((f) => ({ ...f, startsAt: e.target.value }))}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, startsAt: e.target.value }))
+                }
               />
             </Field>
             <Field label="Ends" hint="optional" htmlFor="challenge-ends">
@@ -2041,7 +2303,9 @@ function ChallengesTab({ communityId }: { communityId: number }) {
                 id="challenge-ends"
                 type="date"
                 value={form.endsAt}
-                onChange={(e) => setForm((f) => ({ ...f, endsAt: e.target.value }))}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, endsAt: e.target.value }))
+                }
               />
             </Field>
           </div>
@@ -2074,12 +2338,19 @@ function ChallengesTab({ communityId }: { communityId: number }) {
         ) : (
           <ul className="divide-y divide-hairline/60">
             {entries.map((entry) => (
-              <li key={entry.id} className="flex flex-wrap items-center gap-3 py-3">
+              <li
+                key={entry.id}
+                className="flex flex-wrap items-center gap-3 py-3"
+              >
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-semibold text-ink">
                     {entry.name || entry.email}
                   </p>
-                  {entry.note && <p className="truncate text-xs text-ink-soft">{entry.note}</p>}
+                  {entry.note && (
+                    <p className="truncate text-xs text-ink-soft">
+                      {entry.note}
+                    </p>
+                  )}
                   {entry.proofUrl && (
                     <a
                       href={entry.proofUrl}
@@ -2113,12 +2384,22 @@ function ChallengesTab({ communityId }: { communityId: number }) {
 /* ------------------------------------------------------------------ Events */
 
 function EventsTab({ communityId }: { communityId: number }) {
+  const [joinMode, setJoinMode] = useState<"native" | "external">("native");
   const [events, setEvents] = useState<CommunityEvent[] | null>(null);
   const [creating, setCreating] = useState(false);
-  const [form, setForm] = useState({ title: "", description: "", startsAt: "", durationMinutes: 60, locationUrl: "" });
+  const [form, setForm] = useState({
+    title: "",
+    description: "",
+    startsAt: "",
+    durationMinutes: 60,
+    locationUrl: "",
+  });
 
   const load = useCallback(() => {
-    adminApi.communityEvents(communityId).then(setEvents).catch(() => undefined);
+    adminApi
+      .communityEvents(communityId)
+      .then(setEvents)
+      .catch(() => undefined);
   }, [communityId]);
 
   useEffect(load, [load]);
@@ -2131,6 +2412,8 @@ function EventsTab({ communityId }: { communityId: number }) {
     try {
       await adminApi.eventCreate(communityId, {
         ...form,
+        joinMode,
+        locationUrl: joinMode === "native" ? "" : form.locationUrl,
         // The box speaks her wall clock; the column stores an instant. Sent raw
         // it was read as UTC, and the event she set for 7pm was advertised to
         // her members at 3pm.
@@ -2138,7 +2421,13 @@ function EventsTab({ communityId }: { communityId: number }) {
       });
       toast.success("Event scheduled — your members can see it now");
       setCreating(false);
-      setForm({ title: "", description: "", startsAt: "", durationMinutes: 60, locationUrl: "" });
+      setForm({
+        title: "",
+        description: "",
+        startsAt: "",
+        durationMinutes: 60,
+        locationUrl: "",
+      });
       load();
     } catch (err) {
       toast.error(friendlyError(err, "event"));
@@ -2165,7 +2454,7 @@ function EventsTab({ communityId }: { communityId: number }) {
   return (
     <div className="space-y-5">
       <div className="flex justify-end">
-        <Button size="sm" onClick={() => setCreating(true)}>
+        <Button size="sm" onClick={() => { setJoinMode("native"); setCreating(true); }}>
           <Plus />
           Schedule event
         </Button>
@@ -2187,20 +2476,31 @@ function EventsTab({ communityId }: { communityId: number }) {
         ) : (
           <ul className="divide-y divide-hairline/60">
             {events.map((event) => (
-              <li key={event.id} className="flex flex-wrap items-center gap-4 px-5 py-4">
+              <li
+                key={event.id}
+                className="flex flex-wrap items-center gap-4 px-5 py-4"
+              >
                 <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-lilac-tint text-plum">
                   <CalendarDays className="size-5" />
                 </span>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate font-semibold text-ink">{event.title}</p>
+                  <p className="truncate font-semibold text-ink">
+                    {event.title}
+                  </p>
                   <p className="truncate text-xs text-ink-soft">
-                    {event.startsAt ? formatDateTime(event.startsAt) : "No date set"} ·{" "}
-                    {event.durationMinutes} minutes
+                    {event.startsAt
+                      ? formatDateTime(event.startsAt)
+                      : "No date set"}{" "}
+                    · {event.durationMinutes} minutes
                   </p>
                 </div>
                 {event.locationUrl && (
                   <Button asChild variant="secondary" size="sm">
-                    <a href={event.locationUrl} target="_blank" rel="noreferrer">
+                    <a
+                      href={event.locationUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
                       Open the call
                     </a>
                   </Button>
@@ -2225,7 +2525,11 @@ function EventsTab({ communityId }: { communityId: number }) {
         title="Schedule an event"
         footer={
           <>
-            <Button variant="secondary" size="sm" onClick={() => setCreating(false)}>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setCreating(false)}
+            >
               Cancel
             </Button>
             <Button size="sm" type="submit" form="new-event">
@@ -2239,7 +2543,9 @@ function EventsTab({ communityId }: { communityId: number }) {
             <Input
               id="event-title"
               value={form.title}
-              onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, title: e.target.value }))
+              }
               placeholder="Monthly member Q&A"
               required
               autoFocus
@@ -2250,7 +2556,9 @@ function EventsTab({ communityId }: { communityId: number }) {
               id="event-desc"
               rows={2}
               value={form.description}
-              onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, description: e.target.value }))
+              }
               placeholder="Bring one question about your practice and we'll work through it together."
             />
           </Field>
@@ -2260,31 +2568,63 @@ function EventsTab({ communityId }: { communityId: number }) {
                 id="event-starts"
                 type="datetime-local"
                 value={form.startsAt}
-                onChange={(e) => setForm((f) => ({ ...f, startsAt: e.target.value }))}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, startsAt: e.target.value }))
+                }
               />
             </Field>
-            <Field label="How long is it?" hint="in minutes" htmlFor="event-length">
+            <Field
+              label="How long is it?"
+              hint="in minutes"
+              htmlFor="event-length"
+            >
               <Input
                 id="event-length"
                 type="number"
                 min={5}
                 value={form.durationMinutes}
-                onChange={(e) => setForm((f) => ({ ...f, durationMinutes: Number(e.target.value) }))}
+                onChange={(e) =>
+                  setForm((f) => ({
+                    ...f,
+                    durationMinutes: Number(e.target.value),
+                  }))
+                }
               />
             </Field>
           </div>
-          <Field
-            label="Where do they join?"
-            hint="paste your Zoom, Meet or Riverside link"
-            htmlFor="event-link"
-          >
-            <Input
-              id="event-link"
-              value={form.locationUrl}
-              onChange={(e) => setForm((f) => ({ ...f, locationUrl: e.target.value }))}
-              placeholder="https://zoom.us/j/…"
-            />
+          <Field label="Where do members join?" htmlFor="event-join-mode">
+            <select
+              id="event-join-mode"
+              className={selectStyles}
+              value={joinMode}
+              onChange={(e) =>
+                setJoinMode(e.target.value as "native" | "external")
+              }
+            >
+              <option value="native">Boss Clinician live room</option>
+              <option value="external">External meeting link</option>
+            </select>
           </Field>
+          {joinMode === "native" ? (
+            <p className="rounded-xl bg-lilac-tint p-3 text-sm text-ink-soft">
+              Members join in this community's live room. Scheduling enables the
+              room; its existing host-access setting is preserved. No Zoom or
+              Meet link is needed.
+            </p>
+          ) : (
+            <Field label="External meeting URL" htmlFor="event-link">
+              <Input
+                id="event-link"
+                type="url"
+                required
+                value={form.locationUrl}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, locationUrl: e.target.value }))
+                }
+                placeholder="https://…"
+              />
+            </Field>
+          )}
         </form>
       </Modal>
 
@@ -2300,7 +2640,10 @@ function BadgesTab({ communityId }: { communityId: number }) {
   const [form, setForm] = useState({ name: "", emoji: "🏅", threshold: 100 });
 
   const load = useCallback(() => {
-    adminApi.badges(communityId).then(setBadges).catch(() => undefined);
+    adminApi
+      .badges(communityId)
+      .then(setBadges)
+      .catch(() => undefined);
   }, [communityId]);
 
   useEffect(load, [load]);
@@ -2323,7 +2666,8 @@ function BadgesTab({ communityId }: { communityId: number }) {
   async function remove(id: number) {
     const ok = await confirm({
       title: "Delete this badge?",
-      description: "Members who have already earned it keep it; nobody new can earn it.",
+      description:
+        "Members who have already earned it keep it; nobody new can earn it.",
       confirmLabel: "Yes, delete it",
       destructive: true,
     });
@@ -2358,10 +2702,15 @@ function BadgesTab({ communityId }: { communityId: number }) {
         ) : (
           <ul className="divide-y divide-hairline/60">
             {badges.map((badge) => (
-              <li key={badge.id} className="flex items-center gap-3 px-5 py-3.5">
+              <li
+                key={badge.id}
+                className="flex items-center gap-3 px-5 py-3.5"
+              >
                 <span className="text-2xl">{badge.emoji}</span>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate font-semibold text-ink">{badge.name}</p>
+                  <p className="truncate font-semibold text-ink">
+                    {badge.name}
+                  </p>
                   <p className="text-xs text-ink-soft">
                     Given at {formatNumber(badge.threshold)} points
                   </p>
@@ -2397,7 +2746,9 @@ function BadgesTab({ communityId }: { communityId: number }) {
               <Input
                 id="badge-icon"
                 value={form.emoji}
-                onChange={(e) => setForm((f) => ({ ...f, emoji: e.target.value }))}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, emoji: e.target.value }))
+                }
                 maxLength={4}
               />
             </Field>
@@ -2407,7 +2758,9 @@ function BadgesTab({ communityId }: { communityId: number }) {
                 type="number"
                 min={0}
                 value={form.threshold}
-                onChange={(e) => setForm((f) => ({ ...f, threshold: Number(e.target.value) }))}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, threshold: Number(e.target.value) }))
+                }
               />
             </Field>
           </div>
@@ -2446,6 +2799,7 @@ function AccessGroupsTab({ communityId }: { communityId: number }) {
   const [groups, setGroups] = useState<AdminAccessGroup[] | null>(null);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [pricing, setPricing] = useState(groupPricingForm);
   const [saving, setSaving] = useState(false);
   const [openGroup, setOpenGroup] = useState<number | null>(null);
   const [confirm, confirmDialog] = useConfirm();
@@ -2464,9 +2818,14 @@ function AccessGroupsTab({ communityId }: { communityId: number }) {
     if (!name.trim()) return;
     setSaving(true);
     try {
-      await adminApi.accessGroupCreate(communityId, { name, description });
+      await adminApi.accessGroupCreate(communityId, {
+        name,
+        description,
+        ...groupPricingPayload(pricing),
+      });
       setName("");
       setDescription("");
+      setPricing(groupPricingForm());
       load();
       toast.success("Group added.");
     } catch (err) {
@@ -2481,9 +2840,12 @@ function AccessGroupsTab({ communityId }: { communityId: number }) {
       <Card>
         <CardHeader
           title="Access groups"
-          subtitle="Tiers inside this community. Channels can be limited to one, and an offer can grant it."
+          subtitle="Set free or paid access for each group, then choose which channels it unlocks. Payments belong to access groups."
         />
-        <form onSubmit={create} className="flex flex-wrap items-end gap-3 px-5 py-5">
+        <form
+          onSubmit={create}
+          className="flex flex-wrap items-end gap-3 px-5 py-5"
+        >
           <Field label="Group name" className="min-w-[12rem] flex-1">
             <Input
               value={name}
@@ -2500,6 +2862,7 @@ function AccessGroupsTab({ communityId }: { communityId: number }) {
               maxLength={600}
             />
           </Field>
+          <GroupPricingFields value={pricing} onChange={setPricing} />
           <Button type="submit" size="sm" disabled={saving || !name.trim()}>
             <Plus />
             {saving ? "Adding…" : "Add group"}
@@ -2524,8 +2887,27 @@ function AccessGroupsTab({ communityId }: { communityId: number }) {
                 <div className="flex flex-wrap items-center gap-4 px-5 py-4">
                   <div className="min-w-0 flex-1">
                     <p className="font-semibold text-ink">{group.name}</p>
+                    <p className="mt-1 text-xs text-ink-soft">
+                      {group.pricingType === "free"
+                        ? "Free access"
+                        : group.pricingType
+                          ? `${new Intl.NumberFormat("en-US", { style: "currency", currency: group.currency || "usd" }).format((group.amountCents || 0) / 100)}${group.pricingType === "subscription" ? ` / ${group.interval}` : " one time"}`
+                          : "Existing offer access"}
+                    </p>
+                    {group.checkoutSlug && (
+                      <a
+                        className="mt-1 inline-block text-xs font-semibold text-plum underline"
+                        href={publicSiteUrl(`/checkout/${group.checkoutSlug}`)}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Open checkout
+                      </a>
+                    )}
                     {group.description && (
-                      <p className="truncate text-sm text-ink-soft">{group.description}</p>
+                      <p className="truncate text-sm text-ink-soft">
+                        {group.description}
+                      </p>
                     )}
                   </div>
                   <Badge tone="neutral">
@@ -2557,7 +2939,10 @@ function AccessGroupsTab({ communityId }: { communityId: number }) {
                       });
                       if (!ok) return;
                       try {
-                        await adminApi.accessGroupDelete(communityId, Number(group.id));
+                        await adminApi.accessGroupDelete(
+                          communityId,
+                          Number(group.id),
+                        );
                         load();
                         toast.success("Group deleted.");
                       } catch (err) {
@@ -2603,6 +2988,7 @@ function AccessGroupPanel({
   const [busy, setBusy] = useState(false);
   const [name, setName] = useState(group.name);
   const [description, setDescription] = useState(group.description);
+  const [pricing, setPricing] = useState(() => groupPricingForm(group));
   const [renaming, setRenaming] = useState(false);
   /** Offers that sell this community — the only ones that can grant its tiers. */
   const [offers, setOffers] = useState<AdminCommunityOffer[] | null>(null);
@@ -2648,13 +3034,18 @@ function AccessGroupPanel({
   useEffect(() => {
     // Only people already in the community: a tier is a subset of the room,
     // not a way into it.
-    adminApi.communityMembers(communityId).then(setCandidates).catch(() => setCandidates([]));
+    adminApi
+      .communityMembers(communityId)
+      .then(setCandidates)
+      .catch(() => setCandidates([]));
   }, [communityId]);
 
   const inGroup = new Set((members ?? []).map((row) => String(row.memberId)));
   const addable = candidates.filter((m) => !inGroup.has(String(m.memberId)));
   const soldBy =
-    (grants?.offers.length ?? 0) + (grants?.products.length ?? 0) + (grants?.plans.length ?? 0);
+    (grants?.offers.length ?? 0) +
+    (grants?.products.length ?? 0) +
+    (grants?.plans.length ?? 0);
 
   return (
     <div className="grid grid-cols-1 gap-5 border-t border-hairline/60 px-5 py-5 lg:grid-cols-2">
@@ -2670,9 +3061,16 @@ function AccessGroupPanel({
         ) : (
           <ul className="space-y-1.5">
             {members.map((row) => (
-              <li key={String(row.memberId)} className="flex items-center gap-2 text-sm">
-                <span className="min-w-0 flex-1 truncate text-ink">{row.name || row.email}</span>
-                {row.source === "purchase" && <Badge tone="neutral">Bought it</Badge>}
+              <li
+                key={String(row.memberId)}
+                className="flex items-center gap-2 text-sm"
+              >
+                <span className="min-w-0 flex-1 truncate text-ink">
+                  {row.name || row.email}
+                </span>
+                {row.source === "purchase" && (
+                  <Badge tone="neutral">Bought it</Badge>
+                )}
                 <Button
                   variant="dangerGhost"
                   size="iconSm"
@@ -2762,7 +3160,10 @@ function AccessGroupPanel({
           ) : (
             <ul className="flex flex-wrap gap-2">
               {grants.offers.map((offer) => (
-                <li key={`offer-${offer.id}`} className="flex items-center gap-1">
+                <li
+                  key={`offer-${offer.id}`}
+                  className="flex items-center gap-1"
+                >
                   <Badge tone="gold">Offer: {offer.title}</Badge>
                   <Button
                     variant="dangerGhost"
@@ -2794,12 +3195,15 @@ function AccessGroupPanel({
               is a tier the buyer could never use. */}
           {offers === null ? null : offers.length === 0 ? (
             <p className="text-xs text-ink-soft">
-              No offer sells this community yet, so none can grant this tier. Add
-              the community to an offer first, then come back here.
+              No offer sells this community yet, so none can grant this tier.
+              Add the community to an offer first, then come back here.
             </p>
           ) : (
             <div className="flex flex-wrap items-end gap-2">
-              <Field label="Let an offer grant it" className="min-w-[12rem] flex-1">
+              <Field
+                label="Let an offer grant it"
+                className="min-w-[12rem] flex-1"
+              >
                 <select
                   className={selectStyles}
                   value={offerPick}
@@ -2807,7 +3211,10 @@ function AccessGroupPanel({
                 >
                   <option value="">Choose an offer…</option>
                   {offers
-                    .filter((offer) => String(offer.accessGroupId) !== String(group.id))
+                    .filter(
+                      (offer) =>
+                        String(offer.accessGroupId) !== String(group.id),
+                    )
                     .map((offer) => (
                       <option key={String(offer.id)} value={String(offer.id)}>
                         {offer.accessGroupName
@@ -2822,7 +3229,9 @@ function AccessGroupPanel({
                 size="sm"
                 variant="secondary"
                 disabled={!offerPick || granting}
-                onClick={() => setOfferGrant(Number(offerPick), Number(group.id))}
+                onClick={() =>
+                  setOfferGrant(Number(offerPick), Number(group.id))
+                }
               >
                 <Check />
                 {granting ? "Saving…" : "Grant it"}
@@ -2832,10 +3241,21 @@ function AccessGroupPanel({
         </div>
 
         <div className="space-y-2">
-          <p className="text-[0.8rem] font-semibold text-ink">Rename it</p>
+          <p className="text-[0.8rem] font-semibold text-ink">
+            Group settings and pricing
+          </p>
+          <GroupPricingFields
+            value={pricing}
+            onChange={setPricing}
+            allowLegacy
+          />
           <div className="flex flex-wrap items-end gap-2">
             <Field label="Name" className="min-w-[10rem] flex-1">
-              <Input value={name} onChange={(e) => setName(e.target.value)} maxLength={120} />
+              <Input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                maxLength={120}
+              />
             </Field>
             <Field label="What it is" className="min-w-[12rem] flex-[2]">
               <Input
@@ -2852,10 +3272,15 @@ function AccessGroupPanel({
               onClick={async () => {
                 setRenaming(true);
                 try {
-                  await adminApi.accessGroupSave(communityId, Number(group.id), {
-                    name,
-                    description,
-                  });
+                  await adminApi.accessGroupSave(
+                    communityId,
+                    Number(group.id),
+                    {
+                      name,
+                      description,
+                      ...groupPricingPayload(pricing),
+                    },
+                  );
                   onChanged();
                   toast.success("Saved.");
                 } catch (err) {
@@ -2913,7 +3338,9 @@ function PointRulesTab({ communityId }: { communityId: number }) {
         period: next.period,
       });
       setRules((prev) =>
-        prev ? prev.map((r) => (r.action === rule.action ? { ...r, ...saved } : r)) : prev,
+        prev
+          ? prev.map((r) => (r.action === rule.action ? { ...r, ...saved } : r))
+          : prev,
       );
     } catch (err) {
       toast.error(friendlyError(err, "points rule"));
@@ -2944,7 +3371,9 @@ function PointRulesTab({ communityId }: { communityId: number }) {
             <tbody>
               {rules.map((rule) => (
                 <tr key={rule.action} className="border-t border-hairline/70">
-                  <td className="py-3 pr-4 font-medium text-ink">{rule.label}</td>
+                  <td className="py-3 pr-4 font-medium text-ink">
+                    {rule.label}
+                  </td>
                   <td className="py-3 pr-4">
                     <Input
                       type="number"
@@ -2987,7 +3416,9 @@ function PointRulesTab({ communityId }: { communityId: number }) {
                                     ? {
                                         ...r,
                                         maxPerPeriod:
-                                          e.target.value === "" ? null : Number(e.target.value),
+                                          e.target.value === ""
+                                            ? null
+                                            : Number(e.target.value),
                                       }
                                     : r,
                                 )
@@ -3002,7 +3433,9 @@ function PointRulesTab({ communityId }: { communityId: number }) {
                         value={rule.period}
                         disabled={savingAction === rule.action}
                         onChange={(e) =>
-                          void save(rule, { period: e.target.value as AdminPointRule["period"] })
+                          void save(rule, {
+                            period: e.target.value as AdminPointRule["period"],
+                          })
                         }
                       >
                         {Object.entries(PERIOD_LABELS).map(([value, label]) => (
@@ -3044,18 +3477,26 @@ function ReviewFeedTab({ communityId }: { communityId: number }) {
 
   useEffect(load, [load]);
 
-  const resolve = async (report: AdminCommunityReport, action: "hide" | "dismiss") => {
+  const resolve = async (
+    report: AdminCommunityReport,
+    action: "hide" | "dismiss",
+  ) => {
     if (action === "hide") {
       const ok = await confirm({
         title: "Hide this from the community?",
-        description: "Members won't see it any more. Every open report about it is closed too.",
+        description:
+          "Members won't see it any more. Every open report about it is closed too.",
         confirmLabel: "Yes, hide it",
         destructive: true,
       });
       if (!ok) return;
     }
     try {
-      await adminApi.communityReportResolve(communityId, Number(report.id), action);
+      await adminApi.communityReportResolve(
+        communityId,
+        Number(report.id),
+        action,
+      );
       load();
       toast.success(action === "hide" ? "Hidden." : "Report dismissed.");
     } catch (err) {
@@ -3104,10 +3545,13 @@ function ReviewFeedTab({ communityId }: { communityId: number }) {
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-semibold text-ink">
-                    {report.reporterName} reported {report.commentId ? "a comment" : "a post"}
+                    {report.reporterName} reported{" "}
+                    {report.commentId ? "a comment" : "a post"}
                     {report.channelName ? ` in ${report.channelName}` : ""}
                   </p>
-                  <p className="mt-1 text-sm text-ink-soft">“{report.reason}”</p>
+                  <p className="mt-1 text-sm text-ink-soft">
+                    “{report.reason}”
+                  </p>
                   <p className="mt-2 rounded-xl bg-cream px-3.5 py-2.5 text-sm text-ink">
                     <span className="font-semibold">{report.authorName}: </span>
                     {report.content.slice(0, 400) || "(nothing to show)"}
@@ -3116,7 +3560,11 @@ function ReviewFeedTab({ communityId }: { communityId: number }) {
                 <div className="flex shrink-0 flex-wrap gap-2">
                   {report.status === "open" ? (
                     <>
-                      <Button variant="danger" size="sm" onClick={() => void resolve(report, "hide")}>
+                      <Button
+                        variant="danger"
+                        size="sm"
+                        onClick={() => void resolve(report, "hide")}
+                      >
                         Hide it
                       </Button>
                       <Button
@@ -3128,7 +3576,9 @@ function ReviewFeedTab({ communityId }: { communityId: number }) {
                       </Button>
                     </>
                   ) : (
-                    <Badge tone={report.status === "actioned" ? "red" : "neutral"}>
+                    <Badge
+                      tone={report.status === "actioned" ? "red" : "neutral"}
+                    >
                       {report.status === "actioned" ? "Hidden" : "Dismissed"}
                     </Badge>
                   )}
@@ -3222,7 +3672,11 @@ function ScheduledPostRow({
           {formatDateTime(post.publishAt)}
         </p>
       </div>
-      <Field label="Move it to" htmlFor={`scheduled-${post.id}`} className="w-56">
+      <Field
+        label="Move it to"
+        htmlFor={`scheduled-${post.id}`}
+        className="w-56"
+      >
         <Input
           id={`scheduled-${post.id}`}
           type="datetime-local"
@@ -3242,9 +3696,13 @@ function ScheduledPostRow({
           }
           setBusy(true);
           try {
-            await adminApi.communityScheduledPostSave(communityId, Number(post.id), {
-              publishAt: iso,
-            });
+            await adminApi.communityScheduledPostSave(
+              communityId,
+              Number(post.id),
+              {
+                publishAt: iso,
+              },
+            );
             onChanged();
             toast.success("Moved.");
           } catch (err) {
@@ -3263,9 +3721,13 @@ function ScheduledPostRow({
         onClick={async () => {
           setBusy(true);
           try {
-            await adminApi.communityScheduledPostSave(communityId, Number(post.id), {
-              publishNow: true,
-            });
+            await adminApi.communityScheduledPostSave(
+              communityId,
+              Number(post.id),
+              {
+                publishNow: true,
+              },
+            );
             onChanged();
             toast.success("Published.");
           } catch (err) {
@@ -3313,7 +3775,9 @@ function GuidelinesTab({
           rows={14}
           value={text}
           onChange={(e) => setText(e.target.value)}
-          placeholder={"## House rules\n\nBe kind. No selling.\n\nEmail yvette@bossclinician.com if something is wrong."}
+          placeholder={
+            "## House rules\n\nBe kind. No selling.\n\nEmail yvette@bossclinician.com if something is wrong."
+          }
         />
         <div className="flex flex-wrap items-center gap-3">
           <Button
@@ -3322,7 +3786,10 @@ function GuidelinesTab({
             onClick={async () => {
               setSaving(true);
               try {
-                const res = await adminApi.communityGuidelinesSave(communityId, text);
+                const res = await adminApi.communityGuidelinesSave(
+                  communityId,
+                  text,
+                );
                 toast.success(
                   res.reAccceptanceRequired
                     ? "Saved. Members will be asked to accept these again."
@@ -3344,5 +3811,103 @@ function GuidelinesTab({
         </div>
       </div>
     </Card>
+  );
+}
+
+function CallHistoryTab({ communityId }: { communityId: number }) {
+  const [visits, setVisits] = useState<AdminLiveVisit[] | null>(null);
+  const [error, setError] = useState("");
+  const load = useCallback(() => {
+    setError("");
+    adminApi
+      .communityLiveVisits(communityId)
+      .then(setVisits)
+      .catch(() =>
+        setError("Call history could not be loaded. Please try again."),
+      );
+  }, [communityId]);
+  useEffect(load, [load]);
+  return (
+    <Card>
+      <CardHeader
+        title="Call history"
+        subtitle="Live room attendance, start and end times, and time spent in the room."
+      />
+      <div className="space-y-4 p-5">
+        <Button variant="secondary" size="sm" onClick={load}>
+          Refresh history
+        </Button>
+        {error && <ErrorNotice message={error} />}{" "}
+        {!visits ? (
+          <Skeleton className="h-24" />
+        ) : !visits.length ? (
+          <p className="text-sm text-ink-soft">
+            No calls yet. Completed calls will appear here.
+          </p>
+        ) : (
+          <ul className="divide-y divide-hairline">
+            {visits.map((v) => (
+              <li
+                key={String(v.id)}
+                className="flex flex-wrap items-center justify-between gap-3 py-4"
+              >
+                <div className="min-w-0">
+                  <p className="font-semibold text-ink">
+                    {v.memberName || v.email}
+                  </p>
+                  <p className="text-xs text-ink-soft">
+                    Started {formatDateTime(v.joinedAt)}
+                    {v.leftAt && ` · Ended ${formatDateTime(v.leftAt)}`}
+                  </p>
+                </div>
+                <Badge tone={v.seconds === null ? "green" : "neutral"}>
+                  {v.seconds === null
+                    ? "In progress"
+                    : `${Math.floor(v.seconds / 60)}m ${v.seconds % 60}s`}
+                </Badge>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </Card>
+  );
+}
+
+function AdminCommunitySwitcher({ activeId }: { activeId: number }) {
+  const [communities, setCommunities] = useState<AdminCommunity[]>([]);
+  useEffect(() => {
+    adminApi
+      .communities()
+      .then(setCommunities)
+      .catch(() => undefined);
+  }, []);
+  return (
+    <nav
+      aria-label="Communities"
+      className="rounded-xl border border-hairline bg-surface p-2"
+    >
+      <p className="px-2 py-2 text-[0.65rem] font-bold uppercase tracking-wider text-ink-soft">
+        Communities
+      </p>
+      <ul className="space-y-1">
+        {communities.map((c) => (
+          <li key={c.id}>
+            <Link
+              to={`/admin/community/${c.id}`}
+              aria-current={Number(c.id) === activeId ? "page" : undefined}
+              className={cn(
+                "block rounded-lg border px-3 py-3 text-sm font-bold leading-snug",
+                Number(c.id) === activeId
+                  ? "border-plum/25 bg-lilac-tint text-plum"
+                  : "border-transparent text-ink-soft hover:bg-surface-raised",
+              )}
+            >
+              {c.name}
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </nav>
   );
 }

@@ -38,7 +38,7 @@ import { useHeadContext } from "@/ssr/context";
  */
 
 const PORTRAIT = "/images/758479b0818b.png";
-const JOIN_ANCHOR = "#join";
+const JOIN_ANCHOR = CLUB_JOIN_ROUTE;
 
 /**
  * The source page's own pictures, self-hosted (the CSP allows images from

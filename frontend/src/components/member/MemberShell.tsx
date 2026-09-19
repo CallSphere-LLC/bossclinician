@@ -39,6 +39,7 @@ interface MemberShellProps {
   /** Page-level actions: beside the title on desktop, beneath it on mobile. */
   actions?: ReactNode;
   children: ReactNode;
+  sidebar?: ReactNode;
 }
 
 interface RailLink {
@@ -84,7 +85,12 @@ interface MemberAvatarProps {
  * any real avatar is. `onError` covers an avatar whose file has since been
  * pruned from storage, which would otherwise render a broken-image glyph.
  */
-export function MemberAvatar({ src, name, email, className }: MemberAvatarProps) {
+export function MemberAvatar({
+  src,
+  name,
+  email,
+  className,
+}: MemberAvatarProps) {
   const [broken, setBroken] = useState(false);
 
   if (src && !broken) {
@@ -112,7 +118,13 @@ export function MemberAvatar({ src, name, email, className }: MemberAvatarProps)
   );
 }
 
-export function MemberShell({ title, description, actions, children }: MemberShellProps) {
+export function MemberShell({
+  title,
+  description,
+  actions,
+  children,
+  sidebar,
+}: MemberShellProps) {
   const { member, signOut } = useMember();
   const navigate = useNavigate();
 
@@ -157,7 +169,10 @@ export function MemberShell({ title, description, actions, children }: MemberShe
         {member?.impersonatedBy != null && <ImpersonationBanner />}
 
         <header className="relative border-b border-white/[0.07] bg-night-deep/[0.94] backdrop-blur-xl backdrop-saturate-150">
-          <div aria-hidden className="absolute inset-x-0 bottom-0 h-px bg-rule-gold opacity-40" />
+          <div
+            aria-hidden
+            className="absolute inset-x-0 bottom-0 h-px bg-rule-gold opacity-40"
+          />
 
           <div className="mx-auto flex h-16 w-full max-w-8xl items-center justify-between gap-4 px-5 sm:px-8 lg:px-12">
             <Link
@@ -181,11 +196,18 @@ export function MemberShell({ title, description, actions, children }: MemberShe
                     )}
                     aria-label="Your account menu"
                   >
-                    <MemberAvatar src={member.avatarUrl} name={member.name} email={member.email} />
+                    <MemberAvatar
+                      src={member.avatarUrl}
+                      name={member.name}
+                      email={member.email}
+                    />
                     <span className="hidden max-w-[11rem] truncate text-sm font-medium text-white/85 sm:block">
                       {member.name || member.email}
                     </span>
-                    <ChevronDown aria-hidden className="size-4 shrink-0 text-white/45" />
+                    <ChevronDown
+                      aria-hidden
+                      className="size-4 shrink-0 text-white/45"
+                    />
                   </button>
                 </DropdownMenu.Trigger>
 
@@ -202,7 +224,9 @@ export function MemberShell({ title, description, actions, children }: MemberShe
                       <p className="truncate text-sm font-semibold text-white">
                         {member.name || "Your account"}
                       </p>
-                      <p className="truncate text-xs text-orchid-dim">{member.email}</p>
+                      <p className="truncate text-xs text-orchid-dim">
+                        {member.email}
+                      </p>
                     </div>
                     <DropdownMenu.Separator className="my-1 h-px bg-white/10" />
                     <DropdownMenu.Item asChild>
@@ -220,7 +244,10 @@ export function MemberShell({ title, description, actions, children }: MemberShe
                         onClick={() => void handleSignOut()}
                         className="flex w-full cursor-pointer items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm text-white/85 outline-none data-[highlighted]:bg-white/[0.07]"
                       >
-                        <LogOut aria-hidden className="size-4 text-orchid-dim" />
+                        <LogOut
+                          aria-hidden
+                          className="size-4 text-orchid-dim"
+                        />
                         Sign out
                       </button>
                     </DropdownMenu.Item>
@@ -252,31 +279,43 @@ export function MemberShell({ title, description, actions, children }: MemberShe
       </div>
 
       <div className="mx-auto flex w-full max-w-8xl flex-1 gap-10 px-5 pb-24 pt-8 sm:px-8 lg:gap-14 lg:px-12 lg:pt-12">
-        <nav aria-label="Member sections" className="hidden w-56 shrink-0 lg:block">
-          <ul className="sticky top-28 flex flex-col gap-1">
-            {RAIL.map((item) => (
-              <li key={item.to}>
-                <NavLink to={item.to} className={railLinkClass}>
-                  {({ isActive }) => (
-                    <>
-                      <span
-                        aria-hidden
-                        className={cn(
-                          "absolute inset-y-2 left-0 w-px origin-center bg-rule-gold transition-transform duration-500 ease-luxe",
-                          isActive ? "scale-y-100" : "scale-y-0",
-                        )}
-                      />
-                      <item.icon
-                        aria-hidden
-                        className={cn("size-4 shrink-0", isActive ? "text-gold" : "text-orchid-dim")}
-                      />
-                      {item.label}
-                    </>
-                  )}
-                </NavLink>
-              </li>
-            ))}
-          </ul>
+        <nav
+          aria-label="Member sections"
+          className="hidden w-56 shrink-0 lg:block"
+        >
+          {sidebar ? (
+            <div className="sticky top-28 max-h-[calc(100vh-8rem)] overflow-y-auto pr-1">
+              {sidebar}
+            </div>
+          ) : (
+            <ul className="sticky top-28 flex flex-col gap-1">
+              {RAIL.map((item) => (
+                <li key={item.to}>
+                  <NavLink to={item.to} className={railLinkClass}>
+                    {({ isActive }) => (
+                      <>
+                        <span
+                          aria-hidden
+                          className={cn(
+                            "absolute inset-y-2 left-0 w-px origin-center bg-rule-gold transition-transform duration-500 ease-luxe",
+                            isActive ? "scale-y-100" : "scale-y-0",
+                          )}
+                        />
+                        <item.icon
+                          aria-hidden
+                          className={cn(
+                            "size-4 shrink-0",
+                            isActive ? "text-gold" : "text-orchid-dim",
+                          )}
+                        />
+                        {item.label}
+                      </>
+                    )}
+                  </NavLink>
+                </li>
+              ))}
+            </ul>
+          )}
         </nav>
 
         <main id="member-content" className="min-w-0 flex-1">
@@ -288,9 +327,15 @@ export function MemberShell({ title, description, actions, children }: MemberShe
               <h1 className="text-balance font-display text-[1.9rem] font-medium leading-[1.15] text-white sm:text-[2.4rem]">
                 {title}
               </h1>
-              {description && <p className="copy-luxe mt-3 max-w-xl text-balance">{description}</p>}
+              {description && (
+                <p className="copy-luxe mt-3 max-w-xl text-balance">
+                  {description}
+                </p>
+              )}
             </div>
-            {actions && <div className="flex shrink-0 flex-wrap gap-3">{actions}</div>}
+            {actions && (
+              <div className="flex shrink-0 flex-wrap gap-3">{actions}</div>
+            )}
           </div>
 
           <div aria-hidden className="rule-faint mt-7 w-full" />
@@ -314,7 +359,9 @@ function railLinkClass({ isActive }: { isActive: boolean }): string {
   return cn(
     "relative flex min-h-[2.75rem] items-center gap-3 rounded-xl pl-5 pr-4",
     "text-[0.72rem] font-semibold uppercase tracking-[0.16em] transition-colors duration-300",
-    isActive ? "bg-ink/[0.05] text-white" : "text-white/50 hover:bg-ink/[0.03] hover:text-white",
+    isActive
+      ? "bg-ink/[0.05] text-white"
+      : "text-white/50 hover:bg-ink/[0.03] hover:text-white",
   );
 }
 

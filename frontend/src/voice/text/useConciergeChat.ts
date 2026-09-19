@@ -33,7 +33,6 @@ import { demotedNotice } from "@/voice/ui/demotion";
 import type {
   ConciergeChatMessage,
   ConciergeChatRequest,
-  ConciergeChatResponse,
   ConciergeTool,
   ToolFn,
   VoiceApiClient,
@@ -51,7 +50,7 @@ import {
 } from "./conciergeLoop";
 
 /** The text model's endpoint, as the voice broker's sibling. */
-const CHAT_PATH = "/voice/chat";
+import { streamConciergeChat } from "./chat-stream";
 
 /** Where a conversation is filed so the owner can read it back. */
 const TRANSCRIPT_PATH = "/voice/transcript";
@@ -89,6 +88,8 @@ export type ConciergeChatHandle = {
   messages: ChatMessage[];
   /** True while a turn is in flight, including the tool calls inside it. */
   sending: boolean;
+  /** Visible provider tokens from the current round; finalized into messages once. */
+  streamingReply: string;
   /** The last failure, for a widget that wants to say more than the transcript does. */
   error: string | null;
   /** The row the owner's admin page will show this conversation under. */
@@ -112,6 +113,7 @@ export function useConciergeChat(input: {
   const navigate = useNavigate();
   const [messages, setMessages] = useState<ChatMessage[]>(input.initialMessages);
   const [sending, setSending] = useState(false);
+  const [streamingReply, setStreamingReply] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
 
@@ -139,9 +141,9 @@ export function useConciergeChat(input: {
    * on the server where neither has anything to talk to.
    */
   const apiClient = useCallback((): VoiceApiClient => {
-    clientRef.current ??= createVoiceApiClient();
+    clientRef.current ??= createVoiceApiClient(policy.surface);
     return clientRef.current;
-  }, []);
+  }, [policy.surface]);
 
   const conciergeTools = useCallback((): ConciergeTool[] => {
     if (toolsRef.current?.policy === policy) return toolsRef.current.tools;
@@ -179,6 +181,7 @@ export function useConciergeChat(input: {
    * visitor's transcript must never gain a member's answers halfway down.
    */
   useEffect(() => {
+    clientRef.current = null;
     sessionIdRef.current = null;
     startedAtRef.current = null;
     demotedRef.current = null;
@@ -256,7 +259,9 @@ export function useConciergeChat(input: {
         );
         if (!result.accepted) {
           say(
-            result.reason === "already-answered"
+            result.reason === "needs-click"
+              ? "Please click Approve on the card to confirm this change."
+              : result.reason === "already-answered"
               ? "That one has already been answered."
               : "I could not match that to the change on screen — let me know what you would like to do.",
           );
@@ -283,9 +288,20 @@ export function useConciergeChat(input: {
           history,
           tools: conciergeTools(),
           getLocation: currentLocation,
-          send: (request: ConciergeChatRequest) =>
-            apiClient().post<ConciergeChatResponse>(CHAT_PATH, request),
-          onInterim: (line) => append({ role: "assistant", content: line }),
+          send: async (request: ConciergeChatRequest) => {
+            setStreamingReply("");
+            const response = await streamConciergeChat(request,
+              (delta) => setStreamingReply((text) => text + delta),
+              (session) => {
+                sessionIdRef.current = session.sessionId;
+                setSessionId(session.sessionId);
+              });
+            return response;
+          },
+          onInterim: (line) => {
+            setStreamingReply("");
+            append({ role: "assistant", content: line });
+          },
           /**
            * The server re-decides who is speaking on every turn, and it
            * degrades quietly — so a member whose sign-in lapsed while the panel
@@ -334,10 +350,11 @@ export function useConciergeChat(input: {
       } finally {
         sendingRef.current = false;
         setSending(false);
+        setStreamingReply("");
       }
     },
     [append, apiClient, conciergeTools, failureMessage, persist, policy.surface, say],
   );
 
-  return { messages, sending, error, sessionId, pendingApproval, send, say };
+  return { messages, sending, streamingReply, error, sessionId, pendingApproval, send, say };
 }

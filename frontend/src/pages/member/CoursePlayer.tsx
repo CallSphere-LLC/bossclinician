@@ -957,7 +957,7 @@ function NonCourseProduct({ product }: { product: LibraryProduct }) {
   }
 
   const destination =
-    product.kind === "community"
+    (product.kind === "community" || (product.kind === "access_group" && product.communityId != null))
       ? { to: "/community", label: "Open the community", icon: Users }
       : product.kind === "coaching"
         ? { to: "/coaching", label: "Open your coaching", icon: Sparkles }

@@ -1,4 +1,6 @@
+import { liveRoster } from "../../services/liveRoomBus";
 import { Router } from "express";
+import { GROUP_PRICE_COLUMNS, saveAccessGroup, deleteAccessGroup } from "../../services/communityGroupPricing";
 import { pool } from "../../db/pool";
 import { rowToCamel, rowsToCamel } from "../../utils/case";
 import { asyncHandler } from "../../utils/asyncHandler";
@@ -9,6 +11,7 @@ import { partialUpdate } from "../../validation/partialUpdate";
 import { POINT_ACTIONS } from "../../services/communityNotifications";
 import { recordAdminActionStrict } from "../../services/adminAudit";
 import { HOST_LINK_TTL_SECONDS, createHostLink } from "../../services/hostLinks";
+import { communityEventLocation } from "../../services/communityEventLocation";
 
 /**
  * Community admin API — mounted at /admin/community.
@@ -277,7 +280,7 @@ adminCommunityRouter.get(
   "/:id/live-visits",
   asyncHandler(async (req, res) => {
     const visits = await pool.query(
-      `SELECT v.id, v.member_id, v.joined_at, v.left_at,
+      `SELECT v.id, v.member_id, v.peer_id, v.joined_at, v.left_at,
               COALESCE(NULLIF(TRIM(m.first_name || ' ' || m.last_name), ''),
                        NULLIF(m.name, ''), m.email::text) AS member_name,
               m.email::text AS email,
@@ -293,7 +296,13 @@ adminCommunityRouter.get(
         LIMIT 200`,
       [req.params.id],
     );
-    res.json(rowsToCamel(visits.rows));
+    const active = new Set(liveRoster(Number(req.params.id)).map((peer) => peer.peerId));
+    res.setHeader("Cache-Control", "no-store");
+    res.json(rowsToCamel(visits.rows.map(({ peer_id, ...visit }) => ({
+      ...visit,
+      in_progress: visit.left_at === null && active.has(peer_id),
+      interrupted: visit.left_at === null && !active.has(peer_id),
+    }))));
   }),
 );
 
@@ -481,12 +490,13 @@ adminCommunityRouter.get(
   "/:id/access-groups",
   asyncHandler(async (req, res) => {
     const rows = await pool.query(
-      `SELECT g.id, g.name, g.description, g.sort, g.created_at,
+      `SELECT g.id, g.name, g.description, g.sort, g.created_at, g.checkout_offer_id, ${GROUP_PRICE_COLUMNS},
               (SELECT COUNT(*)::int FROM community_access_group_members m
                 WHERE m.group_id = g.id) AS member_count,
               (SELECT COUNT(*)::int FROM community_channels ch
                 WHERE ch.access_group_id = g.id) AS channel_count
          FROM community_access_groups g
+         LEFT JOIN offers o ON o.id = g.checkout_offer_id
         WHERE g.community_id = $1
         ORDER BY g.sort, g.id`,
       [req.params.id],
@@ -499,28 +509,19 @@ const accessGroupSchema = z.object({
   name: z.string().trim().min(1).max(120),
   description: z.string().trim().max(600).default(""),
   sort: z.number().int().min(0).max(1000).default(0),
+  pricingType: z.enum(["free", "one_time", "subscription"]).optional(),
+  amountCents: z.number().int().min(0).max(99_999_999).optional(),
+  currency: z.string().trim().toLowerCase().regex(/^[a-z]{3}$/).optional(),
+  interval: z.enum(["month", "year"]).nullable().optional(),
 });
 
 adminCommunityRouter.post(
   "/:id/access-groups",
   asyncHandler(async (req, res) => {
     const parsed = accessGroupSchema.safeParse(req.body ?? {});
-    if (!parsed.success) throw badRequest("Give the group a name.", parsed.error.flatten());
-    try {
-      const created = await pool.query(
-        `INSERT INTO community_access_groups (community_id, name, description, sort)
-         VALUES ($1, $2, $3, $4) RETURNING *`,
-        [req.params.id, parsed.data.name, parsed.data.description, parsed.data.sort],
-      );
-      res.status(201).json(rowToCamel(created.rows[0]));
-    } catch (error) {
-      // The UNIQUE is on (community, name): two tiers called the same thing
-      // would be indistinguishable in every picker that offers them.
-      if ((error as { code?: string }).code === "23505") {
-        throw badRequest("There is already a group with that name.");
-      }
-      throw error;
-    }
+    if (!parsed.success) throw badRequest("Check the group's name and pricing.", parsed.error.flatten());
+    const saved = await saveAccessGroup(Number(req.params.id), null, parsed.data);
+    res.status(201).json(rowToCamel(saved));
   }),
 );
 
@@ -528,20 +529,10 @@ adminCommunityRouter.put(
   "/:id/access-groups/:groupId",
   asyncHandler(async (req, res) => {
     const parsed = partialUpdate(accessGroupSchema).safeParse(req.body ?? {});
-    if (!parsed.success) throw badRequest("Check the group's details.");
-    const update = buildUpdate(
-      { name: parsed.data.name, description: parsed.data.description, sort: parsed.data.sort },
-      ["name", "description", "sort"] as const,
-    );
-    if (!update) throw badRequest("No updatable fields supplied");
-    const saved = await pool.query(
-      `UPDATE community_access_groups SET ${update.clause}
-        WHERE id = $${update.values.length + 1} AND community_id = $${update.values.length + 2}
-      RETURNING *`,
-      [...update.values, req.params.groupId, req.params.id],
-    );
-    if (saved.rowCount === 0) throw notFound("Access group not found");
-    res.json(rowToCamel(saved.rows[0]));
+    if (!parsed.success) throw badRequest("Check the group's details and pricing.");
+    if (Object.keys(parsed.data).length === 0) throw badRequest("No updatable fields supplied");
+    const saved = await saveAccessGroup(Number(req.params.id), Number(req.params.groupId), parsed.data);
+    res.json(rowToCamel(saved));
   }),
 );
 
@@ -551,11 +542,7 @@ adminCommunityRouter.delete(
     // Channels and products fall back to the whole community via ON DELETE SET
     // NULL, so deleting a tier opens its channels rather than orphaning them.
     // That is the safe direction: nobody loses access they had.
-    const gone = await pool.query(
-      `DELETE FROM community_access_groups WHERE id = $1 AND community_id = $2`,
-      [req.params.groupId, req.params.id],
-    );
-    if (gone.rowCount === 0) throw notFound("Access group not found");
+    await deleteAccessGroup(Number(req.params.id), Number(req.params.groupId));
     res.status(204).end();
   }),
 );
@@ -1648,7 +1635,14 @@ adminCommunityRouter.post(
     const b = req.body as Record<string, unknown>;
     if (typeof b.title !== "string" || !b.title.trim()) throw badRequest("Title is required");
 
-    const result = await pool.query(
+    const location = communityEventLocation(b, true)!;
+    const client = await pool.connect();
+    try {
+    await client.query("BEGIN");
+    if (location.native) {
+      await client.query("UPDATE communities SET live_room_enabled = true WHERE id = $1", [req.params.id]);
+    }
+    const result = await client.query(
       `INSERT INTO community_events
          (community_id, title, description, starts_at, duration_minutes, location_url)
        VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
@@ -1658,26 +1652,40 @@ adminCommunityRouter.post(
         b.description ?? "",
         b.startsAt || null,
         b.durationMinutes ?? 60,
-        b.locationUrl ?? "",
+        location.locationUrl,
       ],
     );
+    await client.query("COMMIT");
     res.status(201).json(rowToCamel(result.rows[0]));
+    } catch (error) { await client.query("ROLLBACK"); throw error; }
+    finally { client.release(); }
   }),
 );
 
 adminCommunityRouter.put(
   "/events/:eventId",
   asyncHandler(async (req, res) => {
-    const update = buildUpdate(req.body as Record<string, unknown>, EVENT_FIELDS);
+    const body = { ...req.body } as Record<string, unknown>;
+    const location = communityEventLocation(body);
+    if (location) body.locationUrl = location.locationUrl;
+    const update = buildUpdate(body, EVENT_FIELDS);
     if (!update) throw badRequest("No updatable fields supplied");
-
-    const result = await pool.query(
+    const client = await pool.connect();
+    try {
+    await client.query("BEGIN");
+    const result = await client.query(
       `UPDATE community_events SET ${update.clause}
        WHERE id = $${update.values.length + 1} RETURNING *`,
       [...update.values, req.params.eventId],
     );
     if (result.rowCount === 0) throw notFound("Event not found");
+    if (location?.native) {
+      await client.query("UPDATE communities SET live_room_enabled = true WHERE id = $1", [result.rows[0].community_id]);
+    }
+    await client.query("COMMIT");
     res.json(rowToCamel(result.rows[0]));
+    } catch (error) { await client.query("ROLLBACK"); throw error; }
+    finally { client.release(); }
   }),
 );
 

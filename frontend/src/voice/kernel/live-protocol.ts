@@ -29,6 +29,7 @@ export function liveAppendChunks(text: string): string[] {
 export class LiveProtocol {
   started = false;
   closed = false;
+  closing = false;
   usageSeconds: number | null = null;
   private pending = new Set<string>();
   private completed = new Set<string>();
@@ -50,7 +51,7 @@ export class LiveProtocol {
     for (const chunk of liveAppendChunks(content)) this.wire({ type, delegation_id: null, content: chunk });
   }
   send(event: any) {
-    if (!this.started || this.closed) return;
+    if (!this.started || this.closed || this.closing) return;
     if (event.type === "session.update" && event.session?.type === "realtime") {
       const instructions = event.session.instructions;
       if (instructions) {
@@ -95,7 +96,7 @@ export class LiveProtocol {
     this.wire(event);
   }
   private continueBackend() {
-    if (this.continuation && !this.active && this.pending.size === 0 && !this.closed) {
+    if (this.continuation && !this.active && this.pending.size === 0 && !this.closed && !this.closing) {
       this.continuation = false; this.queuedInput = false; this.active = true; this.calls = [];
       this.wire({ type: "response.create" });
     }
@@ -105,6 +106,11 @@ export class LiveProtocol {
     if (event.type === "session.closed") { this.closed = true; this.usageSeconds = event.usage?.seconds ?? null; this.flush(); this.emit(event); return; }
     if (event.type === "session.usage.updated") this.usageSeconds = event.usage?.seconds ?? null;
     if (event.type === "response.event") {
+      if (this.closing || this.closed) {
+        // Preserve final usage/lifecycle evidence without dispatching another tool.
+        this.emit({ type: "live.backend_event", envelope: event });
+        return;
+      }
       const inner = event.event;
       if (inner?.type === "response.created") { this.active = true; this.calls = []; this.emit({ ...inner, delegation_id: event.delegation_id }); }
       if (inner?.type === "response.output_item.done" && inner.item?.type === "function_call") {

@@ -16,9 +16,9 @@ export function refreshAdminSession(): Promise<boolean> {
 }
 
 /** One refresh/retry shared by JSON, CSV, PDF and media clients. */
-export async function sessionFetch(input: RequestInfo | URL, options: RequestInit = {}): Promise<Response> {
+export async function sessionFetch(input: RequestInfo | URL, options: RequestInit = {}, useAdminSession = false): Promise<Response> {
   const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
-  const adminRequest = /\/admin(?:\/|\?|$)/.test(url);
+  const adminRequest = useAdminSession || /\/admin(?:\/|\?|$)/.test(url);
   if (!adminRequest) return fetch(input, options);
   const init = { ...options, credentials: "include" as const };
   const response = await fetch(input, init);

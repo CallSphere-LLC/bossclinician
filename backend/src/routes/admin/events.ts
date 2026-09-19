@@ -63,7 +63,7 @@ async function freeSlug(base: string): Promise<string> {
   return `${wanted}-${suffix}`;
 }
 
-const eventSchema = z.object({
+export const eventSchema = z.object({
   title: z.string().trim().min(1, "Give this event a name").max(200),
   descriptionMd: z.string().max(50_000).optional(),
   coverImage: z.string().max(500).optional(),

@@ -1,0 +1,14 @@
+{
+  "status": 200,
+  "host": "bossclinician-voice-recordings.s3.us-east-1.amazonaws.com",
+  "audio": {
+    "loaded": false,
+    "error": "MEDIA_ELEMENT_ERROR: Media load rejected by URL safety check"
+  },
+  "violations": [
+    {
+      "directive": "media-src",
+      "blockedHost": "bossclinician-voice-recordings.s3.us-east-1.amazonaws.com"
+    }
+  ]
+}

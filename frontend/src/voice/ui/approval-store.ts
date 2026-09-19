@@ -13,7 +13,7 @@
  *
  * Two rules are worth stating out loud, because they are the whole point of
  * this file. A *destructive* change never accepts a spoken yes: a misheard word
- * must not be able to delete anything, so the card demands a click or a typed
+ * must not be able to delete anything, so the card demands a click, rather than a spoken or typed
  * confirmation. And every answer records HOW it arrived, because the audit
  * trail of "who agreed to this" is worth as much as the change itself.
  *
@@ -47,7 +47,7 @@ export type PendingApproval = {
  */
 export type AnswerResult = {
   accepted: boolean;
-  reason?: "unknown-request" | "already-answered" | "needs-click-or-typed";
+  reason?: "unknown-request" | "already-answered" | "needs-click";
 };
 
 export type ApprovalStore = {
@@ -125,8 +125,8 @@ export function createApprovalStore(options?: {
     // A spoken yes is not enough for something that cannot be undone. A spoken
     // NO always is — stopping a destructive change can never be the unsafe
     // reading of a misheard word.
-    if (approved && via === "voice" && entry.pending.request.risk === "destructive") {
-      return { accepted: false, reason: "needs-click-or-typed" };
+    if (approved && via !== "click" && entry.pending.request.risk === "destructive") {
+      return { accepted: false, reason: "needs-click" };
     }
     finish(actionId, note === undefined ? { approved, via } : { approved, via, note });
     return { accepted: true };

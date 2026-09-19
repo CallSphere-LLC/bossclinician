@@ -1,0 +1,49 @@
+{
+  "checks": [
+    "Deployed group monthly49 price retained",
+    "Opening each new event resets native after external selection",
+    {
+      "club": [
+        {
+          "text": "JOIN THE CLUB",
+          "href": "https://www.bossclinician.com/offers/tzgjALKU/checkout"
+        },
+        {
+          "text": "I'M READY TO JOIN!!",
+          "href": "https://www.bossclinician.com/offers/tzgjALKU/checkout"
+        },
+        {
+          "text": "I'M READY FOR THE CLUB",
+          "href": "https://www.bossclinician.com/offers/tzgjALKU/checkout"
+        },
+        {
+          "text": "JOIN THE CLUB",
+          "href": "https://www.bossclinician.com/offers/tzgjALKU/checkout"
+        },
+        {
+          "text": "JOIN THE CLUB",
+          "href": "https://www.bossclinician.com/offers/tzgjALKU/checkout"
+        },
+        {
+          "text": "GET ME IN THE CLUB",
+          "href": "https://www.bossclinician.com/offers/tzgjALKU/checkout"
+        },
+        {
+          "text": "SAY LESS.. I'M READY TO JOIN THE CLUB",
+          "href": "https://www.bossclinician.com/offers/tzgjALKU/checkout"
+        }
+      ]
+    },
+    {
+      "externalClubNavigation": "https://www.bossclinician.com/offers/tzgjALKU/checkout",
+      "status": 200
+    }
+  ],
+  "fixtures": [],
+  "errors": [
+    {
+      "message": "Unexpected end of input",
+      "url": "https://www.bossclinician.com/offers/tzgjALKU/checkout"
+    }
+  ]
+}

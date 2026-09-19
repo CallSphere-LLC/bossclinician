@@ -84,7 +84,7 @@ export function VoiceConcierge({ policy }: { policy: VoiceSurfacePolicy }) {
   // the conversation it actually belongs to.
   const sessionIdRef = useRef<string | null>(null);
 
-  const api = useMemo(() => createVoiceApiClient(), []);
+  const api = useMemo(() => createVoiceApiClient(policy.surface), [policy.surface]);
 
   const context = useMemo<VoiceContext>(
     () => ({

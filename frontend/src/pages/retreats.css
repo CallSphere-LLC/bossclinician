@@ -1,0 +1,476 @@
+.retreat-page {
+  --retreat-forest: #243318;
+  --retreat-deep: #1e2c14;
+  --retreat-gold: #efe0bc;
+  --retreat-ivory: #f8f5ed;
+  background: var(--retreat-forest);
+  color: var(--retreat-ivory);
+  font-family: Montserrat, Arial, sans-serif;
+  line-height: 1.85;
+  overflow: hidden;
+}
+.retreat-page * {
+  box-sizing: border-box;
+}
+.retreat-page p {
+  margin: 0 0 1.2rem;
+}
+.retreat-page h1,
+.retreat-page h2,
+.retreat-page h3,
+.retreat-page blockquote {
+  font-family: "Playfair Display", Georgia, serif;
+  line-height: 1.2;
+  font-weight: 400;
+}
+.retreat-page h1 {
+  font-size: clamp(2.3rem, 5vw, 4.8rem);
+  max-width: 990px;
+  margin: 1.8rem auto;
+}
+.retreat-page h2 {
+  font-size: clamp(2rem, 3.6vw, 3.6rem);
+  margin: 0 0 1.8rem;
+}
+.retreat-page h3 {
+  font-size: 1.75rem;
+  margin: 0 0 1.2rem;
+}
+.retreat-page h4 {
+  font-weight: 600;
+  margin: 1.5rem 0 0.5rem;
+}
+.retreat-page em {
+  display: block;
+  color: var(--retreat-gold);
+  font-weight: 400;
+  margin-top: 0.3em;
+}
+.retreat-container {
+  width: min(1180px, 100% - 80px);
+  margin: 0 auto;
+}
+.retreat-band {
+  padding: 100px 0;
+  scroll-margin-top: 100px;
+}
+.retreat-light {
+  background: var(--retreat-ivory);
+  color: var(--retreat-forest);
+}
+.retreat-light em {
+  color: #6c682d;
+}
+.retreat-eyebrow {
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  line-height: 1.8;
+  color: var(--retreat-gold);
+}
+.retreat-light .retreat-eyebrow {
+  color: #5d622e;
+}
+.retreat-heading {
+  max-width: 860px;
+  margin: 0 auto 2.5rem;
+  text-align: center;
+}
+.retreat-split .retreat-heading {
+  text-align: left;
+}
+.retreat-hero {
+  position: relative;
+  isolation: isolate;
+  padding: 110px 0 90px;
+  text-align: center;
+  background: var(--retreat-deep);
+}
+.retreat-hero > img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  z-index: -2;
+}
+.retreat-hero:after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    rgba(30, 44, 20, 0.86),
+    rgba(30, 44, 20, 0.8)
+  );
+  z-index: -1;
+}
+.retreat-triad {
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: clamp(1.7rem, 3vw, 2.5rem);
+  color: var(--retreat-gold);
+}
+.retreat-hero-lede {
+  max-width: 690px;
+  margin: 0 auto 1.4rem !important;
+  font-size: 0.8rem;
+  letter-spacing: 0.05em;
+}
+.retreat-strip {
+  text-align: center;
+  letter-spacing: 0.12em;
+  font-size: 0.7rem;
+  font-weight: 600;
+  margin: 2rem 0 !important;
+}
+.retreat-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 2rem;
+}
+.retreat-button {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 50px;
+  max-width: 100%;
+  padding: 16px 27px;
+  background: var(--retreat-gold);
+  color: var(--retreat-deep);
+  border: 1px solid var(--retreat-gold);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  line-height: 1.6;
+  text-align: center;
+  text-decoration: none;
+  transition:
+    background 0.2s,
+    transform 0.2s;
+}
+.retreat-button:hover {
+  background: #fff3d7;
+  transform: translateY(-2px);
+}
+.retreat-button-outline {
+  background: transparent;
+  color: var(--retreat-gold);
+}
+.retreat-button-outline:hover {
+  color: var(--retreat-deep);
+}
+.retreat-light .retreat-button {
+  background: var(--retreat-forest);
+  color: var(--retreat-gold);
+  border-color: var(--retreat-forest);
+}
+.retreat-light .retreat-button:hover {
+  background: #344723;
+}
+.retreat-page a:focus-visible,
+.retreat-page summary:focus-visible {
+  outline: 3px solid #a78845;
+  outline-offset: 5px;
+}
+.retreat-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 42px 20px;
+  text-align: center;
+}
+.retreat-stats strong {
+  display: block;
+  font-family: "Playfair Display", Georgia, serif;
+  color: var(--retreat-gold);
+  font-weight: 400;
+  font-size: 3rem;
+  line-height: 1.2;
+}
+.retreat-stats span {
+  font-size: 0.65rem;
+  letter-spacing: 0.14em;
+}
+.retreat-stats > div + div {
+  border-left: 1px solid #efe0bc44;
+}
+.retreat-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 70px;
+  align-items: center;
+}
+.retreat-page img {
+  display: block;
+  max-width: 100%;
+  object-fit: cover;
+}
+.retreat-split > img {
+  width: 100%;
+  height: 100%;
+  max-height: 820px;
+  object-fit: cover;
+}
+.retreat-narrow {
+  max-width: 790px;
+  margin: 0 auto;
+}
+.retreat-page blockquote {
+  font-size: clamp(1.5rem, 2.3vw, 2rem);
+  color: var(--retreat-gold);
+  border-left: 2px solid currentColor;
+  padding-left: 25px;
+  margin: 2rem 0;
+}
+.retreat-light blockquote {
+  color: #62652e;
+}
+.retreat-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 36px;
+  margin: 3rem 0;
+}
+.retreat-inclusions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 25px;
+  margin-top: 3rem;
+}
+.retreat-card {
+  border: 1px solid #24331833;
+  padding: 30px;
+  background: #fffdf833;
+}
+.retreat-card p:last-child {
+  margin-bottom: 0;
+}
+.retreat-number {
+  display: block;
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 2.5rem;
+  color: #8b773d;
+  margin-bottom: 20px;
+}
+.retreat-page ul {
+  padding-left: 1.2rem;
+  list-style: disc;
+}
+.retreat-page li {
+  margin-bottom: 0.7rem;
+}
+.retreat-gallery {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 3px;
+}
+.retreat-gallery figure {
+  position: relative;
+}
+.retreat-gallery img {
+  width: 100%;
+  aspect-ratio: 3/4;
+}
+.retreat-gallery figcaption {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 35px 15px 20px;
+  background: linear-gradient(transparent, #1e2c14dd);
+  text-align: center;
+  letter-spacing: 0.18em;
+  font-size: 0.7rem;
+}
+.retreat-moments {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 25px;
+}
+.retreat-moments img {
+  width: 100%;
+  aspect-ratio: 3/4;
+}
+.retreat-moments figcaption {
+  text-align: center;
+  margin-top: 18px;
+  font-size: 0.7rem;
+  letter-spacing: 0.17em;
+}
+.retreat-centered {
+  text-align: center;
+}
+.retreat-centered blockquote {
+  border: 0;
+  padding: 0;
+}
+.retreat-stanza {
+  margin: 2rem 0;
+}
+.retreat-stanza p {
+  margin: 0;
+}
+.retreat-price {
+  text-align: center;
+  font-size: 2.5rem !important;
+}
+.retreat-reservation {
+  max-width: 900px;
+  margin: 3rem auto;
+  padding: 40px;
+  border: 1px solid #24331833;
+  background: #fffdf8;
+}
+.retreat-reservation .retreat-centered > .retreat-button {
+  margin-bottom: 1rem;
+}
+.retreat-text-link {
+  text-decoration: underline;
+  text-underline-offset: 5px;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+.retreat-faq {
+  max-width: 850px;
+  margin: auto;
+}
+.retreat-faq details {
+  border-bottom: 1px solid #24331833;
+  padding: 22px 0;
+}
+.retreat-faq summary {
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 25px;
+  font-weight: 600;
+  line-height: 1.6;
+  list-style: none;
+}
+.retreat-faq summary::-webkit-details-marker {
+  display: none;
+}
+.retreat-faq summary span {
+  font-size: 1.7rem;
+  font-weight: 400;
+}
+.retreat-faq details[open] summary span {
+  transform: rotate(45deg);
+}
+.retreat-faq details p {
+  margin: 1.3rem 0 0;
+}
+.retreat-faq details a {
+  display: inline-block;
+  margin-top: 1rem;
+}
+@media (max-width: 900px) {
+  .retreat-container {
+    width: calc(100% - 48px);
+  }
+  .retreat-split {
+    gap: 35px;
+  }
+  .retreat-inclusions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .retreat-band {
+    padding: 70px 0;
+  }
+  .retreat-hero {
+    padding: 75px 0;
+  }
+  .retreat-gallery {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .retreat-gallery img {
+    aspect-ratio: 4/3;
+  }
+}
+@media (max-width: 600px) {
+  .retreat-container {
+    width: calc(100% - 36px);
+  }
+  .retreat-page {
+    font-size: 0.9rem;
+  }
+  .retreat-band {
+    padding: 56px 0;
+  }
+  .retreat-split,
+  .retreat-columns,
+  .retreat-inclusions {
+    grid-template-columns: 1fr;
+  }
+  .retreat-split > img {
+    max-height: 500px;
+  }
+  .retreat-split .retreat-heading {
+    text-align: center;
+  }
+  .retreat-card {
+    padding: 25px;
+  }
+  .retreat-stats {
+    padding: 28px 12px;
+  }
+  .retreat-stats strong {
+    font-size: 2.4rem;
+  }
+  .retreat-stats span {
+    font-size: 0.55rem;
+    letter-spacing: 0.07em;
+  }
+  .retreat-hero {
+    padding: 64px 0;
+  }
+  .retreat-eyebrow {
+    letter-spacing: 0.12em;
+  }
+  .retreat-reservation {
+    padding: 24px 18px;
+  }
+  .retreat-reservation .retreat-card {
+    padding: 22px 18px;
+  }
+  .retreat-moments {
+    grid-template-columns: 1fr;
+    max-width: 400px;
+    margin: auto;
+  }
+  .retreat-moments img {
+    aspect-ratio: 4/5;
+  }
+  .retreat-price {
+    font-size: 2rem !important;
+  }
+  .retreat-actions .retreat-button {
+    width: 100%;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .retreat-button {
+    transition: none;
+  }
+  .retreat-button:hover {
+    transform: none;
+  }
+}
+
+.retreat-founder-photo {
+  width: 100%;
+  max-height: 480px;
+  object-fit: cover;
+  margin: 0 0 2rem;
+}
+.retreat-inclusion-photo {
+  width: 100%;
+  aspect-ratio: 4/3;
+  object-fit: cover;
+  margin-bottom: 1.5rem;
+}

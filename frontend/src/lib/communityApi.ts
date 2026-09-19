@@ -80,6 +80,8 @@ export interface CommunityListResponse {
 }
 
 export interface CommunityChannel {
+  accessGroupId?: number | null;
+  accessGroupName?: string | null;
   id: number;
   slug: string;
   name: string;
@@ -112,6 +114,8 @@ export interface CommunityMembership {
 }
 
 export interface CommunityOverview {
+  accessGroups?: {id:number;name:string;description:string}[];
+  availableAccessGroups?: {id:number;name:string;description:string;checkoutSlug:string;pricingType:string;amountCents:number;currency:string;interval:string|null}[];
   community: {
     id: number;
     slug: string;
@@ -558,7 +562,10 @@ export interface LiveRoomStatus {
   roster: LiveRoomPeer[];
 }
 
+export interface MemberLiveVisit {id:number;joinedAt:string;leftAt:string|null;seconds:number|null;inProgress:boolean;interrupted?:boolean}
+
 export const communityApi = {
+  liveHistory: (slug:string) => memberRequest<{items:MemberLiveVisit[];limit:number}>(`/member/community/${seg(slug)}/live/history`),
   list: () => memberRequest<CommunityListResponse>("/member/community"),
 
   /**

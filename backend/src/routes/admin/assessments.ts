@@ -50,7 +50,7 @@ async function freeSlug(table: "assessments" | "events", base: string): Promise<
 
 /* ----------------------------------------------------------------- schemas */
 
-const assessmentSchema = z.object({
+export const assessmentSchema = z.object({
   title: z.string().trim().min(1, "Give this quiz a name").max(200),
   introMd: z.string().max(20_000).optional(),
   kind: z.enum(["quiz", "graded", "survey"]).optional(),

@@ -1,4 +1,4 @@
-import { memberRequest, getAccessToken } from "@/lib/memberApi";
+import { memberRequest, memberFetch } from "@/lib/memberApi";
 import { sessionFetch } from "@/lib/adminTransport";
 import type { VoiceApiClient, VoiceSurface } from "../contract";
 
@@ -51,7 +51,7 @@ async function adminRequest<T>(path: string, init: RequestInit): Promise<T> {
   if (init.body !== undefined && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
-  const response = await sessionFetch(`${API_BASE}${path}`, { ...init, headers, credentials: "include" });
+  const response = await sessionFetch(`${API_BASE}${path}`, { ...init, headers, credentials: "include" }, true);
   if (!response.ok) throw new Error(await readServerMessage(response));
   if (response.status === 204) return undefined as T;
   return (await response.json()) as T;
@@ -97,7 +97,7 @@ export function createVoiceApiClient(surface?: VoiceSurface): VoiceApiClient {
       method,
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     };
-    return isAdminPath(path)
+    return isAdminPath(path) || surface === "admin"
       ? adminRequest<T>(path, init)
       : memberRequest<T>(path, { ...init, skipRefresh });
   };
@@ -105,6 +105,7 @@ export function createVoiceApiClient(surface?: VoiceSurface): VoiceApiClient {
   return {
     get: <T,>(path: string) => send<T>(path, "GET"),
     post: <T,>(path: string, body?: unknown) => send<T>(path, "POST", body),
+    patch: <T,>(path: string, body?: unknown) => send<T>(path, "PATCH", body),
     put: <T,>(path: string, body?: unknown) => send<T>(path, "PUT", body),
     del: <T,>(path: string) => send<T>(path, "DELETE"),
   };
@@ -123,25 +124,24 @@ export function createVoiceApiClient(surface?: VoiceSurface): VoiceApiClient {
  * exists in this tab: a person who closes it mid-sentence would otherwise leave
  * nothing behind at all, which is how a recording feature ends up empty.
  */
+export async function voiceFetch(path: string, init: RequestInit, surface?: VoiceSurface): Promise<Response> {
+  if (surface !== "admin") return memberFetch(path, init);
+  const response = await sessionFetch(`${API_BASE}${path}`, { ...init, credentials: "include" }, true);
+  if (!response.ok) throw new Error(await readServerMessage(response));
+  return response;
+}
+
 export async function putVoiceRecording(
   sessionId: string,
   seq: number,
   audio: Blob,
-  options: { keepalive?: boolean } = {},
+  options: { keepalive?: boolean; surface?: VoiceSurface } = {},
 ): Promise<void> {
-  const headers = new Headers({ "Content-Type": audio.type || "audio/webm" });
-  const token = getAccessToken();
-  if (token) headers.set("Authorization", `Bearer ${token}`);
   const query = new URLSearchParams({ sessionId, seq: String(seq) });
-  const response = await fetch(`${API_BASE}/voice/recording?${query.toString()}`, {
+  await voiceFetch(`/voice/recording?${query.toString()}`, {
     method: "PUT",
-    headers,
-    credentials: "include",
+    headers: { "Content-Type": audio.type || "audio/webm" },
     body: audio,
-    // Set only on the page-is-leaving flush, where the request has to outlive
-    // the document. It caps the body at 64 KB, which one slice is well inside,
-    // but it is not worth spending on the ordinary in-call uploads.
     ...(options.keepalive ? { keepalive: true } : {}),
-  });
-  if (!response.ok) throw new Error(await readServerMessage(response));
+  }, options.surface);
 }

@@ -53,11 +53,13 @@ export interface MemberJwtPayload {
   impersonatedBy?: number;
 }
 
-export function signMemberAccessToken(payload: MemberJwtPayload): string {
+export function signMemberAccessToken(payload: MemberJwtPayload, sessionExpiresAt?: string | Date): string {
   return jwt.sign(payload, memberTokenSecret(), {
     algorithm: "HS256",
     audience: MEMBER_AUDIENCE,
-    expiresIn: ACCESS_TOKEN_TTL_SECONDS,
+    expiresIn: sessionExpiresAt
+      ? Math.max(1, Math.min(ACCESS_TOKEN_TTL_SECONDS, Math.floor((new Date(sessionExpiresAt).getTime() - Date.now()) / 1000)))
+      : ACCESS_TOKEN_TTL_SECONDS,
   });
 }
 
@@ -82,8 +84,9 @@ function cookieOptions(maxAgeMs: number) {
   };
 }
 
-export function setRefreshCookie(res: Response, rawToken: string): void {
-  res.cookie(REFRESH_COOKIE, rawToken, cookieOptions(REFRESH_TOKEN_TTL_SECONDS * 1000));
+export function setRefreshCookie(res: Response, rawToken: string, sessionExpiresAt?: string | Date): void {
+  const remaining = sessionExpiresAt ? Math.max(0, new Date(sessionExpiresAt).getTime() - Date.now()) : REFRESH_TOKEN_TTL_SECONDS * 1000;
+  res.cookie(REFRESH_COOKIE, rawToken, cookieOptions(remaining));
   // Readable by script and site-wide in scope, unlike the token itself, so the
   // app can decide whether a silent refresh is worth attempting.
   res.cookie(SESSION_HINT_COOKIE, "1", {
@@ -91,7 +94,7 @@ export function setRefreshCookie(res: Response, rawToken: string): void {
     secure: env.nodeEnv === "production",
     sameSite: "lax",
     path: "/",
-    maxAge: REFRESH_TOKEN_TTL_SECONDS * 1000,
+    maxAge: remaining,
   });
 }
 
@@ -159,7 +162,7 @@ const ROTATION_GRACE_MS = 30_000;
 const DELIBERATE_REVOCATIONS = new Set(["logout", "admin", "password_change", "suspended"]);
 
 export type RefreshOutcome =
-  | { status: "ok"; memberId: number; refreshToken: string }
+  | { status: "ok"; memberId: number; refreshToken: string; expiresAt: string }
   | { status: "invalid" }
   /** The token was valid once and has already been rotated — treated as theft. */
   | { status: "reused"; memberId: number };
@@ -205,6 +208,15 @@ export async function rotateRefreshToken(
       return { status: "invalid" };
     }
 
+    if (new Date(session.expires_at).getTime() <= Date.now()) {
+      await client.query(
+        `UPDATE member_sessions SET revoked_at = now(), revoked_reason = 'expired' WHERE id = $1`,
+        [session.id]
+      );
+      await client.query("COMMIT");
+      return { status: "invalid" };
+    }
+
     if (session.revoked_at) {
       if (DELIBERATE_REVOCATIONS.has(session.revoked_reason)) {
         await client.query("ROLLBACK");
@@ -235,11 +247,11 @@ export async function rotateRefreshToken(
               session.id,
               (meta.userAgent ?? "").slice(0, 500),
               (meta.ip ?? "").slice(0, 64),
-              expiresIn(REFRESH_TOKEN_TTL_SECONDS),
+              new Date(session.expires_at),
             ]
           );
           await client.query("COMMIT");
-          return { status: "ok", memberId: session.member_id, refreshToken: raced };
+          return { status: "ok", memberId: session.member_id, refreshToken: raced, expiresAt: new Date(session.expires_at).toISOString() };
         }
       }
 
@@ -252,14 +264,7 @@ export async function rotateRefreshToken(
       return { status: "reused", memberId: session.member_id };
     }
 
-    if (new Date(session.expires_at).getTime() <= Date.now()) {
-      await client.query(
-        `UPDATE member_sessions SET revoked_at = now(), revoked_reason = 'expired' WHERE id = $1`,
-        [session.id]
-      );
-      await client.query("COMMIT");
-      return { status: "invalid" };
-    }
+
 
     const raw = generateToken();
     await client.query(
@@ -277,12 +282,12 @@ export async function rotateRefreshToken(
         session.id,
         (meta.userAgent ?? "").slice(0, 500),
         (meta.ip ?? "").slice(0, 64),
-        expiresIn(REFRESH_TOKEN_TTL_SECONDS),
+        new Date(session.expires_at),
       ]
     );
 
     await client.query("COMMIT");
-    return { status: "ok", memberId: session.member_id, refreshToken: raw };
+    return { status: "ok", memberId: session.member_id, refreshToken: raw, expiresAt: new Date(session.expires_at).toISOString() };
   } catch (err) {
     await client.query("ROLLBACK");
     throw err;

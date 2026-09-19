@@ -1,0 +1,76 @@
+{
+  "range": "Bugs!A1:M100",
+  "majorDimension": "ROWS",
+  "values": [
+    [
+      "Bug",
+      "Screenshot",
+      "Fixed?"
+    ],
+    [
+      "In kajabi while we are creating an access group it's asking if it's free or paid if paid admin needs to set a price and and we don't have that in our dashboard.",
+      "",
+      "No"
+    ],
+    [
+      "How long an admin/customer can stay logged in?We have to set a session time out",
+      "",
+      "No"
+    ],
+    [
+      "For video calling, It should show call duration just like it shows in any VC apps",
+      "",
+      "No"
+    ],
+    [
+      "As we have multiple communities it would look cleaner if we can differentiate between communities or highlight the communities(just the name) in the sidebar.",
+      "",
+      "No"
+    ],
+    [
+      "Clicking 'paying members only' just saves the setting and shows a 'community created' pop-up, but no payment method is being set. Because Kajabi applies payments to access groups rather than multiple communities, we need to determine if we should set the payment plan for the overall community or for the access groups.\"",
+      "",
+      "No"
+    ],
+    [
+      "Open any community→events—->schedule an event.Do we need “where do they join? Paste your zoom meet link” when we already have our own VC",
+      "",
+      "No"
+    ],
+    [
+      "Nice to have history of her calls",
+      "",
+      "No"
+    ],
+    [
+      "Nice to have the design like kajabi lounge page as its showing channels access groups etc to the left in a row",
+      "",
+      "No"
+    ],
+    [
+      "",
+      "",
+      "No"
+    ],
+    [
+      "",
+      "",
+      "No"
+    ],
+    [
+      "",
+      "",
+      "No"
+    ],
+    [
+      "",
+      "",
+      "No"
+    ],
+    [
+      "",
+      "",
+      "No"
+    ]
+  ]
+}

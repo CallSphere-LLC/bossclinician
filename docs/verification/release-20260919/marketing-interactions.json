@@ -1,0 +1,34 @@
+[
+  {
+    "flow": "retreat reserve anchor,18 photos,14 FAQ open/close,contact fallback",
+    "pass": true
+  },
+  {
+    "flow": "marketing plan in Club stage,masterclass in Lounge stage,Club link navigation",
+    "pass": true
+  },
+  {
+    "flow": "/ withdrawn-offer audit",
+    "pass": true
+  },
+  {
+    "flow": "/resources withdrawn-offer audit",
+    "pass": true
+  },
+  {
+    "flow": "/store withdrawn-offer audit",
+    "pass": true
+  },
+  {
+    "flow": "/work-with-me withdrawn-offer audit",
+    "pass": true
+  },
+  {
+    "flow": "/apply withdrawn-offer audit",
+    "pass": true
+  },
+  {
+    "flow": "Boardroom retained in Store",
+    "pass": true
+  }
+]

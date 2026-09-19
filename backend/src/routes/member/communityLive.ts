@@ -71,7 +71,8 @@ interface LiveCommunityRow {
  */
 async function resolveRoom(
   member: AuthedMember,
-  slug: string
+  slug: string,
+  allowDisabled = false,
 ): Promise<LiveCommunityRow> {
   const found = await pool.query<LiveCommunityRow>(
     `SELECT c.id, c.name, c.live_room_enabled, c.live_room_access,
@@ -92,7 +93,7 @@ async function resolveRoom(
   if (!row) throw notFound(ROOM_OFF);
   if (row.banned_at !== null) throw forbidden(ROOM_SHUT);
   if (!(await mayEnterCommunity(member.id, row.id))) throw notFound(ROOM_OFF);
-  if (!row.live_room_enabled) throw notFound(ROOM_OFF);
+  if (!row.live_room_enabled && !allowDisabled) throw notFound(ROOM_OFF);
   return row;
 }
 
@@ -149,6 +150,32 @@ memberCommunityLiveRouter.get(
       })),
     });
   })
+);
+
+/** A member sees their own persisted visits, including rooms now disabled. */
+memberCommunityLiveRouter.get(
+  "/:slug/live/history",
+  asyncHandler(async (req, res) => {
+    const member = req.member as AuthedMember;
+    const room = await resolveRoom(member, req.params.slug, true);
+    const active = new Set(liveRoster(room.id).map((peer) => peer.peerId));
+    const visits = await pool.query<{ id: number; peer_id: string; joined_at: Date; left_at: Date | null; seconds: number | null }>(
+      `SELECT id, peer_id, joined_at, left_at,
+              CASE WHEN left_at IS NULL THEN NULL
+                   ELSE GREATEST(0, EXTRACT(EPOCH FROM (left_at - joined_at))::int)
+              END AS seconds
+         FROM community_live_visits
+        WHERE community_id = $1 AND member_id = $2
+        ORDER BY joined_at DESC, id DESC LIMIT 100`,
+      [room.id, member.id],
+    );
+    res.setHeader("Cache-Control", "no-store");
+    res.json({ items: visits.rows.map((visit) => ({
+      id: visit.id, joinedAt: visit.joined_at, leftAt: visit.left_at, seconds: visit.seconds,
+      inProgress: visit.left_at === null && active.has(visit.peer_id),
+      interrupted: visit.left_at === null && !active.has(visit.peer_id),
+    })), limit: 100 });
+  }),
 );
 
 /* --------------------------------------------------------------------- ICE */

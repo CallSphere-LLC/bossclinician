@@ -790,6 +790,12 @@ export interface AdminPointRule {
 }
 
 export interface AdminAccessGroup {
+  pricingType?: "free" | "one_time" | "subscription" | null;
+  amountCents?: number | null;
+  currency?: string | null;
+  interval?: "month" | "year" | null;
+  checkoutOfferId?: number | null;
+  checkoutSlug?: string | null;
   id: Id;
   name: string;
   description: string;

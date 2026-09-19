@@ -1,0 +1,38 @@
+[
+  {
+    "step": "create",
+    "tagId": 65,
+    "approval": "Apply an admin change\n\ncreate tags. Review the exact values below before approving.\n\nREVIEW REQUIRED\nRecord\ntags (new)\nname\nRelease QA Voice 20260919\ndescription\ntemporary manual release verification\n\nReview the values above, then click Approve to confirm this change. A spoken or typed yes does not approve it.\n\nAnything to add before you answer\n\nA note does not change these values. To revise them, choose No and ask for a new proposal.\n\nApprove\nNo\n\nIf you say nothing, I will leave it alone in 1 min 30 sec.",
+    "persisted": {
+      "id": 65,
+      "name": "Release QA Voice 20260919",
+      "slug": "release-qa-voice-20260919",
+      "colour": "",
+      "description": "temporary manual release verification",
+      "contactCount": 0,
+      "createdAt": "2026-09-19T18:42:12.876Z",
+      "updatedAt": "2026-09-19T18:42:12.876Z"
+    }
+  },
+  {
+    "step": "update",
+    "tagId": 65,
+    "approval": "Apply an admin change\n\nupdate tags record 65. Review the exact values below before approving.\n\nREVIEW REQUIRED\nRecord\ntags 65\ndescription\nverified exact-payload update\n\nReview the values above, then click Approve to confirm this change. A spoken or typed yes does not approve it.\n\nAnything to add before you answer\n\nA note does not change these values. To revise them, choose No and ask for a new proposal.\n\nApprove\nNo\n\nIf you say nothing, I will leave it alone in 1 min 30 sec.",
+    "persisted": {
+      "id": 65,
+      "name": "Release QA Voice 20260919",
+      "slug": "release-qa-voice-20260919",
+      "colour": "",
+      "description": "verified exact-payload update",
+      "contactCount": 0,
+      "createdAt": "2026-09-19T18:42:12.876Z",
+      "updatedAt": "2026-09-19T18:42:22.741Z"
+    }
+  },
+  {
+    "step": "delete",
+    "tagId": 65,
+    "approval": "Apply an admin change\n\ndelete tags record 65. Review the exact values below before approving.\n\nREVIEW REQUIRED\nRecord\ntags 65\n\nReview the values above, then click Approve to confirm this change. A spoken or typed yes does not approve it.\n\nAnything to add before you answer\n\nA note does not change these values. To revise them, choose No and ask for a new proposal.\n\nApprove\nNo\n\nIf you say nothing, I will leave it alone in 1 min 30 sec.",
+    "persisted": true
+  }
+]

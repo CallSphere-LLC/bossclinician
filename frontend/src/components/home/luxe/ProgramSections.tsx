@@ -168,7 +168,7 @@ export function Cta({ label, to, note, variant = "foil", className }: CtaProps) 
 
   return (
     <div className={cn("flex flex-col items-center text-center", className)}>
-      {to.startsWith("#") ? (
+      {(to.startsWith("#") || /^https?:\/\//.test(to)) ? (
         <LuxeButton variant={variant} size="lg" href={to} className={classes}>
           {label}
         </LuxeButton>

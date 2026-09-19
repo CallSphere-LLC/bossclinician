@@ -1,0 +1,8 @@
+{
+  "checks": [
+    "Existing group edits to one-time99 and persists reload",
+    "Existing group edits back to monthly49 preserving checkout"
+  ],
+  "fixtures": [],
+  "errors": []
+}

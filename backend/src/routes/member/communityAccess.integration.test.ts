@@ -453,4 +453,26 @@ describeDb("community entitlement (integration)", () => {
     await get(`/api/member/community/${room.slug}`, member.token);
     expect(await membershipCount(room.id, member.id)).toBe(1);
   });
+  it("lists purchasable group metadata without exposing its private channels, then shows entitled group labels", async () => {
+    const member=await newMember();
+    const room=await newCommunity("free");
+    const { saveAccessGroup }=await import("../../services/communityGroupPricing");
+    const group=await saveAccessGroup(room.id,null,{name:"Premium circle",pricingType:"one_time",amountCents:9900});
+    await newChannel(room.id,{slug:"private-tier-content",accessGroupId:group.id});
+    const before=await get(`/api/member/community/${room.slug}`,member.token);
+    expect(before.status).toBe(200);
+    expect(before.body.accessGroups).toEqual([]);
+    expect(before.body.availableAccessGroups).toEqual(expect.arrayContaining([expect.objectContaining({id:group.id,checkoutSlug:group.checkout_slug,amountCents:9900})]));
+    expect(before.body.channels).not.toEqual(expect.arrayContaining([expect.objectContaining({slug:"private-tier-content"})]));
+    expect((await get(`/api/member/community/${room.slug}/channels/private-tier-content/posts`,member.token)).status).toBe(404);
+    await access.grantOfferAccess({memberId:member.id,offerId:group.checkout_offer_id,source:"purchase"});
+    const after=await get(`/api/member/community/${room.slug}`,member.token);
+    expect(after.body.availableAccessGroups).toEqual([]);
+    expect(after.body.accessGroups).toEqual(expect.arrayContaining([expect.objectContaining({id:group.id,name:"Premium circle"})]));
+    expect(after.body.channels).toEqual(expect.arrayContaining([expect.objectContaining({slug:"private-tier-content",accessGroupId:group.id,accessGroupName:"Premium circle"})]));
+    expect((await get(`/api/member/community/${room.slug}/channels/private-tier-content/posts`,member.token)).status).toBe(200);
+    await access.revokeOfferAccess({memberId:member.id,offerId:group.checkout_offer_id,reason:"refunded"});
+    expect((await get(`/api/member/community/${room.slug}/channels/private-tier-content/posts`,member.token)).status).toBe(404);
+  });
+
 });

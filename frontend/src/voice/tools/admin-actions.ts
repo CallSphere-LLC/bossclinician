@@ -36,6 +36,7 @@ export type AdminActionParams = Record<string, unknown>;
 export type AdminAction = {
   actionId: string;
   title: string;
+  prepare?: (params: AdminActionParams, call: VoiceApiClient) => Promise<AdminActionParams>;
   risk: ApprovalRequest["risk"];
   /** What the model is allowed to fill in, as JSON Schema properties. */
   properties: Record<string, unknown>;
@@ -227,6 +228,45 @@ export const ADMIN_ACTIONS: readonly AdminAction[] = [
       return `The note is on ${contact.name || contact.email}'s record, on their timeline.`;
     },
   },
+  {
+    actionId: "admin.request",
+    title: "Apply an admin change",
+    risk: "destructive",
+    properties: {
+      resource: { type: "string", description: "Resource from admin_operation_catalog." },
+      action: { type: "string", description: "create, update or delete, as listed by the catalog." },
+      id: { type: "string", description: "Existing record id or page slug, obtained by reading the record." },
+      body: { type: "object", description: "Exact fields and values from that operation's schema." },
+    },
+    prepare: async (params, call) => {
+      const prepared = await call.post<AdminActionParams>("/voice/admin-catalog/prepare", {
+        resource: params.resource, action: params.action, id: params.id, body: params.body,
+      });
+      // The approval card must show every byte of the approved field values.
+      for (const value of Object.values((prepared.body ?? {}) as Record<string, unknown>)) {
+        if (JSON.stringify(value).length > 1800) throw new NeedsDetail("That field is too long to review in the approval card. Make this change in the editor so you can review it fully.");
+      }
+      return prepared;
+    },
+    describe: (params) => ({
+      summary: `${text(params, "action")} ${text(params, "resource")}${text(params, "path").split("/").length > 3 ? ` record ${text(params, "path").split("/").pop()}` : ""}. Review the exact values below before approving.`,
+      details: [
+        { label: "Record", value: `${text(params, "resource")} ${text(params, "path").split("/").slice(3).join("/") || "(new)"}` },
+        ...Object.entries((params.body ?? {}) as Record<string, unknown>).map(([label, value]) => ({ label, value: typeof value === "string" ? value : JSON.stringify(value) })),
+      ],
+    }),
+    run: async (params, call) => {
+      const path = text(params, "path");
+      if (!/^\/admin\/[a-z-]+(?:\/[a-zA-Z0-9_-]+)?$/.test(path)) throw new Error("Invalid approved operation path.");
+      const method = text(params, "method");
+      if (method === "POST") await call.post(path, params.body);
+      else if (method === "PUT") await call.put(path, params.body);
+      else if (method === "PATCH" && call.patch) await call.patch(path, params.body);
+      else if (method === "DELETE") await call.del(path);
+      else throw new Error("Unsupported approved operation.");
+      return `The ${text(params, "resource")} ${text(params, "action")} completed successfully.`;
+    },
+  },
 ];
 
 const BY_ID = new Map(ADMIN_ACTIONS.map((action) => [action.actionId, action]));
@@ -406,7 +446,7 @@ export function isRunnable(
   if (!proposal.approved) {
     return { ok: false, reason: "She did not approve that, so it has not been done. Ask what she would like instead." };
   }
-  if (proposal.risk === "destructive" && proposal.via === "voice") {
+  if (proposal.risk === "destructive" && proposal.via !== "click") {
     return {
       ok: false,
       reason: "This one changes something the public can see, so a spoken yes is not enough. Ask her to tap Approve on the card, then try again.",
@@ -451,7 +491,11 @@ export function buildProposeAdminActionTool(
         return "There is nobody signed in who could approve a change here, so nothing can be done. Explain what you would have done instead.";
       }
 
-      const params = readParams(args?.params);
+      let params = readParams(args?.params);
+      if (action.prepare) {
+        try { params = await action.prepare(params, ctx.call); }
+        catch (error) { return `The change is not ready to approve: ${error instanceof Error ? error.message : String(error)}`; }
+      }
       const described = action.describe(params);
       const request: ApprovalRequest = {
         actionId: action.actionId,

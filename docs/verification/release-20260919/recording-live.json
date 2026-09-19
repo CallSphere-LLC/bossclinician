@@ -1,0 +1,17 @@
+{
+  "sessionId": "6630b104-a3e0-4ef0-a403-2ebf7d95c3c3",
+  "violations": [],
+  "errors": [],
+  "filteredCount": 3,
+  "rowIndex": 0,
+  "detailStatus": 200,
+  "recordingStatus": 200,
+  "recordingHost": "bossclinician-voice-recordings.s3.us-east-1.amazonaws.com",
+  "playback": {
+    "readyState": 4,
+    "currentTime": 1.17224,
+    "duration": null,
+    "paused": false,
+    "error": null
+  }
+}

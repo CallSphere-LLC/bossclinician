@@ -12,7 +12,11 @@ import { EventsPanel } from "@/components/community/EventsPanel";
 import { ChallengesPanel } from "@/components/community/ChallengesPanel";
 import { LeaderboardPanel } from "@/components/community/LeaderboardPanel";
 import { MemberApiError } from "@/lib/memberApi";
-import { communityApi, type CommunityOverview } from "@/lib/communityApi";
+import {
+  communityApi,
+  type CommunityOverview,
+  type CommunitySummary,
+} from "@/lib/communityApi";
 import { formatNumber } from "@/lib/format";
 import { cn } from "@/lib/cn";
 
@@ -60,6 +64,13 @@ export function CommunityLayout({
 }: CommunityLayoutProps) {
   const [overview, setOverview] = useState<CommunityOverview | null>(null);
   const [error, setError] = useState("");
+  const [communities, setCommunities] = useState<CommunitySummary[]>([]);
+  useEffect(() => {
+    communityApi
+      .list()
+      .then((r) => setCommunities(r.communities.filter((c) => c.joined)))
+      .catch(() => setCommunities([]));
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -92,6 +103,19 @@ export function CommunityLayout({
       title={heading}
       description={description ?? overview?.community.description}
       actions={<NotificationBell />}
+      sidebar={
+        overview ? (
+          <CommunityNavigation
+            slug={slug}
+            overview={overview}
+            communities={communities}
+            activeChannel={
+              activeChannel ??
+              (noChannel ? undefined : overview.channels[0]?.slug)
+            }
+          />
+        ) : undefined
+      }
     >
       <Seo title={`${heading} | Boss Clinician`} />
 
@@ -122,7 +146,10 @@ export function CommunityLayout({
           onAccepted={() =>
             setOverview((prev) =>
               prev && prev.guidelines
-                ? { ...prev, guidelines: { ...prev.guidelines, pending: false } }
+                ? {
+                    ...prev,
+                    guidelines: { ...prev.guidelines, pending: false },
+                  }
                 : prev,
             )
           }
@@ -137,13 +164,22 @@ export function CommunityLayout({
           )}
         >
           <div className="min-w-0">
-            <ChannelStrip
-              slug={slug}
-              overview={overview}
-              activeChannel={
-                activeChannel ?? (noChannel ? undefined : overview.channels[0]?.slug)
-              }
-            />
+            <details className="rounded-xl border border-white/10 p-4 lg:hidden">
+              <summary className="cursor-pointer font-semibold text-gold">
+                Community channels and access groups
+              </summary>
+              <div className="mt-4">
+                <CommunityNavigation
+                  slug={slug}
+                  overview={overview}
+                  communities={communities}
+                  activeChannel={
+                    activeChannel ??
+                    (noChannel ? undefined : overview.channels[0]?.slug)
+                  }
+                />
+              </div>
+            </details>
             <div className="mt-6">{children(overview)}</div>
           </div>
 
@@ -165,110 +201,162 @@ export function CommunityLayout({
   );
 }
 
-function ChannelStrip({
+function CommunityNavigation({
   slug,
   overview,
+  communities,
   activeChannel,
 }: {
   slug: string;
   overview: CommunityOverview;
+  communities: CommunitySummary[];
   activeChannel?: string;
 }) {
+  const groups = Array.from(
+    new Set(overview.channels.map((c) => c.accessGroupName || "All members")),
+  );
+  const linkClass =
+    "flex min-h-11 items-center gap-2 rounded-lg px-3 py-2 text-sm leading-snug transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-gold";
   return (
-    <nav aria-label="Channels" className="flex flex-col gap-3">
-      <ul className="flex snap-x gap-1.5 overflow-x-auto pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        {overview.channels.map((channel) => (
-          <li key={channel.id} className="snap-start">
-            {/* A plain Link, not a NavLink: the active channel is the one the
-                page resolved, which is not always the one in the URL — a bare
-                `/community/:slug` lands on the first channel without naming it. */}
-            <Link
-              to={channel.href}
-              aria-current={channel.slug === activeChannel ? "page" : undefined}
-              className={cn(
-                "inline-flex min-h-[2.75rem] items-center gap-2 whitespace-nowrap rounded-full px-4",
-                "text-[0.7rem] font-semibold uppercase tracking-[0.12em] transition-colors duration-300",
-                "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold",
-                channel.slug === activeChannel
-                  ? "bg-gold/[0.12] text-gold"
-                  : "text-white/55 hover:bg-white/[0.05] hover:text-white",
-              )}
-            >
-              {channel.visibility === "private" ? (
-                <Lock aria-hidden className="size-3.5" />
-              ) : (
-                <Hash aria-hidden className="size-3.5" />
-              )}
-              {channel.name}
-              {channel.unreadCount > 0 && (
-                <span className="grid min-w-[1.15rem] place-items-center rounded-full bg-gold px-1 text-[0.6rem] font-bold leading-[1.15rem] text-night-deep">
-                  {channel.unreadCount > 99 ? "99+" : channel.unreadCount}
-                </span>
-              )}
-            </Link>
-          </li>
+    <div className="space-y-5">
+      <Link
+        to="/community"
+        className="inline-flex min-h-11 items-center text-xs font-semibold text-orchid-dim hover:text-white"
+      >
+        ← All communities
+      </Link>
+      <nav aria-label="Your communities" className="space-y-2">
+        {(communities.length
+          ? communities
+          : [
+              {
+                slug: overview.community.slug,
+                name: overview.community.name,
+                href: `/community/${slug}`,
+              },
+            ]
+        ).map((c) => (
+          <Link
+            key={c.slug}
+            to={c.href}
+            aria-current={c.slug === slug ? "page" : undefined}
+            className={cn(
+              "block rounded-xl border px-3 py-3 text-sm font-bold leading-snug",
+              c.slug === slug
+                ? "border-gold/40 bg-gold/[0.12] text-gold"
+                : "border-white/10 text-white/75 hover:bg-white/[0.05]",
+            )}
+          >
+            {c.name}
+          </Link>
         ))}
-
-        {/* The live room sits in the channel strip rather than the links below,
-            because that is where members look for "places to be" — and it
-            carries the host's own name for it, not ours. */}
-        {overview.liveRoom && (
-          <li className="snap-start">
-            <Link
-              to={overview.liveRoom.href}
-              aria-current={activeChannel === "live" ? "page" : undefined}
-              className={cn(
-                "inline-flex min-h-[2.75rem] items-center gap-2 whitespace-nowrap rounded-full px-4",
-                "text-[0.7rem] font-semibold uppercase tracking-[0.12em] transition-colors duration-300",
-                "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold",
-                activeChannel === "live"
-                  ? "bg-gold/[0.12] text-gold"
-                  : "text-white/55 hover:bg-white/[0.05] hover:text-white",
-              )}
-            >
-              <Radio aria-hidden className="size-3.5" />
-              {overview.liveRoom.label}
-            </Link>
-          </li>
-        )}
-      </ul>
-
-      <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
-        {/* Cmd-K, with the shortcut printed on it — nobody discovers a
-            keyboard shortcut that is written down nowhere. */}
+      </nav>
+      <div className="border-t border-white/10 pt-4">
         <CommandPalette slug={slug} />
-
+      </div>
+      <nav aria-label="Channels and access groups" className="space-y-5">
+        {groups.map((group) => (
+          <div key={group}>
+            <p className="mb-2 px-3 text-[0.65rem] font-bold uppercase tracking-[0.13em] text-orchid-dim">
+              {group}
+            </p>
+            <ul className="space-y-1">
+              {overview.channels
+                .filter((c) => (c.accessGroupName || "All members") === group)
+                .map((c) => (
+                  <li key={c.id}>
+                    <Link
+                      to={c.href}
+                      aria-current={
+                        c.slug === activeChannel ? "page" : undefined
+                      }
+                      className={cn(
+                        linkClass,
+                        c.slug === activeChannel
+                          ? "bg-white/[0.09] text-gold"
+                          : "text-white/65 hover:bg-white/[0.04] hover:text-white",
+                      )}
+                    >
+                      {c.visibility === "private" ? (
+                        <Lock aria-hidden className="size-4 shrink-0" />
+                      ) : (
+                        <Hash aria-hidden className="size-4 shrink-0" />
+                      )}
+                      <span className="min-w-0 break-words">{c.name}</span>
+                      {c.unreadCount > 0 && (
+                        <span className="ml-auto rounded-full bg-gold px-2 text-xs text-night-deep">
+                          {c.unreadCount > 99 ? "99+" : c.unreadCount}
+                        </span>
+                      )}
+                    </Link>
+                  </li>
+                ))}
+            </ul>
+          </div>
+        ))}
+      </nav>
+      {!!overview.availableAccessGroups?.length && (
+        <section
+          aria-label="Available access groups"
+          className="space-y-3 border-t border-white/10 pt-4"
+        >
+          <h2 className="px-3 text-xs font-bold uppercase tracking-wider text-orchid-dim">
+            More access groups
+          </h2>
+          {overview.availableAccessGroups.map((group) => (
+            <Link
+              key={group.id}
+              to={`/checkout/${group.checkoutSlug}`}
+              className="block rounded-xl border border-gold/25 p-3 text-sm text-white"
+            >
+              <span className="block font-semibold">{group.name}</span>
+              <span className="mt-1 block text-xs text-gold">
+                {group.pricingType === "free"
+                  ? "Free access"
+                  : `${new Intl.NumberFormat("en-US", { style: "currency", currency: group.currency || "usd" }).format(group.amountCents / 100)}${group.pricingType === "subscription" ? ` / ${group.interval}` : ""}`}{" "}
+                · View access
+              </span>
+            </Link>
+          ))}
+        </section>
+      )}
+      <nav
+        aria-label="Community activity"
+        className="space-y-1 border-t border-white/10 pt-3"
+      >
+        {overview.liveRoom && (
+          <Link
+            to={overview.liveRoom.href}
+            className={cn(
+              linkClass,
+              activeChannel === "live"
+                ? "bg-gold/[0.12] text-gold"
+                : "text-white/75",
+            )}
+            aria-current={activeChannel === "live" ? "page" : undefined}
+          >
+            <Radio aria-hidden className="size-4 shrink-0" />
+            {overview.liveRoom.label}
+          </Link>
+        )}
         <Link
           to={`/community/${slug}/messages`}
-          className={cn(
-            "inline-flex min-h-[2.75rem] items-center gap-2 text-xs font-semibold",
-            "uppercase tracking-[0.14em] text-orchid-dim transition-colors duration-300",
-            "hover:text-gold focus-visible:outline focus-visible:outline-2",
-            "focus-visible:outline-offset-2 focus-visible:outline-gold",
-          )}
+          className={cn(linkClass, "text-white/75")}
         >
-          <MessageSquare aria-hidden className="size-3.5" />
+          <MessageSquare aria-hidden className="size-4 shrink-0" />
           Messages
         </Link>
-
         <Link
           to={`/community/${slug}/members`}
-          className={cn(
-            "inline-flex min-h-[2.75rem] items-center gap-2 text-xs font-semibold",
-            "uppercase tracking-[0.14em] text-orchid-dim transition-colors duration-300",
-            "hover:text-gold focus-visible:outline focus-visible:outline-2",
-            "focus-visible:outline-offset-2 focus-visible:outline-gold",
-          )}
+          className={cn(linkClass, "text-white/75")}
         >
-          <Users aria-hidden className="size-4" />
-          {/* Pluralised, because the chrome renders this uppercase and "1
-              MEMBERS" is the first thing a member of a new community reads.
-              The number itself now comes from one definition shared with the
-              directory and the admin, so the two cannot disagree. */}
-          {formatNumber(overview.community.memberCount)}{" "}
-          {overview.community.memberCount === 1 ? "member" : "members"}
+          <Users aria-hidden className="size-4 shrink-0" />
+          {formatNumber(overview.community.memberCount)} members
         </Link>
-      </div>
-    </nav>
+        <Link to="/library" className={cn(linkClass, "text-orchid-dim")}>
+          Back to library
+        </Link>
+      </nav>
+    </div>
   );
 }

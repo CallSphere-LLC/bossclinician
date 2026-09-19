@@ -82,7 +82,7 @@ class RunnerGuardTests(unittest.TestCase):
         # by the workflow or refused by the runner.
         guard_default = re.search(r"GUARD_EXPECTED_REPOSITORY_ID:-(\d+)", GUARD.read_text()).group(1)
         workflow = (REPO_ROOT / ".github/workflows/deploy.yml").read_text()
-        self.assertIn(f"github.repository_id == '{guard_default}'", workflow)
+        self.assertNotIn("self-hosted", workflow)
         self.assertEqual(guard_default, REPOSITORY_ID)
 
 

@@ -1,0 +1,231 @@
+{
+  "verifiedAt": "2026-09-19T18:42:34.736736+00:00",
+  "release": "20260919183929-f736b5f",
+  "sourceSha256": "1bfe0709be4c20665d87ca8c5bde149386f65fe6180181bb60d453a41316512a",
+  "checkoutMatchesSource": true,
+  "images": [
+    {
+      "component": "backend",
+      "ref": "docker.io/library/bossclinician-k3-backend:20260919183929-f736b5f",
+      "imageId": "sha256:29285330a00042b00f4590069a3258be020c4ee8fcb016ff41589406e49534a4",
+      "sourceSha256": "1bfe0709be4c20665d87ca8c5bde149386f65fe6180181bb60d453a41316512a"
+    },
+    {
+      "component": "frontend",
+      "ref": "docker.io/library/bossclinician-k3-frontend:20260919183929-f736b5f",
+      "imageId": "sha256:4bcd45ec584b434edb1d45c022b8f62e433794bc6fe112251f3ff6707a5f5809",
+      "sourceSha256": "1bfe0709be4c20665d87ca8c5bde149386f65fe6180181bb60d453a41316512a"
+    },
+    {
+      "component": "ai",
+      "ref": "docker.io/library/bossclinician-k3-ai:20260919183929-f736b5f",
+      "imageId": "sha256:f56bac3529a3459169ea4f5987d64e7f3e9e21e4894f7adf424d689cdd2381bf",
+      "sourceSha256": "1bfe0709be4c20665d87ca8c5bde149386f65fe6180181bb60d453a41316512a"
+    },
+    {
+      "component": "gateway",
+      "ref": "docker.io/library/bossclinician-k3-gateway:20260919183929-f736b5f",
+      "imageId": "sha256:8648a6ab40d73ea18f6321b5140b461946ec831c4698b32cc4772882d19cf4d8",
+      "sourceSha256": "1bfe0709be4c20665d87ca8c5bde149386f65fe6180181bb60d453a41316512a"
+    }
+  ],
+  "pods": [
+    {
+      "name": "boss-ai-c74f66864-5cld8",
+      "ip": "10.42.0.86",
+      "containers": [
+        {
+          "name": "ai",
+          "ready": true,
+          "restarts": 0,
+          "image": "docker.io/library/bossclinician-k3-ai:20260919183929-f736b5f",
+          "imageID": "sha256:f56bac3529a3459169ea4f5987d64e7f3e9e21e4894f7adf424d689cdd2381bf"
+        }
+      ]
+    },
+    {
+      "name": "boss-app-76d7bd9ddb-x9wkk",
+      "ip": "10.42.0.87",
+      "containers": [
+        {
+          "name": "backend",
+          "ready": true,
+          "restarts": 0,
+          "image": "docker.io/library/bossclinician-k3-backend:20260919183929-f736b5f",
+          "imageID": "sha256:29285330a00042b00f4590069a3258be020c4ee8fcb016ff41589406e49534a4"
+        },
+        {
+          "name": "frontend",
+          "ready": true,
+          "restarts": 0,
+          "image": "docker.io/library/bossclinician-k3-frontend:20260919183929-f736b5f",
+          "imageID": "sha256:4bcd45ec584b434edb1d45c022b8f62e433794bc6fe112251f3ff6707a5f5809"
+        },
+        {
+          "name": "gateway",
+          "ready": true,
+          "restarts": 0,
+          "image": "docker.io/library/bossclinician-k3-gateway:20260919183929-f736b5f",
+          "imageID": "sha256:8648a6ab40d73ea18f6321b5140b461946ec831c4698b32cc4772882d19cf4d8"
+        }
+      ]
+    }
+  ],
+  "publicHealthReads": [
+    {
+      "status": true,
+      "release": "20260919183929-f736b5f"
+    },
+    {
+      "status": true,
+      "release": "20260919183929-f736b5f"
+    },
+    {
+      "status": true,
+      "release": "20260919183929-f736b5f"
+    }
+  ],
+  "adminHttpStatus": 200,
+  "publicRouting": [
+    {
+      "name": "boss-web-spdqm",
+      "ports": [
+        {
+          "name": "http",
+          "port": 8080,
+          "protocol": "TCP"
+        }
+      ],
+      "endpoints": [
+        {
+          "addresses": [
+            "10.42.0.87"
+          ],
+          "conditions": {
+            "ready": true,
+            "serving": true,
+            "terminating": false
+          },
+          "nodeName": "ns525614",
+          "targetRef": {
+            "kind": "Pod",
+            "name": "boss-app-76d7bd9ddb-x9wkk",
+            "namespace": "bossclinician",
+            "uid": "92a269ed-7a6e-45f6-b818-2f780cb910db"
+          }
+        }
+      ]
+    }
+  ],
+  "compose": [
+    {
+      "service": "ai",
+      "id": "9359d7272c2490970c7278e8b196dbbc30b2ad100d3c999d8c9493d59099d672",
+      "state": "exited",
+      "mounts": []
+    },
+    {
+      "service": "backend",
+      "id": "08102293981d59bb8918bc8539f2e367126cf1fe22bfcd7c3c4289dc2d2d2ed5",
+      "state": "exited",
+      "mounts": [
+        {
+          "name": "bossclinician_uploads_data",
+          "destination": "/app/uploads"
+        },
+        {
+          "name": "bossclinician_protected_uploads_data",
+          "destination": "/app/uploads-protected"
+        }
+      ]
+    },
+    {
+      "service": "coturn",
+      "id": "1cb85b0eb89cecd0e1c6ca32ebe141d0a3bc12f8ceb760a2132000774215a334",
+      "state": "running",
+      "mounts": [
+        {
+          "name": "6fcc5961548a83e5bc08e581137c58513121609aba4796c678e5277800b20332",
+          "destination": "/var/lib/coturn"
+        }
+      ]
+    },
+    {
+      "service": "db",
+      "id": "d37e9c0bb00123d6cb7f23d2dccaaed4acd96fe5e16d005f98b4a90525d02962",
+      "state": "running",
+      "mounts": [
+        {
+          "name": "bossclinician_db_data",
+          "destination": "/var/lib/postgresql/data"
+        }
+      ]
+    },
+    {
+      "service": "db-bridge",
+      "id": "42152c099d7560fb8ce9e8116b803fdc60e78888cd924569f7789b8d4a0b2d42",
+      "state": "running",
+      "mounts": []
+    },
+    {
+      "service": "frontend",
+      "id": "1f014b52225f003daf79eea1fd670bbac92f209f6b4d2de16f4620e9e12ad406",
+      "state": "exited",
+      "mounts": []
+    },
+    {
+      "service": "nginx",
+      "id": "8f3dbdb629965dd5205a0738199ee4a5b67c717c3ed27eac5352782ed93cf7f1",
+      "state": "exited",
+      "mounts": []
+    }
+  ],
+  "databaseBackup": {
+    "path": "/var/backups/bossclinician/pre-k3s-20260919183929-f736b5f.dump",
+    "archiveListValid": true,
+    "catalogLines": 1541,
+    "restoreNotPerformed": true
+  },
+  "retention": {
+    "removed": {
+      "docker": [
+        "bossclinician-k3-ai:20260919180959-f736b5f",
+        "bossclinician-k3-ai:20260919182104-f736b5f",
+        "bossclinician-k3-backend:20260919180959-f736b5f",
+        "bossclinician-k3-backend:20260919182104-f736b5f",
+        "bossclinician-k3-frontend:20260919180959-f736b5f",
+        "bossclinician-k3-frontend:20260919182104-f736b5f",
+        "bossclinician-k3-gateway:20260919180959-f736b5f",
+        "bossclinician-k3-gateway:20260919182104-f736b5f",
+        "bossclinician-k3-retention-probe:20000101"
+      ],
+      "containerd": [
+        "docker.io/library/bossclinician-k3-ai:20260919180959-f736b5f",
+        "docker.io/library/bossclinician-k3-ai:20260919182104-f736b5f",
+        "docker.io/library/bossclinician-k3-backend:20260919180959-f736b5f",
+        "docker.io/library/bossclinician-k3-backend:20260919182104-f736b5f",
+        "docker.io/library/bossclinician-k3-frontend:20260919180959-f736b5f",
+        "docker.io/library/bossclinician-k3-frontend:20260919182104-f736b5f",
+        "docker.io/library/bossclinician-k3-gateway:20260919180959-f736b5f",
+        "docker.io/library/bossclinician-k3-gateway:20260919182104-f736b5f",
+        "docker.io/library/bossclinician-k3-retention-probe:20000101"
+      ]
+    },
+    "unrelatedRefsPreserved": true,
+    "newestThreeProbeTagsProtected": true,
+    "probeTagsCleaned": true,
+    "timerEnabled": "enabled",
+    "timerActive": "active",
+    "nextTrigger": "Sun 2026-09-20 04:44:49 UTC"
+  },
+  "dataPreservation": {
+    "originalDatabaseContainerUnchanged": true,
+    "uploadsSharedMountReadWriteVerified": true,
+    "temporaryUploadProbesRemoved": true
+  },
+  "validation": {
+    "pipelineAndRetentionUnitTests": 109,
+    "backendIntegrationSuite": 285,
+    "latestMemberHistoryFocusedTests": 17
+  }
+}

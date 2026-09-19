@@ -53,6 +53,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  // A screen left open must still leave the admin area when its absolute
+  // eight-hour session expires. Network failures do not prove a sign-out.
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    const verify = () => {
+      void adminApi.me().catch((error) => {
+        if (!cancelled && error instanceof ApiError && (error.status === 401 || error.status === 403)) setUser(null);
+      });
+    };
+    const timer = window.setInterval(verify, 60_000);
+    window.addEventListener("focus", verify);
+    return () => { cancelled = true; window.clearInterval(timer); window.removeEventListener("focus", verify); };
+  }, [user?.id]);
+
   const login = useCallback(async (email: string, password: string, code?: string) => {
     const { user: loggedInUser } = await adminApi.login(email, password, code);
     clearLegacyAdminToken();

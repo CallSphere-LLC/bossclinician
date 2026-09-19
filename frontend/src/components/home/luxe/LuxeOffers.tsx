@@ -36,11 +36,11 @@ const QUIZ_HREF = "/practice-quiz";
  */
 const OFFERS: readonly Offer[] = [
   {
-    ribbon: "6-MONTH PROGRAM",
+    ribbon: "6-MONTH COACHING PROGRAM",
     name: "The Club",
     tagline: "Build a private practice you won't have to undo later.",
     desc: [
-      "For clinicians building their foundation, attracting clients, and learning how to run the business side of private practice with more confidence and less guessing.",
+      "A structured 6-month program designed to help practice owners strengthen operations, leadership, growth, and profitability with ongoing coaching and accountability.",
     ],
     audience: "For: The clinician building or rebuilding",
     cta: "Explore the Club",
@@ -48,11 +48,11 @@ const OFFERS: readonly Offer[] = [
     accent: "green",
   },
   {
-    ribbon: "MEMBERSHIP",
+    ribbon: "MONTHLY MEMBERSHIP",
     name: "The Lounge",
     tagline: "Make the practice you already built work better for the life you actually want.",
     desc: [
-      "For established clinicians whose practice is full or nearly full, but still requires more time, energy, or clinical output than they want to maintain long-term.",
+      "A flexible monthly membership offering ongoing business support, resources, training, and community for clinicians building and growing their practices.",
       "Strengthen your income model, reduce how much the practice depends on your maximum capacity, build better systems, and create more room for the life and future you actually want.",
     ],
     audience: "For: The Maxed Out Clinician",
@@ -65,7 +65,7 @@ const OFFERS: readonly Offer[] = [
     name: "The Boardroom",
     tagline: "Build a practice that can grow beyond you.",
     desc: [
-      "For group-practice owners and scaling clinicians who need stronger leadership, team systems, and CEO-level decision-making as the business becomes bigger than one person.",
+      "An advanced mastermind for established practice owners who want higher-level strategy, peer collaboration, accountability, and support with scaling their business.",
     ],
     audience: "For: The Stretched Thin Clinician",
     cta: "Explore the Boardroom",

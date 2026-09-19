@@ -1,0 +1,971 @@
+[
+  {
+    "url": "https://bossclinician.callsphere.site/retreats",
+    "events": [
+      {
+        "type": "session.started"
+      },
+      {
+        "type": "session.updated"
+      },
+      {
+        "type": "session.output_transcript.delta",
+        "delta": " Hi,"
+      },
+      {
+        "type": "session.output_transcript.delta",
+        "delta": " I'm"
+      },
+      {
+        "type": "session.instructions.appended"
+      },
+      {
+        "type": "session.output_transcript.delta",
+        "delta": " Boss"
+      },
+      {
+        "type": "session.thinking.appended"
+      },
+      {
+        "type": "session.instructions.appended"
+      },
+      {
+        "type": "session.output_transcript.delta",
+        "delta": " Clinician"
+      },
+      {
+        "type": "session.output_transcript.delta",
+        "delta": " AI."
+      },
+      {
+        "type": "session.output_transcript.delta",
+        "delta": " Would"
+      },
+      {
+        "type": "session.output_transcript.delta",
+        "delta": " you like"
+      },
+      {
+        "type": "session.output_transcript.delta",
+        "delta": " me"
+      },
+      {
+        "type": "session.output_transcript.delta",
+        "delta": " to walk"
+      },
+      {
+        "type": "session.output_transcript.delta",
+        "delta": " you"
+      },
+      {
+        "type": "session.output_transcript.delta",
+        "delta": " through"
+      },
+      {
+        "type": "session.output_transcript.delta",
+        "delta": " the"
+      },
+      {
+        "type": "session.output_transcript.delta",
+        "delta": " whole"
+      },
+      {
+        "type": "session.output_transcript.delta",
+        "delta": " site,"
+      },
+      {
+        "type": "session.output_transcript.delta",
+        "delta": " or"
+      },
+      {
+        "type": "session.output_transcript.delta",
+        "delta": " would you"
+      },
+      {
+        "type": "session.output_transcript.delta",
+        "delta": " rather"
+      },
+      {
+        "type": "session.output_transcript.delta",
+        "delta": " just"
+      },
+      {
+        "type": "session.output_transcript.delta",
+        "delta": " ask"
+      },
+      {
+        "type": "session.output_transcript.delta",
+        "delta": " me"
+      },
+      {
+        "type": "session.output_transcript.delta",
+        "delta": " things?"
+      },
+      {
+        "type": "session.input_transcript.delta",
+        "delta": " Please"
+      },
+      {
+        "type": "session.input_transcript.delta",
+        "delta": " take me"
+      },
+      {
+        "type": "session.input_transcript.delta",
+        "delta": " to the"
+      },
+      {
+        "type": "session.usage.updated",
+        "usage": {
+          "seconds": 15
+        }
+      },
+      {
+        "type": "session.input_transcript.delta",
+        "delta": " retreats"
+      },
+      {
+        "type": "session.input_transcript.delta",
+        "delta": " page"
+      },
+      {
+        "type": "session.input_transcript.delta",
+        "delta": " and"
+      },
+      {
+        "type": "session.input_transcript.delta",
+        "delta": " tell"
+      },
+      {
+        "type": "session.input_transcript.delta",
+        "delta": " me"
+      },
+      {
+        "type": "session.input_transcript.delta",
+        "delta": " about"
+      },
+      {
+        "type": "session.input_transcript.delta",
+        "delta": " the"
+      },
+      {
+        "type": "session.input_transcript.delta",
+        "delta": " location"
+      },
+      {
+        "type": "session.delegation.created"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.created"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.in_progress"
+      },
+      {
+        "type": "session.output_transcript.delta",
+        "delta": " Sure,"
+      },
+      {
+        "type": "session.output_transcript.delta",
+        "delta": " let"
+      },
+      {
+        "type": "session.output_transcript.delta",
+        "delta": " me take"
+      },
+      {
+        "type": "session.output_transcript.delta",
+        "delta": " you there"
+      },
+      {
+        "type": "session.output_transcript.delta",
+        "delta": "."
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_item.added"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.function_call_arguments.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.function_call_arguments.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.function_call_arguments.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.function_call_arguments.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.function_call_arguments.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.function_call_arguments.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.function_call_arguments.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.function_call_arguments.done"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_item.done"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.completed"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.created"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.in_progress"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_item.added"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.function_call_arguments.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.function_call_arguments.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.function_call_arguments.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.function_call_arguments.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.function_call_arguments.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.function_call_arguments.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.function_call_arguments.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.function_call_arguments.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.function_call_arguments.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.function_call_arguments.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.function_call_arguments.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.function_call_arguments.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.function_call_arguments.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.function_call_arguments.done"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_item.done"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.completed"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.created"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.in_progress"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_item.added"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.content_part.added"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.delta"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_text.done"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.content_part.done"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.output_item.done"
+      },
+      {
+        "type": "response.event",
+        "eventType": "response.completed"
+      },
+      {
+        "type": "session.output_transcript.delta",
+        "delta": " Okay,"
+      },
+      {
+        "type": "session.output_transcript.delta",
+        "delta": " I’ve"
+      },
+      {
+        "type": "session.output_transcript.delta",
+        "delta": " brought"
+      },
+      {
+        "type": "session.output_transcript.delta",
+        "delta": " you"
+      },
+      {
+        "type": "session.output_transcript.delta",
+        "delta": " to the"
+      },
+      {
+        "type": "session.output_transcript.delta",
+        "delta": " retreats"
+      },
+      {
+        "type": "session.output_transcript.delta",
+        "delta": " page."
+      },
+      {
+        "type": "session.output_transcript.delta",
+        "delta": " It"
+      },
+      {
+        "type": "session.output_transcript.delta",
+        "delta": " features"
+      },
+      {
+        "type": "session.output_transcript.delta",
+        "delta": " the women's"
+      },
+      {
+        "type": "session.usage.updated",
+        "usage": {
+          "seconds": 28
+        }
+      },
+      {
+        "type": "session.output_transcript.delta",
+        "delta": " wellness"
+      },
+      {
+        "type": "session.output_transcript.delta",
+        "delta": " retreat"
+      },
+      {
+        "type": "session.output_transcript.delta",
+        "delta": " in U"
+      },
+      {
+        "type": "session.output_transcript.delta",
+        "delta": "bud,"
+      },
+      {
+        "type": "session.output_transcript.delta",
+        "delta": " Bali."
+      },
+      {
+        "type": "session.output_transcript.delta",
+        "delta": " and it's"
+      },
+      {
+        "type": "session.output_transcript.delta",
+        "delta": " held"
+      },
+      {
+        "type": "session.output_transcript.delta",
+        "delta": " in a"
+      },
+      {
+        "type": "session.output_transcript.delta",
+        "delta": " private"
+      },
+      {
+        "type": "session.output_transcript.delta",
+        "delta": " villa"
+      },
+      {
+        "type": "session.output_transcript.delta",
+        "delta": " for"
+      },
+      {
+        "type": "session.output_transcript.delta",
+        "delta": " just"
+      },
+      {
+        "type": "session.output_transcript.delta",
+        "delta": " twelve"
+      },
+      {
+        "type": "session.output_transcript.delta",
+        "delta": " women,"
+      },
+      {
+        "type": "session.output_transcript.delta",
+        "delta": " with"
+      },
+      {
+        "type": "session.output_transcript.delta",
+        "delta": " en"
+      },
+      {
+        "type": "session.output_transcript.delta",
+        "delta": " suite"
+      },
+      {
+        "type": "session.output_transcript.delta",
+        "delta": " king"
+      },
+      {
+        "type": "session.output_transcript.delta",
+        "delta": " bedrooms,"
+      },
+      {
+        "type": "session.output_transcript.delta",
+        "delta": " two"
+      },
+      {
+        "type": "session.output_transcript.delta",
+        "delta": " infinity"
+      },
+      {
+        "type": "session.output_transcript.delta",
+        "delta": " pools,"
+      },
+      {
+        "type": "session.output_transcript.delta",
+        "delta": " a yoga"
+      },
+      {
+        "type": "session.output_transcript.delta",
+        "delta": " shala"
+      },
+      {
+        "type": "session.output_transcript.delta",
+        "delta": ","
+      },
+      {
+        "type": "session.output_transcript.delta",
+        "delta": " gym,"
+      },
+      {
+        "type": "session.output_transcript.delta",
+        "delta": " and"
+      },
+      {
+        "type": "session.output_transcript.delta",
+        "delta": " spa"
+      },
+      {
+        "type": "session.output_transcript.delta",
+        "delta": " from"
+      },
+      {
+        "type": "session.output_transcript.delta",
+        "delta": " June"
+      },
+      {
+        "type": "session.output_transcript.delta",
+        "delta": " 15"
+      },
+      {
+        "type": "session.output_transcript.delta",
+        "delta": " to "
+      },
+      {
+        "type": "session.output_transcript.delta",
+        "delta": "20,"
+      },
+      {
+        "type": "session.output_transcript.delta",
+        "delta": " "
+      },
+      {
+        "type": "session.output_transcript.delta",
+        "delta": "2027"
+      },
+      {
+        "type": "session.output_transcript.delta",
+        "delta": "."
+      },
+      {
+        "type": "session.usage.updated",
+        "usage": {
+          "seconds": 43
+        }
+      },
+      {
+        "type": "session.closed",
+        "usage": {
+          "seconds": 44
+        }
+      }
+    ],
+    "requests": [
+      {
+        "path": "/api/voice/tour-progress",
+        "status": 200
+      },
+      {
+        "path": "/api/voice/session",
+        "status": 200,
+        "id": "6630b104-a3e0-4ef0-a403-2ebf7d95c3c3",
+        "surface": "public",
+        "recording": true
+      },
+      {
+        "path": "/api/voice/connect",
+        "status": 200
+      },
+      {
+        "path": "/api/voice/recording",
+        "status": 202
+      },
+      {
+        "path": "/api/voice/recording",
+        "status": 202
+      },
+      {
+        "path": "/api/voice/recording",
+        "status": 202
+      },
+      {
+        "path": "/api/voice/transcript",
+        "status": 200
+      },
+      {
+        "path": "/api/voice/recording",
+        "status": 202
+      },
+      {
+        "path": "/api/voice/recording",
+        "status": 202
+      },
+      {
+        "path": "/api/voice/recording",
+        "status": 202
+      },
+      {
+        "path": "/api/voice/recording",
+        "status": 202
+      },
+      {
+        "path": "/api/voice/transcript",
+        "status": 200
+      },
+      {
+        "path": "/api/voice/recording",
+        "status": 202
+      },
+      {
+        "path": "/api/voice/recording",
+        "status": 202
+      },
+      {
+        "path": "/api/voice/recording",
+        "status": 202
+      },
+      {
+        "path": "/api/voice/recording",
+        "status": 202
+      },
+      {
+        "path": "/api/voice/transcript",
+        "status": 200
+      },
+      {
+        "path": "/api/voice/recording",
+        "status": 202
+      },
+      {
+        "path": "/api/voice/recording",
+        "status": 202
+      },
+      {
+        "path": "/api/voice/recording",
+        "status": 202
+      },
+      {
+        "path": "/api/voice/recording",
+        "status": 202
+      },
+      {
+        "path": "/api/voice/end",
+        "status": 200
+      },
+      {
+        "path": "/api/voice/transcript",
+        "status": 200
+      }
+    ],
+    "errors": []
+  }
+]

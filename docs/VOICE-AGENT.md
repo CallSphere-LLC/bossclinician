@@ -263,3 +263,101 @@ rulings; they are now in the contracts.
    `spotlightSpokenText` per active word. Do not port a second clock.
 6. **A `risk: "destructive"` approval ignores a spoken yes** and keeps the card up until a click or
    a timeout. The tool-side gate is then a second line of defence that never fires in normal use.
+
+## September 19 release: streaming, operation catalog, and verification
+
+The text concierge now requests real provider streaming. `POST /api/voice/chat` uses SSE only
+when `Accept: text/event-stream` is explicitly requested; existing JSON clients retain JSON.
+The stream sends `session`, visible `delta` fragments, then one authoritative `done` envelope
+containing the final text and complete tool calls. Provider failures send `error`. The browser
+must receive `done` before executing any tool; an interrupted stream cannot execute partial
+arguments. Proxy buffering is disabled through `X-Accel-Buffering: no`. The widget displays
+provider fragments as they arrive, with a cursor that respects reduced-motion preferences.
+The transport uses the existing authenticated member fetch, including cookies and bearer-token
+refresh. Session identification arrives before tools run so first-turn approvals can be audited.
+
+Both voice and text still execute the same navigation, page-reading, pointing, tour, account,
+and approval tools. Public narration and chat suggestions no longer sell the retired one-to-one
+offers. Guided itineraries cover concrete registered destination pages; individual record/detail
+routes depend on real records and are reached through their list pages, not invented identifiers.
+
+### Approved admin changes
+
+The four existing specific actions remain: publish/unpublish a blog post, update an enquiry's
+status, and add a contact note. `admin_operation_catalog` additionally discovers **40 CRUD
+operations across 14 resources**. Thirteen support create/update/delete: blog, courses,
+testimonials, resources, tags, segments, contacts, members, forms, events, sequences,
+assessments, and automations. Pages support update by slug only.
+
+The operation schemas import the validators used by the actual admin handlers. The discovery
+endpoint describes one resource/action at a time. `admin.request` first calls
+`/api/voice/admin-catalog/prepare` to validate and normalize the payload, then shows that exact
+payload in the approval card. Execution uses the resulting fixed internal path and method;
+external URLs, traversal, authentication endpoints, and unknown resources are refused.
+The normal admin API remains responsible for current session and module permissions on each
+read and mutation. Catalog access itself requires administrator authentication.
+
+Members and tags have no generic GET-by-id handler; discovery reads their actual list endpoint
+and filters the returned records when an id is supplied. Forms use `/api/admin/forms-v2`.
+Catalog schema sizes were measured at 104–2570 JSON characters in this checkout, within the
+7500-character tool-output bound. Long record lists may still be shortened for model context.
+
+The generic operation path requires a click on **Approve**, with full field values visible in a
+scrollable card. A spoken or typed yes cannot approve a sensitive/destructive request. Existing
+normal-risk actions retain voice/chat approval. A note records context and does not change the
+payload; revising values requires declining and creating a new proposal. Approvals expire and
+are consumed once. A decline never performs the requested mutation.
+
+This is an explicit operation catalog, **not arbitrary coverage of every admin button**.
+Uploads, authentication/team credentials, payment/refund operations, and nested operations not
+listed by discovery must be completed in their own screens. The assistant must explain that
+limit and navigate to the appropriate page. Additions require actual route/method/schema
+metadata and the same approval path, rather than allowing a model-supplied URL.
+
+### Provider lifecycle
+
+The implementation was checked against the current official
+[GPT-Live session guidance](https://developers.openai.com/api/docs/guides/live-conversations)
+and [delegation guidance](https://developers.openai.com/api/docs/guides/live-delegation).
+Startup waits for `session.started`. Configuration changes are sent as
+`session.update` with delegation settings. Function calls are collected from nested
+`response.output_item.done` within `response.event`; the empty output snapshot of the nested
+completion event is not treated as the function-call list. Each executed call returns a
+`response.item.create` function result, followed by `response.create` only once pending results
+are supplied. Backend completion is not evidence of played speech: playback state uses the
+remote audio waveform. Transcript deltas are persisted as grouped fragments, not authoritative
+turn-completion events.
+
+Graceful close installs the `session.closed` listener before `session.close`, retains the peer
+and data channel while final events drain, and releases resources after confirmation or the
+15-second application timeout. Timeout produces an explicit unconfirmed-finalization console
+warning. Cumulative `usage.seconds` replaces prior duration; it is not summed. Local/S3 recording
+chunks are separate application recordings and do not depend on OpenAI stored-session recording.
+
+### Evidence and release checks
+
+Local verification completed before deployment: frontend typecheck and all **353 frontend
+unit tests** passed; backend typecheck and **1192 backend tests** passed, with **274 integration
+tests skipped** by the existing test harness. Focused tests cover split SSE frames, Unicode
+provider fragments, early disconnect/error handling, JSON fallback, tool-call preservation,
+actual schema validation, path rejection, exact approved payload, single-use execution, and
+refused/destructive approvals. These tests do not establish a live provider or S3 result.
+
+Required manual production checks for the release record:
+
+1. Open public, member, and admin chat; confirm the greeting identifies Boss Clinician AI and
+   visible reply text grows before the request completes. Ask each to navigate, read the current
+   page, point at visible content, and start/advance/end a tour.
+2. Ask admin chat to create a disposable tag. Confirm no tag exists before approval, decline the
+   first proposal, then approve a fresh proposal and verify the actual tag row. Confirm a typed
+   yes leaves the sensitive approval card pending. Delete the test tag through a fresh approval.
+3. Verify anonymous/member callers cannot access the admin catalog or mutate admin resources;
+   verify a limited admin's catalog-driven actions retain the module API's permission rejection.
+4. Start voice with a microphone, observe actual `session.started`, delegation and audible output,
+   navigate while connected, then end and observe `session.closed`. Inspect persisted transcript
+   and the private S3 recording through the admin session detail, including playback.
+5. Verify member account reads show only that member's data and a second identity cannot append
+   transcript/recording chunks to another caller's session.
+
+Live browser/provider/storage evidence is recorded separately under `docs/verification`; do not
+promote this local-test section to proof of a production pass.

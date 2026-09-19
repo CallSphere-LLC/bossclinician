@@ -286,7 +286,7 @@ adminMembersRouter.get(
   }),
 );
 
-const createSchema = z.object({
+export const createSchema = z.object({
   email: z.string().trim().email().max(320),
   name: z.string().trim().max(200).optional(),
   firstName: z.string().trim().max(120).optional(),
@@ -369,7 +369,7 @@ adminMembersRouter.post(
   }),
 );
 
-const updateSchema = z.object({
+export const updateSchema = z.object({
   name: z.string().trim().max(200).optional(),
   firstName: z.string().trim().max(120).optional(),
   lastName: z.string().trim().max(120).optional(),

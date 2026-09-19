@@ -13,6 +13,7 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import type { ChatMessage } from "@/types";
 import type { VoiceSurfacePolicy } from "@/voice/contract";
 import { cn } from "@/lib/cn";
+import { footer } from "@/content/site";
 import { createVoiceApiClient } from "@/voice/kernel";
 import { policyForPath } from "@/voice/surfaces";
 import { readApprovalAnswer, useConciergeChat, useFirstVisitOffer } from "@/voice/text";
@@ -63,7 +64,7 @@ function teaserDismissed(): boolean {
 }
 
 const PUBLIC_GREETING =
-  "Hi, I'm the Boss Clinician assistant. Ask me about working with Yvette, the B.O.S.S Blueprint, or where to start!";
+  "Hi, I'm Boss Clinician AI. Ask me about working with Yvette, the B.O.S.S Blueprint, or where to start!";
 
 /**
  * What the panel opens with.
@@ -78,7 +79,7 @@ function panelGreeting(policy: VoiceSurfacePolicy): string {
 }
 
 const FAILURE_MESSAGE =
-  "I'm having trouble connecting right now. Please email bossclinician@gmail.com or try again shortly.";
+  `I'm having trouble connecting right now. Please email ${footer.contactEmail} or try again shortly.`;
 
 /**
  * The walkthrough offer, in the form it takes for someone typing.
@@ -93,7 +94,7 @@ const TOUR_CHOICES = ["Yes, show me around", "No thanks, I'll ask"];
 
 const STARTER_SUGGESTIONS = [
   "What is the B.O.S.S Blueprint?",
-  "How do I apply for 1:1 coaching?",
+  "Tell me about the B.O.S.S. Boardroom",
   "I'm seeing too many clients — help",
 ];
 
@@ -257,7 +258,7 @@ export function ChatWidget() {
     initialMessages,
     failureMessage: FAILURE_MESSAGE,
   });
-  const { messages, sending, pendingApproval } = concierge;
+  const { messages, sending, streamingReply, pendingApproval } = concierge;
 
   const [suggestions, setSuggestions] = useState<string[]>(STARTER_SUGGESTIONS);
   const [input, setInput] = useState("");
@@ -267,7 +268,7 @@ export function ChatWidget() {
 
   // The client is two functions over the app's own fetch and holds no state, so
   // building one per call costs nothing and keeps it out of the render.
-  const voiceApi = useCallback(() => createVoiceApiClient(), []);
+  const voiceApi = useCallback(() => createVoiceApiClient(policy.surface), [policy.surface]);
   const offer = useFirstVisitOffer({
     policy,
     call: voiceApi,
@@ -292,7 +293,7 @@ export function ChatWidget() {
     if (open && scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages, open]);
+  }, [messages, streamingReply, open]);
 
   /**
    * Once opened, the concierge's own overlays stay mounted for the rest of the
@@ -453,7 +454,15 @@ export function ChatWidget() {
                     </p>
                   </div>
                 ))}
-                {sending && (
+                {streamingReply && (
+                  <div className="flex justify-start" data-testid="chat-streaming-reply">
+                    <p className="max-w-[85%] whitespace-pre-wrap rounded-2xl bg-ink/[0.05] px-4 py-2.5 text-sm leading-relaxed text-orchid ring-1 ring-inset ring-ink/[0.07]">
+                      {streamingReply}
+                      <span aria-hidden="true" className="ml-0.5 inline-block h-3.5 w-0.5 bg-current motion-safe:animate-pulse" />
+                    </p>
+                  </div>
+                )}
+                {sending && !streamingReply && (
                   <div className="flex justify-start">
                     <span className="inline-flex items-center gap-1 rounded-2xl bg-ink/[0.05] px-4 py-2.5 ring-1 ring-inset ring-ink/[0.07]">
                       <Dot delay={0} />

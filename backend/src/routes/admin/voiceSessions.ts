@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { asyncHandler } from "../../utils/asyncHandler";
-import { badRequest, notFound } from "../../utils/httpError";
+import { badRequest, conflict, notFound } from "../../utils/httpError";
 import { requirePermission } from "../../services/permissions";
 import { recordAdminAction } from "../../services/adminAudit";
 import {
@@ -97,6 +97,12 @@ adminVoiceSessionsRouter.get(
     const sessionId = String(req.params.id);
     const detail = await sessionDetail(sessionId);
     if (detail === null) throw notFound("That conversation could not be found.");
+
+    // Joining a live recording would remove its parts and reject every later
+    // chunk. A dropped tab is recoverable once its last upload has gone stale.
+    if (!detail.endedAt && Date.now() - Date.parse(detail.lastSeenAt) < 120_000) {
+      throw conflict("This recording is still being saved. Open it after the call ends.");
+    }
 
     let key = detail.recordingKey;
     if (detail.recordingFinalizedAt === null) {

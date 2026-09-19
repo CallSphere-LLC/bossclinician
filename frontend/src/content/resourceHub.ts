@@ -104,7 +104,7 @@ export const avatarSections: AvatarSectionData[] = [
         description:
           "Why your marketing isn't working — and exactly what to do instead. A simple, sustainable system to attract aligned clients without posting every day or depending on platforms to send referrals.",
         ctaLabel: "Get the Free 5-Step Marketing Plan",
-        href: "/resources",
+        href: "https://www.bossclinician.com/5-step-marketing",
       },
     ],
     cta: {
@@ -132,7 +132,7 @@ export const avatarSections: AvatarSectionData[] = [
         description:
           "For established clinicians whose practice is working, but who do not want their income, schedule, and future to depend on staying clinically maxed out. Learn why being fully booked can still leave you maxed out, where your practice may depend too heavily on you, and what needs to change if you want the practice to support your next season. Includes the complimentary Practice Freedom Audit.",
         ctaLabel: "Watch the Free Masterclass",
-        href: "/resources",
+        href: "https://www.bossclinician.com/freedom-masterclass",
       },
     ],
     cta: {
@@ -199,7 +199,7 @@ export interface FinalCtaLink {
 
 // TODO: repoint at the dedicated offer routes once they exist.
 export const finalCtaLinks: FinalCtaLink[] = [
-  { label: "Join the Boss Clinician Club", to: "/work-with-me", variant: "green" },
-  { label: "Join the Boss Clinician Lounge", to: "/work-with-me", variant: "plum" },
+  { label: "Join the Boss Clinician Club", to: "/club", variant: "green" },
+  { label: "Join the Boss Clinician Lounge", to: "/lounge", variant: "plum" },
   { label: "Apply for the Boardroom", to: "/work-with-me", variant: "gold" },
 ];

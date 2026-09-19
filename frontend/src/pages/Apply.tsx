@@ -39,8 +39,8 @@ export default function Apply() {
   return (
     <>
       <Seo
-        title="Boss Clinician Consulting - Apply"
-        description="Apply to work 1:1 with Yvette Howard, LCSW, and build the private practice that pays you well, fits your life, and lets you lead with purpose."
+        title="Apply for the Boss Clinician Boardroom"
+        description="Apply for the Boss Clinician Boardroom with Yvette Howard, LCSW, for support with leadership, hiring, systems, and a sustainable group practice."
       />
 
       <LuxePageHero

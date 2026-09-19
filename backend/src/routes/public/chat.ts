@@ -10,7 +10,7 @@ import { chatLimiter, chatTranscriptLimiter } from "../../middleware/rateLimit";
 export const chatRouter = Router();
 
 const FALLBACK_REPLY =
-  "Thanks for reaching out! I'm having trouble connecting right now, but you can apply for 1:1 coaching or explore the free masterclass while I get back online — or email bossclinician@gmail.com directly.";
+  "Thanks for reaching out! I'm having trouble connecting right now, but you can explore the B.O.S.S. Club, Boardroom, or retreats or explore the free masterclass while I get back online — or email bossclinician@gmail.com directly.";
 
 interface AiChatResponse {
   reply: string;

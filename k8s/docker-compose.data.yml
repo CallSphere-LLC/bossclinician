@@ -1,0 +1,12 @@
+# Data remains in the existing Compose stack. No database recreation is needed.
+services:
+  db-bridge:
+    image: nginx:1.31-alpine
+    restart: unless-stopped
+    mem_limit: 32m
+    security_opt: ["no-new-privileges:true"]
+    ports: ["10.42.0.1:15432:5432"]
+    volumes: ["./k8s/db-bridge.conf:/etc/nginx/nginx.conf:ro"]
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}

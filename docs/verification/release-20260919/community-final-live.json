@@ -1,0 +1,53 @@
+{
+  "checks": [
+    "Deployed group monthly49 price retained",
+    "Opening each new event resets native after external selection",
+    {
+      "club": [
+        {
+          "text": "JOIN THE CLUB",
+          "href": "https://www.bossclinician.com/offers/tzgjALKU/checkout"
+        },
+        {
+          "text": "I'M READY TO JOIN!!",
+          "href": "https://www.bossclinician.com/offers/tzgjALKU/checkout"
+        },
+        {
+          "text": "I'M READY FOR THE CLUB",
+          "href": "https://www.bossclinician.com/offers/tzgjALKU/checkout"
+        },
+        {
+          "text": "JOIN THE CLUB",
+          "href": "https://www.bossclinician.com/offers/tzgjALKU/checkout"
+        },
+        {
+          "text": "JOIN THE CLUB",
+          "href": "https://www.bossclinician.com/offers/tzgjALKU/checkout"
+        },
+        {
+          "text": "GET ME IN THE CLUB",
+          "href": "https://www.bossclinician.com/offers/tzgjALKU/checkout"
+        },
+        {
+          "text": "SAY LESS.. I'M READY TO JOIN THE CLUB",
+          "href": "https://www.bossclinician.com/offers/tzgjALKU/checkout"
+        }
+      ]
+    },
+    {
+      "externalClubNavigation": "https://www.bossclinician.com/offers/tzgjALKU/checkout",
+      "status": 200
+    }
+  ],
+  "fixtures": [],
+  "errors": [
+    {
+      "message": "Unexpected end of input",
+      "url": "https://www.bossclinician.com/offers/tzgjALKU/checkout"
+    }
+  ],
+  "finalPage": {
+    "url": "https://www.bossclinician.com/offers/tzgjALKU/checkout",
+    "body": "You're One Step Away From the Club\nThe 6-month coaching program where therapists build a private practice that replaces their salary, without losing their security to get there.\n\nEverything you need to make your boss move:\n\n✅ The Boss Move Signature Program - All 5 modules with 4 NBCC clock hours. The exact build order that works: foundation, clients, income, systems. Move at your pace, earn continuing education credit while you build.\n\n \n\n✅ 2 Live Coaching Calls Per Month with Yvette - Twelve live calls across your six months. Real questions, real answers, from a strategist who built a multi-six-figure group practice from your exact starting point.\n\n \n\n✅ A Community Built for Your Stage - Your cohort of clinicians building in the same season you are, with six full months of support so you are never building alone.\n\n \n\n✅ The First 30 Days Success Planner + Readiness Tracker - Momentum from day one, with every milestone mapped so you always know what comes next.\n\n \n\n✅ Every Template You Need - Checklists, client and provider letter templates, plus done-for-you branding and marketing materials including business cards, postcards, email signatures, and 250 blog article ideas.\n\n \n\n✅ The Prepare to Profit Guided Meditation Journal - The mindset work that keeps the build moving when fear shows up.\n\nPlus these bonuses, included when you enroll:\n \n\n🎁 BONUS #1: The Therapist Niche Clarity Accelerator\n\nKnow exactly who you serve before you see your first client. The guided workbook, mini-training, 15-minute market research method, and Ideal Client Identifier that take you from \"too "
+  }
+}

@@ -287,6 +287,22 @@ export async function conciergeTurn(input: {
   messages: ResponseInput[];
   tools: SubmittedTool[];
   signal?: AbortSignal;
+  /**
+   * Ask OpenAI to stream this turn, so the visible text can be forwarded as it
+   * is written instead of after the whole turn has been composed.
+   *
+   * It changes how the answer is READ, never what the answer is: both paths end
+   * in `turnFromOutput`, so a streamed turn and a buffered one produce the same
+   * reply and the same tool calls. That is what lets the browser's tool loop
+   * stay exactly as it was — it never learns which path served it.
+   */
+  stream?: boolean;
+  /**
+   * Called with each visible fragment as it arrives, and only ever with visible
+   * text: a turn that decides to call a tool instead of talking emits nothing
+   * here, so the caller can still answer it as an ordinary JSON response.
+   */
+  onDelta?: (text: string) => void;
 }): Promise<ConciergeTurn> {
   if (!voiceEnabled()) {
     return {
@@ -326,6 +342,7 @@ export async function conciergeTurn(input: {
         // turn that looks like the assistant ignoring somebody.
         reasoning: { effort: "low" },
         max_output_tokens: 4096,
+        ...(input.stream ? { stream: true } : {}),
       }),
       redirect: "error",
       signal,
@@ -343,15 +360,19 @@ export async function conciergeTurn(input: {
   }
 
   const requestId = response.headers.get("x-request-id") ?? "none";
+
+  // A streamed turn is read event by event and never reaches `response.json()`.
+  // The test is the content type rather than what we asked for, because an
+  // upstream that quietly ignored `stream: true` answers with ordinary JSON,
+  // and that answer is still a perfectly good turn — falling through to the
+  // buffered path is how this keeps working against a model or a proxy that
+  // cannot stream.
+  if (input.stream && response.ok && isEventStream(response) && response.body) {
+    return readStreamedTurn(response.body, requestId, input.onDelta);
+  }
+
   const body = (await response.json().catch(() => null)) as {
-    output?: {
-      type?: string;
-      call_id?: string;
-      id?: string;
-      name?: string;
-      arguments?: string;
-      content?: { type?: string; text?: string }[];
-    }[];
+    output?: ResponseOutputItem[];
     error?: { message?: string };
     status?: string;
     incomplete_details?: { reason?: string };
@@ -379,10 +400,35 @@ export async function conciergeTurn(input: {
     return { ok: false, status: 502, error: `The reply was cut short (${reason}).` };
   }
 
+  return turnFromOutput(body?.output ?? []);
+}
+
+/* ------------------------- reading one finished turn ---------------------- */
+
+/** One entry of the Responses API's `output` array, in the parts we read. */
+type ResponseOutputItem = {
+  type?: string;
+  call_id?: string;
+  id?: string;
+  name?: string;
+  arguments?: string;
+  content?: { type?: string; text?: string }[];
+};
+
+/**
+ * The model's finished output, as the browser's tool loop consumes it.
+ *
+ * Both transports end here on purpose. The streamed path and the buffered path
+ * differ only in HOW the output array is obtained, so a reply that arrived a
+ * word at a time and one that arrived all at once are indistinguishable by the
+ * time anything acts on them — which is the only reason it is safe to stream a
+ * turn that might turn out to be a tool call rather than an answer.
+ */
+function turnFromOutput(output: ResponseOutputItem[]): ConciergeTurn {
   const reply: string[] = [];
   const toolCalls: { id: string; name: string; arguments: Record<string, unknown> }[] = [];
 
-  for (const item of body?.output ?? []) {
+  for (const item of output) {
     if (item.type === "message") {
       for (const part of item.content ?? []) {
         if (typeof part.text === "string" && part.text.length > 0) reply.push(part.text);
@@ -400,6 +446,127 @@ export async function conciergeTurn(input: {
   }
 
   return { ok: true, reply: reply.length > 0 ? reply.join("\n\n") : null, toolCalls };
+}
+
+function isEventStream(response: Response): boolean {
+  return (response.headers.get("content-type") ?? "").toLowerCase().includes("text/event-stream");
+}
+
+/**
+ * Reads a streamed turn to its end and returns the same thing the buffered path
+ * returns.
+ *
+ * The visible fragments are forwarded as they pass, but they are NOT what the
+ * turn is built from: the terminal `response.completed` event carries the whole
+ * output array, tool calls included, and that is what is parsed. Assembling the
+ * reply out of the deltas instead would work right up until the model emitted a
+ * tool call, which has no text at all.
+ */
+async function readStreamedTurn(
+  body: NonNullable<Response["body"]>,
+  requestId: string,
+  onDelta?: (text: string) => void,
+): Promise<ConciergeTurn> {
+  let completed: ResponseOutputItem[] | null = null;
+  let failure: ConciergeTurn | null = null;
+
+  try {
+    for await (const event of responseEvents(body)) {
+      const type = typeof event.type === "string" ? event.type : "";
+      if (type === "response.output_text.delta") {
+        const delta = event.delta;
+        if (typeof delta === "string" && delta.length > 0) onDelta?.(delta);
+      } else if (type === "response.completed") {
+        completed = eventResponse(event)?.output ?? [];
+      } else if (type === "response.incomplete") {
+        // The same case the buffered path reports: almost always the token
+        // budget, and silence here reads as the assistant ignoring somebody.
+        const reason = eventResponse(event)?.incomplete_details?.reason ?? "unknown";
+        failure = { ok: false, status: 502, error: `The reply was cut short (${reason}).` };
+      } else if (type === "response.failed" || type === "error") {
+        const detail =
+          eventResponse(event)?.error?.message ??
+          (typeof event.message === "string" ? event.message : "the stream reported a failure");
+        failure = { ok: false, status: 502, error: `OpenAI refused the message: ${detail}` };
+      }
+    }
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    console.error(`${LOG} the streamed turn broke off request_id=${requestId}: ${detail}`);
+    return { ok: false, status: 502, error: `The reply broke off: ${detail}` };
+  }
+
+  if (failure) {
+    console.error(`${LOG} the streamed turn failed request_id=${requestId}: ${failure.ok ? "" : failure.error}`);
+    return failure;
+  }
+  if (!completed) {
+    // A stream that stopped without its terminal event. Whatever text went past
+    // is not a turn — there is no way to know whether a tool call was coming —
+    // so this is a failure rather than a half-answer presented as a whole one.
+    console.error(`${LOG} the streamed turn ended unfinished request_id=${requestId}`);
+    return { ok: false, status: 502, error: "The reply ended before it was finished." };
+  }
+  return turnFromOutput(completed);
+}
+
+/** The `data:` payloads of an SSE body, parsed, in order. */
+async function* responseEvents(
+  body: NonNullable<Response["body"]>,
+): AsyncGenerator<Record<string, unknown>> {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      // A chunk boundary falls wherever the network put it, so only the frames
+      // that are provably whole — everything before the last blank line — are
+      // handed on, and the remainder waits for the rest of itself.
+      const frames = buffer.split(/\r?\n\r?\n/);
+      buffer = frames.pop() ?? "";
+      for (const frame of frames) {
+        const parsed = frameData(frame);
+        if (parsed) yield parsed;
+      }
+    }
+    buffer += decoder.decode();
+    const last = frameData(buffer);
+    if (last) yield last;
+  } finally {
+    reader.releaseLock();
+  }
+}
+
+function frameData(frame: string): Record<string, unknown> | null {
+  const data = frame
+    .split(/\r?\n/)
+    .filter((line) => line.startsWith("data:"))
+    .map((line) => line.slice("data:".length).trimStart())
+    .join("\n");
+  // Keep-alive comments and the sentinel some gateways append carry no event.
+  if (!data || data === "[DONE]") return null;
+  try {
+    const parsed = JSON.parse(data) as unknown;
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function eventResponse(event: Record<string, unknown>): {
+  output?: ResponseOutputItem[];
+  incomplete_details?: { reason?: string };
+  error?: { message?: string };
+} | null {
+  const value = event.response;
+  return value && typeof value === "object"
+    ? (value as { output?: ResponseOutputItem[]; incomplete_details?: { reason?: string }; error?: { message?: string } })
+    : null;
 }
 
 function parseArguments(raw: unknown): Record<string, unknown> {

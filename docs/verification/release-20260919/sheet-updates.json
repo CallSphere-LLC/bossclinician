@@ -1,0 +1,12 @@
+{
+  "range": "'Updates & Discussion'!A1:M100",
+  "majorDimension": "ROWS",
+  "values": [
+    [
+      "Updates & Discussion."
+    ],
+    [
+      "**Boss Clinician Club — 6-Month Coaching Program**\r\nA structured 6-month program designed to help practice owners strengthen operations, leadership, growth, and profitability with ongoing coaching and accountability.\r\n\r\n**Boss Clinician Lounge — Monthly Membership**\r\nA flexible monthly membership offering ongoing business support, resources, training, and community for clinicians building and growing their practices.\r\n\r\n**Boss Clinician Boardroom — Mastermind**\r\nAn advanced mastermind for established practice owners who want higher-level strategy, peer collaboration, accountability, and support with scaling their business.\r"
+    ]
+  ]
+}

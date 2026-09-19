@@ -1,0 +1,155 @@
+{
+  "verifiedAt": "2026-09-19T18:47:19.862990+00:00",
+  "fixtureEmails": [
+    "release-20260919-qa-admin@example.invalid",
+    "release-20260919-qa-support@example.invalid",
+    "release-20260919-qa-member@example.invalid",
+    "release-20260919-qa-member-two@example.invalid",
+    "release-20260919-qa-enquiry@example.invalid"
+  ],
+  "deleted": {
+    "admins": 2,
+    "members": 1,
+    "lead": 1,
+    "adminAuditRows": 45,
+    "memberLoginAttempts": 18,
+    "tourProgressRows": 2
+  },
+  "member66AlreadyRemoved": true,
+  "accountSessionsRevokedByCascade": true,
+  "identityResiduals": {
+    "admin_users": 0,
+    "members": 0,
+    "leads": 0
+  },
+  "foreignKeyResiduals": {
+    "abandoned_checkouts.member_id": 0,
+    "access_grants.member_id": 0,
+    "admin_audit_log.admin_user_id": 0,
+    "admin_invites.invited_by": 0,
+    "admin_mfa_recovery_codes.admin_user_id": 0,
+    "admin_sessions.admin_user_id": 0,
+    "affiliates.member_id": 0,
+    "api_keys.created_by": 0,
+    "assessment_attempts.member_id": 0,
+    "certificates.member_id": 0,
+    "coach_availability.admin_user_id": 0,
+    "coach_availability_overrides.admin_user_id": 0,
+    "coaching_credits.member_id": 0,
+    "coaching_sessions.member_id": 0,
+    "community_access_group_members.member_id": 0,
+    "community_challenge_entries.member_id": 0,
+    "community_channel_members.member_id": 0,
+    "community_comments.member_id": 0,
+    "community_dm_messages.sender_id": 0,
+    "community_dm_threads.member_a_id": 0,
+    "community_dm_threads.member_b_id": 0,
+    "community_event_rsvps.member_id": 0,
+    "community_live_visits.member_id": 0,
+    "community_memberships.member_id": 0,
+    "community_point_events.member_id": 0,
+    "community_poll_votes.member_id": 0,
+    "community_posts.member_id": 0,
+    "community_reactions.member_id": 0,
+    "community_reports.reporter_id": 0,
+    "coupon_redemptions.member_id": 0,
+    "course_progress.member_id": 0,
+    "download_events.member_id": 0,
+    "email_messages.member_id": 0,
+    "enrollments.member_id": 0,
+    "event_registrations.member_id": 0,
+    "invoices.member_id": 0,
+    "lesson_comments.admin_user_id": 0,
+    "lesson_comments.member_id": 0,
+    "lesson_notes.member_id": 0,
+    "lesson_progress.member_id": 0,
+    "media_upload_sessions.admin_user_id": 0,
+    "member_badges.member_id": 0,
+    "member_email_preferences.member_id": 0,
+    "member_email_verifications.member_id": 0,
+    "member_magic_links.member_id": 0,
+    "member_notifications.actor_id": 0,
+    "member_notifications.member_id": 0,
+    "member_password_resets.member_id": 0,
+    "member_sessions.member_id": 0,
+    "newsletter_subscriptions.member_id": 0,
+    "orders.gift_member_id": 0,
+    "orders.member_id": 0,
+    "payment_plans.member_id": 0,
+    "podcast_feed_tokens.member_id": 0,
+    "saved_reports.created_by": 0,
+    "subscriptions.member_id": 0,
+    "transactions.member_id": 0,
+    "voice_sessions.admin_user_id": 0,
+    "voice_sessions.member_id": 0,
+    "voice_tour_progress.admin_user_id": 0,
+    "voice_tour_progress.member_id": 0
+  },
+  "emailResiduals": {
+    "abandoned_checkouts.email": 0,
+    "admin_audit_log.admin_email": 0,
+    "admin_invites.email": 0,
+    "admin_users.email": 0,
+    "affiliates.email": 0,
+    "assessment_attempts.email": 0,
+    "contacts.email": 0,
+    "coupon_redemptions.email": 0,
+    "domain_events.email": 0,
+    "email_sends.email": 0,
+    "email_suppressions.email": 0,
+    "event_registrations.email": 0,
+    "form_submissions.email": 0,
+    "invoices.email": 0,
+    "leads.email": 0,
+    "member_email_verifications.email": 0,
+    "member_login_attempts.email": 0,
+    "members.email": 0,
+    "newsletter_subscriptions.email": 0,
+    "orders.email": 0,
+    "payment_plans.email": 0,
+    "subscribers.email": 0,
+    "subscriptions.email": 0,
+    "transactions.email": 0
+  },
+  "voiceSessionsRemovedSeparatelyByRoot": 28,
+  "s3Verification": "Owned separately by root; this task did not touch S3",
+  "publicHealth": {
+    "ok": true,
+    "service": "bossclinician-backend",
+    "release": "20260919183929-f736b5f",
+    "time": "2026-09-19T18:47:19.479Z"
+  },
+  "pods": [
+    {
+      "name": "boss-ai-c74f66864-5cld8",
+      "containers": [
+        {
+          "name": "ai",
+          "ready": true,
+          "restarts": 0
+        }
+      ]
+    },
+    {
+      "name": "boss-app-76d7bd9ddb-x9wkk",
+      "containers": [
+        {
+          "name": "backend",
+          "ready": true,
+          "restarts": 0
+        },
+        {
+          "name": "frontend",
+          "ready": true,
+          "restarts": 0
+        },
+        {
+          "name": "gateway",
+          "ready": true,
+          "restarts": 0
+        }
+      ]
+    }
+  ],
+  "sourceSha256": "1bfe0709be4c20665d87ca8c5bde149386f65fe6180181bb60d453a41316512a"
+}

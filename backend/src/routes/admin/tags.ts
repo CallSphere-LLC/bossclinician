@@ -51,7 +51,7 @@ adminTagsRouter.get(
   })
 );
 
-const createSchema = z.object({
+export const createSchema = z.object({
   name: z.string().trim().min(1).max(120),
   colour: z.string().trim().max(20).optional(),
   description: z.string().trim().max(500).optional(),
@@ -91,7 +91,7 @@ adminTagsRouter.post(
   })
 );
 
-const updateSchema = z.object({
+export const updateSchema = z.object({
   name: z.string().trim().min(1).max(120).optional(),
   colour: z.string().trim().max(20).optional(),
   description: z.string().trim().max(500).optional(),

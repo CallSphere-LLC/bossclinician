@@ -12,6 +12,7 @@ import { Navigate, useLocation } from "react-router";
 import {
   isRegistrationPending,
   memberApi,
+  MemberApiError,
   setAccessToken,
   setSignedOutHandler,
   type MemberProfile,
@@ -132,6 +133,16 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
     };
   }, [applySession, clearSession, previewToken]);
 
+  // Enforce session expiry even while a member leaves a lesson open. The
+  // shared client refreshes expired access tokens and clears an ended session.
+  useEffect(() => {
+    if (!member || member.impersonatedBy) return;
+    const verify = () => { void memberApi.me().catch(() => {}); };
+    const timer = window.setInterval(verify, 60_000);
+    window.addEventListener("focus", verify);
+    return () => { window.clearInterval(timer); window.removeEventListener("focus", verify); };
+  }, [member?.id, member?.impersonatedBy]);
+
   // Refresh a couple of minutes before the 15-minute access token expires, so a
   // member reading a long lesson never gets bounced mid-scroll.
   useEffect(() => {
@@ -141,7 +152,9 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
         void memberApi
           .refresh()
           .then(({ member: profile, accessToken }) => applySession(profile, accessToken))
-          .catch(() => clearSession());
+          .catch((error) => {
+            if (error instanceof MemberApiError && (error.status === 401 || error.status === 403)) clearSession();
+          });
       },
       13 * 60 * 1000,
     );

@@ -1935,12 +1935,14 @@ memberCommunityRouter.get(
         default_view_mode: string;
         view_mode: string;
         access_group_id: number | null;
+        access_group_name: string | null;
         post_count: number;
         unread_count: number;
       }>(
         `SELECT ch.id, ch.slug, ch.name, ch.description, ch.format, ch.visibility,
                 ch.cover_image, ch.view_modes, ch.default_view_mode, ch.view_mode,
                 ch.access_group_id,
+                (SELECT g.name FROM community_access_groups g WHERE g.id=ch.access_group_id) AS access_group_name,
                 (SELECT COUNT(*)::int FROM community_posts p
                   WHERE p.channel_id = ch.id AND p.status = 'visible') AS post_count,
                 (SELECT COUNT(*)::int FROM community_posts p
@@ -1982,7 +1984,26 @@ memberCommunityRouter.get(
       [ctx.id, ctx.points]
     );
 
+    const groupIds = await memberAccessGroupIds(member.id);
+    const accessGroups = await pool.query(
+      `SELECT g.id,g.name,g.description,o.slug AS checkout_slug,o.pricing_type,o.amount_cents,o.currency,o.interval
+         FROM community_access_groups g LEFT JOIN offers o ON o.id=g.checkout_offer_id
+        WHERE g.community_id=$1 AND ($2::bool OR g.id=ANY($3::int[])) ORDER BY g.sort,g.id`,
+      [ctx.id,ctx.moderator,groupIds],
+    );
+    // Published checkout metadata is intentionally discoverable; hidden channel
+    // titles and content remain protected by the normal tier entitlement gate.
+    const availableGroups = await pool.query(
+      `SELECT g.id,g.name,g.description,o.slug AS checkout_slug,o.pricing_type,o.amount_cents,o.currency,o.interval
+         FROM community_access_groups g JOIN offers o ON o.id=g.checkout_offer_id
+        WHERE g.community_id=$1 AND o.status='published' AND NOT(g.id=ANY($2::int[])) ORDER BY g.sort,g.id`,
+      [ctx.id,groupIds],
+    );
+    const groupJson = (g: Record<string, any>) => ({id:g.id,name:g.name,description:g.description,
+      checkoutSlug:g.checkout_slug,pricingType:g.pricing_type,amountCents:g.amount_cents,currency:g.currency,interval:g.interval});
     res.json({
+      accessGroups: accessGroups.rows.map(groupJson),
+      availableAccessGroups: availableGroups.rows.map(groupJson),
       community: {
         id: ctx.id,
         slug: ctx.slug,
@@ -2022,6 +2043,8 @@ memberCommunityRouter.get(
         format: ch.format,
         visibility: ch.visibility,
         coverImage: ch.cover_image,
+        accessGroupId: ch.access_group_id,
+        accessGroupName: ch.access_group_name,
         // The layouts this channel offers, and the one it opens in.
         viewModes: ch.view_modes,
         defaultViewMode: ch.default_view_mode,

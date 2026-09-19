@@ -1,0 +1,40 @@
+[
+  {
+    "role": "admin",
+    "surface": "admin",
+    "sessionId": "c85ad221-26b7-4e77-ad91-ab47714612ea",
+    "responses": [
+      {
+        "path": "/api/voice/chat",
+        "status": 401
+      },
+      {
+        "path": "/api/admin/refresh",
+        "status": 204
+      },
+      {
+        "path": "/api/voice/chat",
+        "status": 200
+      }
+    ]
+  },
+  {
+    "role": "member",
+    "surface": "member",
+    "sessionId": "889300d1-412c-4b26-b012-bb67fd261788",
+    "responses": [
+      {
+        "path": "/api/voice/chat",
+        "status": 401
+      },
+      {
+        "path": "/api/auth/refresh",
+        "status": 200
+      },
+      {
+        "path": "/api/voice/chat",
+        "status": 200
+      }
+    ]
+  }
+]

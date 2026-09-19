@@ -76,8 +76,8 @@ describe("runConciergeTurn", () => {
     expect(turn.reply).toBe("That is the Blueprint.");
     expect(server.seen[1].messages.slice(-3)).toEqual([
       { role: "assistant", content: "Let me show you." },
-      { role: "tool", toolCallId: "c1", name: "navigate_to", content: '{"ok":true,"path":"/courses"}' },
-      { role: "tool", toolCallId: "c2", name: "point_at", content: "pointing at the Blueprint card" },
+      { role: "tool", toolCallId: "c1", name: "navigate_to", arguments: { destination: "courses" }, content: '{"ok":true,"path":"/courses"}' },
+      { role: "tool", toolCallId: "c2", name: "point_at", arguments: { focus: "Blueprint" }, content: "pointing at the Blueprint card" },
     ]);
   });
 
@@ -117,6 +117,7 @@ describe("runConciergeTurn", () => {
       role: "tool",
       toolCallId: "c1",
       name: "my_account_summary",
+      arguments: {},
       content: '{"ok":false,"error":"You are not signed in."}',
     });
   });

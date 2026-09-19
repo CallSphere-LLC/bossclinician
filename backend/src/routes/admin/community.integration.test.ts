@@ -530,4 +530,98 @@ describeDb("community admin api (integration)", () => {
       accessGroupName: group.body.name,
     });
   });
+  it("creates a priced group with a published checkout and grants only after payment", async () => {
+    const communityId = await newCommunity();
+    const memberId = await insertMember(client, `${unique("tier-buyer")}@test.invalid`);
+    const access = await import("../../services/access");
+    const created = await call("POST", `/admin/community/${communityId}/access-groups`, {
+      name: "Paid coaching", pricingType: "subscription", amountCents: 4900, currency: "usd", interval: "month",
+    });
+    expect(created.status).toBe(201);
+    expect(created.body).toMatchObject({pricingType:"subscription",amountCents:4900,currency:"usd",interval:"month"});
+    expect(created.body.checkoutOfferId).toBeTypeOf("number");
+    expect(created.body.checkoutSlug).toMatch(/^community-/);
+    const catalog = await client.query(`SELECT o.status,p.kind,p.community_id,p.access_group_id FROM offers o JOIN offer_products op ON op.offer_id=o.id JOIN products p ON p.id=op.product_id WHERE o.id=$1`,[created.body.checkoutOfferId]);
+    expect(catalog.rows[0]).toEqual({status:"published",kind:"access_group",community_id:communityId,access_group_id:created.body.id});
+    // Selling a tier must not close the rest of a previously free community.
+    expect(await access.mayEnterCommunity(memberId,communityId)).toBe(true);
+    expect(await access.memberAccessGroupIds(memberId)).not.toContain(created.body.id);
+    await client.query(`UPDATE communities SET access='paid' WHERE id=$1`,[communityId]);
+    expect(await access.mayEnterCommunity(memberId,communityId)).toBe(false);
+    await access.grantOfferAccess({memberId,offerId:created.body.checkoutOfferId,source:"purchase"});
+    expect(await access.mayEnterCommunity(memberId,communityId)).toBe(true);
+    expect(await access.memberAccessGroupIds(memberId)).toContain(created.body.id);
+    await access.revokeOfferAccess({memberId,offerId:created.body.checkoutOfferId,reason:"refunded"});
+    expect(await access.mayEnterCommunity(memberId,communityId)).toBe(false);
+    expect(await access.memberAccessGroupIds(memberId)).not.toContain(created.body.id);
+  });
+
+  it("requires a real paid price and rolls failed group creation back", async () => {
+    const communityId=await newCommunity();
+    for(const amountCents of [undefined,0,49,-1]) {
+      const result=await call("POST",`/admin/community/${communityId}/access-groups`,{name:"Invalid paid",pricingType:"one_time",amountCents});
+      expect(result.status).toBe(400);
+    }
+    const groups=await call("GET",`/admin/community/${communityId}/access-groups`);
+    expect(groups.body).toEqual([]);
+  });
+
+  it("creates an explicit free enrollment checkout and keeps legacy groups unconfigured",async()=>{
+    const communityId=await newCommunity();
+    const legacy=await call("POST",`/admin/community/${communityId}/access-groups`,{name:"Existing invitation tier"});
+    expect(legacy.body.checkoutOfferId).toBeNull();
+    expect(legacy.body.pricingType).toBeNull();
+    const free=await call("POST",`/admin/community/${communityId}/access-groups`,{name:"Free enrollment",pricingType:"free",amountCents:999});
+    expect(free.status).toBe(201);
+    expect(free.body).toMatchObject({pricingType:"free",amountCents:0,interval:null});
+    expect(free.body.checkoutSlug).toBeTruthy();
+  });
+
+  it("reprices future checkout without losing existing members, and archives deleted group checkout",async()=>{
+    const communityId=await newCommunity();
+    const other=await newCommunity();
+    const group=await call("POST",`/admin/community/${communityId}/access-groups`,{name:"Lifetime",pricingType:"one_time",amountCents:12000});
+    const memberId=await insertMember(client,`${unique("existing-tier")}@test.invalid`);
+    const access=await import("../../services/access");
+    await access.grantOfferAccess({memberId,offerId:group.body.checkoutOfferId,source:"purchase"});
+    await client.query(`UPDATE offers SET stripe_price_id='price_old' WHERE id=$1`,[group.body.checkoutOfferId]);
+    const wrong=await call("PUT",`/admin/community/${other}/access-groups/${group.body.id}`,{name:"Hijack"});
+    expect(wrong.status).toBe(404);
+    const update=await call("PUT",`/admin/community/${communityId}/access-groups/${group.body.id}`,{name:"Lifetime updated",pricingType:"one_time",amountCents:15000});
+    expect(update.body.checkoutOfferId).toBe(group.body.checkoutOfferId);
+    expect(update.body.checkoutSlug).toBe(group.body.checkoutSlug);
+    expect(await access.memberAccessGroupIds(memberId)).toContain(group.body.id);
+    expect((await client.query(`SELECT stripe_price_id FROM offers WHERE id=$1`,[group.body.checkoutOfferId])).rows[0].stripe_price_id).toBeNull();
+    const deleted=await call("DELETE",`/admin/community/${communityId}/access-groups/${group.body.id}`);
+    expect(deleted.status).toBe(204);
+    expect((await client.query(`SELECT status FROM offers WHERE id=$1`,[group.body.checkoutOfferId])).rows[0].status).toBe("archived");
+  });
+
+  it("creates native community events without an external URL and enables the live room atomically",async()=>{
+    const communityId=await newCommunity();
+    await client.query(`UPDATE communities SET live_room_enabled=false WHERE id=$1`,[communityId]);
+    const created=await call("POST",`/admin/community/${communityId}/events`,{title:"Native meeting",joinMode:"native",startsAt:new Date(Date.now()+3600000).toISOString()});
+    expect(created.status).toBe(201);
+    expect(created.body.locationUrl).toBe("");
+    expect((await client.query(`SELECT live_room_enabled FROM communities WHERE id=$1`,[communityId])).rows[0].live_room_enabled).toBe(true);
+    const invalid=await call("POST",`/admin/community/${communityId}/events`,{title:"Unsafe link",joinMode:"external",locationUrl:"javascript:alert(1)"});
+    expect(invalid.status).toBe(400);
+    expect((await call("GET",`/admin/community/${communityId}/events`)).body).toHaveLength(1);
+  });
+
+  it("switches an external event to the native room and enables that community only",async()=>{
+    const communityId=await newCommunity();
+    const other=await newCommunity();
+    await client.query(`UPDATE communities SET live_room_enabled=false WHERE id=ANY($1::int[])`,[[communityId,other]]);
+    const created=await call("POST",`/admin/community/${communityId}/events`,{title:"External meeting",joinMode:"external",locationUrl:"https://meet.example.test/room"});
+    expect(created.status).toBe(201);
+    expect(created.body.locationUrl).toBe("https://meet.example.test/room");
+    expect((await client.query(`SELECT live_room_enabled FROM communities WHERE id=$1`,[communityId])).rows[0].live_room_enabled).toBe(false);
+    const updated=await call("PUT",`/admin/community/events/${created.body.id}`,{joinMode:"native"});
+    expect(updated.status).toBe(200);
+    expect(updated.body.locationUrl).toBe("");
+    expect((await client.query(`SELECT live_room_enabled FROM communities WHERE id=$1`,[communityId])).rows[0].live_room_enabled).toBe(true);
+    expect((await client.query(`SELECT live_room_enabled FROM communities WHERE id=$1`,[other])).rows[0].live_room_enabled).toBe(false);
+  });
+
 });

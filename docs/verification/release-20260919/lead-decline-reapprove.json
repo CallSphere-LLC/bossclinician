@@ -1,0 +1,75 @@
+{
+  "wire": [
+    {
+      "request": []
+    },
+    {
+      "status": 200,
+      "done": ""
+    },
+    {
+      "request": [
+        {
+          "role": "tool",
+          "toolCallId": "call_yNgYNpopDiYXMFIMZGIja80h",
+          "name": "propose_admin_action",
+          "content": "She said no. Nothing has been changed. Acknowledge it in one short line and ask what she would like instead."
+        }
+      ]
+    },
+    {
+      "status": 200,
+      "done": ""
+    },
+    {
+      "request": []
+    },
+    {
+      "status": 200,
+      "done": ""
+    },
+    {
+      "request": [
+        {
+          "role": "tool",
+          "toolCallId": "call_mFprho89OSwSL8cb3J9mV7j4",
+          "name": "propose_admin_action",
+          "content": "Approved (click). Run it now with run_approved_action and proposal \"lead.status#2\"."
+        }
+      ]
+    },
+    {
+      "status": 200,
+      "done": ""
+    },
+    {
+      "request": [
+        {
+          "role": "tool",
+          "toolCallId": "call_mFprho89OSwSL8cb3J9mV7j4",
+          "name": "propose_admin_action",
+          "content": "Approved (click). Run it now with run_approved_action and proposal \"lead.status#2\"."
+        },
+        {
+          "role": "tool",
+          "toolCallId": "call_8aujbkdDzPeiIMDOLsAAAytc",
+          "name": "run_approved_action",
+          "content": "Done. Release QA Enquiry's enquiry is filed under \"contacted\" now."
+        }
+      ]
+    },
+    {
+      "status": 200,
+      "done": ""
+    }
+  ],
+  "errors": [],
+  "checks": [
+    {
+      "declinePreserved": "new"
+    },
+    {
+      "approvedStatus": "contacted"
+    }
+  ]
+}

@@ -1,39 +1,24 @@
 # Routes bossclinician.callsphere.site (via k3s Traefik + cert-manager TLS)
-# to the isolated Docker Compose stack bound on the host bridge 10.42.0.1:8088.
+# to the native K3s app deployment.
 apiVersion: v1
 kind: Namespace
 metadata:
   name: bossclinician
 ---
-# Service with no selector — endpoints are managed manually (points at the host).
+# The selector routes public and admin traffic to the complete K3s app pod.
 apiVersion: v1
 kind: Service
 metadata:
   name: boss-web
   namespace: bossclinician
 spec:
+  selector:
+    app: boss-app
   ports:
     - name: http
       port: 80
-      targetPort: 8088
+      targetPort: 8080
       protocol: TCP
----
-apiVersion: v1
-kind: Endpoints
-metadata:
-  name: boss-web            # must match the Service name
-  namespace: bossclinician
-subsets:
-  - addresses:
-      # The cni0 gateway: k3s here runs as a host service (not k3d-in-docker), so
-      # pods reach the host at the pod-network gateway, not at a docker bridge.
-      # Was 172.18.0.1 on the old 8GB box, where k3d's nodes were containers on a
-      # docker bridge. Keep in sync with the nginx port binding in docker-compose.yml.
-      - ip: 10.42.0.1
-    ports:
-      - name: http
-        port: 8088
-        protocol: TCP
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress

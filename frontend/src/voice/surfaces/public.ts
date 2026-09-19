@@ -42,7 +42,7 @@ const DESTINATIONS: readonly VoiceDestination[] = [
       "what are my options",
     ],
     narration:
-      "Work With Me is the long page about working one to one: the Practice Reset Intensive, the Scale and Reclaim Suite and the Boss Boardroom, with who each is for, how the partnership runs, six frequently asked questions and a form for anything they miss.",
+      "Work With Me introduces the B.O.S.S. Boardroom, a group experience for practice owners. Read the current page for its format, application details and frequently asked questions. One-to-one consulting is no longer offered.",
     surfaces: PUBLIC,
   },
   {
@@ -111,7 +111,7 @@ const DESTINATIONS: readonly VoiceDestination[] = [
   {
     key: "store",
     path: "/store",
-    label: "Consulting services",
+    label: "Store",
     aliases: [
       "the store",
       "the shop",
@@ -122,7 +122,7 @@ const DESTINATIONS: readonly VoiceDestination[] = [
       "where do I pay",
     ],
     narration:
-      "Three consulting services with their prices written plainly: the Practice Reset Intensive at three thousand five hundred, the Scale and Reclaim Suite at six thousand five hundred, and the Boss Boardroom at twelve thousand dollars.",
+      "The store shows the currently available offers. Read the live products and prices before describing them; never offer retired one-to-one consulting services.",
     surfaces: PUBLIC,
   },
   {
@@ -365,7 +365,7 @@ const TOUR: readonly TourStop[] = [
       },
       {
         focus: "Strategic partnerships",
-        say: "These are the partnerships themselves — the Practice Reset Intensive, the Scale and Reclaim Suite and the Boss Boardroom. As Yvette puts it, she doesn't sell calls, she builds Bosses.",
+        say: "This is the B.O.S.S. Boardroom. Read the details on screen to explain the current group experience and who it serves.",
       },
       {
         focus: "How we work together",
@@ -437,11 +437,11 @@ const TOUR: readonly TourStop[] = [
   },
   {
     destination: "store",
-    purpose: "The defined consulting pieces someone can book without applying.",
+    purpose: "The current offers available to purchase.",
     beats: [
       {
-        focus: "Boss Clinician consulting services",
-        say: "These are the shorter, defined pieces of consulting — bookable directly, with what each one covers and what it costs written out.",
+        focus: "Store",
+        say: "Read the available offers and current prices on this page. The Club, Boardroom and retreats are the current ways to work with Boss Clinician; one-to-one consulting is no longer offered.",
       },
       {
         focus: "Get Started",

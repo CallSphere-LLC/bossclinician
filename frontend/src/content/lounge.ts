@@ -24,7 +24,7 @@ export const lounge = {
   seo: {
     title: "The Lounge | Sustainable Private Practice for Therapists",
     description:
-      "A private-practice membership for established therapists ready to reduce caseload pressure, strengthen income, improve systems, and build a practice that supports their life and future.",
+      "A flexible monthly membership offering ongoing business support, resources, training, and community for clinicians building and growing their practices.",
   },
 
   hero: {

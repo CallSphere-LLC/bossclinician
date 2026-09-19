@@ -18,7 +18,7 @@ import {
   subscribeVoiceCaptions,
 } from "./audio-tap";
 import { describeVoiceError, requestAdmission } from "./connect";
-import { putVoiceRecording } from "./api-client";
+import { putVoiceRecording, voiceFetch } from "./api-client";
 import type { RealtimeSession } from "./live-session.client";
 
 /**
@@ -149,7 +149,7 @@ function pickMimeType(): string {
   return "";
 }
 
-function startCallRecording(pc: RTCPeerConnection, sessionId: string): CallRecorder | null {
+function startCallRecording(pc: RTCPeerConnection, sessionId: string, surface: VoiceSurface): CallRecorder | null {
   if (typeof window === "undefined" || typeof MediaRecorder === "undefined") return null;
   const AC: typeof AudioContext | undefined =
     window.AudioContext ??
@@ -207,7 +207,7 @@ function startCallRecording(pc: RTCPeerConnection, sessionId: string): CallRecor
   const send = (slice: Blob, keepalive: boolean) => {
     const at = seq++;
     uploads = uploads.then(() =>
-      putVoiceRecording(sessionId, at, slice, { keepalive }).catch((uploadError) => {
+      putVoiceRecording(sessionId, at, slice, { keepalive, surface }).catch((uploadError) => {
         // A lost slice is a shorter recording. It is never a reason to disturb
         // a call that is still happening.
         console.warn(`The call recording lost slice ${at}:`, describeVoiceError(uploadError));
@@ -295,6 +295,9 @@ export function useVoiceSession(input: VoiceSessionInput): VoiceSessionHandle {
 
   /** Everything the hook owns, released in the order that preserves the audio. */
   const teardown = useCallback(async (): Promise<void> => {
+    const endingSessionId = sessionIdRef.current;
+    // Freeze queued actions immediately; flushing the recorder may take time.
+    sessionRef.current?.beginClose();
     if (capTimerRef.current) {
       clearInterval(capTimerRef.current);
       capTimerRef.current = null;
@@ -313,6 +316,17 @@ export function useVoiceSession(input: VoiceSessionInput): VoiceSessionHandle {
       // `close` waits for the provider's own `session.closed`, which is what
       // carries the final usage, so the call is billed for what it used.
       await session.close().catch(() => {});
+    }
+
+    if (endingSessionId) {
+      await voiceFetch("/voice/end", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId: endingSessionId, reason: "hung up" }),
+        keepalive: true,
+      }, inputRef.current.policy.surface).catch((failure) => {
+        console.warn("Voice conversation end could not be saved", failure);
+      });
     }
 
     detachVoiceAgentAudioTap();
@@ -491,7 +505,7 @@ export function useVoiceSession(input: VoiceSessionInput): VoiceSessionHandle {
           if (pc) {
             attachVoiceAgentAudioTap(pc);
             if (recordingRef.current && !recorderRef.current) {
-              recorderRef.current = startCallRecording(pc, admission.sessionId);
+              recorderRef.current = startCallRecording(pc, admission.sessionId, admission.surface);
             }
           }
           return;

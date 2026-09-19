@@ -219,7 +219,8 @@ export default function Login() {
                 Use a different account
               </Button>
             )}
-          </form>
+          <p className="mt-4 text-xs text-[var(--text-secondary)]">For security, your admin session ends 8 hours after sign-in.</p>
+              </form>
 
           <p className="mt-6 text-center text-xs text-ink-soft">
             Only you can get in here. If you leave it a while, you'll need to sign in again.

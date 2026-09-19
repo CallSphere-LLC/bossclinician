@@ -42,7 +42,7 @@ const timeOfDay = z
     return Number(match[1]) * 60 + Number(match[2]);
   });
 
-const sequenceSchema = z.object({
+export const sequenceSchema = z.object({
   name: z.string().trim().min(1, "Give this sequence a name").max(200),
   slug: z.string().trim().max(200).optional(),
   description: z.string().max(2000).optional(),

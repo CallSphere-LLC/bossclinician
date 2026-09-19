@@ -44,7 +44,7 @@ export const MAX_TOOL_ROUNDS = 6;
  * than the route should carry, so tool output is clipped with the truncation
  * said out loud rather than silently.
  */
-export const MAX_TOOL_OUTPUT_CHARS = 4_000;
+export const MAX_TOOL_OUTPUT_CHARS = 7_500;
 
 /**
  * How many messages may travel in one request.
@@ -231,7 +231,7 @@ export async function runConciergeTurn(input: ConciergeTurnInput): Promise<Conci
           });
         }
       }
-      messages.push({ role: "tool", toolCallId: call.id, name: call.name, content });
+      messages.push({ role: "tool", toolCallId: call.id, name: call.name, arguments: call.arguments ?? {}, content });
     }
   }
 

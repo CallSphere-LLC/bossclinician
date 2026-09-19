@@ -1,8 +1,15 @@
 import { useNewProductRequest } from "./ui/useNewProductRequest";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { Link } from "react-router";
+import { Link, useNavigate } from "react-router";
 import { motion } from "motion/react";
-import { ArrowUpRight, Hash, MessagesSquare, Plus, Trash2, Users } from "lucide-react";
+import {
+  ArrowUpRight,
+  Hash,
+  MessagesSquare,
+  Plus,
+  Trash2,
+  Users,
+} from "lucide-react";
 import { toast } from "sonner";
 import { adminApi } from "@/lib/api";
 import type { Community } from "@/types/admin";
@@ -33,22 +40,32 @@ const ACCESS_OPTIONS = [
 ] as const;
 
 function accessBadge(access: string): string {
-  return ACCESS_OPTIONS.find((option) => option.value === access)?.badge ?? "Free to join";
+  return (
+    ACCESS_OPTIONS.find((option) => option.value === access)?.badge ??
+    "Free to join"
+  );
 }
 
 export default function CommunityList() {
+  const navigate = useNavigate();
   const [communities, setCommunities] = useState<Community[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ name: "", description: "", access: "free" });
+  const [form, setForm] = useState({
+    name: "",
+    description: "",
+    access: "free",
+  });
   const [confirm, confirmDialog] = useConfirm();
 
   const load = useCallback(() => {
     adminApi
       .communities()
       .then(setCommunities)
-      .catch(() => setError("We couldn't load your communities. Try refreshing the page."));
+      .catch(() =>
+        setError("We couldn't load your communities. Try refreshing the page."),
+      );
   }, []);
 
   useEffect(load, [load]);
@@ -59,8 +76,14 @@ export default function CommunityList() {
     if (!form.name.trim()) return;
     setSaving(true);
     try {
-      await adminApi.communityCreate(form);
-      toast.success("Community created");
+      const created = await adminApi.communityCreate(form);
+      toast.success(
+        form.access === "paid"
+          ? "Community created — set up a paid access group next"
+          : "Community created",
+      );
+      if (form.access === "paid")
+        navigate(`/admin/community/${created.id}?tab=groups`);
       setCreating(false);
       setForm({ name: "", description: "", access: "free" });
       load();
@@ -152,7 +175,10 @@ export default function CommunityList() {
                       {accessBadge(community.access)}
                     </Badge>
                     {!community.published && (
-                      <Badge tone="slate" className="!bg-night-deep/80 !text-white ring-1 ring-white/15 backdrop-blur">
+                      <Badge
+                        tone="slate"
+                        className="!bg-night-deep/80 !text-white ring-1 ring-white/15 backdrop-blur"
+                      >
                         {PUBLISH_LABEL.draft}
                       </Badge>
                     )}
@@ -160,14 +186,24 @@ export default function CommunityList() {
                 </div>
 
                 <div className="p-5">
-                  <h3 className="font-display text-lg text-ink">{community.name}</h3>
+                  <h3 className="font-display text-lg text-ink">
+                    {community.name}
+                  </h3>
                   <p className="mt-1 line-clamp-2 min-h-[2.5rem] text-sm text-ink-soft">
                     {community.description || "No description yet."}
                   </p>
 
                   <dl className="mt-4 grid grid-cols-3 gap-2 border-t border-hairline/70 pt-3.5">
-                    <Stat icon={<Hash className="size-3.5" />} label="Channels" value={community.channelCount} />
-                    <Stat icon={<Users className="size-3.5" />} label="Members" value={community.memberCount} />
+                    <Stat
+                      icon={<Hash className="size-3.5" />}
+                      label="Channels"
+                      value={community.channelCount}
+                    />
+                    <Stat
+                      icon={<Users className="size-3.5" />}
+                      label="Members"
+                      value={community.memberCount}
+                    />
                     <Stat
                       icon={<MessagesSquare className="size-3.5" />}
                       label="Posts"
@@ -205,10 +241,19 @@ export default function CommunityList() {
         description="You can add channels, challenges and events as soon as it's created."
         footer={
           <>
-            <Button variant="secondary" size="sm" onClick={() => setCreating(false)}>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setCreating(false)}
+            >
               Cancel
             </Button>
-            <Button size="sm" form="new-community" type="submit" disabled={saving}>
+            <Button
+              size="sm"
+              form="new-community"
+              type="submit"
+              disabled={saving}
+            >
               {saving ? "Creating…" : "Create community"}
             </Button>
           </>
@@ -234,20 +279,24 @@ export default function CommunityList() {
               id="community-desc"
               rows={3}
               value={form.description}
-              onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, description: e.target.value }))
+              }
               placeholder="A place for clinicians building their own practice to swap wins, ask questions and stay accountable."
             />
           </Field>
           <Field
             label="Who can join?"
-            hint="a paid space opens up when someone subscribes to one of your plans"
+            hint="Prices and checkout are configured on access groups inside the community"
           >
             <div className="flex gap-2">
               {ACCESS_OPTIONS.map((option) => (
                 <button
                   key={option.value}
                   type="button"
-                  onClick={() => setForm((f) => ({ ...f, access: option.value }))}
+                  onClick={() =>
+                    setForm((f) => ({ ...f, access: option.value }))
+                  }
                   className={
                     form.access === option.value
                       ? "flex-1 rounded-xl bg-brand-gradient px-4 py-2.5 text-sm font-semibold text-white"
@@ -259,6 +308,12 @@ export default function CommunityList() {
               ))}
             </div>
           </Field>
+          {form.access === "paid" && (
+            <p className="rounded-xl bg-lilac-tint p-3 text-sm text-ink-soft">
+              Next, create a paid access group and set its price. Choosing this
+              setting alone does not create a payment plan.
+            </p>
+          )}
         </form>
       </Modal>
 
@@ -267,14 +322,24 @@ export default function CommunityList() {
   );
 }
 
-function Stat({ icon, label, value }: { icon: React.ReactNode; label: string; value: number }) {
+function Stat({
+  icon,
+  label,
+  value,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: number;
+}) {
   return (
     <div>
       <dt className="flex items-center gap-1 text-[0.62rem] font-semibold uppercase tracking-wide text-ink-soft">
         {icon}
         {label}
       </dt>
-      <dd className="mt-0.5 font-display text-base text-ink">{formatNumber(value)}</dd>
+      <dd className="mt-0.5 font-display text-base text-ink">
+        {formatNumber(value)}
+      </dd>
     </div>
   );
 }

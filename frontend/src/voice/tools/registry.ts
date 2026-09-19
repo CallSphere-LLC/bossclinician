@@ -1,3 +1,4 @@
+import { buildAdminCatalogTool } from "./admin-catalog";
 /**
  * registry.ts — one table, from capability name to the factory that builds it.
  *
@@ -71,6 +72,7 @@ const FACTORIES: Record<VoiceToolName, Factory> = {
   stop_pointing: (toolFn, ctx) => buildStopPointingTool(toolFn, ctx),
   search_site: (toolFn, ctx, state) => buildSearchSiteTool(toolFn, ctx, { policy: state.policy }),
   my_account_summary: (toolFn, ctx) => buildMyAccountSummaryTool(toolFn, ctx),
+  admin_operation_catalog: (toolFn, ctx) => buildAdminCatalogTool(toolFn, ctx),
   propose_admin_action: (toolFn, ctx, state) =>
     buildProposeAdminActionTool(toolFn, ctx, state.proposals),
   run_approved_action: (toolFn, ctx, state) =>

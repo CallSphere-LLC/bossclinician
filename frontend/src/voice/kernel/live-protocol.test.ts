@@ -260,3 +260,23 @@ describe("captions", () => {
     expect(wire).toEqual([]);
   });
 });
+
+
+describe("graceful close boundary", () => {
+  it("blocks queued work and all outgoing commands while retaining final transcripts and usage", () => {
+    const { protocol, wire, emitted } = harness();
+    protocol.receive({ type: "session.output_transcript.delta", delta: "Goodbye", start_ms: 0, end_ms: 500 });
+    protocol.closing = true;
+    protocol.send({ type: "response.create" });
+    protocol.send({ type: "response.item.create", item: { type: "message", role: "user" } });
+    protocol.receive({ type: "response.event", event: { type: "response.output_item.done", item: { type: "function_call", call_id: "late", name: "run_approved_action", arguments: "{}" } } });
+    protocol.receive({ type: "response.event", event: { type: "response.completed", response: {} } });
+    expect(wire).toEqual([]);
+    expect(emitted.some((event) => event.type === "response.function_call_arguments.done")).toBe(false);
+    protocol.receive({ type: "session.closed", usage: { seconds: 42 } });
+    expect(protocol.usageSeconds).toBe(42);
+    expect(protocol.closed).toBe(true);
+    expect(emitted.some((event) => event.type === "response.output_audio_transcript.done")).toBe(true);
+    expect(emitted.some((event) => event.type === "session.closed")).toBe(true);
+  });
+});

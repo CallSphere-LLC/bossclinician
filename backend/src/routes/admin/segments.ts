@@ -99,7 +99,7 @@ adminSegmentsRouter.post(
   })
 );
 
-const createSchema = z.object({
+export const createSchema = z.object({
   name: z.string().trim().min(1).max(140),
   description: z.string().trim().max(500).optional(),
   definition: segmentDefinitionSchema,
@@ -187,7 +187,7 @@ adminSegmentsRouter.get(
   })
 );
 
-const updateSchema = z.object({
+export const updateSchema = z.object({
   name: z.string().trim().min(1).max(140).optional(),
   description: z.string().trim().max(500).optional(),
   definition: segmentDefinitionSchema.optional(),

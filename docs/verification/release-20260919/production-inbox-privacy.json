@@ -1,0 +1,18 @@
+{
+  "detail": [
+    {
+      "id": "ad951b72-ceb6-415d-858c-8229f75327d1",
+      "status": 404,
+      "messageCount": 0
+    },
+    {
+      "id": "a53fc3ca-c0a3-4ba5-a9d7-2e981f6b8cb1",
+      "status": 404,
+      "messageCount": 0
+    }
+  ],
+  "list": {
+    "status": 200,
+    "exposedPrivateIds": []
+  }
+}

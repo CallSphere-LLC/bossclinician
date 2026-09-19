@@ -1,7 +1,6 @@
 import { motion } from "motion/react";
 import { useEntranceMotion } from "@/hooks/useEntranceMotion";
 import { Section } from "@/components/luxe/Section";
-import { GlassCard } from "@/components/luxe/GlassCard";
 import { LuxeButton } from "@/components/luxe/LuxeButton";
 
 const EASE_LUXE: [number, number, number, number] = [0.22, 1, 0.36, 1];
@@ -10,7 +9,7 @@ const VIEWPORT = { once: true, margin: "-12% 0px -8% 0px" } as const;
 // Neither /masterclass nor /practice-reset-planner exists as a route yet, so
 // both offers land on the Resource Hub, where the masterclass and the planner
 // are actually hosted. Repoint both when the dedicated routes ship.
-const OFFER_ROUTE = "/resources";
+const OFFER_ROUTE = "https://www.bossclinician.com/freedom-masterclass";
 
 /**
  * One rise recipe for the whole stack; only the delay changes. Reduced-motion
@@ -124,41 +123,12 @@ export function LuxeMasterclass() {
         </motion.p>
 
         <motion.div {...rise(reduce, 0.48)}>
-          <LuxeButton variant="foil" size="lg" to={OFFER_ROUTE} className="mt-10">
+          <LuxeButton variant="foil" size="lg" href={OFFER_ROUTE} className="mt-10">
             Watch the Free Masterclass
           </LuxeButton>
         </motion.div>
       </div>
 
-      {/* ── Secondary offer ─────────────────────────────────────────────────
-          Held well clear of the primary CTA and dropped to a quieter material
-          weight, so the eye finishes the masterclass pitch before it discovers
-          there is a second free thing. */}
-      <motion.div {...rise(reduce, 0.1)} className="mt-10">
-        <GlassCard
-          accent="gold"
-          interactive={false}
-          className="mx-auto flex max-w-xl flex-col items-center justify-between gap-5 p-6 text-left sm:flex-row"
-        >
-          <p className="min-w-0">
-            <strong className="block text-sm font-semibold text-white">
-              Also Free: The Practice Reset Planner
-            </strong>
-            <span className="copy-luxe block text-sm">
-              30 days to work less, earn more, and rebuild your practice your way.
-            </span>
-          </p>
-
-          <LuxeButton
-            variant="outline"
-            size="sm"
-            to={OFFER_ROUTE}
-            className="min-h-[44px] shrink-0"
-          >
-            Download
-          </LuxeButton>
-        </GlassCard>
-      </motion.div>
     </Section>
   );
 }

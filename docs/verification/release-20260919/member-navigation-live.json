@@ -1,0 +1,135 @@
+{
+  "fixtures": [
+    {
+      "path": "/admin/community/9/members",
+      "status": 201,
+      "data": {
+        "id": 29,
+        "communityId": 9,
+        "memberId": 66,
+        "role": "member",
+        "points": 0,
+        "joinedAt": "2026-09-19T18:27:05.059Z",
+        "bio": "",
+        "headline": "",
+        "bannedAt": null,
+        "lastSeenAt": null,
+        "source": "manual",
+        "subscriptionId": null,
+        "guidelinesAcceptedAt": null
+      }
+    },
+    {
+      "path": "/admin/community/9/access-groups/7/members",
+      "status": 201,
+      "data": {
+        "ok": true
+      }
+    },
+    {
+      "path": "/admin/community/9/channels",
+      "status": 201,
+      "data": {
+        "id": 16,
+        "communityId": 9,
+        "slug": "qa-general",
+        "name": "QA General",
+        "description": "",
+        "format": "feed",
+        "visibility": "public",
+        "sort": 0,
+        "createdAt": "2026-09-19T18:27:05.071Z",
+        "accessGroupId": null,
+        "coverImage": "",
+        "viewModes": [
+          "feed"
+        ],
+        "defaultViewMode": "feed",
+        "viewMode": "feed"
+      }
+    },
+    {
+      "path": "/admin/community/9/channels",
+      "status": 201,
+      "data": {
+        "id": 17,
+        "communityId": 9,
+        "slug": "qa-free-channel",
+        "name": "QA Free Channel",
+        "description": "",
+        "format": "feed",
+        "visibility": "public",
+        "sort": 1,
+        "createdAt": "2026-09-19T18:27:05.077Z",
+        "accessGroupId": 7,
+        "coverImage": "",
+        "viewModes": [
+          "feed"
+        ],
+        "defaultViewMode": "feed",
+        "viewMode": "feed"
+      }
+    },
+    {
+      "path": "/admin/community/9/channels",
+      "status": 201,
+      "data": {
+        "id": 18,
+        "communityId": 9,
+        "slug": "qa-paid-channel",
+        "name": "QA Paid Channel",
+        "description": "",
+        "format": "feed",
+        "visibility": "public",
+        "sort": 2,
+        "createdAt": "2026-09-19T18:27:05.082Z",
+        "accessGroupId": 8,
+        "coverImage": "",
+        "viewModes": [
+          "feed"
+        ],
+        "defaultViewMode": "feed",
+        "viewMode": "feed"
+      }
+    }
+  ],
+  "checks": [
+    {
+      "width": 320,
+      "authorizedFreeChannel": true,
+      "paidChannelHidden": true,
+      "paidCheckoutVisible": true,
+      "overflow": false
+    },
+    {
+      "width": 390,
+      "authorizedFreeChannel": true,
+      "paidChannelHidden": true,
+      "paidCheckoutVisible": true,
+      "overflow": false
+    },
+    {
+      "width": 768,
+      "authorizedFreeChannel": true,
+      "paidChannelHidden": true,
+      "paidCheckoutVisible": true,
+      "overflow": false
+    },
+    {
+      "width": 1440,
+      "authorizedFreeChannel": true,
+      "paidChannelHidden": true,
+      "paidCheckoutVisible": true,
+      "overflow": false
+    },
+    {
+      "width": 1920,
+      "authorizedFreeChannel": true,
+      "paidChannelHidden": true,
+      "paidCheckoutVisible": true,
+      "overflow": false
+    },
+    "Authorized channel navigation works"
+  ],
+  "errors": []
+}

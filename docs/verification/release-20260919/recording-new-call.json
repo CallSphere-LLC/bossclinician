@@ -1,0 +1,9 @@
+{
+  "status": 200,
+  "host": "bossclinician-voice-recordings.s3.us-east-1.amazonaws.com",
+  "audio": {
+    "loaded": true,
+    "duration": null
+  },
+  "violations": []
+}

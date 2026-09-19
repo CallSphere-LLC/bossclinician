@@ -46,7 +46,7 @@ export const adminAutomationsV2Router = Router();
  */
 const savedConditionsSchema = conditionsSchema.passthrough();
 
-const automationSchema = z.object({
+export const automationSchema = z.object({
   name: z.string().trim().min(1, "Give this automation a name").max(200),
   description: z.string().max(2000).optional(),
   triggerType: z.enum(TRIGGER_TYPES),
