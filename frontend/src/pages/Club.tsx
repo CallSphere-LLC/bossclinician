@@ -15,6 +15,8 @@ import { GlassCard } from "@/components/luxe/GlassCard";
 import { LuxeButton, LuxePill } from "@/components/luxe/LuxeButton";
 import { LuxePageHero } from "@/components/luxe/LuxePageHero";
 import { GoldRule, Section, SectionTitle } from "@/components/luxe/Section";
+import { TestimonialVideo } from "@/components/luxe/TestimonialVideo";
+import { VideoBand } from "@/components/luxe/VideoBand";
 import { RevealGroup, RevealItem } from "@/components/ui/Reveal";
 import { CLUB_JOIN_ROUTE, club } from "@/content/club";
 import { useEntranceMotion } from "@/hooks/useEntranceMotion";
@@ -36,6 +38,21 @@ import { useHeadContext } from "@/ssr/context";
 
 const PORTRAIT = "/images/758479b0818b.png";
 const JOIN_ANCHOR = "#join";
+
+/**
+ * The source page's two films, self-hosted (the CSP allows media from 'self'
+ * only). Filenames are versioned because nothing under public/ is hashed.
+ */
+const INTRO_FILM = {
+  src720: "/videos/club-intro-bg-v1-720.mp4",
+  src540: "/videos/club-intro-bg-v1-540.mp4",
+  poster: "/videos/club-intro-bg-v1-poster.jpg",
+};
+const STORY_FILM = {
+  src720: "/videos/club-mike-testimonial-v1-720.mp4",
+  src540: "/videos/club-mike-testimonial-v1-540.mp4",
+  poster: "/videos/club-mike-testimonial-v1-poster.jpg",
+};
 
 /**
  * The programme as a priced product, with both published payment options. The
@@ -113,6 +130,8 @@ export default function Club() {
       <TaughtSection />
       <StartSection />
       <HoldingBackSection />
+      <QuoteFilmBand />
+      <ClinicianStorySection />
       <WarningSection />
       <PersonasSection />
       <EnterSection />
@@ -159,10 +178,10 @@ function TaughtSection() {
   return (
     <Section surface="base" space="lg" aurora="plum" auroraIntensity={0.45} aria-label={club.taught.title}>
       <SectionTitle title={club.taught.title} className="max-w-3xl" />
-      <motion.div {...rise(reduce, 0.1)} className="mx-auto mt-10 max-w-2xl">
+      <motion.div {...rise(reduce, 0.1)} className="mx-auto mt-7 sm:mt-8 max-w-2xl">
         <Prose paragraphs={club.taught.paragraphs} align="center" />
       </motion.div>
-      <Pull className="mt-12">{club.taught.closing}</Pull>
+      <Pull className="mt-8 sm:mt-10">{club.taught.closing}</Pull>
     </Section>
   );
 }
@@ -175,7 +194,7 @@ function StartSection() {
   return (
     <Section surface="raised" space="lg" aria-label={club.start.title} containerClassName="max-w-3xl">
       <SectionTitle title={club.start.title} />
-      <motion.div {...rise(reduce, 0.1)} className="mt-10">
+      <motion.div {...rise(reduce, 0.1)} className="mt-7 sm:mt-8">
         <Prose paragraphs={club.start.intro} />
         <GlassCard accent="plum" interactive={false} className="mt-8 p-7 sm:p-8">
           <MarkedList items={club.start.tried} />
@@ -203,11 +222,31 @@ function HoldingBackSection() {
       containerClassName="max-w-3xl"
     >
       <SectionTitle title={club.holdingBack.title} />
-      <motion.div {...rise(reduce, 0.1)} className="mt-10">
+      <motion.div {...rise(reduce, 0.1)} className="mt-7 sm:mt-8">
         <Prose paragraphs={club.holdingBack.paragraphs} />
       </motion.div>
-      <Pull className="mt-12">&ldquo;{club.holdingBack.quote}&rdquo;</Pull>
-      <Cta label={club.holdingBack.cta} to={JOIN_ANCHOR} className="mt-10" />
+      <Cta label={club.holdingBack.cta} to={JOIN_ANCHOR} className="mt-7 sm:mt-8" />
+    </Section>
+  );
+}
+
+/* ── 3b · The quote, over the founder's film — as the source runs it ──── */
+
+function QuoteFilmBand() {
+  return (
+    <VideoBand {...INTRO_FILM} aria-label="A word from the founder">
+      <Pull>&ldquo;{club.holdingBack.quote}&rdquo;</Pull>
+    </VideoBand>
+  );
+}
+
+/* ── 3c · A clinician's story, on film ────────────────────────────────── */
+
+function ClinicianStorySection() {
+  return (
+    <Section surface="raised" space="lg" aria-label={club.clinicianStory.title} containerClassName="max-w-4xl">
+      <SectionTitle title={club.clinicianStory.title} />
+      <TestimonialVideo {...STORY_FILM} title={club.clinicianStory.videoTitle} className="mt-7 sm:mt-8" />
     </Section>
   );
 }
@@ -220,11 +259,11 @@ function WarningSection() {
   return (
     <Section surface="base" space="lg" aria-label={club.warning.title} containerClassName="max-w-3xl">
       <SectionTitle title={club.warning.title} />
-      <motion.div {...rise(reduce, 0.1)} className="mt-10">
+      <motion.div {...rise(reduce, 0.1)} className="mt-7 sm:mt-8">
         <Prose paragraphs={club.warning.paragraphs} />
       </motion.div>
 
-      <motion.div {...rise(reduce, 0.15)} className="mt-12">
+      <motion.div {...rise(reduce, 0.15)} className="mt-8 sm:mt-10">
         <GlassCard accent="gold" interactive={false} className="p-7 text-center sm:p-10">
           <h3 className="text-balance font-display text-[1.4rem] font-medium leading-[1.3] text-white sm:text-[1.7rem]">
             {club.warning.meetsYou}
@@ -249,7 +288,7 @@ function PersonasSection() {
 
       <RevealGroup
         as="ul"
-        className="mx-auto mt-12 grid max-w-md list-none grid-cols-1 items-stretch gap-6 lg:max-w-none lg:grid-cols-3"
+        className="mx-auto mt-8 sm:mt-10 grid max-w-md list-none grid-cols-1 items-stretch gap-6 lg:max-w-none lg:grid-cols-3"
       >
         {club.personas.items.map((persona, i) => (
           <RevealItem key={persona.label} as="li" className="h-full">
@@ -268,7 +307,7 @@ function PersonasSection() {
         ))}
       </RevealGroup>
 
-      <Pull className="mt-14">{club.personas.closing}</Pull>
+      <Pull className="mt-9 sm:mt-10 lg:mt-12">{club.personas.closing}</Pull>
     </Section>
   );
 }
@@ -288,10 +327,10 @@ function EnterSection() {
       containerClassName="max-w-3xl"
     >
       <SectionTitle eyebrow={club.enter.eyebrow} title={club.enter.title} />
-      <motion.div {...rise(reduce, 0.1)} className="mt-10">
+      <motion.div {...rise(reduce, 0.1)} className="mt-7 sm:mt-8">
         <Prose paragraphs={club.enter.paragraphs} />
       </motion.div>
-      <Cta label={club.enter.cta} to={JOIN_ANCHOR} className="mt-12" />
+      <Cta label={club.enter.cta} to={JOIN_ANCHOR} className="mt-8 sm:mt-10" />
     </Section>
   );
 }
@@ -309,7 +348,7 @@ function PillarsSection() {
 
       {/* Five items: the first spans the row so the remaining four sit 2 × 2
           instead of leaving an orphan under a 3-up grid. */}
-      <RevealGroup as="ul" className="mt-12 grid list-none grid-cols-1 gap-6 md:grid-cols-2">
+      <RevealGroup as="ul" className="mt-8 sm:mt-10 grid list-none grid-cols-1 gap-6 md:grid-cols-2">
         {club.pillars.items.map((pillar, i) => (
           <RevealItem key={pillar.label} as="li" className={i === 0 ? "h-full md:col-span-2" : "h-full"}>
             <GlassCard as="article" accent={i === 0 ? "gold" : accentAt(i)} className="flex h-full flex-col p-7 sm:p-8">
@@ -345,7 +384,7 @@ function BonusesSection() {
 
       <RevealGroup
         as="ul"
-        className="mx-auto mt-12 grid max-w-4xl list-none grid-cols-1 gap-6 md:grid-cols-2"
+        className="mx-auto mt-8 sm:mt-10 grid max-w-4xl list-none grid-cols-1 gap-6 md:grid-cols-2"
       >
         {club.bonuses.items.map((bonus, i) => (
           <RevealItem key={bonus.title} as="li" className="h-full">
@@ -365,8 +404,8 @@ function BonusesSection() {
         ))}
       </RevealGroup>
 
-      <Pull className="mt-14">{club.bonuses.closing}</Pull>
-      <Cta label={club.bonuses.cta} to={JOIN_ANCHOR} className="mt-10" />
+      <Pull className="mt-9 sm:mt-10 lg:mt-12">{club.bonuses.closing}</Pull>
+      <Cta label={club.bonuses.cta} to={JOIN_ANCHOR} className="mt-7 sm:mt-8" />
     </Section>
   );
 }
@@ -379,7 +418,7 @@ function TestimonialsSection() {
       <SectionTitle title={club.testimonials.title} />
       <RevealGroup
         as="ul"
-        className="mx-auto mt-12 grid max-w-5xl list-none grid-cols-1 gap-6 md:grid-cols-2"
+        className="mx-auto mt-8 sm:mt-10 grid max-w-5xl list-none grid-cols-1 gap-6 md:grid-cols-2"
       >
         {club.testimonials.items.map((item, i) => (
           <RevealItem key={item.name} as="li" className="h-full">
@@ -402,7 +441,7 @@ function PaceSection() {
 
       {/* The source runs a slider here. Its one worked example is kept as a
           static figure; the numbers are the page's own. */}
-      <motion.div {...rise(reduce, 0.1)} className="mt-10">
+      <motion.div {...rise(reduce, 0.1)} className="mt-7 sm:mt-8">
         <GlassCard accent="green" interactive={false} className="p-7 text-center sm:p-10">
           <p className="text-[0.7rem] font-bold uppercase tracking-[0.2em] text-orchid">
             {club.pace.exampleLabel}
@@ -415,10 +454,10 @@ function PaceSection() {
           </p>
           <p className="copy-luxe mx-auto mt-6 max-w-lg text-pretty text-sm">{club.pace.exampleBody}</p>
         </GlassCard>
-        <Prose paragraphs={club.pace.paragraphs} align="center" className="mt-10" />
+        <Prose paragraphs={club.pace.paragraphs} align="center" className="mt-7 sm:mt-8" />
       </motion.div>
 
-      <Pull className="mt-10">{club.pace.closing}</Pull>
+      <Pull className="mt-7 sm:mt-8">{club.pace.closing}</Pull>
     </Section>
   );
 }
@@ -441,7 +480,7 @@ function ValueSection() {
     >
       <SectionTitle eyebrow={club.value.eyebrow} title={club.value.title} />
 
-      <motion.div {...rise(reduce, 0.1)} className="mt-12">
+      <motion.div {...rise(reduce, 0.1)} className="mt-8 sm:mt-10">
         <GlassCard accent="gold" interactive={false} className="p-7 sm:p-10">
           <h3 className="text-balance text-center font-display text-[1.45rem] font-medium leading-[1.3] text-white sm:text-[1.75rem]">
             {club.value.subtitle}
@@ -463,7 +502,7 @@ function ValueSection() {
             ))}
           </ul>
 
-          <h3 className="mt-10 text-balance text-center text-[0.74rem] font-bold uppercase tracking-[0.2em] text-gold/85">
+          <h3 className="mt-7 sm:mt-8 text-balance text-center text-[0.74rem] font-bold uppercase tracking-[0.2em] text-gold/85">
             {club.pricing.title}
           </h3>
 
@@ -487,14 +526,14 @@ function ValueSection() {
             ))}
           </div>
 
-          <Cta label={club.pricing.cta} to={CLUB_JOIN_ROUTE} note={club.pricing.note} className="mt-10" />
+          <Cta label={club.pricing.cta} to={CLUB_JOIN_ROUTE} note={club.pricing.note} className="mt-7 sm:mt-8" />
           <p className="mt-5 text-center text-[0.72rem] font-semibold uppercase tracking-[0.14em] text-green-bright">
             {club.pricing.guarantee}
           </p>
         </GlassCard>
       </motion.div>
 
-      <motion.div {...rise(reduce, 0.15)} className="mx-auto mt-10 max-w-3xl">
+      <motion.div {...rise(reduce, 0.15)} className="mx-auto mt-7 sm:mt-8 max-w-3xl">
         <QuoteCard
           quote={club.testimonials.closing.quote}
           name={club.testimonials.closing.name}
@@ -520,11 +559,11 @@ function NextMoveSection() {
       containerClassName="max-w-3xl"
     >
       <SectionTitle eyebrow={club.nextMove.eyebrow} title={club.nextMove.title} />
-      <motion.div {...rise(reduce, 0.1)} className="mt-10">
+      <motion.div {...rise(reduce, 0.1)} className="mt-7 sm:mt-8">
         <Prose paragraphs={club.nextMove.paragraphs} align="center" />
       </motion.div>
-      <Pull className="mt-12">{club.nextMove.closing}</Pull>
-      <Cta label={club.nextMove.cta} to={JOIN_ANCHOR} className="mt-10" />
+      <Pull className="mt-8 sm:mt-10">{club.nextMove.closing}</Pull>
+      <Cta label={club.nextMove.cta} to={JOIN_ANCHOR} className="mt-7 sm:mt-8" />
     </Section>
   );
 }

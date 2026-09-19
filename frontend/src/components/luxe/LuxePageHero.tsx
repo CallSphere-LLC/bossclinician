@@ -59,7 +59,7 @@ export function LuxePageHero({
         className="pointer-events-none absolute inset-x-0 bottom-0 h-32 bg-gradient-to-b from-transparent to-night"
       />
 
-      <Container className="relative z-[1] py-14 sm:py-16 lg:py-20 2xl:py-28 short:py-14">
+      <Container className="relative z-[1] py-10 sm:py-12 lg:py-16 2xl:py-24 short:py-10">
         <div
           className={cn(
             aside && "grid items-center gap-12 lg:grid-cols-[1.15fr_0.85fr] lg:gap-16",
@@ -82,12 +82,12 @@ export function LuxePageHero({
               )}
             </h1>
 
-            <GoldRule className={cn("mt-8", centered && "mx-auto")} />
+            <GoldRule className={cn("mt-6 sm:mt-8", centered && "mx-auto")} />
 
             {lede && (
               <p
                 className={cn(
-                  "copy-luxe mt-7 text-pretty sm:text-[1.05rem]",
+                  "copy-luxe mt-6 text-pretty sm:mt-7 sm:text-[1.05rem]",
                   centered ? "mx-auto max-w-2xl" : "max-w-[46rem]",
                 )}
               >
@@ -98,7 +98,7 @@ export function LuxePageHero({
             {actions && (
               <div
                 className={cn(
-                  "mt-10 flex flex-wrap items-center gap-4",
+                  "mt-8 flex flex-wrap items-center gap-4 sm:mt-10",
                   centered && "justify-center",
                 )}
               >

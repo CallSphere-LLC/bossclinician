@@ -84,6 +84,12 @@ export const club = {
     cta: "I'M READY TO JOIN!!",
   },
 
+  /** The recorded interview the source page plays under this heading. */
+  clinicianStory: {
+    title: "Hear From a Clinician Who Made Their Boss Move",
+    videoTitle: "Clinician testimonial",
+  },
+
   warning: {
     title: "And Here’s the Part Nobody Warns You About Building Private Practice",
     paragraphs: [

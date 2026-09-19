@@ -40,10 +40,13 @@ const SPACE: Record<Space, string> = {
   // The generous tier starts at 2xl. A 1024-1535px window is as often a big
   // screen zoomed in or snapped to half as it is a small laptop, and 80px +
   // 96px between every pair of sections read there as the page having stalled.
-  sm: "py-8 sm:py-10 lg:py-12 2xl:py-14 short:py-8",
-  md: "py-10 sm:py-12 lg:py-14 2xl:py-16 short:py-10",
-  lg: "py-12 sm:py-12 lg:py-16 2xl:py-20 short:py-12",
-  xl: "py-12 sm:py-14 lg:py-16 xl:py-20 2xl:py-24 short:py-14",
+  // Tightened once more (19 Sep 2026): measured on /club, every boundary was a
+  // uniform 96-101px of nothing on a phone and 133px on a laptop — 17 of them
+  // in a row is what reads as "a gap". A phone now gets 72px at `lg`.
+  sm: "py-6 sm:py-8 lg:py-10 2xl:py-12 short:py-6",
+  md: "py-8 sm:py-9 lg:py-11 2xl:py-14 short:py-8",
+  lg: "py-9 sm:py-10 lg:py-12 2xl:py-16 short:py-9",
+  xl: "py-10 sm:py-12 lg:py-14 2xl:py-20 short:py-10",
 };
 
 interface SectionProps {
@@ -135,9 +138,9 @@ export function SectionTitle({
       >
         {title}
       </h2>
-      {body && <p className="copy-luxe mt-6 text-balance">{body}</p>}
+      {body && <p className="copy-luxe mt-5 text-balance">{body}</p>}
       {rule && (
-        <GoldRule className={cn("mt-9", align === "center" ? "mx-auto" : "")} />
+        <GoldRule className={cn("mt-6 sm:mt-8", align === "center" ? "mx-auto" : "")} />
       )}
     </motion.div>
   );
