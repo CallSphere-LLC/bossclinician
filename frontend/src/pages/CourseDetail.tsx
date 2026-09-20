@@ -15,7 +15,11 @@ import { cn } from "@/lib/cn";
 import { courseNode, productNode } from "@/seo/schema";
 import { useHeadContext } from "@/ssr/context";
 import { ssrKeys } from "@/ssr/keys";
-import type { Course } from "@/types";
+import {
+  priceLabel,
+  type CourseDetailResponse,
+  type CurriculumModule,
+} from "@/components/course/CoursePriceLabel";
 
 /**
  * The sales page for one course.
@@ -31,79 +35,6 @@ import type { Course } from "@/types";
  * sends titles and lengths only — no bodies, no video URLs — so there is
  * nothing here to gate.
  */
-
-interface CurriculumLesson {
-  id: number;
-  title: string;
-  slug: string;
-  durationMinutes: number;
-  contentType: string;
-  preview: boolean;
-}
-
-interface CurriculumModule {
-  id: number;
-  title: string;
-  summary: string;
-  lessons: CurriculumLesson[];
-}
-
-interface CourseOffer {
-  available: boolean;
-  unavailableReason: string;
-  slug: string;
-  title: string;
-  pricingType: "one_time" | "subscription" | "payment_plan" | "free" | "pwyw";
-  amountCents: number;
-  currency: string;
-  interval: string | null;
-  intervalCount: number;
-  installmentCount: number | null;
-  checkoutHeadline: string;
-}
-
-interface CourseDetailResponse extends Course {
-  modules: CurriculumModule[];
-  offers: CourseOffer[];
-  owned: boolean;
-}
-
-const money = (cents: number, currency = "usd") =>
-  new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: currency.toUpperCase(),
-    minimumFractionDigits: cents % 100 === 0 ? 0 : 2,
-  }).format(cents / 100);
-
-/**
- * How an offer's price reads to a buyer.
- *
- * A payment plan states the instalment AND the total. Someone who thinks they
- * are paying $1,250 and then watches $3,750 leave their account over three
- * months raises a chargeback, and they are right to.
- */
-function priceLabel(offer: CourseOffer): string {
-  switch (offer.pricingType) {
-    case "free":
-      return "Free";
-    case "pwyw":
-      return "Pay what you can";
-    case "subscription": {
-      const every =
-        offer.intervalCount > 1
-          ? `every ${offer.intervalCount} ${offer.interval}s`
-          : `a ${offer.interval}`;
-      return `${money(offer.amountCents, offer.currency)} ${every}`;
-    }
-    case "payment_plan": {
-      const count = offer.installmentCount ?? 1;
-      const total = money(offer.amountCents * count, offer.currency);
-      return `${count} payments of ${money(offer.amountCents, offer.currency)} — ${total} in total`;
-    }
-    default:
-      return money(offer.amountCents, offer.currency);
-  }
-}
 
 function totalMinutes(modules: CurriculumModule[]): number {
   return modules.reduce(

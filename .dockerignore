@@ -25,3 +25,6 @@ ai
 *.pdf
 *.png
 .claude
+
+# Credential files are never part of a release or a commit.
+*credentials*.txt

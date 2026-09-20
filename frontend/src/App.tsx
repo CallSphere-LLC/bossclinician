@@ -72,6 +72,18 @@ export const PUBLIC_ROUTES: readonly { path: string; Component: RouteComponent }
   { path: "/about", Component: lazyRoute(() => import("@/pages/About")) },
   { path: "/work-with-me", Component: lazyRoute(() => import("@/pages/WorkWithMe")) },
   { path: "/courses", Component: lazyRoute(() => import("@/pages/Courses")) },
+  // Two products argue for themselves at length, so they get a page rather than
+  // the catalogue layout. Declared before `/courses/:slug` because the preload
+  // map (ssr/preload.ts) resolves a URL by walking this list in order, and the
+  // generic page would otherwise be the component both renders preload.
+  {
+    path: "/courses/credentialing-success-formula",
+    Component: lazyRoute(() => import("@/pages/CredentialingSuccessFormula")),
+  },
+  {
+    path: "/courses/credential-with-confidence",
+    Component: lazyRoute(() => import("@/pages/CredentialWithConfidence")),
+  },
   // Where 55 of the legacy bossclinician.com product URLs land.
   { path: "/courses/:slug", Component: lazyRoute(() => import("@/pages/CourseDetail")) },
   { path: "/partners", Component: lazyRoute(() => import("@/pages/AffiliateSignup")) },

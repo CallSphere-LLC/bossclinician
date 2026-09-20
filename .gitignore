@@ -35,3 +35,6 @@ backend/tsconfig.tsbuildinfo
 
 # stray downloads (receipts, invoices) — not source
 /2026-*-*.pdf
+
+# Cloud sign-in details the owner pastes in; never commit these.
+*credentials*.txt

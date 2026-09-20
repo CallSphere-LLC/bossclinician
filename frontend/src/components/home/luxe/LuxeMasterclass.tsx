@@ -6,10 +6,11 @@ import { LuxeButton } from "@/components/luxe/LuxeButton";
 const EASE_LUXE: [number, number, number, number] = [0.22, 1, 0.36, 1];
 const VIEWPORT = { once: true, margin: "-12% 0px -8% 0px" } as const;
 
-// Neither /masterclass nor /practice-reset-planner exists as a route yet, so
-// both offers land on the Resource Hub, where the masterclass and the planner
-// are actually hosted. Repoint both when the dedicated routes ship.
-const OFFER_ROUTE = "https://www.bossclinician.com/freedom-masterclass";
+// /freedom-masterclass does not exist as a route yet (the server 301s it to
+// /resources, where the masterclass is actually hosted), so the button goes
+// straight there rather than off-site to the legacy Kajabi page. Repoint it
+// when the dedicated route ships.
+const MASTERCLASS_ROUTE = "/resources";
 
 /**
  * One rise recipe for the whole stack; only the delay changes. Reduced-motion
@@ -123,7 +124,7 @@ export function LuxeMasterclass() {
         </motion.p>
 
         <motion.div {...rise(reduce, 0.48)}>
-          <LuxeButton variant="foil" size="lg" href={OFFER_ROUTE} className="mt-10">
+          <LuxeButton variant="foil" size="lg" to={MASTERCLASS_ROUTE} className="mt-10">
             Watch the Free Masterclass
           </LuxeButton>
         </motion.div>
