@@ -357,7 +357,7 @@ export default function CredentialingSuccessFormula() {
             <GlassCard interactive={false} spotlight={false} className="overflow-hidden p-2">
               <img
                 src={PORTRAIT}
-                alt="Yvette Howard, LCSW"
+                alt="Yvette Howard, LCSW, holding a mug that reads “business coach”"
                 width={720}
                 height={900}
                 loading="lazy"
