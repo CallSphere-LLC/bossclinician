@@ -237,3 +237,9 @@ html[data-site-theme="light"] .theme-luxe [data-media-surface] :is([class^="text
 html[data-site-theme="light"] .theme-luxe [data-media-surface] [class*="border-white"] {
   border-color: rgb(255 255 255 / 0.1);
 }
+/* `.eyebrow-luxe` sets its colour in the class itself, so the token swap above
+   cannot reach it: on the light theme it turns dark brown, which over footage
+   or a veiled photograph is ~1.6:1. Foil, as it is on the dark theme. */
+html[data-site-theme="light"] .theme-luxe [data-media-surface] .eyebrow-luxe {
+  color: #c9a46a;
+}

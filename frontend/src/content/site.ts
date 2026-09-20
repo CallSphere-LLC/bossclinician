@@ -20,6 +20,13 @@ export type NavMenuFooterLink =
 
 export interface NavMenu {
   label: string;
+  /**
+   * The group's own overview page. The mobile sheet is a flat list, so its
+   * gold group heading is free to be a link and points here. On desktop the
+   * heading has to stay a disclosure button (it owns the panel), so the
+   * panel's footer carries the same destination.
+   */
+  to?: string;
   /** Short line set above the items inside the desktop panel. */
   description?: string;
   items: NavMenuItem[];
@@ -45,13 +52,15 @@ export const headerActions = {
   },
 };
 
-// Everything a clinician can join or buy a seat in. The Club and the Lounge
-// have their own sales pages, at the same paths the source site uses. The
-// Boardroom has none yet: /boardroom redirects to /work-with-me (migration
-// 064), so the menu goes there directly. Book A Call lives in this panel's
-// footer rather than as a second button in the bar.
-export const programsMenu: NavMenu = {
-  label: "Programs",
+// The two groups the source site's menu is organised into, in its order:
+// About, then everything you can join, then everything you can read or learn
+// from. The Club and the Lounge have their own sales pages, at the same paths
+// the source site uses. The Boardroom has none yet — /boardroom redirects to
+// /work-with-me (migration 064) — so the row goes straight there, to the
+// Boardroom section of that page rather than to the bare application form.
+export const workWithMeMenu: NavMenu = {
+  label: "Work With Me",
+  to: "/work-with-me",
   description: "Ways to work with Yvette",
   items: [
     {
@@ -69,21 +78,11 @@ export const programsMenu: NavMenu = {
       badgeTone: "plum",
     },
     {
-      label: "Boardroom Mastermind",
+      label: "Boss Clinician Boardroom",
       to: "/work-with-me",
       description: "An advanced mastermind for established practice owners who want higher-level strategy, peer collaboration, accountability, and support with scaling their business.",
       badge: "Apply",
       badgeTone: "gold",
-    },
-    {
-      label: "Retreats",
-      to: "/retreats",
-      description: "A luxury wellness retreat for women mental health professionals.",
-    },
-    {
-      label: "Courses",
-      to: "/courses",
-      description: "Self-paced trainings and toolkits from the training library.",
     },
   ],
   footer: [
@@ -92,46 +91,41 @@ export const programsMenu: NavMenu = {
   ],
 };
 
-export const resourcesMenu: NavMenu = {
-  label: "Resources",
-  description: "Free tools and reading",
+export const exploreMenu: NavMenu = {
+  label: "Explore",
+  description: "Learning, tools and reading",
   items: [
+    {
+      label: "Courses",
+      to: "/courses",
+      description: "Self-paced trainings and toolkits from the training library.",
+    },
     {
       label: "Resource Hub",
       to: "/resource-hub",
       description: "Free tools for where your practice is now, including the income calculator.",
     },
     {
-      label: "Free Resources",
-      to: "/resources",
-      description: "The free masterclass, guides and checklists.",
+      label: "Retreats",
+      to: "/retreats",
+      description: "A luxury wellness retreat for women mental health professionals.",
     },
     {
       label: "Blog",
       to: "/blog",
       description: "Articles on building a private practice.",
     },
-    {
-      label: "Practice Quiz",
-      to: "/practice-quiz",
-      description: "A free 2-minute quiz about how your practice is working for you.",
-    },
-    {
-      label: "Store",
-      to: "/store",
-      description: "Courses, toolkits and templates to buy and use today.",
-    },
   ],
 };
 
-// Two categories, then the two pages a visitor looks for by name. About and
-// Contact stay plain links: a two-item dropdown hides both behind a click and
-// groups nothing.
+// About first, then the two groups — the order and the grouping of the source
+// site's own menu. The four pages that menu does not carry (Contact, Store,
+// Free Resources, the Practice Quiz) are reached from the footer, which lists
+// every one of them, and from the pages that sell them.
 export const nav: NavEntry[] = [
-  programsMenu,
-  resourcesMenu,
   { label: "About", to: "/about" },
-  { label: "Contact", to: "/contact" },
+  workWithMeMenu,
+  exploreMenu,
 ];
 
 export const footer = {
@@ -146,6 +140,9 @@ export const footer = {
     // No Boardroom page yet; /boardroom itself redirects here.
     { label: "Boss Clinician Boardroom", to: "/work-with-me" },
     { label: "Blog", to: "/blog" },
+    // The one page the header menu no longer carries; the rest of what it
+    // dropped (Contact, the quiz, the free resources) is already listed here.
+    { label: "Store", to: "/store" },
     { label: "Contact", to: "/contact" },
   ] satisfies NavLinkItem[],
   // The source footer's resource list, under the source's labels. The four

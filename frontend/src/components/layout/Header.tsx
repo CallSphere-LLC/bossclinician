@@ -1,11 +1,11 @@
 import { SiteThemeToggle } from "./SiteThemeToggle";
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { Link, NavLink, useLocation } from "react-router";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Container } from "@/components/ui/Container";
 import { LuxeButton } from "@/components/luxe/LuxeButton";
-import { NavDropdown, isMenuActive } from "@/components/layout/NavDropdown";
-import { headerActions, isNavMenu, nav, type NavMenu } from "@/content/site";
+import { NavDropdown } from "@/components/layout/NavDropdown";
+import { headerActions, isNavMenu, nav } from "@/content/site";
 import { cn } from "@/lib/cn";
 import { ShoppingCart } from "lucide-react";
 import { readCart } from "@/lib/cart";
@@ -27,14 +27,19 @@ export function Header({ transparentAtTop = false }: HeaderProps) {
   // One desktop dropdown, and one mobile section, open at a time, so both
   // live here rather than in the menus themselves.
   const [openMenu, setOpenMenu] = useState<string | null>(null);
-  const [mobileSection, setMobileSection] = useState<string | null>(null);
   const location = useLocation();
   const prefersReducedMotion = useReducedMotion();
   const [cartCount, setCartCount] = useState(0);
   useEffect(() => {
-    const menu = nav.find((item) => isNavMenu(item) && item.label === (openMenu ?? mobileSection));
+    const menu = nav.find((item) => isNavMenu(item) && item.label === openMenu);
     if (menu && isNavMenu(menu)) menu.items.forEach((item) => warmPublicRoute(item.to));
-  }, [openMenu, mobileSection]);
+  }, [openMenu]);
+  // The sheet shows every destination at once, so opening it warms all of them
+  // rather than one section at a time.
+  useEffect(() => {
+    if (!open) return;
+    for (const row of MOBILE_ROWS) if (row.to) warmPublicRoute(row.to);
+  }, [open]);
   useEffect(() => {
     const refresh = () => setCartCount(readCart().length);
     refresh();
@@ -56,13 +61,7 @@ export function Header({ transparentAtTop = false }: HeaderProps) {
   useEffect(() => {
     setOpen(false);
     setOpenMenu(null);
-    setMobileSection(null);
   }, [location.pathname]);
-
-  // A reopened sheet starts with every section closed.
-  useEffect(() => {
-    if (!open) setMobileSection(null);
-  }, [open]);
 
   // An open mobile sheet must not scroll the page behind it.
   useEffect(() => {
@@ -119,8 +118,9 @@ export function Header({ transparentAtTop = false }: HeaderProps) {
           </span>
         </Link>
 
-        {/* Two category menus and two plain links: everything else is one
-            click away inside a panel. The bar still starts at xl (below that,
+        {/* One plain link and two category menus, in the source site's own
+            order: About, then everything you can join, then everything you can
+            read or learn from. The bar still starts at xl (below that,
             including a laptop browser zoomed in, the menu button carries
             everything) and the labels stay on one line. */}
         <nav className="hidden items-center gap-5 xl:flex 2xl:gap-8" aria-label="Primary">
@@ -176,8 +176,8 @@ export function Header({ transparentAtTop = false }: HeaderProps) {
           <SiteThemeToggle />
           {/* Members sign in from the marketing header, as on the source site.
               A text link, not a second button: the bar has ONE primary action,
-              Work With Me. Book A Call sits in the Programs panel's footer and
-              in the mobile sheet. */}
+              Work With Me. Book A Call sits in the Work With Me panel's footer
+              and in the mobile sheet. */}
           <Link
             to={headerActions.logIn.to}
             className="hidden whitespace-nowrap py-2 text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-white/55 transition-colors duration-300 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold xl:inline-flex"
@@ -235,40 +235,46 @@ export function Header({ transparentAtTop = false }: HeaderProps) {
             // — obvious, where the same leak on a light theme would vanish.
             className="absolute inset-x-0 top-full max-h-[calc(100dvh-5rem)] overflow-y-auto border-t border-white/[0.07] bg-night-deep xl:hidden"
           >
-            <Container as="nav" aria-label="Mobile" className="flex flex-col gap-1 py-6">
-              {nav.map((item) =>
-                isNavMenu(item) ? (
-                  <MobileNavGroup
-                    key={item.label}
-                    menu={item}
-                    expanded={mobileSection === item.label}
-                    onToggle={() =>
-                      setMobileSection((current) => (current === item.label ? null : item.label))
-                    }
-                    onNavigate={() => setOpen(false)}
-                  />
-                ) : (
-                  <NavLink
-                    key={item.to}
-                    to={item.to}
-                    onClick={() => setOpen(false)}
-                    className={({ isActive }) =>
-                      cn(
-                        "rounded-xl px-4 py-3.5 font-display text-lg text-white/70 transition-colors hover:bg-white/[0.05] hover:text-white",
-                        isActive && "bg-white/[0.05] text-white",
-                      )
-                    }
-                  >
-                    {item.label}
-                  </NavLink>
-                ),
-              )}
-              <div aria-hidden className="rule-faint my-4" />
+            <Container as="nav" aria-label="Mobile" className="flex flex-col py-2">
+              {MOBILE_ROWS.map((row, index) => (
+                <Fragment key={row.key}>
+                  {/* A hairline between rows, but never between a group
+                      heading and the first item it introduces. */}
+                  {index > 0 && MOBILE_ROWS[index - 1].kind !== "heading" && (
+                    <div aria-hidden className="rule-faint" />
+                  )}
+                  {row.kind === "heading" ? (
+                    row.to ? (
+                      <Link
+                        to={row.to}
+                        onClick={() => setOpen(false)}
+                        className={cn(MOBILE_HEADING, "transition-colors hover:text-gold")}
+                      >
+                        {row.label}
+                      </Link>
+                    ) : (
+                      <p className={MOBILE_HEADING}>{row.label}</p>
+                    )
+                  ) : (
+                    <NavLink
+                      to={row.to}
+                      onClick={() => setOpen(false)}
+                      className={({ isActive }) =>
+                        cn(MOBILE_ITEM, isActive ? "text-gold" : "text-white hover:text-gold")
+                      }
+                    >
+                      {row.label}
+                    </NavLink>
+                  )}
+                </Fragment>
+              ))}
+              <div aria-hidden className="rule-faint" />
+
               <LuxeButton
                 to="/work-with-me"
                 variant="foil"
                 size="md"
-                className="w-full"
+                className="mt-6 w-full"
                 onClick={() => setOpen(false)}
               >
                 Work With Me
@@ -300,89 +306,34 @@ export function Header({ transparentAtTop = false }: HeaderProps) {
   );
 }
 
-interface MobileNavGroupProps {
-  menu: NavMenu;
-  /** Owned by the header: opening one section closes the other. */
-  expanded: boolean;
-  onToggle: () => void;
-  onNavigate: () => void;
-}
+/** One line of the mobile sheet: a destination, or the gold label over a group. */
+type MobileRow =
+  | { kind: "heading"; key: string; label: string; to?: string }
+  | { kind: "link"; key: string; label: string; to: string };
 
 /**
- * A header menu as an accordion section (there is no hover on touch). The
- * panel's footer links are not repeated here: Work With Me and Book A Call are
- * the two buttons at the bottom of the sheet.
+ * The phone menu as the source site lists it: ONE flat list, every destination
+ * visible the moment the sheet opens, with gold group labels rather than
+ * accordions. There is no hover on touch and nothing here is long enough to
+ * need collapsing, so a disclosure only added a tap between a visitor and the
+ * page they came for. A group label that has an overview page of its own links
+ * to it; the desktop bar keeps its dropdowns, where the label must stay a
+ * button because it owns a panel.
  */
-function MobileNavGroup({ menu, expanded, onToggle, onNavigate }: MobileNavGroupProps) {
-  const prefersReducedMotion = useReducedMotion();
-  const { pathname } = useLocation();
-  const active = isMenuActive(menu, pathname);
-  const panelId = `mobile-nav-${menu.label.toLowerCase().replace(/\s+/g, "-")}`;
+const MOBILE_ROWS: MobileRow[] = nav.flatMap((entry): MobileRow[] =>
+  isNavMenu(entry)
+    ? [
+        { kind: "heading", key: `group:${entry.label}`, label: entry.label, to: entry.to },
+        ...entry.items.map(
+          (item): MobileRow => ({ kind: "link", key: `${entry.label}:${item.to}`, label: item.label, to: item.to }),
+        ),
+      ]
+    : [{ kind: "link", key: entry.to, label: entry.label, to: entry.to }],
+);
 
-  return (
-    <div>
-      <button
-        type="button"
-        aria-expanded={expanded}
-        aria-controls={panelId}
-        onClick={onToggle}
-        className={cn(
-          "flex min-h-[44px] w-full items-center justify-between rounded-xl px-4 py-3.5 font-display text-lg text-white/70 transition-colors hover:bg-white/[0.05] hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-gold",
-          (expanded || active) && "text-white",
-        )}
-      >
-        {menu.label}
-        <span
-          aria-hidden
-          className={cn(
-            "text-[0.7rem] leading-none text-gold transition-transform duration-300 ease-luxe",
-            expanded && "rotate-180",
-          )}
-        >
-          ▾
-        </span>
-      </button>
+/** Centred, letterspaced caps — the source menu's type, in this site's scale. */
+const MOBILE_ITEM =
+  "flex min-h-[56px] items-center justify-center px-4 text-center font-body text-[0.8rem] font-semibold uppercase leading-[1.5] tracking-[0.16em] transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-gold";
 
-      <AnimatePresence initial={false}>
-        {expanded && (
-          <motion.ul
-            id={panelId}
-            aria-label={menu.label}
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-            transition={{
-              duration: prefersReducedMotion ? 0 : 0.28,
-              ease: [0.22, 1, 0.36, 1],
-            }}
-            className="overflow-hidden pl-2"
-          >
-            {menu.items.map((item) => {
-              const current = pathname === item.to;
-              return (
-                <li key={item.label}>
-                  <Link
-                    to={item.to}
-                    onClick={onNavigate}
-                    aria-current={current ? "page" : undefined}
-                    className={cn(
-                      "flex min-h-[44px] flex-col justify-center gap-0.5 rounded-xl px-4 py-2.5 transition-colors hover:bg-ink/[0.05] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-gold",
-                      current && "bg-ink/[0.05]",
-                    )}
-                  >
-                    <span className={cn("text-[0.95rem] font-medium", current ? "text-gold" : "text-ink")}>
-                      {item.label}
-                    </span>
-                    <span className="text-[0.8rem] leading-snug text-orchid-dim">
-                      {item.description}
-                    </span>
-                  </Link>
-                </li>
-              );
-            })}
-          </motion.ul>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-}
+const MOBILE_HEADING =
+  "flex min-h-[44px] items-center justify-center px-4 pb-1 pt-5 text-center font-body text-[0.6rem] font-bold uppercase leading-[1.6] tracking-[0.28em] text-gold/75 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-gold";

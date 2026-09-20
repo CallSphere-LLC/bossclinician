@@ -29,7 +29,8 @@ import { useHeadContext } from "@/ssr/context";
  * The Boss Clinician Club — `/club`, at the path the source site sells it from.
  *
  * The argument runs in the source page's order: who it is for → the DIY years →
- * the warning → three starting points → the programme → five pillars → bonuses
+ * the warning → a clinician's story → three starting points → the programme →
+ * five pillars → bonuses
  * → proof → pace → value → price → the next move → Yvette's letter →
  * objections. Copy lives in content/club.ts and is the published wording.
  *
@@ -208,8 +209,8 @@ export default function Club() {
       <StartSection />
       <HoldingBackSection />
       <QuoteFilmBand />
-      <ClinicianStorySection />
       <WarningSection />
+      <ClinicianStorySection />
       <PersonasSection />
       <EnterSection />
       <PillarsSection />
@@ -324,17 +325,6 @@ function QuoteFilmBand() {
   );
 }
 
-/* ── 3c · A clinician's story, on film ────────────────────────────────── */
-
-function ClinicianStorySection() {
-  return (
-    <Section surface="raised" space="lg" aria-label={club.clinicianStory.title} containerClassName="max-w-4xl">
-      <SectionTitle title={club.clinicianStory.title} />
-      <TestimonialVideo {...STORY_FILM} title={club.clinicianStory.videoTitle} className="mt-7 sm:mt-8" />
-    </Section>
-  );
-}
-
 /* ── 4 · The part nobody warns you about ──────────────────────────────── */
 
 function WarningSection() {
@@ -365,6 +355,23 @@ function WarningSection() {
           </p>
         </GlassCard>
       </motion.div>
+    </Section>
+  );
+}
+
+/* ── 4b · A clinician's story, on film ────────────────────────────────── */
+
+/**
+ * The proof, straight after the line it answers. The warning band closes on
+ * "That's exactly why I created The Boss Move inside The Club." — so a
+ * clinician describing the move he actually made belongs here rather than
+ * before the problem has been named.
+ */
+function ClinicianStorySection() {
+  return (
+    <Section surface="deep" space="lg" aria-label={club.clinicianStory.title} containerClassName="max-w-4xl">
+      <SectionTitle title={club.clinicianStory.title} />
+      <TestimonialVideo {...STORY_FILM} title={club.clinicianStory.videoTitle} className="mt-7 sm:mt-8" />
     </Section>
   );
 }
@@ -698,24 +705,54 @@ function NextMoveSection() {
   return (
     <Section
       surface="deep"
-      space="lg"
-      aurora="violet"
-      auroraIntensity={0.6}
+      space="xl"
       aria-label={club.nextMove.title}
-      containerClassName="max-w-5xl"
+      containerClassName="max-w-3xl"
+      // The band is dark in both themes, so the veil below stays a veil and the
+      // heading over it stays white when the site is in its light theme.
+      data-media-surface
+      backdrop={
+        <>
+          {/* The source sets these words over this photograph. A tall 9:16
+              frame cropped into a wide band keeps the horizon, the sun and
+              Yvette's silhouette in view at every width; the `y` bias holds
+              the horizon high enough that the surf is not all a phone gets. */}
+          <img
+            src={NEXT_MOVE_PHOTO.src}
+            alt=""
+            aria-hidden
+            width={NEXT_MOVE_PHOTO.width}
+            height={NEXT_MOVE_PHOTO.height}
+            loading="lazy"
+            decoding="async"
+            className="pointer-events-none absolute inset-0 size-full object-cover object-[center_45%]"
+          />
+          {/* Two token-based veils, not a radial: the light theme hides
+              `bg-[radial-gradient(…)]` decorations outright, and this one is
+              load-bearing. Together they hold ~11:1 on the white headline and
+              ~5:1 on the foil eyebrow against the brightest pixel in the
+              photograph (the sun), and close to the page floor at both edges
+              so the band hands off to its neighbours without a seam. */}
+          <div aria-hidden className="absolute inset-0 bg-night/55" />
+          <div
+            aria-hidden
+            className="absolute inset-0 bg-gradient-to-b from-night-deep via-night-deep/55 to-night-deep"
+          />
+        </>
+      }
     >
       <SectionTitle eyebrow={club.nextMove.eyebrow} title={club.nextMove.title} />
-      {/* The source sets its heading over this photograph; framed here for the
-          same contrast reason as the Enter band. The crop keeps both the sun
-          and Yvette inside a 4:5 window of the tall original. */}
-      <div className="mt-7 grid items-center gap-8 sm:mt-8 lg:grid-cols-[0.75fr_1.25fr] lg:gap-14">
-        <motion.div {...rise(reduce)} className="mx-auto w-full max-w-xs lg:max-w-none">
-          <Framed picture={NEXT_MOVE_PHOTO} imgClassName="aspect-[4/5] object-[center_70%]" />
-        </motion.div>
-        <motion.div {...rise(reduce, 0.1)} className="mx-auto w-full max-w-3xl">
-          <Prose paragraphs={club.nextMove.paragraphs} align="center" className="lg:text-left" />
-        </motion.div>
-      </div>
+      {/* Body copy lifts off `copy-luxe`'s orchid for this band only. Orchid is
+          the calm read on a flat near-black floor (5.2:1); against the sun in
+          this photograph, even under the veil, it falls to 3.0:1. White at 85%
+          holds 8.8:1 there and stays white on the light theme. */}
+      <motion.div {...rise(reduce, 0.1)} className="mx-auto mt-7 w-full max-w-2xl sm:mt-8">
+        <Prose
+          paragraphs={club.nextMove.paragraphs}
+          align="center"
+          className="[&>p]:text-white/85"
+        />
+      </motion.div>
       <Pull className="mt-8 sm:mt-10">{club.nextMove.closing}</Pull>
       <Cta label={club.nextMove.cta} to={JOIN_ANCHOR} className="mt-7 sm:mt-8" />
     </Section>

@@ -61,7 +61,20 @@ interface SectionProps {
   containerClassName?: string;
   /** Escape hatch for full-bleed sections that lay out their own container. */
   bleed?: boolean;
+  /**
+   * Full-bleed decoration painted behind the container — a photograph and the
+   * veil over it. It sits outside the container on purpose: the container is
+   * measured and padded, and a background must not be.
+   *
+   * A band that carries media is dark in BOTH themes, so pass
+   * `data-media-surface` alongside it (see site-theme.css): it puts the night
+   * palette back inside the section, which is what keeps a token-based veil
+   * dark and white type white when the site is in its light theme.
+   */
+  backdrop?: ReactNode;
   "aria-label"?: string;
+  /** Restores the night palette inside this section on the light theme. */
+  "data-media-surface"?: boolean;
   /**
    * Narration markers for the voice concierge (see voice/contract.ts). They are
    * declared here rather than reached through a wrapper because `rest` already
@@ -85,6 +98,7 @@ export function Section({
   className,
   containerClassName,
   bleed = false,
+  backdrop,
   children,
   ...rest
 }: SectionProps) {
@@ -98,6 +112,7 @@ export function Section({
         <div aria-hidden className="rule-faint absolute inset-x-0 top-0 z-[1] w-full" />
       )}
       {aurora && <Aurora tone={aurora} intensity={auroraIntensity} />}
+      {backdrop}
       {bleed ? (
         <div className="relative z-[1]">{children}</div>
       ) : (
