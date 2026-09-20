@@ -110,22 +110,21 @@ export const exploreMenu: NavMenu = {
       to: "/retreats",
       description: "A luxury wellness retreat for women mental health professionals.",
     },
-    {
-      label: "Blog",
-      to: "/blog",
-      description: "Articles on building a private practice.",
-    },
   ],
 };
 
-// About first, then the two groups — the order and the grouping of the source
-// site's own menu. The four pages that menu does not carry (Contact, Store,
-// Free Resources, the Practice Quiz) are reached from the footer, which lists
-// every one of them, and from the pages that sell them.
+// About first, then the two groups, then the Blog — the order and the grouping
+// of the source site's own menu. The Blog is a bar item rather than a row
+// inside Explore: it is the one thing here a reader returns to on its own
+// schedule, and a destination someone comes back for should not cost a hover
+// to find. The four pages the menu does not carry (Contact, Store, Free
+// Resources, the Practice Quiz) are reached from the footer, which lists every
+// one of them, and from the pages that sell them.
 export const nav: NavEntry[] = [
   { label: "About", to: "/about" },
   workWithMeMenu,
   exploreMenu,
+  { label: "Blog", to: "/blog" },
 ];
 
 export const footer = {
