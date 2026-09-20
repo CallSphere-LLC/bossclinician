@@ -48,16 +48,18 @@ export const NAV_GROUPS: NavGroup[] = [
     id: "products",
     label: "Products",
     icon: Package,
+    // Listed in the order Kajabi's Products menu uses, so a hand that already
+    // knows Kajabi reaches for the right item without reading the whole list.
     children: [
       { to: "/admin/products", label: "All Products", ready: true },
-      { to: "/admin/catalogue", label: "Your Catalogue", ready: true },
       { to: "/admin/courses", label: "Courses", ready: true },
-      { to: "/admin/downloads", label: "Downloads", ready: true },
-      { to: "/admin/community", label: "Community", ready: true },
-      { to: "/admin/media", label: "Media Library", ready: true },
       { to: "/admin/coaching", label: "Coaching", ready: true },
+      { to: "/admin/community", label: "Community", ready: true },
       { to: "/admin/podcasts", label: "Podcasts", ready: true },
       { to: "/admin/newsletters", label: "Newsletters", ready: true },
+      { to: "/admin/downloads", label: "Downloads", ready: true },
+      { to: "/admin/catalogue", label: "Your Catalogue", ready: true },
+      { to: "/admin/media", label: "Media Library", ready: true },
     ],
   },
   {

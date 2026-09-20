@@ -500,7 +500,13 @@ function NavGroupItem({
                     to={child.to}
                     className={({ isActive }) =>
                       cn(
-                        "flex items-center justify-between gap-2 rounded-lg px-3 py-2 text-[0.82rem] transition-colors",
+                        // Not `justify-between`: the active row adds the gold
+                        // marker as a `before:` pseudo-element, which counts as
+                        // a flex child — so `justify-between` shoved the label
+                        // of whichever page she was on to the right-hand edge
+                        // while every other row stayed left. The badge earns
+                        // its right edge with `ml-auto` instead.
+                        "flex items-center gap-2 rounded-lg px-3 py-2 text-[0.82rem] transition-colors",
                         isActive
                           ? "bg-surface font-semibold text-ink before:-ml-3 before:h-5 before:w-0.5 before:rounded-full before:bg-gold"
                           : "text-white/60 hover:bg-white/8 hover:text-white",
@@ -516,7 +522,7 @@ function NavGroupItem({
                       )}
                     </span>
                     {child.badge === "leads" && newLeads > 0 && (
-                      <span className="rounded-full bg-gold px-1.5 text-[0.62rem] font-bold text-ink">
+                      <span className="ml-auto rounded-full bg-gold px-1.5 text-[0.62rem] font-bold text-ink">
                         {newLeads}
                       </span>
                     )}

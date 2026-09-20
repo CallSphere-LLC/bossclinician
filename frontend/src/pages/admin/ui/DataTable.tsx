@@ -23,6 +23,21 @@ import { Button, Skeleton } from "@/pages/admin/ui/primitives";
  * renders the empty state.
  */
 
+/**
+ * One shared empty array for the loading state.
+ *
+ * `data ?? []` inline hands TanStack a NEW array on every render while the list
+ * is still loading. Its `getCoreRowModel` memo is keyed on the data identity, so
+ * a fresh array fires `autoResetPageIndex`, which queues a pagination reset on a
+ * microtask, which re-renders, which mints another array — a microtask loop that
+ * never yields. The renderer locks up, so the fetch that would have ended the
+ * loading state never resolves and the page simply never paints: no error, no
+ * warning. It needs a second render while the data is still null to arm itself,
+ * which is why only some tables ever showed it (the Coaching page's Sessions
+ * tab clears its file list on mount, and that was enough).
+ */
+const NO_ROWS: never[] = [];
+
 interface DataTableProps<TData> {
   columns: ColumnDef<TData, unknown>[];
   data: TData[] | null;
@@ -60,7 +75,7 @@ export function DataTable<TData>({
   const [globalFilter, setGlobalFilter] = useState("");
 
   const table = useReactTable({
-    data: data ?? [],
+    data: data ?? NO_ROWS,
     columns,
     state: { sorting, globalFilter },
     onSortingChange: setSorting,

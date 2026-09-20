@@ -2,7 +2,7 @@ import { useNewProductRequest } from "./ui/useNewProductRequest";
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import * as Tabs from "@radix-ui/react-tabs";
 import type { ColumnDef } from "@tanstack/react-table";
-import { CalendarClock, Headphones, Link2, NotebookPen, Paperclip, Plus, Trash2, Users, Video } from "lucide-react";
+import { CalendarClock, Headphones, Link2, Mail, NotebookPen, Paperclip, Plus, Trash2, Users, Video } from "lucide-react";
 import { toast } from "sonner";
 import { adminApi } from "@/lib/api";
 import { coachingAdminApi, type CoachingSessionFile } from "@/lib/coachingAdminApi";
@@ -119,8 +119,9 @@ export default function Coaching() {
       <Tabs.Root defaultValue="offers">
         <Tabs.List className="flex gap-1 rounded-xl border border-hairline/70 bg-surface p-1.5">
           {[
-            { value: "offers", label: "Offers", icon: Headphones },
+            { value: "offers", label: "Programs", icon: Headphones },
             { value: "sessions", label: "Sessions", icon: CalendarClock },
+            { value: "clients", label: "Clients", icon: Users },
           ].map((tab) => (
             <Tabs.Trigger
               key={tab.value}
@@ -139,6 +140,9 @@ export default function Coaching() {
           </Tabs.Content>
           <Tabs.Content value="sessions">
             <SessionsTab />
+          </Tabs.Content>
+          <Tabs.Content value="clients">
+            <ClientsTab />
           </Tabs.Content>
         </div>
       </Tabs.Root>
@@ -160,7 +164,7 @@ function OffersTab() {
     adminApi
       .growthList<CoachingOffer>("coaching/offers")
       .then(setOffers)
-      .catch(() => setError("We couldn't load your coaching offers. Try refreshing the page."));
+      .catch(() => setError("We couldn't load your coaching programs. Try refreshing the page."));
   }, []);
 
   useEffect(load, [load]);
@@ -185,11 +189,11 @@ function OffersTab() {
     try {
       if (draft.id) await adminApi.growthUpdate("coaching/offers", draft.id, payload);
       else await adminApi.growthCreate("coaching/offers", payload);
-      toast.success(draft.id ? "Offer saved" : "Offer created");
+      toast.success(draft.id ? "Coaching program saved" : "Coaching program created");
       setDraft(null);
       load();
     } catch (err) {
-      toast.error(friendlyError(err, "offer"));
+      toast.error(friendlyError(err, "coaching program"));
     }
   }
 
@@ -197,17 +201,17 @@ function OffersTab() {
     const ok = await confirm({
       title: `Delete “${offer.title}”?`,
       description:
-        "Sessions you've already booked stay in your list, but they'll no longer be attached to this offer.",
+        "Sessions you've already booked stay in your list, but they'll no longer be attached to this program.",
       confirmLabel: "Yes, delete it",
       destructive: true,
     });
     if (!ok) return;
     try {
       await adminApi.growthDelete("coaching/offers", offer.id);
-      toast.success("Offer deleted");
+      toast.success("Coaching program deleted");
       load();
     } catch (err) {
-      toast.error(friendlyError(err, "offer"));
+      toast.error(friendlyError(err, "coaching program"));
     }
   }
 
@@ -218,7 +222,7 @@ function OffersTab() {
       <div className="flex justify-end">
         <Button size="sm" onClick={() => openOffer()}>
           <Plus />
-          New offer
+          New coaching program
         </Button>
       </div>
 
@@ -232,11 +236,11 @@ function OffersTab() {
         <Card>
           <EmptyState
             icon={<Headphones />}
-            title="No coaching offers yet"
+            title="No coaching programs yet"
             description="Create a package — one to one or group — and start booking sessions into it."
             action={
               <Button size="sm" onClick={() => openOffer()}>
-                Create an offer
+                Create a coaching program
               </Button>
             }
           />
@@ -296,7 +300,7 @@ function OffersTab() {
       <Modal
         open={draft !== null}
         onOpenChange={(open) => !open && setDraft(null)}
-        title={draft?.id ? "Edit offer" : "New coaching offer"}
+        title={draft?.id ? "Edit coaching program" : "New coaching program"}
         size="lg"
         footer={
           <>
@@ -304,7 +308,7 @@ function OffersTab() {
               Cancel
             </Button>
             <Button size="sm" type="submit" form="offer-form">
-              Save offer
+              Save coaching program
             </Button>
           </>
         }
@@ -544,7 +548,7 @@ function SessionsTab() {
               {row.original.memberName || row.original.memberEmail || "No client chosen"}
             </span>
             <span className="block truncate text-xs text-ink-soft">
-              {row.original.offerTitle ?? "Not part of an offer"}
+              {row.original.offerTitle ?? "Not part of a program"}
             </span>
           </button>
         ),
@@ -673,7 +677,7 @@ function SessionsTab() {
               </select>
               </div>
             </Field>
-            <Field label="Which offer is this part of?">
+            <Field label="Which coaching program is this part of?">
               <select
                 value={String(draft.offerId ?? "")}
                 onChange={(e) =>
@@ -681,7 +685,7 @@ function SessionsTab() {
                 }
                 className={selectStyles}
               >
-                <option value="">Not part of an offer</option>
+                <option value="">Not part of a program</option>
                 {offers.map((o) => (
                   <option key={o.id} value={o.id}>
                     {o.title}
@@ -865,6 +869,255 @@ function SessionsTab() {
           </form>
         )}
       </Modal>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ Clients */
+
+/**
+ * One row per person she coaches, rolled up from her booked sessions.
+ *
+ * There is no roster table to read. `coaching_sessions` is the only record
+ * that ties a person to a program, so the client list IS that list grouped
+ * by person — which is why this reads sessions rather than
+ * `adminApi.coachingClients()`, whose job is to fill the "book a session"
+ * picker and which carries no program at all.
+ *
+ * The consequence, worth knowing before trusting this as a roster: somebody
+ * who has BOUGHT a package and not yet booked anything is not here. That fact
+ * lives in `access_grants`, which no admin route exposes, and which today
+ * cannot answer it anyway — nothing in `products` has `kind = 'coaching'`, so
+ * no grant is attributable to a coaching program yet. When coaching is sold
+ * as a product, this wants a real roster route behind it.
+ */
+interface CoachingClientRow {
+  key: string;
+  name: string;
+  email: string;
+  offerTitles: string[];
+  booked: number;
+  completed: number;
+  lastSessionAt: string | null;
+  lastSessionTime: number;
+}
+
+function ClientsTab() {
+  const [sessions, setSessions] = useState<CoachingSession[] | null>(null);
+  const [offers, setOffers] = useState<CoachingOffer[]>([]);
+  const [offerFilter, setOfferFilter] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    adminApi
+      .coachingSessions()
+      .then(setSessions)
+      .catch(() => setError("We couldn't load your clients. Try refreshing the page."));
+    adminApi.growthList<CoachingOffer>("coaching/offers").then(setOffers).catch(() => undefined);
+  }, []);
+
+  const rows = useMemo<CoachingClientRow[] | null>(() => {
+    if (sessions === null) return null;
+    const now = Date.now();
+    const people = new Map<string, CoachingClientRow>();
+
+    for (const session of sessions) {
+      // A session with nobody on it is a gap in her calendar, not a client.
+      if (!session.memberId && !session.contactId) continue;
+      // Filtering here rather than on the finished rows is what makes the
+      // counts mean "in this program" instead of "in total".
+      if (offerFilter && String(session.offerId ?? "") !== offerFilter) continue;
+
+      const email = (session.memberEmail ?? "").trim();
+      // Keyed on the email first, so the same person booked once against her
+      // contact record and later against her member record counts once. Only
+      // someone with no email at all falls back to the kind:id pair.
+      const key = email
+        ? email.toLowerCase()
+        : session.memberId
+          ? `member:${session.memberId}`
+          : `contact:${session.contactId}`;
+
+      const row = people.get(key) ?? {
+        key,
+        name: "",
+        email,
+        offerTitles: [],
+        booked: 0,
+        completed: 0,
+        lastSessionAt: null,
+        lastSessionTime: 0,
+      };
+
+      if (!row.name && session.memberName) row.name = session.memberName;
+      if (!row.email && email) row.email = email;
+
+      // Deduped by title, which is how she reads them.
+      const offerTitle = session.offerTitle?.trim();
+      if (offerTitle && !row.offerTitles.includes(offerTitle)) row.offerTitles.push(offerTitle);
+
+      // Cancelled is the one status that doesn't count as a session booked.
+      // A no-show does: the hour was held and the package paid for it.
+      if (session.status !== "cancelled") {
+        row.booked += 1;
+        if (session.status === "completed") row.completed += 1;
+        // "Last session" means the last time they actually sat down together,
+        // so a no-show is skipped here even though it still spent a session
+        // above. A past session she never ticked "done" still counts —
+        // forgetting to tick a box is not the same as not meeting.
+        const at = session.scheduledAt ? new Date(session.scheduledAt).getTime() : NaN;
+        if (
+          session.status !== "no_show" &&
+          Number.isFinite(at) &&
+          at <= now &&
+          at > row.lastSessionTime
+        ) {
+          row.lastSessionTime = at;
+          row.lastSessionAt = session.scheduledAt;
+        }
+      }
+
+      people.set(key, row);
+    }
+
+    // Most recently seen first: the people she is working with now are the
+    // ones she opens this for.
+    return [...people.values()].sort((a, b) => b.lastSessionTime - a.lastSessionTime);
+  }, [sessions, offerFilter]);
+
+  const columns = useMemo<ColumnDef<CoachingClientRow, unknown>[]>(
+    () => [
+      {
+        id: "client",
+        header: "Client",
+        // Both halves in one value so the search box finds a person by either.
+        accessorFn: (row) => `${row.name} ${row.email}`.trim(),
+        cell: ({ row }) => (
+          <div className="min-w-0">
+            <span className="block truncate font-semibold text-ink">
+              {row.original.name || row.original.email || "No name yet"}
+            </span>
+            {row.original.name && row.original.email && (
+              <span className="block truncate text-xs text-ink-soft">{row.original.email}</span>
+            )}
+          </div>
+        ),
+      },
+      {
+        id: "program",
+        header: "Program",
+        accessorFn: (row) => row.offerTitles.join(", "),
+        cell: ({ row }) =>
+          row.original.offerTitles.length === 0 ? (
+            <span className="text-xs text-ink-soft/70">Not part of a program</span>
+          ) : (
+            <div className="flex flex-wrap gap-1.5">
+              {row.original.offerTitles.map((title) => (
+                <Badge key={title} tone="plum">
+                  {title}
+                </Badge>
+              ))}
+            </div>
+          ),
+      },
+      {
+        id: "booked",
+        header: "Sessions",
+        accessorFn: (row) => row.booked,
+        // The value is a number so the column sorts properly; the search box
+        // would otherwise read what she typed as a numeric range and match
+        // nothing, so this column and the date one opt out of it.
+        enableGlobalFilter: false,
+        cell: ({ row }) => (
+          <div className="whitespace-nowrap">
+            <span className="text-sm font-semibold text-ink">
+              {pluralize(row.original.booked, "session")}
+            </span>
+            <span className="block text-xs text-ink-soft">{row.original.completed} done</span>
+          </div>
+        ),
+      },
+      {
+        id: "lastSession",
+        header: "Last session",
+        accessorFn: (row) => row.lastSessionTime,
+        enableGlobalFilter: false,
+        cell: ({ row }) => (
+          <span className="whitespace-nowrap text-sm text-ink-soft">
+            {orNone(formatDateTime(row.original.lastSessionAt), "None yet")}
+          </span>
+        ),
+      },
+      {
+        id: "actions",
+        header: "",
+        enableSorting: false,
+        cell: ({ row }) =>
+          row.original.email ? (
+            <RowActions>
+              <Button
+                asChild
+                variant="ghost"
+                size="iconSm"
+                aria-label={`Email ${row.original.name || row.original.email}`}
+              >
+                <a href={`mailto:${row.original.email}`}>
+                  <Mail />
+                </a>
+              </Button>
+            </RowActions>
+          ) : null,
+      },
+    ],
+    [],
+  );
+
+  return (
+    <div className="space-y-5">
+      {error && <ErrorNotice message={error} />}
+
+      <DataTable
+        columns={columns}
+        data={rows}
+        searchPlaceholder="Search your clients…"
+        itemNoun={{ one: "client", many: "clients" }}
+        minWidth="860px"
+        toolbar={
+          <select
+            value={offerFilter}
+            onChange={(e) => setOfferFilter(e.target.value)}
+            aria-label="Which coaching program to show"
+            className={selectStyles}
+          >
+            <option value="">Every program</option>
+            {offers.map((offer) => (
+              <option key={offer.id} value={String(offer.id)}>
+                {offer.title}
+              </option>
+            ))}
+          </select>
+        }
+        emptyState={
+          offerFilter ? (
+            <EmptyState
+              icon={<Users />}
+              title="Nobody in this program yet"
+              description="Nobody has a session booked in it yet. Show every program to see the rest of your clients."
+              action={
+                <Button variant="secondary" size="sm" onClick={() => setOfferFilter("")}>
+                  Show every program
+                </Button>
+              }
+            />
+          ) : (
+            <EmptyState
+              icon={<Users />}
+              title="No clients yet"
+              description="Book a session with someone under Sessions and they'll appear here, with the program they're in and when you last met."
+            />
+          )
+        }
+      />
     </div>
   );
 }
