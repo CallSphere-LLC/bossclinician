@@ -38,3 +38,4 @@ backend/tsconfig.tsbuildinfo
 
 # Cloud sign-in details the owner pastes in; never commit these.
 *credentials*.txt
+*accessKeys*.csv

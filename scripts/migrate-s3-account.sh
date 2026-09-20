@@ -46,9 +46,9 @@ work=$(mktemp -d); trap 'rm -rf "$work"' EXIT
 # name is not evidence: the whole point of this script is that two accounts are
 # in play and the wrong one is a data loss.
 echo "Source: $from_bucket"
-aws sts get-caller-identity --profile "$from_profile" --output text --query 'Account,Arn'
+aws sts get-caller-identity --profile "$from_profile" --output text --query '[Account,Arn]'
 echo "Destination: $to_bucket"
-aws sts get-caller-identity --profile "$to_profile" --output text --query 'Account,Arn'
+aws sts get-caller-identity --profile "$to_profile" --output text --query '[Account,Arn]'
 
 if ! aws s3api head-bucket --bucket "$to_bucket" --profile "$to_profile" 2>/dev/null; then
   echo "Creating $to_bucket in $region"
@@ -90,12 +90,18 @@ listing "$to_bucket"   "$to_profile"   > "$work/dest.txt"
 echo "Source objects:      $(wc -l < "$work/source.txt")"
 echo "Destination objects: $(wc -l < "$work/dest.txt")"
 
-if ! diff -q "$work/source.txt" "$work/dest.txt" >/dev/null; then
-  echo 'Destination does not match source (key or size differs):' >&2
-  diff "$work/source.txt" "$work/dest.txt" | head -40 >&2
+# A subset check, not an equality check. What makes a delete safe is that every
+# object about to be removed exists at the destination at the same size — not
+# that the destination holds nothing else. The destination legitimately grows
+# beyond the source (it is also where the local uploads are backed up), and an
+# equality test would refuse the delete forever on that ground alone.
+comm -23 "$work/source.txt" "$work/dest.txt" > "$work/missing.txt"
+if [[ -s "$work/missing.txt" ]]; then
+  echo "Not in $to_bucket at the same size — refusing to touch the source:" >&2
+  head -40 "$work/missing.txt" >&2
   exit 1
 fi
-echo "Verified: every key present at the same size in $to_bucket."
+echo "Verified: all $(wc -l < "$work/source.txt") source objects present at the same size in $to_bucket."
 
 if [[ "$delete_source" == true ]]; then
   echo
