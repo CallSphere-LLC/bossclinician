@@ -277,7 +277,7 @@ export default function Forms() {
                     <p className="text-[0.7rem] font-semibold uppercase tracking-wide text-ink-soft">
                       Times viewed
                     </p>
-                    <p className="mt-2 font-display text-[1.6rem] leading-none text-ink">
+                    <p className="mt-2 font-bold tabular-nums text-[1.6rem] leading-none text-ink">
                       {formatNumber(active.views)}
                     </p>
                   </Card>
@@ -285,7 +285,7 @@ export default function Forms() {
                     <p className="text-[0.7rem] font-semibold uppercase tracking-wide text-ink-soft">
                       People who filled it in
                     </p>
-                    <p className="mt-2 font-display text-[1.6rem] leading-none text-ink">
+                    <p className="mt-2 font-bold tabular-nums text-[1.6rem] leading-none text-ink">
                       {orNone(submissions?.length)}
                     </p>
                   </Card>
@@ -293,7 +293,7 @@ export default function Forms() {
                     <p className="text-[0.7rem] font-semibold uppercase tracking-wide text-ink-soft">
                       How many who saw it filled it in
                     </p>
-                    <p className="mt-2 font-display text-[1.6rem] leading-none text-plum">
+                    <p className="mt-2 font-bold tabular-nums text-[1.6rem] leading-none text-plum">
                       {conversionRate !== null ? `${conversionRate}%` : "None yet"}
                     </p>
                     <p className="mt-1.5 text-[0.7rem] text-ink-soft">

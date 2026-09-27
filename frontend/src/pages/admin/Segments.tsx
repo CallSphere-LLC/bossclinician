@@ -601,7 +601,7 @@ function SegmentEditor({
             <Skeleton className="h-5 w-40" />
           ) : (
             <>
-              <p className="font-display text-lg text-ink">
+              <p className="font-bold tabular-nums text-lg text-ink">
                 {pluralize(preview.count, "person", "people")} in this group
               </p>
               {preview.items.length > 0 && (

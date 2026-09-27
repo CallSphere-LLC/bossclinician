@@ -474,7 +474,7 @@ export function PlansPage() {
                 {plan.description || "No description yet."}
               </p>
 
-              <p className="mt-3 font-display text-[1.7rem] leading-none text-ink">
+              <p className="mt-3 font-bold tabular-nums text-[1.7rem] leading-none text-ink">
                 {formatCurrency(plan.priceCents, plan.currency)}
                 <span className="ml-1 text-sm font-normal text-ink-soft">
                   {plan.interval === "year" ? "a year" : "a month"}

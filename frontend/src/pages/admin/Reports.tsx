@@ -291,7 +291,7 @@ export default function Reports() {
                         <span className="text-xs text-ink-soft">Nobody has visited yet</span>
                       ) : (
                         <>
-                          <span className="font-display text-lg text-plum">{rate}%</span>
+                          <span className="font-bold tabular-nums text-lg text-plum">{rate}%</span>
                           <p className="text-[0.65rem] text-ink-soft">made it to the end</p>
                         </>
                       )}
@@ -360,7 +360,7 @@ function Metric({
       ) : (
         <p
           className={cn(
-            "mt-1.5 font-display leading-none",
+            "mt-1.5 font-bold tabular-nums leading-none",
             small ? "text-lg" : "text-[1.6rem]",
             accent ? "text-plum" : tone === "bad" ? "text-red-300" : "text-ink",
           )}

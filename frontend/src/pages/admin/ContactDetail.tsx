@@ -1187,7 +1187,7 @@ function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="px-4 py-5">
       <p className="text-xs text-ink-soft">{label}</p>
-      <p className="mt-1 font-display text-2xl text-ink">{value}</p>
+      <p className="mt-1 font-bold tabular-nums text-2xl text-ink">{value}</p>
     </div>
   );
 }

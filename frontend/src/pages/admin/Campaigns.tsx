@@ -1122,7 +1122,7 @@ export default function Campaigns() {
                 <span className="text-ink-soft">Working out how many people…</span>
               ) : (
                 <span className="text-ink">
-                  <strong className="font-display text-lg text-plum">
+                  <strong className="font-bold tabular-nums text-lg text-plum">
                     {formatNumber(audienceCount)}
                   </strong>{" "}
                   <span className="text-ink-soft">

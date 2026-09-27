@@ -234,14 +234,14 @@ export default function Sequences() {
                 <dl className="grid grid-cols-3 gap-3 border-t border-hairline/60 pt-4 text-sm">
                   <div>
                     <dt className="text-xs text-ink-soft">Emails</dt>
-                    <dd className="font-display text-lg text-ink">{sequence.emailCount}</dd>
+                    <dd className="font-bold tabular-nums text-lg text-ink">{sequence.emailCount}</dd>
                   </div>
                   <div>
                     <dt className="flex items-center gap-1 text-xs text-ink-soft">
                       <Users className="size-3" />
                       Going through
                     </dt>
-                    <dd className="font-display text-lg text-ink">
+                    <dd className="font-bold tabular-nums text-lg text-ink">
                       {formatNumber(sequence.activeCount)}
                     </dd>
                   </div>
@@ -250,7 +250,7 @@ export default function Sequences() {
                       <CheckCircle2 className="size-3" />
                       Finished
                     </dt>
-                    <dd className="font-display text-lg text-ink">
+                    <dd className="font-bold tabular-nums text-lg text-ink">
                       {formatNumber(sequence.completedCount)}
                     </dd>
                   </div>

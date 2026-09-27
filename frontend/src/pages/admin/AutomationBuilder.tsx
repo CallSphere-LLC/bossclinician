@@ -891,7 +891,7 @@ function AutomationDetail({
                   >
                     <ArrowUp />
                   </Button>
-                  <span className="font-display text-sm text-ink-soft">{index + 1}</span>
+                  <span className="font-semibold tabular-nums text-sm text-ink-soft">{index + 1}</span>
                   <Button
                     size="iconSm"
                     variant="ghost"

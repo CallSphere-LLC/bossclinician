@@ -249,7 +249,7 @@ export default function CoursesAdmin() {
                     <p className="mt-1 line-clamp-2 text-sm text-ink-soft">{course.subtitle}</p>
                   )}
 
-                  <p className="mt-3 font-display text-lg text-plum">
+                  <p className="mt-3 font-bold tabular-nums text-lg text-plum">
                     {course.priceCents
                       ? formatCurrency(course.priceCents, course.currency)
                       : course.priceText || "No price set"}

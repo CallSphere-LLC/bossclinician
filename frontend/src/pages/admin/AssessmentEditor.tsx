@@ -311,7 +311,7 @@ function QuestionBlock({
         >
           <ArrowUp />
         </Button>
-        <span className="font-display text-sm text-ink-soft">{index + 1}</span>
+        <span className="font-semibold tabular-nums text-sm text-ink-soft">{index + 1}</span>
         <Button
           size="iconSm"
           variant="ghost"
@@ -493,7 +493,7 @@ function ResultBlock({
         >
           <ArrowUp />
         </Button>
-        <span className="font-display text-sm text-ink-soft">{index + 1}</span>
+        <span className="font-semibold tabular-nums text-sm text-ink-soft">{index + 1}</span>
         <Button
           size="iconSm"
           variant="ghost"
@@ -660,7 +660,7 @@ function StatTile({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-xl border border-hairline bg-white/[0.03] px-4 py-3">
       <p className="text-xs text-ink-soft">{label}</p>
-      <p className="mt-1 font-display text-xl text-ink">{value}</p>
+      <p className="mt-1 font-bold tabular-nums text-xl text-ink">{value}</p>
     </div>
   );
 }

@@ -426,7 +426,7 @@ function SummaryTile({ label, value }: { label: string; value: string }) {
       <p className="text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-ink-soft">
         {label}
       </p>
-      <p className="mt-1 font-display text-xl leading-none text-ink">{value}</p>
+      <p className="mt-1 font-bold tabular-nums text-xl leading-none text-ink">{value}</p>
     </div>
   );
 }

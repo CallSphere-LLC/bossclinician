@@ -275,7 +275,7 @@ export default function Dashboard() {
                       {tile.label}
                     </span>
                     <span className="mt-2 flex flex-wrap items-baseline gap-2">
-                      <span className="font-display text-[1.7rem] leading-none text-ink">
+                      <span className="font-bold tabular-nums text-[1.7rem] leading-none text-ink">
                         {formatValue(tile.value, tile.format, tile.currency)}
                       </span>
                       {tile.changePercent !== null && (
@@ -332,7 +332,7 @@ export default function Dashboard() {
                 <p className="text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-ink-soft">
                   Waiting to reach your bank
                 </p>
-                <p className="mt-2 font-display text-[1.7rem] leading-none text-ink">
+                <p className="mt-2 font-bold tabular-nums text-[1.7rem] leading-none text-ink">
                   {figures.balance.available.length === 0
                     ? formatCurrency(0)
                     : figures.balance.available
@@ -445,7 +445,7 @@ export default function Dashboard() {
             </p>
             <p className="text-[0.68rem] text-white/45">Everything people have paid you, all time</p>
             {revenue ? (
-              <p className="mt-3 font-display text-[1.9rem] leading-none">
+              <p className="mt-3 font-bold tabular-nums text-[1.9rem] leading-none">
                 {formatCurrency(revenue.grossCents)}
               </p>
             ) : (
@@ -465,7 +465,7 @@ export default function Dashboard() {
                 </p>
                 <p className="text-[0.68rem] text-ink-soft/75">From people on a plan</p>
                 {revenue ? (
-                  <p className="mt-2.5 font-display text-[1.6rem] leading-none text-ink">
+                  <p className="mt-2.5 font-bold tabular-nums text-[1.6rem] leading-none text-ink">
                     {formatCurrency(revenue.mrrCents)}
                   </p>
                 ) : (
@@ -692,7 +692,7 @@ export default function Dashboard() {
           <div className="p-5">
             {overview ? (
               <>
-                <p className="font-display text-[1.6rem] leading-none text-ink">
+                <p className="font-bold tabular-nums text-[1.6rem] leading-none text-ink">
                   {formatNumber(overview.totals.media)}
                 </p>
                 <p className="mt-1 text-xs text-ink-soft">
@@ -768,7 +768,7 @@ function StatTile({
             {value === undefined ? (
               <Skeleton className="mt-2 h-6 w-16" />
             ) : (
-              <p className="mt-2 font-display text-[1.65rem] leading-none text-ink">
+              <p className="mt-2 font-bold tabular-nums text-[1.65rem] leading-none text-ink">
                 {formatNumber(value)}
               </p>
             )}

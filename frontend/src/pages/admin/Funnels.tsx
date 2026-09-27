@@ -645,7 +645,7 @@ export default function Funnels() {
                   <p className="text-[0.7rem] font-semibold uppercase tracking-wide text-ink-soft">
                     Times viewed
                   </p>
-                  <p className="mt-2 font-display text-[1.6rem] leading-none text-ink">
+                  <p className="mt-2 font-bold tabular-nums text-[1.6rem] leading-none text-ink">
                     {formatNumber(totalViews)}
                   </p>
                 </Card>
@@ -653,7 +653,7 @@ export default function Funnels() {
                   <p className="text-[0.7rem] font-semibold uppercase tracking-wide text-ink-soft">
                     People who went on
                   </p>
-                  <p className="mt-2 font-display text-[1.6rem] leading-none text-ink">
+                  <p className="mt-2 font-bold tabular-nums text-[1.6rem] leading-none text-ink">
                     {formatNumber(totalConversions)}
                   </p>
                 </Card>
@@ -661,7 +661,7 @@ export default function Funnels() {
                   <p className="text-[0.7rem] font-semibold uppercase tracking-wide text-ink-soft">
                     How many went on
                   </p>
-                  <p className="mt-2 font-display text-[1.6rem] leading-none text-plum">
+                  <p className="mt-2 font-bold tabular-nums text-[1.6rem] leading-none text-plum">
                     {totalViews > 0
                       ? `${Math.round((totalConversions / totalViews) * 1000) / 10}%`
                       : "None yet"}

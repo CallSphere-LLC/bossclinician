@@ -10,7 +10,7 @@ function Metric({ label, value, detail, icon, to, linkLabel = "View list" }: { l
       <div className="flex items-start justify-between gap-4">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.1em] text-ink-soft">{label}</p>
-          <p className="mt-2 font-display text-3xl text-ink">{value.toLocaleString()}</p>
+          <p className="mt-2 font-bold tabular-nums text-3xl text-ink">{value.toLocaleString()}</p>
           <p className="mt-1 text-sm text-ink-soft">{detail}</p>
         </div>
         <span className="grid size-10 place-items-center rounded-xl bg-plum/10 text-plum">{icon}</span>
@@ -26,7 +26,7 @@ function Row({ label, value, hint, to }: { label: string; value: number; hint?: 
   return (
     <Link to={to} className="flex min-h-12 items-center justify-between gap-4 border-b border-hairline/60 py-3 hover:text-plum last:border-0">
       <div><p className="text-sm font-medium text-ink">{label}</p>{hint && <p className="text-xs text-ink-soft">{hint}</p>}</div>
-      <span className="font-display text-xl text-ink">{value.toLocaleString()}</span>
+      <span className="font-bold tabular-nums text-xl text-ink">{value.toLocaleString()}</span>
     </Link>
   );
 }

@@ -478,7 +478,7 @@ export default function SequenceEditor() {
                     >
                       <ArrowUp />
                     </Button>
-                    <span className="font-display text-sm text-ink-soft">{index + 1}</span>
+                    <span className="font-semibold tabular-nums text-sm text-ink-soft">{index + 1}</span>
                     <Button
                       size="iconSm"
                       variant="ghost"
@@ -787,7 +787,7 @@ export default function SequenceEditor() {
               ].map((figure) => (
                 <div key={figure.label}>
                   <dt className="text-xs text-ink-soft">{figure.label}</dt>
-                  <dd className="font-display text-xl text-ink">{formatNumber(figure.value)}</dd>
+                  <dd className="font-bold tabular-nums text-xl text-ink">{formatNumber(figure.value)}</dd>
                 </div>
               ))}
             </dl>

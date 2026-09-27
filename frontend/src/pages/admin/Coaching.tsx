@@ -268,7 +268,7 @@ function OffersTab() {
               <p className="mt-1.5 line-clamp-2 min-h-[2.5rem] text-sm text-ink-soft">
                 {offer.description || "No description yet."}
               </p>
-              <p className="mt-3 font-display text-[1.5rem] leading-none text-plum">
+              <p className="mt-3 font-bold tabular-nums text-[1.5rem] leading-none text-plum">
                 {offer.priceCents ? formatCurrency(offer.priceCents, offer.currency) : "No price set"}
               </p>
               <p className="mt-1.5 text-xs text-ink-soft">

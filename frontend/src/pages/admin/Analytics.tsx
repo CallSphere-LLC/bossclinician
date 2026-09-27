@@ -248,7 +248,7 @@ function Kpi({ label, hint, value }: { label: string; hint?: string; value: stri
       {value === null ? (
         <Skeleton className="mt-2.5 h-7 w-24" />
       ) : (
-        <p className="mt-2 font-display text-[1.6rem] leading-none text-ink">{value}</p>
+        <p className="mt-2 font-bold tabular-nums text-[1.6rem] leading-none text-ink">{value}</p>
       )}
       {hint && <p className="mt-1.5 text-xs text-ink-soft/85">{hint}</p>}
     </Card>

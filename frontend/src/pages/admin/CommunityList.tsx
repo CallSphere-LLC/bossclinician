@@ -337,7 +337,7 @@ function Stat({
         {icon}
         {label}
       </dt>
-      <dd className="mt-0.5 font-display text-base text-ink">
+      <dd className="mt-0.5 font-bold tabular-nums text-base text-ink">
         {formatNumber(value)}
       </dd>
     </div>

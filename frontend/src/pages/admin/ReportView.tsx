@@ -417,7 +417,7 @@ export default function ReportView() {
                 <p className="text-[0.7rem] font-semibold uppercase tracking-[0.12em] text-ink-soft">
                   {total.label}
                 </p>
-                <p className="mt-2 font-display text-[1.6rem] leading-none text-ink">
+                <p className="mt-2 font-bold tabular-nums text-[1.6rem] leading-none text-ink">
                   {formatValue(total.value, total.format, report.currency)}
                 </p>
                 {before && (

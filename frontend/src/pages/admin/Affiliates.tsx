@@ -464,7 +464,7 @@ function PaymentsTab({ onError }: { onError: (message: string) => void }) {
                     {row.payoutDetails ? ` · ${row.payoutDetails}` : ""}
                   </p>
                 </div>
-                <span className="whitespace-nowrap font-display text-lg text-plum">
+                <span className="whitespace-nowrap font-bold tabular-nums text-lg text-plum">
                   {formatCurrency(row.amountCents, row.currency)}
                 </span>
                 <Button

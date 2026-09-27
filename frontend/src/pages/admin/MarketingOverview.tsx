@@ -490,7 +490,7 @@ function Tile({
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <Link
                 to={primary.to}
-                className="font-display text-[1.9rem] leading-none text-ink hover:text-plum"
+                className="font-bold tabular-nums text-[1.9rem] leading-none text-ink hover:text-plum"
                 aria-label={`${label}: ${formatNumber(value)}. ${primary.label}`}
               >
                 {formatNumber(value)}
@@ -545,7 +545,7 @@ function Figure({
       <p className="break-words text-[0.66rem] font-semibold uppercase leading-snug tracking-[0.1em] text-ink-soft">
         {label}
       </p>
-      <p className={cn("mt-1 font-display text-xl leading-none", tone === "warn" ? "text-gold" : "text-ink")}>
+      <p className={cn("mt-1 font-bold tabular-nums text-xl leading-none", tone === "warn" ? "text-gold" : "text-ink")}>
         {value}
       </p>
       <p className="mt-1 break-words text-[0.7rem] leading-snug text-ink-soft">{sub}</p>

@@ -215,7 +215,7 @@ function SummaryTile({
             {loading ? (
               <Skeleton className="mt-2 h-7 w-14" />
             ) : (
-              <p className="mt-2 font-display text-[1.65rem] leading-none text-ink">
+              <p className="mt-2 font-bold tabular-nums text-[1.65rem] leading-none text-ink">
                 {value === undefined ? (hint ?? "Open") : formatNumber(value)}
               </p>
             )}

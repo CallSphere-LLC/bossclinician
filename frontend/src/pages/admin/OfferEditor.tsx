@@ -1960,7 +1960,7 @@ function BumpsTab({
                     {bump.description ? ` · “${bump.description}”` : ""}
                   </p>
                 </div>
-                <span className="shrink-0 font-display text-lg text-plum">
+                <span className="shrink-0 font-bold tabular-nums text-lg text-plum">
                   + {money(bump.amountCents, offer.currency)}
                 </span>
                 <Button

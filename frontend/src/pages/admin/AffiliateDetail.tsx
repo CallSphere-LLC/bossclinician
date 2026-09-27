@@ -264,7 +264,7 @@ export default function AffiliateDetail() {
             <p className="text-[0.68rem] font-bold uppercase tracking-[0.1em] text-ink-soft">
               {tile.label}
             </p>
-            <p className="mt-2 font-display text-2xl text-ink">{tile.value}</p>
+            <p className="mt-2 font-bold tabular-nums text-2xl text-ink">{tile.value}</p>
           </Card>
         ))}
       </div>

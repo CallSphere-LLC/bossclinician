@@ -281,7 +281,7 @@ export function DonutChart({
         </PieChart>
       </ResponsiveContainer>
       <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-        <span className="font-display text-2xl text-ink">{total}</span>
+        <span className="font-bold tabular-nums text-2xl text-ink">{total}</span>
         <span className="text-[0.68rem] font-semibold uppercase tracking-wide text-ink-soft">
           {totalLabel}
         </span>
