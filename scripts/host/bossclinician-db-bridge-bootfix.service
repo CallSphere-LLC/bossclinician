@@ -1,0 +1,12 @@
+[Unit]
+Description=Recreate bossclinician db-bridge once k3s cni0 (10.42.0.1) exists
+After=docker.service k3s.service
+Wants=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/bossclinician-db-bridge-bootfix
+TimeoutStartSec=15min
+
+[Install]
+WantedBy=multi-user.target

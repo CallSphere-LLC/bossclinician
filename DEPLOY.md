@@ -27,6 +27,10 @@ existing Docker volumes. Public and protected uploads remain separate and use
 in its existing Compose container and volume; it is neither copied nor reset.
 A tiny `db-bridge` container publishes Postgres only on the private CNI gateway
 `10.42.0.1:15432`; its Docker DNS resolver follows the database after restarts.
+That address exists only once K3s creates `cni0`, so at boot the bridge fails to
+bind and Docker never retries. `bossclinician-db-bridge-bootfix.service` (source in
+`scripts/host/`, installed to `/etc/systemd/system` and `/usr/local/sbin`) waits
+for `cni0` and recreates it; without it the backend crash-loops on `ECONNREFUSED`.
 The existing Boss Clinician TURN relay also stays running with its existing
 ports and secret, independent of the neighboring telehealth relay.
 

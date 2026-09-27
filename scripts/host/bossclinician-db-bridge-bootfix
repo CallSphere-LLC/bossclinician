@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# db-bridge publishes Postgres on 10.42.0.1:15432, an address that only exists once k3s
+# has created cni0. At boot docker starts the container before that -> exit 128
+# ("cannot assign requested address"), docker never retries, and a plain restart leaves
+# it with no network. The K3s backend then cannot reach the database and crash-loops.
+# Wait for cni0, then recreate db-bridge if it is not listening.
+# Installed to /usr/local/sbin; run by bossclinician-db-bridge-bootfix.service.
+set -u
+for _ in $(seq 1 120); do
+  ip -4 addr show cni0 2>/dev/null | grep -q "inet 10.42.0.1/" && break
+  sleep 5
+done
+sleep 5
+if ss -tlnH "sport = :15432" | grep -q "10.42.0.1:15432"; then
+  echo "db-bridge already listening on 10.42.0.1:15432"; exit 0
+fi
+cd /opt/bossclinician && docker compose -p bossclinician -f docker-compose.yml -f k8s/docker-compose.data.yml up -d --no-deps --force-recreate db-bridge
