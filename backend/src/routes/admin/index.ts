@@ -116,8 +116,33 @@ export function moduleGate(module: Module, readOnlyPosts: readonly string[] = []
 
 const marketingGrowthGate = moduleGate("marketing");
 const coachingGrowthGate = moduleGate("coaching");
+const productsGrowthGate = moduleGate("products");
+
+/**
+ * Podcasts and newsletters are products — the nav lists them under Products,
+ * as Kajabi does, and members get them by buying an offer — so they answer to
+ * the products permissions. Behind the marketing gate a Support account saw
+ * both in its menu and got 403 on each screen, while a Marketing account could
+ * edit a paid product it had no right to change. Episodes, feed tokens and
+ * issues are those products' own rows and follow them.
+ */
+const PRODUCT_GROWTH_PREFIXES = ["/podcasts", "/episodes", "/tokens", "/newsletters", "/issues"];
+
+export function growthGateFor(path: string): "coaching" | "products" | "marketing" {
+  if (path.startsWith("/coaching/")) return "coaching";
+  if (PRODUCT_GROWTH_PREFIXES.some((prefix) => path === prefix || path.startsWith(`${prefix}/`))) {
+    return "products";
+  }
+  return "marketing";
+}
+
 function growthGate(req: Request, res: Response, next: NextFunction): void {
-  (req.path.startsWith("/coaching/") ? coachingGrowthGate : marketingGrowthGate)(req, res, next);
+  const module = growthGateFor(req.path);
+  (module === "coaching" ? coachingGrowthGate : module === "products" ? productsGrowthGate : marketingGrowthGate)(
+    req,
+    res,
+    next,
+  );
 }
 
 /**

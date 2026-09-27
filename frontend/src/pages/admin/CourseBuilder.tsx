@@ -78,6 +78,7 @@ interface LessonExtras {
   contentType?: string;
   commentsEnabled?: boolean;
   audioUrl?: string;
+  embedHtml?: string;
   thumbnailUrl?: string;
   requiresPreviousLesson?: boolean;
   assessmentId?: number | null;
@@ -399,6 +400,7 @@ export default function CourseBuilder() {
       videoUrl: lesson.videoUrl ?? "",
       audioUrl: lesson.audioUrl ?? "",
       attachmentUrl: lesson.attachmentUrl ?? "",
+      embedHtml: embedCodeFor(lesson.embedHtml ?? ""),
       thumbnailUrl: lesson.thumbnailUrl ?? "",
       durationMinutes: lesson.durationMinutes ?? 0,
       preview: lesson.preview ?? false,
@@ -1056,6 +1058,34 @@ export default function CourseBuilder() {
               </div>
             </Field>}
 
+            {lessonDraft.lesson.contentType === "pdf" && <Field label="PDF" hint="students read it in the lesson, and can download it">
+              <div className="space-y-2">
+                <Input
+                  value={lessonDraft.lesson.attachmentUrl ?? ""}
+                  onChange={(e) => updateLesson({ attachmentUrl: e.target.value })}
+                  placeholder="Paste a link to a PDF, or upload below"
+                />
+                {/* Protected, like the video: the PDF is part of what was bought. */}
+                <UploadDropzone
+                  compact
+                  accept="application/pdf"
+                  visibility="protected"
+                  scope={`lesson-pdf:${lessonDraft.lesson.id ?? "new"}`}
+                  onUploaded={(asset) => updateLesson({ attachmentUrl: asset.url })}
+                />
+              </div>
+            </Field>}
+
+            {lessonDraft.lesson.contentType === "embed" && <Field label="Embed code" hint="paste the embed code from YouTube, Vimeo, Loom, Google Slides, Typeform, Canva and the like — or just its link">
+              <Textarea
+                rows={5}
+                className="font-mono text-xs"
+                value={lessonDraft.lesson.embedHtml ?? ""}
+                onChange={(e) => updateLesson({ embedHtml: e.target.value })}
+                placeholder={'<iframe src="https://…"></iframe>'}
+              />
+            </Field>}
+
             <Field label="Lesson thumbnail" hint="the image students see in the outline">
               <div className="space-y-2">
                 {lessonDraft.lesson.thumbnailUrl && (
@@ -1217,6 +1247,57 @@ export default function CourseBuilder() {
  * students the notes and no player at all. Only a lesson still sitting on that
  * default is moved; anything she set herself is left alone.
  */
+/**
+ * What gets stored for an embed lesson. Most people paste the share link rather
+ * than the snippet, and a bare link would render as text in the player, so a
+ * lone https:// address is wrapped in the iframe the provider would have given.
+ */
+export function embedCodeFor(value: string): string {
+  const trimmed = value.trim();
+  if (!/^https:\/\/\S+$/i.test(trimmed)) return value;
+  const src = embeddableUrl(trimmed).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+  return `<iframe src="${src}" width="100%" height="100%" frameborder="0" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe>`;
+}
+
+/**
+ * The share links of the big three refuse to load in a frame (YouTube and Loom
+ * send X-Frame-Options), so they are turned into the player address each one
+ * publishes for embedding. Anything else is used as pasted.
+ */
+function embeddableUrl(link: string): string {
+  let url: URL;
+  try {
+    url = new URL(link);
+  } catch {
+    return link;
+  }
+  const host = url.hostname.replace(/^www\./, "").replace(/^m\./, "");
+  const id = (value: string | null | undefined) => (value && /^[\w-]+$/.test(value) ? value : null);
+  if (host === "youtube.com" && url.pathname === "/watch") {
+    const v = id(url.searchParams.get("v"));
+    if (v) return `https://www.youtube-nocookie.com/embed/${v}`;
+  }
+  if (host === "youtu.be") {
+    const v = id(url.pathname.slice(1));
+    if (v) return `https://www.youtube-nocookie.com/embed/${v}`;
+  }
+  if (host === "youtube.com" && url.pathname.startsWith("/shorts/")) {
+    const v = id(url.pathname.split("/")[2]);
+    if (v) return `https://www.youtube-nocookie.com/embed/${v}`;
+  }
+  if (host === "vimeo.com") {
+    const [, videoId, hash] = url.pathname.split("/");
+    if (/^\d+$/.test(videoId ?? "")) {
+      return `https://player.vimeo.com/video/${videoId}${id(hash) ? `?h=${hash}` : ""}`;
+    }
+  }
+  if (host === "loom.com" && url.pathname.startsWith("/share/")) {
+    const v = id(url.pathname.split("/")[2]);
+    if (v) return `https://www.loom.com/embed/${v}`;
+  }
+  return link;
+}
+
 function kindForChosenVideo(current: string | undefined): { contentType?: string } {
   return current && current !== "text" ? {} : { contentType: "video" };
 }

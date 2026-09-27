@@ -791,6 +791,29 @@ async function activateFunnelSequence(funnelId: number): Promise<void> {
 }
 
 /**
+ * Puts a funnel's sign-up form live at the moment the funnel goes live.
+ *
+ * The opt-in step links to that form, so a published funnel with an unpublished
+ * form sends every visitor to a page that is not there. Publishing a funnel
+ * publishes its pages and form in Kajabi and ClickFunnels alike, and here too —
+ * but only on the save that turns the funnel on (the caller checks it was a
+ * draft before), so a form she takes down afterwards on purpose stays down
+ * through every later save of the funnel.
+ */
+async function publishFunnelForm(funnelId: number): Promise<void> {
+  await pool.query(
+    `UPDATE forms fm
+        SET published = true, updated_at = now()
+       FROM funnels f
+      WHERE f.id = $1
+        AND f.published = true
+        AND fm.id = f.form_id
+        AND fm.published = false`,
+    [funnelId],
+  );
+}
+
+/**
  * One funnel, with the state of the parts its blueprint made.
  *
  * The readiness card used to tick every part that merely existed. Whether the
@@ -842,9 +865,12 @@ adminGrowthRouter.put(
     if (!Number.isInteger(id) || id <= 0) throw badRequest("Invalid id");
     const parsed = anySchema.safeParse(req.body);
     if (!parsed.success) throw badRequest("Invalid payload", parsed.error.flatten());
+    const before = await funnelsRepo.getById(id);
+    if (!before) throw notFound("Not found");
     const item = await funnelsRepo.update(id, parsed.data);
     if (!item) throw notFound("Not found");
     await activateFunnelSequence(id);
+    if (!(before as { published?: boolean }).published) await publishFunnelForm(id);
     res.json(item);
   }),
 );

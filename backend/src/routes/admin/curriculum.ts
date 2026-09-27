@@ -29,6 +29,7 @@ export interface CourseLesson {
   contentType: string;
   commentsEnabled: boolean;
   attachmentUrl: string;
+  embedHtml: string;
   thumbnailUrl: string;
   requiresPreviousLesson: boolean;
   durationMinutes: number;
@@ -69,6 +70,7 @@ export const LESSON_FIELDS = [
   "video_url",
   "audio_url",
   "attachment_url",
+  "embed_html",
   "thumbnail_url",
   "requires_previous_lesson",
   "content_type",
@@ -157,6 +159,31 @@ export function assertContentType(body: Record<string, unknown>): void {
       continue;
     }
     throw badRequest(`A lesson has to be one of: ${LESSON_CONTENT_TYPES.join(", ")}.`);
+  }
+}
+
+/** Longer than any real provider's embed snippet, short of a pasted page. */
+const EMBED_HTML_MAX = 20_000;
+
+/**
+ * Refuses embed code the NOT NULL column or the player cannot take.
+ *
+ * The code runs only inside the player's sandboxed, opaque-origin iframe, so it
+ * is not filtered here — only shaped: null clears it, and anything that is not
+ * text or would be a whole page pasted by mistake is sent back with a sentence.
+ */
+export function assertEmbedHtml(body: Record<string, unknown>): void {
+  for (const [key, value] of Object.entries(body)) {
+    if (toSnake(key) !== "embed_html") continue;
+    if (value === undefined) continue;
+    if (value === null) {
+      body[key] = "";
+      continue;
+    }
+    if (typeof value !== "string") throw badRequest("The embed code has to be text.");
+    if (value.length > EMBED_HTML_MAX) {
+      throw badRequest("That embed code is too long. Paste just the snippet the site gives you to embed it.");
+    }
   }
 }
 
@@ -423,6 +450,7 @@ adminCurriculumRouter.post(
     if (!title) throw badRequest("Lesson title is required");
     assertPaidMedia(body);
     assertContentType(body);
+    assertEmbedHtml(body);
 
     // Insert takes the schedule too, so the first save of a brand-new lesson
     // keeps what the form was showing rather than dropping it and reopening the
@@ -441,9 +469,9 @@ adminCurriculumRouter.post(
       `INSERT INTO course_lessons
          (module_id, slug, title, body_md, video_url, audio_url, attachment_url, thumbnail_url,
           duration_minutes, preview, published, content_type, comments_enabled,
-          requires_previous_lesson, drip_days, drip_date, sort)
+          requires_previous_lesson, drip_days, drip_date, embed_html, sort)
        SELECT $1, $11::text,
-              $2, $3, $4, $5, $6, $7, $8, $9, $10, $12, $13, $14, $15, $16,
+              $2, $3, $4, $5, $6, $7, $8, $9, $10, $12, $13, $14, $15, $16, $17,
               (SELECT COALESCE(MAX(sort), -1) + 1 FROM course_lessons WHERE module_id = $1)
        RETURNING *`,
       [
@@ -463,6 +491,7 @@ adminCurriculumRouter.post(
         body.requiresPreviousLesson ?? false,
         drip.drip_days ?? null,
         drip.drip_date ?? null,
+        body.embedHtml ?? "",
       ],
     );
     res.status(201).json(rowToCamel<CourseLesson>(result.rows[0]));
@@ -474,6 +503,7 @@ adminCurriculumRouter.put(
   asyncHandler(async (req, res) => {
     assertPaidMedia(req.body as Record<string, unknown>);
     assertContentType(req.body as Record<string, unknown>);
+    assertEmbedHtml(req.body as Record<string, unknown>);
 
     const body = normalizeDrip(req.body as Record<string, unknown>, await loadDripSettings());
     const update = buildUpdate(body, LESSON_FIELDS);
