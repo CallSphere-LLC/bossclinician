@@ -138,7 +138,22 @@ export interface ContactOrder {
   createdAt: string;
   totalCents: number;
   refundedCents: number;
+  amountCents: number;
   title: string;
+  offerId: number | null;
+  /** "checkout", "manual", "kajabi", … */
+  source: string;
+  notes: string;
+  /** Imported Kajabi payments carry their Kajabi order number here. */
+  customFieldData: Record<string, unknown> | null;
+}
+
+export interface ManualPurchaseInput {
+  title: string;
+  amountCents: number;
+  currency?: string;
+  paidAt?: string;
+  note?: string;
 }
 
 export interface ContactDetail extends Contact {
@@ -360,6 +375,12 @@ export const contactsApi = {
     return res.blob();
   },
 
+  addPurchase: (id: number, data: ManualPurchaseInput) =>
+    request<{ id: number }>(`/admin/contacts/${id}/purchases`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
   addNote: (id: number, body: string) =>
     request<{ ok: true }>(`/admin/contacts/${id}/notes`, {
       method: "POST",
@@ -471,6 +492,11 @@ export const ACTIVITY_LABEL: Record<string, string> = {
   "email.sent": "Email",
   "email.opened": "Email",
   "email.clicked": "Email",
+  "email.confirmed": "Email confirmed",
+  "event.registered": "Event",
+  "assessment.completed": "Quiz",
+  sequence_started: "Email sequence",
+  sequence_completed: "Email sequence",
 };
 
 export function activityLabel(kind: string): string {
@@ -507,4 +533,19 @@ export function dollarsToCents(raw: string): number | null {
   const value = Number(cleaned);
   if (!Number.isFinite(value) || value < 0) return null;
   return Math.round(value * 100);
+}
+
+/**
+ * Whether anything has happened since they were added, which is when Kajabi's
+ * "Last activity" column shows a date rather than "—". Being added bumps the
+ * activity clock too, so that moment alone doesn't count; a purchase always does.
+ */
+export function hasActivity(person: {
+  lastActivityAt: string | null;
+  createdAt: string;
+  lastOrderedAt?: string | null;
+}): boolean {
+  if (!person.lastActivityAt) return false;
+  if (person.lastOrderedAt) return true;
+  return new Date(person.lastActivityAt).getTime() - new Date(person.createdAt).getTime() > 60_000;
 }

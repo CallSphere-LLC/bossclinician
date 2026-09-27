@@ -1239,12 +1239,13 @@ adminContactsRouter.get(
            FROM contact_activity
           WHERE contact_id = $1
           ORDER BY occurred_at DESC, id DESC
-          LIMIT 200`,
+          LIMIT 500`,
         [id]
       ),
       pool.query(
         `SELECT o.id, o.status, o.currency, o.created_at,
                 GREATEST(o.total_cents, o.amount_cents) AS total_cents, o.refunded_cents,
+                o.amount_cents, o.offer_id, o.source, o.notes, o.custom_field_data,
                 COALESCE(NULLIF(off.title, ''), o.course_title, '') AS title
            FROM orders o
            LEFT JOIN offers off ON off.id = o.offer_id
@@ -1473,6 +1474,86 @@ adminContactsRouter.post(
     });
 
     res.status(201).json({ ok: true });
+  })
+);
+
+/* ------------------------------------------------------ manual purchases */
+
+const manualPurchaseSchema = z.object({
+  title: z.string().trim().min(1).max(200),
+  amountCents: z.number().int().min(0).max(100_000_000),
+  currency: z.string().trim().toLowerCase().length(3).default("usd"),
+  paidAt: z.string().datetime({ offset: true }).optional(),
+  note: z.string().trim().max(2000).default(""),
+});
+
+/**
+ * Kajabi's "Create a manual purchase": money that changed hands somewhere the
+ * checkout never saw — a bank transfer, cash at a retreat, a Venmo.
+ *
+ * It records the payment and nothing else. Access is granted separately from
+ * the Products tab, the same as Kajabi keeps "Grant offer" its own action, so
+ * logging a payment can never quietly hand out a course.
+ */
+adminContactsRouter.post(
+  "/:id/purchases",
+  requireManage,
+  asyncHandler(async (req, res) => {
+    const id = parseId(req.params.id);
+    const parsed = manualPurchaseSchema.safeParse(req.body);
+    if (!parsed.success) throw badRequest("Say what they bought and what they paid", parsed.error.flatten());
+    const contact = rowToCamel<{ email: string }>(await loadContact(id));
+    const { title, amountCents, currency, paidAt, note } = parsed.data;
+
+    const inserted = await pool.query<{ id: number; created_at: Date }>(
+      `INSERT INTO orders
+         (email, contact_id, course_title, amount_cents, subtotal_cents, total_cents,
+          currency, status, source, notes, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $4, $4, $5, 'paid', 'manual', $6, COALESCE($7::timestamptz, now()), now())
+       RETURNING id, created_at`,
+      [contact.email, id, title, amountCents, currency, note, paidAt ?? null],
+    );
+    const order = inserted.rows[0];
+
+    // The totals are denormalised and the rollup is hourly; bring this one
+    // person up to date now so the page she's looking at is right.
+    await pool.query(
+      `UPDATE contacts c
+          SET lifetime_value_cents = t.value_cents,
+              order_count          = t.order_count,
+              last_ordered_at      = t.last_ordered_at,
+              updated_at           = now()
+         FROM (
+           SELECT COALESCE(SUM(GREATEST(total_cents, amount_cents) - refunded_cents)
+                             FILTER (WHERE status IN ('paid', 'refunded')), 0)::int AS value_cents,
+                  COUNT(*) FILTER (WHERE status IN ('paid', 'refunded'))::int       AS order_count,
+                  MAX(created_at) FILTER (WHERE status IN ('paid', 'refunded'))     AS last_ordered_at
+             FROM orders
+            WHERE contact_id = $1
+         ) t
+        WHERE c.id = $1`,
+      [id],
+    );
+
+    await recordActivity({
+      contactId: id,
+      kind: "purchase",
+      title: `Bought ${title}`,
+      body: `Recorded by hand${note ? `: ${note}` : ""}`,
+      subjectType: "order",
+      subjectId: order.id,
+      meta: { author: req.user?.email ?? "", manual: true },
+      occurredAt: order.created_at,
+    });
+    await recordAdminAction({
+      req,
+      action: "contact.manual_purchase",
+      entityType: "contact",
+      entityId: String(id),
+      after: { orderId: order.id, title, amountCents, currency },
+    });
+
+    res.status(201).json({ id: order.id });
   })
 );
 

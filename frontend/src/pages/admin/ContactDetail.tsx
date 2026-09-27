@@ -1,36 +1,49 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
-import { Link, useNavigate, useParams } from "react-router";
+import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router";
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import {
   ArrowLeft,
   BadgeCheck,
+  CalendarCheck,
+  ChevronDown,
+  ClipboardCheck,
   Clock,
   Combine,
+  CreditCard,
+  DollarSign,
   Download,
+  Gift,
+  Inbox,
+  KeyRound,
   Mail,
+  MailPlus,
   Pencil,
-  Phone,
   Receipt,
   Send,
   ShieldAlert,
   StickyNote,
   Trash2,
+  UserPlus,
+  UserRound,
   Users,
   X,
+  type LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
+import { adminApi } from "@/lib/api";
 import { cn } from "@/lib/cn";
-import { formatDate, formatDateTime, formatRelative } from "@/lib/format";
+import { formatDate, formatDateTime } from "@/lib/format";
 import {
   EMAIL_STATUS_LABEL,
-  EMAIL_STATUS_TONE,
-  SETTABLE_STATUSES,
   activityLabel,
   contactsApi,
   emailStatusLabel,
+  hasActivity,
   money,
   sourceLabel,
   type Contact,
   type ContactDetail as Person,
+  type ContactOrder,
   type EmailStatus,
   type Tag,
 } from "@/lib/contactsApi";
@@ -43,8 +56,8 @@ import {
   ErrorNotice,
   Field,
   Input,
-  PageHeader,
   Skeleton,
+  selectStyles,
   Textarea,
 } from "@/pages/admin/ui/primitives";
 import { Modal, useConfirm } from "@/pages/admin/ui/Dialog";
@@ -70,6 +83,70 @@ const ORDER_STATUS_LABEL: Record<string, string> = {
   expired: "Abandoned",
 };
 
+/** The tabs of a profile, in the order her Kajabi contact page had them. */
+const TABS = [
+  { id: "lifecycle", label: "Lifecycle" },
+  { id: "info", label: "Info" },
+  { id: "purchases", label: "Purchases" },
+  { id: "products", label: "Products" },
+  { id: "notes", label: "Notes" },
+] as const;
+
+type TabId = (typeof TABS)[number]["id"];
+
+/** Matches the server's cap on the timeline it sends. */
+const FEED_LIMIT = 500;
+
+/**
+ * Custom fields that are bookkeeping, not something she'd read: the Kajabi
+ * row ids, and the sign-in facts the Info tab already prints in their own place.
+ */
+const HIDDEN_FIELDS = new Set([
+  "ID",
+  "Member ID",
+  "External User ID",
+  "Sign In Count",
+  "Last Sign In At",
+  "Member Created At",
+  "Products",
+]);
+
+/** Kajabi's "Additional info" block, in its order. */
+const ADDRESS_FIELDS = ["Address", "Address Line 2", "City", "State", "Country", "Zip Code"];
+
+/** Kajabi's order number for an imported payment, else ours. */
+function orderNumber(order: ContactOrder): string {
+  const kajabi = order.customFieldData?.kajabiOrderNumber;
+  return typeof kajabi === "string" || typeof kajabi === "number" ? String(kajabi) : String(order.id);
+}
+
+function orderTotal(order: ContactOrder): number {
+  return Math.max(order.totalCents, order.amountCents ?? 0);
+}
+
+/** Kajabi's "Subscribed on September 26, 2026 03:38 PM" line, for every state. */
+function marketingLine(person: Person): string {
+  switch (person.emailMarketingStatus) {
+    case "subscribed":
+      return `Subscribed on ${formatDateTime(person.optedInAt ?? person.createdAt)}`;
+    case "opted_out":
+      return person.optedOutAt ? `Unsubscribed on ${formatDateTime(person.optedOutAt)}` : "Unsubscribed";
+    case "bounced":
+      return "Bounced — their inbox refused your last email, so nothing more is sent";
+    case "complained":
+      return "Marked your email as spam — nothing more is sent";
+    default:
+      return "Hasn't confirmed their subscription yet";
+  }
+}
+
+/** Sign-ins as Kajabi counted them, carried over on import. */
+function signInCount(person: Person): string {
+  const counted = person.customFields?.["Sign In Count"];
+  if (counted !== undefined && counted !== null && counted !== "") return String(counted);
+  return "0";
+}
+
 export default function ContactDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -80,12 +157,26 @@ export default function ContactDetail() {
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [merging, setMerging] = useState(false);
+  const [buying, setBuying] = useState(false);
   const [note, setNote] = useState("");
   const [savingNote, setSavingNote] = useState(false);
   const [addingTag, setAddingTag] = useState("");
   const [tagBusy, setTagBusy] = useState<string | null>(null);
   const [confirmBusy, setConfirmBusy] = useState(false);
   const [confirm, confirmDialog] = useConfirm();
+  const [searchParams, setSearchParams] = useSearchParams();
+  // In the address, so a reload or a shared link opens the same tab.
+  const tab: TabId = TABS.find((item) => item.id === searchParams.get("tab"))?.id ?? "lifecycle";
+  const setTab = (next: TabId) =>
+    setSearchParams(
+      (params) => {
+        const updated = new URLSearchParams(params);
+        if (next === "lifecycle") updated.delete("tab");
+        else updated.set("tab", next);
+        return updated;
+      },
+      { replace: true },
+    );
 
   const load = useCallback(() => {
     if (!Number.isInteger(contactId)) {
@@ -113,7 +204,11 @@ export default function ContactDetail() {
   const displayName = person?.name || person?.email || "";
 
   const custom = useMemo(
-    () => Object.entries(person?.customFields ?? {}).filter(([, value]) => value !== null),
+    () =>
+      Object.entries(person?.customFields ?? {}).filter(
+        ([key, value]) =>
+          value !== null && value !== "" && !HIDDEN_FIELDS.has(key) && !ADDRESS_FIELDS.includes(key),
+      ),
     [person],
   );
 
@@ -189,11 +284,17 @@ export default function ContactDetail() {
     }
   }
 
-  async function addTag(slug: string) {
-    if (!person || !slug.trim()) return;
-    setTagBusy(slug.trim());
+  async function addTag(typed: string) {
+    if (!person || !typed.trim()) return;
+    // Picked from the list by its name, or typed fresh: an existing tag is
+    // matched by name so choosing "Did Attend" never creates a second one.
+    const existing = tags.find(
+      (tag) => tag.name.toLowerCase() === typed.trim().toLowerCase() || tag.slug === typed.trim(),
+    );
+    const slug = existing?.slug ?? typed.trim();
+    setTagBusy(slug);
     try {
-      await contactsApi.addTags(person.id, [slug.trim()]);
+      await contactsApi.addTags(person.id, [slug]);
       setAddingTag("");
       toast.success("Tag added");
       load();
@@ -232,6 +333,23 @@ export default function ContactDetail() {
       toast.error(friendlyError(err, "note"));
     } finally {
       setSavingNote(false);
+    }
+  }
+
+  async function sendPassword() {
+    if (!person || person.memberId === null) return;
+    const ok = await confirm({
+      title: `Email ${displayName} a way back in?`,
+      description:
+        "They'll get an email with a link to pick a new password. Their old one keeps working until they use it.",
+      confirmLabel: "Yes, send it",
+    });
+    if (!ok) return;
+    try {
+      await adminApi.memberResetPassword(person.memberId);
+      toast.success(`Sent to ${person.email}`);
+    } catch (err) {
+      toast.error(friendlyError(err, "person"));
     }
   }
 
@@ -297,194 +415,403 @@ export default function ContactDetail() {
     );
   }
 
+  const firstPaid = person.orders
+    .filter((order) => order.status === "paid")
+    .reduce<string | null>((earliest, order) => (!earliest || order.createdAt < earliest ? order.createdAt : earliest), null);
+  const notes = person.activity.filter((entry) => entry.kind === "note");
+
   return (
     <div className="space-y-6">
-      <BackLink />
+      <nav aria-label="Breadcrumb" className="flex items-center gap-2 text-sm">
+        <Link to="/admin/contacts" className="font-semibold text-ink-soft transition-colors hover:text-plum">
+          Contacts
+        </Link>
+        <span className="text-ink-soft" aria-hidden>
+          /
+        </span>
+        <span className="truncate font-semibold text-ink" aria-current="page">
+          {displayName}
+        </span>
+      </nav>
 
-      <PageHeader
-        eyebrow="Contacts"
-        title={displayName}
-        description={
-          person.lastActivityAt
-            ? `Last heard from ${formatRelative(person.lastActivityAt)}. First seen ${formatDate(person.createdAt)}.`
-            : `First seen ${formatDate(person.createdAt)}.`
-        }
-        actions={
-          <>
-            <Button variant="secondary" size="sm" onClick={() => setEditing(true)}>
-              <Pencil />
-              Edit details
+      <div className="space-y-4">
+        <h1 className="font-display text-3xl text-ink">{displayName}</h1>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="ghost" size="sm" onClick={() => setEditing(true)}>
+            <Pencil />
+            Edit Details
+          </Button>
+          {person.memberId !== null && (
+            <Button variant="ghost" size="sm" onClick={() => void sendPassword()}>
+              <KeyRound />
+              Send Password
             </Button>
-            <Button variant="secondary" size="sm" onClick={() => setMerging(true)}>
-              <Combine />
-              Same as someone else
-            </Button>
-            <Button variant="secondary" size="sm" onClick={() => void exportPerson()}>
-              <Download />
-              Export their data
-            </Button>
-            <Button variant="dangerGhost" size="sm" onClick={remove}>
-              <Trash2 />
-              Remove
-            </Button>
-          </>
-        }
-      />
-
-      <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
-        <SummaryTile
-          label="Spent with you"
-          value={person.lifetimeValueCents > 0 ? money(person.lifetimeValueCents) : "Nothing yet"}
-        />
-        <SummaryTile
-          label="Purchases"
-          value={person.orderCount > 0 ? String(person.orderCount) : "None yet"}
-        />
-        <SummaryTile label="First came from" value={sourceLabel(person.source)} />
+          )}
+          <DropdownMenu.Root>
+            <DropdownMenu.Trigger asChild>
+              <Button variant="ghost" size="sm">
+                More Actions
+                <ChevronDown />
+              </Button>
+            </DropdownMenu.Trigger>
+            <DropdownMenu.Portal>
+              <DropdownMenu.Content
+                align="start"
+                sideOffset={6}
+                className="z-50 min-w-[15rem] rounded-xl border border-hairline bg-surface-raised p-1.5 shadow-[0_24px_54px_-18px_rgba(0,0,0,0.85)]"
+              >
+                {/* Kajabi's menu, in its order, less the two that need a
+                    community feature this site doesn't have (Mute, Hide). */}
+                <MenuItem icon={<DollarSign />} onSelect={() => setBuying(true)}>
+                  Create a manual purchase
+                </MenuItem>
+                <MenuItem icon={<Gift />} onSelect={() => setTab("products")}>
+                  Grant offer
+                </MenuItem>
+                {person.memberId !== null && (
+                  <>
+                    <DropdownMenu.Separator className="my-1.5 h-px bg-hairline" />
+                    <MenuItem icon={<KeyRound />} onSelect={() => void sendPassword()}>
+                      Change password
+                    </MenuItem>
+                  </>
+                )}
+                <DropdownMenu.Separator className="my-1.5 h-px bg-hairline" />
+                <MenuItem icon={<Combine />} onSelect={() => setMerging(true)}>
+                  Merge with another contact
+                </MenuItem>
+                <MenuItem icon={<Download />} onSelect={() => void exportPerson()}>
+                  Export their data
+                </MenuItem>
+                <DropdownMenu.Separator className="my-1.5 h-px bg-hairline" />
+                <MenuItem icon={<Trash2 />} onSelect={() => void remove()} destructive>
+                  Delete contact…
+                </MenuItem>
+              </DropdownMenu.Content>
+            </DropdownMenu.Portal>
+          </DropdownMenu.Root>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="space-y-5">
-          <Card>
-            <CardHeader title="What's happened" icon={<Clock />} />
-            {person.activity.length === 0 ? (
-              <EmptyState
-                icon={<Clock />}
-                title="Nothing yet"
-                description="Everything this person does will show up here as it happens."
-              />
-            ) : (
-              <ol className="space-y-0 px-5 py-4">
-                {person.activity.map((entry) => (
-                  <li key={entry.id} className="relative flex gap-4 pb-5 last:pb-0">
-                    <span className="mt-1.5 grid size-2.5 shrink-0 place-items-center rounded-full bg-gold" />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-[0.68rem] font-semibold uppercase tracking-[0.1em] text-ink-soft">
-                        {activityLabel(entry.kind)}
-                      </p>
-                      <p className="font-semibold text-ink">{entry.title}</p>
-                      {entry.body && (
-                        <p className="mt-1 whitespace-pre-wrap text-sm text-ink-soft">
-                          {entry.body}
-                        </p>
-                      )}
-                      <p className="mt-1 text-xs text-ink-soft/80">
-                        {formatDateTime(entry.occurredAt)}
-                      </p>
-                    </div>
-                  </li>
-                ))}
-              </ol>
-            )}
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="min-w-0 space-y-5">
+          <Card className="flex flex-col gap-5 p-6 sm:flex-row sm:items-center">
+            <span className="grid size-24 shrink-0 place-items-center rounded-2xl bg-lilac-tint text-plum-deep">
+              <UserRound className="size-12" aria-hidden />
+            </span>
+            <div className="min-w-0 space-y-1 text-sm">
+              <p className="flex flex-wrap items-center gap-2 font-semibold text-ink">
+                {displayName}
+                {person.memberId !== null && <Badge tone="green">Has an account</Badge>}
+              </p>
+              <a href={`mailto:${person.email}`} className="block break-all text-plum hover:underline">
+                {person.email}
+              </a>
+              {person.phone && <p className="text-ink-soft">{person.phone}</p>}
+              <p className="text-ink-soft">
+                Added on <span className="font-semibold text-ink">{formatDateTime(person.createdAt)}</span>
+              </p>
+              {firstPaid && (
+                <p className="text-ink-soft">
+                  Customer since <span className="font-semibold text-ink">{formatDateTime(firstPaid)}</span>
+                </p>
+              )}
+            </div>
           </Card>
 
           <Card>
-            <CardHeader title="What they've bought" icon={<Receipt />} />
-            {person.orders.length === 0 ? (
-              <EmptyState
-                icon={<Receipt />}
-                title="Nothing yet"
-                description="Purchases appear here the moment a payment goes through."
-              />
-            ) : (
-              <ul className="divide-y divide-hairline/60">
-                {person.orders.map((order) => (
-                  <li key={order.id} className="flex flex-wrap items-center gap-3 px-5 py-3.5">
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate font-semibold text-ink">
-                        {order.title || "A purchase"}
-                      </p>
-                      <p className="text-xs text-ink-soft">{formatDate(order.createdAt)}</p>
+            <div
+              role="tablist"
+              aria-label="About this person"
+              className="flex gap-1 overflow-x-auto overflow-y-hidden border-b border-hairline px-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+            >
+              {TABS.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  role="tab"
+                  id={`tab-${item.id}`}
+                  aria-selected={tab === item.id}
+                  aria-controls={`panel-${item.id}`}
+                  onClick={() => setTab(item.id)}
+                  className={cn(
+                    "-mb-px whitespace-nowrap border-b-2 px-3 py-3.5 text-sm font-semibold transition-colors",
+                    tab === item.id
+                      ? "border-ink text-ink"
+                      : "border-transparent text-ink-soft hover:text-ink",
+                  )}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+
+            <div role="tabpanel" id={`panel-${tab}`} aria-labelledby={`tab-${tab}`} className="space-y-5 p-5">
+              {tab === "lifecycle" && <Lifecycle person={person} />}
+
+              {tab === "info" && (
+                <>
+                  {/* Kajabi's Info panel: the six facts in two columns, then Additional Info. */}
+                  <div className="space-y-5 rounded-xl border border-hairline bg-white/[0.02] p-5">
+                    <dl className="grid grid-cols-1 gap-x-6 gap-y-4 text-sm sm:grid-cols-2">
+                      <DetailLine label="Added on" value={formatDateTime(person.createdAt)} />
+                      <DetailLine
+                        label="Became a Customer on"
+                        value={firstPaid ? formatDateTime(firstPaid) : "Not a customer yet"}
+                      />
+                      <DetailLine label="Net Revenue" value={`${money(person.lifetimeValueCents)} USD`} />
+                      <DetailLine label="Sign in count" value={signInCount(person)} />
+                      <div>
+                        <dt className="text-xs font-semibold text-ink-soft">Email Marketing</dt>
+                        <dd className="mt-0.5 text-ink">{marketingLine(person)}</dd>
+                        {person.emailMarketingStatus === "subscribed" ? (
+                          <button
+                            type="button"
+                            onClick={() => void setStatus("opted_out")}
+                            className="mt-1 text-sm font-semibold text-plum hover:underline"
+                          >
+                            Unsubscribe
+                          </button>
+                        ) : person.emailMarketingStatus === "opted_out" ||
+                          person.emailMarketingStatus === "unconfirmed" ? (
+                          <button
+                            type="button"
+                            onClick={() => void setStatus("subscribed")}
+                            className="mt-1 text-sm font-semibold text-plum hover:underline"
+                          >
+                            Resubscribe
+                          </button>
+                        ) : null}
+                      </div>
+                      <DetailLine
+                        label="Last activity at"
+                        value={hasActivity(person) ? formatDateTime(person.lastActivityAt as string) : "No activity yet"}
+                      />
+                    </dl>
+
+                    <div className="border-t border-hairline pt-4">
+                      <h2 className="mb-3 text-xs font-semibold uppercase tracking-[0.12em] text-ink-soft">
+                        Additional info
+                      </h2>
+                      <dl className="grid grid-cols-1 gap-x-6 gap-y-4 text-sm sm:grid-cols-2">
+                        <DetailLine label="First name" value={orNone(person.firstName, "Not given")} />
+                        <DetailLine label="Last name" value={orNone(person.lastName, "Not given")} />
+                        <DetailLine label="Phone" value={orNone(person.phone, "Not given")} />
+                        <DetailLine label="Time zone" value={person.timezone} />
+                        {ADDRESS_FIELDS.map((key) => {
+                          const value = person.customFields?.[key];
+                          return value === null || value === undefined || value === "" ? null : (
+                            <DetailLine key={key} label={key} value={String(value)} />
+                          );
+                        })}
+                        <DetailLine label="First came from" value={sourceLabel(person.source)} />
+                        <DetailLine
+                          label="On your site"
+                          value={[
+                            person.memberId ? "Has an account" : null,
+                            person.subscribed ? "On the mailing list" : null,
+                            person.leadCount > 0
+                              ? `${pluralize(person.leadCount, "enquiry", "enquiries")} sent`
+                              : null,
+                          ]
+                            .filter(Boolean)
+                            .join(" · ") || "Nothing yet"}
+                        />
+                      </dl>
                     </div>
-                    <span className="font-semibold text-ink">
-                      {money(order.totalCents, order.currency)}
-                    </span>
-                    <Badge tone={order.status === "paid" ? "green" : "slate"}>
-                      {ORDER_STATUS_LABEL[order.status] ?? "Not known"}
-                    </Badge>
-                  </li>
+
+                    {custom.length > 0 && (
+                      <div className="border-t border-hairline pt-4">
+                        <h2 className="mb-3 text-xs font-semibold uppercase tracking-[0.12em] text-ink-soft">
+                          Form answers
+                        </h2>
+                        <dl className="space-y-4 text-sm">
+                          {custom.map(([key, value]) => (
+                            // A key with spaces is a heading off an imported spreadsheet and
+                            // already reads as she wrote it; only machine keys need humanising.
+                            <DetailLine key={key} label={/\s/.test(key) ? key : humaniseKey(key)} value={String(value)} />
+                          ))}
+                        </dl>
+                      </div>
+                    )}
+                  </div>
+                  <ContactFilesCard contactId={contactId} />
+                </>
+              )}
+
+              {tab === "purchases" &&
+                (person.orders.length === 0 ? (
+                  <EmptyState
+                    icon={<Receipt />}
+                    title="No purchases yet"
+                    description="Purchases appear here the moment a payment goes through, or when you record one by hand."
+                    action={
+                      <Button size="sm" variant="secondary" onClick={() => setBuying(true)}>
+                        <DollarSign />
+                        Create a manual purchase
+                      </Button>
+                    }
+                  />
+                ) : (
+                  <ul className="space-y-4">
+                    {person.orders.map((order) => (
+                      <PurchaseCard key={order.id} order={order} />
+                    ))}
+                  </ul>
                 ))}
-              </ul>
-            )}
-          </Card>
 
-          <ContactAccessCard
-            contactId={contactId}
-            email={person.email}
-            displayName={displayName}
-            onChanged={load}
-          />
-
-          <Card>
-            <CardHeader title="Communities" icon={<Users />} />
-            {(person.communities ?? []).length === 0 ? (
-              <EmptyState icon={<Users />} title="No communities yet" description="Their community memberships will appear here when they join." />
-            ) : (
-              <ul className="divide-y divide-hairline/60">
-                {person.communities.map((community) => (
-                  <li key={community.id} className="flex flex-wrap items-center gap-3 px-5 py-3.5">
-                    <div className="min-w-0 flex-1">
-                      <Link to={`/admin/community/${community.communityId}`} className="font-semibold text-plum hover:underline">
-                        {community.name}
-                      </Link>
-                      <p className="text-xs text-ink-soft">Joined {formatDate(community.joinedAt)}</p>
+              {tab === "products" && (
+                <>
+                  {typeof person.customFields?.Products === "string" && person.customFields.Products && (
+                    <div className="rounded-xl border border-hairline px-4 py-3.5 text-sm">
+                      <p className="text-xs font-semibold text-ink-soft">Bought on your old site</p>
+                      <p className="mt-1 text-ink">{person.customFields.Products}</p>
                     </div>
-                    <Badge tone={community.banned || !community.memberActive ? "slate" : "green"}>
-                      {community.banned ? "Banned" : !community.memberActive ? "Account inactive" : community.role === "admin" ? "Admin" : community.role === "moderator" ? "Moderator" : "Member"}
-                    </Badge>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </Card>
+                  )}
+                  <ContactAccessCard
+                    contactId={contactId}
+                    email={person.email}
+                    displayName={displayName}
+                    onChanged={load}
+                  />
+                  <div>
+                    <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-ink">
+                      <Users className="size-4 text-ink-soft" aria-hidden />
+                      Communities
+                    </h2>
+                    {(person.communities ?? []).length === 0 ? (
+                      <p className="text-sm text-ink-soft">Not in any community yet.</p>
+                    ) : (
+                      <ul className="divide-y divide-hairline/60 rounded-xl border border-hairline">
+                        {person.communities.map((community) => (
+                          <li key={community.id} className="flex flex-wrap items-center gap-3 px-4 py-3.5">
+                            <div className="min-w-0 flex-1">
+                              <Link to={`/admin/community/${community.communityId}`} className="font-semibold text-plum hover:underline">
+                                {community.name}
+                              </Link>
+                              <p className="text-xs text-ink-soft">Joined {formatDate(community.joinedAt)}</p>
+                            </div>
+                            <Badge tone={community.banned || !community.memberActive ? "slate" : "green"}>
+                              {community.banned ? "Banned" : !community.memberActive ? "Account inactive" : community.role === "admin" ? "Admin" : community.role === "moderator" ? "Moderator" : "Member"}
+                            </Badge>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                </>
+              )}
 
-          <ContactFilesCard contactId={contactId} />
-
-          <Card>
-            <CardHeader title="Add a note" icon={<StickyNote />} />
-            <form onSubmit={saveNote} className="space-y-3 px-5 py-4">
-              <Textarea
-                rows={3}
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-                placeholder="What you talked about, what you promised, anything you want to remember."
-                aria-label="Your note"
-              />
-              <Button size="sm" type="submit" disabled={!note.trim() || savingNote}>
-                {savingNote ? "Saving…" : "Save this note"}
-              </Button>
-            </form>
+              {tab === "notes" && (
+                <>
+                  <form onSubmit={saveNote} className="space-y-3">
+                    <Textarea
+                      rows={5}
+                      value={note}
+                      onChange={(e) => setNote(e.target.value)}
+                      placeholder="Write your note here"
+                      aria-label="Your note"
+                    />
+                    <Button size="sm" type="submit" disabled={!note.trim() || savingNote}>
+                      {savingNote ? "Adding…" : "Add Note"}
+                    </Button>
+                  </form>
+                  {person.notes && (
+                    <div className="rounded-xl border border-hairline px-4 py-3.5 text-sm">
+                      <p className="text-xs font-semibold text-ink-soft">Notes on their card</p>
+                      <p className="mt-1 whitespace-pre-wrap text-ink">{person.notes}</p>
+                    </div>
+                  )}
+                  {notes.length === 0 ? (
+                    <p className="rounded-xl border border-hairline bg-white/[0.02] px-4 py-3.5 text-sm font-semibold text-ink">
+                      This person has no notes.
+                    </p>
+                  ) : (
+                    <ul className="space-y-3">
+                      {notes.map((entry) => (
+                        <li key={entry.id} className="rounded-xl border border-hairline px-4 py-3.5">
+                          <p className="whitespace-pre-wrap text-sm text-ink">{entry.body || entry.title}</p>
+                          <p className="mt-1.5 text-xs text-ink-soft">{formatDateTime(entry.occurredAt)}</p>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </>
+              )}
+            </div>
           </Card>
         </div>
 
         <div className="space-y-5">
           <Card>
-            <CardHeader title="Their details" icon={<Phone />} />
-            <dl className="space-y-3 px-5 py-4 text-sm">
-              <DetailLine label="Email" value={person.email} />
-              <DetailLine label="Phone" value={orNone(person.phone, "Not given")} />
-              <DetailLine label="Time zone" value={person.timezone} />
-              <DetailLine
-                label="On your site"
-                value={[
-                  person.memberId ? "Has an account" : null,
-                  person.subscribed ? "On the mailing list" : null,
-                  person.leadCount > 0
-                    ? `${pluralize(person.leadCount, "enquiry", "enquiries")} sent`
-                    : null,
-                ]
-                  .filter(Boolean)
-                  .join(" · ") || "Nothing yet"}
-              />
-              {person.notes && <DetailLine label="Notes" value={person.notes} />}
-              {custom.map(([key, value]) => (
-                // A key with spaces is a heading off an imported spreadsheet and
-                // already reads as she wrote it; only machine keys need humanising.
-                <DetailLine key={key} label={/\s/.test(key) ? key : humaniseKey(key)} value={String(value)} />
-              ))}
-            </dl>
-          </Card>
+            <CardHeader
+              title="Tags"
+              action={
+                <Link to="/admin/tags" className="text-sm font-semibold text-ink-soft hover:text-plum">
+                  View All Tags
+                </Link>
+              }
+            />
+            <div className="space-y-3 px-5 py-4">
+              {/*
+                * Kajabi's "Select Tag": one box that searches her tags and, when
+                * nothing matches, makes the one she typed.
+                */}
+              <div className="flex gap-2">
+                <Input
+                  list="contact-tag-options"
+                  value={addingTag}
+                  onChange={(e) => setAddingTag(e.target.value)}
+                  placeholder="Select Tag"
+                  aria-label="Select a tag to add, or type a new one"
+                  onKeyDown={(e) => {
+                    if (e.key !== "Enter") return;
+                    e.preventDefault();
+                    void addTag(addingTag);
+                  }}
+                />
+                <datalist id="contact-tag-options">
+                  {tags
+                    .filter((tag) => !person.tags.some((t) => t.slug === tag.slug))
+                    .map((tag) => (
+                      <option key={tag.slug} value={tag.name} />
+                    ))}
+                </datalist>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  disabled={!addingTag.trim() || tagBusy !== null}
+                  onClick={() => addTag(addingTag)}
+                >
+                  {tagBusy !== null ? "Adding…" : "Add"}
+                </Button>
+              </div>
 
+              <div className="flex flex-wrap gap-1.5">
+                {person.tags.length === 0 && (
+                  <p className="text-xs text-ink-soft">No tags on this person yet.</p>
+                )}
+                {person.tags.map((tag) => (
+                  <span
+                    key={tag.slug}
+                    className="inline-flex items-center gap-1.5 rounded-full border border-plum-bright/40 bg-plum-bright/[0.16] px-2.5 py-1 text-xs font-semibold text-lilac"
+                  >
+                    {tag.name}
+                    <button
+                      type="button"
+                      disabled={tagBusy !== null}
+                      onClick={() => dropTag(tag.slug)}
+                      aria-label={`Take the ${tag.name} tag off ${displayName}`}
+                      className="rounded-full hover:text-white"
+                    >
+                      <X className="size-3.5" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            </div>
+          </Card>
           {/*
             * Email confirmation, above the mailing-list card and deliberately
             * separate from it.
@@ -536,112 +863,7 @@ export default function ContactDetail() {
             </Card>
           )}
 
-          <Card>
-            <CardHeader title="Emails" icon={<Mail />} />
-            <div className="space-y-3 px-5 py-4">
-              <Badge tone={EMAIL_STATUS_TONE[person.emailMarketingStatus] ?? "neutral"}>
-                {emailStatusLabel(person.emailMarketingStatus)}
-              </Badge>
-              {person.emailMarketingStatus === "bounced" ||
-              person.emailMarketingStatus === "complained" ? (
-                <p className="text-xs text-ink-soft">
-                  {person.emailMarketingStatus === "bounced"
-                    ? "Their inbox refused your last email, so nothing more is being sent to this address."
-                    : "They marked one of your emails as spam. Sending to them again would put your other emails at risk, so nothing more is going out."}
-                </p>
-              ) : (
-                <div className="flex flex-wrap gap-2">
-                  {SETTABLE_STATUSES.filter(
-                    (status) => status !== person.emailMarketingStatus,
-                  ).map((status) => (
-                    <Button
-                      key={status}
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => setStatus(status)}
-                    >
-                      {status === "subscribed"
-                        ? "Start sending them emails"
-                        : "Stop sending them emails"}
-                    </Button>
-                  ))}
-                </div>
-              )}
-              {person.optedOutAt && person.emailMarketingStatus === "opted_out" && (
-                <p className="text-xs text-ink-soft">
-                  They asked to stop on {formatDate(person.optedOutAt)}.
-                </p>
-              )}
-            </div>
-          </Card>
 
-          <Card>
-            <CardHeader title="Tags" />
-            <div className="space-y-3 px-5 py-4">
-              <div className="flex flex-wrap gap-1.5">
-                {person.tags.length === 0 && (
-                  <p className="text-xs text-ink-soft">No tags on this person yet.</p>
-                )}
-                {person.tags.map((tag) => (
-                  <span
-                    key={tag.slug}
-                    className="inline-flex items-center gap-1.5 rounded-full border border-plum-bright/40 bg-plum-bright/[0.16] px-2.5 py-1 text-xs font-semibold text-lilac"
-                  >
-                    {tag.name}
-                    <button
-                      type="button"
-                      disabled={tagBusy !== null}
-                      onClick={() => dropTag(tag.slug)}
-                      aria-label={`Take the ${tag.name} tag off ${displayName}`}
-                      className="rounded-full hover:text-white"
-                    >
-                      <X className="size-3.5" />
-                    </button>
-                  </span>
-                ))}
-              </div>
-
-              <div className="flex flex-wrap gap-1.5">
-                {tags
-                  .filter((tag) => !person.tags.some((t) => t.slug === tag.slug))
-                  .slice(0, 8)
-                  .map((tag) => (
-                    <button
-                      key={tag.slug}
-                      type="button"
-                      disabled={tagBusy !== null}
-                      onClick={() => addTag(tag.slug)}
-                      className="min-h-9 rounded-full border border-hairline bg-surface px-4 py-2 text-xs font-semibold text-ink-soft transition-colors hover:border-plum/40 hover:text-plum disabled:cursor-wait disabled:opacity-60"
-                    >
-                      {tagBusy === tag.slug ? "Adding…" : `+ ${tag.name}`}
-                    </button>
-                  ))}
-              </div>
-
-              <div className="flex gap-2">
-                <Input
-                  value={addingTag}
-                  onChange={(e) => setAddingTag(e.target.value)}
-                  placeholder="Type a brand-new tag…"
-                  aria-label="Type a brand-new tag"
-                  onKeyDown={(e) => {
-                    if (e.key !== "Enter") return;
-                    e.preventDefault();
-                    void addTag(addingTag);
-                  }}
-                />
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  disabled={!addingTag.trim() || tagBusy !== null}
-                  onClick={() => addTag(addingTag)}
-                >
-                  Add
-                </Button>
-              </div>
-            </div>
-          </Card>
         </div>
       </div>
 
@@ -651,6 +873,17 @@ export default function ContactDetail() {
         onClose={() => setEditing(false)}
         onSaved={() => {
           setEditing(false);
+          load();
+        }}
+      />
+
+      <ManualPurchaseModal
+        person={person}
+        open={buying}
+        onClose={() => setBuying(false)}
+        onSaved={() => {
+          setBuying(false);
+          setTab("purchases");
           load();
         }}
       />
@@ -682,14 +915,307 @@ function BackLink() {
   );
 }
 
-function SummaryTile({ label, value }: { label: string; value: string }) {
+/** What each kind of moment looks like in the feed. */
+const EVENT_ICON: Record<string, LucideIcon> = {
+  purchase: CreditCard,
+  "email.sent": Send,
+  "email.opened": Send,
+  "email.clicked": Send,
+  "event.registered": CalendarCheck,
+  note: StickyNote,
+  imported: UserPlus,
+  created: UserPlus,
+  "account.created": KeyRound,
+  "lead.created": Inbox,
+  subscribed: MailPlus,
+  email_preference: Mail,
+  "email.confirmed": BadgeCheck,
+  merged: Combine,
+  "assessment.completed": ClipboardCheck,
+  sequence_started: Mail,
+  sequence_completed: Mail,
+};
+
+/** "about 7 hours", "3 days", "about 2 years": how long they've been with her. */
+function lifespan(since: string): string {
+  const minutes = Math.max(0, Math.floor((Date.now() - new Date(since).getTime()) / 60_000));
+  if (minutes < 1) return "less than a minute";
+  if (minutes < 60) return pluralize(minutes, "minute", "minutes");
+  const hours = Math.round(minutes / 60);
+  if (hours < 24) return `about ${pluralize(hours, "hour", "hours")}`;
+  const days = Math.round(hours / 24);
+  if (days < 30) return pluralize(days, "day", "days");
+  const months = Math.round(days / 30.44);
+  if (months < 12) return `about ${pluralize(months, "month", "months")}`;
+  return `about ${pluralize(Math.round(days / 365.25), "year", "years")}`;
+}
+
+/** The Lifecycle tab: the three numbers, then everything that has happened, newest first. */
+function Lifecycle({ person }: { person: Person }) {
+  const [kind, setKind] = useState("all");
+  const kinds = useMemo(
+    () => [...new Set(person.activity.map((entry) => activityLabel(entry.kind)))].sort(),
+    [person],
+  );
+  const shown =
+    kind === "all" ? person.activity : person.activity.filter((entry) => activityLabel(entry.kind) === kind);
+
   return (
-    <Card className="px-5 py-4">
-      <p className="text-[0.68rem] font-semibold uppercase tracking-[0.1em] text-ink-soft">
-        {label}
-      </p>
-      <p className="mt-1 font-display text-xl text-ink">{value}</p>
-    </Card>
+    <>
+      <div className="grid grid-cols-1 divide-y divide-hairline rounded-xl border border-hairline text-center sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+        <Stat label="Lifespan" value={lifespan(person.createdAt)} />
+        <Stat label="Purchases" value={String(person.orderCount)} />
+        <Stat label="Net Revenue" value={money(person.lifetimeValueCents)} />
+      </div>
+
+      <div className="space-y-2">
+        <label htmlFor="event-type" className="block text-sm font-semibold text-ink">
+          Filter by event type
+        </label>
+        <select
+          id="event-type"
+          value={kind}
+          onChange={(e) => setKind(e.target.value)}
+          className={cn(selectStyles, "sm:max-w-64")}
+        >
+          <option value="all">All types</option>
+          {kinds.map((label) => (
+            <option key={label} value={label}>
+              {label}
+            </option>
+          ))}
+        </select>
+        <p className="text-xs text-ink-soft">This feed is limited to the {FEED_LIMIT} most recent events.</p>
+      </div>
+
+      {shown.length === 0 ? (
+        <EmptyState
+          icon={<Clock />}
+          title="Nothing yet"
+          description="Everything this person does will show up here as it happens."
+        />
+      ) : (
+        <ol className="space-y-3">
+          {shown.map((entry) => {
+            const Icon = EVENT_ICON[entry.kind] ?? Clock;
+            return (
+              <li key={entry.id} className="flex gap-4 rounded-xl border border-hairline p-4">
+                <span className="grid size-12 shrink-0 place-items-center rounded-lg bg-white/[0.05] text-ink-soft">
+                  <Icon className="size-5" aria-hidden />
+                </span>
+                <div className="min-w-0 flex-1 space-y-1">
+                  <p className="text-[0.68rem] font-semibold uppercase tracking-[0.1em] text-ink-soft">
+                    {activityLabel(entry.kind)}
+                  </p>
+                  <p className="font-semibold text-ink">{entry.title}</p>
+                  {entry.body && <p className="whitespace-pre-wrap text-sm text-ink-soft">{entry.body}</p>}
+                  <p className="text-xs text-ink-soft/80">{formatDateTime(entry.occurredAt)}</p>
+                </div>
+              </li>
+            );
+          })}
+        </ol>
+      )}
+    </>
+  );
+}
+
+/**
+ * One purchase, drawn the way Kajabi's Purchases tab draws it: a grey band with
+ * when, how much and which order, then what was bought.
+ */
+function PurchaseCard({ order }: { order: ContactOrder }) {
+  const total = orderTotal(order);
+  const refunded = order.refundedCents > 0;
+  const kajabi = order.source === "kajabi";
+  const plan = typeof order.customFieldData?.kajabiType === "string" ? order.customFieldData.kajabiType : null;
+  return (
+    <li className="overflow-hidden rounded-xl border border-hairline">
+      <div className="flex flex-wrap items-start gap-x-8 gap-y-3 bg-white/[0.05] px-4 py-3">
+        <div>
+          <p className="text-xs text-ink-soft">{order.status === "paid" || refunded ? "Paid on" : "Started on"}</p>
+          <p className="mt-0.5 text-sm font-semibold text-ink">{formatDate(order.createdAt)}</p>
+        </div>
+        <div>
+          <p className="text-xs text-ink-soft">Total</p>
+          <p className="mt-0.5 text-sm font-semibold text-ink">
+            {money(total, order.currency)} {order.currency.toUpperCase()}
+          </p>
+        </div>
+        <div className="ml-auto text-right">
+          <p className="text-xs text-ink-soft">Order #{orderNumber(order)}</p>
+          {kajabi ? (
+            <p className="mt-0.5 text-xs text-ink-soft">From Kajabi</p>
+          ) : order.source === "manual" ? (
+            <p className="mt-0.5 text-xs text-ink-soft">Recorded by hand</p>
+          ) : (
+            <Link
+              to="/admin/sales/payments"
+              className="mt-0.5 inline-block text-xs font-semibold text-ink-soft underline hover:text-plum"
+            >
+              View Details
+            </Link>
+          )}
+        </div>
+      </div>
+      <dl className="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-x-4 gap-y-2 px-4 py-4 text-sm sm:px-8">
+        <dt className="text-ink-soft">Offer</dt>
+        <dd className="font-semibold text-ink">
+          {order.offerId ? (
+            <Link to={`/admin/offers/${order.offerId}`} className="underline hover:text-plum">
+              {order.title || "An offer"}
+            </Link>
+          ) : (
+            order.title || "A purchase"
+          )}
+        </dd>
+        <dt className="text-ink-soft">Price</dt>
+        <dd className="text-ink">
+          {money(total, order.currency)} {order.currency.toUpperCase()}
+          {plan && plan !== "One-time" && <span className="text-ink-soft"> · {plan}</span>}
+        </dd>
+        <dt className="text-ink-soft">Quantity</dt>
+        <dd className="text-ink">1</dd>
+        {(order.status !== "paid" || refunded) && (
+          <>
+            <dt className="text-ink-soft">Status</dt>
+            <dd>
+              <Badge tone={refunded ? "slate" : "gold"}>
+                {refunded
+                  ? `Refunded ${money(order.refundedCents, order.currency)}`
+                  : (ORDER_STATUS_LABEL[order.status] ?? "Not known")}
+              </Badge>
+            </dd>
+          </>
+        )}
+        {order.notes && (
+          <>
+            <dt className="text-ink-soft">Note</dt>
+            <dd className="whitespace-pre-wrap text-ink">{order.notes}</dd>
+          </>
+        )}
+      </dl>
+    </li>
+  );
+}
+
+/* ------------------------------------------------ Recording a purchase by hand */
+
+function ManualPurchaseModal({
+  person,
+  open,
+  onClose,
+  onSaved,
+}: {
+  person: Person;
+  open: boolean;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const today = () => new Date().toLocaleDateString("en-CA");
+  const [title, setTitle] = useState("");
+  const [amount, setAmount] = useState("");
+  const [paidOn, setPaidOn] = useState(today);
+  const [note, setNote] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    setTitle("");
+    setAmount("");
+    setPaidOn(today());
+    setNote("");
+  }, [open]);
+
+  const cents = Math.round(Number(amount.replace(/[$,\s]/g, "")) * 100);
+  const valid = title.trim().length > 0 && amount.trim() !== "" && Number.isFinite(cents) && cents >= 0;
+
+  async function save(e: FormEvent) {
+    e.preventDefault();
+    if (!valid || saving) return;
+    setSaving(true);
+    try {
+      // Today means now. An earlier day is stamped at noon local time, so the
+      // date she picked is the date that shows in every time zone near hers.
+      const paidAt = paidOn === today() ? new Date().toISOString() : new Date(`${paidOn}T12:00:00`).toISOString();
+      await contactsApi.addPurchase(person.id, { title: title.trim(), amountCents: cents, paidAt, note: note.trim() });
+      toast.success("Purchase recorded");
+      onSaved();
+    } catch (err) {
+      toast.error(friendlyError(err, "purchase"));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Modal
+      open={open}
+      onOpenChange={(next) => !next && onClose()}
+      title="Create a manual purchase"
+      description={`Record a payment ${person.name || person.email} made outside your checkout. It counts toward their lifetime value. To give them access to what they bought, use Grant offer.`}
+      footer={
+        <>
+          <Button variant="secondary" size="sm" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button size="sm" type="submit" form="manual-purchase" disabled={!valid || saving}>
+            {saving ? "Saving…" : "Create purchase"}
+          </Button>
+        </>
+      }
+    >
+      <form id="manual-purchase" onSubmit={save} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <Field label="What they bought" className="sm:col-span-2">
+          <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. 90 day 1:1 Coaching" autoFocus />
+        </Field>
+        <Field label="Amount paid (USD)">
+          <Input inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="0.00" />
+        </Field>
+        <Field label="Paid on">
+          <Input type="date" value={paidOn} max={today()} onChange={(e) => setPaidOn(e.target.value)} />
+        </Field>
+        <Field label="Note" hint="optional — only you see this" className="sm:col-span-2">
+          <Textarea rows={3} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Paid by bank transfer" />
+        </Field>
+      </form>
+    </Modal>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="px-4 py-5">
+      <p className="text-xs text-ink-soft">{label}</p>
+      <p className="mt-1 font-display text-2xl text-ink">{value}</p>
+    </div>
+  );
+}
+
+function MenuItem({
+  icon,
+  children,
+  onSelect,
+  destructive,
+}: {
+  icon: ReactNode;
+  children: ReactNode;
+  onSelect: () => void;
+  destructive?: boolean;
+}) {
+  return (
+    <DropdownMenu.Item
+      onSelect={onSelect}
+      className={cn(
+        "flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-3 py-2 text-sm outline-none [&_svg]:size-4",
+        destructive
+          ? "text-red-400 data-[highlighted]:bg-red-500/10"
+          : "text-ink data-[highlighted]:bg-white/[0.07] [&_svg]:text-ink-soft",
+      )}
+    >
+      {icon}
+      {children}
+    </DropdownMenu.Item>
   );
 }
 

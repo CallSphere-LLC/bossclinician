@@ -59,6 +59,14 @@ interface DataTableProps<TData> {
   initialPageSize?: number;
   /** Minimum table width before horizontal scrolling kicks in. */
   minWidth?: string;
+  /**
+   * Widths by column id. When given, these replace the default guess (first
+   * column wide, "actions" 180px), which is wrong for a table that starts
+   * with a checkbox.
+   */
+  columnWidths?: Record<string, string>;
+  /** Replaces the "N items" count, for a table the server pages. */
+  countLabel?: ReactNode;
 }
 
 export function DataTable<TData>({
@@ -70,6 +78,8 @@ export function DataTable<TData>({
   toolbar,
   initialPageSize = 10,
   minWidth = "640px",
+  columnWidths,
+  countLabel,
 }: DataTableProps<TData>) {
   const [sorting, setSorting] = useState<SortingState>([]);
   const [globalFilter, setGlobalFilter] = useState("");
@@ -115,11 +125,12 @@ export function DataTable<TData>({
             </div>
           )}
           {toolbar}
-          {!loading && (
+          {!loading && countLabel === undefined && (
             <span className="ml-auto shrink-0 text-xs font-medium text-ink-soft">
               {pluralize(totalRows, itemNoun.one, itemNoun.many)}
             </span>
           )}
+          {countLabel}
         </div>
       )}
 
@@ -127,7 +138,20 @@ export function DataTable<TData>({
         <table className="admin-data-table w-full text-left text-sm" style={{ minWidth }}>
           <colgroup>
             {table.getVisibleLeafColumns().map((column, index, all) => (
-              <col key={column.id} style={column.id === "actions" ? { width: "180px" } : index === 0 && all.length > 2 ? { width: all.length > 5 ? "26%" : "40%" } : undefined} />
+              <col
+                key={column.id}
+                style={
+                  columnWidths
+                    ? columnWidths[column.id]
+                      ? { width: columnWidths[column.id] }
+                      : undefined
+                    : column.id === "actions"
+                      ? { width: "180px" }
+                      : index === 0 && all.length > 2
+                        ? { width: all.length > 5 ? "26%" : "40%" }
+                        : undefined
+                }
+              />
             ))}
           </colgroup>
           <thead className="sticky top-0 z-[1] bg-sand">

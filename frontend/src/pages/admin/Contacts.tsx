@@ -1,15 +1,33 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import type { ColumnDef } from "@tanstack/react-table";
-import { BarChart3, Download, Gift, MailPlus, Plus, Tags as TagsIcon, Trash2, Upload, Users } from "lucide-react";
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+import {
+  BarChart3,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Copy,
+  Download,
+  Gift,
+  MailPlus,
+  MoreHorizontal,
+  Plus,
+  Search,
+  Tags as TagsIcon,
+  Trash2,
+  Upload,
+  UserRound,
+  Users,
+} from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/cn";
-import { formatRelative } from "@/lib/format";
+import { formatDate } from "@/lib/format";
 import {
   EMAIL_STATUS_LABEL,
-  EMAIL_STATUS_TONE,
   contactsApi,
   emailStatusLabel,
+  hasActivity,
   money,
   type Contact,
   type ContactFilters,
@@ -36,7 +54,8 @@ import { saveCsv } from "@/lib/formsApi";
 import { readSpreadsheet, type ImportRow } from "@/lib/peopleSpreadsheet";
 import { DataTable } from "@/pages/admin/ui/DataTable";
 import { Modal, useConfirm } from "@/pages/admin/ui/Dialog";
-import { friendlyError, orNone, pluralize } from "@/pages/admin/ui/friendly";
+import ContactQuickView from "@/pages/admin/ContactQuickView";
+import { friendlyError, pluralize } from "@/pages/admin/ui/friendly";
 
 /**
  * People — the one list.
@@ -47,8 +66,20 @@ import { friendlyError, orNone, pluralize } from "@/pages/admin/ui/friendly";
  * could. Nothing here shows an identifier, a status code or a number of cents.
  */
 
-/** How many rows one fetch brings back. Beyond this the screen says so. */
-const PAGE_SIZE = 200;
+/** Kajabi's "25 / page" choices. The server caps a page at 200. */
+const PER_PAGE_OPTIONS = [25, 50, 100, 200] as const;
+
+/** Column widths, so the checkbox and ⋯ stay narrow and names aren't cut short. */
+const COLUMN_WIDTHS: Record<string, string> = {
+  choose: "44px",
+  name: "22%",
+  email: "25%",
+  status: "15%",
+  lifetimeValueCents: "11%",
+  createdAt: "12%",
+  lastActivityAt: "12%",
+  actions: "52px",
+};
 
 const STATUS_FILTERS: { value: EmailStatus | "all"; label: string }[] = [
   { value: "all", label: "Everyone" },
@@ -69,6 +100,93 @@ const SORT_OPTIONS: { value: NonNullable<ContactFilters["sort"]>; label: string 
   { value: "value", label: "Biggest spenders" },
   { value: "orders", label: "Most purchases" },
 ];
+
+/** The short words Kajabi used in this column, which is what she reads down it. */
+const MARKETING_LABEL: Record<EmailStatus, string> = {
+  subscribed: "Subscribed",
+  opted_out: "Unsubscribed",
+  bounced: "Bounced",
+  complained: "Marked as spam",
+  unconfirmed: "Unconfirmed",
+};
+
+function personName(person: Contact): string {
+  return person.name || `${person.firstName} ${person.lastName}`.trim();
+}
+
+/** The ⋯ at the end of a row: the few things worth doing without opening them. */
+function RowMenu({
+  person,
+  onOpen,
+  onDelete,
+}: {
+  person: Contact;
+  onOpen: () => void;
+  onDelete: () => void;
+}) {
+  const label = personName(person) || person.email;
+  return (
+    <DropdownMenu.Root>
+      <DropdownMenu.Trigger asChild>
+        <Button variant="ghost" size="iconSm" aria-label={`More you can do for ${label}`}>
+          <MoreHorizontal />
+        </Button>
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Portal>
+        <DropdownMenu.Content
+          align="end"
+          sideOffset={6}
+          className="z-50 min-w-[13rem] rounded-xl border border-hairline bg-surface-raised p-1.5 shadow-[0_24px_54px_-18px_rgba(0,0,0,0.85)]"
+        >
+          <RowMenuItem icon={<UserRound />} onSelect={onOpen}>
+            Open their profile
+          </RowMenuItem>
+          <RowMenuItem
+            icon={<Copy />}
+            onSelect={() => {
+              void navigator.clipboard
+                ?.writeText(person.email)
+                .then(() => toast.success("Email address copied"))
+                .catch(() => toast.error("Your browser wouldn't let us copy that"));
+            }}
+          >
+            Copy email address
+          </RowMenuItem>
+          <RowMenuItem icon={<Trash2 />} onSelect={onDelete} destructive>
+            Delete
+          </RowMenuItem>
+        </DropdownMenu.Content>
+      </DropdownMenu.Portal>
+    </DropdownMenu.Root>
+  );
+}
+
+function RowMenuItem({
+  icon,
+  children,
+  onSelect,
+  destructive,
+}: {
+  icon: ReactNode;
+  children: ReactNode;
+  onSelect: () => void;
+  destructive?: boolean;
+}) {
+  return (
+    <DropdownMenu.Item
+      onSelect={onSelect}
+      className={cn(
+        "flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-3 py-2 text-sm outline-none [&_svg]:size-4",
+        destructive
+          ? "text-red-400 data-[highlighted]:bg-red-500/10"
+          : "text-ink data-[highlighted]:bg-white/[0.07] [&_svg]:text-ink-soft",
+      )}
+    >
+      {icon}
+      {children}
+    </DropdownMenu.Item>
+  );
+}
 
 function importSummary(result: ImportOutcome): string {
   const parts: string[] = [];
@@ -97,7 +215,10 @@ export default function Contacts() {
   );
   const [communityOnly, setCommunityOnly] = useState(searchParams.get("community") === "true");
   const [tagFilter, setTagFilter] = useState(searchParams.get("tag") ?? "");
-  const [sort, setSort] = useState<NonNullable<ContactFilters["sort"]>>("recent");
+  const [sort, setSort] = useState<NonNullable<ContactFilters["sort"]>>("newest");
+  const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState<number>(25);
+  const [peeking, setPeeking] = useState<Contact | null>(null);
 
   const audience = (["new", "subscribed", "new_subscriber", "customer", "new_customer"] as const)
     .find((value) => value === searchParams.get("audience"));
@@ -124,10 +245,20 @@ export default function Contacts() {
       optOut,
       engagement,
       sort,
-      limit: PAGE_SIZE,
+      page,
+      limit: perPage,
     }),
-    [search, status, tagFilter, communityOnly, sort, audience, optOut, engagement],
+    [search, status, tagFilter, communityOnly, sort, audience, optOut, engagement, page, perPage],
   );
+
+  // A new search or filter starts back on the first page, as Kajabi's does.
+  useEffect(() => {
+    setPage(1);
+  }, [search, status, tagFilter, communityOnly, sort, audience, optOut, engagement, perPage]);
+
+  const pageCount = Math.max(1, Math.ceil(total / perPage));
+  const firstShown = total === 0 ? 0 : (page - 1) * perPage + 1;
+  const lastShown = Math.min(page * perPage, total);
 
   const insightFilterLabel = audience
     ? ({ new: "New contacts in the last 30 days", subscribed: "Subscribed contacts", new_subscriber: "New subscribers", customer: "Customers", new_customer: "New customers" } as const)[audience]
@@ -233,111 +364,77 @@ export default function Contacts() {
           />
         ),
       },
+      // The columns her Kajabi contact list had, in its order: who, where to
+      // reach them, whether she may email them, what they're worth, and when.
       {
-        id: "who",
-        accessorFn: (person) => `${person.name} ${person.email}`,
-        header: "Who",
-        cell: ({ row }) => (
-          <Link
-            to={`/admin/contacts/${row.original.id}`}
-            className="flex min-w-0 items-center gap-3 text-left"
-          >
-            <span className="grid size-9 shrink-0 place-items-center rounded-full bg-lilac-tint text-xs font-bold text-plum-deep">
-              {(row.original.name || row.original.email).slice(0, 1).toUpperCase()}
-            </span>
-            <span className="min-w-0">
-              <span className="block truncate font-semibold text-ink">
-                {row.original.name || "No name yet"}
+        id: "name",
+        accessorFn: (person) => personName(person),
+        header: "Name",
+        cell: ({ row }) => {
+          const name = personName(row.original);
+          // Kajabi's tick on the avatar marks a customer: somebody who has paid.
+          const customer = row.original.orderCount > 0;
+          return (
+            <button
+              type="button"
+              onClick={() => setPeeking(row.original)}
+              className="group/name flex w-full min-w-0 items-center gap-3 text-left"
+              title="Quick view"
+            >
+              <span className="relative grid size-9 shrink-0 place-items-center rounded-full bg-lilac-tint text-plum-deep">
+                <UserRound className="size-4" aria-hidden />
+                {customer && (
+                  <span
+                    className="absolute -bottom-0.5 -right-0.5 grid size-4 place-items-center rounded-full bg-ink text-surface ring-2 ring-surface"
+                    title="Customer"
+                  >
+                    <Check className="size-2.5" strokeWidth={3} aria-hidden />
+                    <span className="sr-only">Customer</span>
+                  </span>
+                )}
               </span>
-              <span className="block truncate text-xs text-ink-soft">{row.original.email}</span>
-            </span>
-          </Link>
-        ),
+              <span
+                className={cn(
+                  "block truncate group-hover/name:underline",
+                  name ? "font-semibold text-ink" : "text-ink-soft",
+                )}
+              >
+                {name || "No name yet"}
+              </span>
+            </button>
+          );
+        },
       },
       {
-        id: "tags",
-        enableSorting: false,
-        header: "Tags",
-        cell: ({ row }) =>
-          row.original.tags.length === 0 ? (
-            <span className="text-xs text-ink-soft">None yet</span>
-          ) : (
-            <div className="flex flex-wrap gap-1.5">
-              {row.original.tags.slice(0, 3).map((tag) => (
-                <Badge key={tag.slug} tone="plum">
-                  {tag.name}
-                </Badge>
-              ))}
-              {row.original.tags.length > 3 && (
-                <span className="text-xs text-ink-soft">
-                  and {row.original.tags.length - 3} more
-                </span>
-              )}
-            </div>
-          ),
-      },
-      {
-        id: "communities",
-        header: "Communities",
-        enableSorting: false,
-        cell: ({ row }) => (row.original.communities ?? []).length === 0 ? (
-          <span className="text-xs text-ink-soft">None yet</span>
-        ) : (
-          <div className="flex min-w-36 flex-wrap gap-1.5">
-            {row.original.communities.map((community) => (
-              <Link key={community.id} to={`/admin/community/${community.communityId}`}>
-                <Badge tone={community.banned || !community.memberActive ? "slate" : "plum"}>
-                  {community.name}{community.banned ? " (banned)" : !community.memberActive ? " (account inactive)" : ""}
-                </Badge>
-              </Link>
-            ))}
-          </div>
-        ),
-      },
-      {
-        accessorKey: "lifetimeValueCents",
-        header: "Spent with you",
+        id: "email",
+        accessorFn: (person) => person.email,
+        header: "Email",
         cell: ({ row }) => (
-          <span className="whitespace-nowrap font-semibold text-ink">
-            {row.original.lifetimeValueCents > 0 ? money(row.original.lifetimeValueCents) : "—"}
-          </span>
-        ),
-      },
-      {
-        accessorKey: "orderCount",
-        header: "Purchases",
-        cell: ({ row }) => (
-          <span className="text-sm text-ink-soft">{row.original.orderCount || "None yet"}</span>
-        ),
-      },
-      {
-        accessorKey: "lastActivityAt",
-        header: "Last heard from",
-        cell: ({ row }) => (
-          <span className="whitespace-nowrap text-sm text-ink-soft">
-            {orNone(
-              row.original.lastActivityAt ? formatRelative(row.original.lastActivityAt) : null,
-              "Nothing yet",
-            )}
+          <span className="block truncate text-sm text-ink-soft" title={row.original.email}>
+            {row.original.email}
           </span>
         ),
       },
       {
         id: "status",
-        accessorFn: (person) => emailStatusLabel(person.emailMarketingStatus),
-        header: "Emails",
+        accessorFn: (person) => MARKETING_LABEL[person.emailMarketingStatus] ?? "",
+        header: "Email Marketing",
         /*
-         * Two badges, because there are two facts and they are independent:
-         * whether we may email somebody, and whether they have confirmed the
-         * address. Somebody can be "Happy to hear from you" and still be locked
-         * out of posting because their account was never confirmed, which is
-         * exactly the pair this list used to show only half of.
+         * Two facts, independent of each other: whether we may email somebody,
+         * and whether they have confirmed the address. Somebody can be
+         * subscribed and still be locked out of posting because their account
+         * was never confirmed, so the second one keeps its own badge.
          */
         cell: ({ row }) => (
-          <div className="flex flex-wrap items-center gap-1.5">
-            <Badge tone={EMAIL_STATUS_TONE[row.original.emailMarketingStatus] ?? "neutral"}>
-              {emailStatusLabel(row.original.emailMarketingStatus)}
-            </Badge>
+          <div className="flex flex-wrap items-center gap-1.5 whitespace-nowrap text-sm">
+            <span
+              className={cn(
+                row.original.emailMarketingStatus === "subscribed" ? "text-ink-soft" : "font-semibold text-ink",
+              )}
+              title={emailStatusLabel(row.original.emailMarketingStatus)}
+            >
+              {MARKETING_LABEL[row.original.emailMarketingStatus] ?? "Not known"}
+            </span>
             {row.original.accountMemberId !== null &&
               row.original.accountEmailVerifiedAt === null && (
                 <Badge tone="gold">Not confirmed</Badge>
@@ -345,8 +442,46 @@ export default function Contacts() {
           </div>
         ),
       },
+      {
+        accessorKey: "lifetimeValueCents",
+        header: "Lifetime Value",
+        cell: ({ row }) => (
+          <span className="whitespace-nowrap text-sm text-ink">
+            {money(row.original.lifetimeValueCents)}
+          </span>
+        ),
+      },
+      {
+        accessorKey: "createdAt",
+        header: "Added date",
+        cell: ({ row }) => (
+          <span className="whitespace-nowrap text-sm text-ink-soft">{formatDate(row.original.createdAt)}</span>
+        ),
+      },
+      {
+        accessorKey: "lastActivityAt",
+        header: "Last activity",
+        cell: ({ row }) => (
+          <span className="whitespace-nowrap text-sm text-ink-soft">
+            {hasActivity(row.original) ? formatDate(row.original.lastActivityAt as string) : "—"}
+          </span>
+        ),
+      },
+      {
+        id: "actions",
+        enableSorting: false,
+        header: () => <span className="sr-only">More</span>,
+        cell: ({ row }) => (
+          <RowMenu
+            person={row.original}
+            onOpen={() => navigate(`/admin/contacts/${row.original.id}`)}
+            onDelete={() => void deleteOne(row.original)}
+          />
+        ),
+      },
     ],
-    [allSelected, people, selected, toggle],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- deleteOne is re-created each render; load and confirm are what it reads
+    [allSelected, people, selected, toggle, navigate, load, confirm],
   );
 
   async function download() {
@@ -375,6 +510,29 @@ export default function Contacts() {
     }
   }
 
+  async function deleteOne(person: Contact) {
+    const ok = await confirm({
+      title: `Delete ${personName(person) || person.email}?`,
+      description:
+        "Their contact card and marketing history will be erased. Payment records are kept for accounting.",
+      confirmLabel: "Delete this person",
+      destructive: true,
+    });
+    if (!ok) return;
+    try {
+      await contactsApi.remove(person.id);
+      toast.success("Deleted");
+      setSelected((prev) => {
+        const next = new Set(prev);
+        next.delete(person.id);
+        return next;
+      });
+      load();
+    } catch (err) {
+      toast.error(friendlyError(err, "person"));
+    }
+  }
+
   async function deleteChosen() {
     const ids = [...selected];
     const ok = await confirm({
@@ -398,9 +556,7 @@ export default function Contacts() {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="Contacts"
-        title="People"
-        description="Everyone you know — whoever enquired, joined your list, signed up or bought something, all on one card each."
+        title="Contacts"
         actions={
           <>
             <Button variant="secondary" size="sm" asChild>
@@ -409,27 +565,37 @@ export default function Contacts() {
                 Insights
               </Link>
             </Button>
-            <Button variant="secondary" size="sm" asChild>
-              <Link to="/admin/tags">
-                <TagsIcon />
-                Tags
-              </Link>
+            <Button variant="secondary" size="sm" onClick={download} disabled={busy}>
+              <Download />
+              Export
             </Button>
             <Button variant="secondary" size="sm" onClick={() => setImporting(true)}>
               <Upload />
-              Import a list
-            </Button>
-            <Button variant="secondary" size="sm" onClick={download} disabled={busy}>
-              <Download />
-              Download
+              Import contacts
             </Button>
             <Button size="sm" onClick={() => setAdding(true)}>
               <Plus />
-              Add someone
+              Add contacts
             </Button>
           </>
         }
       />
+
+      <nav aria-label="Contacts sections" className="-mt-2 flex gap-6 border-b border-hairline">
+        <span
+          aria-current="page"
+          className="-mb-px border-b-2 border-ink pb-2.5 text-sm font-semibold text-ink"
+        >
+          All Contacts
+        </span>
+        <Link
+          to="/admin/tags"
+          className="-mb-px inline-flex items-center gap-1.5 border-b-2 border-transparent pb-2.5 text-sm font-semibold text-ink-soft transition-colors hover:text-ink"
+        >
+          <TagsIcon className="size-4" aria-hidden />
+          Manage tags
+        </Link>
+      </nav>
 
       {error && <ErrorNotice message={error} />}
 
@@ -441,18 +607,6 @@ export default function Contacts() {
           </Button>
         </Card>
       )}
-
-      <div className={chipRowStyles}>
-        {STATUS_FILTERS.map((option) => (
-          <Chip
-            key={option.value}
-            selected={status === option.value}
-            onClick={() => setStatus(option.value)}
-          >
-            {option.label}
-          </Chip>
-        ))}
-      </div>
 
       {selected.size > 0 && (
         <Card className="flex flex-wrap items-center gap-3 px-5 py-3.5">
@@ -489,17 +643,90 @@ export default function Contacts() {
         columns={columns}
         data={people}
         itemNoun={{ one: "person", many: "people" }}
-        minWidth="960px"
-        initialPageSize={25}
+        minWidth="980px"
+        // The server pages; the table shows every row it was handed.
+        initialPageSize={PER_PAGE_OPTIONS[PER_PAGE_OPTIONS.length - 1]}
+        columnWidths={COLUMN_WIDTHS}
+        countLabel={
+          <div className="flex w-full flex-wrap items-center gap-2.5 border-t border-hairline/60 pt-3">
+            <p className="text-sm text-ink-soft" aria-live="polite">
+              {people === null
+                ? "Loading…"
+                : `Displaying ${firstShown}–${lastShown} of ${pluralize(total, "contact", "contacts")}`}
+            </p>
+            <div className="ml-auto flex items-center gap-2">
+              <Button
+                variant="secondary"
+                size="iconSm"
+                aria-label="Previous page"
+                disabled={page <= 1 || people === null}
+                onClick={() => setPage((current) => Math.max(1, current - 1))}
+              >
+                <ChevronLeft />
+              </Button>
+              <Button
+                variant="secondary"
+                size="iconSm"
+                aria-label="Next page"
+                disabled={page >= pageCount || people === null}
+                onClick={() => setPage((current) => Math.min(pageCount, current + 1))}
+              >
+                <ChevronRight />
+              </Button>
+              <select
+                value={perPage}
+                onChange={(e) => setPerPage(Number(e.target.value))}
+                aria-label="Contacts per page"
+                className={cn(selectStyles, "h-9 w-auto min-w-[8.5rem] pr-9")}
+              >
+                {PER_PAGE_OPTIONS.map((size) => (
+                  <option key={size} value={size}>
+                    {size} / page
+                  </option>
+                ))}
+              </select>
+              <select
+                value={sort}
+                onChange={(e) => setSort(e.target.value as NonNullable<ContactFilters["sort"]>)}
+                aria-label="Sort contacts"
+                className={cn(selectStyles, "h-9 w-auto min-w-[8.5rem] pr-9")}
+              >
+                {SORT_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        }
         toolbar={
           <div className="flex flex-1 flex-wrap items-center gap-2.5">
-            <Input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by name, email or phone…"
-              aria-label="Search your people"
-              className="h-11 min-w-0 flex-1 sm:max-w-xs"
-            />
+            <select
+              value={status}
+              onChange={(e) => setStatus(e.target.value as EmailStatus | "all")}
+              aria-label="Show contacts by email marketing status"
+              className={cn(selectStyles, "w-auto")}
+            >
+              {STATUS_FILTERS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.value === "all" ? "All contacts" : option.label}
+                </option>
+              ))}
+            </select>
+            <div className="relative min-w-0 flex-1">
+              <Search
+                className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-ink-soft/60"
+                aria-hidden
+              />
+              <Input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search Contacts..."
+                aria-label="Search contacts"
+                className="h-11 pl-10"
+              />
+            </div>
             <select
               value={communityOnly ? "community" : "everyone"}
               onChange={(e) => {
@@ -510,7 +737,7 @@ export default function Contacts() {
                 else next.delete("community");
                 setSearchParams(next, { replace: true });
               }}
-              aria-label="Filter people by membership"
+              aria-label="Filter contacts by membership"
               className={cn(selectStyles, "w-auto")}
             >
               <option value="everyone">Everyone</option>
@@ -519,25 +746,13 @@ export default function Contacts() {
             <select
               value={tagFilter}
               onChange={(e) => setTagFilter(e.target.value)}
-              aria-label="Show only people with a tag"
-              className={cn(selectStyles, "w-auto")}
+              aria-label="Show only contacts with a tag"
+              className={cn(selectStyles, "w-auto max-w-56")}
             >
               <option value="">Any tag</option>
               {tags.map((tag) => (
                 <option key={tag.slug} value={tag.slug}>
                   {tag.name}
-                </option>
-              ))}
-            </select>
-            <select
-              value={sort}
-              onChange={(e) => setSort(e.target.value as NonNullable<ContactFilters["sort"]>)}
-              aria-label="Order the list"
-              className={cn(selectStyles, "w-auto")}
-            >
-              {SORT_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
                 </option>
               ))}
             </select>
@@ -561,12 +776,14 @@ export default function Contacts() {
         }
       />
 
-      {people !== null && total > people.length && (
-        <p className="text-xs text-ink-soft">
-          Showing the first {people.length} of {pluralize(total, "person", "people")}. Narrow it
-          down with the search box or a tag to see the rest.
-        </p>
-      )}
+      <ContactQuickView
+        person={peeking}
+        onClose={() => setPeeking(null)}
+        onDelete={(person) => {
+          setPeeking(null);
+          void deleteOne(person);
+        }}
+      />
 
       <AddPersonModal
         open={adding}
