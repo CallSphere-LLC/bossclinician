@@ -1,11 +1,13 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import * as RadixDialog from "@radix-ui/react-dialog";
-import { Check, ChevronRight, Copy, Gift, Maximize2, Pencil, Tag as TagIcon, Trash2, UserRound, X } from "lucide-react";
+import { Check, ChevronRight, Copy, Gift, KeyRound, Maximize2, Pencil, Tag as TagIcon, Trash2, UserRound, X } from "lucide-react";
 import { toast } from "sonner";
+import { adminApi } from "@/lib/api";
 import { formatDate } from "@/lib/format";
 import { contactsApi, money, type Contact, type ContactDetail } from "@/lib/contactsApi";
 import { Badge, Skeleton } from "@/pages/admin/ui/primitives";
+import { useConfirm } from "@/pages/admin/ui/Dialog";
 import { friendlyError } from "@/pages/admin/ui/friendly";
 
 /**
@@ -39,6 +41,24 @@ export default function ContactQuickView({
   onDelete: (person: Contact) => void;
 }) {
   const [detail, setDetail] = useState<ContactDetail | null>(null);
+  const [confirm, confirmDialog] = useConfirm();
+
+  /** Kajabi's "Reset password": email them a link to choose a password here. */
+  async function sendPassword(target: Contact, memberId: number) {
+    const who = target.name || target.email;
+    const ok = await confirm({
+      title: `Email ${who} a way to set their password?`,
+      description: `They'll get an email at ${target.email} with a link to choose a password. It works once and expires in 24 hours.`,
+      confirmLabel: "Yes, send it",
+    });
+    if (!ok) return;
+    try {
+      await adminApi.memberResetPassword(memberId);
+      toast.success(`Sent to ${target.email}`);
+    } catch (err) {
+      toast.error(friendlyError(err, "person"));
+    }
+  }
 
   useEffect(() => {
     setDetail(null);
@@ -120,6 +140,17 @@ export default function ContactQuickView({
 
                   <div className="mt-5 flex items-center gap-2">
                     <IconLink to={profile} label="Edit contact" icon={<Pencil />} />
+                    {person.accountMemberId !== null && (
+                      <button
+                        type="button"
+                        onClick={() => void sendPassword(person, person.accountMemberId as number)}
+                        aria-label="Send password"
+                        title="Send password"
+                        className="grid size-10 place-items-center rounded-full border border-hairline text-ink-soft transition-colors hover:bg-white/[0.06] hover:text-ink [&_svg]:size-4"
+                      >
+                        <KeyRound />
+                      </button>
+                    )}
                     <IconLink to={profile} label="Add tag" icon={<TagIcon />} />
                     <IconLink to={`${profile}?tab=products`} label="Grant offer" icon={<Gift />} />
                     <button
@@ -176,6 +207,7 @@ export default function ContactQuickView({
               </div>
             </>
           )}
+          {confirmDialog}
         </RadixDialog.Content>
       </RadixDialog.Portal>
     </RadixDialog.Root>
