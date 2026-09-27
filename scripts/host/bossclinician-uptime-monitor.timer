@@ -1,0 +1,11 @@
+[Unit]
+Description=Run the Boss Clinician uptime monitor every minute
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=1min
+AccuracySec=10s
+Unit=bossclinician-uptime-monitor.service
+
+[Install]
+WantedBy=timers.target

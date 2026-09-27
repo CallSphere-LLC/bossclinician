@@ -1,0 +1,11 @@
+[Unit]
+Description=Check Boss Clinician components and email an alert when one goes down
+After=network-online.target docker.service k3s.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/bossclinician-uptime-monitor
+StateDirectory=bossclinician-uptime
+StateDirectoryMode=0700
+TimeoutStartSec=5min

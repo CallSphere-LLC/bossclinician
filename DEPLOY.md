@@ -32,6 +32,10 @@ bind and Docker never retries. `bossclinician-db-bridge-bootfix.service` (source
 `scripts/host/`, installed to `/etc/systemd/system` and `/usr/local/sbin`) waits
 for `cni0` and recreates it; without it the backend crash-loops on `ECONNREFUSED`.
 Its `.timer` reruns the check every 2 minutes, so a failed boot attempt retries.
+`bossclinician-uptime-monitor.timer` (same install layout) checks the website,
+admin, API, database (`/api/settings`), AI service and TURN relay every minute and
+emails sagar@callsphere.ai through the app's SES SMTP after 3 failed runs, again
+on recovery. It runs on this host, so a host that is down cannot alert.
 The existing Boss Clinician TURN relay also stays running with its existing
 ports and secret, independent of the neighboring telehealth relay.
 
