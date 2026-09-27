@@ -90,6 +90,19 @@ const monthlyCents = (amount: string, interval: string, count: string): string =
        ELSE 1
      END * GREATEST(${count}, 1)))::bigint`;
 
+/**
+ * One month of a subscription. A legacy plan subscription was written without
+ * its own interval (the column keeps its 'month' default), so the plan's is used
+ * where there is one; an offer subscription has no plan and carries Stripe's
+ * `interval` x `interval_count` itself. The same arithmetic as the admin
+ * Reports and income panel, so the three agree. Needs `LEFT JOIN plans p`.
+ */
+const SUBSCRIPTION_MONTHLY_CENTS = monthlyCents(
+  "s.amount_cents",
+  'COALESCE(p."interval", s."interval")',
+  "CASE WHEN p.id IS NULL THEN s.interval_count ELSE 1 END",
+);
+
 /** Legacy `/checkout/session` orders fill `amount_cents`; offer checkout fills
  *  `total_cents`. Taking either alone values half the order history at nothing. */
 const ORDER_CENTS = `GREATEST(o.total_cents, o.amount_cents)`;
@@ -329,8 +342,9 @@ const METRICS: MetricSource[] = [
     sql: `
       WITH base AS (
         SELECT ${day("s.created_at")} AS day, s.currency, s.offer_id,
-               ${monthlyCents("s.amount_cents", 's."interval"', "s.interval_count")} AS monthly_cents
+               ${SUBSCRIPTION_MONTHLY_CENTS} AS monthly_cents
           FROM subscriptions s
+          LEFT JOIN plans p ON p.id = s.plan_id
          WHERE ${within("s.created_at")}
       )
       SELECT day, '' AS dimension, SUM(monthly_cents)::bigint AS value_cents,
@@ -346,8 +360,9 @@ const METRICS: MetricSource[] = [
       WITH base AS (
         SELECT ${day("COALESCE(s.canceled_at, s.ended_at)")} AS day, s.currency, s.offer_id,
                COALESCE(NULLIF(s.cancel_reason, ''), 'not given') AS reason,
-               ${monthlyCents("s.amount_cents", 's."interval"', "s.interval_count")} AS monthly_cents
+               ${SUBSCRIPTION_MONTHLY_CENTS} AS monthly_cents
           FROM subscriptions s
+          LEFT JOIN plans p ON p.id = s.plan_id
          WHERE COALESCE(s.canceled_at, s.ended_at) IS NOT NULL
            AND ${within("COALESCE(s.canceled_at, s.ended_at)")}
       )
@@ -379,12 +394,13 @@ const METRICS: MetricSource[] = [
       ),
       base AS (
         SELECT d.day, s.currency, s.offer_id,
-               ${monthlyCents("s.amount_cents", 's."interval"', "s.interval_count")} AS monthly_cents
+               ${SUBSCRIPTION_MONTHLY_CENTS} AS monthly_cents
           FROM days d
           JOIN subscriptions s
             ON ${day("s.created_at")} <= d.day
            AND (s.canceled_at IS NULL OR ${day("s.canceled_at")} > d.day)
            AND (s.ended_at    IS NULL OR ${day("s.ended_at")}    > d.day)
+          LEFT JOIN plans p ON p.id = s.plan_id
          WHERE s.status <> 'incomplete'
       )
       SELECT day, '' AS dimension, SUM(monthly_cents)::bigint AS value_cents,

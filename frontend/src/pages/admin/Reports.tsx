@@ -35,27 +35,36 @@ const JOURNEY_PURPOSE: Record<string, string> = {
   launch: "Running a launch",
 };
 
+/** The four reports, each loaded — and allowed to fail — on its own. */
+type Section = "subs" | "audience" | "funnels" | "content";
+
+const SECTION_ERROR = "We couldn't load these numbers. Try refreshing the page.";
+
+/** Stands in for a section whose report didn't come back. */
+function SectionError() {
+  return (
+    <div className="p-5">
+      <ErrorNotice message={SECTION_ERROR} />
+    </div>
+  );
+}
+
 export default function Reports() {
   const [subs, setSubs] = useState<SubscriptionReport | null>(null);
   const [audience, setAudience] = useState<AudienceReport | null>(null);
   const [funnels, setFunnels] = useState<FunnelReport[] | null>(null);
   const [content, setContent] = useState<ContentReport | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [failed, setFailed] = useState<ReadonlySet<Section>>(new Set());
 
   useEffect(() => {
-    Promise.all([
-      adminApi.reportSubscriptions(),
-      adminApi.reportAudience(),
-      adminApi.reportFunnels(),
-      adminApi.reportContent(),
-    ])
-      .then(([s, a, f, c]) => {
-        setSubs(s);
-        setAudience(a);
-        setFunnels(f);
-        setContent(c);
-      })
-      .catch(() => setError("We couldn't load your numbers. Try refreshing the page."));
+    // Each report loads on its own: one slow or broken query used to blank the
+    // whole page, hiding the three sets of numbers that had come back fine.
+    const markFailed = (section: Section) => () =>
+      setFailed((prev) => new Set(prev).add(section));
+    adminApi.reportSubscriptions().then(setSubs).catch(markFailed("subs"));
+    adminApi.reportAudience().then(setAudience).catch(markFailed("audience"));
+    adminApi.reportFunnels().then(setFunnels).catch(markFailed("funnels"));
+    adminApi.reportContent().then(setContent).catch(markFailed("content"));
   }, []);
 
   const contentBars = useMemo(
@@ -113,15 +122,6 @@ export default function Reports() {
     saveCsv(blob, `your-numbers-${new Date().toISOString().slice(0, 10)}.csv`);
   }
 
-  if (error) {
-    return (
-      <div className="space-y-6">
-        <PageHeader eyebrow="Analytics" title="Reports" />
-        <ErrorNotice message={error} />
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-6">
       <PageHeader
@@ -129,7 +129,12 @@ export default function Reports() {
         title="Reports"
         description="The numbers behind your business — who's paying you, how your audience is growing, how people move through your sign-up journeys, and everything you've published."
         actions={
-          <Button variant="secondary" size="sm" onClick={downloadSpreadsheet} disabled={!subs}>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={downloadSpreadsheet}
+            disabled={!subs || !audience || !content}
+          >
             <Download />
             Download as spreadsheet (opens in Excel)
           </Button>
@@ -142,54 +147,60 @@ export default function Reports() {
           title="Active subscriptions"
           subtitle="How your plans and memberships are doing right now"
         />
-        <div className="grid grid-cols-1 gap-px bg-hairline/60 sm:grid-cols-2 xl:grid-cols-4">
-          <Metric
-            label="People paying you"
-            hint="on a plan right now"
-            value={subs && formatNumber(subs.activeCount)}
-          />
-          <Metric
-            label="Money every month"
-            hint="what those plans add up to"
-            value={subs && formatCurrency(subs.mrrCents)}
-            accent
-          />
-          <Metric
-            label="Average per person"
-            hint="each month"
-            value={subs && formatCurrency(subs.arpuCents)}
-          />
-          <Metric
-            label="People leaving"
-            hint="share who cancelled in the last 30 days"
-            value={subs && `${subs.churnRate}%`}
-            tone={subs && subs.churnRate > 5 ? "bad" : "good"}
-          />
-        </div>
-        <div className="grid grid-cols-1 gap-px border-t border-hairline/60 bg-hairline/60 sm:grid-cols-3">
-          <Metric
-            label="Joined"
-            hint="in the last 30 days"
-            value={subs && formatNumber(subs.new30d)}
-            small
-          />
-          <Metric
-            label="Left"
-            hint="in the last 30 days"
-            value={subs && formatNumber(subs.churned30d)}
-            small
-          />
-          <Metric
-            label="Cancelling soon"
-            hint="still have access until their month runs out"
-            value={subs && formatNumber(subs.pendingCancel)}
-            small
-          />
-        </div>
-        {subs && subs.activeCount === 0 && (
-          <p className="border-t border-hairline/60 px-5 py-3 text-xs text-ink-soft">
-            Nobody is on a paid plan yet — these numbers fill in as soon as someone subscribes.
-          </p>
+        {failed.has("subs") ? (
+          <SectionError />
+        ) : (
+          <>
+            <div className="grid grid-cols-1 gap-px bg-hairline/60 sm:grid-cols-2 xl:grid-cols-4">
+              <Metric
+                label="People paying you"
+                hint="on a plan right now"
+                value={subs && formatNumber(subs.activeCount)}
+              />
+              <Metric
+                label="Money every month"
+                hint="what those plans add up to"
+                value={subs && formatCurrency(subs.mrrCents)}
+                accent
+              />
+              <Metric
+                label="Average per person"
+                hint="each month"
+                value={subs && formatCurrency(subs.arpuCents)}
+              />
+              <Metric
+                label="People leaving"
+                hint="share who cancelled in the last 30 days"
+                value={subs && `${subs.churnRate}%`}
+                tone={subs && subs.churnRate > 5 ? "bad" : "good"}
+              />
+            </div>
+            <div className="grid grid-cols-1 gap-px border-t border-hairline/60 bg-hairline/60 sm:grid-cols-3">
+              <Metric
+                label="Joined"
+                hint="in the last 30 days"
+                value={subs && formatNumber(subs.new30d)}
+                small
+              />
+              <Metric
+                label="Left"
+                hint="in the last 30 days"
+                value={subs && formatNumber(subs.churned30d)}
+                small
+              />
+              <Metric
+                label="Cancelling soon"
+                hint="still have access until their month runs out"
+                value={subs && formatNumber(subs.pendingCancel)}
+                small
+              />
+            </div>
+            {subs && subs.activeCount === 0 && (
+              <p className="border-t border-hairline/60 px-5 py-3 text-xs text-ink-soft">
+                Nobody is on a paid plan yet — these numbers fill in as soon as someone subscribes.
+              </p>
+            )}
+          </>
         )}
       </Card>
 
@@ -200,40 +211,46 @@ export default function Reports() {
           subtitle="Everyone in your world, and how many joined each day over the last 30 days"
           icon={<Users className="size-4" />}
         />
-        <div className="grid grid-cols-1 gap-px bg-hairline/60 sm:grid-cols-3 xl:grid-cols-5">
-          <Metric
-            label="On your email list"
-            value={audience && formatNumber(audience.totals.subscribers)}
-            small
-          />
-          <Metric label="Members" value={audience && formatNumber(audience.totals.members)} small />
-          <Metric label="Enquiries" value={audience && formatNumber(audience.totals.leads)} small />
-          <Metric
-            label="Form replies"
-            value={audience && formatNumber(audience.totals.formSubmissions)}
-            small
-          />
-          <Metric
-            label="In your community"
-            value={audience && formatNumber(audience.totals.communityMembers)}
-            small
-          />
-        </div>
-        <div className="px-3 py-5 sm:px-5">
-          {audience === null ? (
-            <Skeleton className="h-[240px] w-full" />
-          ) : (
-            <TrendAreaChart
-              data={audience.series}
-              height={240}
-              emptyMessage="Nothing yet — this fills in as people join your list."
-              series={[
-                { key: "subscribers", label: "Joined your email list", color: CHART_COLORS.plum },
-                { key: "members", label: "Became members", color: CHART_COLORS.green },
-              ]}
-            />
-          )}
-        </div>
+        {failed.has("audience") ? (
+          <SectionError />
+        ) : (
+          <>
+            <div className="grid grid-cols-1 gap-px bg-hairline/60 sm:grid-cols-3 xl:grid-cols-5">
+              <Metric
+                label="On your email list"
+                value={audience && formatNumber(audience.totals.subscribers)}
+                small
+              />
+              <Metric label="Members" value={audience && formatNumber(audience.totals.members)} small />
+              <Metric label="Enquiries" value={audience && formatNumber(audience.totals.leads)} small />
+              <Metric
+                label="Form replies"
+                value={audience && formatNumber(audience.totals.formSubmissions)}
+                small
+              />
+              <Metric
+                label="In your community"
+                value={audience && formatNumber(audience.totals.communityMembers)}
+                small
+              />
+            </div>
+            <div className="px-3 py-5 sm:px-5">
+              {audience === null ? (
+                <Skeleton className="h-[240px] w-full" />
+              ) : (
+                <TrendAreaChart
+                  data={audience.series}
+                  height={240}
+                  emptyMessage="Nothing yet — this fills in as people join your list."
+                  series={[
+                    { key: "subscribers", label: "Joined your email list", color: CHART_COLORS.plum },
+                    { key: "members", label: "Became members", color: CHART_COLORS.green },
+                  ]}
+                />
+              )}
+            </div>
+          </>
+        )}
       </Card>
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
@@ -244,7 +261,9 @@ export default function Reports() {
             subtitle="How many people who land on a journey make it all the way through"
             icon={<Split className="size-4" />}
           />
-          {funnels === null ? (
+          {failed.has("funnels") ? (
+            <SectionError />
+          ) : funnels === null ? (
             <Skeleton className="m-5 h-40" />
           ) : funnels.length === 0 ? (
             <EmptyState
@@ -292,7 +311,9 @@ export default function Reports() {
             icon={<FileStack className="size-4" />}
           />
           <div className="p-5">
-            {content === null ? (
+            {failed.has("content") ? (
+              <ErrorNotice message={SECTION_ERROR} />
+            ) : content === null ? (
               <Skeleton className="h-[180px] w-full" />
             ) : (
               <MiniBarChart

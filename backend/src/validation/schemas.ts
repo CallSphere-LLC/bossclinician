@@ -112,6 +112,9 @@ export const testimonialSchema = z.object({
   name: z.string().min(1).max(200),
   credential: z.string().max(200).default(""),
   quote: z.string().max(2000).default(""),
+  // Nullable: rows written before the column existed hold NULL, and an edit
+  // sends back whatever the row had.
+  practice: z.string().max(200).nullable().optional(),
   image: presentationImage(2000).nullable().optional(),
   sort: z.number().int().default(0),
   published: z.boolean().default(true),

@@ -301,6 +301,28 @@ export function lessonSlug(title: string): string {
   );
 }
 
+/**
+ * The first slug in a section that no lesson there holds yet.
+ *
+ * Numbered from the highest suffix already in use rather than from a count of
+ * the lessons sharing the base: with "intro" and "intro-2" in a section and the
+ * first one deleted, a count of one handed the next "Introduction" "intro-2"
+ * again, and the UNIQUE (module_id, slug) index refused the lesson with a 500.
+ * `taken` is every slug in the section that is the base or the base plus a
+ * suffix; anything else in it is ignored.
+ */
+export function nextLessonSlug(base: string, taken: string[]): string {
+  const prefix = `${base}-`;
+  let highest = 0;
+  for (const slug of taken) {
+    if (slug === base) highest = Math.max(highest, 1);
+    else if (slug.startsWith(prefix) && /^\d+$/.test(slug.slice(prefix.length))) {
+      highest = Math.max(highest, Number(slug.slice(prefix.length)));
+    }
+  }
+  return highest === 0 ? base : `${base}-${highest + 1}`;
+}
+
 /** GET /admin/curriculum/:courseId — modules with their lessons nested. */
 adminCurriculumRouter.get(
   "/:courseId",
@@ -408,19 +430,21 @@ adminCurriculumRouter.post(
     const drip = normalizeDrip(body, await loadDripSettings());
 
     // Two lessons called "Introduction" in one section is the ordinary case, so
-    // the slug is disambiguated in the same statement that reads the sort.
+    // the slug is disambiguated against the ones the section already holds.
+    const base = lessonSlug(title);
+    const taken = await pool.query<{ slug: string }>(
+      `SELECT slug FROM course_lessons
+        WHERE module_id = $1 AND (slug = $2::text OR slug LIKE $2::text || '-%')`,
+      [req.params.moduleId, base],
+    );
     const result = await pool.query(
       `INSERT INTO course_lessons
          (module_id, slug, title, body_md, video_url, audio_url, attachment_url, thumbnail_url,
           duration_minutes, preview, published, content_type, comments_enabled,
           requires_previous_lesson, drip_days, drip_date, sort)
-       SELECT $1,
-              CASE WHEN taken.n = 0 THEN $11::text ELSE $11::text || '-' || (taken.n + 1) END,
+       SELECT $1, $11::text,
               $2, $3, $4, $5, $6, $7, $8, $9, $10, $12, $13, $14, $15, $16,
               (SELECT COALESCE(MAX(sort), -1) + 1 FROM course_lessons WHERE module_id = $1)
-         FROM (SELECT COUNT(*)::int AS n FROM course_lessons
-                WHERE module_id = $1
-                  AND (slug = $11::text OR slug LIKE $11::text || '-%')) taken
        RETURNING *`,
       [
         req.params.moduleId,
@@ -433,7 +457,7 @@ adminCurriculumRouter.post(
         body.durationMinutes ?? 0,
         body.preview ?? false,
         body.published ?? true,
-        lessonSlug(title),
+        nextLessonSlug(base, taken.rows.map((row) => row.slug)),
         body.contentType ?? "text",
         body.commentsEnabled ?? true,
         body.requiresPreviousLesson ?? false,

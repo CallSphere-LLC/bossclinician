@@ -142,6 +142,30 @@ function displayName(row: MemberRow): string {
   return `${row.first_name} ${row.last_name}`.trim() || row.name;
 }
 
+/**
+ * The name pair to store for a create or import row.
+ *
+ * Every screen prefers first + last over `name`, so a row that arrives with
+ * only a whole name ("Add a member", a "Full name" column) and matches someone
+ * who already has the pair would update a column nothing shows: the admin is
+ * told they were saved and the old name stays on screen. A whole name on its
+ * own is split the same way the edit path splits it (lib/api.ts withSplitName).
+ */
+export function namePair(input: { name?: string; firstName?: string; lastName?: string }): {
+  firstName: string;
+  lastName: string;
+} {
+  if (input.firstName !== undefined || input.lastName !== undefined || !input.name) {
+    return { firstName: input.firstName ?? "", lastName: input.lastName ?? "" };
+  }
+  const whole = input.name.trim();
+  const gap = whole.indexOf(" ");
+  return {
+    firstName: gap === -1 ? whole : whole.slice(0, gap),
+    lastName: gap === -1 ? "" : whole.slice(gap + 1).trim(),
+  };
+}
+
 function toMemberProfile(row: MemberRow, impersonatedBy?: number) {
   return {
     id: row.id,
@@ -300,7 +324,8 @@ adminMembersRouter.post(
   asyncHandler(async (req, res) => {
     const parsed = createSchema.safeParse(req.body);
     if (!parsed.success) throw badRequest("Invalid payload", parsed.error.flatten());
-    const { email, firstName = "", lastName = "", status } = parsed.data;
+    const { email, status } = parsed.data;
+    const { firstName, lastName } = namePair(parsed.data);
     const name = parsed.data.name ?? `${firstName} ${lastName}`.trim();
 
     // The address is stored as typed: the unique index is on a citext column,
@@ -995,8 +1020,7 @@ adminMembersRouter.post(
       }
       seen.add(key);
 
-      const firstName = row.data.firstName ?? "";
-      const lastName = row.data.lastName ?? "";
+      const { firstName, lastName } = namePair(row.data);
       const name = row.data.name ?? `${firstName} ${lastName}`.trim();
 
       try {
@@ -1138,7 +1162,8 @@ adminMembersRouter.post(
 
     // Checked up front so a bad id answers 404 rather than surfacing a foreign
     // key violation as a 500.
-    await loadMember(id);
+    const member = await loadMember(id);
+    assertNotDeleted(member);
 
     const result = await pool.query(
       `INSERT INTO enrollments (member_id, course_id) VALUES ($1, $2)

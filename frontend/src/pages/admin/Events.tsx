@@ -61,6 +61,7 @@ export default function Events() {
   const [draft, setDraft] = useState<Partial<CommunityEvent & { communityId: number }> | null>(
     null,
   );
+  const [saving, setSaving] = useState(false);
   const [confirm, confirmDialog] = useConfirm();
 
   const load = useCallback(async () => {
@@ -96,7 +97,10 @@ export default function Events() {
 
   async function save(e: FormEvent) {
     e.preventDefault();
-    if (!draft?.title?.trim() || !draft.communityId) return;
+    // A second click (or Enter) while the first save is in flight used to add
+    // the same event to the calendar twice.
+    if (saving || !draft?.title?.trim() || !draft.communityId) return;
+    setSaving(true);
     try {
       await adminApi.eventCreate(draft.communityId, {
         ...draft,
@@ -109,6 +113,8 @@ export default function Events() {
       void load();
     } catch (err) {
       toast.error(friendlyError(err, "event"));
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -245,8 +251,8 @@ export default function Events() {
             <Button variant="secondary" size="sm" onClick={() => setDraft(null)}>
               Never mind
             </Button>
-            <Button size="sm" type="submit" form="event-form">
-              Add to the calendar
+            <Button size="sm" type="submit" form="event-form" disabled={saving}>
+              {saving ? "Adding…" : "Add to the calendar"}
             </Button>
           </>
         }

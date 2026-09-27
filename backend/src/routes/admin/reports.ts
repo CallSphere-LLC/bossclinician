@@ -25,13 +25,26 @@ import { daysBetween, lastRollupAt, reportDay, shiftDay } from "../../services/r
 export const adminReportsRouter = Router();
 
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * A real calendar day. The pattern alone let `2026-02-30` and `2026-13-01`
+ * through, and those reached Postgres (or `toISOString`) and came back as a
+ * 500 rather than as the 400 a bad date is.
+ */
+export function isCalendarDay(value: string): boolean {
+  if (!DATE.test(value)) return false;
+  const at = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(at.getTime()) && at.toISOString().slice(0, 10) === value;
+}
+
+const day = () => z.string().refine(isCalendarDay, "Not a real date");
 const DEFAULT_DAYS = 30;
 /** Two years of daily points is already more than any chart can show usefully. */
 const MAX_RANGE_DAYS = 800;
 
 const rangeQuery = z.object({
-  from: z.string().regex(DATE).optional(),
-  to: z.string().regex(DATE).optional(),
+  from: day().optional(),
+  to: day().optional(),
   compare: z.enum(["previous", "none"]).optional(),
   // Only ever one of the report's own declared breakdown keys.
   dimension: z.string().max(40).regex(/^[a-z_]*$/).optional(),
@@ -106,8 +119,8 @@ const savedBody = z.object({
   reportId: z.string().min(1).max(80),
   /** A trailing window, so a saved view stays current instead of freezing. */
   days: z.number().int().min(1).max(MAX_RANGE_DAYS).optional(),
-  from: z.string().regex(DATE).optional(),
-  to: z.string().regex(DATE).optional(),
+  from: day().optional(),
+  to: day().optional(),
   compare: z.enum(["previous", "none"]).default("none"),
   dimension: z.string().max(40).regex(/^[a-z_]*$/).optional(),
 });
@@ -251,7 +264,7 @@ adminReportsRouter.post(
   "/refresh",
   asyncHandler(async (req, res) => {
     const body = z
-      .object({ from: z.string().regex(DATE).optional(), to: z.string().regex(DATE).optional() })
+      .object({ from: day().optional(), to: day().optional() })
       .parse(req.body ?? {});
 
     const to = body.to ?? reportDay();

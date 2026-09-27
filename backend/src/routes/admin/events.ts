@@ -382,12 +382,18 @@ adminEventsRouter.patch(
 
     // Checked against the row as it will be, not as it was: switching a replay
     // to a live event in the same save has to bring a date with it.
+    // An explicit null is a value being cleared, not a field left out, so it
+    // is checked as null — falling back to the stored value let "clear the
+    // date of a live event" past this check and into the CHECK constraint.
     const kind = input.kind ?? current.kind;
-    const startsAt = input.startsAt ?? current.starts_at?.toISOString() ?? null;
+    const startsAt =
+      input.startsAt !== undefined ? input.startsAt : current.starts_at?.toISOString() ?? null;
     const problem = shapeError(kind, {
       startsAt,
       evergreenIntervalMinutes:
-        input.evergreenIntervalMinutes ?? current.evergreen_interval_minutes,
+        input.evergreenIntervalMinutes !== undefined
+          ? input.evergreenIntervalMinutes
+          : current.evergreen_interval_minutes,
     });
     if (problem) throw badRequest(problem);
 
@@ -444,7 +450,11 @@ adminEventsRouter.delete(
 adminEventsRouter.get(
   "/:id/registrations",
   asyncHandler(async (req, res) => {
-    const limit = Math.min(Number(req.query.limit) || 200, 1000);
+    // Defaults to the cap rather than 200: the editor asks without a limit, and
+    // a smaller default silently dropped the earliest sign-ups from the list
+    // (and from "select everyone") on any event with more than 200 of them.
+    // Floored at 1 so a negative limit is not handed to Postgres as LIMIT -5.
+    const limit = Math.max(1, Math.min(Math.trunc(Number(req.query.limit)) || 1000, 1000));
     const result = await pool.query<{
       id: string;
       email: string;

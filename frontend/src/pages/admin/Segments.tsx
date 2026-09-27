@@ -441,19 +441,29 @@ function SegmentEditor({
   // debounced, because she is typing into a text box while it runs.
   useEffect(() => {
     if (!segment) return;
+    // The debounce only spaces the requests out; a count over the whole list
+    // can take longer than 350ms, so answers can come back out of order, and
+    // an older one landing last showed the count for rows she had already
+    // changed — or, after reopening, for a different group.
+    let current = true;
     const timer = setTimeout(() => {
       contactsApi
         .segmentPreview(definition)
         .then((result) => {
+          if (!current) return;
           setPreview(result);
           setPreviewError(null);
         })
         .catch(() => {
+          if (!current) return;
           setPreview(null);
           setPreviewError("One of these rows still needs filling in.");
         });
     }, 350);
-    return () => clearTimeout(timer);
+    return () => {
+      current = false;
+      clearTimeout(timer);
+    };
   }, [definition, segment]);
 
   function updateRule(index: number, patch: Partial<SegmentRule>) {

@@ -342,6 +342,8 @@ export default function Campaigns() {
    * while the problem exists and disappears the moment it is fixed.
    */
   const [showErrors, setShowErrors] = useState(false);
+  /** A save in flight. A second press used to create a second copy of a new email. */
+  const [saving, setSaving] = useState(false);
   const [confirm, confirmDialog] = useConfirm();
 
   /**
@@ -441,7 +443,7 @@ export default function Campaigns() {
   async function save(e: FormEvent) {
     e.preventDefault();
     // Unreachable in practice — the form only renders while there is a draft.
-    if (!draft) return;
+    if (!draft || saving) return;
 
     /*
      * A1. Every rule that can refuse a save is in validateCampaignDraft, and a
@@ -470,6 +472,7 @@ export default function Campaigns() {
       return;
     }
 
+    setSaving(true);
     try {
       // The anchor is never written through the campaign save: the server
       // stamps the arming moment as part of arming it, and that stamp is what
@@ -494,11 +497,41 @@ export default function Campaigns() {
         setDraft((current) => current ? { ...current, id: campaign.id, status: "draft" } : current);
       }
 
-      const wasArmed =
-        draft.status === "scheduled" ||
-        (draft.status === "sending" && draft.anchorKind === "event_registration");
+      const liveRegistration =
+        draft.status === "sending" && draft.anchorKind === "event_registration";
+      const wasArmed = draft.status === "scheduled" || liveRegistration;
 
-      if (sendMode === "absolute" && scheduledAt) {
+      /*
+       * A live "upon registration" campaign sits on `sending`, which neither
+       * schedule route will re-arm — so editing its wording, or moving it to
+       * another timing, saved the words and then failed with "wait for the
+       * current send to finish". Unchanged, it is left running as it is:
+       * re-arming would restamp the arming moment and drop everyone who
+       * registered since and is still waiting out the delay. Changed, it is
+       * switched off first so the new timing can be armed. The draft's anchor
+       * fields are the ones being edited; the saved row is what is armed.
+       */
+      const armed = campaigns?.find((row) => row.id === draft.id);
+      const offsetForMode =
+        anchorOffsetMinutes ?? (sendMode === "event_start" ? -1440 : 0);
+      const registrationUnchanged =
+        liveRegistration &&
+        sendMode === "event_registration" &&
+        armed !== undefined &&
+        anchorEventId === armed.anchorEventId &&
+        offsetForMode === (armed.anchorOffsetMinutes ?? 0);
+      if (liveRegistration && sendMode !== "manual" && !registrationUnchanged) {
+        await adminApi.campaignCancelSchedule(campaign.id);
+        // It is a draft on the server now; a retry after a failed re-arm must
+        // not try to switch it off a second time.
+        setDraft((current) =>
+          current ? { ...current, status: "draft", anchorKind: "absolute" } : current,
+        );
+      }
+
+      if (registrationUnchanged) {
+        toast.success("Email saved — it carries on going to new registrations.");
+      } else if (sendMode === "absolute" && scheduledAt) {
         const timezone = draft.timezone || DEFAULT_TIMEZONE;
         await adminApi.campaignSchedule(campaign.id, scheduledAt, timezone);
         toast.success(`Email scheduled for ${scheduledLabel(scheduledAt, timezone)}`);
@@ -524,6 +557,8 @@ export default function Campaigns() {
       load();
     } catch (err) {
       toast.error(friendlyError(err, "email"));
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -952,8 +987,8 @@ export default function Campaigns() {
             <Button variant="secondary" size="sm" onClick={() => setDraft(null)}>
               Cancel
             </Button>
-            <Button size="sm" type="submit" form="campaign-form">
-              Save email
+            <Button size="sm" type="submit" form="campaign-form" disabled={saving}>
+              {saving ? "Saving…" : "Save email"}
             </Button>
           </>
         }

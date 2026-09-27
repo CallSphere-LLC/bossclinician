@@ -52,6 +52,8 @@ const STATUS_TONE: Record<string, "blue" | "green" | "gold" | "slate"> = {
 };
 
 interface RuleDraft {
+  /** Set when editing a saved rule, whose offer is then fixed — see the select. */
+  id?: number;
   offerId: number | null;
   kind: "percent" | "fixed" | "none";
   /**
@@ -327,6 +329,7 @@ export default function AffiliateDetail() {
                     size="sm"
                     onClick={() =>
                       setRule({
+                        id: row.id,
                         offerId: row.offerId,
                         kind: row.commissionKind,
                         percent: String(row.commissionPercent),
@@ -354,8 +357,13 @@ export default function AffiliateDetail() {
         {rule && (
           <form onSubmit={saveRule} className="grid grid-cols-1 gap-4 border-t border-hairline/60 p-5 sm:grid-cols-2">
             <Field label="This applies to">
+              {/* Rules are saved per partner-and-offer, so changing the offer on
+                  a saved rule wrote a second rule and left the old one in force
+                  — "moving" 40% from the retreat to the course paid 40% on both.
+                  To move one, remove it and set a new rate. */}
               <select
                 value={rule.offerId ?? ""}
+                disabled={rule.id !== undefined}
                 onChange={(e) =>
                   setRule({ ...rule, offerId: e.target.value ? Number(e.target.value) : null })
                 }

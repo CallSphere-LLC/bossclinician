@@ -484,10 +484,20 @@ adminSalesRouter.get(
            COUNT(*) FILTER (WHERE status = 'paid')::int                       AS orders_paid
          FROM orders`,
       ),
+      // The same arithmetic as /reports/subscriptions and the reports rollup's
+      // MRR, so the three agree. An offer subscription has no plan and carries
+      // Stripe's interval x interval_count itself; a legacy plan subscription
+      // was written without its own (the column keeps its 'month' default), so
+      // its plan's is used. Reading only the plan's counted a $1,200-a-year
+      // offer as $1,200 a month; reading only the subscription's would do the
+      // same to a yearly plan.
       pool.query(
-        `SELECT COALESCE(SUM(
-           CASE WHEN p.interval = 'year' THEN s.amount_cents / 12 ELSE s.amount_cents END
-         ), 0)::int AS mrr_cents
+        `SELECT COALESCE(SUM(ROUND(s.amount_cents::numeric / (CASE COALESCE(p."interval", s."interval")
+             WHEN 'day'  THEN 1.0 / 30
+             WHEN 'week' THEN 7.0 / 30
+             WHEN 'year' THEN 12
+             ELSE 1
+           END * CASE WHEN p.id IS NULL THEN GREATEST(s.interval_count, 1) ELSE 1 END))), 0)::int AS mrr_cents
          FROM subscriptions s
          LEFT JOIN plans p ON p.id = s.plan_id
          WHERE s.status IN ('active', 'trialing')`,
@@ -602,6 +612,13 @@ async function checkedCouponOfferIds(offerIds: number[]): Promise<number[]> {
   return unique;
 }
 
+function duplicateCouponError() {
+  return issueError({
+    field: "code",
+    message: "You already have a coupon with that code. Pick a different code.",
+  });
+}
+
 function couponExpiry(value: string | null | undefined): Date | null {
   return value ? new Date(`${value.slice(0, 10)}T23:59:59.999Z`) : null;
 }
@@ -640,6 +657,13 @@ adminSalesRouter.post(
     const amountOffCents = b.amountOffCents ?? null;
     const uniqueOfferIds = await checkedCouponOfferIds(b.offerIds);
     const expiresAt = couponExpiry(b.expiresAt);
+
+    // Asked before Stripe is touched, as for plans: `code` is unique, so a
+    // second LAUNCH20 used to fail the insert with a 500 after its Stripe
+    // coupon had already been made. The catch below is the backstop for a race.
+    const taken = await pool.query("SELECT 1 FROM coupons WHERE code = $1", [code]);
+    if (taken.rowCount) throw duplicateCouponError();
+
     const stripeCouponId = await createStripeCoupon({
       code, percentOff, amountOffCents, currency: b.currency,
       maxRedemptions: b.maxRedemptions ?? null, expiresAt, duration: b.duration,
@@ -664,6 +688,11 @@ adminSalesRouter.post(
       res.status(201).json({ ...rowToCamel(result.rows[0]), offerIds: uniqueOfferIds });
     } catch (error) {
       await client.query("ROLLBACK");
+      // Nothing local points at it now, so it goes too.
+      if (stripeCouponId && stripeEnabled()) {
+        await stripe().coupons.del(stripeCouponId).catch(() => undefined);
+      }
+      if (isUniqueViolation(error)) throw duplicateCouponError();
       throw error;
     } finally {
       client.release();

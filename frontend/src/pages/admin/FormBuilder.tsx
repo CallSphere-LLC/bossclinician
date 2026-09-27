@@ -112,6 +112,43 @@ function answerText(value: unknown): string {
   return String(value);
 }
 
+/**
+ * The key a new question's answers are filed under.
+ *
+ * The server takes keys of up to 60 characters, and `fieldKey` alone can
+ * already produce 60 — 66 once a label that starts with a number ("1. What is
+ * the biggest…") is prefixed with `field_` — before `uniqueKey` adds its "_2".
+ * A key is never regenerated, so an over-long one was a form that could not be
+ * saved again until the question was deleted. Room is left for the suffix.
+ */
+export function questionKey(label: string, taken: Iterable<string>): string {
+  const base = fieldKey(label).slice(0, 56).replace(/_+$/, "") || "field";
+  return uniqueKey(base, taken);
+}
+
+/**
+ * Every reply, not only the first page of them.
+ *
+ * The route answers 100 at a time, and the table below promises everything
+ * people have sent — so a form with 250 replies showed the newest 100, said
+ * "100 replies", and searched only those. Deduplicated by id, because a reply
+ * arriving between two pages shifts the next page by one.
+ */
+export async function fetchAllReplies(
+  id: number,
+  sinceDays: number | null,
+  page: typeof formsApi.submissions = formsApi.submissions,
+): Promise<FormSubmission[]> {
+  const byId = new Map<number, FormSubmission>();
+  let offset = 0;
+  for (;;) {
+    const { total, submissions } = await page(id, offset, sinceDays);
+    for (const reply of submissions) if (!byId.has(reply.id)) byId.set(reply.id, reply);
+    offset += submissions.length;
+    if (submissions.length === 0 || offset >= total) return [...byId.values()];
+  }
+}
+
 /** The largest-file choices offered. The server caps every one at 10 MB. */
 const FILE_SIZE_CHOICES = [1, 2, 5, 10];
 
@@ -657,7 +694,14 @@ export default function FormBuilder() {
   const [saving, setSaving] = useState(false);
   const revision = useRef(0);
   const saveQueue = useRef<Promise<unknown>>(Promise.resolve());
+  // Saves still on the wire. "Saving…" follows this rather than the revision:
+  // a save overtaken by a newer edit that then failed its own checks left the
+  // button disabled on "Saving automatically…" with nothing being saved.
+  const savesInFlight = useRef(0);
   const [replies, setReplies] = useState<FormSubmission[] | null>(null);
+  // Only the newest replies request may land: switching forms or clearing
+  // `since` otherwise let a slower, older answer overwrite the right one.
+  const repliesTicket = useRef(0);
   const [downloading, setDownloading] = useState(false);
 
   const [adding, setAdding] = useState(false);
@@ -687,28 +731,45 @@ export default function FormBuilder() {
 
   const loadReplies = useCallback(
     (id: number) => {
-      formsApi
-        .submissions(id, 0, sinceDays)
-        .then((page) => setReplies(page.submissions))
-        .catch(() => setReplies([]));
+      const ticket = ++repliesTicket.current;
+      fetchAllReplies(id, sinceDays)
+        .then((rows) => {
+          if (ticket === repliesTicket.current) setReplies(rows);
+        })
+        .catch(() => {
+          if (ticket === repliesTicket.current) setReplies([]);
+        });
     },
     [sinceDays],
   );
 
   useEffect(() => {
     if (openId === null) {
+      repliesTicket.current += 1;
       setDraft(null);
       setReplies(null);
+      // The draft was discarded with the form ("Leave without saving?"); left
+      // set, the list page kept the leave-guards armed and asked about unsaved
+      // changes on every sidebar click and reload.
+      setDirty(false);
       return;
     }
+    let current = true;
     setDraft(null);
     setDirty(false);
     setReplies(null);
     setError(null);
     formsApi
       .get(openId)
-      .then(setDraft)
-      .catch((err) => setError(friendlyError(err, "form")));
+      .then((form) => {
+        if (current) setDraft(form);
+      })
+      .catch((err) => {
+        if (current) setError(friendlyError(err, "form"));
+      });
+    return () => {
+      current = false;
+    };
   }, [openId]);
 
   // The replies load on their own, so narrowing or clearing `since` refetches
@@ -894,7 +955,7 @@ export default function FormBuilder() {
     // filed under this name, so regenerating it when she renames the question
     // would orphan the replies people have already sent.
     const taken = draft.fields.map((field) => field.key);
-    const key = uniqueKey(fieldKey(label), taken);
+    const key = questionKey(label, taken);
 
     change({
       fields: [
@@ -1005,17 +1066,23 @@ export default function FormBuilder() {
     const fileCount = outgoingFields.filter((field) => field.type === "file").length;
     // Said here, next to the form, rather than left to a save that fails in
     // the background: the same rules the server applies (formsV2.ts).
+    // The redirect rule too: picking "Send them to another page" autosaved
+    // before there was any page typed, and the server's refusal arrived as an
+    // error toast while she was still reaching for the box.
     const problem = noFileKinds
       ? `“${noFileKinds.label}” doesn't accept any kind of file yet. Tick at least one.`
       : fileCount > MAX_FILE_QUESTIONS
         ? `A form can ask for up to ${MAX_FILE_QUESTIONS} files.`
-        : logicProblem(outgoingFields);
+        : snapshot.postAction === "redirect" && !snapshot.redirectUrl.trim()
+          ? "Choose where people should go after they send this form."
+          : logicProblem(outgoingFields);
     if (problem) {
       if (atRevision === revision.current) setSaveProblem(problem);
       return;
     }
 
     setSaveProblem(null);
+    savesInFlight.current += 1;
     setSaving(true);
 
     const request = saveQueue.current.then(() =>
@@ -1046,7 +1113,8 @@ export default function FormBuilder() {
         toast.error(friendlyError(err, "form"));
       }
     } finally {
-      if (atRevision === revision.current) setSaving(false);
+      savesInFlight.current -= 1;
+      if (savesInFlight.current === 0) setSaving(false);
     }
   }
 
@@ -1189,7 +1257,11 @@ export default function FormBuilder() {
             <span className="min-w-0">
               <span className="block truncate font-semibold text-ink">{row.original.name}</span>
               <span className="block truncate text-xs text-ink-soft">
-                {row.original.description || "No description yet"}
+                {/* What this screen writes is `descriptionMd`; `description` is
+                    the legacy screen's. Same order the public page reads them. */}
+                {(row.original as FormSummary & { descriptionMd?: string }).descriptionMd ||
+                  row.original.description ||
+                  "No description yet"}
               </span>
             </span>
           </button>

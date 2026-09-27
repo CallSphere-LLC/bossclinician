@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { pool } from "../db/pool";
 import { badRequest } from "../utils/httpError";
+import { zonedWallClockToUtc } from "./drip";
+import { REPORT_TIMEZONE } from "./reports/rollup";
 
 /**
  * Segments — a saved filter over contacts, stored as rules and interpreted here.
@@ -101,11 +103,31 @@ function asId(field: string, value: unknown): number {
   return parsed;
 }
 
+/**
+ * A bare "YYYY-MM-DD" — what the date box writes — is a day on the owner's
+ * calendar, not an instant. `new Date` reads it as midnight UTC, which in New
+ * York is 7pm the evening before, so "added before March 1" would drop the
+ * people who signed up on the evening of February 28. It is cut at midnight in
+ * the zone the reports cut their days in instead; a full timestamp already
+ * names its instant and is left alone.
+ */
+function calendarDayStart(value: string): Date | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
+  if (!match) return null;
+  const [year, month, day] = match.slice(1).map(Number);
+  // Date.UTC rolls "2026-02-30" over into March; refuse it rather than guess.
+  const probe = new Date(Date.UTC(year, month - 1, day));
+  if (probe.getUTCMonth() !== month - 1 || probe.getUTCDate() !== day) {
+    return new Date(Number.NaN);
+  }
+  return zonedWallClockToUtc(year, month, day, 0, REPORT_TIMEZONE);
+}
+
 function asDate(field: string, value: unknown): Date {
   if (typeof value !== "string" && typeof value !== "number") {
     throw badRequest(`"${field}" needs a date to compare against`);
   }
-  const date = new Date(value);
+  const date = (typeof value === "string" && calendarDayStart(value)) || new Date(value);
   if (Number.isNaN(date.getTime())) throw badRequest(`"${field}" needs a valid date`);
   return date;
 }

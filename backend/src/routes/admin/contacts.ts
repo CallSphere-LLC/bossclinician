@@ -642,11 +642,26 @@ adminContactsRouter.post(
 adminContactsRouter.post(
   "/bulk/offer",
   requireManage,
+  // Handing out an offer is an offers change, whichever screen it starts from.
+  // The single grant (`POST /admin/offers/:id/grant`) needs `offers.manage`, and
+  // without the same gate here a marketing login — which holds contacts.manage
+  // but not offers.manage — could give any course away free from the People list.
+  requirePermission("offers.manage"),
   asyncHandler(async (req, res) => {
     const parsed = bulkTargetsSchema.extend({ offerId: z.coerce.number().int().positive() }).safeParse(req.body);
     if (!parsed.success) throw badRequest("Invalid payload", parsed.error.flatten());
-    const exists = await pool.query(`SELECT 1 FROM offers WHERE id = $1`, [parsed.data.offerId]);
+    const exists = await pool.query<{ title: string; products: number }>(
+      `SELECT o.title, (SELECT COUNT(*)::int FROM offer_products op WHERE op.offer_id = o.id) AS products
+         FROM offers o WHERE o.id = $1`,
+      [parsed.data.offerId],
+    );
     if (exists.rowCount === 0) throw notFound("Offer not found");
+    // The same refusal the single grant gives. Without it every chosen person got
+    // an account made and an "Offer access granted" line on their timeline for an
+    // offer that gave them nothing.
+    if ((exists.rows[0]?.products ?? 0) === 0) {
+      throw badRequest(`"${exists.rows[0].title}" does not include any products yet, so there is nothing to give.`);
+    }
 
     let granted = 0;
     for (const contactId of new Set(parsed.data.contactIds)) {
@@ -668,7 +683,8 @@ adminContactsRouter.post(
         offerId: parsed.data.offerId,
         source: "manual",
       });
-      if (products.length > 0) granted += 1;
+      if (products.length === 0) continue;
+      granted += 1;
       await recordActivity({
         contactId,
         kind: "offer_granted",
@@ -743,8 +759,31 @@ adminContactsRouter.post(
   }),
 );
 
-/** The tables whose `contact_id` has to follow the survivor of a merge. */
-const MERGEABLE_TABLES = ["leads", "subscribers", "members", "orders", "email_messages"] as const;
+/**
+ * The tables whose `contact_id` has to follow the survivor of a merge.
+ *
+ * Every `ON DELETE SET NULL` reference to contacts belongs here. One left out is
+ * not an error — deleting the duplicate quietly nulls the link — so its form
+ * replies, coaching sessions and uploaded files stop showing on the survivor's
+ * card and drop out of their data export. The two tables with a unique key on
+ * `contact_id` (sequence_subscriptions, contact_email_preferences) are handled
+ * separately below.
+ */
+export const MERGEABLE_TABLES = [
+  "leads",
+  "subscribers",
+  "members",
+  "orders",
+  "email_messages",
+  "email_sends",
+  "automation_runs",
+  "form_submissions",
+  "assessment_attempts",
+  "event_registrations",
+  "coaching_sessions",
+  "media_assets",
+  "affiliates",
+] as const;
 
 const mergeSchema = z.object({
   /** The row that survives. Its details win wherever both have one. */
@@ -1165,11 +1204,19 @@ adminContactsRouter.put(
               timezone   = COALESCE(NULLIF($6::text, ''), c.timezone),
               notes      = COALESCE($7::text, c.notes),
               email_marketing_status = COALESCE($8::text, c.email_marketing_status),
+              -- Who opted them out. Insights' "Unsubscribed by you" and the
+              -- optOut=manual filter read 'admin' here; left alone, somebody
+              -- taken off the list from their card was counted as having opted
+              -- out themselves. Only an opt-out is stamped: writing 'admin' on a
+              -- re-subscribe would count their own later unsubscribe as ours.
+              consent_source = CASE
+                WHEN $8::text = 'opted_out' AND c.email_marketing_status <> 'opted_out' THEN 'admin'
+                ELSE c.consent_source END,
               -- Stamped whenever the answer changes, because "when did they opt
               -- out" is the question a complaint is answered with.
               opted_out_at = CASE
-                WHEN $8::text IS NOT NULL AND $8::text <> 'subscribed'
-                     AND c.email_marketing_status = 'subscribed' THEN now()
+                WHEN $8::text IS NOT NULL AND $8::text NOT IN ('subscribed', 'unconfirmed')
+                     AND c.email_marketing_status IN ('subscribed', 'unconfirmed') THEN now()
                 ELSE c.opted_out_at END,
               opted_in_at = CASE
                 WHEN $8::text = 'subscribed' AND c.email_marketing_status <> 'subscribed'

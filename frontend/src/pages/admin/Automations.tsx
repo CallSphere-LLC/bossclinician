@@ -40,7 +40,7 @@ import {
   type BadgeProps,
 } from "@/pages/admin/ui/primitives";
 import { Modal, useConfirm } from "@/pages/admin/ui/Dialog";
-import { friendlyError, humanizeKey, pluralize } from "@/pages/admin/ui/friendly";
+import { friendlyError, humanizeKey, pluralize, statusOf } from "@/pages/admin/ui/friendly";
 
 /**
  * Everything on this screen is a translation of one of three stored strings —
@@ -225,6 +225,7 @@ const SKIP_REASONS: Record<string, string> = {
   "no email in payload": "there was no email address to send to",
   "no email": "there was no email address",
   "NOTIFY_EMAIL not set": "your own notification address isn't set up yet",
+  "no notification address set": "your own notification address isn't set up yet",
   "no courseId": "no course was chosen",
   "no communityId": "no community was chosen",
   "missing communityId/points": "the community or the points were missing",
@@ -247,11 +248,21 @@ export default function Automations() {
   const [confirm, confirmDialog] = useConfirm();
   const subjectRef = useRef<HTMLInputElement>(null);
   const messageRef = useRef<HTMLTextAreaElement>(null);
+  // Which automation the detail panel is showing, for answers that arrive late.
+  const activeIdRef = useRef<number | null>(null);
+  activeIdRef.current = active?.id ?? null;
 
   const load = useCallback(() => {
     adminApi
       .growthList<Automation>("automations")
-      .then((list) => {
+      .then((rows) => {
+        // The table is shared with the new builder, whose automations store
+        // their conditions as `{ match, rules: [...] }`. This screen reads
+        // conditions as a flat map, so opening one of those here and pressing
+        // Save wrote `rules: "[object Object]"`, which the new engine cannot
+        // read — and it then skipped every real trigger. Only the automations
+        // this screen can actually represent are listed on it.
+        const list = rows.filter((row) => TRIGGERS.some((t) => t.value === row.triggerType));
         setAutomations(list);
         setActive((prev) => (prev ? list.find((a) => a.id === prev.id) ?? list[0] : list[0]) ?? null);
       })
@@ -268,10 +279,22 @@ export default function Automations() {
   }, []);
 
   const loadDetail = useCallback((id: number) => {
+    // Dropped if she has moved to another automation meanwhile (a quick second
+    // click, or the delayed reload after a test). Landing anyway put one
+    // automation's steps under another's name, and editing one of them then
+    // saved it with the open automation's id — moving the step across.
+    const stillOpen = () => activeIdRef.current === id;
+    if (!stillOpen()) return;
     setActions(null);
     setRuns(null);
-    adminApi.automationActions(id).then(setActions).catch(() => setActions([]));
-    adminApi.automationRuns(id).then(setRuns).catch(() => setRuns([]));
+    adminApi
+      .automationActions(id)
+      .then((rows) => stillOpen() && setActions(rows))
+      .catch(() => stillOpen() && setActions([]));
+    adminApi
+      .automationRuns(id)
+      .then((rows) => stillOpen() && setRuns(rows))
+      .catch(() => stillOpen() && setRuns([]));
   }, []);
 
   useEffect(() => {
@@ -328,8 +351,17 @@ export default function Automations() {
   async function saveAction(e: FormEvent) {
     e.preventDefault();
     if (!actionDraft?.actionType || !active) return;
+    // The boxes for points and the sign-up label show a starting value that
+    // was never written into the draft unless she typed over it. The engine
+    // skips "award points" with no points and labels the sign-up "automation",
+    // so what she saw on screen is what gets saved.
+    const needs = ACTIONS.find((a) => a.value === actionDraft.actionType)?.needs ?? [];
+    const config = { ...(actionDraft.config ?? {}) };
+    if (needs.includes("points") && config.points == null) config.points = 10;
+    if (needs.includes("source") && config.source == null) config.source = "Added automatically";
     const payload = {
       ...actionDraft,
+      config,
       automationId: active.id,
       sort: actionDraft.sort ?? (actions?.length ?? 0),
     };
@@ -364,9 +396,14 @@ export default function Automations() {
       await adminApi.automationTest(active.id, { email: testEmail.trim(), name: "Test Person" });
       toast.success("Test sent — checking what happened.");
       window.setTimeout(() => loadDetail(active.id), 1500);
-    } catch {
-      // Never the server's own words: a failed test is ours to explain.
-      toast.error("We couldn't run that test. Please try again.");
+    } catch (err) {
+      // A 400 carries the server's reason the test was refused (paused, or the
+      // trigger is shared with other automations); anything else is ours to explain.
+      toast.error(
+        statusOf(err) === 400 && err instanceof Error && err.message
+          ? err.message
+          : "We couldn't run that test. Please try again.",
+      );
     } finally {
       setTesting(false);
     }
@@ -424,6 +461,12 @@ export default function Automations() {
       const reason = SKIP_REASONS[detail.match(/\(([^)]*)\)/)?.[1] ?? ""];
       return reason ? `${label} — skipped because ${reason}.` : `${label} — skipped.`;
     }
+
+    // A suppressed address: the engine writes "not sent to <address> — <why>".
+    // Without this it fell through to "done", reporting an email that never
+    // went as sent.
+    const notSent = detail.match(/^not sent to (\S+)/);
+    if (notSent) return `${label} — not sent to ${notSent[1]}; that address can't be emailed.`;
 
     const sentTo = detail.match(/^sent to (.+)$/);
     if (sentTo) {

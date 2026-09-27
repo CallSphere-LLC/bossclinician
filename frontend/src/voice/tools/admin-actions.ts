@@ -53,7 +53,7 @@ export type AdminAction = {
  */
 class NeedsDetail extends Error {}
 
-type BlogPost = { id: number; title: string; slug: string; published: boolean };
+type BlogPost = { id: number; title: string; slug: string; published: boolean; publishedAt?: string | null };
 type Lead = { id: number; name: string; email: string; status: string };
 type Contact = { id: number; name: string; email: string };
 
@@ -69,6 +69,21 @@ function number(params: AdminActionParams, key: string): number | null {
   return null;
 }
 
+/**
+ * The one record a loose description means, or a question back to her.
+ *
+ * A partial match that fits two records is not an answer: "burnout" against
+ * "Burnout recovery" and "Beating burnout" used to pick whichever came first,
+ * after she had approved a card that named neither.
+ */
+function onlyMatch<T>(matches: T[], said: string, name: (item: T) => string): T | undefined {
+  if (matches.length > 1) {
+    const names = matches.slice(0, 5).map((item) => `"${name(item)}"`).join(", ");
+    throw new NeedsDetail(`More than one matches "${said}": ${names}. Ask which one she means.`);
+  }
+  return matches[0];
+}
+
 /** Find the post the owner means, by id when the agent has one and by title
  * otherwise — she says "the burnout article", never a row number. */
 async function findPost(call: VoiceApiClient, params: AdminActionParams): Promise<BlogPost> {
@@ -80,11 +95,12 @@ async function findPost(call: VoiceApiClient, params: AdminActionParams): Promis
   }
   const title = text(params, "title").toLowerCase();
   if (!title) throw new NeedsDetail("Which post? Ask her for its title.");
+  const said = text(params, "title");
   const match =
     posts.find((post) => post.title.toLowerCase() === title) ??
-    posts.find((post) => post.title.toLowerCase().includes(title)) ??
-    posts.find((post) => post.slug.toLowerCase().includes(title));
-  if (!match) throw new NeedsDetail(`There is no post called "${text(params, "title")}". Ask her which one she means.`);
+    onlyMatch(posts.filter((post) => post.title.toLowerCase().includes(title)), said, (p) => p.title) ??
+    onlyMatch(posts.filter((post) => post.slug.toLowerCase().includes(title)), said, (p) => p.title);
+  if (!match) throw new NeedsDetail(`There is no post called "${said}". Ask her which one she means.`);
   return match;
 }
 
@@ -97,16 +113,35 @@ async function findLead(call: VoiceApiClient, params: AdminActionParams): Promis
   }
   const person = text(params, "person").toLowerCase();
   if (!person) throw new NeedsDetail("Which enquiry? Ask her whose it is.");
+  const said = text(params, "person");
+  // Two people can share a name; the address is what tells them apart.
+  const label = (lead: Lead) => (lead.name && lead.email ? `${lead.name} (${lead.email})` : lead.name || lead.email);
+  // One address can have written in more than once; the newest comes first and
+  // stands for that person, so a repeat enquiry is not "more than one match".
+  const seen = new Set<string>();
+  const people = leads.filter((lead) => {
+    const email = (lead.email ?? "").toLowerCase();
+    if (!email) return true;
+    if (seen.has(email)) return false;
+    seen.add(email);
+    return true;
+  });
   const match =
     leads.find((lead) => (lead.email ?? "").toLowerCase() === person) ??
-    leads.find((lead) => (lead.name ?? "").toLowerCase().includes(person));
-  if (!match) throw new NeedsDetail(`No enquiry from "${text(params, "person")}" is on the list. Ask her to say the name again.`);
+    onlyMatch(people.filter((lead) => (lead.name ?? "").toLowerCase() === person), said, label) ??
+    onlyMatch(people.filter((lead) => (lead.name ?? "").toLowerCase().includes(person)), said, label);
+  if (!match) throw new NeedsDetail(`No enquiry from "${said}" is on the list. Ask her to say the name again.`);
   return match;
 }
 
 async function findContact(call: VoiceApiClient, params: AdminActionParams): Promise<Contact> {
   const id = number(params, "contactId");
-  if (id !== null) return { id, name: text(params, "person") || `contact ${id}`, email: "" };
+  if (id !== null) {
+    // Read back rather than trusted: the card names the person the note lands
+    // on, so the name has to be that record's, not whatever the model said.
+    const contact = await call.get<Contact>(`/admin/contacts/${id}`);
+    return { id: contact.id, name: contact.name ?? "", email: contact.email ?? "" };
+  }
   const person = text(params, "person");
   if (!person) throw new NeedsDetail("Which person? Ask her for a name or an email address.");
   const found = await call.get<{ items: Contact[] }>(
@@ -115,6 +150,10 @@ async function findContact(call: VoiceApiClient, params: AdminActionParams): Pro
   const first = found.items[0];
   if (!first) throw new NeedsDetail(`Nobody called "${person}" is in her contacts. Ask her to spell it.`);
   if (found.items.length > 1) {
+    // An exact email address is unambiguous even when the search also finds
+    // people whose names merely contain it.
+    const exact = found.items.filter((item) => (item.email ?? "").toLowerCase() === person.toLowerCase());
+    if (exact.length === 1) return exact[0];
     const names = found.items.map((item) => `${item.name || item.email}`).join(", ");
     throw new NeedsDetail(`More than one person matches "${person}": ${names}. Ask which one she means.`);
   }
@@ -124,10 +163,38 @@ async function findContact(call: VoiceApiClient, params: AdminActionParams): Pro
 /** The enquiry states her screen offers, in her order. */
 const LEAD_STATUSES = ["new", "contacted", "qualified", "closed", "archived"] as const;
 
+/**
+ * Resolved before the card is shown, not after she answers it.
+ *
+ * The card used to repeat whatever the model had heard — "burnout", "Ann" —
+ * and the record was looked up only once she had said yes, so a yes to "Ann"
+ * could file Joanne's enquiry. Pinning the id here means the card names the
+ * exact record and `run` acts on that id and nothing else.
+ */
+async function preparePost(params: AdminActionParams, call: VoiceApiClient): Promise<AdminActionParams> {
+  const post = await findPost(call, params);
+  return { ...params, postId: post.id, title: post.title };
+}
+
+/** `run` acts only on the record the card named; one that has gone is not swapped for a look-alike. */
+function assertPinned(found: { id: number }, params: AdminActionParams, key: string): void {
+  const pinned = number(params, key);
+  if (pinned !== null && found.id !== pinned) {
+    throw new Error("The record she approved is no longer there, so nothing was changed.");
+  }
+}
+
+function assertLeadStatus(status: string): void {
+  if (!LEAD_STATUSES.includes(status as (typeof LEAD_STATUSES)[number])) {
+    throw new NeedsDetail(`"${status}" is not one of the states an enquiry can be in. They are: ${LEAD_STATUSES.join(", ")}.`);
+  }
+}
+
 export const ADMIN_ACTIONS: readonly AdminAction[] = [
   {
     actionId: "blog.publish",
     title: "Publish a blog post",
+    prepare: preparePost,
     risk: "normal",
     properties: {
       title: { type: "string", description: "The post's title, or enough of it to recognise." },
@@ -142,10 +209,13 @@ export const ADMIN_ACTIONS: readonly AdminAction[] = [
     }),
     run: async (params, call) => {
       const post = await findPost(call, params);
+      assertPinned(post, params, "postId");
       if (post.published) return `"${post.title}" was already live on the site — nothing needed doing.`;
+      // A post going back up keeps the date it first went out, as the editor
+      // does; only a first publish is stamped now.
       await call.put(`/admin/blog/${post.id}`, {
         published: true,
-        publishedAt: new Date().toISOString(),
+        publishedAt: post.publishedAt || new Date().toISOString(),
       });
       return `"${post.title}" is live on the site now, at /blog/${post.slug}.`;
     },
@@ -155,6 +225,7 @@ export const ADMIN_ACTIONS: readonly AdminAction[] = [
     title: "Take a blog post off the website",
     // Destructive: the page is live, it may be linked from an email that went
     // out this morning, and taking it down is visible to everyone at once.
+    prepare: preparePost,
     risk: "destructive",
     properties: {
       title: { type: "string", description: "The post's title, or enough of it to recognise." },
@@ -169,6 +240,7 @@ export const ADMIN_ACTIONS: readonly AdminAction[] = [
     }),
     run: async (params, call) => {
       const post = await findPost(call, params);
+      assertPinned(post, params, "postId");
       if (!post.published) return `"${post.title}" was already a draft — nothing needed doing.`;
       await call.put(`/admin/blog/${post.id}`, { published: false });
       return `"${post.title}" is back to a draft and no longer on the website.`;
@@ -178,6 +250,11 @@ export const ADMIN_ACTIONS: readonly AdminAction[] = [
     actionId: "lead.status",
     title: "Move an enquiry along",
     risk: "normal",
+    prepare: async (params, call) => {
+      assertLeadStatus(text(params, "status"));
+      const lead = await findLead(call, params);
+      return { ...params, leadId: lead.id, person: lead.name || lead.email };
+    },
     properties: {
       person: { type: "string", description: "The name or email on the enquiry." },
       leadId: { type: "integer", description: "The enquiry's id, when you already know it." },
@@ -196,10 +273,9 @@ export const ADMIN_ACTIONS: readonly AdminAction[] = [
     }),
     run: async (params, call) => {
       const status = text(params, "status");
-      if (!LEAD_STATUSES.includes(status as (typeof LEAD_STATUSES)[number])) {
-        throw new NeedsDetail(`"${status}" is not one of the states an enquiry can be in. They are: ${LEAD_STATUSES.join(", ")}.`);
-      }
+      assertLeadStatus(status);
       const lead = await findLead(call, params);
+      assertPinned(lead, params, "leadId");
       await call.put(`/admin/leads/${lead.id}`, { status });
       return `${lead.name || lead.email}'s enquiry is filed under "${status}" now.`;
     },
@@ -208,6 +284,11 @@ export const ADMIN_ACTIONS: readonly AdminAction[] = [
     actionId: "contact.note",
     title: "Add a note to someone's record",
     risk: "normal",
+    prepare: async (params, call) => {
+      if (!text(params, "note")) throw new NeedsDetail("There is nothing to write down yet — ask her what the note should say.");
+      const contact = await findContact(call, params);
+      return { ...params, contactId: contact.id, person: contact.name || contact.email || `contact ${contact.id}` };
+    },
     properties: {
       person: { type: "string", description: "The name or email of the person." },
       contactId: { type: "integer", description: "Their contact id, when you already know it." },

@@ -77,6 +77,10 @@ export default function Dashboard() {
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<string>("gross");
   const [refreshing, setRefreshing] = useState(false);
+  // Set once all three requests have answered. Without it a figure this account
+  // may not read (Marketing holds reports but not payments; Support the
+  // reverse) stayed a pulsing skeleton for ever instead of simply not showing.
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -93,6 +97,7 @@ export default function Dashboard() {
         if (f) setFigures(f);
         if (o) setOverview(o);
         if (r) setRevenue(r);
+        setLoaded(true);
         // Only nothing at all is worth an error: the rest of the screen still
         // has something true to show.
         if (!f && !o && !r) {
@@ -118,6 +123,10 @@ export default function Dashboard() {
 
   const tiles = figures?.tiles ?? [];
   const active = tiles.find((t) => t.key === selected) ?? tiles[0];
+  // Answered, and not with anything: the section is left out, not left loading.
+  const noFigures = loaded && figures === null;
+  const noOverview = loaded && overview === null;
+  const noRevenue = loaded && revenue === null;
 
   /** The selected tile's own daily series, ready for the big chart. */
   const chartData = useMemo(
@@ -236,6 +245,7 @@ export default function Dashboard() {
       )}
 
       {/* The daily numbers */}
+      {!noFigures && (
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {tiles.length === 0
           ? Array.from({ length: 5 }, (_, i) => <Skeleton key={i} className="h-36 w-full" />)
@@ -359,9 +369,12 @@ export default function Dashboard() {
           </Card>
         )}
       </div>
+      )}
 
       {/* The chart for whichever number she picked */}
+      {!(noFigures && noRevenue) && (
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_19rem]">
+        {!noFigures && (
         <Card className="overflow-hidden">
           <div className="flex flex-wrap items-center gap-2 border-b border-hairline/60 px-5 py-3.5">
             <Badge tone="plum">Last {figures?.range.days ?? 30} days</Badge>
@@ -420,8 +433,10 @@ export default function Dashboard() {
             )}
           </div>
         </Card>
+        )}
 
         {/* Income rail */}
+        {!noRevenue && (
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-1">
           <Card className="relative overflow-hidden bg-surface-raised p-5 text-ink">
             <div className="pointer-events-none absolute -right-10 -top-12 size-36 rounded-full bg-gold/20 blur-2xl" />
@@ -489,9 +504,12 @@ export default function Dashboard() {
             </div>
           </Card>
         </div>
+        )}
       </div>
+      )}
 
       {/* Bento stat row */}
+      {!noOverview && (
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-4">
         <StatTile
           label="Enquiries"
@@ -549,8 +567,10 @@ export default function Dashboard() {
           color={CHART_COLORS.lilac}
         />
       </div>
+      )}
 
       {/* Bento content row */}
+      {!noOverview && (
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
         <Card className="xl:col-span-2">
           <CardHeader
@@ -637,6 +657,7 @@ export default function Dashboard() {
           </div>
         </Card>
       </div>
+      )}
 
       {/* Community + storage */}
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
@@ -678,7 +699,7 @@ export default function Dashboard() {
                   {formatBytes(overview.totals.storageBytes)} of space used
                 </p>
               </>
-            ) : (
+            ) : noOverview ? null : (
               <>
                 <Skeleton className="h-6 w-16" />
                 <Skeleton className="mt-2 h-3 w-28" />

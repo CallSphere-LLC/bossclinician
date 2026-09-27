@@ -350,10 +350,13 @@ function PartnersTab({ onError }: { onError: (message: string) => void }) {
 function PaymentsTab({ onError }: { onError: (message: string) => void }) {
   const [due, setDue] = useState<PayoutDue[] | null>(null);
   const [totalCents, setTotalCents] = useState(0);
+  // Null until the first answer, so a slow or failed load is never shown as
+  // "No payments yet" — that read as if nothing were waiting to be marked sent.
   const [history, setHistory] = useState<
-    { id: number; name: string; amountCents: number; status: string; paidAt: string | null }[]
-  >([]);
+    { id: number; name: string; amountCents: number; status: string; paidAt: string | null }[] | null
+  >(null);
   const [busy, setBusy] = useState<number | null>(null);
+  const [marking, setMarking] = useState<number | null>(null);
 
   const load = useCallback(() => {
     adminAffiliateApi
@@ -377,7 +380,7 @@ function PaymentsTab({ onError }: { onError: (message: string) => void }) {
           })),
         ),
       )
-      .catch(() => undefined);
+      .catch(() => onError("We couldn't load the payments you've made. Try refreshing the page."));
   }, [onError]);
 
   useEffect(load, [load]);
@@ -396,12 +399,18 @@ function PaymentsTab({ onError }: { onError: (message: string) => void }) {
   }
 
   async function markSent(id: number) {
+    // A second click while the first is in flight used to answer "not found",
+    // because the first had already moved the payout off pending.
+    if (marking !== null) return;
+    setMarking(id);
     try {
       await adminAffiliateApi.markPayoutPaid(id);
       toast.success("Marked as sent");
       load();
     } catch (err) {
       toast.error(friendlyError(err, "payment"));
+    } finally {
+      setMarking(null);
     }
   }
 
@@ -473,7 +482,13 @@ function PaymentsTab({ onError }: { onError: (message: string) => void }) {
 
       <Card>
         <CardHeader title="Payments you've made" />
-        {history.length === 0 ? (
+        {history === null ? (
+          <div className="space-y-3 p-5">
+            {Array.from({ length: 2 }, (_, i) => (
+              <Skeleton key={i} className="h-12 w-full" />
+            ))}
+          </div>
+        ) : history.length === 0 ? (
           <EmptyState
             icon={<Wallet />}
             title="No payments yet"
@@ -495,8 +510,13 @@ function PaymentsTab({ onError }: { onError: (message: string) => void }) {
                 {payout.status === "paid" ? (
                   <Badge tone="green">Sent</Badge>
                 ) : (
-                  <Button variant="secondary" size="sm" onClick={() => void markSent(payout.id)}>
-                    I've sent this
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={marking !== null}
+                    onClick={() => void markSent(payout.id)}
+                  >
+                    {marking === payout.id ? "Saving…" : "I've sent this"}
                   </Button>
                 )}
               </li>
@@ -943,10 +963,19 @@ function HowItWorksTab({ onError }: { onError: (message: string) => void }) {
   async function save(event: FormEvent) {
     event.preventDefault();
     if (!settings) return;
+    // Said here, as the partner page does: the server's answer to 150% is a
+    // bare "Invalid settings" with nothing on screen highlighted.
+    if (settings.commissionKind === "percent" && (Number(percentText) || 0) > 100) {
+      toast.error("A share can't be more than 100%.");
+      return;
+    }
     setSaving(true);
     try {
       const saved = await adminAffiliateApi.saveSettings({
         ...settings,
+        // An emptied box means the home page, which is what its "/" placeholder
+        // says; sent as "" it was refused as "not a page on this site".
+        landingPath: settings.landingPath.trim() || "/",
         commissionPercent: Number(percentText) || 0,
         commissionAmountCents: Math.round((Number(amountText) || 0) * 100),
       });

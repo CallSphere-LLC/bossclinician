@@ -221,17 +221,27 @@ export default function PagesAdmin() {
 
   useEffect(() => {
     if (!activeSlug) return;
+    // Clicking from one page to the next before the first has loaded must not
+    // let the slower answer land last: the list would highlight one page while
+    // the boxes held another's words, and Save would write to that other page.
+    let cancelled = false;
     setPage(null);
     adminApi
       .pageGet(activeSlug)
       .then((loaded) => {
+        if (cancelled) return;
         const sections = isPlainObject(loaded.sections) ? loaded.sections : {};
         setPage(loaded);
         setContent(sections);
         setBaseline(snapshot(loaded.title, loaded.description, sections));
         setError(null);
       })
-      .catch((err) => setError(friendlyError(err, "page")));
+      .catch((err) => {
+        if (!cancelled) setError(friendlyError(err, "page"));
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [activeSlug]);
 
   const [confirm, confirmDialog] = useConfirm();

@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useState, type FormEvent } from "react";
+import { Fragment, useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router";
 import { ArrowLeft, ChevronDown, ChevronLeft, ChevronRight, ScrollText } from "lucide-react";
 import { cn } from "@/lib/cn";
@@ -103,26 +103,31 @@ export default function AuditLog() {
       .catch(() => setFacets({ entityTypes: [], actors: [] }));
   }, []);
 
-  const load = useCallback((filters: FilterForm, pageNumber: number) => {
+  // Each fetch is cancelled by the next: two quick presses of Older used to let
+  // the slower first answer land last, showing one page's rows under another's
+  // number — and a filter applied mid-flight could be overwritten the same way.
+  useEffect(() => {
+    let cancelled = false;
     setRows(null);
     setOpen(null);
     auditLogApi
-      .list(toFilters(filters), pageNumber, PAGE_SIZE)
+      .list(toFilters(applied), page, PAGE_SIZE)
       .then((res) => {
+        if (cancelled) return;
         setRows(res.items);
         setTotal(res.total);
         setError(null);
       })
       .catch((err) => {
+        if (cancelled) return;
         setRows([]);
         setTotal(0);
         setError(friendlyError(err, "activity log"));
       });
-  }, []);
-
-  useEffect(() => {
-    load(applied, page);
-  }, [applied, page, load]);
+    return () => {
+      cancelled = true;
+    };
+  }, [applied, page]);
 
   function apply(e: FormEvent) {
     e.preventDefault();

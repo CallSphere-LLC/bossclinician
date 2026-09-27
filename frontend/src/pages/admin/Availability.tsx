@@ -26,6 +26,9 @@ import { wallClockToIso } from "@/lib/zonedDateTime";
 
 const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
+const NO_TIMEZONE_YET =
+  "Your coaching timezone hasn't loaded yet, so this can't be saved. Refresh the page and try again.";
+
 function minutesToClock(value: number): string {
   return `${String(Math.floor(value / 60)).padStart(2, "0")}:${String(value % 60).padStart(2, "0")}`;
 }
@@ -78,10 +81,17 @@ export default function Availability() {
       toast.error("The end time must be after the start time.");
       return;
     }
+    // The hours are saved in the coaching timezone, which arrives with the
+    // preview. Falling back to this browser's zone saved "9:00" three hours
+    // out for a coach on Eastern time using a Pacific laptop.
+    if (!preview) {
+      toast.error(NO_TIMEZONE_YET);
+      return;
+    }
     setBusy(true);
     try {
       await adminApi.availabilityRuleCreate({
-        timezone: preview?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
+        timezone: preview.timezone,
         weekday: ruleDraft.weekday,
         startMinute,
         endMinute,
@@ -99,7 +109,11 @@ export default function Availability() {
 
   async function addException(event: FormEvent) {
     event.preventDefault();
-    const timezone = preview?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (!preview) {
+      toast.error(NO_TIMEZONE_YET);
+      return;
+    }
+    const timezone = preview.timezone;
     const startsAt = wallClockToIso(exception.startsAt, timezone);
     const endsAt = wallClockToIso(exception.endsAt, timezone);
     if (!startsAt || !endsAt || Date.parse(endsAt) <= Date.parse(startsAt)) {

@@ -1,6 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate, useParams } from "react-router";
-import { toast } from "sonner";
 import { Button, Card, ErrorNotice, Field, Input, Skeleton } from "@/pages/admin/ui/primitives";
 import { friendlyError } from "@/pages/admin/ui/friendly";
 import { acceptInviteApi, type InvitePreview } from "@/lib/settingsApi";
@@ -21,6 +20,10 @@ export default function AcceptInvite() {
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
   const [saving, setSaving] = useState(false);
+  // Shown in the card rather than as a toast: this page sits outside the admin
+  // layout, which is where the only toaster is mounted, so a toast here — "that
+  // password is too easy to guess" — was never seen by anybody.
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     acceptInviteApi
@@ -32,12 +35,15 @@ export default function AcceptInvite() {
   async function submit(e: FormEvent) {
     e.preventDefault();
     setSaving(true);
+    setError(null);
     try {
       await acceptInviteApi.accept(token, { name, password });
-      toast.success("You're all set — sign in with your new password.");
-      navigate("/admin/login", { replace: true });
+      navigate("/admin/login", {
+        replace: true,
+        state: { notice: "You're all set — sign in with your new password." },
+      });
     } catch (err) {
-      toast.error(friendlyError(err, "invitation"));
+      setError(friendlyError(err, "invitation"));
     } finally {
       setSaving(false);
     }
@@ -90,6 +96,7 @@ export default function AcceptInvite() {
                   onChange={(e) => setPassword(e.target.value)}
                 />
               </Field>
+              {error && <ErrorNotice message={error} />}
               <Button type="submit" className="w-full" disabled={saving}>
                 {saving ? "Saving…" : "Save it and sign in"}
               </Button>

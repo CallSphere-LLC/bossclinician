@@ -81,6 +81,7 @@ export default function ContactDetail() {
   const [editing, setEditing] = useState(false);
   const [merging, setMerging] = useState(false);
   const [note, setNote] = useState("");
+  const [savingNote, setSavingNote] = useState(false);
   const [addingTag, setAddingTag] = useState("");
   const [tagBusy, setTagBusy] = useState<string | null>(null);
   const [confirmBusy, setConfirmBusy] = useState(false);
@@ -219,7 +220,9 @@ export default function ContactDetail() {
 
   async function saveNote(e: FormEvent) {
     e.preventDefault();
-    if (!person || !note.trim()) return;
+    // A second click while the first is in flight used to post the note twice.
+    if (!person || !note.trim() || savingNote) return;
+    setSavingNote(true);
     try {
       await contactsApi.addNote(person.id, note.trim());
       setNote("");
@@ -227,6 +230,8 @@ export default function ContactDetail() {
       load();
     } catch (err) {
       toast.error(friendlyError(err, "note"));
+    } finally {
+      setSavingNote(false);
     }
   }
 
@@ -445,8 +450,8 @@ export default function ContactDetail() {
                 placeholder="What you talked about, what you promised, anything you want to remember."
                 aria-label="Your note"
               />
-              <Button size="sm" type="submit" disabled={!note.trim()}>
-                Save this note
+              <Button size="sm" type="submit" disabled={!note.trim() || savingNote}>
+                {savingNote ? "Saving…" : "Save this note"}
               </Button>
             </form>
           </Card>

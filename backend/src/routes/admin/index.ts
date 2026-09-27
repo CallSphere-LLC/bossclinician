@@ -96,12 +96,21 @@ adminRouter.use((_req, res, next) => { res.setHeader("Cache-Control", "no-store"
  * `/stats`, `/dashboard` and `/subscribers` are left on the plain `view`
  * permission deliberately — they expose no route that is not a GET, so a gate
  * there would be a comment pretending to be a control.
+ *
+ * `readOnlyPosts` names the few POSTs that are reads in everything but verb —
+ * a download whose selection is too long for a query string. They keep the
+ * view permission, so exporting the ticked rows is allowed to exactly the
+ * people who can already export the whole filtered list over GET.
  */
-function moduleGate(module: Module) {
+export function moduleGate(module: Module, readOnlyPosts: readonly string[] = []) {
   const view = requirePermission(`${module}.view`);
   const manage = requirePermission(`${module}.manage`);
   return (req: Request, res: Response, next: NextFunction): void => {
-    (req.method === "GET" || req.method === "HEAD" ? view : manage)(req, res, next);
+    const isRead =
+      req.method === "GET" ||
+      req.method === "HEAD" ||
+      (req.method === "POST" && readOnlyPosts.includes(req.path));
+    (isRead ? view : manage)(req, res, next);
   };
 }
 
@@ -161,7 +170,7 @@ adminRouter.use("/chats", requireAuth, moduleGate("contacts"), adminChatsRouter)
 adminRouter.use("/products", requireAuth, moduleGate("products"), adminProductsRouter);
 adminRouter.use("/offers", requireAuth, moduleGate("offers"), adminOffersRouter);
 adminRouter.use("/redirects", requireAuth, moduleGate("website"), adminRedirectsRouter);
-adminRouter.use("/contacts", requireAuth, moduleGate("contacts"), adminContactsRouter);
+adminRouter.use("/contacts", requireAuth, moduleGate("contacts", ["/bulk/export.csv"]), adminContactsRouter);
 adminRouter.use("/tags", requireAuth, moduleGate("contacts"), adminTagsRouter);
 adminRouter.use("/segments", requireAuth, moduleGate("contacts"), adminSegmentsRouter);
 adminRouter.use("/sequences", requireAuth, moduleGate("marketing"), adminSequencesRouter);

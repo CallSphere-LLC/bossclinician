@@ -85,6 +85,7 @@ export interface FormSummary {
   slug: string;
   name: string;
   description: string;
+  descriptionMd: string;
   published: boolean;
   views: number;
   submitCount: number;

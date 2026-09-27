@@ -17,6 +17,7 @@ import {
   MAILABLE_CONTACT_SERIES_SQL,
 } from "../../services/audience";
 import { fireTriggerAsync, type TriggerType } from "../../automations/engine";
+import { isTriggerV2 } from "../../automations/engineV2";
 import { dispatchEvent } from "../../services/webhooksOut";
 import { env } from "../../config/env";
 import {
@@ -875,12 +876,43 @@ adminGrowthRouter.get(
   }),
 );
 
+/**
+ * Why a legacy test-fire cannot run just this one automation, or null.
+ *
+ * The original engine has no single-automation runner: `fireTrigger` runs every
+ * active automation on the trigger, for real. So a test is only honest when
+ * this automation is the one that trigger would run — a paused one ran nothing
+ * yet answered "Test fired", and one sharing its trigger sent the other
+ * automations' emails to the test address too.
+ */
+export function legacyTestRefusal(automation: {
+  triggerType: string;
+  status: string;
+  othersOnTrigger: number;
+}): string | null {
+  if (isTriggerV2(automation.triggerType)) {
+    return "This automation belongs to the automation builder — test it from there.";
+  }
+  if (automation.status !== "active") {
+    return "This automation is paused, so a test would run nothing. Turn it on to test it.";
+  }
+  if (automation.othersOnTrigger > 0) {
+    const n = automation.othersOnTrigger;
+    return `A test would also run ${n} other active automation${n === 1 ? "" : "s"} on the same trigger. Pause ${n === 1 ? "it" : "them"} to test this one alone.`;
+  }
+  return null;
+}
+
 /** Fires the automation against a sample payload so it can be proven safe. */
 adminGrowthRouter.post(
   "/automations/:id/test",
   asyncHandler(async (req, res) => {
-    const automation = await pool.query(
-      "SELECT trigger_type FROM automations WHERE id = $1",
+    const automation = await pool.query<{ trigger_type: string; status: string; others: number }>(
+      `SELECT a.trigger_type, a.status,
+              (SELECT COUNT(*)::int FROM automations o
+                WHERE o.trigger_type = a.trigger_type AND o.status = 'active' AND o.id <> a.id)
+                AS others
+         FROM automations a WHERE a.id = $1`,
       [req.params.id],
     );
     if (automation.rowCount === 0) throw notFound("Automation not found");
@@ -888,8 +920,67 @@ adminGrowthRouter.post(
     const payload = (req.body ?? {}) as Record<string, unknown>;
     if (!payload.email) throw badRequest("Provide an email to test with");
 
-    fireTriggerAsync(automation.rows[0].trigger_type as TriggerType, payload);
+    const row = automation.rows[0];
+    const refusal = legacyTestRefusal({
+      triggerType: row.trigger_type,
+      status: row.status,
+      othersOnTrigger: row.others,
+    });
+    if (refusal) throw badRequest(refusal);
+
+    fireTriggerAsync(row.trigger_type as TriggerType, payload);
     res.status(202).json({ ok: true, note: "Test fired — check the run log in a moment." });
+  }),
+);
+
+/**
+ * Why a legacy CRUD write would switch on a builder automation, or null.
+ *
+ * The table is shared with the automation builder, whose POST/PATCH refuse to
+ * turn one on until every step is finished. This permissive CRUD had no such
+ * check, so `status: "active"` here — or a create, where the column defaults to
+ * active — put an unfinished builder automation live. The older screen only
+ * lists its own triggers, so none of its saves come near this.
+ */
+export function legacyActivationRefusal(
+  body: Record<string, unknown>,
+  current: { trigger_type: string; status: string } | null,
+): string | null {
+  const triggerType = String(body.triggerType ?? current?.trigger_type ?? "");
+  const status = String(body.status ?? current?.status ?? "active");
+  if (!isTriggerV2(triggerType) || status !== "active") return null;
+  // Already live and left that way — the builder does not pause it either.
+  if (current && isTriggerV2(current.trigger_type) && current.status === "active") return null;
+  return "Turn this automation on from the automation builder, which checks every step is finished first.";
+}
+
+adminGrowthRouter.post(
+  "/automations",
+  asyncHandler(async (req, _res, next) => {
+    const refusal = legacyActivationRefusal((req.body ?? {}) as Record<string, unknown>, null);
+    if (refusal) throw badRequest(refusal);
+    next();
+  }),
+);
+
+adminGrowthRouter.put(
+  "/automations/:id",
+  asyncHandler(async (req, _res, next) => {
+    // A bad id or a missing row falls through to the CRUD router's own 400/404.
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return next();
+    const current = await pool.query<{ trigger_type: string; status: string }>(
+      "SELECT trigger_type, status FROM automations WHERE id = $1",
+      [id],
+    );
+    if (current.rowCount) {
+      const refusal = legacyActivationRefusal(
+        (req.body ?? {}) as Record<string, unknown>,
+        current.rows[0],
+      );
+      if (refusal) throw badRequest(refusal);
+    }
+    next();
   }),
 );
 
@@ -925,18 +1016,39 @@ adminGrowthRouter.use("/saved-reports", buildAdminCrudRouter(savedReportsRepo, a
 adminGrowthRouter.get(
   "/reports/subscriptions",
   asyncHandler(async (_req, res) => {
+    // The billing cadence is normalised the way the reports rollup's
+    // `monthlyCents` does. A legacy plan subscription is written without its
+    // own interval (the column keeps its 'month' default), so the plan's is
+    // used where there is a plan; an offer subscription has none and carries
+    // Stripe's `interval` × `interval_count` itself. This used to select
+    // `s.*, p.interval` into one CTE — two columns called `interval`, so the
+    // outer reference was ambiguous and the whole Reports screen failed to
+    // load — and it read only the plan's interval, which is NULL for every
+    // offer subscription, so a yearly offer was booked as a year's revenue in
+    // every month.
     const result = await pool.query(
       `WITH active AS (
-         SELECT s.*, p.interval FROM subscriptions s
-         LEFT JOIN plans p ON p.id = s.plan_id
-         WHERE s.status IN ('active','trialing')
+         SELECT ROUND(s.amount_cents::numeric / (CASE COALESCE(p."interval", s."interval")
+                    WHEN 'day'  THEN 1.0 / 30
+                    WHEN 'week' THEN 7.0 / 30
+                    WHEN 'year' THEN 12
+                    ELSE 1
+                  END * CASE WHEN p.id IS NULL THEN GREATEST(s.interval_count, 1) ELSE 1 END))
+                  AS monthly_cents
+           FROM subscriptions s
+           LEFT JOIN plans p ON p.id = s.plan_id
+          WHERE s.status IN ('active','trialing')
        )
        SELECT
          (SELECT COUNT(*)::int FROM active)                                    AS active_count,
-         (SELECT COALESCE(SUM(CASE WHEN interval = 'year' THEN amount_cents/12
-                                   ELSE amount_cents END), 0)::int FROM active) AS mrr_cents,
+         (SELECT COALESCE(SUM(monthly_cents), 0)::int FROM active)             AS mrr_cents,
+         -- When it ended, not when the row last changed: any later webhook
+         -- touching a long-cancelled subscription used to count it as churn
+         -- again. ended_at comes first because Stripe's canceled_at is when a
+         -- cancel-at-period-end was asked for, which can be weeks earlier.
          (SELECT COUNT(*)::int FROM subscriptions
-           WHERE status = 'canceled' AND updated_at >= CURRENT_DATE - INTERVAL '30 days')
+           WHERE status = 'canceled'
+             AND COALESCE(ended_at, canceled_at, updated_at) >= CURRENT_DATE - INTERVAL '30 days')
                                                                                 AS churned_30d,
          (SELECT COUNT(*)::int FROM subscriptions
            WHERE created_at >= CURRENT_DATE - INTERVAL '30 days')               AS new_30d,

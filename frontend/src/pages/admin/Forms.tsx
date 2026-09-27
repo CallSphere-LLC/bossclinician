@@ -121,8 +121,21 @@ export default function Forms() {
 
   useEffect(() => {
     if (!active) return;
+    // Ignored once another form is picked: a slower answer for the previous
+    // form otherwise filled this one's reply list and counts.
+    let current = true;
     setSubmissions(null);
-    adminApi.formSubmissions(active.id).then(setSubmissions).catch(() => setSubmissions([]));
+    adminApi
+      .formSubmissions(active.id)
+      .then((rows) => {
+        if (current) setSubmissions(rows);
+      })
+      .catch(() => {
+        if (current) setSubmissions([]);
+      });
+    return () => {
+      current = false;
+    };
   }, [active]);
 
   async function save(e: FormEvent) {
@@ -143,7 +156,9 @@ export default function Forms() {
       const options = field.options?.map((o) => o.trim()).filter(Boolean);
       const named = options ? { ...field, options } : field;
       if (named.key) return named;
-      const key = uniqueKey(fieldKey(named.label), takenKeys);
+      // Kept to 56 so the "_2" suffix still fits the 60 characters the form
+      // builder accepts — a longer key is one it can never save the form with.
+      const key = uniqueKey(fieldKey(named.label).slice(0, 56).replace(/_+$/, "") || "field", takenKeys);
       takenKeys.add(key);
       return { ...named, key };
     });

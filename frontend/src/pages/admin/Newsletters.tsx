@@ -271,6 +271,8 @@ export default function Newsletters() {
   const [nlDraft, setNlDraft] = useState<Partial<Newsletter> | null>(null);
   useNewProductRequest(() => setNlDraft({ access: "free", published: true }));
   const [editionDraft, setEditionDraft] = useState<Partial<NewsletterIssue> | null>(null);
+  /** A save in flight — a second press used to create a second newsletter or edition. */
+  const [saving, setSaving] = useState(false);
   const [confirm, confirmDialog] = useConfirm();
 
   const load = useCallback(() => {
@@ -290,9 +292,17 @@ export default function Newsletters() {
     adminApi.plans().then(setPlans).catch(() => undefined);
   }, []);
 
+  // Only the newest request may fill the list. Clicking one newsletter and then
+  // another quickly let the first answer land last, so the second newsletter
+  // showed — and offered to send and delete — the first one's editions.
+  const editionsRequest = useRef(0);
   const loadEditions = useCallback((id: number) => {
+    const request = ++editionsRequest.current;
     setEditions(null);
-    adminApi.newsletterIssues(id).then(setEditions).catch(() => setEditions([]));
+    adminApi
+      .newsletterIssues(id)
+      .then((rows) => request === editionsRequest.current && setEditions(rows))
+      .catch(() => request === editionsRequest.current && setEditions([]));
   }, []);
 
   useEffect(() => {
@@ -301,7 +311,13 @@ export default function Newsletters() {
 
   async function saveNewsletter(e: FormEvent) {
     e.preventDefault();
-    if (!nlDraft?.name?.trim()) return;
+    if (!nlDraft || saving) return;
+    // `required` lets a name of only spaces through, and this used to return
+    // on it without a word.
+    if (!nlDraft.name?.trim()) {
+      toast.error("Give the newsletter a name.");
+      return;
+    }
     // "Paying members only" with no plan behind it does not restrict anything:
     // the send falls back to every subscriber on the list, while the send
     // warning promises it only reaches the people paying.
@@ -321,6 +337,7 @@ export default function Newsletters() {
       slug:
         nlDraft.slug || uniqueKey(slugify(nlDraft.name) || "newsletter", takenAddresses, "-"),
     };
+    setSaving(true);
     try {
       if (nlDraft.id) await adminApi.growthUpdate("newsletters", nlDraft.id, payload);
       else await adminApi.growthCreate("newsletters", payload);
@@ -329,12 +346,19 @@ export default function Newsletters() {
       load();
     } catch (err) {
       toast.error(friendlyError(err, "newsletter"));
+    } finally {
+      setSaving(false);
     }
   }
 
   async function saveEdition(e: FormEvent) {
     e.preventDefault();
-    if (!editionDraft?.subject?.trim() || !active) return;
+    if (!editionDraft || !active || saving) return;
+    if (!editionDraft.subject?.trim()) {
+      toast.error("Give this edition a subject line.");
+      return;
+    }
+    setSaving(true);
     try {
       if (editionDraft.id) await adminApi.growthUpdate("issues", editionDraft.id, editionDraft);
       else await adminApi.growthCreate("issues", { ...editionDraft, newsletterId: active.id });
@@ -343,6 +367,8 @@ export default function Newsletters() {
       loadEditions(active.id);
     } catch (err) {
       toast.error(friendlyError(err, "edition"));
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -534,8 +560,8 @@ export default function Newsletters() {
             <Button variant="secondary" size="sm" onClick={() => setNlDraft(null)}>
               Cancel
             </Button>
-            <Button size="sm" type="submit" form="nl-form">
-              Save
+            <Button size="sm" type="submit" form="nl-form" disabled={saving}>
+              {saving ? "Saving…" : "Save"}
             </Button>
           </>
         }
@@ -606,8 +632,8 @@ export default function Newsletters() {
             <Button variant="secondary" size="sm" onClick={() => setEditionDraft(null)}>
               Cancel
             </Button>
-            <Button size="sm" type="submit" form="edition-form">
-              Save edition
+            <Button size="sm" type="submit" form="edition-form" disabled={saving}>
+              {saving ? "Saving…" : "Save edition"}
             </Button>
           </>
         }

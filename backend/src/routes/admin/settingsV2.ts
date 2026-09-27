@@ -37,6 +37,30 @@ import {
 export const adminSettingsV2Router = Router();
 
 /**
+ * A setting's value as it may leave the server — in a response or in the audit
+ * log, which is a table too.
+ *
+ * Only the declared fields survive. `readSetting` and `writeSetting` hand back
+ * the stored row with every key it holds, and `email_provider` can hold the
+ * Resend API key as `apiKey` (email/provider.ts reads it from there when the
+ * environment has none) without the registry declaring it; hiding only the
+ * declared secrets sent that key back in clear on every save of the card. A row
+ * flagged `is_secret` hides every field, as `settingGroups` does on the read.
+ */
+export function redactSettingValue(
+  fields: readonly { name: string; type: string }[],
+  value: Record<string, unknown>,
+  wholeRowSecret = false
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const field of fields) {
+    if (!(field.name in value)) continue;
+    out[field.name] = wholeRowSecret || field.type === "secret" ? "[hidden]" : value[field.name];
+  }
+  return out;
+}
+
+/**
  * The "Sending service" field, showing the transport that is really in use.
  *
  * The stored row said "Your own mail server" while every message went out
@@ -160,18 +184,15 @@ adminSettingsV2Router.put(
       throw err;
     }
 
-    const secretFields = new Set(
-      definition.fields.filter((f) => f.type === "secret").map((f) => f.name)
+    const flagged = await pool.query<{ is_secret: boolean | null }>(
+      "SELECT is_secret FROM settings WHERE key = $1",
+      [key]
     );
+    const wholeRowSecret = flagged.rows[0]?.is_secret === true;
 
     /** A secret must not be written to the audit log either — that is a table too. */
-    const redact = (value: Record<string, unknown>): Record<string, unknown> => {
-      const out: Record<string, unknown> = {};
-      for (const [name, item] of Object.entries(value)) {
-        out[name] = secretFields.has(name) ? "[hidden]" : item;
-      }
-      return out;
-    };
+    const redact = (value: Record<string, unknown>): Record<string, unknown> =>
+      redactSettingValue(definition.fields, value, wholeRowSecret);
 
     await recordAdminAction({
       req,

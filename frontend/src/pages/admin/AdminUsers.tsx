@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
+import { ApiError } from "@/lib/api";
 import {
   teamApi,
   describeDevice,
@@ -82,6 +83,7 @@ const STATUS_LABEL: Record<string, string> = {
 
 function SecurityCard() {
   const [security, setSecurity] = useState<MySecurity | null>(null);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [enrolling, setEnrolling] = useState<{ secret: string; otpauthUrl: string } | null>(null);
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
@@ -92,8 +94,12 @@ function SecurityCard() {
   const load = useCallback(() => {
     teamApi
       .mySecurity()
-      .then(setSecurity)
-      .catch(() => undefined);
+      .then((res) => {
+        setSecurity(res);
+        setLoadFailed(false);
+      })
+      // Without this the card stayed a skeleton for good after one failed load.
+      .catch(() => setLoadFailed(true));
   }, []);
 
   useEffect(load, [load]);
@@ -113,6 +119,9 @@ function SecurityCard() {
     try {
       const result = await teamApi.confirmMfa(code);
       setEnrolling(null);
+      // The "turn it off" box shares this state; left filled, it opened with
+      // the code just spent already in it and its button already enabled.
+      setCode("");
       setRecoveryCodes(result.recoveryCodes);
       toast.success("Two-step sign-in is on");
       load();
@@ -156,7 +165,13 @@ function SecurityCard() {
     }
   }
 
-  if (!security) return <Skeleton className="h-56 w-full" />;
+  if (!security) {
+    return loadFailed ? (
+      <ErrorNotice message="We couldn't load your sign-in settings. Try refreshing the page." />
+    ) : (
+      <Skeleton className="h-56 w-full" />
+    );
+  }
 
   return (
     <>
@@ -368,6 +383,9 @@ export default function AdminUsers() {
   const [invites, setInvites] = useState<AdminInvite[]>([]);
   const [roles, setRoles] = useState<RoleDescriptor[]>([]);
   const [error, setError] = useState<string | null>(null);
+  // Marketing, Support and Coach accounts come here for their own two-step
+  // sign-in (the card above the list); the list itself is not theirs to see.
+  const [teamHidden, setTeamHidden] = useState(false);
   const [inviting, setInviting] = useState(false);
   const [invite, setInvite] = useState({ name: "", email: "", role: "support" as AdminRole });
   const [sending, setSending] = useState(false);
@@ -383,8 +401,18 @@ export default function AdminUsers() {
         setPeople(res.people);
         setInvites(res.invites);
         setError(null);
+        setTeamHidden(false);
       })
-      .catch(() => setError("We couldn't load your team. Try refreshing the page."));
+      .catch((err) => {
+        // A 403 is an answer, not a failure: "try refreshing" would never end,
+        // and the table beside it would stay a loading skeleton for good.
+        if (err instanceof ApiError && err.status === 403) {
+          setTeamHidden(true);
+          setError(null);
+          return;
+        }
+        setError("We couldn't load your team. Try refreshing the page.");
+      });
   }, []);
 
   useEffect(load, [load]);
@@ -606,6 +634,11 @@ export default function AdminUsers() {
 
       <SecurityCard />
 
+      {teamHidden ? (
+        <p className="text-sm text-ink-soft">
+          Only the owner or a manager can see who else has access.
+        </p>
+      ) : (
       <DataTable
         columns={columns}
         data={people}
@@ -620,6 +653,7 @@ export default function AdminUsers() {
           />
         }
       />
+      )}
 
       {invites.length > 0 && (
         <Card>

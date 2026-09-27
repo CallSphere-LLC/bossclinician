@@ -168,7 +168,18 @@ export default function Integrations() {
 
   async function testEndpoint(endpoint: WebhookEndpoint) {
     try {
-      await integrationsApi.testEndpoint(endpoint.id);
+      // `queued` is false when nothing was sent: a connection that hears only
+      // about the events picked for it, or a dispatch that failed. Saying "Test
+      // sent" then sent her looking for a message that never existed.
+      const { queued } = await integrationsApi.testEndpoint(endpoint.id);
+      if (!queued) {
+        toast.error(
+          endpoint.eventTypes.length > 0
+            ? "No test went out — this connection only hears about the things you picked for it."
+            : "No test went out. Please try again in a moment.",
+        );
+        return;
+      }
       toast.success("Test sent — check the recent messages below in a moment.");
       setTimeout(load, 3000);
     } catch (err) {

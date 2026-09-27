@@ -156,7 +156,15 @@ function draftFrom(product: Product): Draft {
 
 export default function ProductsCatalog({ downloadOnly = false }: { downloadOnly?: boolean }) {
   const [searchParams, setSearchParams] = useSearchParams();
-  const [products, setProducts] = useState<Product[] | null>(null);
+  // The whole catalogue, whichever screen this is. Downloads shows only its
+  // own kind, but a new product's web address has to miss every product's —
+  // checked against downloads alone, "Starter Kit" collided with a course of
+  // the same name, and this form has no box to change the address in.
+  const [catalogue, setCatalogue] = useState<Product[] | null>(null);
+  const products = useMemo(
+    () => (catalogue && downloadOnly ? catalogue.filter((p) => p.kind === "download") : catalogue),
+    [catalogue, downloadOnly],
+  );
   const [error, setError] = useState<string | null>(null);
   const [showRetired, setShowRetired] = useState(false);
 
@@ -181,11 +189,11 @@ export default function ProductsCatalog({ downloadOnly = false }: { downloadOnly
     adminCommerceApi
       .productList()
       .then((list) => {
-        setProducts(downloadOnly ? list.filter((p) => p.kind === "download") : list);
+        setCatalogue(list);
         setError(null);
       })
       .catch(() => setError("We couldn't load your catalogue. Try refreshing the page."));
-  }, [downloadOnly]);
+  }, []);
 
   useEffect(load, [load]);
 
@@ -211,7 +219,10 @@ export default function ProductsCatalog({ downloadOnly = false }: { downloadOnly
       .growthList<CoachingOffer>("coaching/offers")
       .then((list) => setCoaching(list.map((o) => ({ id: o.id, label: o.title }))))
       .catch(() => setCoaching([]));
-  }, []);
+    // Downloads and the catalogue are one component on two routes, so going
+    // from one to the other keeps this instance: with no dependency the
+    // pickers stayed empty after arriving from Downloads.
+  }, [downloadOnly]);
 
   useEffect(() => {
     if (downloadOnly && searchParams.get("new") === "1") {
@@ -287,7 +298,7 @@ export default function ProductsCatalog({ downloadOnly = false }: { downloadOnly
       if (draft.id === null) {
         // Generated once, from the name. It is the address the delivery pages
         // use, so an existing product never has its own changed underneath it.
-        const taken = (products ?? []).map((product) => product.slug);
+        const taken = (catalogue ?? []).map((product) => product.slug);
         const base = slugify(draft.title) || "item";
         const created = await adminCommerceApi.productCreate({
           slug: uniqueKey(base, taken, "-"),
@@ -297,7 +308,7 @@ export default function ProductsCatalog({ downloadOnly = false }: { downloadOnly
           podcastId: null,
           newsletterId: null,
           coachingOfferId: null,
-          sort: products?.length ?? 0,
+          sort: catalogue?.length ?? 0,
           ...shared,
         });
         if (kind === "download") setFiles({ ...created, fileCount: 0, memberCount: 0, offerCount: 0 });
@@ -700,7 +711,7 @@ export default function ProductsCatalog({ downloadOnly = false }: { downloadOnly
 
       <BundleModal
         product={bundle}
-        catalogue={products ?? []}
+        catalogue={catalogue ?? []}
         onClose={() => setBundle(null)}
         onChanged={load}
       />
@@ -784,8 +795,11 @@ function FilesModal({
     setSelectedMedia("");
   }, [productId, load]);
 
+  // Uploads of several files at once finish one after another and each one is
+  // attached, so only the library picker's button is held while one is in
+  // flight — a guard here dropped every file that finished during another's.
   async function attach(asset: MediaAsset) {
-    if (productId === null || attaching) return;
+    if (productId === null) return;
     setAttaching(true);
     try {
       await adminCommerceApi.fileAdd(productId, {
@@ -862,13 +876,16 @@ function FilesModal({
             <option value="">Choose a file…</option>
             {media.filter((asset) => !files?.some((f) => f.mediaId === asset.id) && `${asset.title} ${asset.originalName}`.toLowerCase().includes(mediaQuery.toLowerCase())).slice(0, 100).map((asset) => <option key={asset.id} value={asset.id}>{asset.title || asset.originalName}</option>)}
           </select>
-          <Button variant="secondary" size="sm" disabled={!selectedMedia || attaching} onClick={() => { const asset = media.find((item) => String(item.id) === selectedMedia); if (asset) void attach(asset); }}>Add selected file</Button>
+          <Button variant="secondary" size="sm" disabled={!selectedMedia || attaching} onClick={() => { if (attaching) return; const asset = media.find((item) => String(item.id) === selectedMedia); if (asset) void attach(asset); }}>Add selected file</Button>
           {mediaError && <ErrorNotice message={mediaError} />}
         </Field>
         <UploadDropzone
           compact
           visibility="protected"
-          scope="product-files"
+          // One box per product: a file that finishes after this dialog closes
+          // is handed to the next box that opens on the same scope, which with
+          // one shared name was whichever product she opened next.
+          scope={`product-files-${productId ?? "none"}`}
           onUploaded={(asset) => void attach(asset)}
         />
 
@@ -934,6 +951,11 @@ function BundleModal({
   onChanged: () => void;
 }) {
   const [chosen, setChosen] = useState<number[]>([]);
+  // Saving replaces the bundle's whole contents, so it waits for them: a Save
+  // pressed before they arrived, or after they failed to, sent an empty list
+  // and emptied a bundle people had paid for.
+  const [loaded, setLoaded] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const productId = product?.id ?? null;
 
@@ -941,11 +963,23 @@ function BundleModal({
     // Cleared first: opening a second bundle before its contents arrive used to
     // show the previous one's ticks, and saving then wrote those into it.
     setChosen([]);
+    setLoaded(false);
+    setLoadError(null);
     if (productId === null) return;
+    let cancelled = false;
     adminCommerceApi
       .productGet(productId)
-      .then((detail) => setChosen(detail.bundleItems.map((item) => item.productId)))
-      .catch(() => setChosen([]));
+      .then((detail) => {
+        if (cancelled) return;
+        setChosen(detail.bundleItems.map((item) => item.productId));
+        setLoaded(true);
+      })
+      .catch(() => {
+        if (!cancelled) setLoadError("We couldn't load what's in this bundle. Close it and try again.");
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [productId]);
 
   // A bundle inside a bundle is paid for and never delivered, so the ones on
@@ -961,7 +995,7 @@ function BundleModal({
   }
 
   async function save() {
-    if (productId === null) return;
+    if (productId === null || !loaded) return;
     setSaving(true);
     try {
       await adminCommerceApi.bundleSave(
@@ -990,12 +1024,13 @@ function BundleModal({
           <Button variant="secondary" size="sm" onClick={onClose}>
             Cancel
           </Button>
-          <Button size="sm" onClick={() => void save()} disabled={saving}>
+          <Button size="sm" onClick={() => void save()} disabled={saving || !loaded}>
             {saving ? "Saving…" : "Save what's inside"}
           </Button>
         </>
       }
     >
+      {loadError && <ErrorNotice message={loadError} />}
       {available.length === 0 ? (
         <EmptyState
           icon={<Tag />}

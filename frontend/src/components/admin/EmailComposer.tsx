@@ -158,6 +158,11 @@ export function previewWidthClass(device: PreviewDevice): string {
   return device === "mobile" ? "mx-auto w-[390px] max-w-full" : "";
 }
 
+/** The library's order: by name, as the server lists it. */
+function sortTemplates(rows: SavedEmailTemplate[]): SavedEmailTemplate[] {
+  return [...rows].sort((a, b) => a.name.localeCompare(b.name));
+}
+
 function insertAt(value: string, start: number, end: number, body: string): TextEdit {
   const before = value.slice(0, start);
   const after = value.slice(end);
@@ -290,7 +295,7 @@ export default function EmailComposer({
     setSavingTemplate(true);
     try {
       const saved = await adminApi.savedTemplateCreate({ name: name.trim(), bodyMd: value });
-      setTemplates((prev) => [...prev, saved].sort((a, b) => a.name.localeCompare(b.name)));
+      setTemplates((prev) => sortTemplates([...prev, saved]));
       toast.success(`Saved as “${saved.name}”.`);
     } catch {
       toast.error("We couldn't save that as a template.");
@@ -299,15 +304,22 @@ export default function EmailComposer({
     }
   }
 
+  /**
+   * Runs one library action and applies its change to the list AS IT IS WHEN
+   * THE ANSWER ARRIVES. The change used to be worked out from the list as it
+   * was when the button was pressed, so copying one template and deleting
+   * another before the copy came back put the deleted one back, or lost the
+   * copy.
+   */
   async function runTemplateAction(
     id: number,
-    action: () => Promise<SavedEmailTemplate[] | void>,
+    action: () => Promise<((current: SavedEmailTemplate[]) => SavedEmailTemplate[]) | void>,
     failure: string,
   ) {
     setBusyTemplateId(id);
     try {
-      const next = await action();
-      if (next) setTemplates(next.sort((a, b) => a.name.localeCompare(b.name)));
+      const change = await action();
+      if (change) setTemplates((current) => sortTemplates(change(current)));
     } catch {
       toast.error(failure);
     } finally {
@@ -429,9 +441,7 @@ export default function EmailComposer({
                           name: `${starter.label} (my copy)`,
                           bodyMd: starter.body,
                         });
-                        setTemplates((prev) =>
-                          [...prev, saved].sort((a, b) => a.name.localeCompare(b.name)),
-                        );
+                        setTemplates((prev) => sortTemplates([...prev, saved]));
                         toast.success(`Saved as “${saved.name}”.`);
                       } catch {
                         toast.error("We couldn't copy that starter.");
@@ -476,7 +486,7 @@ export default function EmailComposer({
                         async () => {
                           const copy = await adminApi.savedTemplateDuplicate(template.id);
                           toast.success(`Copied to “${copy.name}”.`);
-                          return [...templates, copy];
+                          return (current) => [...current, copy];
                         },
                         "We couldn't copy that template.",
                       )
@@ -501,7 +511,8 @@ export default function EmailComposer({
                             template.id,
                             name.trim(),
                           );
-                          return templates.map((row) => (row.id === template.id ? renamed : row));
+                          return (current) =>
+                            current.map((row) => (row.id === template.id ? renamed : row));
                         },
                         "We couldn't rename that template.",
                       );
@@ -525,7 +536,7 @@ export default function EmailComposer({
                         async () => {
                           await adminApi.savedTemplateDelete(template.id);
                           toast.success("Template deleted.");
-                          return templates.filter((row) => row.id !== template.id);
+                          return (current) => current.filter((row) => row.id !== template.id);
                         },
                         "We couldn't delete that template.",
                       );

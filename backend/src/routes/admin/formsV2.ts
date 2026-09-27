@@ -237,7 +237,7 @@ adminFormsRouter.get(
   "/",
   asyncHandler(async (_req, res) => {
     const result = await pool.query(
-      `SELECT f.id, f.slug, f.name, f.description, f.published, f.views, f.submit_count,
+      `SELECT f.id, f.slug, f.name, f.description, f.description_md, f.published, f.views, f.submit_count,
               f.post_action, f.updated_at,
               jsonb_array_length(f.fields) AS field_count,
               (SELECT count(*)::int FROM form_submissions s WHERE s.form_id = f.id) AS submission_count

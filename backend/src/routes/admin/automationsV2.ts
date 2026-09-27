@@ -337,6 +337,15 @@ adminAutomationsV2Router.post(
   "/",
   asyncHandler(async (req, res) => {
     const input = automationSchema.parse(req.body);
+
+    // The same turn-it-on gate as PATCH. `status` is part of the create schema
+    // (the voice assistant's catalogue hands it out as such), and a row made
+    // here has no steps yet, so "create it active" was a way round the check
+    // that went live doing nothing and logged every run as fine.
+    if (input.status === "active") {
+      throw badRequest(notReadyMessage(readinessProblems(input.conditions, [])));
+    }
+
     const result = await pool.query(
       `INSERT INTO automations
          (name, description, trigger_type, trigger_config, conditions, status,

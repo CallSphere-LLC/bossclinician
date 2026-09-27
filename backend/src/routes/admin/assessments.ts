@@ -408,37 +408,52 @@ adminAssessmentsRouter.post(
     );
     const used = new Set(existing.rows.map((row) => row.slug));
     const base = slugify(title) || "result";
-    let slug = base;
-    let suffix = 2;
-    while (used.has(slug)) {
-      slug = `${base}-${suffix}`;
-      suffix += 1;
-    }
+    const freeResultSlug = () => {
+      let slug = base;
+      let suffix = 2;
+      while (used.has(slug)) {
+        slug = `${base}-${suffix}`;
+        suffix += 1;
+      }
+      return slug;
+    };
 
     const nextPosition = existing.rows.reduce((max, row) => Math.max(max, row.position + 1), 0);
 
-    const result = await pool.query(
-      `INSERT INTO assessment_results
-         (assessment_id, position, slug, title, body_md, image_url, min_score, max_score,
-          apply_tag_id, subscribe_sequence_id, cta_label, cta_url)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-       RETURNING *`,
-      [
-        req.params.id,
-        input.position ?? nextPosition,
-        slug,
-        title,
-        input.bodyMd ?? "",
-        input.imageUrl ?? "",
-        input.minScore ?? 0,
-        input.maxScore ?? OPEN_ENDED,
-        input.applyTagId ?? null,
-        input.subscribeSequenceId ?? null,
-        input.ctaLabel ?? "",
-        input.ctaUrl ?? "",
-      ]
-    );
-    res.status(201).json(rowToCamel(result.rows[0]));
+    // Two adds at once (a second tab, a double-click) both read the same slugs
+    // above and pick the same free one; the loser used to surface as a 500 from
+    // UNIQUE (assessment_id, slug). It takes the next suffix instead.
+    for (let attempt = 0; ; attempt += 1) {
+      const slug = freeResultSlug();
+      try {
+        const result = await pool.query(
+          `INSERT INTO assessment_results
+             (assessment_id, position, slug, title, body_md, image_url, min_score, max_score,
+              apply_tag_id, subscribe_sequence_id, cta_label, cta_url)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+           RETURNING *`,
+          [
+            req.params.id,
+            input.position ?? nextPosition,
+            slug,
+            title,
+            input.bodyMd ?? "",
+            input.imageUrl ?? "",
+            input.minScore ?? 0,
+            input.maxScore ?? OPEN_ENDED,
+            input.applyTagId ?? null,
+            input.subscribeSequenceId ?? null,
+            input.ctaLabel ?? "",
+            input.ctaUrl ?? "",
+          ]
+        );
+        res.status(201).json(rowToCamel(result.rows[0]));
+        return;
+      } catch (err) {
+        if ((err as { code?: string }).code !== "23505" || attempt >= 4) throw err;
+        used.add(slug);
+      }
+    }
   })
 );
 
@@ -517,7 +532,10 @@ adminAssessmentsRouter.post(
 adminAssessmentsRouter.get(
   "/:id/attempts",
   asyncHandler(async (req, res) => {
-    const limit = Math.min(Number(req.query.limit) || 100, 500);
+    // 500 unless asked otherwise: the editor asks for no limit and lists these
+    // under "Everyone who finished", beside a report that counts every attempt
+    // — a default of 100 showed "100 people" next to "Finished it: 250".
+    const limit = Math.min(Number(req.query.limit) || 500, 500);
     const result = await pool.query<{ id: string }>(
       `SELECT t.id, t.email::text AS email, t.score, t.max_score, t.percent, t.passed,
               t.completed_at, t.responses, t.member_id, r.title AS result_title, COALESCE(c.name, m.name) AS contact_name, c.id AS contact_id

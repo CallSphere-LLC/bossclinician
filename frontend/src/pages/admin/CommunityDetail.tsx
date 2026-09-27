@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 import { publicSiteUrl } from "@/lib/siteOrigins";
 import {
@@ -134,8 +134,20 @@ const ROLE_LABEL: Record<string, string> = {
   admin: "Runs this",
 };
 
+/**
+ * Keyed on the id, because the route is not: the community switcher in the
+ * sidebar links from one community to another inside this same page, and
+ * without a remount every tab kept the previous community's state. The
+ * Guidelines box still held community A's rules and saved them over B's, the
+ * live room form wrote A's name and size onto B, and a community with no
+ * channels left A's channel selected so a post went into the wrong room.
+ */
 export default function CommunityDetail() {
   const { id } = useParams();
+  return <CommunityDetailPage key={id ?? ""} id={id} />;
+}
+
+function CommunityDetailPage({ id }: { id: string | undefined }) {
   const communityId = Number(id);
   const [searchParams] = useSearchParams();
   const [community, setCommunity] = useState<CommunityDetailType | null>(null);
@@ -259,7 +271,11 @@ export default function CommunityDetail() {
             <ScheduledPostsTab communityId={communityId} />
           </Tabs.Content>
           <Tabs.Content value="guidelines">
-            <GuidelinesTab communityId={communityId} community={community} />
+            <GuidelinesTab
+              communityId={communityId}
+              community={community}
+              onSaved={load}
+            />
           </Tabs.Content>
         </div>
       </Tabs.Root>
@@ -268,6 +284,24 @@ export default function CommunityDetail() {
 }
 
 /* ---------------------------------------------------------------- Channels */
+
+/**
+ * A visit as the endpoint sends it. `seconds` is null for every visit with no
+ * leaving time, and that is two different things: somebody still in the room,
+ * and a visit whose end was never recorded (the server restarted, the tab
+ * died). The route tells them apart against the live roster; reading only
+ * `seconds` showed a visit from last Tuesday as "In there now" for ever.
+ */
+type LiveVisit = AdminLiveVisit & {
+  inProgress?: boolean;
+  interrupted?: boolean;
+};
+
+function visitIsLive(visit: LiveVisit): boolean {
+  if (visit.seconds !== null) return false;
+  // An older server that sends neither flag: fall back to the old reading.
+  return visit.interrupted !== true;
+}
 
 /**
  * The live room, from the admin's side.
@@ -310,7 +344,7 @@ function LiveRoomPanel({
   });
   const [saving, setSaving] = useState(false);
   const [joining, setJoining] = useState(false);
-  const [visits, setVisits] = useState<AdminLiveVisit[] | null>(null);
+  const [visits, setVisits] = useState<LiveVisit[] | null>(null);
 
   useEffect(() => {
     adminApi
@@ -506,8 +540,10 @@ function LiveRoomPanel({
                 <span className="text-xs text-ink-soft">
                   {formatRelative(visit.joinedAt)}
                 </span>
-                {visit.seconds === null ? (
+                {visitIsLive(visit) ? (
                   <Badge tone="green">In there now</Badge>
+                ) : visit.seconds === null ? (
+                  <Badge tone="neutral">Length not recorded</Badge>
                 ) : (
                   <Badge tone="neutral">
                     {Math.max(1, Math.round(visit.seconds / 60))} min
@@ -909,6 +945,8 @@ function ChannelsTab({
   const [editing, setEditing] = useState<CommunityChannel | null>(null);
   const [editForm, setEditForm] = useState<ChannelForm>(BLANK_CHANNEL);
   const [savingChannel, setSavingChannel] = useState(false);
+  /** In flight: a double-click on Create used to send two POSTs. */
+  const [creatingChannel, setCreatingChannel] = useState(false);
   /** Whether the list is showing move up/down controls instead of settings. */
   const [reordering, setReordering] = useState(false);
   const [moving, setMoving] = useState(false);
@@ -949,16 +987,24 @@ function ChannelsTab({
     });
   }, [channels]);
 
+  // Only the latest request may fill the list: clicking from one channel to
+  // the next before the first answered let the slower reply land last, showing
+  // one channel's posts under another's name.
+  const postsRequest = useRef(0);
   const loadPosts = useCallback((channelId: number) => {
+    const request = ++postsRequest.current;
     setPosts(null);
     adminApi
       .channelPosts(channelId)
-      .then(setPosts)
-      .catch(() =>
+      .then((rows) => {
+        if (request === postsRequest.current) setPosts(rows);
+      })
+      .catch(() => {
+        if (request !== postsRequest.current) return;
         toast.error(
           "We couldn't load what's in this channel. Try again in a moment.",
-        ),
-      );
+        );
+      });
   }, []);
 
   useEffect(() => {
@@ -967,7 +1013,8 @@ function ChannelsTab({
 
   async function createChannel(e: FormEvent) {
     e.preventDefault();
-    if (!createForm.name.trim()) return;
+    if (!createForm.name.trim() || creatingChannel) return;
+    setCreatingChannel(true);
     try {
       await adminApi.channelCreate(communityId, channelToPayload(createForm));
       toast.success(
@@ -980,6 +1027,8 @@ function ChannelsTab({
       onChange();
     } catch (err) {
       toast.error(friendlyError(err, "channel"));
+    } finally {
+      setCreatingChannel(false);
     }
   }
 
@@ -1057,6 +1106,9 @@ function ChannelsTab({
       return;
     }
     setPosting(true);
+    // Which list is on screen now; if she moves to another channel while this
+    // saves, the new post must not be spliced into that channel's list.
+    const listShown = postsRequest.current;
     try {
       const created = await adminApi.postCreate(Number(active.id), {
         body: composer.body,
@@ -1072,12 +1124,17 @@ function ChannelsTab({
         // Re-read rather than splice it in at the top: a scheduled post is not
         // yet in the channel, and the list marks it "waiting to go out" in the
         // place it will actually appear.
-        loadPosts(Number(active.id));
+        if (listShown === postsRequest.current) loadPosts(Number(active.id));
         toast.success(
           `Scheduled for ${formatDateTime(when)} — it's on the Scheduled tab.`,
         );
       } else {
-        setPosts((prev) => (prev ? [created, ...prev] : [created]));
+        // The create answers with the bare row; the counts only come from the
+        // list query, and without them the card read "undefined comments".
+        const fresh = { ...created, commentCount: 0, reactionCount: 0 };
+        if (listShown === postsRequest.current) {
+          setPosts((prev) => (prev ? [fresh, ...prev] : [fresh]));
+        }
         toast.success("Posted — your members can see it now");
       }
     } catch (err) {
@@ -1533,8 +1590,13 @@ function ChannelsTab({
             >
               Cancel
             </Button>
-            <Button size="sm" type="submit" form="new-channel">
-              Create channel
+            <Button
+              size="sm"
+              type="submit"
+              form="new-channel"
+              disabled={creatingChannel}
+            >
+              {creatingChannel ? "Creating…" : "Create channel"}
             </Button>
           </>
         }
@@ -1683,7 +1745,8 @@ function MembersTab({ communityId }: { communityId: number }) {
     adminApi
       .communityMembers(communityId)
       .then(setMemberships)
-      .catch(() => undefined);
+      // Said out loud: swallowed, the list sat on its loading bars for ever.
+      .catch(() => toast.error("We couldn't load who's in this community."));
     adminApi
       .accessGroups(communityId)
       .then(setGroups)
@@ -2111,7 +2174,7 @@ function ChallengesTab({ communityId }: { communityId: number }) {
     adminApi
       .challenges(communityId)
       .then(setChallenges)
-      .catch(() => undefined);
+      .catch(() => toast.error("We couldn't load your challenges."));
   }, [communityId]);
 
   useEffect(load, [load]);
@@ -2122,7 +2185,7 @@ function ChallengesTab({ communityId }: { communityId: number }) {
     adminApi
       .challengeEntries(entriesFor.id)
       .then(setEntries)
-      .catch(() => undefined);
+      .catch(() => toast.error("We couldn't load who's entered."));
   }, [entriesFor]);
 
   async function create(e: FormEvent) {
@@ -2399,7 +2462,7 @@ function EventsTab({ communityId }: { communityId: number }) {
     adminApi
       .communityEvents(communityId)
       .then(setEvents)
-      .catch(() => undefined);
+      .catch(() => toast.error("We couldn't load your events."));
   }, [communityId]);
 
   useEffect(load, [load]);
@@ -2643,7 +2706,7 @@ function BadgesTab({ communityId }: { communityId: number }) {
     adminApi
       .badges(communityId)
       .then(setBadges)
-      .catch(() => undefined);
+      .catch(() => toast.error("We couldn't load your badges."));
   }, [communityId]);
 
   useEffect(load, [load]);
@@ -3749,9 +3812,12 @@ function ScheduledPostRow({
 function GuidelinesTab({
   communityId,
   community,
+  onSaved,
 }: {
   communityId: number;
   community: CommunityDetailShape | null;
+  /** Re-reads the community, so coming back to this tab shows what was saved. */
+  onSaved: () => void;
 }) {
   const [text, setText] = useState("");
   const [saving, setSaving] = useState(false);
@@ -3795,6 +3861,10 @@ function GuidelinesTab({
                     ? "Saved. Members will be asked to accept these again."
                     : "Saved. Nothing changed, so nobody has to accept again.",
                 );
+                // The tab unmounts when she leaves it and re-seeds from the
+                // parent's copy when she comes back; left stale, that copy
+                // showed the old rules, and saving again quietly reverted them.
+                onSaved();
               } catch (err) {
                 toast.error(friendlyError(err, "guidelines"));
               } finally {
@@ -3815,7 +3885,7 @@ function GuidelinesTab({
 }
 
 function CallHistoryTab({ communityId }: { communityId: number }) {
-  const [visits, setVisits] = useState<AdminLiveVisit[] | null>(null);
+  const [visits, setVisits] = useState<LiveVisit[] | null>(null);
   const [error, setError] = useState("");
   const load = useCallback(() => {
     setError("");
@@ -3860,10 +3930,12 @@ function CallHistoryTab({ communityId }: { communityId: number }) {
                     {v.leftAt && ` · Ended ${formatDateTime(v.leftAt)}`}
                   </p>
                 </div>
-                <Badge tone={v.seconds === null ? "green" : "neutral"}>
-                  {v.seconds === null
+                <Badge tone={visitIsLive(v) ? "green" : "neutral"}>
+                  {visitIsLive(v)
                     ? "In progress"
-                    : `${Math.floor(v.seconds / 60)}m ${v.seconds % 60}s`}
+                    : v.seconds === null
+                      ? "Length not recorded"
+                      : `${Math.floor(v.seconds / 60)}m ${v.seconds % 60}s`}
                 </Badge>
               </li>
             ))}

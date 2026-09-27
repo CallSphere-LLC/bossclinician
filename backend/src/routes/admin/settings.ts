@@ -15,6 +15,23 @@ function asObject(value: unknown): Record<string, unknown> | null {
 }
 
 /**
+ * Credentials a stored row can hold without the registry declaring them.
+ *
+ * The Resend API key is read from `email_provider.apiKey` when the environment
+ * has none (email/provider.ts, `providerSettings`), but the settings screen has
+ * no box for it, so it is not a declared secret field and `secretFieldNames`
+ * never names it. Without this list the whole key went back to the browser in
+ * clear from GET /admin/settings.
+ */
+const UNDECLARED_SECRET_FIELDS: Record<string, string[]> = {
+  email_provider: ["apiKey"],
+};
+
+function hiddenFieldNames(key: string): string[] {
+  return [...secretFieldNames(key), ...(UNDECLARED_SECRET_FIELDS[key] ?? [])];
+}
+
+/**
  * A stored value with its credentials taken out.
  *
  * This endpoint returns the settings table as it stands, and three of its keys
@@ -27,7 +44,7 @@ function asObject(value: unknown): Record<string, unknown> | null {
  * this screen posts back everything it was given.
  */
 export function withoutSecrets(key: string, value: unknown): unknown {
-  const secrets = secretFieldNames(key);
+  const secrets = hiddenFieldNames(key);
   const object = secrets.length === 0 ? null : asObject(value);
   if (!object) return value;
 
@@ -47,7 +64,7 @@ export function withoutSecrets(key: string, value: unknown): unknown {
  * absent means "leave it alone", not "there isn't one".
  */
 export function keepStoredSecrets(key: string, incoming: unknown, stored: unknown): unknown {
-  const secrets = secretFieldNames(key);
+  const secrets = hiddenFieldNames(key);
   const next = secrets.length === 0 ? null : asObject(incoming);
   const previous = next === null ? null : asObject(stored);
   if (!next || !previous) return incoming;
@@ -59,13 +76,31 @@ export function keepStoredSecrets(key: string, incoming: unknown, stored: unknow
   return Object.keys(kept).length === 0 ? incoming : { ...kept, ...next };
 }
 
+/**
+ * The table as this screen may see it.
+ *
+ * A row flagged `is_secret` is left out altogether: that flag is how a key the
+ * registry does not describe is marked as a credential, and the settings screen
+ * already hides every field of such a row (services/settings.ts,
+ * `settingGroups`). This screen never writes one back, so leaving it out cannot
+ * blank it either.
+ */
+async function readableSettings(): Promise<Record<string, unknown>> {
+  const result = await pool.query<{ key: string; value: unknown; is_secret: boolean | null }>(
+    "SELECT key, value, is_secret FROM settings WHERE key != 'seed_completed'"
+  );
+  const merged: Record<string, unknown> = {};
+  for (const row of result.rows) {
+    if (row.is_secret === true) continue;
+    merged[row.key] = withoutSecrets(row.key, row.value);
+  }
+  return merged;
+}
+
 adminSettingsRouter.get(
   "/",
   asyncHandler(async (_req, res) => {
-    const result = await pool.query("SELECT key, value FROM settings WHERE key != 'seed_completed'");
-    const merged: Record<string, unknown> = {};
-    for (const row of result.rows) merged[row.key] = withoutSecrets(row.key, row.value);
-    res.json(merged);
+    res.json(await readableSettings());
   })
 );
 
@@ -101,9 +136,6 @@ adminSettingsRouter.put(
     clearSettingsCache();
     if (entries.some(([key]) => key === "drip")) clearDripSettingsCache();
 
-    const result = await pool.query("SELECT key, value FROM settings WHERE key != 'seed_completed'");
-    const merged: Record<string, unknown> = {};
-    for (const row of result.rows) merged[row.key] = withoutSecrets(row.key, row.value);
-    res.json(merged);
+    res.json(await readableSettings());
   })
 );

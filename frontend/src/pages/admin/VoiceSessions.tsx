@@ -208,10 +208,15 @@ export default function VoiceSessions() {
   const [total, setTotal] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [openId, setOpenId] = useState<string | null>(null);
+  /** Bumped to fetch the same page again, e.g. after a delete. */
+  const [reloadKey, setReloadKey] = useState(0);
 
   const [confirm, confirmDialog] = useConfirm();
 
-  const load = useCallback(() => {
+  // Each fetch is cancelled by the next: pressing Older twice quickly used to
+  // let the slower first answer land last, showing page 2's rows under "Page 3".
+  useEffect(() => {
+    let cancelled = false;
     setRows(null);
     conversationsApi
       .list(
@@ -223,18 +228,21 @@ export default function VoiceSessions() {
         page,
       )
       .then((res) => {
+        if (cancelled) return;
         setRows(res.items);
         setTotal(res.total);
         setError(null);
       })
       .catch((err) => {
+        if (cancelled) return;
         setRows([]);
         setTotal(0);
         setError(friendlyError(err, "conversations"));
       });
-  }, [surface, mode, withRecording, page]);
-
-  useEffect(load, [load]);
+    return () => {
+      cancelled = true;
+    };
+  }, [surface, mode, withRecording, page, reloadKey]);
 
   async function remove(row: ConversationSummary) {
     const ok = await confirm({
@@ -249,7 +257,10 @@ export default function VoiceSessions() {
       await conversationsApi.remove(row.id);
       toast.success("Conversation deleted");
       if (openId === row.id) setOpenId(null);
-      load();
+      // The last row on a later page leaves that page empty; step back to the
+      // one that still has conversations on it instead of "Page 3 of 2".
+      if (page > 1 && rows !== null && rows.length <= 1) setPage(page - 1);
+      else setReloadKey((key) => key + 1);
     } catch (err) {
       toast.error(friendlyError(err, "conversation"));
     }
@@ -480,6 +491,8 @@ function ConversationPanel({
   useEffect(() => {
     let cancelled = false;
     setDetail(null);
+    // Another conversation's failure must not sit over this one.
+    setError(null);
     conversationsApi
       .detail(id)
       .then((res) => {
@@ -627,7 +640,16 @@ function RecordingPlayer({ id }: { id: string }) {
         setUrl(res.url);
         setError(null);
       })
-      .catch((err) => setError(friendlyError(err, "recording")));
+      .catch((err) =>
+        // A 409 here is "still being saved — open it after the call ends", and
+        // the generic 409 wording ("clashes with one you already have — try a
+        // different name") would be nonsense on a recording.
+        setError(
+          err instanceof ApiError && err.status === 409
+            ? err.message
+            : friendlyError(err, "recording"),
+        ),
+      );
   }, [id]);
 
   useEffect(() => {

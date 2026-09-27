@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import { CancelReasonsEditor } from "./CancelReasonsEditor";
+import { CancelReasonsEditor, lockSavedReasons } from "./CancelReasonsEditor";
+import { newReasonRow, rowsFromText, textFromRows } from "@/lib/cancelReasons";
 import { paymentFieldProblem } from "@/lib/paymentSettingsRules";
 
 const LIVE_VALUE =
@@ -37,6 +38,29 @@ describe("CancelReasonsEditor", () => {
       <CancelReasonsEditor id="reasons" label="Reasons" value="" onChange={() => undefined} />,
     );
     expect(html).toContain("Keep at least one reason");
+  });
+});
+
+describe("lockSavedReasons", () => {
+  it("locks a new reason's key once a save stores it, so renaming it keeps that key", () => {
+    const added = { ...newReasonRow(), label: "I moved clinics" };
+    const rows = [...rowsFromText(LIVE_VALUE), added];
+    const saved = textFromRows(rows);
+
+    const locked = lockSavedReasons(rows, saved);
+    expect(locked[4]).toMatchObject({ id: added.id, key: "i_moved_clinics", keyLocked: true });
+    // The text did not change, so the card is not left "unsaved".
+    expect(textFromRows(locked)).toBe(saved);
+
+    const renamed = locked.map((row, i) => (i === 4 ? { ...row, label: "I changed jobs" } : row));
+    expect(textFromRows(renamed)).toContain("i_moved_clinics | I changed jobs");
+  });
+
+  it("leaves a new reason unsaved when the stored text does not hold it", () => {
+    const saved = textFromRows([...rowsFromText(LIVE_VALUE), { ...newReasonRow(), label: "I moved clinics" }]);
+    // Reworded while the save was in flight: its key would now be minted differently.
+    const rows = [...rowsFromText(LIVE_VALUE), { ...newReasonRow(), label: "I changed jobs" }];
+    expect(lockSavedReasons(rows, saved)[4]).toMatchObject({ key: "", keyLocked: false });
   });
 });
 

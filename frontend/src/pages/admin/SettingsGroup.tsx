@@ -128,6 +128,7 @@ function FieldInput({
           label={field.label}
           help={field.help}
           value={typeof value === "string" ? value : ""}
+          savedValue={typeof field.value === "string" ? field.value : undefined}
           onChange={onChange}
         />
       );
@@ -442,15 +443,19 @@ export function ReceiptPreviewCard() {
 }
 
 function SettingCard({ card, onSaved }: { card: SettingCardShape; onSaved: () => void }) {
+  // Keyed on what the server said, not on the card object: saving any card
+  // reloads every group, and a fresh but identical card object used to reset
+  // this one — throwing away edits she had typed here and not yet saved.
+  const fieldsKey = JSON.stringify(card.fields);
   const initial = useMemo(() => {
     const draft: Draft = {};
-    for (const field of card.fields) {
+    for (const field of JSON.parse(fieldsKey) as SettingField[]) {
       // A secret starts blank — an empty box means "leave it alone", and only a
       // value typed in gets sent.
       draft[field.name] = field.type === "secret" ? "" : toDisplay(field, field.value);
     }
     return draft;
-  }, [card]);
+  }, [fieldsKey]);
 
   const [draft, setDraft] = useState<Draft>(initial);
   const [saving, setSaving] = useState(false);
@@ -492,6 +497,13 @@ function SettingCard({ card, onSaved }: { card: SettingCardShape; onSaved: () =>
 
     try {
       await settingsApi.save(card.key, values);
+      // A saved secret is stored now; empty its box so the card is not left
+      // "unsaved" when the reload brings back the same hint as before.
+      setDraft((d) => {
+        const next = { ...d };
+        for (const field of card.fields) if (field.type === "secret") next[field.name] = "";
+        return next;
+      });
       toast.success("Saved");
       onSaved();
     } catch (err) {

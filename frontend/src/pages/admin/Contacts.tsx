@@ -54,6 +54,9 @@ const STATUS_FILTERS: { value: EmailStatus | "all"; label: string }[] = [
   { value: "subscribed", label: EMAIL_STATUS_LABEL.subscribed },
   { value: "opted_out", label: EMAIL_STATUS_LABEL.opted_out },
   { value: "bounced", label: EMAIL_STATUS_LABEL.bounced },
+  // Insights' "Marked as spam" row opens ?status=complained. Without a chip the
+  // list was filtered with nothing on screen saying so, and read as everyone.
+  { value: "complained", label: EMAIL_STATUS_LABEL.complained },
   { value: "unconfirmed", label: EMAIL_STATUS_LABEL.unconfirmed },
 ];
 
@@ -1049,6 +1052,8 @@ function ImportModal({
   const [text, setText] = useState("");
   const [chosen, setChosen] = useState<string[]>([]);
   const [result, setResult] = useState<ImportOutcome | null>(null);
+  /** The rows the result's line numbers index into, kept in case the text is edited after. */
+  const [sentRows, setSentRows] = useState<Record<string, string>[]>([]);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -1056,6 +1061,7 @@ function ImportModal({
     setText("");
     setChosen([]);
     setResult(null);
+    setSentRows([]);
   }, [open]);
 
   const parsed = useMemo(() => readSpreadsheet(text), [text]);
@@ -1064,7 +1070,9 @@ function ImportModal({
   async function run() {
     setSaving(true);
     try {
-      const outcome = await contactsApi.importPeople(parsed.rows, chosen);
+      const rows = parsed.rows;
+      const outcome = await contactsApi.importPeople(rows, chosen);
+      setSentRows(rows);
       setResult(outcome);
       toast.success(importSummary(outcome));
       onDone();
@@ -1154,9 +1162,15 @@ function ImportModal({
             <p className="text-sm font-semibold text-ink">{importSummary(result)}</p>
             {result.errors.length > 0 && (
               <ul className="space-y-1 text-xs text-ink-soft">
+                {/*
+                  * `row` counts the people sent, not the lines of the file: the
+                  * heading and any line without an address were dropped first,
+                  * so "Line 3" pointed at the wrong line. Name the address read
+                  * from that row instead, which is what she can search for.
+                  */}
                 {result.errors.slice(0, 10).map((entry, i) => (
                   <li key={i}>
-                    {entry.email ? entry.email : `Line ${entry.row}`} — {entry.message}
+                    {entry.email || sentRows[entry.row - 1]?.email || `Person ${entry.row}`} — {entry.message}
                   </li>
                 ))}
               </ul>

@@ -111,28 +111,44 @@ adminRedirectsRouter.put(
     if (!parsed.success) throw badRequest("Please check the details.", parsed.error.flatten());
     if (parsed.data.toPath) assertRelativeTarget(parsed.data.toPath);
 
-    const result = await pool.query(
-      `UPDATE redirects
-          SET from_path     = COALESCE($2, from_path),
-              to_path       = COALESCE($3, to_path),
-              status_code   = COALESCE($4, status_code),
-              target_exists = COALESCE($5, target_exists),
-              note          = COALESCE($6, note),
-              updated_at    = now()
-        WHERE id = $1
-        RETURNING id, from_path, to_path`,
-      [
-        id,
-        parsed.data.fromPath ? normalizePath(parsed.data.fromPath) : null,
-        parsed.data.toPath ?? null,
-        parsed.data.statusCode ?? null,
-        parsed.data.targetExists ?? null,
-        parsed.data.note ?? null,
-      ]
-    );
+    const fromPath = parsed.data.fromPath ? normalizePath(parsed.data.fromPath) : null;
+    let result;
+    try {
+      result = await pool.query(
+        `UPDATE redirects
+            SET from_path     = COALESCE($2, from_path),
+                to_path       = COALESCE($3, to_path),
+                status_code   = COALESCE($4, status_code),
+                target_exists = COALESCE($5, target_exists),
+                note          = COALESCE($6, note),
+                updated_at    = now()
+          WHERE id = $1
+          RETURNING id, from_path, to_path`,
+        [
+          id,
+          fromPath,
+          parsed.data.toPath ?? null,
+          parsed.data.statusCode ?? null,
+          parsed.data.targetExists ?? null,
+          parsed.data.note ?? null,
+        ]
+      );
+    } catch (err) {
+      // Moving a redirect onto an address another one already covers hits the
+      // unique index — the same refusal create gives, rather than a 500.
+      if ((err as { code?: string } | null)?.code === "23505") {
+        throw badRequest("There's already a redirect for that address.");
+      }
+      throw err;
+    }
 
     const row = result.rows[0];
     if (!row) throw notFound("Redirect not found");
+
+    // As on create: the address it now covers stops appearing in the 404 report.
+    if (fromPath) {
+      await pool.query(`UPDATE not_found_log SET resolved = true WHERE path = $1`, [fromPath]);
+    }
 
     await recordAdminAction({
       req,

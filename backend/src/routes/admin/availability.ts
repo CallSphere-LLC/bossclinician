@@ -285,12 +285,15 @@ adminAvailabilityRouter.get(
 
     const policy = await loadCoachingPolicy();
     const from = parsed.data.from ? new Date(parsed.data.from) : new Date(Date.now() - 30 * DAY_MS);
-    const to = parsed.data.to ? new Date(parsed.data.to) : new Date(from.getTime() + 180 * DAY_MS);
+    // No end unless one is asked for: a cap here hid an exception booked far
+    // ahead (next year's holiday) the moment it was saved, so the screen said
+    // "Time blocked off" and then showed no such exception.
+    const to = parsed.data.to ? new Date(parsed.data.to) : null;
 
     const found = await pool.query<OverrideRow>(
       `SELECT ${OVERRIDE_COLUMNS}
          FROM coach_availability_overrides
-        WHERE starts_at < $2 AND ends_at > $1
+        WHERE ($2::timestamptz IS NULL OR starts_at < $2) AND ends_at > $1
         ORDER BY starts_at, id`,
       [from, to]
     );
@@ -409,6 +412,32 @@ adminAvailabilityRouter.delete(
 /* ------------------------------------------------------------------- preview */
 
 /**
+ * The instants the preview covers, and how far past its end bookings are read.
+ *
+ * Capped at the booking horizon the same way the member's slot list is: a
+ * preview that ran past it would list days no member can book, beside a
+ * "Booking window" tile saying they can't. Bookings are read `durationMinutes`
+ * past the end because a slot that starts just before `to` runs past it, and a
+ * session starting in that overhang still takes the slot.
+ */
+export function previewWindow(
+  raw: { from?: string; to?: string; durationMinutes: number },
+  policy: { bookingHorizonDays: number },
+  now: Date
+): { from: Date; to: Date; busyTo: Date } {
+  const from = raw.from ? new Date(raw.from) : now;
+  const requestedTo = raw.to ? new Date(raw.to) : new Date(from.getTime() + 14 * DAY_MS);
+  const horizon = now.getTime() + policy.bookingHorizonDays * DAY_MS;
+  const to = new Date(
+    Math.max(
+      from.getTime(),
+      Math.min(requestedTo.getTime(), from.getTime() + MAX_PREVIEW_DAYS * DAY_MS, horizon)
+    )
+  );
+  return { from, to, busyTo: new Date(to.getTime() + raw.durationMinutes * 60_000) };
+}
+
+/**
  * GET /api/admin/availability/preview
  *
  * Exactly what a member would be offered, computed by the same function, plus
@@ -428,23 +457,24 @@ adminAvailabilityRouter.get(
         : policy.timezone;
 
     const now = new Date();
-    const from = parsed.data.from ? new Date(parsed.data.from) : now;
-    const requestedTo = parsed.data.to ? new Date(parsed.data.to) : new Date(from.getTime() + 14 * DAY_MS);
-    const to = new Date(
-      Math.max(
-        from.getTime(),
-        Math.min(requestedTo.getTime(), from.getTime() + MAX_PREVIEW_DAYS * DAY_MS)
-      )
-    );
-
     const durationMinutes = parsed.data.durationMinutes ?? 60;
+    const { from, to, busyTo } = previewWindow(
+      { from: parsed.data.from, to: parsed.data.to, durationMinutes },
+      policy,
+      now
+    );
     const padded = { from: new Date(from.getTime() - DAY_MS), to: new Date(to.getTime() + DAY_MS) };
 
     const [rules, overrides, existingSessions] = await Promise.all([
       loadAvailabilityRules(),
       loadAvailabilityOverrides(padded.from, padded.to),
-      loadBusySessions(from, to),
+      loadBusySessions(from, busyTo),
     ]);
+    // The overhang is read only so slots near the end are judged correctly; the
+    // "already booked" list stays inside the window it describes.
+    const bookedInWindow = existingSessions.filter(
+      (session) => session.startsAt.getTime() < to.getTime()
+    );
 
     const slots = computeSlots({
       rules,
@@ -478,7 +508,7 @@ adminAvailabilityRouter.get(
         timeLabel: slot.timeLabel,
         label: slot.label,
       })),
-      booked: existingSessions.map((session) => ({
+      booked: bookedInWindow.map((session) => ({
         sessionId: session.id,
         startsAt: session.startsAt.toISOString(),
         durationMinutes: session.durationMinutes,

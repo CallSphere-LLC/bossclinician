@@ -28,6 +28,16 @@ describe("withoutSecrets", () => {
     ).toEqual({ provider: "ses" });
   });
 
+  it("drops the Resend API key the email provider row can hold undeclared", () => {
+    expect(
+      withoutSecrets("email_provider", {
+        provider: "resend",
+        apiKey: "re_LIVE_SECRET",
+        webhookSecret: "whsec_SECRET",
+      })
+    ).toEqual({ provider: "resend" });
+  });
+
   it("leaves a key with no secret fields exactly as it was", () => {
     const nav = [{ label: "Home", href: "/" }];
     expect(withoutSecrets("nav", nav)).toBe(nav);
@@ -54,6 +64,16 @@ describe("keepStoredSecrets", () => {
         { metaAccessToken: "EAAG-SECRET" }
       )
     ).toEqual({ metaAccessToken: "" });
+  });
+
+  it("puts back the undeclared Resend API key as well", () => {
+    expect(
+      keepStoredSecrets(
+        "email_provider",
+        { provider: "resend" },
+        { provider: "smtp", apiKey: "re_LIVE_SECRET", webhookSecret: "whsec_SECRET" }
+      )
+    ).toEqual({ provider: "resend", apiKey: "re_LIVE_SECRET", webhookSecret: "whsec_SECRET" });
   });
 
   it("changes nothing for a key with no secret fields", () => {

@@ -31,6 +31,9 @@ export const adminSequencesRouter = Router();
 
 /* ----------------------------------------------------------------- schemas */
 
+/** `renderTokens`' token syntax, as a Postgres regular expression. */
+export const MERGE_TOKEN_PATTERN = String.raw`\{\{\s*[\w.]+\s*\}\}`;
+
 const timeOfDay = z
   .union([z.number().int().min(0).max(1439), z.string(), z.null()])
   .optional()
@@ -644,6 +647,11 @@ adminSequencesRouter.get(
       ),
     ]);
 
+    // A subject with merge tags goes out filled in — "{{firstName}}, your
+    // guide" is logged as "Sam, your guide" — so an exact match counted such
+    // an email as never sent. Those are matched as a LIKE pattern instead,
+    // each tag standing for anything and the literal text escaped. A subject
+    // that is nothing but tags would match every email, so it is left exact.
     const result = await pool.query(
       `SELECT e.id, e.position, e.subject,
               COUNT(m.id) FILTER (WHERE m.status <> 'suppressed')::int AS sent,
@@ -652,11 +660,21 @@ adminSequencesRouter.get(
               COUNT(m.id) FILTER (WHERE m.status = 'bounced')::int AS bounced
          FROM sequence_emails e
          LEFT JOIN email_messages m
-           ON m.source_type = 'sequence' AND m.source_id = e.sequence_id AND m.subject = e.subject
+           ON m.source_type = 'sequence' AND m.source_id = e.sequence_id
+          AND (
+                m.subject = e.subject
+                OR (e.subject ~ $2::text
+                    AND btrim(regexp_replace(e.subject, $2::text, '', 'g')) <> ''
+                    AND m.subject LIKE replace(
+                          replace(replace(replace(
+                            regexp_replace(e.subject, $2::text, chr(1), 'g'),
+                            $3::text, $3::text || $3::text), '%', $3::text || '%'), '_', $3::text || '_'),
+                          chr(1), '%'))
+              )
         WHERE e.sequence_id = $1
         GROUP BY e.id, e.position, e.subject
         ORDER BY e.position`,
-      [req.params.id]
+      [req.params.id, MERGE_TOKEN_PATTERN, "\\"]
     );
     res.json({
       emails: rowsToCamel(result.rows),

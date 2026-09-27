@@ -7,6 +7,7 @@ import {
   assertPaidMedia,
   dripDateLocal,
   lessonSlug,
+  nextLessonSlug,
   normalizeDrip,
 } from "./curriculum";
 import { buildUpdate } from "../../utils/sqlUpdate";
@@ -210,5 +211,30 @@ describe("assertContentType", () => {
     expect(() => assertContentType({ content_type: "webinar" })).toThrow();
     expect(() => assertContentType({ contentType: "" })).toThrow();
     expect(() => assertContentType({ contentType: null })).toThrow();
+  });
+});
+
+/**
+ * The suffix used to be a count of the lessons sharing the base, so deleting
+ * the first "Introduction" and adding another handed out "introduction-2" a
+ * second time — and the unique index turned the save into a 500.
+ */
+describe("nextLessonSlug", () => {
+  it("uses the plain slug while nothing in the section holds it", () => {
+    expect(nextLessonSlug("intro", [])).toBe("intro");
+    expect(nextLessonSlug("intro", ["intro-to-billing"])).toBe("intro");
+  });
+
+  it("numbers past the highest suffix, not past the count", () => {
+    expect(nextLessonSlug("intro", ["intro"])).toBe("intro-2");
+    expect(nextLessonSlug("intro", ["intro-2"])).toBe("intro-3");
+    expect(nextLessonSlug("intro", ["intro", "intro-3"])).toBe("intro-4");
+    // Migration 062 suffixed duplicates with the lesson id.
+    expect(nextLessonSlug("intro", ["intro", "intro-57"])).toBe("intro-58");
+  });
+
+  it("never hands out a slug already in the list", () => {
+    const taken = ["week", "week-2", "week-to-go", "week-5"];
+    expect(taken).not.toContain(nextLessonSlug("week", taken));
   });
 });

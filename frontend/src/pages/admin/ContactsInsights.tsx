@@ -44,7 +44,7 @@ export default function ContactsInsights() {
       <Link to="/admin/contacts" className="inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-ink-soft hover:text-ink"><ArrowLeft className="size-4" />People</Link>
       <PageHeader eyebrow="Contacts" title="Insights" description="Who is joining, buying and still engaging with your emails." />
       {error && <ErrorNotice message={error} />}
-      {!data ? <div className="grid grid-cols-1 gap-4 md:grid-cols-3"><Skeleton className="h-44" /><Skeleton className="h-44" /><Skeleton className="h-44" /></div> : <>
+      {!data ? !error && <div className="grid grid-cols-1 gap-4 md:grid-cols-3"><Skeleton className="h-44" /><Skeleton className="h-44" /><Skeleton className="h-44" /></div> : <>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           <Metric label="Contacts" value={data.contacts} detail={`${data.newContacts.toLocaleString()} new in the last 30 days`} icon={<Users className="size-5" />} to="/admin/contacts?audience=new" linkLabel="View new contacts" />
           <Metric label="Subscribed" value={data.subscribed} detail={`${data.newSubscribers.toLocaleString()} newly subscribed`} icon={<MailCheck className="size-5" />} to="/admin/contacts?audience=subscribed" />

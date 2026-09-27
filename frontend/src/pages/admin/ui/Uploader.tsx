@@ -76,8 +76,15 @@ export function UploadDropzone({
   const inputRef = useRef<HTMLInputElement>(null);
 
   const mine = useUploads(zone);
+  // Only the ones actually moving. Counting everything not done or cancelled
+  // told her a failed or paused file was "uploading — it carries on while you
+  // work" for as long as its row sat in the tray.
   const working = mine.filter(
-    (item) => item.status !== "done" && item.status !== "cancelled",
+    (item) =>
+      item.status === "queued" ||
+      item.status === "uploading" ||
+      item.status === "retrying" ||
+      item.status === "offline",
   ).length;
 
   const handleUploaded = useCallback(

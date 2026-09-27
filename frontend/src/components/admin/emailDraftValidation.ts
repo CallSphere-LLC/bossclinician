@@ -87,6 +87,11 @@ export function validateCampaignDraft(
     } else if (at <= now + 60_000) {
       errors.scheduledAt = "Choose a send time at least one minute from now.";
     }
+    // The schedule route refuses a blank subject, and by then the email has
+    // already been saved — so the refusal arrived as a failed schedule.
+    if (blank(draft.subject)) {
+      errors.subject = errors.subject ?? "Add a subject line before scheduling this.";
+    }
   }
 
   if (sendMode === "event_start" || sendMode === "event_registration") {

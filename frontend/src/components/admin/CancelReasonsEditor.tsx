@@ -11,6 +11,25 @@ import {
 } from "@/lib/cancelReasons";
 
 /**
+ * The rows with every new reason the saved text now holds marked as saved.
+ *
+ * A save hands the editor back the very text it produced, so there is nothing
+ * to re-parse; instead each unsaved row's key is minted the way the save minted
+ * it and, when that key is in the stored text, locked — so renaming the reason
+ * afterwards keeps the key its answers are filed under. Rows keep their ids, so
+ * a box being typed in keeps its focus.
+ */
+export function lockSavedReasons(rows: ReasonRow[], saved: string): ReasonRow[] {
+  const savedKeys = new Set(rowsFromText(saved).filter((row) => row.keyLocked).map((row) => row.key));
+  // One line per row, in order, so the parse lines up with `rows` by index.
+  const minted = rowsFromText(textFromRows(rows));
+  return rows.map((row, index) => {
+    const key = minted[index]?.key ?? "";
+    return !row.keyLocked && savedKeys.has(key) ? { ...row, key, keyLocked: true } : row;
+  });
+}
+
+/**
  * The cancellation-reasons editor on Settings → Payments.
  *
  * It replaces a text box that asked the owner to type `too_expensive | It's too
@@ -27,12 +46,15 @@ export function CancelReasonsEditor({
   label,
   help,
   value,
+  savedValue,
   onChange,
 }: {
   id: string;
   label: string;
   help?: string;
   value: string;
+  /** What the server has stored, so a save that echoes `value` still locks keys. */
+  savedValue?: string;
   onChange: (value: string) => void;
 }) {
   const [rows, setRows] = useState<ReasonRow[]>(() => rowsFromText(value));
@@ -47,6 +69,15 @@ export function CancelReasonsEditor({
       setRows(rowsFromText(value));
     }
   }, [value]);
+
+  const seenSaved = useRef(savedValue);
+  useEffect(() => {
+    // A save stores exactly what this editor emitted, so `value` comes back
+    // unchanged; the stored text changing is what says the new reasons are saved.
+    if (savedValue === undefined || savedValue === seenSaved.current) return;
+    seenSaved.current = savedValue;
+    setRows((current) => lockSavedReasons(current, savedValue));
+  }, [savedValue]);
 
   const update = (next: ReasonRow[]) => {
     setRows(next);

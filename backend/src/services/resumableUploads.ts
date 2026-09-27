@@ -406,7 +406,12 @@ export async function appendChunk(
   }
 
   const remaining = session.sizeBytes - offset;
-  if (remaining <= 0) return session;
+  if (remaining <= 0) {
+    // Nothing to write, but the caller took the write lock for this call; left
+    // set, /complete would answer 409 until the lock timed out.
+    await unlockUploadSession(session.id);
+    return session;
+  }
 
   const file = partPath(session);
   // The tail beyond `receivedBytes` is bytes from a chunk whose request died

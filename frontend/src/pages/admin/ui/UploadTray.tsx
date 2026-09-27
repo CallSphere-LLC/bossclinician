@@ -56,6 +56,9 @@ export function UploadTray() {
       item.status === "paused" || item.status === "offline" || item.status === "needs-signin",
   );
   const stuck = items.filter((item) => item.status === "needs-file" || item.status === "error");
+  // `resume()` ignores an offline upload (it restarts itself when the network
+  // is back), so "Resume all" only counts the ones it can actually restart.
+  const resumable = waiting.filter((item) => item.status !== "offline");
 
   const sent = items.reduce((total, item) => total + item.loaded, 0);
   const total = items.reduce((sum, item) => sum + item.sizeBytes, 0);
@@ -127,12 +130,12 @@ export function UploadTray() {
                 </AnimatePresence>
               </ul>
 
-              {waiting.length > 1 && (
+              {resumable.length > 1 && (
                 <div className="flex justify-end border-t border-hairline/60 px-3 py-2">
                   <Button
                     variant="secondary"
                     size="sm"
-                    onClick={() => waiting.forEach((item) => uploadManager.resume(item.id))}
+                    onClick={() => resumable.forEach((item) => uploadManager.resume(item.id))}
                   >
                     Resume all
                   </Button>

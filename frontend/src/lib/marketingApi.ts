@@ -1,5 +1,6 @@
 import { sessionFetch } from "@/lib/adminTransport";
 import { ApiError } from "@/lib/api";
+import type { SequenceSubscriberStats } from "@/types/admin";
 
 /**
  * Email sequences, automations and system templates — the marketing console's
@@ -329,7 +330,10 @@ export const marketingApi = {
     request<SequenceSubscriber[]>(
       `/admin/sequences/${id}/subscribers${status ? `?status=${encodeURIComponent(status)}` : ""}`,
     ),
-  sequenceStats: (id: number) => request<SequenceEmailStats[]>(`/admin/sequences/${id}/stats`),
+  sequenceStats: (id: number) =>
+    request<{ emails: SequenceEmailStats[]; subscribers: SequenceSubscriberStats }>(
+      `/admin/sequences/${id}/stats`,
+    ),
   enrolInSequence: (id: number, email: string, name?: string) =>
     request<{ outcome: string }>(`/admin/sequences/${id}/enroll`, {
       method: "POST",

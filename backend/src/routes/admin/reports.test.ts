@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { csvCell, toCsv } from "./reports";
+import { csvCell, isCalendarDay, toCsv } from "./reports";
 import type { ReportResult } from "../../services/reports/queries";
 
 /**
@@ -92,5 +92,19 @@ describe("toCsv", () => {
       currency: "mixed",
     });
     expect(mixed).toContain('"Currency","MIXED"');
+  });
+});
+
+describe("isCalendarDay", () => {
+  it("accepts a real day", () => {
+    expect(isCalendarDay("2026-02-28")).toBe(true);
+    expect(isCalendarDay("2028-02-29")).toBe(true);
+  });
+  it("refuses a day that fits the pattern but is not on the calendar", () => {
+    // These used to pass the pattern and come back as a 500 from the database
+    // or from toISOString, instead of a 400.
+    expect(isCalendarDay("2026-02-30")).toBe(false);
+    expect(isCalendarDay("2026-13-01")).toBe(false);
+    expect(isCalendarDay("2026-2-1")).toBe(false);
   });
 });

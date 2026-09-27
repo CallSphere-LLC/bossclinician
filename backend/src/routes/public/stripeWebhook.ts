@@ -617,11 +617,16 @@ async function mirrorLegacyPlanSubscription(session: Stripe.Checkout.Session): P
     }
   }
 
+  // The plan's billing period goes onto the row: left to the column's 'month'
+  // default, anything reading the row alone booked a yearly plan's price every
+  // month. Plans bill once per interval. On a conflict the row came from
+  // customer.subscription.*, whose interval from Stripe stands.
   const subscription = await pool.query<{ id: number; created: boolean }>(
     `INSERT INTO subscriptions
        (member_id, plan_id, email, stripe_customer_id, stripe_subscription_id,
-        status, amount_cents, currency)
-     VALUES ($1, $2, $3, $4, $5, 'active', $6, $7)
+        status, amount_cents, currency, "interval", interval_count)
+     VALUES ($1, $2, $3, $4, $5, 'active', $6, $7,
+             COALESCE((SELECT p."interval" FROM plans p WHERE p.id = $2), 'month'), 1)
      ON CONFLICT (stripe_subscription_id) DO UPDATE
        SET member_id = COALESCE(EXCLUDED.member_id, subscriptions.member_id),
            plan_id   = COALESCE(EXCLUDED.plan_id, subscriptions.plan_id),

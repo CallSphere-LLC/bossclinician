@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { BarChart3, GraduationCap, Inbox } from "lucide-react";
-import { adminApi } from "@/lib/api";
+import { ApiError, adminApi } from "@/lib/api";
 import type { DashboardOverview, RevenueSummary } from "@/types/admin";
 import { formatCurrency, formatNumber } from "@/lib/format";
 import {
@@ -13,6 +13,7 @@ import {
   Skeleton,
   leadStatusLabel,
 } from "@/pages/admin/ui/primitives";
+import { friendlyError } from "@/pages/admin/ui/friendly";
 import {
   CHART_COLORS,
   DonutChart,
@@ -24,14 +25,33 @@ export default function Analytics() {
   const [overview, setOverview] = useState<DashboardOverview | null>(null);
   const [revenue, setRevenue] = useState<RevenueSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [revenueError, setRevenueError] = useState<string | null>(null);
 
+  // Loaded separately: the money figures come from Sales, which a Marketing
+  // login may not read. Tying them together turned that one 403 into a blank
+  // page, taking the enquiry and audience charts she can see down with it.
   useEffect(() => {
-    Promise.all([adminApi.overview(), adminApi.revenue()])
-      .then(([o, r]) => {
-        setOverview(o);
-        setRevenue(r);
-      })
-      .catch(() => setError("We couldn't load your numbers. Try refreshing the page."));
+    let cancelled = false;
+    adminApi
+      .overview()
+      .then((o) => !cancelled && setOverview(o))
+      .catch(() => {
+        if (!cancelled) setError("We couldn't load your numbers. Try refreshing the page.");
+      });
+    adminApi
+      .revenue()
+      .then((r) => !cancelled && setRevenue(r))
+      .catch((err) => {
+        if (cancelled) return;
+        setRevenueError(
+          err instanceof ApiError && err.status === 403
+            ? "Money figures are shown to accounts that can see sales."
+            : friendlyError(err, "sales figures"),
+        );
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const activityData = useMemo(
@@ -104,12 +124,12 @@ export default function Analytics() {
         <Kpi
           label="Money coming in"
           hint="Everything people have paid you"
-          value={revenue && formatCurrency(revenue.grossCents)}
+          value={revenue ? formatCurrency(revenue.grossCents) : revenueError ? "—" : null}
         />
         <Kpi
           label="Money every month"
           hint="From people on a plan"
-          value={revenue && formatCurrency(revenue.mrrCents)}
+          value={revenue ? formatCurrency(revenue.mrrCents) : revenueError ? "—" : null}
         />
         <Kpi
           label="Enquiries"
@@ -129,7 +149,9 @@ export default function Analytics() {
           subtitle="One-off purchases next to monthly plan payments, day by day"
         />
         <div className="px-3 py-5 sm:px-5">
-          {revenueData.length === 0 ? (
+          {revenueError ? (
+            <p className="py-6 text-center text-sm text-ink-soft">{revenueError}</p>
+          ) : revenueData.length === 0 ? (
             <Skeleton className="h-[280px] w-full" />
           ) : (
             <TrendAreaChart

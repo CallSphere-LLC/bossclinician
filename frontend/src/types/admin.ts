@@ -868,6 +868,10 @@ export interface AdminLiveVisit {
   leftAt: string | null;
   /** Null while they are still in the room. */
   seconds: number | null;
+  /** No leaving time and still on the live roster: in there now. */
+  inProgress: boolean;
+  /** No leaving time but gone from the roster: the end was never recorded. */
+  interrupted: boolean;
 }
 
 /* ---------------------------------------------------- email, section 3 */

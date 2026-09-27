@@ -30,9 +30,14 @@ authRouter.post(
     const { email, password } = parsed.data;
     const submittedCode = typeof req.body?.code === "string" ? req.body.code : "";
 
+    // Case-insensitive, as invitations (stored lower-cased), Google sign-in and
+    // the per-email limiter all are: "Sam@Example.com" is the same admin as
+    // "sam@example.com". An exact match wins should both spellings ever exist.
     const result = await pool.query(
       `SELECT id, email, password_hash, name, role, created_at, status, mfa_enabled, mfa_secret
-         FROM admin_users WHERE email = $1`,
+         FROM admin_users WHERE lower(email) = lower($1)
+        ORDER BY (email = $1) DESC
+        LIMIT 1`,
       [email]
     );
 

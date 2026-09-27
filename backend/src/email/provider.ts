@@ -789,9 +789,17 @@ export async function suppress(input: {
   await pool.query(
     `UPDATE contacts
         SET email_marketing_status = $2,
+            -- Who opted them out. Insights' "Unsubscribed by you" and the
+            -- optOut=manual filter read 'admin'/'manual' here, so a contact an
+            -- admin added who then unsubscribed themselves was counted as ours.
+            -- Stamped only when the status changes, so a later unsubscribe
+            -- click does not relabel an opt-out the admin already made.
+            consent_source = CASE
+              WHEN email_marketing_status IS DISTINCT FROM $2 THEN $3
+              ELSE consent_source END,
             opted_out_at = COALESCE(opted_out_at, now()),
             updated_at = now()
       WHERE email = $1`,
-    [email, status]
+    [email, status, input.reason]
   );
 }

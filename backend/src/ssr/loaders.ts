@@ -1,6 +1,7 @@
 import { loadPublicCourseOffers } from "../services/courseOffers";
 import { pool } from "../db/pool";
-import { coursesRepo, resourcesRepo, testimonialsRepo } from "../db/repos";
+import { coursesRepo, resourcesRepo } from "../db/repos";
+import { listPublicTestimonials } from "../routes/public/testimonials";
 import { rowToCamel, rowsToCamel } from "../utils/case";
 import { BlogPost } from "../types";
 
@@ -70,8 +71,9 @@ export async function loadBlogPost(slug: string): Promise<BlogPost | null> {
   return rowToCamel<BlogPost>(res.rows[0]);
 }
 
+/** Mirrors GET /api/testimonials, so the seeded cards carry `photo` too. */
 export async function loadTestimonials(): Promise<unknown[]> {
-  return testimonialsRepo.list({ where: "published = true" });
+  return listPublicTestimonials();
 }
 
 export async function loadCourses(): Promise<unknown[]> {

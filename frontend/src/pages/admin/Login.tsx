@@ -1,9 +1,9 @@
 import { useState, type FormEvent } from "react";
-import { Navigate, useSearchParams } from "react-router";
+import { Navigate, useLocation, useSearchParams } from "react-router";
 import { motion } from "motion/react";
 import { ArrowLeft, ArrowRight, Eye, EyeOff, Loader2, ShieldCheck } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
-import { isMfaRequiredError } from "@/lib/api";
+import { ApiError, isMfaRequiredError } from "@/lib/api";
 import { Button, ErrorNotice, Field, Input } from "@/pages/admin/ui/primitives";
 import { RETURN_PARAM, safeReturnPath } from "@/pages/admin/adminReturnTo";
 import {
@@ -18,6 +18,25 @@ const HIGHLIGHTS = [
   "See what you've earned and who's getting in touch",
 ];
 
+/**
+ * What a failed sign-in (other than "now enter your code") says.
+ *
+ * Only a 401 means the email or password was wrong. The limiter answers a 429
+ * after five tries, and telling her the password is wrong then sends her round
+ * a loop of retyping a correct one for fifteen minutes; a 5xx or a dropped
+ * connection says nothing about her details at all.
+ */
+export function loginErrorMessage(err: unknown): string {
+  if (err instanceof ApiError) {
+    if (err.status === 401) return "That email or password doesn't match. Check them and try again.";
+    if (err.status === 429) {
+      return "Too many sign-in attempts. Wait 15 minutes, then try again.";
+    }
+    if (err.status === 400) return "Enter a valid email address and your password.";
+  }
+  return "We couldn't reach the server to sign you in. Check your connection and try again.";
+}
+
 export default function Login() {
   const { user, loading, login } = useAuth();
   const [email, setEmail] = useState("");
@@ -29,6 +48,9 @@ export default function Login() {
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [searchParams] = useSearchParams();
+  // A one-off message handed over by the page that sent her here — accepting
+  // an invitation lands on this screen, which has no toaster of its own.
+  const arrivalNotice = (useLocation().state as { notice?: unknown } | null)?.notice;
   const googleEnabled = useAdminGoogleEnabled();
   const returnTo = safeReturnPath(searchParams.get(RETURN_PARAM));
   // What a failed trip to Google left in the URL. It belongs to that attempt,
@@ -53,7 +75,7 @@ export default function Login() {
         setMfaRequired(true);
         setError(code ? "That code didn't match. Try the current code or a backup code." : null);
       } else {
-        setError("That email or password doesn't match. Check them and try again.");
+        setError(loginErrorMessage(err));
       }
     } finally {
       setSubmitting(false);
@@ -180,6 +202,12 @@ export default function Login() {
                   required
                 />
               </Field>
+            )}
+
+            {!submitted && typeof arrivalNotice === "string" && !notice && (
+              <p role="status" className="rounded-xl border border-hairline px-4 py-3 text-sm text-ink">
+                {arrivalNotice}
+              </p>
             )}
 
             {notice && <ErrorNotice message={notice} />}

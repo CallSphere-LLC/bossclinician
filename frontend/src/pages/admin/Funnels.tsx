@@ -364,6 +364,7 @@ export default function Funnels() {
   const [stepDraft, setStepDraft] = useState<Partial<FunnelStep> | null>(null);
   const [offers, setOffers] = useState<Offer[]>([]);
   const [reordering, setReordering] = useState(false);
+  const [savingFunnel, setSavingFunnel] = useState(false);
   const bodyRef = useRef<HTMLTextAreaElement>(null);
   const [confirm, confirmDialog] = useConfirm();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -408,9 +409,27 @@ export default function Funnels() {
     adminCommerceApi.offerList().then(setOffers).catch(() => setOffers([]));
   }, []);
 
+  /* Only the latest request may land. Clicking one funnel and then another
+     before the first answered could otherwise paint the first funnel's stages
+     under the second's name — and a reorder or delete then acted on them. */
+  const stepsRequestRef = useRef(0);
+  /* A reload that finishes a reorder or save of a funnel she has since left
+     must not be issued: as the latest request it would win over the one for
+     the funnel now on screen. */
+  const activeIdRef = useRef<number | null>(null);
+  activeIdRef.current = active?.id ?? null;
   const loadSteps = useCallback((id: number) => {
+    if (id !== activeIdRef.current) return;
+    const request = ++stepsRequestRef.current;
     setSteps(null);
-    adminApi.funnelSteps(id).then(setSteps).catch(() => setSteps([]));
+    adminApi
+      .funnelSteps(id)
+      .then((list) => {
+        if (request === stepsRequestRef.current) setSteps(list);
+      })
+      .catch(() => {
+        if (request === stepsRequestRef.current) setSteps([]);
+      });
   }, []);
 
   useEffect(() => {
@@ -438,7 +457,7 @@ export default function Funnels() {
 
   async function saveFunnel(e: FormEvent) {
     e.preventDefault();
-    if (!funnelDraft?.name?.trim()) return;
+    if (!funnelDraft?.name?.trim() || savingFunnel) return;
 
     // The web address comes from the name rather than a box she has to fill
     // in, and an existing funnel keeps the one it already has so links she has
@@ -447,7 +466,16 @@ export default function Funnels() {
     const payload = {
       ...funnelDraft,
       slug: funnelDraft.slug || uniqueKey(slugify(funnelDraft.name) || "funnel", taken, "-"),
+      // The offer picker only shows for a sales or launch funnel, but an offer
+      // chosen there survived switching the kind back, and an opt-in funnel was
+      // built with an offer attached that nothing on screen had shown.
+      ...(!funnelDraft.id && !["sales", "launch"].includes(funnelDraft.kind ?? "")
+        ? { offerId: null }
+        : {}),
     };
+    // A second click on Create while the first was building ran the blueprint
+    // twice, and the second failed on the web address the first had just taken.
+    setSavingFunnel(true);
     try {
       if (funnelDraft.id) {
         const saved = await adminApi.growthUpdate<Funnel>("funnels", funnelDraft.id, payload);
@@ -462,6 +490,8 @@ export default function Funnels() {
       }
     } catch (err) {
       toast.error(friendlyError(err, "funnel"));
+    } finally {
+      setSavingFunnel(false);
     }
   }
 
@@ -533,11 +563,13 @@ export default function Funnels() {
             adminApi.growthUpdate("steps", stage.id, { sort: position }),
           ),
       );
-      loadSteps(active.id);
     } catch (err) {
       toast.error(friendlyError(err, "stage"));
     } finally {
       setReordering(false);
+      // Also after a failure: some of the renumbering writes may have landed,
+      // and the next move is computed from the positions shown here.
+      loadSteps(active.id);
     }
   }
 
@@ -856,8 +888,8 @@ export default function Funnels() {
             <Button variant="secondary" size="sm" onClick={() => setFunnelDraft(null)}>
               Cancel
             </Button>
-            <Button size="sm" type="submit" form="funnel-form">
-              Save
+            <Button size="sm" type="submit" form="funnel-form" disabled={savingFunnel}>
+              {savingFunnel ? "Saving…" : "Save"}
             </Button>
           </>
         }

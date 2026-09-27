@@ -149,7 +149,7 @@ export function fromDateInput(day: string, edge: "start" | "end" = "start"): str
 }
 
 /** Pulls a numeric HTTP status off an ApiError without importing the class. */
-function statusOf(err: unknown): number | undefined {
+export function statusOf(err: unknown): number | undefined {
   if (typeof err === "object" && err !== null && "status" in err) {
     const status = (err as { status: unknown }).status;
     if (typeof status === "number") return status;
@@ -181,6 +181,11 @@ export function friendlyError(err: unknown, context: string): string {
   if (status === 403) return "Your account isn't allowed to do that.";
   if (status === 404) return `We couldn't find that ${context}.`;
   if (status === 409) {
+    // Not every 409 is a name clash: "This file is still being uploaded
+    // somewhere else" told her to rename a file she never named. The server's
+    // sentence wins when it wrote one; the bare "Conflict" default does not.
+    const said = err instanceof Error ? err.message.trim() : "";
+    if (said && said.length <= 200 && !/^conflict$/i.test(said)) return said;
     return `That ${context} clashes with one you already have — try a different name.`;
   }
   if (status === 413) return "That file is too large.";

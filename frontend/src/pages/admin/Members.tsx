@@ -222,11 +222,22 @@ function readSpreadsheet(text: string): ParsedSpreadsheet {
   return { rows, unusable };
 }
 
-/** One rejected line, as a sentence rather than a blank bullet. */
-function importErrorText(entry: ImportError): string {
+/**
+ * One rejected line, as a sentence rather than a blank bullet.
+ *
+ * The server answers `{ row, reason }`, where `row` counts from 1 through the
+ * rows we *sent* — not the lines of her file, since headings and lines with no
+ * address never leave the browser. So the row is turned back into the address
+ * it carried, which is how she'll find it in her spreadsheet.
+ */
+export function importErrorText(entry: ImportError, sent: ImportRow[] = []): string {
   if (typeof entry === "string") return entry;
-  const who = entry.email || (entry.row ? `Line ${entry.row}` : "One line");
-  return `${who} — ${entry.message ?? "we couldn't use this one."}`;
+  const reason =
+    "reason" in entry && typeof entry.reason === "string" ? entry.reason : entry.message;
+  const who =
+    entry.email ||
+    (entry.row ? sent[entry.row - 1]?.email || `Line ${entry.row}` : "One line");
+  return `${who} — ${reason || "we couldn't use this one."}`;
 }
 
 /** The result in the numbers she cares about: who came in, who didn't. */
@@ -289,6 +300,7 @@ export default function Members() {
 
   const [manage, setManage] = useState<Member | null>(null);
   const [enrollments, setEnrollments] = useState<Enrollment[] | null>(null);
+  const [enrollmentsError, setEnrollmentsError] = useState<string | null>(null);
   const [courseToAdd, setCourseToAdd] = useState("");
 
   const [downloading, setDownloading] = useState(false);
@@ -347,7 +359,22 @@ export default function Members() {
   useEffect(() => {
     if (!manage) return;
     setEnrollments(null);
-    adminApi.memberEnrollments(manage.id).then(setEnrollments).catch(() => undefined);
+    setEnrollmentsError(null);
+    // Closing one member's courses and opening another's faster than the first
+    // list arrives would otherwise file the first person's courses under the
+    // second — and "Take them out" would then act on the wrong person.
+    let current = true;
+    adminApi
+      .memberEnrollments(manage.id)
+      .then((list) => {
+        if (current) setEnrollments(list);
+      })
+      .catch(() => {
+        if (current) setEnrollmentsError("We couldn't load their courses. Close this and try again.");
+      });
+    return () => {
+      current = false;
+    };
   }, [manage]);
 
   const filtering = Boolean(searchTerm || statusFilter || courseFilter);
@@ -543,6 +570,8 @@ export default function Members() {
       await adminApi.memberEnroll(manage.id, Number(courseToAdd));
       const fresh = await adminApi.memberEnrollments(manage.id);
       setEnrollments(fresh);
+      // A fresh list replaces the "couldn't load" notice, or it would hide it.
+      setEnrollmentsError(null);
       setCourseToAdd("");
       toast.success("Added to the course");
       reload();
@@ -997,7 +1026,9 @@ export default function Members() {
             </Button>
           </form>
 
-          {enrollments === null ? (
+          {enrollmentsError ? (
+            <ErrorNotice message={enrollmentsError} />
+          ) : enrollments === null ? (
             <Skeleton className="h-24 w-full" />
           ) : enrollments.length === 0 ? (
             <EmptyState
@@ -1072,7 +1103,7 @@ export default function Members() {
                 <p className="text-sm font-semibold text-ink">These ones need a second look</p>
                 <ul className="mt-2 space-y-1.5 text-sm text-ink-soft">
                   {importResult.errors.slice(0, 8).map((entry, i) => (
-                    <li key={i}>{importErrorText(entry)}</li>
+                    <li key={i}>{importErrorText(entry, parsedImport.rows)}</li>
                   ))}
                 </ul>
                 {importResult.errors.length > 8 && (

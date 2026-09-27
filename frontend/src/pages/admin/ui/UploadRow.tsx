@@ -75,6 +75,10 @@ export function UploadRow({ item }: { item: UploadItem }) {
   const busy = item.status === "uploading" || item.status === "queued";
   const stopped =
     item.status === "paused" || item.status === "offline" || item.status === "retrying";
+  // Offline and retrying are still the manager's to finish — it carries on by
+  // itself when the connection answers, and `resume()` ignores them — so a
+  // Resume button there was a button that did nothing.
+  const resumable = item.status === "paused";
   const trouble = TROUBLE.includes(item.status);
 
   return (
@@ -144,7 +148,7 @@ export function UploadRow({ item }: { item: UploadItem }) {
           </Button>
         )}
 
-        {stopped && (
+        {resumable && (
           <Button
             variant="ghost"
             size="iconSm"

@@ -177,8 +177,11 @@ export async function dispatchEvent(
          FROM webhook_endpoints
         WHERE enabled
           AND ($2::int IS NULL OR id = $2)
-          -- An endpoint that named no events wants all of them.
-          AND (cardinality(event_types) = 0 OR $1 = ANY (event_types))`,
+          -- An endpoint that named no events wants all of them. A test sent to
+          -- one endpoint skips the filter: the picker never offers test.ping,
+          -- so a filtered endpoint could otherwise never be tested.
+          AND (cardinality(event_types) = 0 OR $1 = ANY (event_types)
+               OR ($2::int IS NOT NULL AND $1 = 'test.ping'))`,
       [eventType, options.endpointId ?? null]
     );
 

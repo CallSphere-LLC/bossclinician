@@ -126,6 +126,24 @@ function dripBody(choice: DripChoice): { dripDays: number | null; dripDate: stri
   return { dripDays: null, dripDate: null };
 }
 
+/**
+ * Why a schedule can't be saved as it stands, or null when it can.
+ *
+ * `dripBody` reads a blank or zero day count, and a missing date, as "open
+ * now" — so choosing "a set number of days" and leaving the box empty saved a
+ * section that opens the moment they buy, and reopened as exactly that.
+ */
+export function dripError(choice: DripChoice): string | null {
+  if (choice.mode === "days") {
+    const days = Number(choice.days);
+    if (choice.days.trim() === "" || !Number.isInteger(days) || days < 1) {
+      return "Say how many days after they buy this should open — a whole number, 1 or more.";
+    }
+  }
+  if (choice.mode === "date" && !choice.date) return "Choose the date this should open.";
+  return null;
+}
+
 /** "Opens 7 days after they buy" — the line under a section or lesson name. */
 function dripSummary(item: Drip): string | null {
   if (item.dripDateLocal) {
@@ -259,11 +277,17 @@ export default function CourseBuilder() {
       .catch(() => undefined);
   }, [courseId]);
 
-  useEffect(() => {
+  /* Reloaded after every lesson save as well as on arrival: the picker hides
+     assessments another lesson already holds by reading `lessonId` off this
+     list, and a list from before the save still showed a quiz just linked to
+     one lesson as free — choosing it on the next lesson moved it silently. */
+  const loadAssessments = useCallback(() => {
     assessmentsApi.list()
       .then((rows) => setGradedTests(rows.filter((assessment) => assessment.kind === "graded" || assessment.kind === "survey")))
       .catch(() => setGradedTests([]));
   }, []);
+
+  useEffect(loadAssessments, [loadAssessments]);
 
   const lessonCount = (modules ?? []).reduce((sum, m) => sum + m.lessons.length, 0);
   const totalMinutes = (modules ?? []).reduce(
@@ -288,6 +312,11 @@ export default function CourseBuilder() {
   async function saveModule(e: FormEvent) {
     e.preventDefault();
     if (!moduleDraft?.title.trim()) return;
+    const dripProblem = dripError(moduleDraft.drip);
+    if (dripProblem) {
+      toast.error(dripProblem);
+      return;
+    }
     try {
       await adminApi.moduleUpdate(moduleDraft.id, {
         title: moduleDraft.title.trim(),
@@ -356,6 +385,11 @@ export default function CourseBuilder() {
   async function saveLesson(e: FormEvent) {
     e.preventDefault();
     if (!lessonDraft?.lesson.title?.trim() || savingLesson) return;
+    const dripProblem = dripError(lessonDraft.drip);
+    if (dripProblem) {
+      toast.error(dripProblem);
+      return;
+    }
     setSavingLesson(true);
 
     const { moduleId, lesson } = lessonDraft;
@@ -411,8 +445,11 @@ export default function CourseBuilder() {
       toast.success(lesson.id ? "Lesson saved" : "Lesson added");
       setLessonDraft(null);
       load();
+      loadAssessments();
     } catch (err) {
       toast.error(friendlyError(err, "lesson"));
+      // A save that got as far as unlinking the old quiz has changed the list.
+      loadAssessments();
     } finally {
       setSavingLesson(false);
     }

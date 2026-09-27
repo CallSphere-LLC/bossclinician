@@ -179,6 +179,18 @@ export function offerPricingErrors(
   return {};
 }
 
+/**
+ * The payment-count box → the stored count, capped at 60 but never floored
+ * while she types: an empty box is null and a lone "1" stays 1, so "12" can be
+ * typed. `offerPricingErrors` refuses anything under 2 at save time.
+ */
+export function installmentInput(raw: string): number | null {
+  if (raw.trim() === "") return null;
+  const count = Math.trunc(Number(raw));
+  if (!Number.isFinite(count)) return null;
+  return Math.min(60, Math.max(0, count));
+}
+
 /* ── Tabs ───────────────────────────────────────────────────────────────── */
 
 type TabKey = "selling" | "price" | "form" | "bumps" | "upsells" | "gifting" | "after";
@@ -1156,14 +1168,14 @@ function PriceTab({
                     type="number"
                     min={2}
                     max={60}
-                    value={draft.installmentCount ?? 3}
+                    value={draft.installmentCount ?? ""}
                     onChange={(e) =>
-                      // Capped at both ends: over 60 the server answers with the
+                      // Capped at 60: over it the server answers with the
                       // parser's own words ("Number must be less than or equal
-                      // to 60") right under the box.
-                      update({
-                        installmentCount: Math.min(60, Math.max(2, Number(e.target.value) || 2)),
-                      })
+                      // to 60") right under the box. Not floored at 2 while she
+                      // types — that turned the "1" of "12" into a 2, so typing
+                      // 12 saved a 22-payment plan. Save refuses anything under 2.
+                      update({ installmentCount: installmentInput(e.target.value) })
                     }
                   />
                 </Field>
@@ -1465,7 +1477,7 @@ function AdditionalPricingOptions({ offer, onChanged, confirm }: {
           )}
           {draft.pricingType === "payment_plan" && (
             <Field label="Number of payments">
-              <Input type="number" min={2} max={60} value={draft.installmentCount ?? 3} onChange={(e) => setDraft((current) => ({ ...current, installmentCount: Math.min(60, Math.max(2, Number(e.target.value) || 2)) }))} />
+              <Input type="number" min={2} max={60} value={draft.installmentCount ?? ""} onChange={(e) => setDraft((current) => ({ ...current, installmentCount: installmentInput(e.target.value) }))} />
             </Field>
           )}
           {draft.pricingType === "subscription" && (
@@ -1757,6 +1769,23 @@ type Confirm = (options: {
   destructive?: boolean;
 }) => Promise<boolean>;
 
+/**
+ * The sort writes that swap bump `index` with bump `target`.
+ *
+ * Every row whose position changes is rewritten, not only the pair: after a
+ * removal the stored sorts are gappy or tied (a new bump takes `bumps.length`),
+ * so trading just the pair's numbers can leave an untouched row between them.
+ */
+export function bumpSortWrites(
+  bumps: Pick<OfferBump, "id" | "sort">[],
+  index: number,
+  target: number,
+): { id: number; sort: number }[] {
+  const order = [...bumps];
+  [order[index], order[target]] = [order[target], order[index]];
+  return order.flatMap((bump, position) => (bump.sort === position ? [] : [{ id: bump.id, sort: position }]));
+}
+
 function BumpsTab({
   offer,
   catalogue,
@@ -1852,15 +1881,14 @@ function BumpsTab({
     }
   }
 
-  /** Swaps a bump with its neighbour by trading their positions. */
+  /** Swaps a bump with its neighbour — see `bumpSortWrites`. */
   async function move(index: number, delta: number) {
     const target = index + delta;
-    const a = offer.bumps[index];
-    const b = offer.bumps[target];
-    if (!a || !b) return;
+    if (!offer.bumps[index] || !offer.bumps[target]) return;
     try {
-      await adminCommerceApi.bumpUpdate(offer.id, a.id, { sort: target });
-      await adminCommerceApi.bumpUpdate(offer.id, b.id, { sort: index });
+      for (const write of bumpSortWrites(offer.bumps, index, target)) {
+        await adminCommerceApi.bumpUpdate(offer.id, write.id, { sort: write.sort });
+      }
       onChanged();
     } catch (err) {
       toast.error(commerceMessage(err, "order bump"));
@@ -2041,6 +2069,17 @@ function firstFreeStep(used: Set<number>): number | null {
   return null;
 }
 
+/**
+ * The step a new upsell is saved at: after the last one. The lowest free number
+ * would slot it in ahead of the existing funnel whenever an earlier step had
+ * been removed.
+ */
+export function nextUpsellStep(used: Set<number>): number {
+  const last = Math.max(0, ...used);
+  if (last < MAX_STEP) return last + 1;
+  return firstFreeStep(used) ?? MAX_STEP;
+}
+
 function UpsellsTab({
   offer,
   offers,
@@ -2093,7 +2132,7 @@ function UpsellsTab({
     if (!chosen) return;
 
     const used = new Set(offer.upsells.map((upsell) => upsell.step));
-    const step = editing.upsell?.step ?? firstFreeStep(used) ?? MAX_STEP;
+    const step = editing.upsell?.step ?? nextUpsellStep(used);
 
     setBusy(true);
     try {

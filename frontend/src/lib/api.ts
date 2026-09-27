@@ -490,9 +490,9 @@ export const adminApi = {
       created: number;
       updated: number;
       skipped: number;
-      // A rejected line comes back either as a finished sentence or as the
-      // pieces to build one from, so the screen can always show a reason.
-      errors: (string | { row?: number; email?: string; message?: string })[];
+      // The route answers `{ row, reason }` for each rejected line; the other
+      // shapes are older ones the screen still knows how to word.
+      errors: (string | { row?: number; reason?: string; email?: string; message?: string })[];
     }>("/admin/members/import", { method: "POST", body: JSON.stringify({ rows }) }),
   memberCreate: (data: { email: string; name?: string; status?: string }) =>
     request<Member>("/admin/members", { method: "POST", body: JSON.stringify(data) }),
@@ -750,13 +750,14 @@ export const adminApi = {
 
   channelPosts: (channelId: number) =>
     request<CommunityPost[]>(`/admin/community/channels/${channelId}/posts`),
+  // The write answers with the bare row: the counts come only from the list.
   postCreate: (channelId: number, data: Record<string, unknown>) =>
-    request<CommunityPost>(`/admin/community/channels/${channelId}/posts`, {
+    request<Omit<CommunityPost, "commentCount" | "reactionCount">>(`/admin/community/channels/${channelId}/posts`, {
       method: "POST",
       body: JSON.stringify(data),
     }),
   postUpdate: (id: number, data: Record<string, unknown>) =>
-    request<CommunityPost>(`/admin/community/posts/${id}`, {
+    request<Omit<CommunityPost, "commentCount" | "reactionCount">>(`/admin/community/posts/${id}`, {
       method: "PUT",
       body: JSON.stringify(data),
     }),

@@ -47,17 +47,31 @@ export default function Products() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    Promise.all([adminApi.coursesList(), adminApi.communities(), adminApi.plans(), adminCommerceApi.productList({ kind: "download" }), adminApi.growthList<Podcast>("podcasts"), adminApi.growthList<Newsletter>("newsletters"), adminApi.growthList<CoachingOffer>("coaching/offers")])
-      .then(([c, comm, p, dl, shows, letters, coaches]) => {
-        setDownloads(dl.filter((d) => d.status !== "archived"));
-        setPodcasts(shows);
-        setNewsletters(letters);
-        setCoaching(coaches);
-        setCourses(c);
-        setCommunities(comm);
-        setPlans(p);
-      })
-      .catch(() => setError("We couldn't load what you're selling. Try refreshing the page."));
+    // Each list on its own. These sit behind different permissions — Support
+    // can't read podcasts, Marketing can't read plans — and one refusal used to
+    // reject the lot, leaving every section a skeleton for good.
+    let failed = false;
+    function settle<T>(request: Promise<T[]>, set: (items: T[]) => void): Promise<void> {
+      return request
+        .then(set)
+        .catch(() => {
+          failed = true;
+          set([]);
+        });
+    }
+    void Promise.all([
+      settle(adminApi.coursesList(), setCourses),
+      settle(adminApi.communities(), setCommunities),
+      settle(adminApi.plans(), setPlans),
+      settle(adminCommerceApi.productList({ kind: "download" }), (dl) =>
+        setDownloads(dl.filter((d) => d.status !== "archived")),
+      ),
+      settle(adminApi.growthList<Podcast>("podcasts"), setPodcasts),
+      settle(adminApi.growthList<Newsletter>("newsletters"), setNewsletters),
+      settle(adminApi.growthList<CoachingOffer>("coaching/offers"), setCoaching),
+    ]).then(() => {
+      if (failed) setError("Some of what you're selling couldn't be loaded. Try refreshing the page.");
+    });
   }, []);
 
   const loading = courses === null || communities === null || plans === null || downloads === null || podcasts === null || newsletters === null || coaching === null;

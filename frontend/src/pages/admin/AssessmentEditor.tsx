@@ -681,20 +681,44 @@ export default function AssessmentEditor() {
   const pendingInlineSaves = useRef(0);
   const [confirm, confirmDialog] = useConfirm();
 
+  // Every save reloads, so several loads are often on the wire at once; only
+  // the newest may land. An older answer arriving last put back the text from
+  // before the latest save — and, the box then matching it, nothing re-saved.
+  const loadTicket = useRef(0);
+
   const load = useCallback(() => {
     if (!Number.isFinite(quizId)) {
       setError("We couldn’t find that quiz.");
       return;
     }
+    const ticket = ++loadTicket.current;
+    const latest = () => ticket === loadTicket.current;
     assessmentsApi
       .get(quizId)
       .then((row) => {
+        if (!latest()) return;
         setDetail(row);
         setError(null);
       })
-      .catch(() => setError("We couldn’t load this quiz just now."));
-    assessmentsApi.attempts(quizId).then(setAttempts).catch(() => setAttempts([]));
-    assessmentsApi.report(quizId).then(setReport).catch(() => setReport(null));
+      .catch(() => {
+        if (latest()) setError("We couldn’t load this quiz just now.");
+      });
+    assessmentsApi
+      .attempts(quizId)
+      .then((rows) => {
+        if (latest()) setAttempts(rows);
+      })
+      .catch(() => {
+        if (latest()) setAttempts([]);
+      });
+    assessmentsApi
+      .report(quizId)
+      .then((row) => {
+        if (latest()) setReport(row);
+      })
+      .catch(() => {
+        if (latest()) setReport(null);
+      });
   }, [quizId]);
 
   useEffect(load, [load]);
@@ -874,12 +898,20 @@ export default function AssessmentEditor() {
     [beginInlineSave, finishInlineSave, load],
   );
 
+  // One at a time: the route picks the new result's web address ("new-result")
+  // from the ones already stored, so a double-click sent two requests that both
+  // picked the same one and the second failed the unique constraint with a 500.
+  const addingResult = useRef(false);
   const addResult = useCallback(async () => {
+    if (addingResult.current) return;
+    addingResult.current = true;
     try {
       await assessmentsApi.addResult(quizId, {});
       load();
     } catch (err) {
       toast.error(friendlyError(err, "quiz"));
+    } finally {
+      addingResult.current = false;
     }
   }, [quizId, load]);
 

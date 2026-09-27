@@ -58,6 +58,13 @@ async function readWindow(opts: {
   previousFrom: string;
   previousTo: string;
   aggregate?: "sum" | "last";
+  /**
+   * The last day the rollup has actually worked out. A snapshot is read from
+   * there rather than from `to`: until the 03:00 run, today has no row, and the
+   * LEFT JOIN turned that into a zero — "Money every month: $0, down 100%"
+   * every night after midnight, and all day if the run was late.
+   */
+  through?: string;
 }): Promise<MetricWindow> {
   const res = await pool.query<{
     date: string;
@@ -91,10 +98,7 @@ async function readWindow(opts: {
     (r) => r.date >= opts.previousFrom && r.date <= opts.previousTo
   );
 
-  const fold = (list: typeof rows): number =>
-    opts.aggregate === "last"
-      ? (list[list.length - 1]?.value ?? 0)
-      : list.reduce((acc, r) => acc + r.value, 0);
+  const fold = (list: typeof rows): number => foldMetric(list, opts.aggregate, opts.through);
 
   const seen = new Set(rows.map((r) => r.currency).filter((c): c is string => Boolean(c)));
 
@@ -104,6 +108,17 @@ async function readWindow(opts: {
     previousTotal: fold(previous),
     currency: seen.size === 1 ? [...seen][0] : seen.size === 0 ? "usd" : "mixed",
   };
+}
+
+/** A window's days folded into its one figure — summed, or the latest settled snapshot. */
+export function foldMetric(
+  list: { date: string; value: number }[],
+  aggregate: "sum" | "last" = "sum",
+  through?: string
+): number {
+  if (aggregate !== "last") return list.reduce((acc, r) => acc + r.value, 0);
+  const settled = through ? list.filter((r) => r.date <= through) : list;
+  return settled[settled.length - 1]?.value ?? 0;
 }
 
 function changePercent(current: number, previous: number): number | null {
@@ -173,9 +188,13 @@ adminDashboardRouter.get(
 
     const window = { from, to, previousFrom, previousTo };
 
-    const [gross, recurring, optins, sold, netAllTime, figuresUpdatedAt] = await Promise.all([
+    // Read first: the snapshot tile needs to know which day was last worked out.
+    const figuresUpdatedAt = await lastRollupAt();
+    const through = figuresUpdatedAt ? reportDay(figuresUpdatedAt) : undefined;
+
+    const [gross, recurring, optins, sold, netAllTime] = await Promise.all([
       readWindow({ ...window, metric: "gross_revenue", column: "value_cents" }),
-      readWindow({ ...window, metric: "mrr", column: "value_cents", aggregate: "last" }),
+      readWindow({ ...window, metric: "mrr", column: "value_cents", aggregate: "last", through }),
       readWindow({ ...window, metric: "optins", column: "value_count" }),
       readWindow({ ...window, metric: "orders", column: "value_count" }),
       pool.query<{ cents: string; currency: string | null }>(
@@ -184,7 +203,6 @@ adminDashboardRouter.get(
            FROM report_daily
           WHERE metric = 'net_revenue' AND dimension = ''`
       ),
-      lastRollupAt(),
     ]);
 
     const tile = (

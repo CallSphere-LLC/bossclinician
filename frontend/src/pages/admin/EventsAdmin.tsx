@@ -749,19 +749,43 @@ export default function EventsAdmin() {
     contactsApi.tags().then(setTags).catch(() => setTags([]));
   }, []);
 
-  const loadDetail = useCallback((id: number) => {
+  /*
+   * The event the editor is showing right now. Every read below lands only if
+   * it is still for that event: without the check, opening one event and then
+   * another before the first answered filled the second one's editor with the
+   * first one's settings — and "Save event" then wrote them onto the second.
+   */
+  const shownId = useRef<number | null>(null);
+
+  /**
+   * `keepForm` is for re-reads after a reminder or attendance change: those
+   * refresh the counts, and must not throw away settings typed but not saved.
+   */
+  const loadDetail = useCallback((id: number, options: { keepForm?: boolean } = {}) => {
+    const current = () => shownId.current === id;
     eventsAdminApi
       .get(id)
       .then((row) => {
+        if (!current()) return;
         setDetail(row);
-        setForm(formFromDetail(row));
+        if (options.keepForm) setForm((existing) => existing ?? formFromDetail(row));
+        else setForm(formFromDetail(row));
       })
-      .catch((err) => toast.error(friendlyError(err, "event")));
-    eventsAdminApi.registrations(id).then(setRegistrants).catch(() => setRegistrants([]));
-    eventsAdminApi.report(id).then(setReport).catch(() => setReport(null));
+      .catch((err) => {
+        if (current()) toast.error(friendlyError(err, "event"));
+      });
+    eventsAdminApi
+      .registrations(id)
+      .then((rows) => current() && setRegistrants(rows))
+      .catch(() => current() && setRegistrants([]));
+    eventsAdminApi
+      .report(id)
+      .then((row) => current() && setReport(row))
+      .catch(() => current() && setReport(null));
   }, []);
 
   function open(id: number) {
+    shownId.current = id;
     setOpenId(id);
     setDetail(null);
     setForm(null);
@@ -773,6 +797,7 @@ export default function EventsAdmin() {
   }
 
   function close() {
+    shownId.current = null;
     setOpenId(null);
     setDetail(null);
     setForm(null);
@@ -964,7 +989,7 @@ export default function EventsAdmin() {
           : `${pluralize(selected.length, "person", "people")} marked as didn’t turn up.`,
       );
       setSelected([]);
-      loadDetail(openId);
+      loadDetail(openId, { keepForm: true });
       loadList();
     } catch (err) {
       toast.error(friendlyError(err, "event"));
@@ -996,7 +1021,7 @@ export default function EventsAdmin() {
     try {
       toast.success(await work());
       setReminderProblem(null);
-      loadDetail(openId);
+      loadDetail(openId, { keepForm: true });
     } catch (err) {
       const message = saveProblem(err, "reminder");
       setReminderProblem(message);

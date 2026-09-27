@@ -107,6 +107,27 @@ function describeExitReason(reason: string): string {
   return trimmed.charAt(0).toLowerCase() + trimmed.slice(1);
 }
 
+/**
+ * "Where they are" for one person on the sequence.
+ *
+ * A subscription's `position` is the stored position of the next email due,
+ * which is not its number in the list once an email has been deleted (1, 3, 4)
+ * or switched off, so it is counted against the emails as listed. Paused runs
+ * are still on the sequence and were shown as having left it.
+ */
+export function describeWhereTheyAre(
+  row: Pick<SequenceSubscriber, "status" | "position">,
+  emails: Pick<SequenceEmail, "position" | "enabled">[],
+): string {
+  if (row.status === "completed") return "Finished";
+  if (row.status !== "active" && row.status !== "paused") return "Left early";
+  // The sender skips switched-off emails, so the next one to go is the first
+  // switched-on email at or after the stored position.
+  const index = emails.findIndex((email) => email.enabled && email.position >= row.position);
+  const where = index === -1 ? "Waiting for the next email" : `On email ${index + 1}`;
+  return row.status === "paused" ? `${where} (paused)` : where;
+}
+
 export default function SequenceEditor() {
   const params = useParams<{ id: string }>();
   const sequenceId = Number(params.id);
@@ -131,6 +152,7 @@ export default function SequenceEditor() {
   const [testingId, setTestingId] = useState<number | null>(null);
   const [testAddress, setTestAddress] = useState("");
   const [testAddressError, setTestAddressError] = useState<string | null>(null);
+  const [sendingTest, setSendingTest] = useState(false);
   const [confirm, confirmDialog] = useConfirm();
 
   const load = useCallback(() => {
@@ -330,7 +352,7 @@ export default function SequenceEditor() {
 
   async function sendTest(event: FormEvent) {
     event.preventDefault();
-    if (!sequence || testingId === null) return;
+    if (!sequence || testingId === null || sendingTest) return;
     // Was `type="email" required`, which the browser enforced in silence.
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(testAddress.trim())) {
       setTestAddressError(
@@ -343,6 +365,7 @@ export default function SequenceEditor() {
       return;
     }
     setTestAddressError(null);
+    setSendingTest(true);
     try {
       await marketingApi.testSequenceEmail(sequence.id, testingId, testAddress.trim());
       toast.success(`Test sent to ${testAddress.trim()}`);
@@ -350,6 +373,8 @@ export default function SequenceEditor() {
       setTestAddress("");
     } catch (err) {
       toast.error(friendlyError(err, "email"));
+    } finally {
+      setSendingTest(false);
     }
   }
 
@@ -367,6 +392,12 @@ export default function SequenceEditor() {
   const isOn = sequence.status === "active";
   const statsFor = (emailId: number): SequenceEmailStats | undefined =>
     stats.find((row) => row.id === emailId);
+  // A zone set elsewhere (the site default, say) that is not in the short
+  // list is still offered, so the picker shows the zone actually in use
+  // instead of silently displaying the first option.
+  const timezones = TIMEZONES.includes(sequence.timezone)
+    ? TIMEZONES
+    : [sequence.timezone, ...TIMEZONES];
 
   return (
     <div className="space-y-6">
@@ -597,7 +628,7 @@ export default function SequenceEditor() {
               value={sequence.timezone}
               onChange={(event) => void patch({ timezone: event.target.value })}
             >
-              {TIMEZONES.map((zone) => (
+              {timezones.map((zone) => (
                 <option key={zone} value={zone}>
                   {zone.replace(/_/g, " ").replace("/", " — ")}
                 </option>
@@ -803,11 +834,7 @@ export default function SequenceEditor() {
                       )}
                     </td>
                     <td className="px-5 py-3 text-ink-soft">
-                      {row.status === "active"
-                        ? `On email ${row.position}`
-                        : row.status === "completed"
-                          ? "Finished"
-                          : "Left early"}
+                      {describeWhereTheyAre(row, sequence.emails)}
                     </td>
                     <td className="px-5 py-3 text-ink-soft">
                       {row.nextSendAt ? formatDateTime(row.nextSendAt) : "—"}
@@ -946,8 +973,8 @@ export default function SequenceEditor() {
             <Button variant="secondary" size="sm" onClick={() => setTestingId(null)}>
               Cancel
             </Button>
-            <Button size="sm" type="submit" form="sequence-test-form">
-              Send it
+            <Button size="sm" type="submit" form="sequence-test-form" disabled={sendingTest}>
+              {sendingTest ? "Sending…" : "Send it"}
             </Button>
           </>
         }

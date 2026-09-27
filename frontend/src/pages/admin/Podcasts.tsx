@@ -367,6 +367,9 @@ export default function Podcasts() {
   const [picking, setPicking] = useState<"audio" | "cover" | null>(null);
   const [pickerKind, setPickerKind] = useState<"audio" | "image">("audio");
   const [copied, setCopied] = useState(false);
+  // Episodes have no unique address, so a double-pressed Save used to add the
+  // same episode to the feed twice.
+  const [saving, setSaving] = useState(false);
   const [confirm, confirmDialog] = useConfirm();
 
   // Null while the episodes are still loading, so the card never flashes
@@ -399,10 +402,24 @@ export default function Podcasts() {
     adminApi.membersList().then(setMembers).catch(() => undefined);
   }, []);
 
+  // The show whose episodes and links were asked for last. Clicking from one
+  // show to the next fires two requests; if the first answers second, its
+  // episodes and private links would land under the other show's name — and a
+  // copied private link would pair this show's address with that show's token.
+  const detailFor = useRef<number | null>(null);
   const loadDetail = useCallback((podcastId: number) => {
+    detailFor.current = podcastId;
+    const current = () => detailFor.current === podcastId;
     setEpisodes(null);
-    adminApi.podcastEpisodes(podcastId).then(setEpisodes).catch(() => setEpisodes([]));
-    adminApi.feedTokens(podcastId).then(setLinks).catch(() => setLinks([]));
+    setLinks(null);
+    adminApi
+      .podcastEpisodes(podcastId)
+      .then((rows) => current() && setEpisodes(rows))
+      .catch(() => current() && setEpisodes([]));
+    adminApi
+      .feedTokens(podcastId)
+      .then((rows) => current() && setLinks(rows))
+      .catch(() => current() && setLinks([]));
   }, []);
 
   useEffect(() => {
@@ -417,7 +434,7 @@ export default function Podcasts() {
 
   async function saveShow(e: FormEvent) {
     e.preventDefault();
-    if (!showDraft?.title?.trim()) return;
+    if (!showDraft?.title?.trim() || saving) return;
     // The web address is derived from the title and never shown; an existing
     // show keeps the one it already has so links people saved keep working.
     const takenAddresses = (shows ?? [])
@@ -430,6 +447,7 @@ export default function Podcasts() {
       // address and collide with the next one.
       slug: showDraft.slug || uniqueKey(slugify(showDraft.title) || "show", takenAddresses, "-"),
     };
+    setSaving(true);
     try {
       if (showDraft.id) await adminApi.growthUpdate("podcasts", showDraft.id, payload);
       else await adminApi.growthCreate("podcasts", payload);
@@ -438,12 +456,14 @@ export default function Podcasts() {
       loadShows();
     } catch (err) {
       toast.error(friendlyError(err, "show"));
+    } finally {
+      setSaving(false);
     }
   }
 
   async function saveEpisode(e: FormEvent) {
     e.preventDefault();
-    if (!episodeDraft?.title?.trim() || !active) return;
+    if (!episodeDraft?.title?.trim() || !active || saving) return;
     if (episodeDraft.published && !episodeDraft.audioUrl?.trim()) {
       toast.error("Add the audio before making this episode live.");
       return;
@@ -457,6 +477,7 @@ export default function Podcasts() {
           ? new Date().toISOString()
           : episodeDraft.publishedAt,
     };
+    setSaving(true);
     try {
       if (episodeDraft.id) await adminApi.growthUpdate("episodes", episodeDraft.id, payload);
       else await adminApi.growthCreate("episodes", payload);
@@ -465,6 +486,8 @@ export default function Podcasts() {
       loadDetail(active.id);
     } catch (err) {
       toast.error(friendlyError(err, "episode"));
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -846,7 +869,7 @@ export default function Podcasts() {
             <Button variant="secondary" size="sm" onClick={() => setShowDraft(null)}>
               Cancel
             </Button>
-            <Button size="sm" type="submit" form="show-form">
+            <Button size="sm" type="submit" form="show-form" disabled={saving}>
               Save show
             </Button>
           </>
@@ -982,7 +1005,7 @@ export default function Podcasts() {
             <Button variant="secondary" size="sm" onClick={() => setEpisodeDraft(null)}>
               Cancel
             </Button>
-            <Button size="sm" type="submit" form="episode-form">
+            <Button size="sm" type="submit" form="episode-form" disabled={saving}>
               Save episode
             </Button>
           </>
@@ -1110,7 +1133,10 @@ export default function Podcasts() {
               <input
                 type="checkbox"
                 checked={episodeDraft.published === true}
-                disabled={!episodeDraft.audioUrl}
+                // Only stops an episode going live without audio. A live one
+                // whose audio she has just removed must still be switchable
+                // off, or Save refuses it and nothing on the form can fix it.
+                disabled={!episodeDraft.audioUrl && episodeDraft.published !== true}
                 onChange={(e) => setEpisodeDraft((d) => ({ ...d, published: e.target.checked }))}
                 className="size-4 rounded border-hairline text-plum"
               />

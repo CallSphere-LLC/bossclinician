@@ -417,7 +417,13 @@ function SessionsTab() {
   const [clients, setClients] = useState<CoachingClient[]>([]);
   const [contactSearch, setContactSearch] = useState("");
   const [clientChoice, setClientChoice] = useState("");
+  /* What the picker calls the chosen client. The picker lists at most 100
+     people, and only those matching the search, so the chosen one is often
+     not among them; without its own option the box reads "Choose a client…"
+     over a session that has one. */
+  const [clientLabel, setClientLabel] = useState("");
   const [draft, setDraft] = useState<SessionDraft | null>(null);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [files, setFiles] = useState<CoachingSessionFile[]>([]);
   const [linkTitle, setLinkTitle] = useState("");
@@ -513,9 +519,33 @@ function SessionsTab() {
     return () => window.clearTimeout(timer);
   }, [contactSearch]);
 
+  /**
+   * Opens a session with its own client chosen in the picker.
+   *
+   * Every way into the form goes through here: `save` reads `clientChoice`
+   * before the draft's own ids, so a door that set only the draft left the
+   * previous session's client in the picker and saved it onto this one.
+   */
+  function openSession(session: SessionDraft | null) {
+    setDraft(session);
+    setClientChoice(
+      session?.memberId
+        ? `member:${session.memberId}`
+        : session?.contactId
+          ? `contact:${session.contactId}`
+          : "",
+    );
+    const name = session?.memberName ?? "";
+    const email = session?.memberEmail ?? "";
+    setClientLabel(name && email ? `${name} — ${email}` : name || email);
+  }
+
   async function save(e: FormEvent) {
     e.preventDefault();
-    if (!draft) return;
+    // A second click while the first is on its way would book the client twice
+    // and send the "you're booked" automation twice.
+    if (!draft || saving) return;
+    setSaving(true);
     try {
       let memberId = draft.memberId ?? null;
       let contactId = draft.contactId ?? null;
@@ -526,14 +556,18 @@ function SessionsTab() {
         contactId = Number(clientChoice.slice("contact:".length));
         memberId = null;
       }
-      const payload = { ...draft, memberId, contactId };
+      // A cleared date box reads back as "", which the timestamp column
+      // refuses outright; no date is null.
+      const payload = { ...draft, memberId, contactId, scheduledAt: draft.scheduledAt || null };
       if (draft.id) await adminApi.growthUpdate("coaching/sessions", draft.id, payload);
       else await adminApi.growthCreate("coaching/sessions", payload);
       toast.success(draft.id ? "Session saved" : "Session booked");
-      setDraft(null);
+      openSession(null);
       load();
     } catch (err) {
       toast.error(friendlyError(err, "session"));
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -543,7 +577,7 @@ function SessionsTab() {
         accessorKey: "memberName",
         header: "Client",
         cell: ({ row }) => (
-          <button type="button" onClick={() => { setDraft(row.original); setClientChoice(row.original.memberId ? `member:${row.original.memberId}` : row.original.contactId ? `contact:${row.original.contactId}` : ""); }} className="min-w-0 text-left">
+          <button type="button" onClick={() => openSession(row.original)} className="min-w-0 text-left">
             <span className="block truncate font-semibold text-ink">
               {row.original.memberName || row.original.memberEmail || "No client chosen"}
             </span>
@@ -598,7 +632,7 @@ function SessionsTab() {
                 </a>
               </Button>
             )}
-            <Button variant="ghost" size="sm" onClick={() => setDraft(row.original)}>
+            <Button variant="ghost" size="sm" onClick={() => openSession(row.original)}>
               Open
             </Button>
           </RowActions>
@@ -615,7 +649,7 @@ function SessionsTab() {
       <div className="flex justify-end">
         <Button
           size="sm"
-          onClick={() => { setDraft({ status: "scheduled", durationMinutes: 60 }); setClientChoice(""); }}
+          onClick={() => openSession({ status: "scheduled", durationMinutes: 60 })}
         >
           <Plus />
           Book a session
@@ -639,16 +673,16 @@ function SessionsTab() {
 
       <Modal
         open={draft !== null}
-        onOpenChange={(open) => !open && setDraft(null)}
+        onOpenChange={(open) => !open && openSession(null)}
         title={draft?.id ? "Coaching session" : "Book a session"}
         size="lg"
         footer={
           <>
-            <Button variant="secondary" size="sm" onClick={() => setDraft(null)}>
+            <Button variant="secondary" size="sm" onClick={() => openSession(null)}>
               Cancel
             </Button>
-            <Button size="sm" type="submit" form="session-form">
-              Save session
+            <Button size="sm" type="submit" form="session-form" disabled={saving}>
+              {saving ? "Saving…" : "Save session"}
             </Button>
           </>
         }
@@ -664,11 +698,18 @@ function SessionsTab() {
                 aria-label="Search contacts"
               />
               <select
-                value={clientChoice || (draft.memberId ? `member:${draft.memberId}` : draft.contactId ? `contact:${draft.contactId}` : "")}
-                onChange={(e) => setClientChoice(e.target.value)}
+                value={clientChoice}
+                onChange={(e) => {
+                  setClientChoice(e.target.value);
+                  setClientLabel(e.target.selectedOptions[0]?.text ?? "");
+                }}
                 className={selectStyles}
               >
                 <option value="">Choose a client…</option>
+                {clientChoice &&
+                  !clients.some((client) => `${client.kind}:${client.id}` === clientChoice) && (
+                    <option value={clientChoice}>{clientLabel || "The client already chosen"}</option>
+                  )}
                 {clients.map((client) => (
                   <option key={`${client.kind}:${client.id}`} value={`${client.kind}:${client.id}`}>
                     {client.name ? `${client.name} — ${client.email}` : client.email}

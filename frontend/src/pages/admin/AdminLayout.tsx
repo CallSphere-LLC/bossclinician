@@ -23,6 +23,27 @@ import { AdminVoiceMount } from "@/voice/surfaces/mount";
 import { ConsoleThemeToggle } from "@/pages/admin/ui/ConsoleThemeToggle";
 
 /**
+ * Browser storage for the rail's remembered layout. Either call throws where
+ * site data is blocked, and a throw from a `useState` initialiser is a blank
+ * admin — so a failure here only means the layout is not remembered.
+ */
+function readPref(key: string): string | null {
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    return null;
+  }
+}
+
+function writePref(key: string, value: string): void {
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    // Not remembered; nothing else depends on it.
+  }
+}
+
+/**
  * Admin shell: dark rail + collapsible nav groups, glass topbar, content well.
  *
  * The rail is intentionally dark against the light content area — it pushes
@@ -36,14 +57,14 @@ export function AdminLayout({ children }: { children: ReactNode }) {
   const reduceMotion = useReducedMotion();
 
   const [collapsed, setCollapsed] = useState(() => {
-    return localStorage.getItem("bc_admin_rail") === "collapsed";
+    return readPref("bc_admin_rail") === "collapsed";
   });
   const [mobileOpen, setMobileOpen] = useState(false);
   // Multiple groups stay open at once (not an accordion) — with eight sections
   // and frequent cross-section hopping, auto-collapsing the previous group
   // just costs an extra click every time.
   const [openGroups, setOpenGroups] = useState<Set<string>>(() => {
-    const stored = localStorage.getItem("bc_admin_groups");
+    const stored = readPref("bc_admin_groups");
     // Guarded: a value this browser cannot parse would throw during render and
     // leave her with a blank admin on every load, with nowhere to click to
     // recover it.
@@ -65,7 +86,7 @@ export function AdminLayout({ children }: { children: ReactNode }) {
   }, [location.pathname]);
 
   useEffect(() => {
-    localStorage.setItem("bc_admin_groups", JSON.stringify([...openGroups]));
+    writePref("bc_admin_groups", JSON.stringify([...openGroups]));
   }, [openGroups]);
 
   useEffect(() => {
@@ -73,7 +94,7 @@ export function AdminLayout({ children }: { children: ReactNode }) {
   }, [location.pathname]);
 
   useEffect(() => {
-    localStorage.setItem("bc_admin_rail", collapsed ? "collapsed" : "expanded");
+    writePref("bc_admin_rail", collapsed ? "collapsed" : "expanded");
   }, [collapsed]);
 
   // Unread-style badge on the enquiries inbox.

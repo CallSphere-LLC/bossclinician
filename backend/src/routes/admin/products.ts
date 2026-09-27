@@ -403,16 +403,25 @@ adminProductsRouter.delete(
     const id = parseId(req.params.id);
     const product = await loadProduct(id);
 
-    const usage = await pool.query<{ offers: number; members: number; bundles: number }>(
+    // Plans and order bumps cascade off this row as well, so a product a plan
+    // unlocks, or an offer adds as a bump, is refused for the same reason an
+    // offer's own product is: the next person to pay would get nothing for it.
+    const usage = await pool.query<{
+      offers: number; members: number; bundles: number; plans: number; bumps: number;
+    }>(
       `SELECT (SELECT COUNT(*)::int FROM offer_products op WHERE op.product_id = $1) AS offers,
               (SELECT COUNT(*)::int FROM access_grants g
                 WHERE g.product_id = $1 AND g.status = 'active') AS members,
-              (SELECT COUNT(*)::int FROM product_bundle_items bi WHERE bi.product_id = $1) AS bundles`,
+              (SELECT COUNT(*)::int FROM product_bundle_items bi WHERE bi.product_id = $1) AS bundles,
+              (SELECT COUNT(*)::int FROM plan_products pp WHERE pp.product_id = $1) AS plans,
+              (SELECT COUNT(*)::int FROM offer_bumps ob WHERE ob.product_id = $1) AS bumps`,
       [id],
     );
     const offers = usage.rows[0]?.offers ?? 0;
     const members = usage.rows[0]?.members ?? 0;
     const bundles = usage.rows[0]?.bundles ?? 0;
+    const plans = usage.rows[0]?.plans ?? 0;
+    const bumps = usage.rows[0]?.bumps ?? 0;
 
     if (members > 0) {
       throw badRequest(
@@ -431,6 +440,18 @@ adminProductsRouter.delete(
       throw badRequest(
         `"${product.title}" is part of ${bundles} ${bundles === 1 ? "bundle" : "bundles"}. ` +
           `Take it out of them first.`,
+      );
+    }
+    if (bumps > 0) {
+      throw badRequest(
+        `"${product.title}" is an order bump on ${bumps} ${bumps === 1 ? "offer" : "offers"}. ` +
+          `Remove it from those offers' order bumps first, or set it to Archived.`,
+      );
+    }
+    if (plans > 0) {
+      throw badRequest(
+        `"${product.title}" is unlocked by ${plans} ${plans === 1 ? "plan" : "plans"}. ` +
+          `Take it out of those plans first, or set it to Archived.`,
       );
     }
 

@@ -349,8 +349,10 @@ adminOffersRouter.get(
 const pricingOptionSchema = z.object({
   label: z.string().trim().min(1).max(120),
   pricingType: z.enum(["one_time", "subscription", "payment_plan", "free", "pwyw"]),
-  amountCents: z.number().int().min(0),
-  minAmountCents: z.number().int().min(0).default(0),
+  // The same $999,999.99 cap as the offer itself; the INT column would
+  // otherwise answer a larger figure with a 500 instead of a field message.
+  amountCents: z.number().int().min(0).max(99_999_999),
+  minAmountCents: z.number().int().min(0).max(99_999_999).default(0),
   interval: z.enum(["day", "week", "month", "year"]).nullable().default(null),
   intervalCount: z.number().int().min(1).max(365).default(1),
   installmentCount: z.number().int().min(2).max(60).nullable().default(null),
@@ -591,7 +593,18 @@ adminOffersRouter.put(
       installmentCount: patched(patch.installmentCount, before.installment_count),
       trialDays: patched(patch.trialDays, before.trial_days),
     };
-    const issue = offerPricingIssue(pricing);
+    // Only when the edit touches the price. A live offer that predates a
+    // tightened rule has to stay switchable back to a draft with `{ status }`
+    // alone — refusing that would leave it selling at the price being objected
+    // to. Going live still re-checks everything through `assertPublishable`.
+    const touchesPricing =
+      patch.pricingType !== undefined ||
+      patch.amountCents !== undefined ||
+      patch.minAmountCents !== undefined ||
+      patch.interval !== undefined ||
+      patch.installmentCount !== undefined ||
+      patch.trialDays !== undefined;
+    const issue = touchesPricing ? offerPricingIssue(pricing) : null;
     if (issue) throw issueError(issue);
 
     const currency = patched(patch.currency, before.currency);

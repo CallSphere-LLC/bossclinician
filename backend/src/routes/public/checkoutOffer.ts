@@ -369,29 +369,8 @@ async function ensureRecurringPrice(offer: OfferRow): Promise<string> {
   if (offer.stripe_price_id) return offer.stripe_price_id;
   if (!offer.interval) throw badRequest("This offer is not set up for recurring billing");
 
-  const currency = offer.currency || "usd";
-  const descriptor = await cardStatementDescriptor();
-  const price = await stripe().prices.create(
-    {
-      currency,
-      unit_amount: offer.amount_cents,
-      recurring: { interval: offer.interval, interval_count: offer.interval_count },
-      ...(offer.stripe_product_id
-        ? { product: offer.stripe_product_id }
-        : {
-            product_data: {
-              name: offer.title,
-              ...(descriptor ? { statement_descriptor: descriptor } : {}),
-            },
-          }),
-      metadata: { offerId: String(offer.id), offerSlug: offer.slug },
-    },
-    {
-      idempotencyKey:
-        `offer-price-${offer.id}-${currency}-${offer.amount_cents}` +
-        `-${offer.interval}-${offer.interval_count}`,
-    }
-  );
+  const { params, idempotencyKey } = recurringPriceRequest(offer, await cardStatementDescriptor());
+  const price = await stripe().prices.create(params, { idempotencyKey });
 
   const productId = typeof price.product === "string" ? price.product : price.product.id;
   if (offer.pricing_option_id) {
@@ -415,6 +394,40 @@ async function ensureRecurringPrice(offer: OfferRow): Promise<string> {
   }
 
   return price.id;
+}
+
+/**
+ * The Price create call for a recurring offer, and the idempotency key it goes
+ * out under.
+ *
+ * Stripe refuses a key replayed within 24 hours with different parameters, and
+ * the parameters move with more than the figures: the first mint sends
+ * product_data, later ones name the Product it made, and a renamed title or a
+ * new descriptor changes product_data too. Keying on the figures alone broke
+ * $99 → $149 → $99 in one day. The key hashes the whole request, so an identical
+ * request (two shoppers on the first sale) still shares one Price and any other
+ * gets its own.
+ */
+export function recurringPriceRequest(
+  offer: OfferRow,
+  descriptor: string | undefined,
+): { params: Stripe.PriceCreateParams; idempotencyKey: string } {
+  const params: Stripe.PriceCreateParams = {
+    currency: offer.currency || "usd",
+    unit_amount: offer.amount_cents,
+    recurring: { interval: offer.interval!, interval_count: offer.interval_count },
+    ...(offer.stripe_product_id
+      ? { product: offer.stripe_product_id }
+      : {
+          product_data: {
+            name: offer.title,
+            ...(descriptor ? { statement_descriptor: descriptor } : {}),
+          },
+        }),
+    metadata: { offerId: String(offer.id), offerSlug: offer.slug },
+  };
+  const digest = crypto.createHash("sha256").update(JSON.stringify(params)).digest("hex");
+  return { params, idempotencyKey: `offer-price-${offer.id}-${digest.slice(0, 32)}` };
 }
 
 /** Stripe accepts 5–22 Latin letters, digits and a small punctuation set. */

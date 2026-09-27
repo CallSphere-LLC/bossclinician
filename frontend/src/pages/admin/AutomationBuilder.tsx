@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
-import { useSearchParams } from "react-router";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { Link, useSearchParams } from "react-router";
 import { motion } from "motion/react";
 import {
   ArrowDown,
@@ -471,15 +471,23 @@ function AutomationDetail({
   const [testing, setTesting] = useState(false);
   const [testAddress, setTestAddress] = useState("");
   const [confirm, confirmDialog] = useConfirm();
+  // Every edit reloads the automation, and two quick edits mean two reloads in
+  // flight. Only the newest may land: an older answer arriving last put the
+  // screen back to before the second edit, and the next condition picked was
+  // then saved on top of that stale list, undoing the one before it.
+  const loadSeq = useRef(0);
 
   const load = useCallback(() => {
+    const seq = ++loadSeq.current;
     marketingApi
       .automation(automationId)
       .then((row) => {
+        if (seq !== loadSeq.current) return;
         setAutomation(row);
         setLoadError(null);
       })
       .catch((err) => {
+        if (seq !== loadSeq.current) return;
         setAutomation(null);
         // A stale or mistyped ?automation= link used to leave a skeleton
         // spinning forever; say what happened and offer the way back.
@@ -489,7 +497,10 @@ function AutomationDetail({
             : "We couldn't load this automation just now. Try again in a moment.",
         );
       });
-    marketingApi.automationRuns(automationId).then(setRuns).catch(() => setRuns([]));
+    marketingApi
+      .automationRuns(automationId)
+      .then((rows) => seq === loadSeq.current && setRuns(rows))
+      .catch(() => seq === loadSeq.current && setRuns([]));
   }, [automationId]);
 
   useEffect(load, [load]);
@@ -502,11 +513,15 @@ function AutomationDetail({
   const rules = useMemo(() => readRules(automation?.conditions), [automation?.conditions]);
 
   async function patch(changes: Parameters<typeof marketingApi.updateAutomation>[1]) {
+    // A reload already on its way predates this edit; let it go.
+    loadSeq.current += 1;
     try {
       await marketingApi.updateAutomation(automationId, changes);
       load();
     } catch (err) {
       toast.error(friendlyError(err, "automation"));
+      // Puts back anything shown ahead of the save (see setRules).
+      load();
     }
   }
 
@@ -575,8 +590,16 @@ function AutomationDetail({
     }
   }
 
+  /**
+   * Shown at once, then saved. The list each edit starts from is the one on
+   * screen, which used to change only when the reload after the save came back
+   * — so a second pick made before then was saved over a list without the
+   * first, and the first quietly disappeared.
+   */
   function setRules(next: ConditionRule[]) {
-    void patch({ conditions: { match: "all", rules: next } });
+    const conditions = { match: "all", rules: next };
+    setAutomation((current) => (current ? { ...current, conditions } : current));
+    void patch({ conditions });
   }
 
   if (!automation) {
@@ -593,6 +616,47 @@ function AutomationDetail({
   }
 
   const isOn = automation.status === "active";
+
+  // The automations table is shared with the older screen, whose automations
+  // use triggers, conditions and steps this builder has no words for. Shown
+  // here, one read "No conditions — this runs for everybody" over conditions
+  // it does have, and adding a condition replaced them with a shape the older
+  // engine never matches, so it stopped firing. It is left to its own screen.
+  if (!trigger) {
+    return (
+      <div className="space-y-6">
+        <PageHeader
+          eyebrow="Automation"
+          title={automation.name}
+          description={automation.description || undefined}
+          actions={
+            <div className="flex flex-wrap items-center gap-2">
+              <Button size="sm" variant="ghost" onClick={onBack}>
+                <ArrowLeft />
+                All automations
+              </Button>
+              {isOn && (
+                <Button size="sm" variant="secondary" onClick={() => void patch({ status: "paused" })}>
+                  <Pause />
+                  Pause it
+                </Button>
+              )}
+            </div>
+          }
+        />
+        <Card className="p-5">
+          <p className="text-sm text-ink">
+            This automation was set up on the older automations screen, and it can only be changed
+            there.
+          </p>
+          <Button size="sm" variant="secondary" className="mt-3" asChild>
+            <Link to="/admin/marketing/automations">Open the older automations screen</Link>
+          </Button>
+        </Card>
+      </div>
+    );
+  }
+
   const problems = problemsOf(automation);
   const subjectList = trigger?.subjectSource ? (options.lists[trigger.subjectSource] ?? []) : [];
 

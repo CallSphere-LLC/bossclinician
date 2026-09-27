@@ -144,6 +144,19 @@ async function checkDkim(domain: string): Promise<CheckResult> {
   };
 }
 
+/**
+ * The `p=` tag of a DMARC record, read as a tag rather than as a substring —
+ * `sp=none; p=reject` has "p=none" inside its `sp=` tag, and a bare search
+ * reported that enforcing record as only watching.
+ */
+export function dmarcPolicy(record: string): string {
+  for (const tag of record.split(";")) {
+    const [name, ...rest] = tag.split("=");
+    if (name.trim().toLowerCase() === "p") return rest.join("=").trim().toLowerCase();
+  }
+  return "";
+}
+
 /** DMARC: is there a policy, and is it doing anything? */
 async function checkDmarc(domain: string): Promise<CheckResult> {
   const found = (await txt(`_dmarc.${domain}`)).filter((v) =>
@@ -161,7 +174,7 @@ async function checkDmarc(domain: string): Promise<CheckResult> {
       expected,
     };
   }
-  const policy = /p=([a-z]+)/i.exec(found[0])?.[1]?.toLowerCase() ?? "";
+  const policy = dmarcPolicy(found[0]);
   if (policy === "none") {
     // Not a failure: p=none is the correct first step and it collects reports.
     // But it enforces nothing, so calling it "verified" would overstate it.
@@ -244,7 +257,9 @@ adminSendingDomainRouter.get(
     if (!parsed.success) throw badRequest("That doesn't look like a domain name.");
 
     const marketing = await marketingSettings();
-    const configured = marketing.fromEmail.split("@")[1] ?? "";
+    // Normalised the way the query's domain is, or "Yvette@BossClinician.com"
+    // never reads as the domain being checked.
+    const configured = (marketing.fromEmail.split("@")[1] ?? "").trim().toLowerCase();
     const domain = parsed.data.domain || configured;
 
     if (!domain) {

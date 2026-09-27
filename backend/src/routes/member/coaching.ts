@@ -911,10 +911,14 @@ memberCoachingRouter.get(
     const window = resolveWindow(query.data, policy, now);
 
     const padded = paddedWindow(window.from, window.to);
+    // Bookings are read one offer length past the end: a slot starting just
+    // before `to` runs past it, and a session starting in that overhang still
+    // takes the slot (POST /book would refuse it).
+    const busyTo = new Date(window.to.getTime() + offer.duration_minutes * MINUTE_MS);
     const [rules, overrides, existingSessions] = await Promise.all([
       loadAvailabilityRules(),
       loadAvailabilityOverrides(padded.from, padded.to),
-      loadBusySessions(window.from, window.to),
+      loadBusySessions(window.from, busyTo),
     ]);
 
     const slots = computeSlots({

@@ -205,10 +205,17 @@ export default function MediaLibrary() {
     // Uploaded while looking at a folder: that is where she expects to find it.
     // Only a file with no folder yet — one she already filed elsewhere stays put.
     if (folderFilter && !asset.folder) {
+      const folder = folderFilter;
       mediaLibraryApi
-        .update(asset.id, { folder: folderFilter })
+        .update(asset.id, { folder })
         .then(replaceAsset)
-        .catch(() => undefined);
+        .catch(() =>
+          // Silent, the upload simply vanished from the folder she was looking
+          // at: it is in the library, just not filed where she expects.
+          toast.error(
+            `“${asset.title || asset.originalName}” was uploaded, but we couldn't put it in “${folder}”. Use Move to file it.`,
+          ),
+        );
     }
   }
 
@@ -240,14 +247,19 @@ export default function MediaLibrary() {
     });
     if (!ok) return;
 
-    // Optimistic: the grid feels instant, and we restore on failure.
-    const snapshot = assets;
+    // Optimistic: the grid feels instant, and we put this one file back on
+    // failure. Not a snapshot of the whole grid: restoring that also undid
+    // whatever happened meanwhile — another file deleted, an upload finished.
     setAssets((prev) => prev?.filter((a) => a.id !== asset.id) ?? prev);
     try {
       await adminApi.mediaDelete(asset.id);
       toast.success(`“${name}” was deleted`);
     } catch (err) {
-      setAssets(snapshot ?? null);
+      setAssets((prev) =>
+        prev && !prev.some((a) => a.id === asset.id)
+          ? [...prev, asset].sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
+          : prev,
+      );
       toast.error(friendlyError(err, "file"));
     }
   }

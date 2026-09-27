@@ -4,7 +4,7 @@ import { GROUP_PRICE_COLUMNS, saveAccessGroup, deleteAccessGroup } from "../../s
 import { pool } from "../../db/pool";
 import { rowToCamel, rowsToCamel } from "../../utils/case";
 import { asyncHandler } from "../../utils/asyncHandler";
-import { badRequest, forbidden, notFound } from "../../utils/httpError";
+import { badRequest, conflict, forbidden, notFound } from "../../utils/httpError";
 import { buildUpdate } from "../../utils/sqlUpdate";
 import { z } from "zod";
 import { partialUpdate } from "../../validation/partialUpdate";
@@ -130,6 +130,16 @@ function slugify(input: string): string {
     .slice(0, 80);
 }
 
+/**
+ * Both `communities.slug` and `(community_id, slug)` on channels are unique,
+ * and without this check a clash reached the error handler as a raw Postgres
+ * error — a 500, which the admin renders as "something went wrong on our end"
+ * for what is really "you already have one called that".
+ */
+function isUniqueViolation(err: unknown): boolean {
+  return (err as { code?: string } | null)?.code === "23505";
+}
+
 /* ------------------------------------------------------------- Communities */
 
 adminCommunityRouter.get(
@@ -165,17 +175,27 @@ adminCommunityRouter.post(
     const { name, description, access, coverImage, slug } = req.body as Record<string, string>;
     if (!name?.trim()) throw badRequest("Community name is required");
 
-    const result = await pool.query(
-      `INSERT INTO communities (slug, name, description, cover_image, access)
-       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-      [
-        slug?.trim() || slugify(name),
-        name.trim(),
-        description ?? "",
-        coverImage ?? "",
-        access === "paid" ? "paid" : "free",
-      ],
-    );
+    let result;
+    try {
+      result = await pool.query(
+        `INSERT INTO communities (slug, name, description, cover_image, access)
+         VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+        [
+          // A name with no latin letters or digits slugifies to "", which is a
+          // community with no address; it still needs one.
+          slug?.trim() || slugify(name) || "community",
+          name.trim(),
+          description ?? "",
+          coverImage ?? "",
+          access === "paid" ? "paid" : "free",
+        ],
+      );
+    } catch (err) {
+      if (isUniqueViolation(err)) {
+        throw conflict("You already have a community with that name. Try a different one.");
+      }
+      throw err;
+    }
     res.status(201).json(rowToCamel(result.rows[0]));
   }),
 );
@@ -959,26 +979,47 @@ adminCommunityRouter.post(
         ? body.defaultViewMode
         : modes[0]);
 
-    const result = await pool.query(
-      `INSERT INTO community_channels
-         (community_id, slug, name, description, format, visibility,
-          cover_image, access_group_id, view_modes, default_view_mode, view_mode, sort)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::text[], $10, $10,
-         (SELECT COALESCE(MAX(sort), -1) + 1 FROM community_channels WHERE community_id = $1))
-       RETURNING *`,
-      [
-        req.params.id,
-        slugify(name),
-        name.trim(),
-        typeof body.description === "string" ? body.description : "",
-        body.format === "chat" ? "chat" : "feed",
-        body.visibility === "private" ? "private" : "public",
-        typeof body.coverImage === "string" ? body.coverImage : "",
-        await resolveAccessGroupId(req.params.id, body.accessGroupId),
-        modes,
-        preferred,
-      ],
-    );
+    const accessGroupId = await resolveAccessGroupId(req.params.id, body.accessGroupId);
+
+    /*
+     * The slug is derived, and renaming never re-slugs (see the PUT), so a
+     * clash is usually not hers to fix: rename "General" to "Old general" and
+     * the next channel called "General" wants the slug the old one still
+     * holds. It gets the next free "-2", "-3" instead of a 500.
+     */
+    const base = slugify(name) || "channel";
+    let result;
+    for (let attempt = 1; ; attempt++) {
+      const candidate = attempt === 1 ? base : `${base.slice(0, 75)}-${attempt}`;
+      try {
+        result = await pool.query(
+          `INSERT INTO community_channels
+             (community_id, slug, name, description, format, visibility,
+              cover_image, access_group_id, view_modes, default_view_mode, view_mode, sort)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::text[], $10, $10,
+             (SELECT COALESCE(MAX(sort), -1) + 1 FROM community_channels WHERE community_id = $1))
+           RETURNING *`,
+          [
+            req.params.id,
+            candidate,
+            name.trim(),
+            typeof body.description === "string" ? body.description : "",
+            body.format === "chat" ? "chat" : "feed",
+            body.visibility === "private" ? "private" : "public",
+            typeof body.coverImage === "string" ? body.coverImage : "",
+            accessGroupId,
+            modes,
+            preferred,
+          ],
+        );
+        break;
+      } catch (err) {
+        if (!isUniqueViolation(err)) throw err;
+        if (attempt >= 20) {
+          throw conflict("You already have a channel with that name. Try a different one.");
+        }
+      }
+    }
     res.status(201).json(rowToCamel(result.rows[0]));
   }),
 );

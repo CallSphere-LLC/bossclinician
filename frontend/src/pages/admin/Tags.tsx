@@ -108,7 +108,7 @@ export default function Tags() {
       {error && <ErrorNotice message={error} />}
 
       {tags === null ? (
-        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+        !error && <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
           {Array.from({ length: 6 }, (_, i) => (
             <Skeleton key={i} className="h-32 w-full" />
           ))}
@@ -325,12 +325,14 @@ function TagEditor({
 function TagPeople({ tag, onClose }: { tag: Tag | null; onClose: () => void }) {
   const [people, setPeople] = useState<SegmentPerson[] | null>(null);
   const [total, setTotal] = useState(0);
+  const [failed, setFailed] = useState(false);
 
   useEffect(() => {
-    if (!tag) {
-      setPeople(null);
-      return;
-    }
+    // Reset on every open, or the last tag's total is shown against this one.
+    setPeople(null);
+    setTotal(0);
+    setFailed(false);
+    if (!tag) return;
     let current = true;
     contactsApi
       .tagContacts(tag.id)
@@ -339,7 +341,9 @@ function TagPeople({ tag, onClose }: { tag: Tag | null; onClose: () => void }) {
         setPeople(result.items);
         setTotal(result.total);
       })
-      .catch(() => current && setPeople([]));
+      // A failed load is not "nobody has this tag" — that answer is what gets a
+      // tag deleted that two hundred people still carry.
+      .catch(() => current && setFailed(true));
     return () => {
       current = false;
     };
@@ -358,7 +362,9 @@ function TagPeople({ tag, onClose }: { tag: Tag | null; onClose: () => void }) {
         </Button>
       }
     >
-      {people === null ? (
+      {failed ? (
+        <ErrorNotice message="We couldn't load who has this tag just now. Close this and try again." />
+      ) : people === null ? (
         <div className="space-y-2">
           {Array.from({ length: 4 }, (_, i) => (
             <Skeleton key={i} className="h-12 w-full" />
