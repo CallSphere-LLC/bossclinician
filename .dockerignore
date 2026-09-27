@@ -28,3 +28,6 @@ ai
 
 # Credential files are never part of a release or a commit.
 *credentials*.txt
+
+# Contact exports hold personal details and are never part of a build.
+*.csv

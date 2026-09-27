@@ -478,7 +478,9 @@ export default function ContactDetail() {
               />
               {person.notes && <DetailLine label="Notes" value={person.notes} />}
               {custom.map(([key, value]) => (
-                <DetailLine key={key} label={humaniseKey(key)} value={String(value)} />
+                // A key with spaces is a heading off an imported spreadsheet and
+                // already reads as she wrote it; only machine keys need humanising.
+                <DetailLine key={key} label={/\s/.test(key) ? key : humaniseKey(key)} value={String(value)} />
               ))}
             </dl>
           </Card>

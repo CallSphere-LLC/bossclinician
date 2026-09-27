@@ -441,6 +441,50 @@ adminContactsRouter.get(
   })
 );
 
+/**
+ * Card details are refused on the server whatever the import screen sends:
+ * Kajabi's export still carries "Credit Card Number", "Expiration" and "CW"
+ * columns from an old payment form, and this table must never hold them.
+ */
+const REFUSED_FIELD = /credit\s*card|card\s*number|\bcvv\b|\bcvc\b|\bcw\b|expiration|security\s*code/i;
+
+/** A 13–19 digit run that passes the Luhn check reads as a card number, not an answer. */
+function looksLikeCardNumber(value: string): boolean {
+  const digits = value.replace(/[\s-]/g, "");
+  if (!/^\d{13,19}$/.test(digits)) return false;
+  let sum = 0;
+  for (let i = 0; i < digits.length; i += 1) {
+    let d = Number(digits[digits.length - 1 - i]);
+    if (i % 2 === 1) {
+      d *= 2;
+      if (d > 9) d -= 9;
+    }
+    sum += d;
+  }
+  return sum % 10 === 0;
+}
+
+/**
+ * Kajabi writes `2024-05-06 18:01:32 -0700`; spreadsheets write ISO or a bare
+ * date. Anything that doesn't read as a real moment is left as custom text
+ * rather than guessed at.
+ */
+function importDate(raw: string | undefined): Date | null {
+  if (!raw) return null;
+  const kajabi = /^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}(?::\d{2})?)\s*([+-]\d{2}):?(\d{2})$/.exec(raw.trim());
+  const iso = kajabi ? `${kajabi[1]}T${kajabi[2]}${kajabi[3]}:${kajabi[4]}` : raw.trim();
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) return null;
+  // Nothing real predates the internet or arrives from the future.
+  if (at.getFullYear() < 1995 || at.getTime() > Date.now() + 86_400_000) return null;
+  return at;
+}
+
+/** Kajabi appends "archived 1785129457" to a product it has since retired. */
+function productName(raw: string): string {
+  return raw.replace(/\s+archived\s+\d+\s*$/i, "").trim();
+}
+
 const importRowSchema = z.object({
   email: z.string().trim().email().max(320),
   name: z.string().trim().max(200).optional(),
@@ -449,7 +493,16 @@ const importRowSchema = z.object({
   phone: z.string().trim().max(60).optional(),
   source: z.string().trim().max(80).optional(),
   /** Tags on the row itself, comma-separated the way a spreadsheet holds them. */
-  tags: z.string().trim().max(500).optional(),
+  tags: z.string().trim().max(2000).optional(),
+  /** What they bought in the old system, comma-separated. */
+  products: z.string().trim().max(2000).optional(),
+  createdAt: z.string().trim().max(40).optional(),
+  lastActivityAt: z.string().trim().max(40).optional(),
+  /** Every other column of the file, keyed by its heading. */
+  customFields: z
+    .record(z.string().trim().min(1).max(600), z.string().max(10_000))
+    .refine((fields) => Object.keys(fields).length <= 150, "Too many columns on this line")
+    .optional(),
 });
 
 // Rows are validated one at a time rather than as a typed array, because the
@@ -513,33 +566,89 @@ adminContactsRouter.post(
       const last = row.data.lastName ?? "";
       const name = row.data.name ?? `${first} ${last}`.trim();
 
+      const customFields: Record<string, string> = {};
+      for (const [key, value] of Object.entries(row.data.customFields ?? {})) {
+        const text = value.trim();
+        if (!text || REFUSED_FIELD.test(key) || looksLikeCardNumber(text)) continue;
+        customFields[key] = text;
+      }
+      // The field keeps the file's own wording, "archived" marker and all; the
+      // tags use the product's plain name so they match the catalogue.
+      const listed = (row.data.products ?? "").split(",").map((product) => product.trim()).filter(Boolean);
+      const products = [...new Set(listed.map(productName).filter(Boolean))];
+      if (listed.length) customFields.Products = listed.join(", ");
+      // A date that didn't parse is still what the file said, so it is kept.
+      const createdAt = importDate(row.data.createdAt);
+      if (row.data.createdAt && !createdAt) customFields["Created At"] = row.data.createdAt;
+      const lastActivityAt = importDate(row.data.lastActivityAt);
+      if (row.data.lastActivityAt && !lastActivityAt) customFields["Last Activity"] = row.data.lastActivityAt;
+
       try {
         // `xmax = 0` is true only for a tuple this statement inserted, which is
         // the one way to tell a create from an update inside a single upsert.
+        // The older join date wins on an update: the old system knew them first.
         const result = await pool.query<{ id: number; inserted: boolean }>(
-          `INSERT INTO contacts AS c (email, name, first_name, last_name, phone, source)
-           VALUES ($1, $2, $3, $4, $5, COALESCE(NULLIF($6, ''), 'import'))
+          `INSERT INTO contacts AS c (email, name, first_name, last_name, phone, source, consent_source,
+                                      custom_fields, created_at, last_activity_at)
+           VALUES ($1, $2, $3, $4, $5, COALESCE(NULLIF($6, ''), 'import'), 'import',
+                   $7::jsonb, COALESCE($8::timestamptz, now()), $9::timestamptz)
            ON CONFLICT (email) DO UPDATE
               SET name       = COALESCE(NULLIF(EXCLUDED.name, ''), c.name),
                   first_name = COALESCE(NULLIF(EXCLUDED.first_name, ''), c.first_name),
                   last_name  = COALESCE(NULLIF(EXCLUDED.last_name, ''), c.last_name),
                   phone      = COALESCE(NULLIF(EXCLUDED.phone, ''), c.phone),
+                  consent_source = COALESCE(NULLIF(c.consent_source, ''), EXCLUDED.consent_source),
+                  -- Merged, not replaced: answers a form already gave must survive.
+                  custom_fields  = c.custom_fields || EXCLUDED.custom_fields,
+                  created_at     = LEAST(c.created_at, COALESCE($8::timestamptz, c.created_at)),
+                  last_activity_at = GREATEST(c.last_activity_at, EXCLUDED.last_activity_at),
                   updated_at = now()
            RETURNING c.id, (xmax = 0) AS inserted`,
-          [email, name, first, last, row.data.phone ?? "", row.data.source ?? ""]
+          [
+            email,
+            name,
+            first,
+            last,
+            row.data.phone ?? "",
+            row.data.source ?? "",
+            JSON.stringify(customFields),
+            createdAt?.toISOString() ?? null,
+            lastActivityAt?.toISOString() ?? null,
+          ]
         );
 
         const contact = result.rows[0];
-        const rowTags = normaliseSlugs((row.data.tags ?? "").split(","));
-        const tags = [...new Set([...fileTags, ...rowTags])];
+        // Tags keep the names the file gave them. Left to `applyTags` they would
+        // be rebuilt from the slug, and "[Purchased] PPP Leap Accelerator"
+        // would come back as "Purchased Ppp Leap Accelerator".
+        const named = [
+          ...(row.data.tags ?? "").split(",").map((tag) => tag.trim()),
+          ...products.map((product) => `Bought: ${product}`),
+        ]
+          .filter(Boolean)
+          .map((tag) => ({ name: tag.slice(0, 120), slug: normaliseSlugs([tag])[0] }))
+          .filter((tag): tag is { name: string; slug: string } => Boolean(tag.slug));
+        if (named.length) {
+          await pool.query(
+            `INSERT INTO tags (name, slug)
+             SELECT name, slug FROM unnest($1::text[], $2::citext[]) AS t(name, slug)
+             ON CONFLICT (slug) DO NOTHING`,
+            [named.map((tag) => tag.name), named.map((tag) => tag.slug)]
+          );
+        }
+        const tags = [...new Set([...fileTags, ...named.map((tag) => tag.slug)])];
         if (tags.length) await applyTags(contact.id, tags, "import");
 
         if (contact.inserted) {
           created += 1;
+          // Dated to when they joined the old system, where the file says: dated
+          // now, it would mark all of them active today and bury the real
+          // "last heard from" the file carries.
           await recordActivity({
             contactId: contact.id,
             kind: "imported",
-            title: "Added from a spreadsheet",
+            title: createdAt ? "Joined — brought over from a spreadsheet" : "Added from a spreadsheet",
+            occurredAt: createdAt ?? undefined,
           });
           await publishDomainEvent("contact_created", {
             eventKey: `contact-created:${contact.id}`,

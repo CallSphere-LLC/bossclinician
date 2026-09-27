@@ -1,5 +1,6 @@
 import { sessionFetch } from "@/lib/adminTransport";
 import { ApiError } from "@/lib/api";
+import type { ImportRow } from "@/lib/peopleSpreadsheet";
 
 /**
  * Contacts, tags and groups — the admin client for the one list of people.
@@ -371,7 +372,7 @@ export const contactsApi = {
       body: JSON.stringify({ keepId, mergeId }),
     }),
 
-  importPeople: (rows: Record<string, string>[], tagSlugs: string[] = []) =>
+  importPeople: (rows: ImportRow[], tagSlugs: string[] = []) =>
     request<ImportOutcome>("/admin/contacts/import", {
       method: "POST",
       body: JSON.stringify({ rows, tagSlugs }),

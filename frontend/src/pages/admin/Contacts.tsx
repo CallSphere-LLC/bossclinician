@@ -33,6 +33,7 @@ import {
   Textarea,
 } from "@/pages/admin/ui/primitives";
 import { saveCsv } from "@/lib/formsApi";
+import { readSpreadsheet, type ImportRow } from "@/lib/peopleSpreadsheet";
 import { DataTable } from "@/pages/admin/ui/DataTable";
 import { Modal, useConfirm } from "@/pages/admin/ui/Dialog";
 import { friendlyError, orNone, pluralize } from "@/pages/admin/ui/friendly";
@@ -68,127 +69,6 @@ const SORT_OPTIONS: { value: NonNullable<ContactFilters["sort"]>; label: string 
   { value: "value", label: "Biggest spenders" },
   { value: "orders", label: "Most purchases" },
 ];
-
-/* ------------------------------------------------- Reading her spreadsheet */
-
-/** Column headings she might have used, mapped to what we keep. */
-const HEADINGS: Record<string, string> = {
-  email: "email",
-  "email address": "email",
-  "e-mail": "email",
-  name: "name",
-  "full name": "name",
-  "first name": "firstName",
-  firstname: "firstName",
-  "given name": "firstName",
-  "last name": "lastName",
-  lastname: "lastName",
-  surname: "lastName",
-  phone: "phone",
-  "phone number": "phone",
-  mobile: "phone",
-  tags: "tags",
-  tag: "tags",
-};
-
-/**
- * Splits pasted spreadsheet text into rows of cells.
- *
- * Hand-rolled because the only thing harder here than `split(",")` is quoted
- * cells: a name like "Howard, Yvette" comes out of Excel wrapped in quotes with
- * its comma intact, and a naive split silently shifts every column after it
- * onto the wrong person.
- */
-function parseDelimited(text: string, delimiter: string): string[][] {
-  const rows: string[][] = [];
-  let row: string[] = [];
-  let cell = "";
-  let quoted = false;
-
-  for (let i = 0; i < text.length; i += 1) {
-    const char = text[i];
-
-    if (quoted) {
-      if (char !== '"') {
-        cell += char;
-      } else if (text[i + 1] === '"') {
-        cell += '"';
-        i += 1;
-      } else {
-        quoted = false;
-      }
-      continue;
-    }
-
-    if (char === '"') {
-      quoted = true;
-    } else if (char === delimiter) {
-      row.push(cell.trim());
-      cell = "";
-    } else if (char === "\n" || char === "\r") {
-      if (char === "\r" && text[i + 1] === "\n") i += 1;
-      row.push(cell.trim());
-      rows.push(row);
-      row = [];
-      cell = "";
-    } else {
-      cell += char;
-    }
-  }
-
-  row.push(cell.trim());
-  rows.push(row);
-  return rows.filter((cells) => cells.some((value) => value !== ""));
-}
-
-interface ParsedSpreadsheet {
-  rows: Record<string, string>[];
-  /** Lines with nothing that looks like an email address on them. */
-  unusable: number;
-}
-
-/**
- * Pasted text → the people in it.
- *
- * Deliberately forgiving, because the file is whatever her old system gave her:
- * copying straight out of a spreadsheet produces tabs rather than commas, the
- * headings might be missing entirely, and the columns arrive in any order.
- * Anything we can't place is counted rather than dropped silently, so the
- * numbers she sees back add up to the file she handed over.
- */
-function readSpreadsheet(text: string): ParsedSpreadsheet {
-  if (!text.trim()) return { rows: [], unusable: 0 };
-
-  const firstLine = text.split(/\r?\n/, 1)[0] ?? "";
-  const delimiter = firstLine.split("\t").length > firstLine.split(",").length ? "\t" : ",";
-  const table = parseDelimited(text, delimiter);
-  if (table.length === 0) return { rows: [], unusable: 0 };
-
-  const hasHeadings = !table[0].some((cell) => cell.includes("@"));
-  const mapped = hasHeadings
-    ? table[0].map((cell) => HEADINGS[cell.trim().toLowerCase()] ?? null)
-    : null;
-  // Headings we don't recognise are no better than none: fall back to reading
-  // each line by eye rather than filing every column under nothing.
-  const headings = mapped?.includes("email") ? mapped : null;
-  const body = hasHeadings ? table.slice(1) : table;
-
-  const rows: Record<string, string>[] = [];
-  let unusable = 0;
-
-  for (const line of body) {
-    const row: Record<string, string> = {};
-    line.forEach((cell, index) => {
-      if (!cell) return;
-      const key = headings ? headings[index] : cell.includes("@") ? "email" : "name";
-      if (key) row[key] = cell;
-    });
-    if (row.email) rows.push(row);
-    else unusable += 1;
-  }
-
-  return { rows, unusable };
-}
 
 function importSummary(result: ImportOutcome): string {
   const parts: string[] = [];
@@ -1053,7 +933,7 @@ function ImportModal({
   const [chosen, setChosen] = useState<string[]>([]);
   const [result, setResult] = useState<ImportOutcome | null>(null);
   /** The rows the result's line numbers index into, kept in case the text is edited after. */
-  const [sentRows, setSentRows] = useState<Record<string, string>[]>([]);
+  const [sentRows, setSentRows] = useState<ImportRow[]>([]);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {

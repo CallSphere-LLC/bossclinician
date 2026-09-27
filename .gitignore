@@ -39,3 +39,6 @@ backend/tsconfig.tsbuildinfo
 # Cloud sign-in details the owner pastes in; never commit these.
 *credentials*.txt
 *accessKeys*.csv
+
+# Contact and member exports carry people's personal details; never commit or ship them.
+*.csv
