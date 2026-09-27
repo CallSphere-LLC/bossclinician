@@ -31,6 +31,7 @@ That address exists only once K3s creates `cni0`, so at boot the bridge fails to
 bind and Docker never retries. `bossclinician-db-bridge-bootfix.service` (source in
 `scripts/host/`, installed to `/etc/systemd/system` and `/usr/local/sbin`) waits
 for `cni0` and recreates it; without it the backend crash-loops on `ECONNREFUSED`.
+Its `.timer` reruns the check every 2 minutes, so a failed boot attempt retries.
 The existing Boss Clinician TURN relay also stays running with its existing
 ports and secret, independent of the neighboring telehealth relay.
 

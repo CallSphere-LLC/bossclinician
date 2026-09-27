@@ -1,0 +1,10 @@
+[Unit]
+Description=Recheck bossclinician db-bridge every 2 minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=2min
+Unit=bossclinician-db-bridge-bootfix.service
+
+[Install]
+WantedBy=timers.target
