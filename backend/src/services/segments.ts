@@ -75,6 +75,8 @@ const EMAIL_STATUSES = [
   "bounced",
   "complained",
   "unconfirmed",
+  // Kajabi's "Never subscribed": on the list of contacts, never on the email list.
+  "never_subscribed",
 ] as const;
 
 /** Escapes the characters LIKE reads as syntax, so "100%" searches for itself. */

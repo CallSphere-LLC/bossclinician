@@ -75,6 +75,8 @@ const ROUTES: { path: string; load?: Loader }[] = [
   { path: "/store" },
   { path: "/club" },
   { path: "/lounge" },
+  // Must ship with the matching name in nginx/site.conf's no-children regex.
+  { path: "/boardroom" },
   { path: "/practice-quiz" },
   { path: "/practice-reset-planner" },
   { path: "/privacy-policy" },

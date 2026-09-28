@@ -48,6 +48,7 @@ import { adminMarketingOverviewRouter } from "./marketingOverview";
 import { adminCoachingSessionFilesRouter } from "./coachingSessionFiles";
 import { adminAuditLogRouter } from "./auditLog";
 import { adminContactAccessRouter } from "./contactAccess";
+import { adminPurchasesRouter } from "./purchases";
 import { adminVoiceSessionsRouter, adminVoiceRecordingRouter } from "./voiceSessions";
 
 export const adminRouter = Router();
@@ -187,6 +188,9 @@ adminRouter.use("/audit-log", requireAuth, requirePermission("admins.view"), adm
 // the assistant was approved to do inside this admin.
 adminRouter.use("/voice-sessions", requireAuth, requirePermission("admins.view"), adminVoiceSessionsRouter);
 adminRouter.use("/contact-access", requireAuth, moduleGate("contacts"), adminContactAccessRouter);
+// A contact's Purchases tab and each purchase's View Details page (read-only),
+// behind the same permission as the profile they are part of.
+adminRouter.use("/purchases", requireAuth, moduleGate("contacts"), adminPurchasesRouter);
 adminRouter.use("/members", requireAuth, requirePermission("contacts.view"), adminMembersRouter);
 adminRouter.use("/community", requireAuth, moduleGate("community"), adminCommunityRouter);
 adminRouter.use("/sales", requireAuth, requirePermission("orders.view"), adminSalesRouter);

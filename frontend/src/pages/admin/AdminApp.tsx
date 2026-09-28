@@ -20,6 +20,7 @@ import Leads from "@/pages/admin/Leads";
 import Contacts from "@/pages/admin/Contacts";
 import ContactsInsights from "@/pages/admin/ContactsInsights";
 import ContactDetail from "@/pages/admin/ContactDetail";
+import PurchaseDetail from "@/pages/admin/PurchaseDetail";
 import Tags from "@/pages/admin/Tags";
 import Segments from "@/pages/admin/Segments";
 import Conversations from "@/pages/admin/Conversations";
@@ -153,6 +154,7 @@ function ProtectedRoutes() {
         <Route path="/contacts/insights" element={<ContactsInsights />} />
         {/* AliasFirst: /contacts/tags and friends are aliases, not contact ids. */}
         <Route path="/contacts/:id" element={<AliasFirst><ContactDetail /></AliasFirst>} />
+        <Route path="/purchases/:id" element={<PurchaseDetail />} />
         <Route path="/tags" element={<Tags />} />
         <Route path="/segments" element={<Segments />} />
         <Route path="/leads" element={<Leads />} />

@@ -33,6 +33,7 @@ adminSubscribersRouter.get(
               COALESCE(c.opted_in_at, c.created_at)            AS created_at
          FROM contacts c
         WHERE ${MAILABLE_CONTACT_SQL}
+          AND NOT c.is_internal
         ORDER BY COALESCE(c.opted_in_at, c.created_at) DESC, c.id DESC`
     );
     res.json(rowsToCamel<Subscriber>(result.rows));

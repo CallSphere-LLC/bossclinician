@@ -30,7 +30,10 @@ export const MAILABLE_CONTACT_SQL = `c.email <> ''
  * It carries its own `FROM contacts c`, so the alias is local to the subquery
  * and cannot collide with an enclosing query that also uses `c`.
  */
-export const MAILABLE_CONTACT_COUNT_SQL = `(SELECT COUNT(*)::int FROM contacts c WHERE ${MAILABLE_CONTACT_SQL})`;
+// Team and test accounts (contacts.is_internal) still receive mail — the
+// sending test above leaves them in — but they are not audience, so the totals
+// and trend charts the owner reads leave them out.
+export const MAILABLE_CONTACT_COUNT_SQL = `(SELECT COUNT(*)::int FROM contacts c WHERE ${MAILABLE_CONTACT_SQL} AND NOT c.is_internal)`;
 
 /**
  * A day-by-day count of people who became mailable, for the 30-day trend
@@ -45,6 +48,7 @@ export const MAILABLE_CONTACT_SERIES_SQL = `SELECT COALESCE(c.opted_in_at, c.cre
           COUNT(*)::int AS c
      FROM contacts c
     WHERE ${MAILABLE_CONTACT_SQL}
+      AND NOT c.is_internal
       AND COALESCE(c.opted_in_at, c.created_at) >= CURRENT_DATE - INTERVAL '29 days'
     GROUP BY 1`;
 

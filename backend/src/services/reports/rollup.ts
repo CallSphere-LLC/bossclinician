@@ -480,6 +480,7 @@ const METRICS: MetricSource[] = [
                COALESCE(NULLIF(c.source, ''), 'unknown') AS source
           FROM contacts c
          WHERE ${within("c.created_at")}
+           AND NOT c.is_internal
       )
       SELECT day, '' AS dimension, 0::bigint AS value_cents,
              COUNT(*)::int AS value_count, ${NO_CURRENCY} AS currency
@@ -502,6 +503,7 @@ const METRICS: MetricSource[] = [
                COALESCE(NULLIF(c.source, ''), 'unknown') AS source
           FROM contacts c
          WHERE c.email_marketing_status = 'subscribed'
+           AND NOT c.is_internal
            AND ${within("COALESCE(c.opted_in_at, c.created_at)")}
       )
       SELECT day, '' AS dimension, 0::bigint AS value_cents,

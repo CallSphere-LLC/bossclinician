@@ -17,36 +17,39 @@ import {
   KeyRound,
   Mail,
   MailPlus,
+  MessageSquare,
   Pencil,
-  Receipt,
   Send,
   ShieldAlert,
   StickyNote,
+  Tag as TagIcon,
   Trash2,
   UserPlus,
   UserRound,
   Users,
   X,
+  Zap,
   type LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 import { adminApi } from "@/lib/api";
 import { cn } from "@/lib/cn";
-import { formatDate, formatDateTime } from "@/lib/format";
 import {
-  EMAIL_STATUS_LABEL,
+  LIFECYCLE_EVENT_TYPES,
   activityLabel,
   contactsApi,
   emailStatusLabel,
   hasActivity,
+  marketingStatusWords,
   money,
   sourceLabel,
   type Contact,
   type ContactDetail as Person,
-  type ContactOrder,
   type EmailStatus,
+  type LifecycleEventType,
   type Tag,
 } from "@/lib/contactsApi";
+import { useSiteTime } from "@/pages/admin/ui/siteTime";
 import {
   Badge,
   Button,
@@ -65,6 +68,8 @@ import { friendlyError, humaniseKey, orNone, pluralize } from "@/pages/admin/ui/
 import { saveCsv } from "@/lib/formsApi";
 import ContactFilesCard from "@/pages/admin/ContactFilesCard";
 import ContactAccessCard from "@/pages/admin/ContactAccessCard";
+import ContactPurchases from "@/pages/admin/ContactPurchases";
+import { usePurchaseCount } from "@/lib/purchasesApi";
 
 /**
  * One person, and everything they have ever done.
@@ -73,15 +78,6 @@ import ContactAccessCard from "@/pages/admin/ContactAccessCard";
  * January, joining the list in March and buying in June used to be three rows
  * in three places, and no screen could say they were the same person.
  */
-
-/** What one purchase's state means, in words. */
-const ORDER_STATUS_LABEL: Record<string, string> = {
-  paid: "Paid",
-  pending: "Not finished",
-  refunded: "Refunded",
-  failed: "Payment failed",
-  expired: "Abandoned",
-};
 
 /** The tabs of a profile, in the order her Kajabi contact page had them. */
 const TABS = [
@@ -114,30 +110,36 @@ const HIDDEN_FIELDS = new Set([
 /** Kajabi's "Additional info" block, in its order. */
 const ADDRESS_FIELDS = ["Address", "Address Line 2", "City", "State", "Country", "Zip Code"];
 
-/** Kajabi's order number for an imported payment, else ours. */
-function orderNumber(order: ContactOrder): string {
-  const kajabi = order.customFieldData?.kajabiOrderNumber;
-  return typeof kajabi === "string" || typeof kajabi === "number" ? String(kajabi) : String(order.id);
-}
-
-function orderTotal(order: ContactOrder): number {
-  return Math.max(order.totalCents, order.amountCents ?? 0);
-}
-
-/** Kajabi's "Subscribed on September 26, 2026 03:38 PM" line, for every state. */
-function marketingLine(person: Person): string {
+/**
+ * Kajabi's "Subscribed on September 26, 2026 03:38 PM" line, for every state —
+ * in the site's zone and Kajabi's long form (QA row 24).
+ */
+function marketingLine(person: Person, longTime: (value: string | null) => string): string {
   switch (person.emailMarketingStatus) {
     case "subscribed":
-      return `Subscribed on ${formatDateTime(person.optedInAt ?? person.createdAt)}`;
+      return `Subscribed on ${longTime(person.optedInAt ?? person.createdAt)}`;
     case "opted_out":
-      return person.optedOutAt ? `Unsubscribed on ${formatDateTime(person.optedOutAt)}` : "Unsubscribed";
+      return person.optedOutAt ? `Opted out on ${longTime(person.optedOutAt)}` : "Opted out";
     case "bounced":
-      return "Bounced — their inbox refused your last email, so nothing more is sent";
+      return "Hard bounced — their inbox refused your email, so nothing more is sent";
     case "complained":
       return "Marked your email as spam — nothing more is sent";
+    case "never_subscribed":
+      return "Never subscribed — they haven't agreed to your marketing emails";
     default:
       return "Hasn't confirmed their subscription yet";
   }
+}
+
+/** Kajabi's "Opt-in status": the marketing double opt-in, never the account's own verification. */
+function optInWords(person: Person, longTime: (value: string | null) => string): string {
+  return person.optInConfirmedAt ? `Confirmed on ${longTime(person.optInConfirmedAt)}` : "Unconfirmed";
+}
+
+/** The member account's email verification, which used to be shown as the opt-in (QA rows 26/27). */
+function accountEmailWords(person: Person, longTime: (value: string | null) => string): string {
+  if (person.accountMemberId === null) return "No account";
+  return person.accountEmailVerifiedAt ? `Verified on ${longTime(person.accountEmailVerifiedAt)}` : "Not verified";
 }
 
 /** Sign-ins as Kajabi counted them, carried over on import. */
@@ -164,6 +166,8 @@ export default function ContactDetail() {
   const [tagBusy, setTagBusy] = useState<string | null>(null);
   const [confirmBusy, setConfirmBusy] = useState(false);
   const [confirm, confirmDialog] = useConfirm();
+  // Every date on this page is in the site's zone, as Kajabi shows it (QA row 24).
+  const time = useSiteTime();
   const [searchParams, setSearchParams] = useSearchParams();
   // In the address, so a reload or a shared link opens the same tab.
   const tab: TabId = TABS.find((item) => item.id === searchParams.get("tab"))?.id ?? "lifecycle";
@@ -503,17 +507,23 @@ export default function ContactDetail() {
               <p className="flex flex-wrap items-center gap-2 font-semibold text-ink">
                 {displayName}
                 {person.memberId !== null && <Badge tone="green">Has an account</Badge>}
+                {/* Left out of the contact list and its counts (migration 075). */}
+                {person.isInternal && (
+                  <Badge tone="slate" title="A team or test account: not counted in your contacts, segments or Insights">
+                    Team/test
+                  </Badge>
+                )}
               </p>
               <a href={`mailto:${person.email}`} className="block break-all text-plum hover:underline">
                 {person.email}
               </a>
               {person.phone && <p className="text-ink-soft">{person.phone}</p>}
               <p className="text-ink-soft">
-                Added on <span className="font-semibold text-ink">{formatDateTime(person.createdAt)}</span>
+                Added on <span className="font-semibold text-ink">{time.dateTimeLong(person.createdAt)}</span>
               </p>
               {firstPaid && (
                 <p className="text-ink-soft">
-                  Customer since <span className="font-semibold text-ink">{formatDateTime(firstPaid)}</span>
+                  Customer since <span className="font-semibold text-ink">{time.dateTimeLong(firstPaid)}</span>
                 </p>
               )}
             </div>
@@ -554,16 +564,16 @@ export default function ContactDetail() {
                   {/* Kajabi's Info panel: the six facts in two columns, then Additional Info. */}
                   <div className="space-y-5 rounded-xl border border-hairline bg-white/[0.02] p-5">
                     <dl className="grid grid-cols-1 gap-x-6 gap-y-4 text-sm sm:grid-cols-2">
-                      <DetailLine label="Added on" value={formatDateTime(person.createdAt)} />
+                      <DetailLine label="Added on" value={time.dateTimeLong(person.createdAt)} />
                       <DetailLine
                         label="Became a Customer on"
-                        value={firstPaid ? formatDateTime(firstPaid) : "Not a customer yet"}
+                        value={firstPaid ? time.dateTimeLong(firstPaid) : "Not a customer yet"}
                       />
-                      <DetailLine label="Net Revenue" value={`${money(person.lifetimeValueCents)} USD`} />
-                      <DetailLine label="Sign in count" value={signInCount(person)} />
+                      <DetailLine label="Net Revenue" value={`${money(person.lifetimeValueCents)} USD`} numeric />
+                      <DetailLine label="Sign in count" value={signInCount(person)} numeric />
                       <div>
                         <dt className="text-xs font-semibold text-ink-soft">Email Marketing</dt>
-                        <dd className="mt-0.5 text-ink">{marketingLine(person)}</dd>
+                        <dd className="mt-0.5 text-ink">{marketingLine(person, time.dateTimeLong)}</dd>
                         {person.emailMarketingStatus === "subscribed" ? (
                           <button
                             type="button"
@@ -573,20 +583,29 @@ export default function ContactDetail() {
                             Unsubscribe
                           </button>
                         ) : person.emailMarketingStatus === "opted_out" ||
-                          person.emailMarketingStatus === "unconfirmed" ? (
+                          person.emailMarketingStatus === "unconfirmed" ||
+                          person.emailMarketingStatus === "never_subscribed" ? (
                           <button
                             type="button"
                             onClick={() => void setStatus("subscribed")}
                             className="mt-1 text-sm font-semibold text-plum hover:underline"
                           >
-                            Resubscribe
+                            {person.emailMarketingStatus === "never_subscribed" ? "Subscribe" : "Resubscribe"}
                           </button>
                         ) : null}
                       </div>
                       <DetailLine
                         label="Last activity at"
-                        value={hasActivity(person) ? formatDateTime(person.lastActivityAt as string) : "No activity yet"}
+                        value={hasActivity(person) ? time.dateTimeLong(person.lastActivityAt) : "No activity yet"}
                       />
+                      {/*
+                        * Two different confirmations, side by side and named apart
+                        * (QA rows 26/27). Opt-in status is Kajabi's: the marketing
+                        * double opt-in. Account email is whether their member
+                        * login's address was verified, which used to stand in for it.
+                        */}
+                      <DetailLine label="Opt-in status" value={optInWords(person, time.dateTimeLong)} />
+                      <DetailLine label="Account email" value={accountEmailWords(person, time.dateTimeLong)} />
                     </dl>
 
                     <div className="border-t border-hairline pt-4">
@@ -639,26 +658,12 @@ export default function ContactDetail() {
                 </>
               )}
 
-              {tab === "purchases" &&
-                (person.orders.length === 0 ? (
-                  <EmptyState
-                    icon={<Receipt />}
-                    title="No purchases yet"
-                    description="Purchases appear here the moment a payment goes through, or when you record one by hand."
-                    action={
-                      <Button size="sm" variant="secondary" onClick={() => setBuying(true)}>
-                        <DollarSign />
-                        Create a manual purchase
-                      </Button>
-                    }
-                  />
-                ) : (
-                  <ul className="space-y-4">
-                    {person.orders.map((order) => (
-                      <PurchaseCard key={order.id} order={order} />
-                    ))}
-                  </ul>
-                ))}
+              {tab === "purchases" && (
+                // One card per purchase, as Kajabi draws them — a plan is one
+                // card however many instalments it has taken (ContactPurchases.tsx).
+                // `person` as the refresh key: a manual purchase reloads it.
+                <ContactPurchases contactId={contactId} onCreateManual={() => setBuying(true)} refreshKey={person} />
+              )}
 
               {tab === "products" && (
                 <>
@@ -689,7 +694,7 @@ export default function ContactDetail() {
                               <Link to={`/admin/community/${community.communityId}`} className="font-semibold text-plum hover:underline">
                                 {community.name}
                               </Link>
-                              <p className="text-xs text-ink-soft">Joined {formatDate(community.joinedAt)}</p>
+                              <p className="text-xs text-ink-soft">Joined {time.date(community.joinedAt)}</p>
                             </div>
                             <Badge tone={community.banned || !community.memberActive ? "slate" : "green"}>
                               {community.banned ? "Banned" : !community.memberActive ? "Account inactive" : community.role === "admin" ? "Admin" : community.role === "moderator" ? "Moderator" : "Member"}
@@ -731,7 +736,7 @@ export default function ContactDetail() {
                       {notes.map((entry) => (
                         <li key={entry.id} className="rounded-xl border border-hairline px-4 py-3.5">
                           <p className="whitespace-pre-wrap text-sm text-ink">{entry.body || entry.title}</p>
-                          <p className="mt-1.5 text-xs text-ink-soft">{formatDateTime(entry.occurredAt)}</p>
+                          <p className="mt-1.5 text-xs text-ink-soft">{time.dateTime(entry.occurredAt)}</p>
                         </li>
                       ))}
                     </ul>
@@ -825,7 +830,9 @@ export default function ContactDetail() {
           {person.confirmation && person.confirmation.state !== "no_account" && (
             <Card>
               <CardHeader
-                title="Email confirmation"
+                // Named for what it is. With no account, it is the mailing list's
+                // opt-in waiting on a click; with one, it is the login address.
+                title={person.confirmation.state === "list_unconfirmed" ? "Opt-in confirmation" : "Account email"}
                 icon={person.confirmation.confirmed ? <BadgeCheck /> : <ShieldAlert />}
               />
               <div className="space-y-3 px-5 py-4">
@@ -837,7 +844,7 @@ export default function ContactDetail() {
                 </p>
                 {person.confirmation.accountConfirmedAt && (
                   <p className="text-xs text-ink-soft">
-                    Confirmed on {formatDate(person.confirmation.accountConfirmedAt)}.
+                    Verified on {time.dateTimeLong(person.confirmation.accountConfirmedAt)}.
                   </p>
                 )}
                 {!person.confirmation.confirmed && (
@@ -915,7 +922,22 @@ function BackLink() {
   );
 }
 
-/** What each kind of moment looks like in the feed. */
+/** What each of Kajabi's event types looks like in the feed. */
+const TYPE_ICON: Record<LifecycleEventType, LucideIcon> = {
+  "Form Submission": Inbox,
+  "Email Delivery": Send,
+  "Email Sequence Subscription": Mail,
+  "Offer Purchase": CreditCard,
+  "Offer Grant": Gift,
+  "Event Registration": CalendarCheck,
+  "Assessment Result": ClipboardCheck,
+  "Expert Agent Chat": MessageSquare,
+  "Contact Created": UserPlus,
+  "Tag Added": TagIcon,
+  "Automation Enrollment": Zap,
+};
+
+/** Moments Kajabi has no type for, which keep their own look. */
 const EVENT_ICON: Record<string, LucideIcon> = {
   purchase: CreditCard,
   "email.sent": Send,
@@ -950,21 +972,28 @@ function lifespan(since: string): string {
   return `about ${pluralize(Math.round(days / 365.25), "year", "years")}`;
 }
 
-/** The Lifecycle tab: the three numbers, then everything that has happened, newest first. */
+/**
+ * The Lifecycle tab: the three numbers, then everything that has happened,
+ * newest first.
+ *
+ * "Filter by event type" is Kajabi's menu, all of it and in its order (QA row
+ * 25), not a list of whatever types this person's feed happens to contain. The
+ * server files every moment under one of Kajabi's types (eventType) and words
+ * it the way Kajabi would (headline); moments Kajabi has no type for — notes,
+ * merges — show under All types only.
+ */
 function Lifecycle({ person }: { person: Person }) {
-  const [kind, setKind] = useState("all");
-  const kinds = useMemo(
-    () => [...new Set(person.activity.map((entry) => activityLabel(entry.kind)))].sort(),
-    [person],
-  );
-  const shown =
-    kind === "all" ? person.activity : person.activity.filter((entry) => activityLabel(entry.kind) === kind);
+  const [type, setType] = useState<LifecycleEventType | "all">("all");
+  const time = useSiteTime();
+  const shown = type === "all" ? person.activity : person.activity.filter((entry) => entry.eventType === type);
+  // Purchases as Kajabi counts them (a plan is one), not payments.
+  const purchaseCount = usePurchaseCount(person.id, person);
 
   return (
     <>
       <div className="grid grid-cols-1 divide-y divide-hairline rounded-xl border border-hairline text-center sm:grid-cols-3 sm:divide-x sm:divide-y-0">
         <Stat label="Lifespan" value={lifespan(person.createdAt)} />
-        <Stat label="Purchases" value={String(person.orderCount)} />
+        <Stat label="Purchases" value={purchaseCount === null ? "—" : String(purchaseCount)} />
         <Stat label="Net Revenue" value={money(person.lifetimeValueCents)} />
       </div>
 
@@ -974,30 +1003,36 @@ function Lifecycle({ person }: { person: Person }) {
         </label>
         <select
           id="event-type"
-          value={kind}
-          onChange={(e) => setKind(e.target.value)}
+          value={type}
+          onChange={(e) => setType(e.target.value as LifecycleEventType | "all")}
           className={cn(selectStyles, "sm:max-w-64")}
         >
           <option value="all">All types</option>
-          {kinds.map((label) => (
+          {LIFECYCLE_EVENT_TYPES.map((label) => (
             <option key={label} value={label}>
               {label}
             </option>
           ))}
         </select>
-        <p className="text-xs text-ink-soft">This feed is limited to the {FEED_LIMIT} most recent events.</p>
+        <p className="text-xs text-ink-soft">
+          This feed is limited to the {FEED_LIMIT} most recent events. Times are {time.zoneName}.
+        </p>
       </div>
 
       {shown.length === 0 ? (
         <EmptyState
           icon={<Clock />}
-          title="Nothing yet"
-          description="Everything this person does will show up here as it happens."
+          title={type === "all" ? "Nothing yet" : `No ${type} events`}
+          description={
+            type === "all"
+              ? "Everything this person does will show up here as it happens."
+              : "Nothing of this type has happened for this person on this site yet."
+          }
         />
       ) : (
         <ol className="space-y-3">
           {shown.map((entry) => {
-            const Icon = EVENT_ICON[entry.kind] ?? Clock;
+            const Icon = (entry.eventType && TYPE_ICON[entry.eventType]) || EVENT_ICON[entry.kind] || Clock;
             return (
               <li key={entry.id} className="flex gap-4 rounded-xl border border-hairline p-4">
                 <span className="grid size-12 shrink-0 place-items-center rounded-lg bg-white/[0.05] text-ink-soft">
@@ -1005,11 +1040,22 @@ function Lifecycle({ person }: { person: Person }) {
                 </span>
                 <div className="min-w-0 flex-1 space-y-1">
                   <p className="text-[0.68rem] font-semibold uppercase tracking-[0.1em] text-ink-soft">
-                    {activityLabel(entry.kind)}
+                    {entry.eventType ?? activityLabel(entry.kind)}
                   </p>
-                  <p className="font-semibold text-ink">{entry.title}</p>
-                  {entry.body && <p className="whitespace-pre-wrap text-sm text-ink-soft">{entry.body}</p>}
-                  <p className="text-xs text-ink-soft/80">{formatDateTime(entry.occurredAt)}</p>
+                  <p className="font-semibold text-ink">{entry.headline || entry.title}</p>
+                  {entry.kind === "imported" ? (
+                    // Dated the day they were first added, which is what the file
+                    // carried; their history before that wasn't in it. Kajabi's
+                    // export gave every row its Kajabi contact id ("ID").
+                    <p className="text-sm text-ink-soft">
+                      {person.customFields?.ID
+                        ? "Added in Kajabi, and brought over with your contacts."
+                        : "Brought over from a spreadsheet you imported."}
+                    </p>
+                  ) : (
+                    entry.body && <p className="whitespace-pre-wrap text-sm text-ink-soft">{entry.body}</p>
+                  )}
+                  <p className="text-xs text-ink-soft/80">{time.dateTime(entry.occurredAt)}</p>
                 </div>
               </li>
             );
@@ -1017,85 +1063,6 @@ function Lifecycle({ person }: { person: Person }) {
         </ol>
       )}
     </>
-  );
-}
-
-/**
- * One purchase, drawn the way Kajabi's Purchases tab draws it: a grey band with
- * when, how much and which order, then what was bought.
- */
-function PurchaseCard({ order }: { order: ContactOrder }) {
-  const total = orderTotal(order);
-  const refunded = order.refundedCents > 0;
-  const kajabi = order.source === "kajabi";
-  const plan = typeof order.customFieldData?.kajabiType === "string" ? order.customFieldData.kajabiType : null;
-  return (
-    <li className="overflow-hidden rounded-xl border border-hairline">
-      <div className="flex flex-wrap items-start gap-x-8 gap-y-3 bg-white/[0.05] px-4 py-3">
-        <div>
-          <p className="text-xs text-ink-soft">{order.status === "paid" || refunded ? "Paid on" : "Started on"}</p>
-          <p className="mt-0.5 text-sm font-semibold text-ink">{formatDate(order.createdAt)}</p>
-        </div>
-        <div>
-          <p className="text-xs text-ink-soft">Total</p>
-          <p className="mt-0.5 text-sm font-semibold text-ink">
-            {money(total, order.currency)} {order.currency.toUpperCase()}
-          </p>
-        </div>
-        <div className="ml-auto text-right">
-          <p className="text-xs text-ink-soft">Order #{orderNumber(order)}</p>
-          {kajabi ? (
-            <p className="mt-0.5 text-xs text-ink-soft">From Kajabi</p>
-          ) : order.source === "manual" ? (
-            <p className="mt-0.5 text-xs text-ink-soft">Recorded by hand</p>
-          ) : (
-            <Link
-              to="/admin/sales/payments"
-              className="mt-0.5 inline-block text-xs font-semibold text-ink-soft underline hover:text-plum"
-            >
-              View Details
-            </Link>
-          )}
-        </div>
-      </div>
-      <dl className="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-x-4 gap-y-2 px-4 py-4 text-sm sm:px-8">
-        <dt className="text-ink-soft">Offer</dt>
-        <dd className="font-semibold text-ink">
-          {order.offerId ? (
-            <Link to={`/admin/offers/${order.offerId}`} className="underline hover:text-plum">
-              {order.title || "An offer"}
-            </Link>
-          ) : (
-            order.title || "A purchase"
-          )}
-        </dd>
-        <dt className="text-ink-soft">Price</dt>
-        <dd className="text-ink">
-          {money(total, order.currency)} {order.currency.toUpperCase()}
-          {plan && plan !== "One-time" && <span className="text-ink-soft"> · {plan}</span>}
-        </dd>
-        <dt className="text-ink-soft">Quantity</dt>
-        <dd className="text-ink">1</dd>
-        {(order.status !== "paid" || refunded) && (
-          <>
-            <dt className="text-ink-soft">Status</dt>
-            <dd>
-              <Badge tone={refunded ? "slate" : "gold"}>
-                {refunded
-                  ? `Refunded ${money(order.refundedCents, order.currency)}`
-                  : (ORDER_STATUS_LABEL[order.status] ?? "Not known")}
-              </Badge>
-            </dd>
-          </>
-        )}
-        {order.notes && (
-          <>
-            <dt className="text-ink-soft">Note</dt>
-            <dd className="whitespace-pre-wrap text-ink">{order.notes}</dd>
-          </>
-        )}
-      </dl>
-    </li>
   );
 }
 
@@ -1219,11 +1186,11 @@ function MenuItem({
   );
 }
 
-function DetailLine({ label, value }: { label: string; value: string }) {
+function DetailLine({ label, value, numeric = false }: { label: string; value: string; numeric?: boolean }) {
   return (
     <div>
       <dt className="text-xs font-semibold text-ink-soft">{label}</dt>
-      <dd className="mt-0.5 break-words text-ink">{value}</dd>
+      <dd className={cn("mt-0.5 break-words text-ink", numeric && "font-bold tabular-nums")}>{value}</dd>
     </div>
   );
 }
@@ -1435,9 +1402,10 @@ function MergeModal({
               Their purchases, tags and history all move across. If either of them asked to stop
               receiving emails, the combined person keeps that. You can't undo this.
             </p>
-            {EMAIL_STATUS_LABEL[picked.emailMarketingStatus] && (
+            {picked.emailMarketingStatus && (
               <p className="mt-1 text-xs text-ink-soft">
-                Right now that card says: {emailStatusLabel(picked.emailMarketingStatus)}.
+                Right now that card says: {marketingStatusWords(picked.emailMarketingStatus)} (
+                {emailStatusLabel(picked.emailMarketingStatus).toLowerCase()}).
               </p>
             )}
           </div>

@@ -1314,6 +1314,7 @@ export const topCustomers: ReportRunner = async () => {
             c.order_count          AS orders
        FROM contacts c
       WHERE c.order_count > 0
+        AND NOT c.is_internal
       ORDER BY c.lifetime_value_cents DESC
       LIMIT 50`
   );

@@ -41,6 +41,55 @@ export function newLeadNotification(lead: {
   };
 }
 
+/** One line of a form reply as the owner reads it: the question, then the answer. */
+export interface FormAnswerRow {
+  label: string;
+  value: string;
+}
+
+/**
+ * The owner's copy of a form reply, with every answer on it.
+ *
+ * A lead from the contact form has always been emailed to her
+ * (routes/public/leads.ts); a reply to a form built in the admin was filed and
+ * then sat there until somebody happened to open Forms. For an application
+ * like the Boardroom's — twenty-odd answers someone took real time over — the
+ * email is the notification, so it carries the answers themselves rather than
+ * a link to go and find them.
+ *
+ * Everything in it was typed by a stranger, so every label and answer is
+ * escaped, and a long answer keeps its line breaks. The subject is squeezed to
+ * one line: a name with a newline in it has no business in a mail header.
+ */
+export function formSubmissionNotification(reply: {
+  formName: string;
+  name: string;
+  email: string;
+  answers: FormAnswerRow[];
+}): { subject: string; text: string; html: string } {
+  const who = (reply.name || reply.email).replace(/\s+/g, " ").trim().slice(0, 120);
+  const formName = reply.formName.replace(/\s+/g, " ").trim();
+
+  const text = [
+    `${who} filled in "${formName}".`,
+    ``,
+    ...reply.answers.map((row) => `${row.label}: ${row.value}`),
+    ``,
+    `Reply to this email to write back to them.`,
+  ].join("\n");
+
+  const html = [
+    `<p>${escapeHtml(who)} filled in "${escapeHtml(formName)}".</p>`,
+    ...reply.answers.map(
+      (row) =>
+        `<p><strong>${escapeHtml(row.label)}:</strong> ${escapeHtml(row.value).replace(/\r?\n/g, "<br>")}</p>`,
+    ),
+    `<p>Reply to this email to write back to them.</p>`,
+  ].join("\n");
+
+  return { subject: `New ${formName}: ${who}`, text, html };
+}
+
 export function subscriberWelcome(email: string): { subject: string; text: string; html: string } {
   const text = [
     `Hi there,`,

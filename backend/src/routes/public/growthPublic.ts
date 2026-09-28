@@ -31,6 +31,9 @@ import {
 } from "../../services/formLogic";
 import { keepStagedFile, receiveFormFiles, type StagedFile } from "../../services/formUploads";
 import { kindFromMime } from "../../services/mediaStorage";
+import { notificationRecipients } from "../../services/notificationRecipients";
+import { sendMail } from "../../email/mailer";
+import { formSubmissionNotification, type FormAnswerRow } from "../../email/templates";
 
 /** Public endpoints for podcasts (RSS), forms and funnels. */
 export const growthPublicRouter = Router();
@@ -436,6 +439,88 @@ async function afterSubmission<T>(what: string, run: () => Promise<T>): Promise<
   }
 }
 
+/**
+ * One answer in words, for the owner's email.
+ *
+ * The same shapes the admin's reply table reads (pages/admin/FormBuilder.tsx
+ * `answerText`): a tick-any question is a list, a single tick box is a
+ * boolean, and a file is the small record the route stores in its place.
+ */
+function answerInWords(value: unknown): string {
+  if (value === undefined || value === null || value === "") return "Not answered";
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  if (Array.isArray(value)) {
+    const parts = value.map((entry) => String(entry)).filter((entry) => entry.trim() !== "");
+    return parts.length > 0 ? parts.join(", ") : "Not answered";
+  }
+  if (typeof value === "object") {
+    const name = (value as { name?: unknown }).name;
+    return `${typeof name === "string" && name ? name : "A file"} (attached — open it from Forms)`;
+  }
+  return String(value);
+}
+
+/**
+ * Every question on the form, labelled, with what this reply said to it.
+ *
+ * In the form's own order and under the form's own labels — the Boardroom asks
+ * for a "Full name", and that is what the email should say. A form built before
+ * the starter fields existed has no stored name or address question, so those
+ * two are put in front under the page's standard labels (`publicFormFields`).
+ * A question with no key at all in the answers was hidden by its show rule and
+ * is left out rather than listed as unanswered: it was never asked.
+ */
+export function submissionAnswerRows(
+  fields: unknown,
+  answers: Record<string, unknown>,
+): FormAnswerRow[] {
+  const stored = asFields(fields);
+  const storedKeys = new Set(stored.map((field) => field.key));
+  const identity = publicFormFields([])
+    .map((field) => ({ key: String(field.key), label: String(field.label) }))
+    .filter((field) => !storedKeys.has(field.key));
+
+  const rows: FormAnswerRow[] = [];
+  for (const field of [...identity, ...stored]) {
+    if (!(field.key in answers)) continue;
+    const label = typeof field.label === "string" && field.label.trim() ? field.label : field.key;
+    rows.push({ label, value: answerInWords(answers[field.key]) });
+  }
+  return rows;
+}
+
+/**
+ * Emails the owner a reply, with its answers. Fire-and-forget, like the lead
+ * route's notification: a reply that is already stored must not wait on, or
+ * fail because of, the mail server. It never throws — `sendMail` can reject
+ * before its own error handling starts (it records the send first), and an
+ * unawaited rejection would take the process down.
+ *
+ * Sent under the "someone sends an enquiry" switch in Settings, which is what a
+ * reply that makes a lead is. Reply-To is the person who filled it in, so
+ * answering the email answers them.
+ */
+async function notifyOwnerOfReply(
+  form: { name: string; slug: string; fields: unknown },
+  who: { name: string; email: string },
+  answers: Record<string, unknown>,
+): Promise<void> {
+  try {
+    const to = await notificationRecipients("lead");
+    if (!to) return;
+    const { subject, text, html } = formSubmissionNotification({
+      formName: form.name,
+      name: who.name,
+      email: who.email,
+      answers: submissionAnswerRows(form.fields, answers),
+    });
+    await sendMail({ to, subject, text, html, replyTo: who.email });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error(`[forms] could not email the owner about a reply to ${form.slug}:`, (err as Error).message);
+  }
+}
+
 /** A reply carrying files arrives as multipart; every other reply is JSON, as before. */
 function isMultipart(req: Request): boolean {
   return Boolean(req.is("multipart/form-data"));
@@ -768,6 +853,13 @@ growthPublicRouter.post(
         if (contactId !== null) await linkContact("lead", lead.rows[0].id, contactId);
         fireTriggerAsync("lead_created", { email, name, source: `form:${form.slug}` });
       });
+
+      // A reply that makes a lead is an enquiry, and an enquiry through the
+      // lead form has always reached the owner's inbox. Until this line one
+      // through a built form did not: it was filed, and nobody was told.
+      // Outside the afterSubmission call above so a failed lead insert cannot
+      // also cost the email, and not awaited — see notifyOwnerOfReply.
+      void notifyOwnerOfReply(form, { name, email }, answers);
     }
 
     if (contactRecord?.created) {

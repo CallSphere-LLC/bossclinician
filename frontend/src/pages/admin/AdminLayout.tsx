@@ -1,6 +1,6 @@
 import { publicSiteUrl } from "@/lib/siteOrigins";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Link, NavLink, useLocation } from "react-router";
+import { Link, useLocation } from "react-router";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import {
@@ -17,7 +17,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { cn } from "@/lib/cn";
 import { adminApi } from "@/lib/api";
 import { pluralize } from "@/pages/admin/ui/friendly";
-import { NAV_GROUPS, groupForPath, type NavGroup } from "@/pages/admin/ui/nav";
+import { NAV_GROUPS, activeNavTarget, groupForPath, type NavGroup } from "@/pages/admin/ui/nav";
 import { UploadTray } from "@/pages/admin/ui/UploadTray";
 import { AdminVoiceMount } from "@/voice/surfaces/mount";
 import { ConsoleThemeToggle } from "@/pages/admin/ui/ConsoleThemeToggle";
@@ -403,16 +403,18 @@ function NavGroupItem({
 }) {
   const Icon = group.icon;
   const location = useLocation();
+  // One answer for the whole rail rather than each link matching for itself:
+  // several rows sit beneath another row's address (Insights under All
+  // Contacts), and self-matching links lit both. See activeNavTarget.
+  const activeTo = activeNavTarget(location.pathname);
 
   // Single-destination group (Dashboard, Settings).
   if (group.to) {
-    const active = group.end
-      ? location.pathname === group.to
-      : location.pathname.startsWith(group.to);
+    const active = activeTo === group.to;
     return (
-      <NavLink
+      <Link
         to={group.to}
-        end={group.end}
+        aria-current={active ? "page" : undefined}
         title={collapsed ? group.label : undefined}
         className={cn(
           "relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors",
@@ -429,11 +431,11 @@ function NavGroupItem({
         )}
         <Icon className="size-[1.15rem] shrink-0" />
         {!collapsed && group.label}
-      </NavLink>
+      </Link>
     );
   }
 
-  const groupActive = group.children?.some((c) => location.pathname.startsWith(c.to)) ?? false;
+  const groupActive = group.children?.some((c) => c.to === activeTo) ?? false;
 
   // Collapsed rail: expanding in place would have nowhere to go, so the group
   // becomes a flyout menu instead.
@@ -466,7 +468,13 @@ function NavGroupItem({
               <DropdownMenu.Item key={child.to} asChild>
                 <Link
                   to={child.to}
-                  className="flex cursor-pointer items-center justify-between gap-3 rounded-lg px-3 py-2 text-sm text-ink outline-none data-[highlighted]:bg-lilac-tint"
+                  aria-current={child.to === activeTo ? "page" : undefined}
+                  className={cn(
+                    "flex cursor-pointer items-center justify-between gap-3 rounded-lg px-3 py-2 text-sm text-ink outline-none data-[highlighted]:bg-lilac-tint",
+                    // The narrow rail only lights the group's icon, so the
+                    // flyout is the one place left to say which row she is on.
+                    child.to === activeTo && "font-semibold",
+                  )}
                 >
                   {child.label}
                   {child.badge === "leads" && newLeads > 0 && (
@@ -517,22 +525,21 @@ function NavGroupItem({
             <div className="ml-[1.6rem] mt-0.5 space-y-0.5 border-l border-white/12 pl-2.5">
               {group.children?.map((child) => (
                 <li key={child.to}>
-                  <NavLink
+                  <Link
                     to={child.to}
-                    className={({ isActive }) =>
-                      cn(
-                        // Not `justify-between`: the active row adds the gold
-                        // marker as a `before:` pseudo-element, which counts as
-                        // a flex child — so `justify-between` shoved the label
-                        // of whichever page she was on to the right-hand edge
-                        // while every other row stayed left. The badge earns
-                        // its right edge with `ml-auto` instead.
-                        "flex items-center gap-2 rounded-lg px-3 py-2 text-[0.82rem] transition-colors",
-                        isActive
-                          ? "bg-surface font-semibold text-ink before:-ml-3 before:h-5 before:w-0.5 before:rounded-full before:bg-gold"
-                          : "text-white/60 hover:bg-white/8 hover:text-white",
-                      )
-                    }
+                    aria-current={child.to === activeTo ? "page" : undefined}
+                    className={cn(
+                      // Not `justify-between`: the active row adds the gold
+                      // marker as a `before:` pseudo-element, which counts as
+                      // a flex child — so `justify-between` shoved the label
+                      // of whichever page she was on to the right-hand edge
+                      // while every other row stayed left. The badge earns
+                      // its right edge with `ml-auto` instead.
+                      "flex items-center gap-2 rounded-lg px-3 py-2 text-[0.82rem] transition-colors",
+                      child.to === activeTo
+                        ? "bg-surface font-semibold text-ink before:-ml-3 before:h-5 before:w-0.5 before:rounded-full before:bg-gold"
+                        : "text-white/60 hover:bg-white/8 hover:text-white",
+                    )}
                   >
                     <span className="flex items-center gap-2">
                       {child.label}
@@ -547,7 +554,7 @@ function NavGroupItem({
                         {newLeads}
                       </span>
                     )}
-                  </NavLink>
+                  </Link>
                 </li>
               ))}
             </div>

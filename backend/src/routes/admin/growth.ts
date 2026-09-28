@@ -19,6 +19,7 @@ import {
 import { fireTriggerAsync, type TriggerType } from "../../automations/engine";
 import { isTriggerV2 } from "../../automations/engineV2";
 import { dispatchEvent } from "../../services/webhooksOut";
+import { listCoachingRoster } from "../../services/coachingRoster";
 import { env } from "../../config/env";
 import {
   automationActionsRepo,
@@ -280,6 +281,22 @@ adminGrowthRouter.get(
       [q, like],
     );
     res.json({ clients: rowsToCamel(result.rows) });
+  }),
+);
+
+/**
+ * The Clients tab: everyone she coaches, one row per person, with the programs
+ * they're in, sessions used against what the package holds, and their next and
+ * last session. Who counts as a client, and why, lives with the query in
+ * services/coachingRoster.ts.
+ *
+ * Not `/coaching/clients` — that one feeds the "book a session" picker, which
+ * lists every contact and member so she can book anybody.
+ */
+adminGrowthRouter.get(
+  "/coaching/roster",
+  asyncHandler(async (_req, res) => {
+    res.json({ clients: await listCoachingRoster() });
   }),
 );
 

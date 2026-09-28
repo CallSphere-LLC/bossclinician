@@ -30,8 +30,7 @@ export function FinalCTA() {
           <Button to="/work-with-me" variant="gold" size="lg">
             Find Your Path
           </Button>
-          {/* TODO: point to /boss-clinician-boardroom once that route exists */}
-          <Button to="/work-with-me" variant="outline-light" size="lg">
+          <Button to="/boardroom#apply" variant="outline-light" size="lg">
             Apply for the Boardroom
           </Button>
         </div>

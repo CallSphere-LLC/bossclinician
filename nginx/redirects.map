@@ -21,9 +21,9 @@ map $uri $redirect_target {
     /blog/alma-vs-private-pay-group-practice-numbers /blog;
     /blog/how-to-stop-seeing-25-clients-a-week /blog/how-to-stop-seeing-25-clients-a-week-and-still-hit-your-income-goals;
     /blog/is-talkspace-right-for-your-practice-goals /blog;
-    /boardroom /work-with-me;
     /boss-assessment /practice-quiz;
     /boss-builders-sales-page /work-with-me;
+    /boss-clinician-boardroom /boardroom;
     /boss-clinician-home /;
     /business-plan-guide /resources;
     /business-plan-ty /resources;
@@ -74,8 +74,8 @@ map $uri $redirect_target {
     /offers/boofdeo2/checkout /retreats;
     /offers/eghehsbl /store;
     /offers/eghehsbl/checkout /store;
-    /offers/gswshbtx /store;
-    /offers/gswshbtx/checkout /store;
+    /offers/gswshbtx /boardroom;
+    /offers/gswshbtx/checkout /boardroom;
     /offers/tzgjalku /club;
     /offers/tzgjalku/checkout /club;
     /offers/ugqhxnvs /courses/credential-with-confidence;

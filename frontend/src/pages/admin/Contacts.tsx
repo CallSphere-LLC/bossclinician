@@ -22,22 +22,23 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/cn";
-import { formatDate } from "@/lib/format";
 import {
-  EMAIL_STATUS_LABEL,
+  MARKETING_STATUS_WORDS,
   contactsApi,
   emailStatusLabel,
   hasActivity,
+  marketingStatusWords,
   money,
   type Contact,
+  type ContactFilterOptions,
   type ContactFilters,
-  type EmailStatus,
+  type ContactSort,
   type ImportOutcome,
+  type MarketingStatus,
   type SegmentOptions,
   type Tag,
 } from "@/lib/contactsApi";
 import {
-  Badge,
   Button,
   Card,
   Chip,
@@ -55,7 +56,16 @@ import { readSpreadsheet, type ImportRow } from "@/lib/peopleSpreadsheet";
 import { DataTable } from "@/pages/admin/ui/DataTable";
 import { Modal, useConfirm } from "@/pages/admin/ui/Dialog";
 import ContactQuickView from "@/pages/admin/ContactQuickView";
+import {
+  FiltersButton,
+  FiltersPanel,
+  SegmentMenu,
+  decodeFilterRows,
+  describeRow,
+  encodeFilterRows,
+} from "@/pages/admin/ContactsFilterBar";
 import { friendlyError, pluralize } from "@/pages/admin/ui/friendly";
+import { useSiteTime } from "@/pages/admin/ui/siteTime";
 
 /**
  * People — the one list.
@@ -81,34 +91,33 @@ const COLUMN_WIDTHS: Record<string, string> = {
   actions: "52px",
 };
 
-const STATUS_FILTERS: { value: EmailStatus | "all"; label: string }[] = [
-  { value: "all", label: "Everyone" },
-  { value: "subscribed", label: EMAIL_STATUS_LABEL.subscribed },
-  { value: "opted_out", label: EMAIL_STATUS_LABEL.opted_out },
-  { value: "bounced", label: EMAIL_STATUS_LABEL.bounced },
-  // Insights' "Marked as spam" row opens ?status=complained. Without a chip the
-  // list was filtered with nothing on screen saying so, and read as everyone.
-  { value: "complained", label: EMAIL_STATUS_LABEL.complained },
-  { value: "unconfirmed", label: EMAIL_STATUS_LABEL.unconfirmed },
+/**
+ * Kajabi's sort menu, word for word and in its order (the owner asked for it
+ * exactly). The server holds the same ten under the same keys
+ * (services/contactFilters.ts, CONTACT_SORTS) and pins the words in a test.
+ */
+const SORT_OPTIONS: { value: ContactSort; label: string }[] = [
+  { value: "name_asc", label: "Name A–Z" },
+  { value: "name_desc", label: "Name Z–A" },
+  { value: "email_asc", label: "Email A–Z" },
+  { value: "email_desc", label: "Email Z–A" },
+  { value: "value_desc", label: "Lifetime Value (most first)" },
+  { value: "value_asc", label: "Lifetime Value (least first)" },
+  { value: "added_asc", label: "Added date (oldest first)" },
+  { value: "added_desc", label: "Added date (newest first)" },
+  { value: "activity_asc", label: "Last activity (oldest first)" },
+  { value: "activity_desc", label: "Last activity (newest first)" },
 ];
 
-const SORT_OPTIONS: { value: NonNullable<ContactFilters["sort"]>; label: string }[] = [
-  { value: "recent", label: "Most recently active" },
-  { value: "newest", label: "Newest first" },
-  { value: "oldest", label: "Oldest first" },
-  { value: "name", label: "By name" },
-  { value: "value", label: "Biggest spenders" },
-  { value: "orders", label: "Most purchases" },
-];
+/** Kajabi's default. */
+const DEFAULT_SORT: ContactSort = "added_desc";
 
-/** The short words Kajabi used in this column, which is what she reads down it. */
-const MARKETING_LABEL: Record<EmailStatus, string> = {
-  subscribed: "Subscribed",
-  opted_out: "Unsubscribed",
-  bounced: "Bounced",
-  complained: "Marked as spam",
-  unconfirmed: "Unconfirmed",
-};
+/**
+ * The older links into this list — Insights' tiles, the tag screen — name a
+ * filter by these parameters. They still work, and are shown in the "Showing:"
+ * line with a way to clear them, since the new toolbar has no box for them.
+ */
+const LEGACY_PARAMS = ["audience", "optOut", "engagement", "status", "tag", "community", "untagged"] as const;
 
 function personName(person: Contact): string {
   return person.name || `${person.firstName} ${person.lastName}`.trim();
@@ -208,18 +217,55 @@ export default function Contacts() {
   const [tags, setTags] = useState<Tag[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  const requestedStatus = searchParams.get("status");
+  const time = useSiteTime();
   const [search, setSearch] = useState(searchParams.get("q") ?? "");
-  const [status, setStatus] = useState<EmailStatus | "all">(
-    EMAIL_STATUS_LABEL[requestedStatus as EmailStatus] ? requestedStatus as EmailStatus : "all",
-  );
-  const [communityOnly, setCommunityOnly] = useState(searchParams.get("community") === "true");
-  const [tagFilter, setTagFilter] = useState(searchParams.get("tag") ?? "");
-  const [sort, setSort] = useState<NonNullable<ContactFilters["sort"]>>("newest");
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState<number>(25);
   const [peeking, setPeeking] = useState<Contact | null>(null);
+  const [filterOptions, setFilterOptions] = useState<ContactFilterOptions | null>(null);
 
+  /*
+   * The segment, the applied filter rows and the sort live in the address bar,
+   * so a refresh — or a link sent to her assistant — opens the same list.
+   */
+  // A hand-edited or stale link falls back to All Contacts rather than an error.
+  const requestedSegment = searchParams.get("segment") ?? "";
+  const segment = /^(customers|subscribed|inactive|hard_bounced|team|saved-[1-9]\d{0,8})$/.test(requestedSegment)
+    ? requestedSegment
+    : "all";
+  const filtersParam = searchParams.get("filters");
+  const appliedRows = useMemo(() => decodeFilterRows(filtersParam), [filtersParam]);
+  const sortParam = searchParams.get("sort");
+  const sort: ContactSort = SORT_OPTIONS.some((option) => option.value === sortParam)
+    ? (sortParam as ContactSort)
+    : DEFAULT_SORT;
+  const [filtersOpen, setFiltersOpen] = useState(appliedRows.length > 0);
+
+  const setParams = useCallback(
+    (edit: (next: URLSearchParams) => void) =>
+      setSearchParams(
+        (current) => {
+          const next = new URLSearchParams(current);
+          edit(next);
+          return next;
+        },
+        { replace: true },
+      ),
+    [setSearchParams],
+  );
+
+  // The search box writes itself into the address bar a moment after typing stops.
+  useEffect(() => {
+    const typed = search.trim();
+    if ((searchParams.get("q") ?? "") === typed) return;
+    const timer = setTimeout(() => setParams((next) => (typed ? next.set("q", typed) : next.delete("q"))), 300);
+    return () => clearTimeout(timer);
+  }, [search, searchParams, setParams]);
+
+  const requestedStatus = searchParams.get("status");
+  const status = MARKETING_STATUS_WORDS[requestedStatus as MarketingStatus] ? (requestedStatus as MarketingStatus) : undefined;
+  const tagFilter = searchParams.get("tag") ?? "";
+  const communityOnly = searchParams.get("community") === "true";
   const audience = (["new", "subscribed", "new_subscriber", "customer", "new_customer"] as const)
     .find((value) => value === searchParams.get("audience"));
   const optOut = (["manual", "self"] as const).find((value) => value === searchParams.get("optOut"));
@@ -238,42 +284,48 @@ export default function Contacts() {
   const filters = useMemo<ContactFilters>(
     () => ({
       q: search.trim() || undefined,
-      status: status === "all" ? undefined : status,
+      status,
       tag: tagFilter || undefined,
       community: communityOnly || undefined,
       audience,
       optOut,
       engagement,
+      segment: segment === "all" ? undefined : segment,
+      filters: appliedRows.length ? appliedRows : undefined,
       sort,
       page,
       limit: perPage,
     }),
-    [search, status, tagFilter, communityOnly, sort, audience, optOut, engagement, page, perPage],
+    [search, status, tagFilter, communityOnly, audience, optOut, engagement, segment, appliedRows, sort, page, perPage],
   );
 
-  // A new search or filter starts back on the first page, as Kajabi's does.
+  // A new search, segment or filter starts back on the first page, as Kajabi's does.
   useEffect(() => {
     setPage(1);
-  }, [search, status, tagFilter, communityOnly, sort, audience, optOut, engagement, perPage]);
+  }, [search, status, tagFilter, communityOnly, audience, optOut, engagement, segment, filtersParam, sort, perPage]);
 
   const pageCount = Math.max(1, Math.ceil(total / perPage));
   const firstShown = total === 0 ? 0 : (page - 1) * perPage + 1;
   const lastShown = Math.min(page * perPage, total);
 
-  const insightFilterLabel = audience
-    ? ({ new: "New contacts in the last 30 days", subscribed: "Subscribed contacts", new_subscriber: "New subscribers", customer: "Customers", new_customer: "New customers" } as const)[audience]
-    : optOut
-      ? optOut === "manual" ? "Unsubscribed by an administrator" : "People who opted out themselves"
-      : engagement
-        ? ({ healthy: "Healthy subscribers", passive: "Passive subscribers", unengaged: "Unengaged subscribers", inactive: "Inactive subscribers" } as const)[engagement]
-        : null;
+  const legacyLabels = [
+    audience &&
+      ({ new: "New contacts in the last 30 days", subscribed: "Subscribed contacts", new_subscriber: "New subscribers", customer: "Customers", new_customer: "New customers" } as const)[audience],
+    optOut && (optOut === "manual" ? "Unsubscribed by an administrator" : "People who opted out themselves"),
+    engagement &&
+      ({ healthy: "Healthy subscribers", passive: "Passive subscribers", unengaged: "Unengaged subscribers", inactive: "Inactive subscribers" } as const)[engagement],
+    status &&
+      (status === "unconfirmed"
+        ? "People who haven't confirmed their email"
+        : `Email Marketing: ${marketingStatusWords(status)}`),
+    tagFilter && `Tagged ${tags.find((tag) => tag.slug === tagFilter)?.name ?? tagFilter}`,
+    communityOnly && "Community members",
+  ].filter(Boolean);
+  const insightFilterLabel = legacyLabels.length ? legacyLabels.join(" · ") : null;
+  const narrowed = Boolean(search.trim() || insightFilterLabel || segment !== "all" || appliedRows.length);
 
   function clearInsightFilter() {
-    const next = new URLSearchParams(searchParams);
-    next.delete("audience");
-    next.delete("optOut");
-    next.delete("engagement");
-    setSearchParams(next, { replace: true });
+    setParams((next) => LEGACY_PARAMS.forEach((key) => next.delete(key)));
   }
 
   const load = useCallback(() => {
@@ -325,6 +377,9 @@ export default function Contacts() {
 
   useEffect(() => {
     contactsApi.segmentOptions().then(setBulkOptions).catch(() => undefined);
+    // The Segments menu, the Filters panel and the Sort menu. Without it the
+    // toolbar still works with All Contacts; it just has nothing to offer.
+    contactsApi.filterOptions().then(setFilterOptions).catch(() => setFilterOptions(null));
   }, []);
 
   const toggle = useCallback((id: number) => {
@@ -417,36 +472,32 @@ export default function Contacts() {
       },
       {
         id: "status",
-        accessorFn: (person) => MARKETING_LABEL[person.emailMarketingStatus] ?? "",
+        accessorFn: (person) => marketingStatusWords(person.emailMarketingStatus),
         header: "Email Marketing",
         /*
-         * Two facts, independent of each other: whether we may email somebody,
-         * and whether they have confirmed the address. Somebody can be
-         * subscribed and still be locked out of posting because their account
-         * was never confirmed, so the second one keeps its own badge.
+         * Kajabi's column, in Kajabi's words, and only that. It used to carry a
+         * "Not confirmed" badge for members whose ACCOUNT address was never
+         * verified; beside "Subscribed" it read as the marketing opt-in being
+         * unconfirmed, which is the exact confusion QA rows 26/27 were about.
+         * The account's state is on the person's card, as "Account email".
          */
         cell: ({ row }) => (
-          <div className="flex flex-wrap items-center gap-1.5 whitespace-nowrap text-sm">
-            <span
-              className={cn(
-                row.original.emailMarketingStatus === "subscribed" ? "text-ink-soft" : "font-semibold text-ink",
-              )}
-              title={emailStatusLabel(row.original.emailMarketingStatus)}
-            >
-              {MARKETING_LABEL[row.original.emailMarketingStatus] ?? "Not known"}
-            </span>
-            {row.original.accountMemberId !== null &&
-              row.original.accountEmailVerifiedAt === null && (
-                <Badge tone="gold">Not confirmed</Badge>
-              )}
-          </div>
+          <span
+            className={cn(
+              "whitespace-nowrap text-sm",
+              row.original.emailMarketingStatus === "subscribed" ? "text-ink-soft" : "font-semibold text-ink",
+            )}
+            title={emailStatusLabel(row.original.emailMarketingStatus)}
+          >
+            {marketingStatusWords(row.original.emailMarketingStatus)}
+          </span>
         ),
       },
       {
         accessorKey: "lifetimeValueCents",
         header: "Lifetime Value",
         cell: ({ row }) => (
-          <span className="whitespace-nowrap text-sm text-ink">
+          <span className="whitespace-nowrap text-sm font-bold tabular-nums text-ink">
             {money(row.original.lifetimeValueCents)}
           </span>
         ),
@@ -455,7 +506,8 @@ export default function Contacts() {
         accessorKey: "createdAt",
         header: "Added date",
         cell: ({ row }) => (
-          <span className="whitespace-nowrap text-sm text-ink-soft">{formatDate(row.original.createdAt)}</span>
+          // In the site's zone, as Kajabi shows it (QA row 24), not the viewer's.
+          <span className="whitespace-nowrap text-sm text-ink-soft">{time.date(row.original.createdAt)}</span>
         ),
       },
       {
@@ -463,7 +515,7 @@ export default function Contacts() {
         header: "Last activity",
         cell: ({ row }) => (
           <span className="whitespace-nowrap text-sm text-ink-soft">
-            {hasActivity(row.original) ? formatDate(row.original.lastActivityAt as string) : "—"}
+            {hasActivity(row.original) ? time.date(row.original.lastActivityAt) : "—"}
           </span>
         ),
       },
@@ -481,7 +533,7 @@ export default function Contacts() {
       },
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps -- deleteOne is re-created each render; load and confirm are what it reads
-    [allSelected, people, selected, toggle, navigate, load, confirm],
+    [allSelected, people, selected, toggle, navigate, load, confirm, time.timeZone],
   );
 
   async function download() {
@@ -687,7 +739,10 @@ export default function Contacts() {
               </select>
               <select
                 value={sort}
-                onChange={(e) => setSort(e.target.value as NonNullable<ContactFilters["sort"]>)}
+                onChange={(e) => {
+                  const next = e.target.value as ContactSort;
+                  setParams((params) => (next === DEFAULT_SORT ? params.delete("sort") : params.set("sort", next)));
+                }}
                 aria-label="Sort contacts"
                 className={cn(selectStyles, "h-9 w-auto min-w-[8.5rem] pr-9")}
               >
@@ -701,70 +756,62 @@ export default function Contacts() {
           </div>
         }
         toolbar={
-          <div className="flex flex-1 flex-wrap items-center gap-2.5">
-            <select
-              value={status}
-              onChange={(e) => setStatus(e.target.value as EmailStatus | "all")}
-              aria-label="Show contacts by email marketing status"
-              className={cn(selectStyles, "w-auto")}
-            >
-              {STATUS_FILTERS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.value === "all" ? "All contacts" : option.label}
-                </option>
-              ))}
-            </select>
-            <div className="relative min-w-0 flex-1">
-              <Search
-                className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-ink-soft/60"
-                aria-hidden
+          /*
+           * Kajabi's toolbar: [Segments ▾] [Search Contacts…] [Filters]. The
+           * three dropdowns it replaces (status, community, tag) are all
+           * expressible as filter rows now, and their old links still work.
+           */
+          <div className="flex w-full flex-col gap-3">
+            <div className="flex flex-wrap items-center gap-2.5">
+              <SegmentMenu
+                options={filterOptions}
+                value={segment}
+                onChange={(next) => setParams((params) => (next === "all" ? params.delete("segment") : params.set("segment", next)))}
               />
-              <Input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search Contacts..."
-                aria-label="Search contacts"
-                className="h-11 pl-10"
-              />
+              <div className="relative min-w-[12rem] flex-1">
+                <Search
+                  className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-ink-soft/60"
+                  aria-hidden
+                />
+                <Input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Search Contacts..."
+                  aria-label="Search contacts"
+                  className="h-11 pl-10"
+                />
+              </div>
+              <FiltersButton count={appliedRows.length} open={filtersOpen} onClick={() => setFiltersOpen((open) => !open)} />
             </div>
-            <select
-              value={communityOnly ? "community" : "everyone"}
-              onChange={(e) => {
-                const community = e.target.value === "community";
-                setCommunityOnly(community);
-                const next = new URLSearchParams(searchParams);
-                if (community) next.set("community", "true");
-                else next.delete("community");
-                setSearchParams(next, { replace: true });
-              }}
-              aria-label="Filter contacts by membership"
-              className={cn(selectStyles, "w-auto")}
-            >
-              <option value="everyone">Everyone</option>
-              <option value="community">Community members</option>
-            </select>
-            <select
-              value={tagFilter}
-              onChange={(e) => setTagFilter(e.target.value)}
-              aria-label="Show only contacts with a tag"
-              className={cn(selectStyles, "w-auto max-w-56")}
-            >
-              <option value="">Any tag</option>
-              {tags.map((tag) => (
-                <option key={tag.slug} value={tag.slug}>
-                  {tag.name}
-                </option>
-              ))}
-            </select>
+            {filtersOpen ? (
+              <FiltersPanel
+                options={filterOptions}
+                applied={appliedRows}
+                onApply={(rows) =>
+                  setParams((params) => {
+                    const encoded = encodeFilterRows(rows);
+                    if (encoded) params.set("filters", encoded);
+                    else params.delete("filters");
+                  })
+                }
+              />
+            ) : (
+              appliedRows.length > 0 && (
+                <p className="text-xs text-ink-soft">
+                  <span className="font-semibold text-ink">Filtering by:</span>{" "}
+                  {appliedRows.map((row) => describeRow(filterOptions, row)).join(" · ")}
+                </p>
+              )
+            )}
           </div>
         }
-        emptyState={
+                emptyState={
           <EmptyState
             icon={<Users />}
-            title={search || tagFilter || communityOnly || status !== "all" || insightFilterLabel ? "Nobody matches that" : "No people yet"}
+            title={narrowed ? "Nobody matches that" : "No people yet"}
             description={
-              search || tagFilter || communityOnly || status !== "all" || insightFilterLabel
-                ? "Try a shorter search, or clear the filters above."
+              narrowed
+                ? "Try a shorter search, another segment, or clear the filters above."
                 : "People appear here as they enquire, join your list, sign up or buy something."
             }
             action={

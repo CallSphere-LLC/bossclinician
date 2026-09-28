@@ -10,8 +10,7 @@ interface Offer {
   desc: string;
   forWho: string;
   ctaLabel: string;
-  // TODO: swap for a dedicated offer route once it exists
-  // (/boss-clinician-club, /boss-clinician-lounge, /boss-clinician-boardroom)
+  /** The programme's own page: /club, /lounge, or the Boardroom's application. */
   to: string;
 }
 
@@ -59,7 +58,7 @@ const offers: Offer[] = [
     desc: "An exclusive mastermind for group practice owners and scaling clinicians ready for peer-level strategy, CEO leadership development, and a room full of people building at the same level — with Yvette guiding the room.",
     forWho: "For: The Stretched Thin Clinician — leading a team or scaling",
     ctaLabel: "Apply for the Boardroom",
-    to: "/work-with-me",
+    to: "/boardroom#apply",
   },
 ];
 

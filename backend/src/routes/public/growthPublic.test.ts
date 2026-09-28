@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { contactFromSubmission, isAutomatedSubmission, publicFormFields } from "./growthPublic";
+import {
+  contactFromSubmission,
+  isAutomatedSubmission,
+  publicFormFields,
+  submissionAnswerRows,
+} from "./growthPublic";
 
 describe("public form identity fields", () => {
   it("adds name and email to an old form without duplicating newer starter fields", () => {
@@ -208,5 +213,63 @@ describe("contactFromSubmission", () => {
     );
 
     expect(contact.firstName.length).toBe(200);
+  });
+});
+
+/**
+ * The owner's email lists a reply's answers under the questions' own labels.
+ * These pin the shapes a reply can take — a tick-any list, a single tick box,
+ * a file — and that a question hidden by its show rule is left out rather than
+ * reported as unanswered.
+ */
+describe("submissionAnswerRows", () => {
+  const fields = [
+    { key: "name", label: "Full name", type: "text" },
+    { key: "email", label: "Email address", type: "email" },
+    { key: "challenge", label: "Biggest challenge", type: "checkboxes" },
+    { key: "commitment", label: "I understand", type: "checkbox" },
+    { key: "sessions", label: "Sessions a week", type: "number" },
+    { key: "notes", label: "Anything else", type: "textarea" },
+    { key: "upload", label: "Your plan", type: "file" },
+    { key: "hidden_by_rule", label: "Only sometimes", type: "text" },
+  ];
+
+  it("reads every shape of answer in the form's own order", () => {
+    const rows = submissionAnswerRows(fields, {
+      name: "Jane Doe",
+      email: "jane@example.com",
+      challenge: ["Hiring", "Owner pay"],
+      commitment: true,
+      sessions: 0,
+      notes: "",
+      upload: { file: true, name: "plan.pdf" },
+    });
+    expect(rows).toEqual([
+      { label: "Full name", value: "Jane Doe" },
+      { label: "Email address", value: "jane@example.com" },
+      { label: "Biggest challenge", value: "Hiring, Owner pay" },
+      { label: "I understand", value: "Yes" },
+      { label: "Sessions a week", value: "0" },
+      { label: "Anything else", value: "Not answered" },
+      { label: "Your plan", value: "plan.pdf (attached — open it from Forms)" },
+    ]);
+  });
+
+  it("still names the person on a form that never stored the two starter questions", () => {
+    const rows = submissionAnswerRows([{ key: "state", label: "State", type: "text" }], {
+      name: "Jane Doe",
+      email: "jane@example.com",
+      state: "GA",
+    });
+    expect(rows).toEqual([
+      { label: "Your name", value: "Jane Doe" },
+      { label: "Email address", value: "jane@example.com" },
+      { label: "State", value: "GA" },
+    ]);
+  });
+
+  it("says so when a tick-any question has nothing ticked", () => {
+    const rows = submissionAnswerRows(fields, { name: "J", email: "j@example.com", challenge: [] });
+    expect(rows.find((row) => row.label === "Biggest challenge")?.value).toBe("Not answered");
   });
 });

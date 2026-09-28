@@ -33,8 +33,9 @@ export const ADMIN_PATH_ALIASES: readonly AdminPathAlias[] = [
   { from: "/admin/subscriptions", to: "/admin/sales/subscriptions" },
   { from: "/admin/invoices", to: "/admin/sales/invoices" },
   { from: "/admin/payouts", to: "/admin/sales/payouts" },
-  // "Affiliates" is what this screen was called before it became "Partners",
-  // and the public signup page still lives at /partners.
+  // "Affiliates" is Kajabi's word for this screen and the one the sidebar
+  // uses; the page itself is headed "Partners", which is why it lives at
+  // /partners (as does the public signup page).
   { from: "/admin/affiliates", to: "/admin/partners" },
 
   // The marketing screens, guessed without their prefix.
@@ -97,6 +98,22 @@ export const ADMIN_PATH_ALIASES: readonly AdminPathAlias[] = [
   { from: "/admin/email-templates", to: "/admin/marketing/emails" },
   { from: "/admin/templates", to: "/admin/marketing/emails" },
   { from: "/admin/marketing/templates", to: "/admin/marketing/emails" },
+
+  // The sidebar now uses Kajabi's words, and a word on the sidebar is a path
+  // someone will type. Quizzes sit under Contacts as "Assessments", where
+  // Kajabi keeps them, while their screen stays at its marketing address — so
+  // all three guesses at that name land on it. /contacts/:id would read the
+  // two contact-shaped ones as a contact id; AliasFirst checks here first.
+  { from: "/admin/assessments", to: "/admin/marketing/quizzes" },
+  { from: "/admin/contacts/assessments", to: "/admin/marketing/quizzes" },
+  { from: "/admin/marketing/assessments", to: "/admin/marketing/quizzes" },
+  { from: "/admin/all-contacts", to: "/admin/contacts" },
+  { from: "/admin/contacts/all", to: "/admin/contacts" },
+  { from: "/admin/website-pages", to: "/admin/pages" },
+  { from: "/admin/email-campaigns", to: "/admin/marketing/campaigns" },
+  { from: "/admin/marketing/email-campaigns", to: "/admin/marketing/campaigns" },
+  { from: "/admin/automatic-emails", to: "/admin/marketing/emails" },
+  { from: "/admin/marketing/automatic-emails", to: "/admin/marketing/emails" },
 
   // Settings screens guessed without /settings/. Not /admin/settings/integrations:
   // that is a real group of settings ("Connected services"), not an alias.

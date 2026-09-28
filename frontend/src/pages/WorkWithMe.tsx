@@ -691,8 +691,11 @@ function OffersSection() {
 
                   <div aria-hidden className="rule-faint mt-8 w-full" />
 
+                  {/* The Boardroom's own application, on its own page —
+                      not the general /apply letter the other buttons here
+                      still use. */}
                   <LuxeButton
-                    to="/apply"
+                    to="/boardroom#apply"
                     variant="glass"
                     size="sm"
                     className="mt-6 min-h-[44px] w-full"

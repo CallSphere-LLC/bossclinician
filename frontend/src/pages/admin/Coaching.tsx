@@ -1,14 +1,25 @@
 import { useNewProductRequest } from "./ui/useNewProductRequest";
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
+import { Link, useSearchParams } from "react-router";
 import * as Tabs from "@radix-ui/react-tabs";
 import type { ColumnDef } from "@tanstack/react-table";
-import { CalendarClock, Headphones, Link2, Mail, NotebookPen, Paperclip, Plus, Trash2, Users, Video } from "lucide-react";
+import { CalendarClock, Headphones, Link2, Mail, NotebookPen, Paperclip, Plus, RotateCw, Trash2, Users, Video } from "lucide-react";
 import { toast } from "sonner";
 import { adminApi } from "@/lib/api";
 import { coachingAdminApi, type CoachingSessionFile } from "@/lib/coachingAdminApi";
+import {
+  coachingTabFrom,
+  hasSessionsOutsidePrograms,
+  NO_PROGRAM,
+  rosterRows,
+  sessionsSummary,
+  type CoachingRosterClient,
+  type CoachingRosterRow,
+  type CoachingTab,
+} from "@/lib/coachingRoster";
 import type { CoachingOffer, CoachingSession, MediaAsset } from "@/types/admin";
 import { cn } from "@/lib/cn";
-import { formatCurrency, formatDateTime } from "@/lib/format";
+import { formatCurrency, formatDate, formatDateTime } from "@/lib/format";
 import {
   Badge,
   Button,
@@ -107,35 +118,85 @@ function centsToInput(cents: number | null | undefined): string {
   return Number.isInteger(dollars) ? String(dollars) : dollars.toFixed(2);
 }
 
+/**
+ * What a tab shows when its list won't load: the reason, and a way to ask
+ * again without reloading the whole console.
+ *
+ * It stands in for the table rather than sitting above it. Above it, the table
+ * underneath stayed on its loading skeleton for good — a failed request read as
+ * a tab that was still "loading" and never would, which is exactly how a broken
+ * tab gets reported as one that "doesn't switch".
+ */
+function LoadProblem({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return (
+    <div className="space-y-3">
+      <ErrorNotice message={message} />
+      <Button variant="secondary" size="sm" onClick={onRetry}>
+        <RotateCw />
+        Try again
+      </Button>
+    </div>
+  );
+}
+
+const COACHING_TABS: { value: CoachingTab; label: string; icon: typeof Headphones }[] = [
+  { value: "programs", label: "Programs", icon: Headphones },
+  { value: "sessions", label: "Sessions", icon: CalendarClock },
+  { value: "clients", label: "Clients", icon: Users },
+];
+
+/**
+ * The open tab lives in the address (`?tab=sessions`), not only in the tabs'
+ * own memory.
+ *
+ * Left to itself the tab list forgot where she was on every reload and every
+ * trip back from a contact's profile, and dropped her on Programs each time —
+ * and nothing else in the console could send her straight to her sessions or
+ * clients. The old `?tab=offers` still opens Programs (see coachingTabFrom).
+ *
+ * `replace` keeps flicking between tabs out of the back button's history, and
+ * the update starts from the address as it is now, so the "new program"
+ * request (`?new=1`) that All Products hands over isn't lost on the way.
+ */
 export default function Coaching() {
+  const [params, setParams] = useSearchParams();
+  const tab = coachingTabFrom(params.get("tab"));
+
+  function openTab(value: string) {
+    setParams(
+      (current) => {
+        const next = new URLSearchParams(current);
+        next.set("tab", coachingTabFrom(value));
+        return next;
+      },
+      { replace: true },
+    );
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader
         eyebrow="Products"
         title="Coaching"
-        description="Sell your coaching packages, then keep every booked session, agenda and private note in one place."
+        description="Sell your coaching programs, see who's in them, and keep every booked session, agenda and private note in one place."
       />
 
-      <Tabs.Root defaultValue="offers">
-        <Tabs.List className="flex gap-1 rounded-xl border border-hairline/70 bg-surface p-1.5">
-          {[
-            { value: "offers", label: "Programs", icon: Headphones },
-            { value: "sessions", label: "Sessions", icon: CalendarClock },
-            { value: "clients", label: "Clients", icon: Users },
-          ].map((tab) => (
+      <Tabs.Root value={tab} onValueChange={openTab}>
+        <Tabs.List className="flex gap-1 overflow-x-auto rounded-xl border border-hairline/70 bg-surface p-1.5">
+          {COACHING_TABS.map((item) => (
             <Tabs.Trigger
-              key={tab.value}
-              value={tab.value}
-              className="flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-ink-soft transition-colors hover:text-plum data-[state=active]:bg-brand-gradient data-[state=active]:text-white"
+              key={item.value}
+              value={item.value}
+              className="flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm font-semibold text-ink-soft transition-colors hover:text-plum sm:px-4 data-[state=active]:bg-brand-gradient data-[state=active]:text-white"
             >
-              <tab.icon className="size-4" />
-              {tab.label}
+              <item.icon className="size-4" />
+              {item.label}
             </Tabs.Trigger>
           ))}
         </Tabs.List>
 
         <div className="mt-5">
-          <Tabs.Content value="offers">
+          <Tabs.Content value="programs">
             <OffersTab />
           </Tabs.Content>
           <Tabs.Content value="sessions">
@@ -161,10 +222,11 @@ function OffersTab() {
   const [confirm, confirmDialog] = useConfirm();
 
   const load = useCallback(() => {
+    setError(null);
     adminApi
       .growthList<CoachingOffer>("coaching/offers")
       .then(setOffers)
-      .catch(() => setError("We couldn't load your coaching programs. Try refreshing the page."));
+      .catch(() => setError("We couldn't load your coaching programs."));
   }, []);
 
   useEffect(load, [load]);
@@ -217,7 +279,7 @@ function OffersTab() {
 
   return (
     <div className="space-y-5">
-      {error && <ErrorNotice message={error} />}
+      {error && <LoadProblem message={error} onRetry={load} />}
 
       <div className="flex justify-end">
         <Button size="sm" onClick={() => openOffer()}>
@@ -227,11 +289,15 @@ function OffersTab() {
       </div>
 
       {offers === null ? (
-        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
-          {Array.from({ length: 3 }, (_, i) => (
-            <Skeleton key={i} className="h-52 w-full" />
-          ))}
-        </div>
+        // With the error showing, a skeleton underneath would promise a list
+        // that isn't coming.
+        error ? null : (
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+            {Array.from({ length: 3 }, (_, i) => (
+              <Skeleton key={i} className="h-52 w-full" />
+            ))}
+          </div>
+        )
       ) : offers.length === 0 ? (
         <Card>
           <EmptyState
@@ -497,10 +563,11 @@ function SessionsTab() {
   }
 
   const load = useCallback(() => {
+    setError(null);
     adminApi
       .coachingSessions()
       .then(setSessions)
-      .catch(() => setError("We couldn't load your sessions. Try refreshing the page."));
+      .catch(() => setError("We couldn't load your sessions."));
   }, []);
 
   useEffect(load, [load]);
@@ -644,7 +711,7 @@ function SessionsTab() {
 
   return (
     <div className="space-y-5">
-      {error && <ErrorNotice message={error} />}
+      {error && <LoadProblem message={error} onRetry={load} />}
 
       <div className="flex justify-end">
         <Button
@@ -656,20 +723,24 @@ function SessionsTab() {
         </Button>
       </div>
 
-      <DataTable
-        columns={columns}
-        data={sessions}
-        searchPlaceholder="Search your sessions…"
-        itemNoun={{ one: "session", many: "sessions" }}
-        minWidth="720px"
-        emptyState={
-          <EmptyState
-            icon={<CalendarClock />}
-            title="No sessions booked yet"
-            description="Book a session with one of your clients and it'll show up here, with what you'll cover and your private notes."
-          />
-        }
-      />
+      {/* A list that failed to load is neither loading nor empty: no table
+          at all until "Try again" brings one back. */}
+      {!(error && sessions === null) && (
+        <DataTable
+          columns={columns}
+          data={sessions}
+          searchPlaceholder="Search your sessions…"
+          itemNoun={{ one: "session", many: "sessions" }}
+          minWidth="720px"
+          emptyState={
+            <EmptyState
+              icon={<CalendarClock />}
+              title="No sessions booked yet"
+              description="Book a session with one of your clients and it'll show up here, with what you'll cover and your private notes."
+            />
+          }
+        />
+      )}
 
       <Modal
         open={draft !== null}
@@ -917,165 +988,122 @@ function SessionsTab() {
 /* ------------------------------------------------------------------ Clients */
 
 /**
- * One row per person she coaches, rolled up from her booked sessions.
+ * Everyone she coaches, one row per person — Kajabi's "Clients" list on a
+ * coaching product.
  *
- * There is no roster table to read. `coaching_sessions` is the only record
- * that ties a person to a program, so the client list IS that list grouped
- * by person — which is why this reads sessions rather than
- * `adminApi.coachingClients()`, whose job is to fill the "book a session"
- * picker and which carries no program at all.
+ * The rows come from the server's roster (`GET /admin/growth/coaching/roster`)
+ * rather than being rolled up here from booked sessions, which is what this tab
+ * used to do. Sessions alone could never show the person who has BOUGHT a
+ * program, or been given one, and not booked anything yet — the client she
+ * most needs to chase. The roster reads access grants on coaching products as
+ * well as sessions; who counts, and why, is written up beside the query in
+ * backend/src/services/coachingRoster.ts.
  *
- * The consequence, worth knowing before trusting this as a roster: somebody
- * who has BOUGHT a package and not yet booked anything is not here. That fact
- * lives in `access_grants`, which no admin route exposes, and which today
- * cannot answer it anyway — nothing in `products` has `kind = 'coaching'`, so
- * no grant is attributable to a coaching program yet. When coaching is sold
- * as a product, this wants a real roster route behind it.
+ * The program filter works on programs, not people: choose one and each row
+ * narrows to it, so "2 of 6 used", next, last and joined are all about that
+ * program (rosterRows in lib/coachingRoster.ts). The search box is the table's
+ * own, matching a name, an email or a program.
  */
-interface CoachingClientRow {
-  key: string;
-  name: string;
-  email: string;
-  offerTitles: string[];
-  booked: number;
-  completed: number;
-  lastSessionAt: string | null;
-  lastSessionTime: number;
-}
-
 function ClientsTab() {
-  const [sessions, setSessions] = useState<CoachingSession[] | null>(null);
+  const [clients, setClients] = useState<CoachingRosterClient[] | null>(null);
   const [offers, setOffers] = useState<CoachingOffer[]>([]);
-  const [offerFilter, setOfferFilter] = useState("");
+  const [programFilter, setProgramFilter] = useState("");
   const [error, setError] = useState<string | null>(null);
 
+  const load = useCallback(() => {
+    setError(null);
+    coachingAdminApi
+      .roster()
+      .then((page) => setClients(page.clients))
+      .catch(() => setError("We couldn't load your clients."));
+  }, []);
+
+  useEffect(load, [load]);
   useEffect(() => {
-    adminApi
-      .coachingSessions()
-      .then(setSessions)
-      .catch(() => setError("We couldn't load your clients. Try refreshing the page."));
     adminApi.growthList<CoachingOffer>("coaching/offers").then(setOffers).catch(() => undefined);
   }, []);
 
-  const rows = useMemo<CoachingClientRow[] | null>(() => {
-    if (sessions === null) return null;
-    const now = Date.now();
-    const people = new Map<string, CoachingClientRow>();
+  // Memoised on purpose: the table keys its row model on this array's
+  // identity, and a fresh one on every render is what once froze the page.
+  const rows = useMemo<CoachingRosterRow[] | null>(
+    () => (clients === null ? null : rosterRows(clients, programFilter)),
+    [clients, programFilter],
+  );
+  const showOutside = clients !== null && hasSessionsOutsidePrograms(clients);
 
-    for (const session of sessions) {
-      // A session with nobody on it is a gap in her calendar, not a client.
-      if (!session.memberId && !session.contactId) continue;
-      // Filtering here rather than on the finished rows is what makes the
-      // counts mean "in this program" instead of "in total".
-      if (offerFilter && String(session.offerId ?? "") !== offerFilter) continue;
-
-      const email = (session.memberEmail ?? "").trim();
-      // Keyed on the email first, so the same person booked once against her
-      // contact record and later against her member record counts once. Only
-      // someone with no email at all falls back to the kind:id pair.
-      const key = email
-        ? email.toLowerCase()
-        : session.memberId
-          ? `member:${session.memberId}`
-          : `contact:${session.contactId}`;
-
-      const row = people.get(key) ?? {
-        key,
-        name: "",
-        email,
-        offerTitles: [],
-        booked: 0,
-        completed: 0,
-        lastSessionAt: null,
-        lastSessionTime: 0,
-      };
-
-      if (!row.name && session.memberName) row.name = session.memberName;
-      if (!row.email && email) row.email = email;
-
-      // Deduped by title, which is how she reads them.
-      const offerTitle = session.offerTitle?.trim();
-      if (offerTitle && !row.offerTitles.includes(offerTitle)) row.offerTitles.push(offerTitle);
-
-      // Cancelled is the one status that doesn't count as a session booked.
-      // A no-show does: the hour was held and the package paid for it.
-      if (session.status !== "cancelled") {
-        row.booked += 1;
-        if (session.status === "completed") row.completed += 1;
-        // "Last session" means the last time they actually sat down together,
-        // so a no-show is skipped here even though it still spent a session
-        // above. A past session she never ticked "done" still counts —
-        // forgetting to tick a box is not the same as not meeting.
-        const at = session.scheduledAt ? new Date(session.scheduledAt).getTime() : NaN;
-        if (
-          session.status !== "no_show" &&
-          Number.isFinite(at) &&
-          at <= now &&
-          at > row.lastSessionTime
-        ) {
-          row.lastSessionTime = at;
-          row.lastSessionAt = session.scheduledAt;
-        }
-      }
-
-      people.set(key, row);
-    }
-
-    // Most recently seen first: the people she is working with now are the
-    // ones she opens this for.
-    return [...people.values()].sort((a, b) => b.lastSessionTime - a.lastSessionTime);
-  }, [sessions, offerFilter]);
-
-  const columns = useMemo<ColumnDef<CoachingClientRow, unknown>[]>(
+  const columns = useMemo<ColumnDef<CoachingRosterRow, unknown>[]>(
     () => [
       {
         id: "client",
         header: "Client",
         // Both halves in one value so the search box finds a person by either.
         accessorFn: (row) => `${row.name} ${row.email}`.trim(),
-        cell: ({ row }) => (
-          <div className="min-w-0">
-            <span className="block truncate font-semibold text-ink">
-              {row.original.name || row.original.email || "No name yet"}
-            </span>
-            {row.original.name && row.original.email && (
-              <span className="block truncate text-xs text-ink-soft">{row.original.email}</span>
-            )}
-          </div>
-        ),
+        cell: ({ row }) => {
+          const label = row.original.name || row.original.email || "No name yet";
+          return (
+            <div className="min-w-0">
+              {row.original.contactId ? (
+                <Link
+                  to={`/admin/contacts/${row.original.contactId}`}
+                  className="block truncate font-semibold text-ink transition-colors hover:text-plum"
+                >
+                  {label}
+                </Link>
+              ) : (
+                <span className="block truncate font-semibold text-ink">{label}</span>
+              )}
+              {row.original.name && row.original.email && (
+                <span className="block truncate text-xs text-ink-soft">{row.original.email}</span>
+              )}
+            </div>
+          );
+        },
       },
       {
         id: "program",
         header: "Program",
-        accessorFn: (row) => row.offerTitles.join(", "),
-        cell: ({ row }) =>
-          row.original.offerTitles.length === 0 ? (
-            <span className="text-xs text-ink-soft/70">Not part of a program</span>
-          ) : (
-            <div className="flex flex-wrap gap-1.5">
-              {row.original.offerTitles.map((title) => (
-                <Badge key={title} tone="plum">
-                  {title}
-                </Badge>
-              ))}
-            </div>
-          ),
+        accessorFn: (row) => row.programs.map((p) => p.title ?? "Not part of a program").join(", "),
+        cell: ({ row }) => (
+          <div className="flex flex-wrap gap-1.5">
+            {row.original.programs.map((program) => (
+              <Badge
+                key={program.offerId ?? NO_PROGRAM}
+                tone={program.offerId === null ? "neutral" : program.access === "ended" ? "slate" : "plum"}
+              >
+                {program.title ?? "Not part of a program"}
+                {program.access === "ended" && " · ended"}
+              </Badge>
+            ))}
+          </div>
+        ),
       },
       {
-        id: "booked",
+        id: "sessions",
         header: "Sessions",
-        accessorFn: (row) => row.booked,
+        accessorFn: (row) => row.sessionsUsed + row.sessionsOutside,
         // The value is a number so the column sorts properly; the search box
         // would otherwise read what she typed as a numeric range and match
-        // nothing, so this column and the date one opt out of it.
+        // nothing, so this column and the date ones opt out of it.
+        enableGlobalFilter: false,
+        cell: ({ row }) => {
+          const { main, note } = sessionsSummary(row.original);
+          return (
+            <div className="whitespace-nowrap">
+              <span className="text-sm font-bold tabular-nums text-ink">{main}</span>
+              {note && <span className="block text-xs tabular-nums text-ink-soft">{note}</span>}
+            </div>
+          );
+        },
+      },
+      {
+        id: "nextSession",
+        header: "Next session",
+        accessorFn: (row) => row.nextSessionTime,
         enableGlobalFilter: false,
         cell: ({ row }) => (
-          <div className="whitespace-nowrap">
-            <span className="text-sm font-semibold text-ink">
-              {pluralize(row.original.booked, "session")}
-            </span>
-            <span className="block text-xs text-ink-soft">{row.original.completed} done</span>
-          </div>
+          <span className="whitespace-nowrap text-sm text-ink-soft">
+            {orNone(formatDateTime(row.original.nextSessionAt), "Nothing booked")}
+          </span>
         ),
       },
       {
@@ -1086,6 +1114,17 @@ function ClientsTab() {
         cell: ({ row }) => (
           <span className="whitespace-nowrap text-sm text-ink-soft">
             {orNone(formatDateTime(row.original.lastSessionAt), "None yet")}
+          </span>
+        ),
+      },
+      {
+        id: "joined",
+        header: "Joined",
+        accessorFn: (row) => row.joinedTime,
+        enableGlobalFilter: false,
+        cell: ({ row }) => (
+          <span className="whitespace-nowrap text-sm text-ink-soft">
+            {orNone(formatDate(row.original.joinedAt), "Not known")}
           </span>
         ),
       },
@@ -1115,50 +1154,54 @@ function ClientsTab() {
 
   return (
     <div className="space-y-5">
-      {error && <ErrorNotice message={error} />}
+      {error && <LoadProblem message={error} onRetry={load} />}
 
-      <DataTable
-        columns={columns}
-        data={rows}
-        searchPlaceholder="Search your clients…"
-        itemNoun={{ one: "client", many: "clients" }}
-        minWidth="860px"
-        toolbar={
-          <select
-            value={offerFilter}
-            onChange={(e) => setOfferFilter(e.target.value)}
-            aria-label="Which coaching program to show"
-            className={selectStyles}
-          >
-            <option value="">Every program</option>
-            {offers.map((offer) => (
-              <option key={offer.id} value={String(offer.id)}>
-                {offer.title}
-              </option>
-            ))}
-          </select>
-        }
-        emptyState={
-          offerFilter ? (
-            <EmptyState
-              icon={<Users />}
-              title="Nobody in this program yet"
-              description="Nobody has a session booked in it yet. Show every program to see the rest of your clients."
-              action={
-                <Button variant="secondary" size="sm" onClick={() => setOfferFilter("")}>
-                  Show every program
-                </Button>
-              }
-            />
-          ) : (
-            <EmptyState
-              icon={<Users />}
-              title="No clients yet"
-              description="Book a session with someone under Sessions and they'll appear here, with the program they're in and when you last met."
-            />
-          )
-        }
-      />
+      {!(error && clients === null) && (
+        <DataTable
+          columns={columns}
+          data={rows}
+          searchPlaceholder="Search your clients…"
+          itemNoun={{ one: "client", many: "clients" }}
+          minWidth="1040px"
+          columnWidths={{ client: "24%", actions: "64px" }}
+          toolbar={
+            <select
+              value={programFilter}
+              onChange={(e) => setProgramFilter(e.target.value)}
+              aria-label="Which coaching program to show"
+              className={cn(selectStyles, "w-auto min-w-[12rem]")}
+            >
+              <option value="">Every program</option>
+              {offers.map((offer) => (
+                <option key={offer.id} value={String(offer.id)}>
+                  {offer.title}
+                </option>
+              ))}
+              {showOutside && <option value={NO_PROGRAM}>Sessions outside a program</option>}
+            </select>
+          }
+          emptyState={
+            programFilter ? (
+              <EmptyState
+                icon={<Users />}
+                title="Nobody in this program yet"
+                description="Nobody has bought, been given or booked into this program yet. Show every program to see the rest of your clients."
+                action={
+                  <Button variant="secondary" size="sm" onClick={() => setProgramFilter("")}>
+                    Show every program
+                  </Button>
+                }
+              />
+            ) : (
+              <EmptyState
+                icon={<Users />}
+                title="No clients yet"
+                description="Clients appear here when someone buys or is given a coaching program, or when you book them a session."
+              />
+            )
+          }
+        />
+      )}
     </div>
   );
 }

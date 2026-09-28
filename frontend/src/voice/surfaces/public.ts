@@ -36,7 +36,6 @@ const DESTINATIONS: readonly VoiceDestination[] = [
       "work with me",
       "work with Yvette",
       "coaching",
-      "the boardroom",
       "one to one",
       "how do I hire her",
       "what are my options",
@@ -74,6 +73,26 @@ const DESTINATIONS: readonly VoiceDestination[] = [
     ],
     narration:
       "The Lounge is a monthly membership for therapists whose practice already works but who cannot keep working like this. There are two tiers at the founding rate — Member at a hundred and ninety-seven a month, and VIP at three hundred and forty-seven, which puts Yvette's eyes on your practice.",
+    surfaces: PUBLIC,
+  },
+  {
+    key: "boardroom",
+    path: "/boardroom",
+    label: "The Boardroom",
+    aliases: [
+      "the boardroom",
+      "boardroom",
+      "boss clinician boardroom",
+      "the mastermind",
+      "apply for the boardroom",
+      "I'm ready to hire",
+      "I already have a team",
+    ],
+    // No price on purpose: the page states the investment in its application,
+    // and older copy elsewhere on the site states a different one. The
+    // concierge reads what is on screen rather than repeating either.
+    narration:
+      "The Boardroom is Yvette's private business mastermind for mental health practice owners who are preparing to make their first hire or already lead a team. Six practice owners at a time work through money, team, systems and growth together. It is by application: the application is at the foot of the page, and Yvette reviews every one herself.",
     surfaces: PUBLIC,
   },
   {
@@ -404,6 +423,25 @@ const TOUR: readonly TourStop[] = [
       {
         focus: "Choose your path into the Lounge",
         say: "Two tiers. Member is a hundred and ninety-seven a month, VIP is three hundred and forty-seven and puts Yvette's eyes on your practice. Both are founding rates on limited seats, and the rate you join at is the rate you keep.",
+      },
+    ],
+  },
+  {
+    destination: "boardroom",
+    purpose:
+      "The mastermind for practice owners making CEO decisions — hiring for the first time, or leading the team they already have.",
+    beats: [
+      {
+        focus: "Build a practice that can grow beyond you.",
+        say: "The Boardroom is the third way in. It is for practice owners whose next decisions are CEO decisions: when to hire, what they can afford, and how to step back without everything falling apart.",
+      },
+      {
+        focus: "Only Six Seats.",
+        say: "It is deliberately small — six practice owners, six businesses, real numbers. Joining is an application, then Yvette's personal review, then an invitation.",
+      },
+      {
+        focus: "There are six chairs in this room.",
+        say: "The application is here, in six short steps. You do not need to have everything figured out to apply.",
       },
     ],
   },

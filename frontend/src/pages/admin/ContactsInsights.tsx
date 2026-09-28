@@ -42,7 +42,7 @@ export default function ContactsInsights() {
   return (
     <div className="space-y-6">
       <Link to="/admin/contacts" className="inline-flex min-h-11 items-center gap-2 text-sm font-semibold text-ink-soft hover:text-ink"><ArrowLeft className="size-4" />People</Link>
-      <PageHeader eyebrow="Contacts" title="Insights" description="Who is joining, buying and still engaging with your emails." />
+      <PageHeader eyebrow="Contacts" title="Insights" description="Who is joining, buying and still engaging with your emails. Team and test accounts are not counted." />
       {error && <ErrorNotice message={error} />}
       {!data ? !error && <div className="grid grid-cols-1 gap-4 md:grid-cols-3"><Skeleton className="h-44" /><Skeleton className="h-44" /><Skeleton className="h-44" /></div> : <>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -51,7 +51,7 @@ export default function ContactsInsights() {
           <Metric label="Customers" value={data.customers} detail={`${data.newCustomers.toLocaleString()} bought in the last 30 days`} icon={<ShoppingBag className="size-5" />} to="/admin/contacts?audience=customer" />
         </div>
         <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
-          <Card className="p-5"><h2 className="font-display text-xl text-ink">People no longer receiving marketing</h2><div className="mt-3"><Row label="Unsubscribed by you" value={data.manuallyUnsubscribed} to="/admin/contacts?optOut=manual" /><Row label="Opted out themselves" value={data.optedOut} to="/admin/contacts?optOut=self" /><Row label="Email bounced" value={data.bounced} to="/admin/contacts?status=bounced" /><Row label="Marked as spam" value={data.complained} to="/admin/contacts?status=complained" /></div></Card>
+          <Card className="p-5"><h2 className="font-display text-xl text-ink">People no longer receiving marketing</h2><div className="mt-3"><Row label="Unsubscribed by you" value={data.manuallyUnsubscribed} to="/admin/contacts?optOut=manual" /><Row label="Opted out themselves" value={data.optedOut} to="/admin/contacts?optOut=self" /><Row label="Email bounced" value={data.bounced} to="/admin/contacts?status=bounced" /><Row label="Marked as spam" value={data.complained} to="/admin/contacts?status=complained" /><Row label="Never subscribed" hint="Never agreed to your marketing emails" value={data.neverOptedIn ?? 0} to="/admin/contacts?status=never_subscribed" /></div></Card>
           <Card className="p-5"><div className="flex items-center gap-2"><Activity className="size-5 text-plum" /><h2 className="font-display text-xl text-ink">Subscriber engagement</h2></div><div className="mt-3"><Row label="Healthy" hint="Opened or clicked in the last 90 days" value={data.engagement.healthy} to="/admin/contacts?engagement=healthy" /><Row label="Passive" hint="Last engaged 91–180 days ago" value={data.engagement.passive} to="/admin/contacts?engagement=passive" /><Row label="Unengaged" hint="Last engaged 181–270 days ago" value={data.engagement.unengaged} to="/admin/contacts?engagement=unengaged" /><Row label="Inactive" hint="No engagement for more than 270 days" value={data.engagement.inactive} to="/admin/contacts?engagement=inactive" /></div></Card>
         </div>
         {/*

@@ -56,8 +56,8 @@ export const sortPills: SortPillData[] = [
   { id: "stretchedthin", label: "Building a Team", accent: "ink" },
 ];
 
-// TODO: repoint the section CTAs at /boss-clinician-club, /boss-clinician-lounge
-// and /boss-clinician-boardroom once those dedicated offer routes exist.
+// Each section's CTA goes to its own programme's page: /club, /lounge, and the
+// application at the foot of /boardroom.
 export const avatarSections: AvatarSectionData[] = [
   {
     id: "depleted",
@@ -174,7 +174,7 @@ export const avatarSections: AvatarSectionData[] = [
     cta: {
       body: "Ready for a peer-level mastermind with clinicians building at the same level — guided by Yvette?",
       label: "Apply for the Boss Clinician Boardroom",
-      to: "/work-with-me",
+      to: "/boardroom#apply",
     },
   },
 ];
@@ -197,9 +197,10 @@ export interface FinalCtaLink {
   variant: "green" | "plum" | "gold";
 }
 
-// TODO: repoint at the dedicated offer routes once they exist.
+// One per programme, each to that programme's own page. The Boardroom is by
+// application, so its button lands on the application itself.
 export const finalCtaLinks: FinalCtaLink[] = [
   { label: "Join the Boss Clinician Club", to: "/club", variant: "green" },
   { label: "Join the Boss Clinician Lounge", to: "/lounge", variant: "plum" },
-  { label: "Apply for the Boardroom", to: "/work-with-me", variant: "gold" },
+  { label: "Apply for the Boardroom", to: "/boardroom#apply", variant: "gold" },
 ];

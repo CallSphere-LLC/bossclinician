@@ -1,12 +1,14 @@
 import { sessionFetch } from "@/lib/adminTransport";
 import { ApiError } from "@/lib/api";
+import type { CoachingRosterClient } from "@/lib/coachingRoster";
 
 /**
- * The admin side of a coaching session's files.
+ * The admin side of coaching: a session's files, and the Clients tab's roster.
  *
  * `lib/coachingApi.ts` is the member's client; this is the coach's. Kept off
  * `lib/api.ts` because that file is shared by every other screen in the
- * console, and this carries one small shape.
+ * console, and these carry a couple of small shapes. The roster's shape lives
+ * in `lib/coachingRoster.ts`, beside the pure code that turns it into rows.
  */
 
 const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? "/api";
@@ -58,4 +60,6 @@ export const coachingAdminApi = {
     }),
   sessionFileDelete: (sessionId: number, fileId: number) =>
     request<void>(`/admin/coaching/sessions/${sessionId}/files/${fileId}`, { method: "DELETE" }),
+  /** The Clients tab: everyone in a coaching program, one entry per person. */
+  roster: () => request<{ clients: CoachingRosterClient[] }>(`/admin/growth/coaching/roster`),
 };

@@ -51,12 +51,25 @@ export interface ContactTag {
   colour: string;
 }
 
+/**
+ * The five states a saved segment's rule can name (services/segments.ts), and
+ * the ones an administrator can move somebody between.
+ */
 export type EmailStatus =
   | "subscribed"
   | "opted_out"
   | "bounced"
   | "complained"
   | "unconfirmed";
+
+/**
+ * Every state a contact can be in: the five above, plus Kajabi's "Never
+ * subscribed" (migration 075) — never agreed to marketing, which is not the
+ * same as having opted out. No sending gate mails it. Kept a separate type so
+ * the saved-segment rule menu (Segments.tsx), which the server doesn't accept
+ * it in yet, doesn't start offering it.
+ */
+export type MarketingStatus = EmailStatus | "never_subscribed";
 
 export interface ContactCommunity {
   id: number;
@@ -76,7 +89,7 @@ export interface Contact {
   lastName: string;
   phone: string;
   timezone: string;
-  emailMarketingStatus: EmailStatus;
+  emailMarketingStatus: MarketingStatus;
   optedInAt: string | null;
   optedOutAt: string | null;
   consentSource: string;
@@ -103,6 +116,17 @@ export interface Contact {
    */
   accountMemberId: number | null;
   accountEmailVerifiedAt: string | null;
+  /**
+   * A team or test account (migration 075). Left out of the list, its count,
+   * the segments and Insights, and badged on its own card.
+   */
+  isInternal: boolean;
+  /**
+   * Kajabi's "Opt-in status": when they confirmed the email-marketing double
+   * opt-in. Not the account's email verification — that is
+   * `accountEmailVerifiedAt`, and the two used to be confused (QA rows 26/27).
+   */
+  optInConfirmedAt: string | null;
 }
 
 export type ConfirmationState = "confirmed" | "unconfirmed" | "list_unconfirmed" | "no_account";
@@ -121,6 +145,7 @@ export interface ContactConfirmation {
 }
 
 export interface ContactActivity {
+  /** An activity row's number, or `email-83`, `tag-4`… for moments read from their own tables. */
   id: string;
   kind: string;
   title: string;
@@ -129,7 +154,28 @@ export interface ContactActivity {
   subjectId: string;
   meta: Record<string, unknown>;
   occurredAt: string;
+  /** Kajabi's event type, for "Filter by event type"; null for moments Kajabi has no type for. */
+  eventType: LifecycleEventType | null;
+  /** The sentence Kajabi would print: "Purchased …", "Opted Into …", "Was broadcasted by …". */
+  headline: string;
 }
+
+/** Kajabi's Lifecycle "Filter by event type" menu, in its order. The server files every moment under one. */
+export const LIFECYCLE_EVENT_TYPES = [
+  "Form Submission",
+  "Email Delivery",
+  "Email Sequence Subscription",
+  "Offer Purchase",
+  "Offer Grant",
+  "Event Registration",
+  "Assessment Result",
+  "Expert Agent Chat",
+  "Contact Created",
+  "Tag Added",
+  "Automation Enrollment",
+] as const;
+
+export type LifecycleEventType = (typeof LIFECYCLE_EVENT_TYPES)[number];
 
 export interface ContactOrder {
   id: number;
@@ -190,6 +236,8 @@ export interface ContactInsights {
    * the list it opens cannot disagree.
    */
   neverSubscribed: number;
+  /** Kajabi's "Never subscribed" status — never agreed to marketing at all. */
+  neverOptedIn: number;
   engagement: { healthy: number; passive: number; unengaged: number; inactive: number };
 }
 
@@ -231,7 +279,7 @@ export interface SegmentPerson {
   id: number;
   email: string;
   name: string;
-  emailMarketingStatus: EmailStatus;
+  emailMarketingStatus: MarketingStatus;
   lifetimeValueCents: number;
   orderCount: number;
   lastActivityAt: string | null;
@@ -250,23 +298,98 @@ export interface ImportOutcome {
   errors: { row: number; email?: string; message: string }[];
 }
 
+/** Kajabi's sort menu, by the keys the server knows (services/contactFilters.ts). */
+export type ContactSort =
+  | "name_asc"
+  | "name_desc"
+  | "email_asc"
+  | "email_desc"
+  | "value_desc"
+  | "value_asc"
+  | "added_asc"
+  | "added_desc"
+  | "activity_asc"
+  | "activity_desc";
+
+/** One "Filtering by:" row: [Category][Conditional][Value] (+ text for the field comparisons). */
+export interface ContactFilterRow {
+  category: string;
+  op: string;
+  value: string;
+  text: string;
+}
+
 export interface ContactFilters {
   q?: string;
   tag?: string;
-  status?: EmailStatus;
+  status?: MarketingStatus;
   untagged?: boolean;
   community?: boolean;
   audience?: "new" | "subscribed" | "new_subscriber" | "customer" | "new_customer";
   optOut?: "manual" | "self";
   engagement?: "healthy" | "passive" | "unengaged" | "inactive";
-  sort?: "recent" | "newest" | "oldest" | "name" | "value" | "orders";
+  /** A built-in segment key, `saved-<id>`, or `team`. */
+  segment?: string;
+  /** Kajabi-style filter rows; they AND together. */
+  filters?: ContactFilterRow[];
+  /** Kajabi's ten sorts. The old words ("recent", "newest"…) are still understood by the server. */
+  sort?: ContactSort | "recent" | "newest" | "oldest" | "name" | "value" | "orders";
   page?: number;
   limit?: number;
+}
+
+/** One choice in a filter's value box, as the server lists it. */
+export interface FilterChoice {
+  value: string;
+  label: string;
+  hint?: string;
+}
+
+export type FilterValueKind =
+  | "none"
+  | "choice"
+  | "days"
+  | "engagement_days"
+  | "date_range"
+  | "money"
+  | "field"
+  | "field_text";
+
+export interface FilterConditional {
+  key: string;
+  label: string;
+  value: FilterValueKind;
+  /** Which of `options` the value box draws from. */
+  options: string | null;
+  /** Set when Kajabi has it and this site can't answer it; shown, never sent. */
+  unavailable: string;
+}
+
+export interface FilterCategory {
+  key: string;
+  label: string;
+  note: string;
+  conditionals: FilterConditional[];
+}
+
+/** Everything the Segments menu, the Filters panel and the Sort menu need. */
+export interface ContactFilterOptions {
+  segments: { key: string; label: string; kind: "built_in" | "saved" | "team" }[];
+  sorts: { key: ContactSort; label: string }[];
+  defaultSort: ContactSort;
+  categories: FilterCategory[];
+  options: Record<string, FilterChoice[]>;
+  days: number[];
+  engagementDays: number[];
+  datePresets: { key: string; label: string }[];
+  eventTypes: LifecycleEventType[];
 }
 
 function toQuery(filters: ContactFilters): string {
   const qs = new URLSearchParams();
   if (filters.q) qs.set("q", filters.q);
+  if (filters.segment && filters.segment !== "all") qs.set("segment", filters.segment);
+  if (filters.filters && filters.filters.length > 0) qs.set("filters", JSON.stringify(filters.filters));
   if (filters.tag) qs.set("tag", filters.tag);
   if (filters.status) qs.set("status", filters.status);
   if (filters.community) qs.set("community", "true");
@@ -285,6 +408,7 @@ function toQuery(filters: ContactFilters): string {
 
 export const contactsApi = {
   insights: () => request<ContactInsights>("/admin/contacts/insights"),
+  filterOptions: () => request<ContactFilterOptions>("/admin/contacts/filter-options"),
   list: (filters: ContactFilters = {}) =>
     request<ContactPage>(`/admin/contacts${toQuery(filters)}`),
   get: (id: number) => request<ContactDetail>(`/admin/contacts/${id}`),
@@ -449,26 +573,54 @@ export const contactsApi = {
  * "complained" in particular are things that happened *to* the address, and the
  * only thing she needs from them is whether mail is still going out.
  */
-export const EMAIL_STATUS_LABEL: Record<EmailStatus, string> = {
+/**
+ * Keyed on the five states a saved segment's rule may name. `never_subscribed`
+ * is deliberately absent: Segments.tsx builds its rule menu from these keys,
+ * and services/segments.ts does not accept that state in a saved rule yet, so
+ * listing it here would offer a choice that fails on save. Its words are in
+ * `emailStatusLabel` and `MARKETING_STATUS_WORDS`.
+ */
+export const EMAIL_STATUS_LABEL: Record<MarketingStatus, string> = {
   subscribed: "Happy to hear from you",
   opted_out: "Asked to stop",
   bounced: "Emails aren't arriving",
   complained: "Marked you as spam",
   unconfirmed: "Hasn't confirmed yet",
+  never_subscribed: "Never subscribed",
 };
 
-export const EMAIL_STATUS_TONE: Record<EmailStatus, "green" | "slate" | "red" | "gold"> = {
+export const EMAIL_STATUS_TONE: Record<MarketingStatus, "green" | "slate" | "red" | "gold"> = {
   subscribed: "green",
   opted_out: "slate",
   bounced: "red",
   complained: "red",
   unconfirmed: "gold",
+  never_subscribed: "slate",
 };
+
+/**
+ * The words Kajabi's Email Marketing column uses, which is what the tester
+ * reads down it side by side with Kajabi (QA rows 22–27). The People list, the
+ * quick view, the profile and the filters all use these.
+ */
+export const MARKETING_STATUS_WORDS: Record<MarketingStatus, string> = {
+  subscribed: "Subscribed",
+  opted_out: "Opted out",
+  bounced: "Hard bounced",
+  complained: "Marked as spam",
+  unconfirmed: "Unconfirmed",
+  never_subscribed: "Never subscribed",
+};
+
+export function marketingStatusWords(status: string): string {
+  return MARKETING_STATUS_WORDS[status as MarketingStatus] ?? "Not known";
+}
 
 /** The two statuses she can set herself. The rest are set by what the inbox did. */
 export const SETTABLE_STATUSES: EmailStatus[] = ["subscribed", "opted_out"];
 
 export function emailStatusLabel(status: string): string {
+  if (status === "never_subscribed") return "Never signed up for your emails";
   return EMAIL_STATUS_LABEL[status as EmailStatus] ?? "Not known";
 }
 

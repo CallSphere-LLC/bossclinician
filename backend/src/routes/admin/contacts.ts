@@ -20,6 +20,32 @@ import { publishDomainEvent } from "../../services/domainEvents";
 import { requirePermission } from "../../services/permissions";
 import { enrollContact } from "../../services/sequences";
 import { grantOfferAccess } from "../../services/access";
+import { compileSegment } from "../../services/segments";
+import {
+  BUILT_IN_SEGMENTS,
+  CONTACT_SORTS,
+  CONTACT_SORT_KEYS,
+  DATE_PRESETS,
+  DAY_CHOICES,
+  DEFAULT_CONTACT_SORT,
+  DEFAULT_FIELDS,
+  EMAIL_MARKETING_STATUSES,
+  EMAIL_STATUS_WORDS,
+  ENGAGEMENT_DAY_CHOICES,
+  NOT_INTERNAL_SQL,
+  SEGMENT_PATTERN,
+  SORT_PARAM_VALUES,
+  TEAM_SEGMENT,
+  buildScopeClauses,
+  filterCatalog,
+  likePattern,
+  parseFilterRows,
+  savedSegmentId,
+  sortSql,
+  type FilterRow,
+} from "../../services/contactFilters";
+import { lifecycleEventType, lifecycleHeadline, LIFECYCLE_EVENT_TYPES } from "../../services/contactLifecycle";
+import { siteTimeZone } from "../../services/siteTime";
 
 /**
  * Contacts — the one list of people, mounted at /admin/contacts.
@@ -31,18 +57,24 @@ import { grantOfferAccess } from "../../services/access";
 export const adminContactsRouter = Router();
 const requireManage = requirePermission("contacts.manage");
 
-const EMAIL_STATUSES = [
-  "subscribed",
-  "opted_out",
-  "bounced",
-  "complained",
-  "unconfirmed",
-] as const;
+/**
+ * Every email-marketing state, including `never_subscribed` (migration 075),
+ * which Kajabi shows for people who never agreed to marketing and which no
+ * sending gate will mail. One list, from services/contactFilters.ts, so the
+ * filters, the status query and the update route cannot disagree.
+ */
+const EMAIL_STATUSES = EMAIL_MARKETING_STATUSES as [string, ...string[]];
 
 const CONTACT_COLUMNS = `c.id, c.email::text AS email, c.name, c.first_name, c.last_name,
        c.phone, c.timezone, c.email_marketing_status, c.opted_in_at, c.opted_out_at,
        c.consent_source, c.lifetime_value_cents, c.order_count, c.last_activity_at,
        c.last_ordered_at, c.source, c.custom_fields, c.notes, c.created_at, c.updated_at,
+       -- A team or test account (migration 075): left out of the list and its
+       -- counts, and badged on its own card so the owner can see why.
+       c.is_internal,
+       -- Kajabi's "Opt-in status": the marketing double opt-in, and only that.
+       -- The account's own email verification is account_email_verified_at.
+       c.opt_in_confirmed_at,
        -- The account behind this person, so no contact read can show a mailing
        -- list status without the confirmation state that goes with it. The two
        -- used to be separate reads on separate screens, which is how a member
@@ -77,26 +109,6 @@ function parseId(raw: string, label = "contact"): number {
   return parsed.data;
 }
 
-/** Escapes the characters LIKE reads as syntax, so searching for "100%" finds it. */
-function likePattern(term: string): string {
-  return `%${term.replace(/[\\%_]/g, (char) => `\\${char}`)}%`;
-}
-
-/**
- * Sorting comes from a fixed map rather than from the query string.
- *
- * An ORDER BY assembled from a parameter is the same injection hole a WHERE is,
- * and it is the one people forget because it looks like presentation.
- */
-const SORTS = {
-  recent: "c.last_activity_at DESC NULLS LAST, c.id DESC",
-  newest: "c.created_at DESC",
-  oldest: "c.created_at ASC",
-  name: "lower(c.name) ASC, c.id",
-  value: "c.lifetime_value_cents DESC, c.id",
-  orders: "c.order_count DESC, c.id",
-} as const;
-
 interface ContactFilters {
   q?: string;
   tag?: string;
@@ -106,6 +118,18 @@ interface ContactFilters {
   audience?: "new" | "subscribed" | "new_subscriber" | "customer" | "new_customer";
   optOut?: "manual" | "self";
   engagement?: "healthy" | "passive" | "unengaged" | "inactive";
+  /**
+   * Kajabi's Segments menu (services/contactFilters.ts): a built-in segment,
+   * `saved-<id>`, or `team`. Absent means All Contacts — which, like every
+   * segment but `team`, leaves the team and test accounts out.
+   */
+  segment?: string;
+  /** Kajabi's "Filtering by:" rows, already parsed; they AND together. */
+  rows?: FilterRow[];
+  /** The saved segment's compiled predicate, when `segment` names one. */
+  saved?: { where: string; params: unknown[] } | null;
+  /** The site's zone, for the filters that cut calendar days. */
+  timeZone?: string;
 }
 
 const LAST_ENGAGED_SQL = `GREATEST(
@@ -194,6 +218,21 @@ export function buildFilters(filters: ContactFilters): { where: string; params: 
     if (filters.engagement === "inactive") clauses.push(`${age} < now() - interval '270 days'`);
   }
 
+  // Last, so the segment and filter rows bind after everything above. Always
+  // present: team and test accounts stay out of every list and count unless
+  // the "Team & test accounts" segment is what was asked for.
+  clauses.push(
+    ...buildScopeClauses(
+      {
+        segment: filters.segment,
+        rows: filters.rows,
+        saved: filters.saved,
+        timeZone: filters.timeZone ?? "America/Los_Angeles",
+      },
+      params,
+    ),
+  );
+
   return { where: clauses.length ? `WHERE ${clauses.join(" AND ")}` : "", params };
 }
 
@@ -206,10 +245,40 @@ const listQuerySchema = z.object({
   audience: z.enum(["new", "subscribed", "new_subscriber", "customer", "new_customer"]).optional(),
   optOut: z.enum(["manual", "self"]).optional(),
   engagement: z.enum(["healthy", "passive", "unengaged", "inactive"]).optional(),
-  sort: z.enum(["recent", "newest", "oldest", "name", "value", "orders"]).default("recent"),
+  segment: z.string().regex(SEGMENT_PATTERN).optional(),
+  /** Kajabi-style filter rows, as the JSON array the screen keeps in its address bar. */
+  filters: z.string().max(12_000).optional(),
+  // Kajabi's ten sorts, plus the words the list used before, so an old link
+  // still sorts. The default is Kajabi's: newest added first.
+  sort: z.enum(SORT_PARAM_VALUES).default(DEFAULT_CONTACT_SORT),
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(200).default(50),
 });
+
+type ListQuery = z.infer<typeof listQuerySchema>;
+
+/**
+ * The list's filters with the parts that need the database filled in: the
+ * filter rows parsed, the site's zone, and a saved segment's rules compiled.
+ *
+ * A saved segment is compiled by services/segments.ts, the same compiler the
+ * broadcasts use, so "send to this segment" and "show me this segment" can
+ * never mean two different sets of people.
+ */
+async function resolveFilters(
+  query: Omit<Partial<ListQuery>, "filters" | "sort" | "page" | "limit"> & { filters?: string },
+): Promise<ContactFilters> {
+  const { filters: rawRows, ...rest } = query;
+  const rows = parseFilterRows(rawRows);
+  const savedId = savedSegmentId(rest.segment);
+  let saved: ContactFilters["saved"] = null;
+  if (savedId !== null) {
+    const found = await pool.query<{ definition: unknown }>(`SELECT definition FROM segments WHERE id = $1`, [savedId]);
+    if (!found.rows[0]) throw notFound("That segment no longer exists");
+    saved = compileSegment(found.rows[0].definition);
+  }
+  return { ...rest, rows, saved, timeZone: await siteTimeZone() };
+}
 
 /**
  * List health, computed from the same contact and delivery facts the sender
@@ -232,6 +301,7 @@ adminContactsRouter.get(
         bounced: number;
         complained: number;
         never_subscribed: number;
+        never_opted_in: number;
       }>(
         `SELECT COUNT(*)::int AS contacts,
                 COUNT(*) FILTER (WHERE c.created_at >= now() - INTERVAL '30 days')::int AS new_contacts,
@@ -247,10 +317,17 @@ adminContactsRouter.get(
                                    AND c.consent_source NOT IN ('admin','manual'))::int AS opted_out,
                 COUNT(*) FILTER (WHERE c.email_marketing_status = 'bounced')::int AS bounced,
                 COUNT(*) FILTER (WHERE c.email_marketing_status = 'complained')::int AS complained,
+                -- Kajabi's "Never subscribed" (migration 075). Not to be read
+                -- as the older never_subscribed column below, which — despite
+                -- its name — counts people who haven't CONFIRMED.
+                COUNT(*) FILTER (WHERE c.email_marketing_status = 'never_subscribed')::int AS never_opted_in,
                 -- The same predicate the People filter this tile links to
                 -- uses, or the tile and the list it opens disagree.
                 COUNT(*) FILTER (WHERE ${CONTACT_UNCONFIRMED_SQL})::int AS never_subscribed
-           FROM contacts c`,
+           FROM contacts c
+          -- Team and test accounts are not part of her audience (migration
+          -- 075), so no tile counts them — the same 415 the list shows.
+          WHERE ${NOT_INTERNAL_SQL}`,
       ),
       pool.query<{ healthy: number; passive: number; unengaged: number; inactive: number }>(
         `WITH last_touch AS (
@@ -262,7 +339,7 @@ adminContactsRouter.get(
                   ) AS engaged_at
              FROM contacts c
              LEFT JOIN email_messages m ON m.contact_id = c.id
-            WHERE ${MAILABLE_CONTACT_SQL}
+            WHERE ${MAILABLE_CONTACT_SQL} AND ${NOT_INTERNAL_SQL}
             GROUP BY c.id, c.opted_in_at, c.created_at
          )
          SELECT COUNT(*) FILTER (WHERE engaged_at >= now() - INTERVAL '90 days')::int AS healthy,
@@ -279,21 +356,169 @@ adminContactsRouter.get(
   }),
 );
 
+/**
+ * GET /site-time — the zone the admin shows dates in (QA sheet row 24).
+ *
+ * Its own tiny read rather than a field on the list, because the quick view,
+ * the profile and any other admin screen format dates too, and they should all
+ * get the same answer from one place (frontend pages/admin/ui/siteTime.ts).
+ */
+adminContactsRouter.get(
+  "/site-time",
+  asyncHandler(async (_req, res) => {
+    res.json({ timezone: await siteTimeZone() });
+  }),
+);
+
+/** One choice in a filter's value box. `value` is what the filter row sends back. */
+interface FilterChoice {
+  value: string;
+  label: string;
+  /** A second, quieter line — "Only in Kajabi", a draft's status. */
+  hint?: string;
+}
+
+function choicesById<T extends { id: number }>(
+  rows: T[],
+  label: (row: T) => string,
+  hint?: (row: T) => string | undefined,
+): FilterChoice[] {
+  return rows.map((row) => ({ value: String(row.id), label: label(row), hint: hint?.(row) }));
+}
+
+/**
+ * GET /filter-options — everything Kajabi's Segments menu, Filters panel and
+ * Sort menu need, in one round trip.
+ *
+ * The categories and conditionals come from services/contactFilters.ts, the
+ * same table that compiles them, so the screen can never offer a filter the
+ * server would refuse. The value lists are her real data: her offers, forms,
+ * tags, the custom fields her contacts actually carry.
+ *
+ * Offers and products also list the ones only her Kajabi import knows — the
+ * titles on imported payments and in Kajabi's "Products" column that were
+ * never rebuilt here — as `t:<title>`, because a tester comparing
+ * "has access to Protect Your Practice Training" with Kajabi has no other way
+ * to ask.
+ */
+adminContactsRouter.get(
+  "/filter-options",
+  asyncHandler(async (_req, res) => {
+    const normalised = (expr: string) => `regexp_replace(lower(${expr}), '[^a-z0-9]+', '', 'g')`;
+    const [
+      saved,
+      assessments,
+      coupons,
+      broadcasts,
+      sequences,
+      events,
+      forms,
+      newsletters,
+      offers,
+      kajabiOffers,
+      products,
+      kajabiProducts,
+      tags,
+      customFields,
+    ] = await Promise.all([
+      pool.query<{ id: number; name: string }>(`SELECT id, name FROM segments ORDER BY lower(name)`),
+      pool.query<{ id: number; title: string }>(`SELECT id, title FROM assessments ORDER BY lower(title)`),
+      pool.query<{ id: number; code: string; name: string }>(`SELECT id, code, name FROM coupons ORDER BY lower(code)`),
+      // Only a broadcast that went out can have been received.
+      pool.query<{ id: number; name: string; sent_at: Date | null }>(
+        `SELECT id, name, sent_at FROM email_campaigns
+          WHERE sent_at IS NOT NULL OR status IN ('sent', 'sending')
+          ORDER BY sent_at DESC NULLS LAST, id DESC`,
+      ),
+      pool.query<{ id: number; name: string; status: string }>(`SELECT id, name, status FROM email_sequences ORDER BY lower(name)`),
+      pool.query<{ id: number; title: string }>(`SELECT id, title FROM events ORDER BY starts_at DESC NULLS LAST, lower(title)`),
+      pool.query<{ id: number; name: string }>(`SELECT id, name FROM forms ORDER BY lower(name)`),
+      pool.query<{ id: number; name: string }>(`SELECT id, name FROM newsletters ORDER BY lower(name)`),
+      pool.query<{ id: number; title: string; status: string }>(`SELECT id, title, status FROM offers ORDER BY lower(title)`),
+      pool.query<{ title: string }>(
+        `SELECT DISTINCT o.course_title AS title
+           FROM orders o
+          WHERE o.offer_id IS NULL AND o.course_title <> '' AND o.status = 'paid'
+            AND NOT EXISTS (SELECT 1 FROM offers f WHERE ${normalised("f.title")} = ${normalised("o.course_title")})
+          ORDER BY 1`,
+      ),
+      pool.query<{ id: number; title: string; status: string }>(`SELECT id, title, status FROM products ORDER BY lower(title)`),
+      pool.query<{ title: string }>(
+        `SELECT DISTINCT btrim(regexp_replace(kp.name, '\\s+archived\\s+\\d+\\s*$', '', 'i')) AS title
+           FROM contacts c,
+                unnest(string_to_array(COALESCE(c.custom_fields->>'Products', ''), ',')) AS kp(name)
+          WHERE btrim(kp.name) <> ''
+            AND NOT EXISTS (
+              SELECT 1 FROM products p
+               WHERE ${normalised("p.title")} = ${normalised("regexp_replace(kp.name, '\\s+archived\\s+\\d+\\s*$', '', 'i')")})
+          ORDER BY 1`,
+      ),
+      pool.query<{ slug: string; name: string }>(`SELECT slug::text AS slug, name FROM tags ORDER BY lower(name)`),
+      // The fields her contacts actually carry, most common first. Kajabi's
+      // address columns are offered under Default Fields instead.
+      pool.query<{ key: string; people: number }>(
+        `SELECT key, COUNT(*)::int AS people
+           FROM contacts c, jsonb_object_keys(c.custom_fields) AS key
+          WHERE ${NOT_INTERNAL_SQL}
+            AND key NOT IN ('Address', 'Address Line 2', 'City', 'State', 'Country', 'Zip Code')
+          GROUP BY key
+          ORDER BY people DESC, lower(key)`,
+      ),
+    ]);
+
+    const kajabiOnly = (rows: { title: string }[]): FilterChoice[] =>
+      rows.map((row) => ({ value: `t:${row.title}`, label: row.title, hint: "Only in Kajabi" }));
+    const draftHint = (row: { status: string }) => (row.status === "published" ? undefined : row.status);
+
+    const options: Record<string, FilterChoice[]> = {
+      assessments: choicesById(assessments.rows, (row) => row.title),
+      coupons: choicesById(coupons.rows, (row) => row.name || row.code, (row) => (row.name ? row.code : undefined)),
+      broadcasts: choicesById(broadcasts.rows, (row) => row.name),
+      sequences: choicesById(sequences.rows, (row) => row.name, draftHint),
+      events: choicesById(events.rows, (row) => row.title),
+      forms: choicesById(forms.rows, (row) => row.name),
+      newsletters: choicesById(newsletters.rows, (row) => row.name),
+      offers: [...choicesById(offers.rows, (row) => row.title, draftHint), ...kajabiOnly(kajabiOffers.rows)],
+      products: [...choicesById(products.rows, (row) => row.title, draftHint), ...kajabiOnly(kajabiProducts.rows)],
+      tags: tags.rows.map((row) => ({ value: row.slug, label: row.name })),
+      customFields: customFields.rows.map((row) => ({ value: row.key, label: row.key, hint: `${row.people} ${row.people === 1 ? "person" : "people"}` })),
+      defaultFields: Object.entries(DEFAULT_FIELDS).map(([value, field]) => ({ value, label: field.label })),
+      statuses: Object.entries(EMAIL_STATUS_WORDS).map(([value, label]) => ({ value, label })),
+    };
+
+    res.json({
+      segments: [
+        ...BUILT_IN_SEGMENTS.map((segment) => ({ key: segment.key, label: segment.label, kind: "built_in" })),
+        ...saved.rows.map((segment) => ({ key: `saved-${segment.id}`, label: segment.name, kind: "saved" })),
+        { key: TEAM_SEGMENT.key, label: TEAM_SEGMENT.label, kind: "team" },
+      ],
+      sorts: CONTACT_SORT_KEYS.map((key) => ({ key, label: CONTACT_SORTS[key].label })),
+      defaultSort: DEFAULT_CONTACT_SORT,
+      categories: filterCatalog(),
+      options,
+      days: DAY_CHOICES,
+      engagementDays: ENGAGEMENT_DAY_CHOICES,
+      datePresets: DATE_PRESETS,
+      eventTypes: LIFECYCLE_EVENT_TYPES,
+    });
+  }),
+);
+
 adminContactsRouter.get(
   "/",
   asyncHandler(async (req, res) => {
     const parsed = listQuerySchema.safeParse(req.query);
     if (!parsed.success) throw badRequest("Invalid query", parsed.error.flatten());
-    const { sort, page, limit, ...filters } = parsed.data;
+    const { sort, page, limit, ...query } = parsed.data;
 
-    const { where, params } = buildFilters(filters);
+    const { where, params } = buildFilters(await resolveFilters(query));
 
     const [items, total] = await Promise.all([
       pool.query(
         `SELECT ${CONTACT_COLUMNS}, ${CONTACT_TAGS}, ${CONTACT_COMMUNITIES}
            FROM contacts c
            ${where}
-          ORDER BY ${SORTS[sort]}
+          ORDER BY ${sortSql(sort)}
           LIMIT $${params.length + 1} OFFSET $${params.length + 2}`,
         [...params, limit, (page - 1) * limit]
       ),
@@ -364,6 +589,11 @@ export const exportQuerySchema = listQuerySchema.pick({
   audience: true,
   optOut: true,
   engagement: true,
+  // The Kajabi-style segment and filter rows are on the Export link too;
+  // leaving them out here would export everybody while the screen shows a
+  // segment.
+  segment: true,
+  filters: true,
 });
 
 interface ExportRow {
@@ -387,7 +617,7 @@ adminContactsRouter.get(
     const parsed = exportQuerySchema.safeParse(req.query);
     if (!parsed.success) throw badRequest("Invalid query", parsed.error.flatten());
 
-    const { where, params } = buildFilters(parsed.data);
+    const { where, params } = buildFilters(await resolveFilters(parsed.data));
     const result = await pool.query<ExportRow>(
       `SELECT c.email::text AS email, c.name, c.first_name, c.last_name, c.phone,
               c.email_marketing_status, c.lifetime_value_cents, c.order_count,
@@ -892,6 +1122,9 @@ export const MERGEABLE_TABLES = [
   "coaching_sessions",
   "media_assets",
   "affiliates",
+  // Kajabi-style purchases (migration 076): a purchase is the person's, and
+  // must follow them into the survivor like the orders under it do.
+  "purchases",
 ] as const;
 
 const mergeSchema = z.object({
@@ -1007,11 +1240,18 @@ adminContactsRouter.post(
                   WHEN 'complained' IN (keep.email_marketing_status, dup.email_marketing_status) THEN 'complained'
                   WHEN 'bounced'    IN (keep.email_marketing_status, dup.email_marketing_status) THEN 'bounced'
                   WHEN 'opted_out'  IN (keep.email_marketing_status, dup.email_marketing_status) THEN 'opted_out'
+                  -- Never agreed to marketing: not sendable, so it beats both
+                  -- states below it. A merge is not consent.
+                  WHEN 'never_subscribed' IN (keep.email_marketing_status, dup.email_marketing_status) THEN 'never_subscribed'
                   WHEN 'unconfirmed' IN (keep.email_marketing_status, dup.email_marketing_status) THEN 'unconfirmed'
                   ELSE keep.email_marketing_status
                 END,
                 opted_out_at = COALESCE(keep.opted_out_at, dup.opted_out_at),
                 opted_in_at  = LEAST(keep.opted_in_at, dup.opted_in_at),
+                -- A confirmed opt-in on either card was a real confirmation.
+                -- (is_internal stays the survivor's own: folding a test card
+                -- into a real person must not hide the real person.)
+                opt_in_confirmed_at = LEAST(keep.opt_in_confirmed_at, dup.opt_in_confirmed_at),
                 updated_at = now()
            FROM contacts dup
           WHERE keep.id = $1 AND dup.id = $2`,
@@ -1220,6 +1460,137 @@ adminContactsRouter.get(
   }),
 );
 
+/** Matches the cap the Lifecycle tab tells her about. */
+const FEED_LIMIT = 500;
+
+// A type alias, not an interface, so a row satisfies pg's QueryResultRow and
+// rowToCamel's Record parameter without a cast.
+type FeedRow = {
+  id: string;
+  kind: string;
+  title: string;
+  body: string;
+  subject_type: string;
+  subject_id: string;
+  meta: Record<string, unknown> | null;
+  occurred_at: Date;
+};
+
+/**
+ * The Lifecycle feed: the timeline, plus the moments other tables already
+ * record and the timeline never copied (QA sheet row 25).
+ *
+ * `contact_activity` is still the spine — it is what survives the deletion of
+ * whatever an entry describes. Four kinds of moment Kajabi shows were never
+ * written to it, so they are read from where they live, each given a string id
+ * that cannot collide with an activity row's number:
+ *
+ *  - Email Delivery: marketing email this site sent them (broadcast, sequence,
+ *    automation), from email_messages. Transactional mail is left out — a
+ *    receipt isn't a marketing moment, and owner notifications about a person
+ *    are addressed to the owner, not to them.
+ *  - Automation Enrollment: automation_runs, test runs excepted.
+ *  - Tag Added: contact_tags, except the tags the Kajabi import applied. Those
+ *    carry the import's timestamp, not the day Kajabi tagged them (which the
+ *    export doesn't hold), and 134 of them dated to one afternoon would bury
+ *    the real timeline.
+ *  - Offer Grant: access given by hand (access_grants not from a purchase),
+ *    one entry per offer or product per minute, skipping any the bulk "Grant
+ *    an offer" action already wrote to the timeline.
+ *
+ * Kajabi's own history — its broadcasts, deliveries and opt-ins — was not in
+ * its contacts export, so for the people brought over the feed starts with
+ * what the export did carry: the day Kajabi added them and their payments.
+ */
+async function lifecycleFeed(contactId: number): Promise<Record<string, unknown>[]> {
+  const [activity, emails, automations, tagsAdded, grants] = await Promise.all([
+    pool.query<FeedRow>(
+      `SELECT id::text AS id, kind, title, body, subject_type, subject_id, meta, occurred_at
+         FROM contact_activity
+        WHERE contact_id = $1
+        ORDER BY occurred_at DESC, id DESC
+        LIMIT ${FEED_LIMIT}`,
+      [contactId],
+    ),
+    pool.query<FeedRow>(
+      `SELECT 'email-' || m.id AS id, 'email.delivered' AS kind,
+              COALESCE(NULLIF(ec.name, ''), m.subject) AS title, '' AS body,
+              m.source_type AS subject_type, COALESCE(m.source_id::text, '') AS subject_id,
+              jsonb_build_object(
+                'sourceType', m.source_type, 'subject', m.subject,
+                'campaign', ec.name, 'sequence', es.name,
+                'opened', m.first_opened_at IS NOT NULL, 'clicked', m.first_clicked_at IS NOT NULL
+              ) AS meta,
+              COALESCE(m.sent_at, m.created_at) AS occurred_at
+         FROM email_messages m
+         LEFT JOIN email_campaigns ec ON m.source_type = 'broadcast' AND ec.id = m.source_id
+         LEFT JOIN email_sequences es ON m.source_type = 'sequence' AND es.id = m.source_id
+        WHERE m.contact_id = $1
+          AND m.source_type IN ('broadcast', 'sequence', 'automation')
+          AND m.status IN ('sent', 'delivered')
+        ORDER BY occurred_at DESC
+        LIMIT ${FEED_LIMIT}`,
+      [contactId],
+    ),
+    pool.query<FeedRow>(
+      `SELECT 'automation-' || r.id AS id, 'automation.enrolled' AS kind, a.name AS title, '' AS body,
+              'automation' AS subject_type, r.automation_id::text AS subject_id,
+              jsonb_build_object('status', r.status) AS meta, r.created_at AS occurred_at
+         FROM automation_runs r
+         JOIN automations a ON a.id = r.automation_id
+        WHERE r.contact_id = $1 AND NOT r.is_test
+        ORDER BY r.created_at DESC
+        LIMIT ${FEED_LIMIT}`,
+      [contactId],
+    ),
+    pool.query<FeedRow>(
+      `SELECT 'tag-' || ct.tag_id AS id, 'tag.added' AS kind, t.name AS title, '' AS body,
+              'tag' AS subject_type, t.slug::text AS subject_id,
+              jsonb_build_object('appliedBy', ct.applied_by) AS meta, ct.created_at AS occurred_at
+         FROM contact_tags ct
+         JOIN tags t ON t.id = ct.tag_id
+        WHERE ct.contact_id = $1 AND ct.applied_by <> 'import'
+        ORDER BY ct.created_at DESC
+        LIMIT ${FEED_LIMIT}`,
+      [contactId],
+    ),
+    pool.query<FeedRow>(
+      `SELECT 'grant-' || MIN(ag.id) AS id, 'offer.granted' AS kind,
+              COALESCE(MIN(o.title), MIN(p.title), '') AS title, '' AS body,
+              CASE WHEN ag.offer_id IS NULL THEN 'product' ELSE 'offer' END AS subject_type,
+              COALESCE(ag.offer_id, MIN(ag.product_id))::text AS subject_id,
+              jsonb_build_object('source', MIN(ag.source)) AS meta,
+              MIN(ag.granted_at) AS occurred_at
+         FROM access_grants ag
+         JOIN members m ON m.id = ag.member_id
+         LEFT JOIN offers o ON o.id = ag.offer_id
+         LEFT JOIN products p ON p.id = ag.product_id
+        WHERE m.contact_id = $1
+          AND ag.source <> 'purchase'
+          AND NOT EXISTS (
+            SELECT 1 FROM contact_activity a
+             WHERE a.contact_id = $1 AND a.kind = 'offer_granted'
+               AND a.subject_type = 'offer' AND a.subject_id = ag.offer_id::text)
+        GROUP BY ag.offer_id, CASE WHEN ag.offer_id IS NULL THEN ag.product_id END,
+                 date_trunc('minute', ag.granted_at)
+        ORDER BY occurred_at DESC
+        LIMIT ${FEED_LIMIT}`,
+      [contactId],
+    ),
+  ]);
+
+  return [...activity.rows, ...emails.rows, ...automations.rows, ...tagsAdded.rows, ...grants.rows]
+    .sort((a, b) => new Date(b.occurred_at).getTime() - new Date(a.occurred_at).getTime())
+    .slice(0, FEED_LIMIT)
+    .map((row) => ({
+      ...rowToCamel<Record<string, unknown>>(row),
+      // Kajabi's event type and the sentence Kajabi would print, worked out
+      // once here so the tab and its "Filter by event type" menu agree.
+      eventType: lifecycleEventType(row.kind),
+      headline: lifecycleHeadline({ kind: row.kind, title: row.title, body: row.body, meta: row.meta }),
+    }));
+}
+
 /**
  * GET /:id — the person, and everything they have ever done.
  *
@@ -1234,14 +1605,7 @@ adminContactsRouter.get(
     const contact = await loadContact(id);
 
     const [activity, orders, links] = await Promise.all([
-      pool.query(
-        `SELECT id, kind, title, body, subject_type, subject_id, meta, occurred_at
-           FROM contact_activity
-          WHERE contact_id = $1
-          ORDER BY occurred_at DESC, id DESC
-          LIMIT 500`,
-        [id]
-      ),
+      lifecycleFeed(id),
       pool.query(
         `SELECT o.id, o.status, o.currency, o.created_at,
                 GREATEST(o.total_cents, o.amount_cents) AS total_cents, o.refunded_cents,
@@ -1272,7 +1636,7 @@ adminContactsRouter.get(
 
     res.json({
       ...rowToCamel(contact),
-      activity: rowsToCamel(activity.rows),
+      activity,
       orders: rowsToCamel(orders.rows),
       ...rowToCamel(links.rows[0] ?? {}),
       /*
@@ -1593,6 +1957,18 @@ adminContactsRouter.post(
       state.memberId === null
         ? await confirmContactListAsAdmin(id)
         : await confirmMemberEmailAsAdmin(state.memberId);
+
+    // Kajabi's "Opt-in status" (QA rows 26/27) is the mailing list's double
+    // opt-in and nothing else. When this took their list opt-in out of
+    // waiting, that opt-in is now confirmed — on the administrator's word, and
+    // audited below. Confirming only an account's address leaves it alone.
+    if (result.before.contactStatus === "unconfirmed" && result.after.contactStatus === "subscribed") {
+      await pool.query(
+        `UPDATE contacts SET opt_in_confirmed_at = COALESCE(opt_in_confirmed_at, now()), updated_at = now()
+          WHERE id = $1`,
+        [id],
+      );
+    }
 
     if (result.changed) {
       await recordActivity({

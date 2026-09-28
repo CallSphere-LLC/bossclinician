@@ -30,9 +30,10 @@ interface Offer {
 const QUIZ_HREF = "/practice-quiz";
 
 /**
- * The Club and the Lounge have their own sales pages (/club, /lounge), as they
- * do on the source site. The Boardroom has none yet — /boardroom redirects to
- * /work-with-me — so its card goes there directly.
+ * Each programme has its own sales page — /club and /lounge, as on the source
+ * site, and /boardroom, Yvette's page for the mastermind. "Explore" goes to the
+ * top of that page rather than to its application: this card introduces the
+ * room, and the page makes the case before it asks.
  */
 const OFFERS: readonly Offer[] = [
   {
@@ -69,7 +70,7 @@ const OFFERS: readonly Offer[] = [
     ],
     audience: "For: The Stretched Thin Clinician",
     cta: "Explore the Boardroom",
-    to: "/work-with-me",
+    to: "/boardroom",
     accent: "gold",
   },
 ];

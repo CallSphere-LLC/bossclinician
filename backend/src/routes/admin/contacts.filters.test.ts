@@ -20,6 +20,8 @@ describe("exportQuerySchema", () => {
       audience: "customer",
       optOut: "self",
       engagement: "inactive",
+      segment: "customers",
+      filters: '[{"category":"tags","op":"has","value":"vip"}]',
     });
 
     expect(parsed).toEqual({
@@ -31,6 +33,8 @@ describe("exportQuerySchema", () => {
       audience: "customer",
       optOut: "self",
       engagement: "inactive",
+      segment: "customers",
+      filters: '[{"category":"tags","op":"has","value":"vip"}]',
     });
   });
 
@@ -53,13 +57,32 @@ describe("exportQuerySchema", () => {
     );
   });
 
-  it("still exports everything when nothing is filtered", () => {
-    expect(buildFilters(exportQuerySchema.parse({})).where).toBe("");
+  it("exports everyone but the team and test accounts when nothing is filtered", () => {
+    // 415 people, as Kajabi counts them: the nine team and test accounts
+    // (migration 075) are not part of her audience.
+    expect(buildFilters(exportQuerySchema.parse({})).where).toBe("WHERE NOT c.is_internal");
   });
 
   it("refuses a filter value the list would refuse", () => {
     expect(exportQuerySchema.safeParse({ community: "yes" }).success).toBe(false);
     expect(exportQuerySchema.safeParse({ optOut: "everyone" }).success).toBe(false);
+    expect(exportQuerySchema.safeParse({ segment: "everyone" }).success).toBe(false);
+    expect(exportQuerySchema.safeParse({ status: "never_subscribed" }).success).toBe(true);
+  });
+
+  it("carries the Kajabi segment and filter rows into the file", () => {
+    const { where, params } = buildFilters({
+      segment: "hard_bounced",
+      rows: [{ category: "tags", op: "has", value: "vip", text: "" }],
+      timeZone: "America/Los_Angeles",
+    });
+    expect(where).toContain("c.email_marketing_status = 'bounced'");
+    expect(where).toContain("t.slug = $1::citext");
+    expect(params).toEqual(["vip"]);
+  });
+
+  it("shows only the team and test accounts when that segment is chosen", () => {
+    expect(buildFilters({ segment: "team" }).where).toBe("WHERE c.is_internal");
   });
 });
 
@@ -69,5 +92,15 @@ describe("buildFilters", () => {
     const { where, params } = buildFilters({ q: "100%_x", tag: "retreat" });
     expect(where).not.toContain("100%");
     expect(params).toEqual(["%100\\%\\_x%", "retreat"]);
+  });
+
+  it("numbers the filter rows after the search and tag", () => {
+    const { where, params } = buildFilters({
+      q: "sam",
+      tag: "retreat",
+      rows: [{ category: "lifetime_value", op: "gt", value: "100", text: "" }],
+    });
+    expect(where).toContain("c.lifetime_value_cents > $3");
+    expect(params).toEqual(["%sam%", "retreat", 10000]);
   });
 });

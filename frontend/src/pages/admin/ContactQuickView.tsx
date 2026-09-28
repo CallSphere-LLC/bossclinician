@@ -4,11 +4,12 @@ import * as RadixDialog from "@radix-ui/react-dialog";
 import { Check, ChevronRight, Copy, Gift, KeyRound, Maximize2, Pencil, Tag as TagIcon, Trash2, UserRound, X } from "lucide-react";
 import { toast } from "sonner";
 import { adminApi } from "@/lib/api";
-import { formatDate } from "@/lib/format";
-import { contactsApi, money, type Contact, type ContactDetail } from "@/lib/contactsApi";
+import { contactsApi, marketingStatusWords, money, type Contact, type ContactDetail } from "@/lib/contactsApi";
 import { Badge, Skeleton } from "@/pages/admin/ui/primitives";
+import { usePurchaseCount } from "@/lib/purchasesApi";
 import { useConfirm } from "@/pages/admin/ui/Dialog";
 import { friendlyError } from "@/pages/admin/ui/friendly";
+import { useSiteTime } from "@/pages/admin/ui/siteTime";
 
 /**
  * Kajabi's contact drawer: click a row and the person slides in from the right
@@ -18,13 +19,15 @@ import { friendlyError } from "@/pages/admin/ui/friendly";
  * confirmation) from the full record, so the top of it never waits.
  */
 
-const MARKETING: Record<string, string> = {
-  subscribed: "Subscribed",
-  opted_out: "Unsubscribed",
-  bounced: "Bounced",
-  complained: "Marked as spam",
-  unconfirmed: "Unconfirmed",
-};
+/**
+ * The account's own email verification, in words. Kept apart from "Opt-in
+ * status", which is the marketing double opt-in (QA rows 26/27): a member can
+ * have verified their login address and never confirmed a marketing opt-in.
+ */
+function accountEmailWords(person: Contact): string {
+  if (person.accountMemberId === null) return "No account";
+  return person.accountEmailVerifiedAt ? "Verified" : "Not verified";
+}
 
 function field(detail: ContactDetail | null, key: string): string | null {
   const value = detail?.customFields?.[key];
@@ -42,6 +45,10 @@ export default function ContactQuickView({
 }) {
   const [detail, setDetail] = useState<ContactDetail | null>(null);
   const [confirm, confirmDialog] = useConfirm();
+  // Kajabi's "Total offers": a payment plan is one purchase, not one per instalment (QA row 31).
+  const purchaseCount = usePurchaseCount(person?.id ?? null);
+  // Kajabi's clock: every date here is in the site's zone, not the viewer's (QA row 24).
+  const time = useSiteTime();
 
   /** Kajabi's "Reset password": email them a link to choose a password here. */
   async function sendPassword(target: Contact, memberId: number) {
@@ -123,6 +130,11 @@ export default function ContactQuickView({
                   <RadixDialog.Title className="mt-3 font-display text-xl text-ink">
                     {name || "No name yet"}
                   </RadixDialog.Title>
+                  {person.isInternal && (
+                    <Badge tone="slate" className="mt-1.5" title="A team or test account: left out of the contact list and its counts">
+                      Team/test
+                    </Badge>
+                  )}
                   <button
                     type="button"
                     onClick={() =>
@@ -167,8 +179,11 @@ export default function ContactQuickView({
 
                 <dl className="divide-y divide-hairline/60 border-t border-hairline/60 px-5 text-sm">
                   <Group>
-                    <Row label="Lifetime value" value={money(person.lifetimeValueCents)} />
-                    <Row label="Total purchases" value={String(person.orderCount)} />
+                    <Row label="Lifetime value" value={<span className="font-bold tabular-nums">{money(person.lifetimeValueCents)}</span>} />
+                    <Row
+                      label="Total purchases"
+                      value={purchaseCount === null ? null : <span className="font-bold tabular-nums">{purchaseCount}</span>}
+                    />
                     <div className="flex justify-end">
                       <Link
                         to={`${profile}?tab=purchases`}
@@ -180,28 +195,26 @@ export default function ContactQuickView({
                     </div>
                   </Group>
                   <Group>
-                    <Row label="Last sign-in" value={detail ? (lastSignIn ? formatDate(lastSignIn) : "—") : null} />
-                    <Row label="Total sign-ins" value={detail ? (signIns ?? "0") : null} />
+                    {/* Kajabi's own stamp ("2026-09-18 08:20:23 -0700") is read as the instant it names. */}
+                    <Row label="Last sign-in" value={detail ? (lastSignIn ? time.dateTime(lastSignIn) : "—") : null} />
+                    <Row label="Total sign-ins" value={detail ? <span className="font-bold tabular-nums">{signIns ?? "0"}</span> : null} />
                   </Group>
                   <Group>
                     <Row
                       label="Contact status"
                       value={<Badge tone={customer ? "plum" : "slate"}>{status}</Badge>}
                     />
-                    <Row label="Marketing status" value={MARKETING[person.emailMarketingStatus] ?? "Not known"} />
-                    <Row label="Contact added" value={formatDate(person.createdAt)} />
-                    <Row
-                      label="Opt-in status"
-                      value={
-                        detail
-                          ? detail.confirmation?.state === "no_account"
-                            ? "No account yet"
-                            : detail.confirmation?.confirmed
-                              ? "Confirmed"
-                              : "Unconfirmed"
-                          : null
-                      }
-                    />
+                    <Row label="Marketing status" value={marketingStatusWords(person.emailMarketingStatus)} />
+                    <Row label="Contact added" value={time.dateTime(person.createdAt)} />
+                    {/*
+                      * Kajabi's "Opt-in status" is the email-marketing double
+                      * opt-in. It used to be read from the member account's
+                      * email confirmation, so a customer who had verified her
+                      * login showed "Confirmed" here and "Unconfirmed" in Kajabi
+                      * (QA rows 26/27). The account's state has its own line.
+                      */}
+                    <Row label="Opt-in status" value={person.optInConfirmedAt ? "Confirmed" : "Unconfirmed"} />
+                    <Row label="Account email" value={accountEmailWords(person)} />
                   </Group>
                 </dl>
               </div>

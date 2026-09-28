@@ -69,7 +69,9 @@ const SERVICES: readonly Service[] = [
   {
     name: "The Boss Boardroom",
     price: "$12,000.00 USD",
-    to: "/apply",
+    // The mastermind's own page, where the application is. No checkout: the
+    // Boardroom is by application and invitation.
+    to: "/boardroom",
     image:
       "/images/migrated-840e01072ac7.png",
     accent: "gold",

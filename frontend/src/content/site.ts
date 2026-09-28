@@ -55,9 +55,10 @@ export const headerActions = {
 // The two groups the source site's menu is organised into, in its order:
 // About, then everything you can join, then everything you can read or learn
 // from. The Club and the Lounge have their own sales pages, at the same paths
-// the source site uses. The Boardroom has none yet — /boardroom redirects to
-// /work-with-me (migration 064) — so the row goes straight there, to the
-// Boardroom section of that page rather than to the bare application form.
+// the source site uses. The Boardroom has one too: /boardroom, the short link
+// the source site's own navigation used, is Yvette's page for the mastermind
+// (pages/Boardroom.tsx) with its application at the foot of it. Until that
+// page existed this row pointed at /work-with-me.
 export const workWithMeMenu: NavMenu = {
   label: "Work With Me",
   to: "/work-with-me",
@@ -79,7 +80,7 @@ export const workWithMeMenu: NavMenu = {
     },
     {
       label: "Boss Clinician Boardroom",
-      to: "/work-with-me",
+      to: "/boardroom",
       description: "An advanced mastermind for established practice owners who want higher-level strategy, peer collaboration, accountability, and support with scaling their business.",
       badge: "Apply",
       badgeTone: "gold",
@@ -136,8 +137,7 @@ export const footer = {
     { label: "Work With Me", to: "/work-with-me" },
     { label: "Boss Clinician Club", to: "/club" },
     { label: "Boss Clinician Lounge", to: "/lounge" },
-    // No Boardroom page yet; /boardroom itself redirects here.
-    { label: "Boss Clinician Boardroom", to: "/work-with-me" },
+    { label: "Boss Clinician Boardroom", to: "/boardroom" },
     { label: "Blog", to: "/blog" },
     // The one page the header menu no longer carries; the rest of what it
     // dropped (Contact, the quiz, the free resources) is already listed here.
@@ -651,8 +651,7 @@ export const contactPage = {
         bestFit:
           "Best fit if: you’re asking, “How do I lead this business well as it grows beyond me?”",
         cta: "LEARN ABOUT THE BOARDROOM",
-        // No Boardroom page yet; /boardroom redirects here too (migration 064).
-        to: "/work-with-me",
+        to: "/boardroom",
       },
     ],
     closing: "Build it. Sustain it. Lead it. Leave it on your terms.",

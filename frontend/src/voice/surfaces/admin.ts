@@ -140,7 +140,7 @@ const DESTINATIONS: readonly VoiceDestination[] = [
       "book a session",
     ],
     narration:
-      "Two tabs: Offers, where your coaching packages are created and priced, and Sessions, where every booked call sits with its date, its link, what you will cover and your private notes.",
+      "Three tabs: Programs, where your coaching packages are created and priced; Sessions, where every booked call sits with its date, its link, what you will cover and your private notes; and Clients, everyone who has bought, been given or booked into a program, with sessions used and their next session.",
     surfaces: ADMIN,
   },
   {

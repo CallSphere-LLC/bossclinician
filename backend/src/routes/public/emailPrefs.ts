@@ -267,7 +267,7 @@ emailPrefsRouter.post(
         `UPDATE contacts
             SET email_marketing_status = 'subscribed', opted_in_at = COALESCE(opted_in_at, now()),
                 opted_out_at = NULL, consent_source = 'preferences page', updated_at = now()
-          WHERE id = $1 AND email_marketing_status IN ('opted_out', 'unconfirmed')`,
+          WHERE id = $1 AND email_marketing_status IN ('opted_out', 'unconfirmed', 'never_subscribed')`,
         [contactId]
       );
       await pool.query(

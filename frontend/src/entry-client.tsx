@@ -10,11 +10,13 @@ import { preloadPublicRoute } from "./ssr/preload";
 import "./index.css";
 // Server-rendered routes whose stylesheet must ship in the entry CSS.
 // Imported from a page alone, Vite splits these into the route's JS chunk,
-// so the SSR document paints /blog and /retreats unstyled until that chunk
-// downloads. Imported here they land in the entry stylesheet the document
-// already links, after Tailwind's utilities, so the cascade is unchanged.
+// so the SSR document paints /blog, /retreats and /boardroom unstyled until
+// that chunk downloads. Imported here they land in the entry stylesheet the
+// document already links, after Tailwind's utilities, so the cascade is
+// unchanged.
 import "./pages/blog.css";
 import "./pages/retreats.css";
+import "./pages/boardroom.css";
 
 clearLegacyAdminToken();
 initializeSiteTheme();

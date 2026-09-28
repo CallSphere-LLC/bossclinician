@@ -106,6 +106,7 @@ export const PUBLIC_ROUTES: readonly { path: string; Component: RouteComponent }
   { path: "/store", Component: lazyRoute(() => import("@/pages/Store")) },
   { path: "/club", Component: lazyRoute(() => import("@/pages/Club")) },
   { path: "/lounge", Component: lazyRoute(() => import("@/pages/Lounge")) },
+  { path: "/boardroom", Component: lazyRoute(() => import("@/pages/Boardroom")) },
   { path: "/practice-quiz", Component: lazyRoute(() => import("@/pages/PracticeQuiz")) },
   {
     path: "/practice-reset-planner",

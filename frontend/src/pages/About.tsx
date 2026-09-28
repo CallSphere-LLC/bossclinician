@@ -34,9 +34,11 @@ const ACCENTS = ["green", "plum", "gold"] as const satisfies readonly Accent[];
    bossclinician.com link: after the domain cutover that URL is this app, and
    the redirect map (migration 004) already sends /offer-quiz to
    /practice-quiz — so the link goes there directly, in the same tab. The
-   three community CTAs all resolve to /work-with-me. */
+   Club and Lounge CTAs resolve to /work-with-me; the Boardroom's goes to the
+   application on its own page. */
 const QUIZ_URL = "/practice-quiz";
 const WORK_WITH_ME = "/work-with-me";
+const BOARDROOM_APPLICATION = "/boardroom#apply";
 const BRIGHTER_TOMORROW = "https://brightertomorrowtherapy.com/";
 const EXTERNAL = { target: "_blank", rel: "noopener noreferrer" } as const;
 
@@ -790,7 +792,7 @@ function ClosingCta() {
         <LuxeButton
           variant="outline"
           size="md"
-          to={WORK_WITH_ME}
+          to={BOARDROOM_APPLICATION}
           className="w-full sm:w-auto"
         >
           APPLY FOR THE BOARDROOM
