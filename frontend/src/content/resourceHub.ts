@@ -132,7 +132,7 @@ export const avatarSections: AvatarSectionData[] = [
         description:
           "For established clinicians whose practice is working, but who do not want their income, schedule, and future to depend on staying clinically maxed out. Learn why being fully booked can still leave you maxed out, where your practice may depend too heavily on you, and what needs to change if you want the practice to support your next season. Includes the complimentary Practice Freedom Audit.",
         ctaLabel: "Watch the Free Masterclass",
-        href: "https://www.bossclinician.com/freedom-masterclass",
+        href: "/freedom-masterclass",
       },
     ],
     cta: {

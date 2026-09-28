@@ -65,6 +65,20 @@ describe("publicView", () => {
     expect(view).toEqual({ address: "123 Main St" });
   });
 
+  it("publishes the masterclass video and guide links and nothing else", () => {
+    // /watch-now reads both from the anonymous endpoint; a stray field written
+    // into the row by hand stays private.
+    const view = publicView("masterclass", {
+      videoUrl: "https://bossclinician.callsphere.site/uploads/masterclass.mp4",
+      actionGuideUrl: "",
+      draftNote: "not for the public",
+    });
+    expect(view).toEqual({
+      videoUrl: "https://bossclinician.callsphere.site/uploads/masterclass.mp4",
+      actionGuideUrl: "",
+    });
+  });
+
   it("does not invent fields the stored value does not have", () => {
     expect(publicView("checkout", { supportEmail: "a@b.c" })).toEqual({ supportEmail: "a@b.c" });
   });

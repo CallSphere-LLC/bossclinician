@@ -25,8 +25,7 @@ export function MasterclassBand() {
             without guessing, without platforms, and without another 60-hour week. Masterclass
             Guide included.
           </p>
-          {/* TODO: point to /masterclass once a dedicated masterclass route exists */}
-          <Button to="/resources" variant="gold" size="lg" className="mt-9">
+          <Button to="/freedom-masterclass" variant="gold" size="lg" className="mt-9">
             Watch for Free
           </Button>
 

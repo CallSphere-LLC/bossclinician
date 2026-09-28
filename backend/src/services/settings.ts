@@ -711,6 +711,41 @@ export const SETTING_DEFINITIONS: SettingDefinition[] = [
     ],
   },
   {
+    // The page people land on after signing up for the free masterclass
+    // (frontend/src/pages/WatchNow.tsx, /watch-now). Yvette asked to "upload the
+    // video on there" herself, so the video is a setting rather than code. Both
+    // fields are public — see PUBLIC_FIELDS in routes/public/settings.ts.
+    //
+    // A link from the Media Library ("Copy video link") plays in the page's own
+    // player; a YouTube, Vimeo, Loom or Wistia link plays in that provider's
+    // player, and nginx/site.conf's `frame-src` lists exactly those four. Any
+    // other address becomes a button that opens it, never a blank frame.
+    key: "masterclass",
+    group: "website",
+    label: "Free masterclass",
+    description:
+      "What people see on the Watch Now page after they sign up for the Freedom Masterclass.",
+    defaults: { videoUrl: "", actionGuideUrl: "" },
+    fields: [
+      {
+        name: "videoUrl",
+        label: "Masterclass video",
+        help:
+          "Upload the video in Media Library, press “Copy video link” and paste it here — or paste a YouTube, Vimeo, Loom or Wistia link. Leave blank and the page says the video is coming soon.",
+        type: "url",
+        placeholder: "https://…",
+      },
+      {
+        name: "actionGuideUrl",
+        label: "Action guide download",
+        help:
+          "Leave blank to keep the Practice Freedom Audit PDF that is already on the page. To swap it, upload a new PDF in Media Library, copy its link and paste it here.",
+        type: "url",
+        placeholder: "https://…",
+      },
+    ],
+  },
+  {
     key: "analytics",
     group: "integrations",
     label: "Tracking",

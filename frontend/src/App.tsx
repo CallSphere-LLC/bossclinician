@@ -107,6 +107,14 @@ export const PUBLIC_ROUTES: readonly { path: string; Component: RouteComponent }
   { path: "/club", Component: lazyRoute(() => import("@/pages/Club")) },
   { path: "/lounge", Component: lazyRoute(() => import("@/pages/Lounge")) },
   { path: "/boardroom", Component: lazyRoute(() => import("@/pages/Boardroom")) },
+  // The free masterclass: the sign-up (server-rendered, render.ts), then the
+  // page it sends people to, where the video is (client-only and noindex — it
+  // greets them by the name in its query string).
+  {
+    path: "/freedom-masterclass",
+    Component: lazyRoute(() => import("@/pages/FreedomMasterclass")),
+  },
+  { path: "/watch-now", Component: lazyRoute(() => import("@/pages/WatchNow")) },
   { path: "/practice-quiz", Component: lazyRoute(() => import("@/pages/PracticeQuiz")) },
   {
     path: "/practice-reset-planner",

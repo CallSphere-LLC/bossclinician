@@ -41,8 +41,7 @@ export function Hero() {
               <Button to="/work-with-me" variant="gold" size="lg">
                 Find Your Path
               </Button>
-              {/* TODO: point to /masterclass once a dedicated masterclass route exists */}
-              <Button to="/resources" variant="outline-light" size="lg">
+              <Button to="/freedom-masterclass" variant="outline-light" size="lg">
                 Watch Free Masterclass
               </Button>
             </div>

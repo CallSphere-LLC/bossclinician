@@ -12,6 +12,7 @@ import { useCollection } from "@/hooks/useCollection";
 import { ssrKeys } from "@/ssr/keys";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/cn";
+import { MASTERCLASS_ROUTE } from "@/lib/masterclass";
 import type { Resource } from "@/types";
 
 const EASE_LUXE: [number, number, number, number] = [0.22, 1, 0.36, 1];
@@ -86,7 +87,7 @@ export default function Resources() {
             title: fallbackResources[0].title,
             description: fallbackResources[0].description,
             ctaLabel: "Watch the Free Masterclass",
-            ctaUrl: "https://www.bossclinician.com/freedom-masterclass",
+            ctaUrl: MASTERCLASS_ROUTE,
           }
         : resource,
     )

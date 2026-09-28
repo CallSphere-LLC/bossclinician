@@ -129,7 +129,7 @@ export const nav: NavEntry[] = [
 ];
 
 export const footer = {
-  brandTagline: "Self Made — Self Paid.",
+  brandTagline: "Lead. Heal. Elevate.",
   tagline:
     "Community, strategy, and mastermind for therapists and clinicians building practices that are actually theirs.",
   exploreLinks: [
@@ -153,7 +153,7 @@ export const footer = {
   // the page does not keep.
   resourceLinks: [
     { label: "Resource Hub", to: "/resource-hub" },
-    { label: "Free Masterclass", to: "/resources" },
+    { label: "Free Masterclass", to: "/freedom-masterclass" },
     { label: "Offer Quiz", to: "/practice-quiz" },
     { label: "Group Practice Assessment", to: "/resource-hub" },
     { label: "5-Step Marketing Plan", to: "/resource-hub" },

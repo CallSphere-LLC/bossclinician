@@ -36,8 +36,7 @@ export function FinalCTA() {
         </div>
         <p className="mt-7 text-sm text-lilac/50">
           Or start with the free masterclass:{" "}
-          {/* TODO: point to /masterclass once that route exists */}
-          <Link to="/resources" className="text-lilac/75 underline underline-offset-2">
+          <Link to="/freedom-masterclass" className="text-lilac/75 underline underline-offset-2">
             Watch now →
           </Link>
         </p>

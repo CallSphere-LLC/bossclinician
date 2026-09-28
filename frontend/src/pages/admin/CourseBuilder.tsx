@@ -28,6 +28,7 @@ import type { CourseLesson, CourseModule, LessonFile, MediaAsset } from "@/types
 import type { Course } from "@/types";
 import { cn } from "@/lib/cn";
 import { formatBytes } from "@/lib/format";
+import { embeddableUrl } from "@/lib/videoEmbed";
 import {
   Badge,
   Button,
@@ -1257,45 +1258,6 @@ export function embedCodeFor(value: string): string {
   if (!/^https:\/\/\S+$/i.test(trimmed)) return value;
   const src = embeddableUrl(trimmed).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
   return `<iframe src="${src}" width="100%" height="100%" frameborder="0" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe>`;
-}
-
-/**
- * The share links of the big three refuse to load in a frame (YouTube and Loom
- * send X-Frame-Options), so they are turned into the player address each one
- * publishes for embedding. Anything else is used as pasted.
- */
-function embeddableUrl(link: string): string {
-  let url: URL;
-  try {
-    url = new URL(link);
-  } catch {
-    return link;
-  }
-  const host = url.hostname.replace(/^www\./, "").replace(/^m\./, "");
-  const id = (value: string | null | undefined) => (value && /^[\w-]+$/.test(value) ? value : null);
-  if (host === "youtube.com" && url.pathname === "/watch") {
-    const v = id(url.searchParams.get("v"));
-    if (v) return `https://www.youtube-nocookie.com/embed/${v}`;
-  }
-  if (host === "youtu.be") {
-    const v = id(url.pathname.slice(1));
-    if (v) return `https://www.youtube-nocookie.com/embed/${v}`;
-  }
-  if (host === "youtube.com" && url.pathname.startsWith("/shorts/")) {
-    const v = id(url.pathname.split("/")[2]);
-    if (v) return `https://www.youtube-nocookie.com/embed/${v}`;
-  }
-  if (host === "vimeo.com") {
-    const [, videoId, hash] = url.pathname.split("/");
-    if (/^\d+$/.test(videoId ?? "")) {
-      return `https://player.vimeo.com/video/${videoId}${id(hash) ? `?h=${hash}` : ""}`;
-    }
-  }
-  if (host === "loom.com" && url.pathname.startsWith("/share/")) {
-    const v = id(url.pathname.split("/")[2]);
-    if (v) return `https://www.loom.com/embed/${v}`;
-  }
-  return link;
 }
 
 function kindForChosenVideo(current: string | undefined): { contentType?: string } {

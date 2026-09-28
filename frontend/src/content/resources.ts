@@ -9,7 +9,7 @@ export const resources: Resource[] = [
       "A free masterclass for established clinicians who want their practice to support their next season. Includes the complimentary Practice Freedom Audit.",
     image: "/images/24ea3347f734.png",
     ctaLabel: "Watch Free Masterclass",
-    ctaUrl: "https://www.bossclinician.com/freedom-masterclass",
+    ctaUrl: "/freedom-masterclass",
     kind: "masterclass",
     sort: 1,
     published: true,

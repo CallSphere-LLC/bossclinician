@@ -182,13 +182,28 @@ const DESTINATIONS: readonly VoiceDestination[] = [
     aliases: [
       "free resources",
       "freebies",
-      "the masterclass",
-      "the free masterclass",
       "guides",
       "checklists",
     ],
     narration:
       "Freebies and resources: the free masterclass, the guides, the checklists and the income tool, each one free in exchange for an email address.",
+    surfaces: PUBLIC,
+  },
+  {
+    // The masterclass's own sign-up page. Its thank-you page, /watch-now, is not
+    // a destination: it greets one person by name and is reached by signing up.
+    key: "freedom-masterclass",
+    path: "/freedom-masterclass",
+    label: "Free Masterclass",
+    aliases: [
+      "the masterclass",
+      "the free masterclass",
+      "the freedom masterclass",
+      "watch the masterclass",
+      "the free training",
+    ],
+    narration:
+      "The free on-demand masterclass: how to create a private practice that supports your income, energy and future without seeing 25 to 30 clients forever. It takes a first name and an email address, then goes straight to the video, with the complimentary Practice Freedom Audit to download alongside it.",
     surfaces: PUBLIC,
   },
   {
@@ -530,6 +545,20 @@ const TOUR: readonly TourStop[] = [
       {
         focus: "Watch Free Masterclass",
         say: "The masterclass is the longest of them, and the closest thing to sitting in on how Yvette thinks about a practice.",
+      },
+    ],
+  },
+  {
+    destination: "freedom-masterclass",
+    purpose: "The free masterclass sign-up, which leads straight to the video.",
+    beats: [
+      {
+        focus: "Free On-Demand Masterclass",
+        say: "This is the masterclass itself. It is for clinicians whose practice already works but asks too much of them, and it is free.",
+      },
+      {
+        focus: "Get Free Access",
+        say: "A first name and an email address is all it asks. The video opens on the next page, with the Practice Freedom Audit to download beside it.",
       },
     ],
   },

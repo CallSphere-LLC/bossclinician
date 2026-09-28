@@ -2,15 +2,11 @@ import { motion } from "motion/react";
 import { useEntranceMotion } from "@/hooks/useEntranceMotion";
 import { Section } from "@/components/luxe/Section";
 import { LuxeButton } from "@/components/luxe/LuxeButton";
+// The sign-up page, which sends people on to /watch-now and the video.
+import { MASTERCLASS_ROUTE } from "@/lib/masterclass";
 
 const EASE_LUXE: [number, number, number, number] = [0.22, 1, 0.36, 1];
 const VIEWPORT = { once: true, margin: "-12% 0px -8% 0px" } as const;
-
-// /freedom-masterclass does not exist as a route yet (the server 301s it to
-// /resources, where the masterclass is actually hosted), so the button goes
-// straight there rather than off-site to the legacy Kajabi page. Repoint it
-// when the dedicated route ships.
-const MASTERCLASS_ROUTE = "/resources";
 
 /**
  * One rise recipe for the whole stack; only the delay changes. Reduced-motion

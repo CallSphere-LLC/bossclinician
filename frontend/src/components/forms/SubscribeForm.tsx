@@ -42,7 +42,7 @@ export function SubscribeForm({
         role="status"
         className={cn("text-sm font-medium", dark ? "text-gold" : "text-plum-deep")}
       >
-        You're in! Check your inbox for the masterclass link.
+        You're in. Watch your inbox for Yvette's next note.
       </motion.p>
     );
   }

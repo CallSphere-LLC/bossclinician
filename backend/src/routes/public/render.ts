@@ -77,6 +77,11 @@ const ROUTES: { path: string; load?: Loader }[] = [
   { path: "/lounge" },
   // Must ship with the matching name in nginx/site.conf's no-children regex.
   { path: "/boardroom" },
+  // The masterclass sign-up page (migration 077). Same rule as /boardroom. Its
+  // thank-you page, /watch-now, is deliberately not here: it greets the visitor
+  // by the name in its query string, is noindex, and has nothing a crawler
+  // should read, so it stays the client-rendered shell.
+  { path: "/freedom-masterclass" },
   { path: "/practice-quiz" },
   { path: "/practice-reset-planner" },
   { path: "/privacy-policy" },

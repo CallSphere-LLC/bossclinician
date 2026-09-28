@@ -71,6 +71,10 @@ const STATIC_ROUTES: SitemapEntry[] = [
   // The third programme page. The source site linked /boardroom from its menu
   // but never built it, so this is the first time the address has a page.
   { loc: "/boardroom", changefreq: "monthly", priority: "0.9" },
+  // The free masterclass sign-up. Its thank-you page, /watch-now, is left out
+  // on purpose: it is noindex, and listing a page while telling crawlers not to
+  // index it is a contradiction search consoles report as an error.
+  { loc: "/freedom-masterclass", changefreq: "monthly", priority: "0.8" },
   { loc: "/courses", changefreq: "weekly", priority: "0.9" },
   { loc: "/store", changefreq: "weekly", priority: "0.8" },
   { loc: "/resources", changefreq: "weekly", priority: "0.7" },

@@ -36,6 +36,9 @@ const PUBLIC_FIELDS: Record<string, readonly string[] | "all"> = {
   member_signin: ["magicLinkEnabled"],
   // The physical address is required in the footer by CAN-SPAM anyway.
   marketing_email: ["address"],
+  // The /watch-now page plays the video and offers the guide to anyone who
+  // signed up — both are links the owner means to publish.
+  masterclass: ["videoUrl", "actionGuideUrl"],
 };
 
 export function publicView(key: string, value: unknown): unknown | undefined {

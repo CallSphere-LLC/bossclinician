@@ -1,4 +1,4 @@
-import { Link } from "react-router";
+import { Link, useLocation } from "react-router";
 import { Container } from "@/components/ui/Container";
 import { Aurora } from "@/components/luxe/Aurora";
 import { footer } from "@/content/site";
@@ -19,6 +19,14 @@ const columnLink =
   "block py-2.5 text-sm text-white/45 transition-colors duration-300 hover:text-gold";
 
 export function Footer() {
+  const { pathname } = useLocation();
+  // A footer link to the page already on screen changes no route, so Layout's
+  // scroll-to-top never fires and the click looked dead (the Boardroom link on
+  // /boardroom). Take the reader to the top of the page they asked for.
+  const toTopIfCurrent = (to: string) => () => {
+    if (to === pathname) window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
   return (
     <footer className="relative isolate overflow-hidden bg-night-deep">
       {/* Foil trim along the top edge, then a low-intensity light field. The
@@ -48,7 +56,7 @@ export function Footer() {
           <ul className="space-y-1">
             {footer.exploreLinks.map((item) => (
               <li key={item.label}>
-                <Link to={item.to} className={columnLink}>
+                <Link to={item.to} onClick={toTopIfCurrent(item.to)} className={columnLink}>
                   {item.label}
                 </Link>
               </li>
@@ -61,7 +69,7 @@ export function Footer() {
           <ul className="space-y-1">
             {footer.resourceLinks.map((item) => (
               <li key={item.label}>
-                <Link to={item.to} className={columnLink}>
+                <Link to={item.to} onClick={toTopIfCurrent(item.to)} className={columnLink}>
                   {item.label}
                 </Link>
               </li>

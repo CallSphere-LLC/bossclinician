@@ -6,6 +6,7 @@ import { GlassCard } from "@/components/luxe/GlassCard";
 import { KineticText } from "@/components/luxe/KineticText";
 import { LuxeButton } from "@/components/luxe/LuxeButton";
 import { Container } from "@/components/ui/Container";
+import { MASTERCLASS_ROUTE } from "@/lib/masterclass";
 
 const EASE: [number, number, number, number] = [0.22, 1, 0.36, 1];
 
@@ -146,7 +147,7 @@ export function LuxeHero() {
                   <path d="M2.5 8h11M9.5 4l4 4-4 4" />
                 </svg>
               </LuxeButton>
-              <LuxeButton to="/resources" variant="glass" size="lg">
+              <LuxeButton to={MASTERCLASS_ROUTE} variant="glass" size="lg">
                 <svg viewBox="0 0 16 16" aria-hidden className="h-3 w-3" fill="currentColor">
                   <path d="M4.8 3.1 12.6 8l-7.8 4.9Z" />
                 </svg>

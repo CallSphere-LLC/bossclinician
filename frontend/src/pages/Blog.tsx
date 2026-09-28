@@ -137,12 +137,21 @@ export default function Blog() {
         canonicalPath={tag ? `/blog?tag=${encodeURIComponent(tag)}` : "/blog"}
       />
 
+      <JournalHero />
+
       <Section surface="base" space="md" seam={false} className="blog-collection" aria-label="Blog articles">
-        <div className="blog-heading">
-          <h1>BOSS CLINICIAN BLOG</h1>
-          {tag && <Link to="/blog" className="blog-reset">All articles <span aria-hidden>↗</span></Link>}
-        </div>
-        {tag && <p className="blog-archive-label">{topicLabel(tag)}</p>}
+        {/* A topic archive names its topic above the articles it filtered, with
+            the way back to the whole journal beside it. The hero stays the same
+            on every archive: it is the journal's masthead, not the topic's. */}
+        {tag && (
+          <div className="blog-heading">
+            <p className="blog-archive-label">
+              <span className="blog-archive-eyebrow">Topic</span>
+              {topicLabel(tag)}
+            </p>
+            <Link to="/blog" className="blog-reset">All articles <span aria-hidden>↗</span></Link>
+          </div>
+        )}
 
         {loading && items.length === 0 ? (
           <p role="status" className="copy-luxe mt-10 text-center">
@@ -196,6 +205,100 @@ export default function Blog() {
         </Section>
       </div>
     </>
+  );
+}
+
+/* ── Journal masthead ─────────────────────────────────────────────────── */
+
+/**
+ * The live site opens its blog on a looping clip of a woman reading a tablet in
+ * a warm, lamp-lit office (Wistia 0f2z9y2psc, 1280x720), with the words and a
+ * slate tint band burned into every frame. This is a frame of that clip with
+ * both lifted out: the lettering masked by its temporal minimum (the camera
+ * pans, the text does not) and inpainted, the band's blend inverted. The words
+ * are then real text: one h1 for the page, in the site's own type.
+ */
+const JOURNAL_PHOTO = {
+  src: "/images/blog/journal-hero.webp",
+  width: 1280,
+  height: 720,
+} as const;
+
+function JournalHero() {
+  const reduce = useEntranceMotion();
+
+  return (
+    <Section
+      surface="deep"
+      seam={false}
+      aria-label="Welcome to the Boss Clinician Journal"
+      className="flex min-h-[27rem] items-center py-20 sm:min-h-[30rem] sm:py-24 lg:min-h-[34rem] lg:py-28 2xl:min-h-[38rem] 2xl:py-28 short:py-16"
+      containerClassName="w-full max-w-6xl"
+      // The band is dark in both themes, so the veils stay veils and the type
+      // over them stays white when the site is in its light theme.
+      data-media-surface
+      backdrop={
+        <>
+          {/* Her face sits a little above centre in the frame; the `y` bias
+              keeps it in view when a phone crops the wide frame to a column. */}
+          <img
+            src={JOURNAL_PHOTO.src}
+            alt=""
+            aria-hidden
+            width={JOURNAL_PHOTO.width}
+            height={JOURNAL_PHOTO.height}
+            loading="eager"
+            fetchPriority="high"
+            decoding="async"
+            className="pointer-events-none absolute inset-0 size-full object-cover object-[center_40%]"
+          />
+          {/* Two token-based veils, as on the Club's closing band. The flat one
+              calms the whole frame; the second is the source's own dark band
+              behind the words, widened to the full text block and softened at
+              both edges. Measured against the brightest pixel behind each
+              line (390 to 1440 wide, both themes), the title holds 4.1:1 or
+              more (large text, AA is 3:1) and the eyebrow and subtitle 4.6:1
+              or more (AA is 4.5:1); the lamp at tablet width is the tightest.
+              Lighten these only with a re-measure. */}
+          <div aria-hidden className="absolute inset-0 bg-night-deep/20" />
+          <div
+            aria-hidden
+            className="absolute inset-0 bg-gradient-to-b from-night-deep/10 via-night-deep/60 to-night-deep/35"
+          />
+        </>
+      }
+    >
+      <div className="text-center">
+        {/* The source's eyebrow is nearly half the height of its title, so
+            this one is set larger than the site's section eyebrows. Bright
+            foil is a literal on purpose: on the light theme, the media-surface
+            rules repaint every `text-gold*` class and `.eyebrow-luxe` to the
+            deeper foil, which would drop this line under 4.5:1. */}
+        <motion.p
+          {...rise(reduce, 0)}
+          className="text-[0.8rem] font-semibold uppercase tracking-[0.28em] text-[#E8CE9A] sm:text-[0.95rem] sm:tracking-[0.32em] lg:text-[1.05rem]"
+        >
+          Welcome to the
+        </motion.p>
+        <motion.h1
+          {...rise(reduce, 0.08)}
+          className="mt-4 text-balance font-display text-[2.35rem] font-medium uppercase leading-[1.05] tracking-[0.02em] text-white min-[400px]:text-[2.6rem] sm:mt-5 sm:text-[3.4rem] lg:text-[4rem] xl:text-[4.5rem] 2xl:text-[5rem]"
+        >
+          Boss Clinician Journal
+        </motion.h1>
+        <motion.div {...rise(reduce, 0.14)}>
+          <GoldRule className="mx-auto mt-6 sm:mt-8" />
+        </motion.div>
+        <motion.p
+          {...rise(reduce, 0.2)}
+          className="mx-auto mt-6 max-w-3xl text-balance text-[1rem] font-medium leading-[1.7] text-white sm:mt-8 sm:text-[1.15rem] lg:max-w-[62rem] lg:text-[1.3rem]"
+        >
+          Your space for private practice strategy, sustainable growth, business
+          clarity, and the kind of big-sister advice from a therapist who’s been
+          where you are.
+        </motion.p>
+      </div>
+    </Section>
   );
 }
 
