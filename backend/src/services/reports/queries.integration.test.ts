@@ -31,6 +31,14 @@ describeDb("report queries (integration)", () => {
     queries = await import("./queries");
     rollup = await import("./rollup");
 
+    // Start from empty tables with ids from 1, as rollup.integration.test.ts
+    // does: the Kajabi data migrations (081+) seed offers into every new
+    // database, so the fixture's offer id 1 would already be taken.
+    await client.query(
+      `TRUNCATE report_daily, refunds, transactions, order_items, orders,
+                subscriptions, contacts, offers RESTART IDENTITY CASCADE`
+    );
+
     await client.query(
       `INSERT INTO offers (id, title, slug, pricing_type, amount_cents)
        VALUES (1, 'Practice Protection Pack', 'ppp', 'one_time', 49700)`
