@@ -154,7 +154,7 @@ export default function Offers() {
     void run(
       offer,
       () => adminCommerceApi.offerPublish(offer.id),
-      `“${offer.title}” is live — anyone with the link can buy it.`,
+      `“${listName(offer)}” is live — anyone with the link can buy it.`,
     );
   }
 
@@ -162,7 +162,7 @@ export default function Offers() {
     void run(
       offer,
       () => adminCommerceApi.offerUpdate(offer.id, { status: "draft" }),
-      `“${offer.title}” is back to a draft. Nobody can buy it now.`,
+      `“${listName(offer)}” is back to a draft. Nobody can buy it now.`,
     );
   }
 
@@ -181,7 +181,7 @@ export default function Offers() {
 
   async function archive(offer: Offer) {
     const ok = await confirm({
-      title: `Archive “${offer.title}”?`,
+      title: `Archive “${listName(offer)}”?`,
       description:
         offer.purchaseCount > 0
           ? "It stops selling straight away. Everyone who already bought it keeps what they paid for, and it stays in your sales history."
@@ -189,14 +189,14 @@ export default function Offers() {
       confirmLabel: "Yes, archive it",
     });
     if (!ok) return;
-    void run(offer, () => adminCommerceApi.offerArchive(offer.id), `“${offer.title}” is archived.`);
+    void run(offer, () => adminCommerceApi.offerArchive(offer.id), `“${listName(offer)}” is archived.`);
   }
 
   function restore(offer: Offer) {
     void run(
       offer,
       () => adminCommerceApi.offerUpdate(offer.id, { status: "draft" }),
-      `“${offer.title}” is back as a draft.`,
+      `“${listName(offer)}” is back as a draft.`,
     );
   }
 
@@ -221,7 +221,7 @@ export default function Offers() {
               >
                 {listName(offer)}
               </Link>
-              {internal && (
+              {internal && internal.toLowerCase() !== offer.title.trim().toLowerCase() && (
                 <p className="mt-0.5 truncate text-xs text-ink-soft">
                   Checkout title: {offer.title}
                 </p>

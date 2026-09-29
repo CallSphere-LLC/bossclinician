@@ -1346,8 +1346,15 @@ function ChannelsTab({
                     )}
                   >
                     <Hash className="size-4 shrink-0 opacity-60" />
-                    <span className="min-w-0 flex-1 truncate">
-                      {channel.name}
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate">{channel.name}</span>
+                      {/* Two groups can each have a "Q&A": say whose it is,
+                          the way Kajabi's sidebar heads channels by group. */}
+                      {channel.accessGroupName && (
+                        <span className="block truncate text-[11px] font-normal text-ink-soft/80">
+                          {channel.accessGroupName}
+                        </span>
+                      )}
                     </span>
                     {channel.visibility === "private" && (
                       <Lock
