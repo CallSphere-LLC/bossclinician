@@ -5,6 +5,7 @@ import {
   GroupPricingFields,
   groupPricingForm,
   groupPricingPayload,
+  groupPricingSummary,
 } from "./AccessGroupPricing";
 import * as Tabs from "@radix-ui/react-tabs";
 import { motion } from "motion/react";
@@ -93,6 +94,7 @@ import {
 
 const TAB_LIST = [
   { value: "channels", label: "Channels", icon: Hash },
+  { value: "live", label: "Live room", icon: Video },
   { value: "members", label: "Members", icon: Users },
   { value: "groups", label: "Access groups", icon: Layers },
   { value: "challenges", label: "Challenges", icon: Target },
@@ -153,6 +155,12 @@ function CommunityDetailPage({ id }: { id: string | undefined }) {
   const [searchParams] = useSearchParams();
   const [community, setCommunity] = useState<CommunityDetailType | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Controlled so the header's "Set up the live room" can switch to that tab.
+  const [tab, setTab] = useState(() => {
+    const asked = searchParams.get("tab");
+    return asked === "groups" || asked === "live" ? asked : "channels";
+  });
+  const hostJoin = useHostJoin(communityId);
 
   const load = useCallback(() => {
     // A malformed id (`/admin/community/abc` → NaN, or `/0`) used to return
@@ -199,6 +207,29 @@ function CommunityDetailPage({ id }: { id: string | undefined }) {
                   ? "Paid community"
                   : "Free community"}
               </Badge>
+              {/* The call, where an admin looks first. QA row 43 found no
+                  sign of web calling on this page: it was a channel-list row
+                  named after the room's alias, with nothing saying "call". */}
+              {!community.archivedAt &&
+                (community.liveRoomEnabled === true ? (
+                  <Button
+                    size="sm"
+                    onClick={hostJoin.join}
+                    disabled={hostJoin.joining}
+                  >
+                    <Video />
+                    {hostJoin.joining ? "Opening…" : "Start or join the call"}
+                  </Button>
+                ) : (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => setTab("live")}
+                  >
+                    <Video />
+                    Live room is off — set it up
+                  </Button>
+                ))}
             </div>
           )
         }
@@ -232,9 +263,8 @@ function CommunityDetailPage({ id }: { id: string | undefined }) {
       )}
 
       <Tabs.Root
-        defaultValue={
-          searchParams.get("tab") === "groups" ? "groups" : "channels"
-        }
+        value={tab}
+        onValueChange={setTab}
         className="grid min-w-0 grid-cols-1 gap-5 lg:grid-cols-[190px_minmax(0,1fr)]"
       >
         {/* Wraps rather than scrolls. This started as five tabs in a row and is
@@ -273,6 +303,17 @@ function CommunityDetailPage({ id }: { id: string | undefined }) {
               channels={community?.channels ?? null}
               onChange={load}
             />
+          </Tabs.Content>
+          <Tabs.Content value="live">
+            {community ? (
+              <LiveRoomPanel
+                communityId={communityId}
+                community={community}
+                onChange={load}
+              />
+            ) : (
+              <Skeleton className="h-64 w-full" />
+            )}
           </Tabs.Content>
           <Tabs.Content value="members">
             <MembersTab communityId={communityId} />
@@ -337,13 +378,16 @@ function visitIsLive(visit: LiveVisit): boolean {
 /**
  * The live room, from the admin's side.
  *
- * Members see this at the top of their channel list under whatever it is
- * called — "JOIN OFFICE HOURS" on the live site — and the admin console had no
- * screen for it at all. The result read as a missing channel: a member listed
+ * Members see it as a "Live video call" card with a Join button at the top of
+ * every community page, and first in their sidebar, under whatever it is
+ * called ("Office Hours" in The Boss). The admin console once had no screen
+ * for it at all. The result read as a missing channel: a member listed
  * three things, the admin listed two, and the third was a room its owner could
  * not see, name, close or check the attendance of. It is not a channel, so it
  * is not in the channel table; it belongs here, in the same list and the same
- * position the member sees it in, so the two views agree.
+ * position the member sees it in, so the two views agree — and, since QA row
+ * 43, in its own "Live room" tab and a header button, so nobody has to know
+ * the alias to find the call.
  */
 const LIVE_ROOM_ACCESS = [
   {
@@ -358,40 +402,14 @@ const LIVE_ROOM_ACCESS = [
   },
 ] as const;
 
-function LiveRoomPanel({
-  communityId,
-  community,
-  onChange,
-}: {
-  communityId: number;
-  community: CommunityDetailType;
-  onChange: () => void;
-}) {
-  const [form, setForm] = useState({
-    liveRoomEnabled: community.liveRoomEnabled === true,
-    liveRoomAccess: community.liveRoomAccess ?? "always",
-    liveRoomAlias: community.liveRoomAlias ?? "",
-    liveRoomCapacity: community.liveRoomCapacity ?? 8,
-  });
-  const [saving, setSaving] = useState(false);
+/**
+ * The room lives on the member site and only lets member sessions in, so an
+ * admin session cannot simply follow a link to it. The API mints a one-time
+ * link that signs this browser in over there as the host.
+ */
+function useHostJoin(communityId: number) {
   const [joining, setJoining] = useState(false);
-  const [visits, setVisits] = useState<LiveVisit[] | null>(null);
-
-  useEffect(() => {
-    adminApi
-      .communityLiveVisits(communityId)
-      .then(setVisits)
-      .catch(() => setVisits([]));
-  }, [communityId]);
-
-  const label = form.liveRoomAlias.trim() || "Live room";
-
-  /**
-   * The room lives on the member site and only lets member sessions in, so an
-   * admin session cannot simply follow a link to it. The API mints a one-time
-   * link that signs this browser in over there as the host.
-   */
-  async function joinAsHost() {
+  async function join() {
     // Opened before the request, not after it: a popup blocker only trusts a
     // window.open that happens inside the click itself, and an await ends that.
     const tab = window.open("", "_blank");
@@ -413,6 +431,36 @@ function LiveRoomPanel({
       setJoining(false);
     }
   }
+  return { joining, join };
+}
+
+function LiveRoomPanel({
+  communityId,
+  community,
+  onChange,
+}: {
+  communityId: number;
+  community: CommunityDetailType;
+  onChange: () => void;
+}) {
+  const [form, setForm] = useState({
+    liveRoomEnabled: community.liveRoomEnabled === true,
+    liveRoomAccess: community.liveRoomAccess ?? "always",
+    liveRoomAlias: community.liveRoomAlias ?? "",
+    liveRoomCapacity: community.liveRoomCapacity ?? 8,
+  });
+  const [saving, setSaving] = useState(false);
+  const { joining, join: joinAsHost } = useHostJoin(communityId);
+  const [visits, setVisits] = useState<LiveVisit[] | null>(null);
+
+  useEffect(() => {
+    adminApi
+      .communityLiveVisits(communityId)
+      .then(setVisits)
+      .catch(() => setVisits([]));
+  }, [communityId]);
+
+  const label = form.liveRoomAlias.trim() || "Live room";
 
   async function save(e: FormEvent) {
     e.preventDefault();
@@ -434,8 +482,8 @@ function LiveRoomPanel({
         title={label}
         subtitle={
           form.liveRoomEnabled
-            ? "Members reach this from the top of their channel list."
-            : "Switched off — nobody sees it."
+            ? "Web video calling for this community. Members get a “Join the call” card at the top of every community page."
+            : "Off — members have no way to start a call here. Switch it on and save to give every member a “Join the call” button."
         }
         icon={<Video className="size-4" />}
       />
@@ -446,7 +494,7 @@ function LiveRoomPanel({
         <div className="border-b border-hairline/60 px-5 py-5">
           <Button type="button" onClick={joinAsHost} disabled={joining}>
             <Video />
-            {joining ? "Opening…" : "Join the live room as host"}
+            {joining ? "Opening…" : "Start or join the call as host"}
           </Button>
           <p className="mt-2.5 text-xs leading-relaxed text-ink-soft">
             Opens the room in a new tab, signed in on the member site as the
@@ -2982,11 +3030,7 @@ function AccessGroupsTab({ communityId }: { communityId: number }) {
                   <div className="min-w-0 flex-1">
                     <p className="font-semibold text-ink">{group.name}</p>
                     <p className="mt-1 text-xs text-ink-soft">
-                      {group.pricingType === "free"
-                        ? "Free access"
-                        : group.pricingType
-                          ? `${new Intl.NumberFormat("en-US", { style: "currency", currency: group.currency || "usd" }).format((group.amountCents || 0) / 100)}${group.pricingType === "subscription" ? ` / ${group.interval}` : " one time"}`
-                          : "Existing offer access"}
+                      {groupPricingSummary(group)}
                     </p>
                     {group.checkoutSlug && (
                       <a

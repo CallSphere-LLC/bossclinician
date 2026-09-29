@@ -112,3 +112,34 @@ scheduled job.
 - Provider Partnership Guide: Kajabi checkout $47 vs sales page and here $97.
 - Boardroom: $12,000 / 24 sessions (Kajabi offer) vs $18,000 (owner's Boardroom page).
 - The Club's checkout copy has Kajabi's own "[LINK]" placeholder to fill before publishing.
+
+# Rows 41–43 (added 29-Sep) — release `20260929182043-626ced5`
+
+| Row | Report | Valid? | Status |
+| --- | --- | --- | --- |
+| 41 | Kajabi's two Lounge access groups not in our community page | True (The Lounge had 0 groups) | Fixed |
+| 42 | Access-group pricing types differ from Kajabi | True (no Multiple payments, no trial) | Fixed |
+| 43 | Web calling not visible on the community page | True (it existed but was hidden; off for The Lounge) | Fixed |
+
+- **41, migration 083:** "Boss Clinician Lounge" (owner's Lounge description) is linked to the existing draft
+  Kajabi offer 40 "The Lounge | Boss Clinician" ($1,997 or 6 × $197), so buying it grants The Lounge and
+  the group. "How to Improve Relations" has no description or price because no source gives one. The offer
+  stays a draft. No duplicate offer, no Stripe calls. Backup: `backups/sheet-parity-20260929/access-groups-before.sql`.
+- **42:** Access is now Free or Paid, as in Kajabi. Paid means One-time payment, Subscription (monthly or yearly,
+  with an optional free trial) or Multiple payments (count, amount per payment, frequency). Each is wired to the
+  group's real offer and checkout. Repricing or deleting a group linked to an existing offer no longer rewrites
+  or archives that offer. The member sidebar shows "6 × $197.00 / month" and trial days.
+- **43, migration 084:** a "Live video call" card with Start/Join/Back-to-call sits at the top of every
+  community page, including on phones (it used to be a small "Office Hours" link at the bottom of the sidebar).
+  The room link is first in the sidebar. The admin has a header "Start or join the call" button and a Live room
+  tab. The live room is now on for The Boss and The Lounge. Checked on a copy of production with headless
+  Chromium: two members joined, and each received both video streams with TURN credentials issued.
+  A call between two different networks has not been tested.
+
+Live after deploy: 083/084 applied; admin `/community/14/access-groups` returns both groups (Lounge: $1,997,
+"$197.00 every month for 6 months ($1,182 total)", checkout draft); communities 2 and 14 `live_room_enabled`;
+the deployed bundles contain the new call and pricing UI; only routine scheduled jobs ran.
+
+Open: VIP offer 41's group mapping, the description and price of "How to Improve Relations", and
+whether The Lounge is a monthly subscription (Kajabi FAQ) or $1,997 / 6 × $197 (current offer). These need
+Kajabi admin access or the owner.

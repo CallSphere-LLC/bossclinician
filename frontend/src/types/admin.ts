@@ -796,12 +796,20 @@ export interface AdminPointRule {
 }
 
 export interface AdminAccessGroup {
-  pricingType?: "free" | "one_time" | "subscription" | null;
+  /** payment_plan is Kajabi's "Multiple payments". */
+  pricingType?: "free" | "one_time" | "subscription" | "payment_plan" | null;
+  /** For payment_plan, the amount of ONE payment. */
   amountCents?: number | null;
   currency?: string | null;
-  interval?: "month" | "year" | null;
+  interval?: "week" | "month" | "year" | null;
+  installmentCount?: number | null;
+  trialDays?: number | null;
   checkoutOfferId?: number | null;
   checkoutSlug?: string | null;
+  checkoutStatus?: "draft" | "published" | "archived" | null;
+  checkoutTitle?: string | null;
+  /** Labels of the checkout's extra payment options, e.g. "6 x $197". */
+  checkoutOptionLabels?: string[] | null;
   id: Id;
   name: string;
   description: string;

@@ -637,6 +637,28 @@ describeDb("community admin api (integration)", () => {
     expect(groups.body).toEqual([]);
   });
 
+  it("offers Kajabi's Multiple payments and subscription free trial through the admin API", async () => {
+    const communityId = await newCommunity();
+    const plan = await call("POST", `/admin/community/${communityId}/access-groups`, {
+      name: "Six payments", pricingType: "payment_plan", amountCents: 19700, installmentCount: 6, interval: "month",
+    });
+    expect(plan.status).toBe(201);
+    expect(plan.body).toMatchObject({ pricingType: "payment_plan", amountCents: 19700, installmentCount: 6, interval: "month", trialDays: 0, checkoutStatus: "published", checkoutOptionLabels: [] });
+    const trial = await call("POST", `/admin/community/${communityId}/access-groups`, {
+      name: "Yearly with trial", pricingType: "subscription", amountCents: 47000, interval: "year", trialDays: 14,
+    });
+    expect(trial.status).toBe(201);
+    expect(trial.body).toMatchObject({ pricingType: "subscription", interval: "year", trialDays: 14, installmentCount: null });
+    for (const installmentCount of [1, 61, undefined]) {
+      const bad = await call("POST", `/admin/community/${communityId}/access-groups`, {
+        name: `Bad plan ${installmentCount}`, pricingType: "payment_plan", amountCents: 19700, installmentCount, interval: "month",
+      });
+      expect(bad.status).toBe(400);
+    }
+    const listed = await call("GET", `/admin/community/${communityId}/access-groups`);
+    expect((listed.body as { name: string }[]).map((g) => g.name)).toEqual(["Six payments", "Yearly with trial"]);
+  });
+
   it("creates an explicit free enrollment checkout and keeps legacy groups unconfigured",async()=>{
     const communityId=await newCommunity();
     const legacy=await call("POST",`/admin/community/${communityId}/access-groups`,{name:"Existing invitation tier"});

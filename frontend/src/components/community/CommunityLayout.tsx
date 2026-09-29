@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "react-router";
-import { Hash, Loader2, Lock, MessageSquare, Radio, Users } from "lucide-react";
+import { Hash, Loader2, Lock, MessageSquare, Users, Video } from "lucide-react";
 import { Seo } from "@/components/Seo";
 import { MemberShell } from "@/components/member/MemberShell";
 import { LuxeButton } from "@/components/luxe/LuxeButton";
@@ -11,6 +11,7 @@ import { BadgesPanel } from "@/components/community/BadgesPanel";
 import { EventsPanel } from "@/components/community/EventsPanel";
 import { ChallengesPanel } from "@/components/community/ChallengesPanel";
 import { LeaderboardPanel } from "@/components/community/LeaderboardPanel";
+import { LiveRoomCallout } from "@/components/community/LiveRoomCallout";
 import { MemberApiError } from "@/lib/memberApi";
 import {
   communityApi,
@@ -164,6 +165,18 @@ export function CommunityLayout({
           )}
         >
           <div className="min-w-0">
+            {/* The call is offered above whatever is being read, outside the
+                drawer a phone folds the navigation into — QA row 43 could not
+                find it when it lived only at the foot of the sidebar. */}
+            {overview.liveRoom && activeChannel !== "live" && (
+              <div className="mb-6 lg:mb-0">
+                <LiveRoomCallout
+                  slug={slug}
+                  label={overview.liveRoom.label}
+                  href={overview.liveRoom.href}
+                />
+              </div>
+            )}
             <details className="rounded-xl border border-white/10 p-4 lg:hidden">
               <summary className="cursor-pointer font-semibold text-gold">
                 Community channels and access groups
@@ -251,6 +264,30 @@ function CommunityNavigation({
           </Link>
         ))}
       </nav>
+      {overview.liveRoom && (
+        <Link
+          to={overview.liveRoom.href}
+          className={cn(
+            "flex min-h-11 items-center gap-3 rounded-xl border px-3 py-2.5 text-sm leading-snug transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-gold",
+            activeChannel === "live"
+              ? "border-gold/40 bg-gold/[0.12] text-gold"
+              : "border-gold/25 text-white hover:bg-gold/[0.08]",
+          )}
+          aria-current={activeChannel === "live" ? "page" : undefined}
+        >
+          <Video aria-hidden className="size-4 shrink-0 text-gold" />
+          <span className="min-w-0">
+            <span className="block font-semibold">
+              {overview.liveRoom.label}
+            </span>
+            {overview.liveRoom.label !== "Live room" && (
+              <span className="block text-xs text-orchid-dim">
+                Live video call
+              </span>
+            )}
+          </span>
+        </Link>
+      )}
       <div className="border-t border-white/10 pt-4">
         <CommandPalette slug={slug} />
       </div>
@@ -313,7 +350,7 @@ function CommunityNavigation({
               <span className="mt-1 block text-xs text-gold">
                 {group.pricingType === "free"
                   ? "Free access"
-                  : `${new Intl.NumberFormat("en-US", { style: "currency", currency: group.currency || "usd" }).format(group.amountCents / 100)}${group.pricingType === "subscription" ? ` / ${group.interval}` : ""}`}{" "}
+                  : `${group.pricingType === "payment_plan" && group.installmentCount ? `${group.installmentCount} × ` : ""}${new Intl.NumberFormat("en-US", { style: "currency", currency: group.currency || "usd" }).format(group.amountCents / 100)}${group.pricingType === "subscription" || group.pricingType === "payment_plan" ? ` / ${group.interval}` : ""}${group.pricingType === "subscription" && group.trialDays ? ` · ${group.trialDays}-day free trial` : ""}`}{" "}
                 · View access
               </span>
             </Link>
@@ -324,21 +361,6 @@ function CommunityNavigation({
         aria-label="Community activity"
         className="space-y-1 border-t border-white/10 pt-3"
       >
-        {overview.liveRoom && (
-          <Link
-            to={overview.liveRoom.href}
-            className={cn(
-              linkClass,
-              activeChannel === "live"
-                ? "bg-gold/[0.12] text-gold"
-                : "text-white/75",
-            )}
-            aria-current={activeChannel === "live" ? "page" : undefined}
-          >
-            <Radio aria-hidden className="size-4 shrink-0" />
-            {overview.liveRoom.label}
-          </Link>
-        )}
         <Link
           to={`/community/${slug}/messages`}
           className={cn(linkClass, "text-white/75")}

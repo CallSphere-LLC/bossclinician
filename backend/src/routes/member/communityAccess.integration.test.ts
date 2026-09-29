@@ -475,4 +475,102 @@ describeDb("community entitlement (integration)", () => {
     expect((await get(`/api/member/community/${room.slug}/channels/private-tier-content/posts`,member.token)).status).toBe(404);
   });
 
+  /* ---------------------------- Kajabi's access-group pricing (sheet row 42) */
+
+  it("sells a group as Multiple payments: a payment plan offer that grants the tier while it is live", async () => {
+    const member = await newMember();
+    const room = await newCommunity("free");
+    const { saveAccessGroup } = await import("../../services/communityGroupPricing");
+    const group = await saveAccessGroup(room.id, null, {
+      name: "Six payments", pricingType: "payment_plan", amountCents: 19700, installmentCount: 6, interval: "month",
+    });
+    expect(group).toMatchObject({ pricing_type: "payment_plan", amount_cents: 19700, installment_count: 6, interval: "month", trial_days: 0, checkout_status: "published" });
+    const offer = await client.query(`SELECT pricing_type, amount_cents, installment_count, interval, interval_count, access_group_id FROM offers WHERE id = $1`, [group.checkout_offer_id]);
+    expect(offer.rows[0]).toEqual({ pricing_type: "payment_plan", amount_cents: 19700, installment_count: 6, interval: "month", interval_count: 1, access_group_id: group.id });
+
+    await newChannel(room.id, { slug: "plan-tier", accessGroupId: group.id });
+    const listed = await get(`/api/member/community/${room.slug}`, member.token);
+    expect(listed.body.availableAccessGroups).toEqual(expect.arrayContaining([expect.objectContaining({ id: group.id, pricingType: "payment_plan" })]));
+    await access.grantOfferAccess({ memberId: member.id, offerId: group.checkout_offer_id, source: "purchase" });
+    expect((await get(`/api/member/community/${room.slug}/channels/plan-tier/posts`, member.token)).status).toBe(200);
+    await access.revokeOfferAccess({ memberId: member.id, offerId: group.checkout_offer_id, reason: "refunded" });
+    expect((await get(`/api/member/community/${room.slug}/channels/plan-tier/posts`, member.token)).status).toBe(404);
+  });
+
+  it("keeps a subscription's free trial, and refuses a trial or a single payment on Multiple payments", async () => {
+    const room = await newCommunity("free");
+    const { saveAccessGroup } = await import("../../services/communityGroupPricing");
+    const sub = await saveAccessGroup(room.id, null, { name: "Monthly", pricingType: "subscription", amountCents: 4700, interval: "month", trialDays: 14 });
+    expect(sub).toMatchObject({ pricing_type: "subscription", interval: "month", trial_days: 14, installment_count: null });
+
+    // Switching the same group to a one-time price drops the trial and interval.
+    const once = await saveAccessGroup(room.id, sub.id, { pricingType: "one_time", amountCents: 9900 });
+    expect(once).toMatchObject({ pricing_type: "one_time", amount_cents: 9900, interval: null, trial_days: 0, installment_count: null });
+
+    await expect(saveAccessGroup(room.id, null, { name: "Trial plan", pricingType: "payment_plan", amountCents: 19700, installmentCount: 6, interval: "month", trialDays: 7 }))
+      .rejects.toMatchObject({ status: 400 });
+    await expect(saveAccessGroup(room.id, null, { name: "No count", pricingType: "payment_plan", amountCents: 19700, interval: "month" }))
+      .rejects.toMatchObject({ status: 400 });
+    // A refused save leaves nothing half-made behind.
+    const leftovers = await client.query(`SELECT 1 FROM community_access_groups WHERE community_id = $1 AND name IN ('Trial plan','No count')`, [room.id]);
+    expect(leftovers.rowCount).toBe(0);
+  });
+
+  it("repricing a group linked to an existing offer keeps that offer's own title and checkout copy", async () => {
+    const room = await newCommunity("paid");
+    const { saveAccessGroup } = await import("../../services/communityGroupPricing");
+    const group = await saveAccessGroup(room.id, null, { name: "Linked tier", description: "Group blurb" });
+    const offerId = await insertOffer(client, unique("kajabi-offer"), [], { amountCents: 199700 });
+    await client.query(`UPDATE offers SET description = 'Kajabi checkout copy', stripe_price_id = 'price_cached' WHERE id = $1`, [offerId]);
+    await client.query(`UPDATE community_access_groups SET checkout_offer_id = $2 WHERE id = $1`, [group.id, offerId]);
+
+    const saved = await saveAccessGroup(room.id, group.id, { name: "Linked tier", description: "New blurb", pricingType: "payment_plan", amountCents: 19700, installmentCount: 6, interval: "month" });
+    expect(saved).toMatchObject({ checkout_offer_id: offerId, pricing_type: "payment_plan", installment_count: 6, description: "New blurb" });
+    const offer = await client.query(`SELECT title, description, stripe_price_id FROM offers WHERE id = $1`, [offerId]);
+    expect(offer.rows[0].title).toMatch(/^Offer kajabi-offer-/);
+    expect(offer.rows[0].description).toBe("Kajabi checkout copy");
+    expect(offer.rows[0].stripe_price_id).toBeNull();
+
+    // Deleting the group leaves the linked offer in the catalog as it was.
+    const { deleteAccessGroup } = await import("../../services/communityGroupPricing");
+    await deleteAccessGroup(room.id, group.id);
+    const after = await client.query(`SELECT status, access_group_id FROM offers WHERE id = $1`, [offerId]);
+    expect(after.rows[0]).toEqual({ status: "published", access_group_id: null });
+  });
+
+  it("migration 083 gives The Lounge its two Kajabi groups and links the draft Lounge offer, idempotently", async () => {
+    const fs = await import("fs");
+    const path = await import("path");
+    const sql = fs.readFileSync(path.join(__dirname, "..", "..", "db", "migrations", "083_lounge_access_groups.sql"), "utf8");
+    const lounge = await client.query<{ id: number }>(
+      `INSERT INTO communities (slug, name, access, published) VALUES ('the-lounge', 'The Lounge', 'paid', true)
+       ON CONFLICT (slug) DO UPDATE SET name = EXCLUDED.name RETURNING id`,
+    );
+    await client.query(sql);
+    await client.query(sql);
+
+    const groups = await client.query(
+      `SELECT g.name, g.description, g.checkout_offer_id, o.slug, o.status, o.title, o.access_group_id = g.id AS offer_names_group
+         FROM community_access_groups g LEFT JOIN offers o ON o.id = g.checkout_offer_id
+        WHERE g.community_id = $1 ORDER BY g.sort`, [lounge.rows[0].id]);
+    expect(groups.rows).toEqual([
+      expect.objectContaining({ name: "Boss Clinician Lounge", slug: "the-lounge", status: "draft", title: "The Lounge | Boss Clinician", offer_names_group: true }),
+      expect.objectContaining({ name: "How to Improve Relations", description: "", checkout_offer_id: null }),
+    ]);
+    expect(groups.rows[0].description).toMatch(/^A flexible monthly membership/);
+    const products = await client.query(
+      `SELECT p.kind, p.community_id FROM offer_products op JOIN products p ON p.id = op.product_id
+         JOIN offers o ON o.id = op.offer_id WHERE o.slug = 'the-lounge'`);
+    expect(products.rows).toEqual([{ kind: "access_group", community_id: lounge.rows[0].id }]);
+
+    // Buying the Lounge offer (once the owner publishes it) grants the room and the tier.
+    const member = await newMember();
+    const offerId = groups.rows[0].checkout_offer_id;
+    await access.grantOfferAccess({ memberId: member.id, offerId, source: "purchase" });
+    const groupIds = await access.memberAccessGroupIds(member.id);
+    const loungeGroup = await client.query(`SELECT id FROM community_access_groups WHERE community_id = $1 AND name = 'Boss Clinician Lounge'`, [lounge.rows[0].id]);
+    expect(groupIds).toContain(loungeGroup.rows[0].id);
+    expect((await get(`/api/member/community/the-lounge`, member.token)).status).toBe(200);
+  });
+
 });

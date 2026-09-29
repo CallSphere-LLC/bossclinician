@@ -219,6 +219,9 @@ function LiveRoom({ slug }: { slug: string }) {
     <div className="space-y-6">
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div className="min-w-0">
+          <p className="text-[0.65rem] font-bold uppercase tracking-[0.14em] text-gold">
+            Live video call
+          </p>
           <h1 className="font-display text-2xl text-white">{label}</h1>
           <p className="copy-luxe mt-1 text-sm">
             {room.access === "always"
@@ -358,11 +361,14 @@ function LiveRoom({ slug }: { slug: string }) {
             disabled={joining || room.full || (!room.open && !room.youAreHost)}
             onClick={() => void join()}
           >
+            <Video aria-hidden className="size-4" />
             {joining
               ? "Joining…"
               : room.full
                 ? "The room is full"
-                : `Join ${label.toLowerCase()}`}
+                : room.roster.length === 0
+                  ? "Start the video call"
+                  : "Join the video call"}
           </LuxeButton>
 
           <p className="text-xs text-white/45">

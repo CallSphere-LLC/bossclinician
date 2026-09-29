@@ -584,10 +584,14 @@ const accessGroupSchema = z.object({
   name: z.string().trim().min(1).max(120),
   description: z.string().trim().max(600).default(""),
   sort: z.number().int().min(0).max(1000).default(0),
-  pricingType: z.enum(["free", "one_time", "subscription"]).optional(),
+  // Kajabi's choices: Free, or Paid as One-time payment, Subscription or
+  // Multiple payments (payment_plan). For payment_plan, amountCents is ONE payment.
+  pricingType: z.enum(["free", "one_time", "subscription", "payment_plan"]).optional(),
   amountCents: z.number().int().min(0).max(99_999_999).optional(),
   currency: z.string().trim().toLowerCase().regex(/^[a-z]{3}$/).optional(),
-  interval: z.enum(["month", "year"]).nullable().optional(),
+  interval: z.enum(["week", "month", "year"]).nullable().optional(),
+  installmentCount: z.number().int().min(2).max(60).nullable().optional(),
+  trialDays: z.number().int().min(0).max(365).optional(),
 });
 
 adminCommunityRouter.post(

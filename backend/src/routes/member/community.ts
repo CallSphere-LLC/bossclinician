@@ -1986,7 +1986,7 @@ memberCommunityRouter.get(
 
     const groupIds = await memberAccessGroupIds(member.id);
     const accessGroups = await pool.query(
-      `SELECT g.id,g.name,g.description,o.slug AS checkout_slug,o.pricing_type,o.amount_cents,o.currency,o.interval
+      `SELECT g.id,g.name,g.description,o.slug AS checkout_slug,o.pricing_type,o.amount_cents,o.currency,o.interval,o.installment_count,o.trial_days
          FROM community_access_groups g LEFT JOIN offers o ON o.id=g.checkout_offer_id
         WHERE g.community_id=$1 AND ($2::bool OR g.id=ANY($3::int[])) ORDER BY g.sort,g.id`,
       [ctx.id,ctx.moderator,groupIds],
@@ -1994,13 +1994,14 @@ memberCommunityRouter.get(
     // Published checkout metadata is intentionally discoverable; hidden channel
     // titles and content remain protected by the normal tier entitlement gate.
     const availableGroups = await pool.query(
-      `SELECT g.id,g.name,g.description,o.slug AS checkout_slug,o.pricing_type,o.amount_cents,o.currency,o.interval
+      `SELECT g.id,g.name,g.description,o.slug AS checkout_slug,o.pricing_type,o.amount_cents,o.currency,o.interval,o.installment_count,o.trial_days
          FROM community_access_groups g JOIN offers o ON o.id=g.checkout_offer_id
         WHERE g.community_id=$1 AND o.status='published' AND NOT(g.id=ANY($2::int[])) ORDER BY g.sort,g.id`,
       [ctx.id,groupIds],
     );
     const groupJson = (g: Record<string, any>) => ({id:g.id,name:g.name,description:g.description,
-      checkoutSlug:g.checkout_slug,pricingType:g.pricing_type,amountCents:g.amount_cents,currency:g.currency,interval:g.interval});
+      checkoutSlug:g.checkout_slug,pricingType:g.pricing_type,amountCents:g.amount_cents,currency:g.currency,interval:g.interval,
+      installmentCount:g.installment_count??null,trialDays:g.trial_days??0});
     res.json({
       accessGroups: accessGroups.rows.map(groupJson),
       availableAccessGroups: availableGroups.rows.map(groupJson),
