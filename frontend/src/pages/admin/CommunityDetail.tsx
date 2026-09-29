@@ -9,6 +9,7 @@ import {
 import * as Tabs from "@radix-ui/react-tabs";
 import { motion } from "motion/react";
 import {
+  ArchiveRestore,
   ArrowLeft,
   ArrowUpDown,
   Award,
@@ -191,14 +192,44 @@ function CommunityDetailPage({ id }: { id: string | undefined }) {
         description={community?.description}
         actions={
           community && (
-            <Badge tone={community.access === "paid" ? "gold" : "neutral"}>
-              {community.access === "paid"
-                ? "Paid community"
-                : "Free community"}
-            </Badge>
+            <div className="flex flex-wrap items-center gap-2">
+              {community.archivedAt && <Badge tone="slate">Archived</Badge>}
+              <Badge tone={community.access === "paid" ? "gold" : "neutral"}>
+                {community.access === "paid"
+                  ? "Paid community"
+                  : "Free community"}
+              </Badge>
+            </div>
           )
         }
       />
+
+      {community?.archivedAt && (
+        <Card className="flex flex-wrap items-center justify-between gap-3 p-4">
+          <p className="text-sm text-ink-soft">
+            This community is archived. Members can't open it; its members and
+            history are kept for the record.
+          </p>
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() =>
+              adminApi
+                .communityRestore(communityId)
+                .then(() => {
+                  toast.success("Community restored — publish it when you're ready");
+                  load();
+                })
+                .catch((err: unknown) =>
+                  toast.error(friendlyError(err, "community")),
+                )
+            }
+          >
+            <ArchiveRestore />
+            Restore
+          </Button>
+        </Card>
+      )}
 
       <Tabs.Root
         defaultValue={

@@ -2,7 +2,7 @@
 # Source: the `redirects` table. Regenerate with:
 #   docker compose exec backend node scripts/generate-nginx-redirects.js
 #   docker compose exec nginx nginx -s reload
-# Generated from 167 rows.
+# Generated from 157 rows.
 
 # The podcast episode paths (/podcasts/<show>/episodes/<id>) overflow the
 # 64-byte default bucket, and nginx refuses to start rather than truncating.
@@ -87,16 +87,6 @@ map $uri $redirect_target {
     /opt-in /resources;
     /password/new /forgot-password;
     /password/reset /forgot-password;
-    /podcasts/lyrical-reflections /blog;
-    /podcasts/lyrical-reflections/episodes/2148691037 /blog;
-    /podcasts/lyrical-reflections/episodes/2148691038 /blog;
-    /podcasts/lyrical-reflections/episodes/2148691039 /blog;
-    /podcasts/lyrical-reflections/episodes/2148691040 /blog;
-    /podcasts/lyrical-reflections/episodes/2148691041 /blog;
-    /podcasts/lyrical-reflections/episodes/2148691042 /blog;
-    /podcasts/lyrical-reflections/episodes/2148691043 /blog;
-    /podcasts/lyrical-reflections/episodes/2148691044 /blog;
-    /podcasts/lyrical-reflections/episodes/2148691045 /blog;
     /practice-planner /courses/prepare-to-profit-journal;
     /practice-planner-thank-you /resources;
     /practice-protection-pack /courses/private-practice-protection-pack;

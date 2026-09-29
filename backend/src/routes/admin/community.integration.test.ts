@@ -695,4 +695,42 @@ describeDb("community admin api (integration)", () => {
     expect((await client.query(`SELECT live_room_enabled FROM communities WHERE id=$1`,[other])).rows[0].live_room_enabled).toBe(false);
   });
 
+  it("archives a community: out of the default list and unpublished, kept with its members, restorable", async () => {
+    const communityId = await newCommunity();
+    const memberId = await insertMember(client, `${unique("archived")}@example.test`);
+    await client.query(
+      `INSERT INTO community_memberships (community_id, member_id, source) VALUES ($1, $2, 'manual')`,
+      [communityId, memberId],
+    );
+
+    const archived = await call("POST", `/admin/community/${communityId}/archive`);
+    expect(archived.status).toBe(200);
+    expect(archived.body.archivedAt).toBeTruthy();
+    expect(archived.body.published).toBe(false);
+
+    // Pickers read the default list; an archived space must not be offered there.
+    const ids = (body: Array<{ id: number }>) => body.map((c) => c.id);
+    expect(ids((await call("GET", "/admin/community")).body)).not.toContain(communityId);
+    const all = (await call("GET", "/admin/community?include=archived")).body as Array<{ id: number; memberCount: number; archivedAt: string | null }>;
+    const row = all.find((c) => c.id === communityId);
+    expect(row?.archivedAt).toBeTruthy();
+    expect(row?.memberCount).toBe(1);
+    // Archived spaces sort after the live ones.
+    expect(all.findIndex((c) => c.archivedAt)).toBeGreaterThan(all.findIndex((c) => !c.archivedAt));
+
+    const restored = await call("POST", `/admin/community/${communityId}/restore`);
+    expect(restored.status).toBe(200);
+    expect(restored.body.archivedAt).toBeNull();
+    expect(restored.body.published).toBe(false);
+    expect(ids((await call("GET", "/admin/community")).body)).toContain(communityId);
+
+    // Publishing an archived community brings it back too.
+    await call("POST", `/admin/community/${communityId}/archive`);
+    const published = await call("PUT", `/admin/community/${communityId}`, { published: true });
+    expect(published.body.archivedAt).toBeNull();
+    expect(published.body.published).toBe(true);
+
+    expect((await call("POST", "/admin/community/999999/archive")).status).toBe(404);
+  });
+
 });

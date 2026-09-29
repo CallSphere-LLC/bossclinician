@@ -1,5 +1,8 @@
 import { memberRequest } from "@/lib/memberApi";
 
+/** Same base every client in lib/ uses; not imported, so this file stays off the admin client. */
+const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? "/api";
+
 /**
  * Podcast and newsletter client — the two things that arrive on a schedule
  * rather than being sat down with.
@@ -13,6 +16,10 @@ export interface PodcastEpisode {
   id: number;
   title: string;
   description: string;
+  /** Markdown, as written in the admin. Absent from an older cached response. */
+  showNotesMd?: string;
+  /** Verbatim; "" when the episode has none. */
+  transcript?: string;
   audioUrl: string;
   durationSeconds: number;
   episodeNumber: number | null;
@@ -103,3 +110,44 @@ export const publishingApi = {
       body: JSON.stringify({ topic, subscribed }),
     }),
 };
+
+/* ── The public show page ──────────────────────────────────────────────── */
+
+export interface PublicPodcastEpisode {
+  id: number;
+  /** The id in the episode's address: Kajabi's for an imported episode. */
+  pathId: string;
+  title: string;
+  description: string;
+  showNotesMd: string;
+  audioUrl: string;
+  durationSeconds: number;
+  episodeNumber: number | null;
+  season: number;
+  publishedAt: string | null;
+  coverImage: string;
+}
+
+export interface PublicPodcast {
+  slug: string;
+  title: string;
+  description: string;
+  author: string;
+  category: string;
+  coverImage: string;
+  feedUrl: string;
+  episodes: PublicPodcastEpisode[];
+}
+
+/**
+ * A published public show, or null when there is none by that name (a draft,
+ * a members-only show, or a slug that never existed all read the same).
+ */
+export async function fetchPublicPodcast(slug: string): Promise<PublicPodcast | null> {
+  const res = await fetch(`${API_BASE}/podcast/${encodeURIComponent(slug)}`, {
+    headers: { Accept: "application/json" },
+  });
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error(`Could not load the show (${res.status})`);
+  return (await res.json()) as PublicPodcast;
+}

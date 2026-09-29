@@ -108,9 +108,16 @@ const OFFER_COLUMNS = `o.id, o.title, o.slug, o.status, o.description, o.checkou
  * Only orders that settled. A pending row is a checkout somebody started, and
  * counting those as purchases makes the offer nobody completes look like the
  * best seller on the site.
+ *
+ * Sales made on Kajabi before the move are `purchases` rows (source 'kajabi')
+ * and never had an order here, so they are added on top: without them an offer
+ * that sold dozens of times on Kajabi reads "Nobody yet". Counted per person,
+ * because a Kajabi grant and a later payment are two cards for one buyer.
  */
-const PURCHASE_COUNT = `(SELECT COUNT(*)::int FROM orders ord
-                          WHERE ord.offer_id = o.id AND ord.status = 'paid') AS purchase_count`;
+const PURCHASE_COUNT = `((SELECT COUNT(*)::int FROM orders ord
+                           WHERE ord.offer_id = o.id AND ord.status = 'paid')
+                        + (SELECT COUNT(DISTINCT pur.contact_id)::int FROM purchases pur
+                           WHERE pur.offer_id = o.id AND pur.source = 'kajabi')) AS purchase_count`;
 
 /**
  * Nested JSON is built with camelCase keys in the query itself: `rowToCamel` is

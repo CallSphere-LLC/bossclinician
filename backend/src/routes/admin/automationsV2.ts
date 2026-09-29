@@ -161,7 +161,7 @@ adminAutomationsV2Router.get(
         namesFrom(`SELECT id, title AS name FROM events ORDER BY title`),
         namesFrom(`SELECT id, title AS name FROM assessments ORDER BY title`),
         namesFrom(`SELECT id, title AS name FROM courses ORDER BY title`),
-        namesFrom(`SELECT id, name FROM communities ORDER BY name`),
+        namesFrom(`SELECT id, name FROM communities WHERE archived_at IS NULL ORDER BY name`),
         namesFrom(`SELECT id, name FROM plans ORDER BY name`),
         namesFrom(`SELECT id, name FROM segments ORDER BY name`),
       ]);

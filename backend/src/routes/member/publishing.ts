@@ -144,6 +144,7 @@ interface EpisodeRow {
   podcast_id: number;
   title: string;
   description: string;
+  show_notes_md: string;
   transcript: string;
   audio_url: string;
   duration_seconds: number;
@@ -156,6 +157,8 @@ interface EpisodeJson {
   id: number;
   title: string;
   description: string;
+  /** The show notes as written in the admin (Markdown); "" when there are none. */
+  showNotesMd: string;
   /** Verbatim, and "" when the episode has none. */
   transcript: string;
   audioUrl: string;
@@ -246,8 +249,8 @@ async function loadEpisodes(
   // One query with a per-show window rather than a query per show: a member
   // with six feeds should still cost one round trip.
   const res = await pool.query<EpisodeRow>(
-    `SELECT id, podcast_id, title, description, transcript, audio_url, duration_seconds,
-            episode_number, season, published_at
+    `SELECT id, podcast_id, title, description, show_notes_md, transcript, audio_url,
+            duration_seconds, episode_number, season, published_at
        FROM (
          SELECT e.*, row_number() OVER (
                   PARTITION BY e.podcast_id
@@ -267,6 +270,7 @@ async function loadEpisodes(
       id: row.id,
       title: row.title,
       description: row.description,
+      showNotesMd: row.show_notes_md ?? "",
       transcript: row.transcript ?? "",
       audioUrl: episodeAudioUrl(row.audio_url, row.id, memberId),
       durationSeconds: row.duration_seconds,

@@ -33,6 +33,7 @@ import { keepStagedFile, receiveFormFiles, type StagedFile } from "../../service
 import { kindFromMime } from "../../services/mediaStorage";
 import { notificationRecipients } from "../../services/notificationRecipients";
 import { sendMail } from "../../email/mailer";
+import { renderMarkdown } from "../../email/provider";
 import { formSubmissionNotification, type FormAnswerRow } from "../../email/templates";
 
 /** Public endpoints for podcasts (RSS), forms and funnels. */
@@ -89,6 +90,47 @@ function hhmmss(totalSeconds: number): string {
   const sec = s % 60;
   const pad = (n: number) => String(n).padStart(2, "0");
   return h > 0 ? `${h}:${pad(m)}:${pad(sec)}` : `${pad(m)}:${pad(sec)}`;
+}
+
+/**
+ * An episode's notes as the HTML podcast apps render in <description>.
+ *
+ * The admin stores show notes as Markdown; put in the feed verbatim, apps
+ * showed `[Click here!](https://…)` and `- ` bullets as literal text. Rendered
+ * with the email editor's renderer, which escapes everything first. A `]]>`
+ * cannot survive escaping, so the CDATA section cannot be closed early.
+ */
+export function feedNotesHtml(showNotesMd: unknown, description: unknown): string {
+  const source = String(showNotesMd ?? "").trim() || String(description ?? "").trim();
+  return source ? renderMarkdown(source) : "";
+}
+
+/**
+ * The <guid> a podcast app files an episode under.
+ *
+ * Apps de-duplicate on the guid, so it must never change for an episode that is
+ * already out there. Episodes imported from Kajabi (slug `kajabi-<id>`, written
+ * by backups/sheet-parity-20260929/podcast-import-kajabi.py) keep Kajabi's own
+ * `Kajabi-<id>`: when the show's directory listings are pointed at this feed,
+ * a subscriber's app sees the same nine episodes it already has, not nine new
+ * ones. Everything else keeps the `episode-<id>` it has always had.
+ */
+export function episodeGuid(ep: { id: number; slug: unknown }): string {
+  const kajabi = /^kajabi-(\d+)$/.exec(String(ep.slug ?? ""));
+  return kajabi ? `Kajabi-${kajabi[1]}` : `episode-${ep.id}`;
+}
+
+/**
+ * `<itunes:episode>`, or nothing for an episode without a number.
+ *
+ * Emitting `<itunes:episode>0</itunes:episode>` for an unnumbered episode (the
+ * Kajabi show's welcome trailer is one) made apps list it as "Episode 0".
+ */
+export function episodeNumberTags(episodeNumber: unknown): string {
+  const n = Number(episodeNumber);
+  return episodeNumber !== null && episodeNumber !== undefined && Number.isInteger(n) && n > 0
+    ? `      <itunes:episode>${n}</itunes:episode>\n`
+    : "";
 }
 
 /**
@@ -173,13 +215,12 @@ growthPublicRouter.get(
         const audioUrl = enclosureUrl(ep as { id: number; audio_url: unknown });
         return `    <item>
       <title>${xmlEscape(String(ep.title))}</title>
-      <description><![CDATA[${ep.show_notes_md || ep.description || ""}]]></description>
+      <description><![CDATA[${feedNotesHtml(ep.show_notes_md, ep.description)}]]></description>
       <pubDate>${rfc822(ep.published_at)}</pubDate>
-      <guid isPermaLink="false">episode-${ep.id}</guid>
+      <guid isPermaLink="false">${xmlEscape(episodeGuid(ep as { id: number; slug: unknown }))}</guid>
       <enclosure url="${xmlEscape(audioUrl)}" length="${Number(ep.audio_bytes) || 0}" type="audio/mpeg"/>
       <itunes:duration>${hhmmss(Number(ep.duration_seconds) || 0)}</itunes:duration>
-      <itunes:episode>${Number(ep.episode_number) || 0}</itunes:episode>
-      <itunes:season>${Number(ep.season) || 1}</itunes:season>
+${episodeNumberTags(ep.episode_number)}      <itunes:season>${Number(ep.season) || 1}</itunes:season>
       <itunes:explicit>${podcast.explicit ? "true" : "false"}</itunes:explicit>
     </item>`;
       })
@@ -192,7 +233,7 @@ growthPublicRouter.get(
 <rss version="2.0" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd" xmlns:content="http://purl.org/rss/1.0/modules/content/">
   <channel>
     <title>${xmlEscape(String(podcast.title))}</title>
-    <link>${xmlEscape(site)}</link>
+    <link>${xmlEscape(podcast.visibility === "private" ? site : `${site}/podcasts/${podcast.slug}`)}</link>
     <description><![CDATA[${podcast.description ?? ""}]]></description>
     <language>${xmlEscape(String(podcast.language ?? "en-us"))}</language>
     <itunes:author>${xmlEscape(String(podcast.author ?? ""))}</itunes:author>
@@ -210,6 +251,85 @@ ${items}
       res.setHeader("Cache-Control", "private, no-store");
     }
     res.type("application/rss+xml").send(xml);
+  }),
+);
+
+/**
+ * The id an episode's public address carries: `/podcasts/<show>/episodes/<id>`.
+ *
+ * Episodes imported from Kajabi keep Kajabi's number, so every link to the old
+ * site's episode pages (`/podcasts/lyrical-reflections/episodes/2148691037`)
+ * lands on the same episode here. Anything made in this app uses its own id.
+ */
+export function episodePathId(ep: { id: number; slug: unknown }): string {
+  const kajabi = /^kajabi-(\d+)$/.exec(String(ep.slug ?? ""));
+  return kajabi ? kajabi[1] : String(ep.id);
+}
+
+/**
+ * A stored media reference as a URL a stranger's browser can fetch — or "" when
+ * it is a protected file, which a public page must never hand out.
+ */
+export function publicMediaUrl(reference: unknown, site: string): string {
+  const value = String(reference ?? "").trim();
+  if (!value || isProtectedRef(value)) return "";
+  if (/^https?:\/\//i.test(value)) return value;
+  return `${site}${value.startsWith("/") ? "" : "/"}${value}`;
+}
+
+/**
+ * GET /podcast/:slug
+ *
+ * The public show page (frontend pages/Podcast.tsx, at the same
+ * /podcasts/<slug> address the show had on Kajabi). Only a published *public*
+ * show: a members-only show is 404 here exactly as it is on the RSS route
+ * without a token, so its existence is not advertised either.
+ */
+growthPublicRouter.get(
+  "/podcast/:slug",
+  asyncHandler(async (req, res) => {
+    const found = await pool.query(
+      `SELECT id, slug, title, description, cover_image, author, category
+         FROM podcasts
+        WHERE slug = $1 AND published = true AND visibility <> 'private'`,
+      [req.params.slug],
+    );
+    const podcast = found.rows[0];
+    if (!podcast) throw notFound("Podcast not found");
+
+    const episodes = await pool.query(
+      `SELECT id, slug, title, description, show_notes_md, audio_url, duration_seconds,
+              episode_number, season, published_at, cover_image
+         FROM podcast_episodes
+        WHERE podcast_id = $1 AND published = true
+        ORDER BY published_at DESC NULLS LAST, id DESC`,
+      [podcast.id],
+    );
+
+    const site = env.publicSiteUrl.replace(/\/$/, "");
+    const cover = publicMediaUrl(podcast.cover_image, site);
+    res.json({
+      slug: podcast.slug,
+      title: podcast.title,
+      description: podcast.description ?? "",
+      author: podcast.author ?? "",
+      category: podcast.category ?? "",
+      coverImage: cover,
+      feedUrl: `${site}/api/podcast/${encodeURIComponent(String(podcast.slug))}/rss.xml`,
+      episodes: episodes.rows.map((ep) => ({
+        id: ep.id,
+        pathId: episodePathId(ep),
+        title: ep.title,
+        description: ep.description ?? "",
+        showNotesMd: ep.show_notes_md ?? "",
+        audioUrl: publicMediaUrl(ep.audio_url, site),
+        durationSeconds: Number(ep.duration_seconds) || 0,
+        episodeNumber: ep.episode_number ?? null,
+        season: Number(ep.season) || 1,
+        publishedAt: ep.published_at ? new Date(ep.published_at).toISOString() : null,
+        coverImage: publicMediaUrl(ep.cover_image, site) || cover,
+      })),
+    });
   }),
 );
 

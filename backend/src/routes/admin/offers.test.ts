@@ -83,3 +83,37 @@ describe("PUT /admin/offers/:id", () => {
     expect(error?.message).toMatch(/cannot have a free trial/);
   });
 });
+
+/** Runs the GET / handler the way Express would. */
+async function list(queryString: Record<string, string> = {}) {
+  const layer = (adminOffersRouter.stack as any[]).find(
+    (l) => l.route?.path === "/" && l.route.methods.get,
+  );
+  const handler = layer.route.stack[0].handle;
+  return new Promise<{ body?: unknown; error?: any }>((resolve) => {
+    const res: any = {
+      status() {
+        return this;
+      },
+      json(payload: unknown) {
+        resolve({ body: payload });
+        return this;
+      },
+    };
+    handler({ query: queryString } as any, res, (error: unknown) => resolve({ error }));
+  });
+}
+
+describe("GET /admin/offers", () => {
+  beforeEach(() => query.mockReset());
+
+  it("counts sales imported from Kajabi alongside paid orders", async () => {
+    query.mockResolvedValueOnce({ rows: [{ ...legacyPlan, purchase_count: 21, products: [] }] });
+    const { error, body } = await list();
+    expect(error).toBeUndefined();
+    const sql = String(query.mock.calls[0][0]);
+    expect(sql).toMatch(/FROM orders ord\s+WHERE ord\.offer_id = o\.id AND ord\.status = 'paid'/);
+    expect(sql).toMatch(/COUNT\(DISTINCT pur\.contact_id\)::int FROM purchases pur\s+WHERE pur\.offer_id = o\.id AND pur\.source = 'kajabi'/);
+    expect((body as Array<{ purchaseCount: number }>)[0].purchaseCount).toBe(21);
+  });
+});

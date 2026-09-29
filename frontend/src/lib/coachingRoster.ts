@@ -43,6 +43,12 @@ export interface CoachingRosterProgram {
   sessionsIncluded: number | null;
   /** The package has no session limit. */
   openEnded: boolean;
+  /**
+   * `kajabi` — in this program because Kajabi listed them as holding its
+   * Kajabi product (migration 078). Their sessions happened on Kajabi, so a
+   * Kajabi-only program carries no allowance (`sessionsIncluded` null).
+   */
+  source?: "kajabi" | null;
   nextSessionAt: string | null;
   lastSessionAt: string | null;
 }
@@ -76,6 +82,8 @@ export interface CoachingRosterRow {
   openEnded: boolean;
   /** Sessions booked that no package pays for. */
   sessionsOutside: number;
+  /** At least one of the programs came over from Kajabi. */
+  fromKajabi: boolean;
   nextSessionAt: string | null;
   lastSessionAt: string | null;
   joinedAt: string | null;
@@ -127,8 +135,10 @@ export function rosterRows(clients: CoachingRosterClient[], filter = ""): Coachi
     let lastSessionAt: string | null = null;
     let joined = Number.POSITIVE_INFINITY;
     let joinedAt: string | null = null;
+    let fromKajabi = false;
 
     for (const program of programs) {
+      if (program.source === "kajabi") fromKajabi = true;
       if (program.access === "sessions" || program.sessionsIncluded === null) {
         sessionsOutside += program.sessionsUsed;
       } else {
@@ -164,6 +174,7 @@ export function rosterRows(clients: CoachingRosterClient[], filter = ""): Coachi
       sessionsIncluded,
       openEnded,
       sessionsOutside,
+      fromKajabi,
       nextSessionAt,
       lastSessionAt,
       joinedAt,
@@ -194,7 +205,30 @@ export function sessionsSummary(row: CoachingRosterRow): { main: string; note: s
         : `${row.sessionsUsed} used · no limit`;
     return { main, note: outside ? `+ ${outside} outside a package` : null };
   }
+  if (!outside && row.fromKajabi) {
+    // Kajabi's session history didn't come over, so "No sessions booked" would
+    // read as a client who never had one.
+    return { main: "None booked here yet", note: "earlier sessions were on Kajabi" };
+  }
   return { main: `${outside ?? "No sessions"} booked`, note: null };
+}
+
+/**
+ * How many people are in each program, for the program cards: offer id →
+ * clients. Somebody in a program twice (a grant and a Kajabi enrollment)
+ * counts once, and sessions outside any program aren't a program's.
+ */
+export function clientsPerProgram(clients: CoachingRosterClient[]): Map<number, number> {
+  const counts = new Map<number, number>();
+  for (const client of clients) {
+    const seen = new Set<number>();
+    for (const program of client.programs) {
+      if (program.offerId === null || seen.has(program.offerId)) continue;
+      seen.add(program.offerId);
+      counts.set(program.offerId, (counts.get(program.offerId) ?? 0) + 1);
+    }
+  }
+  return counts;
 }
 
 /**

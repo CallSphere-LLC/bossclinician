@@ -143,7 +143,9 @@ export default function Checkout() {
     <>
       <Seo
         title={`${offer.title} - Checkout - Boss Clinician`}
-        description={offer.description || `Complete your order for ${offer.title}.`}
+        // The description is the whole checkout pitch now (Kajabi copy, one line
+        // per paragraph); the meta tag only wants its opening line.
+        description={offer.description.split("\n").find((line) => line.trim())?.trim().slice(0, 160) || `Complete your order for ${offer.title}.`}
       />
       <CheckoutShell>
         <CheckoutExperience offer={offer} />
@@ -659,7 +661,7 @@ function CheckoutForm({ offer, pricingOption, mode, onAmountChange }: CheckoutFo
         <h1 className="text-balance font-display text-[1.9rem] font-normal leading-[1.14] text-white sm:text-[2.5rem]">
           {offer.checkoutHeadline || offer.title}
         </h1>
-        {offer.description && <p className="copy-luxe mt-4 max-w-xl text-pretty">{offer.description}</p>}
+        {offer.description && <p className="copy-luxe mt-4 max-w-xl whitespace-pre-line text-pretty">{offer.description}</p>}
         {!offer.cartItems && ["one_time","free"].includes(billing.pricingType) && <div className="mt-4 flex flex-wrap gap-4 text-sm text-gold">
           <button type="button" className="underline underline-offset-4" onClick={()=>{addToCart({slug:offer.slug,pricingOptionId:pricingOption.id,bumpProductIds:selectedBumps});navigate('/cart');}}>Add to cart</button>
           <Link to="/cart" className="underline underline-offset-4">View cart</Link>

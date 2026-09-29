@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  clientsPerProgram,
   coachingTabFrom,
   hasSessionsOutsidePrograms,
   NO_PROGRAM,
@@ -136,5 +137,41 @@ describe("coaching roster rows", () => {
     const [row] = rosterRows([buyer]);
     expect(sessionsSummary(row)).toEqual({ main: "0 of 6 used", note: null });
     expect(row.lastSessionTime).toBe(0);
+  });
+
+  it("says a Kajabi client's sessions were on Kajabi rather than 'none booked'", () => {
+    const kajabi: CoachingRosterClient = {
+      ...ALICE,
+      programs: [program({ offerId: 11, source: "kajabi", sessionsIncluded: null })],
+    };
+    const [row] = rosterRows([kajabi]);
+    expect(row.fromKajabi).toBe(true);
+    expect(sessionsSummary(row)).toEqual({
+      main: "None booked here yet",
+      note: "earlier sessions were on Kajabi",
+    });
+  });
+
+  it("counts a Kajabi client's sessions booked here like anyone else's", () => {
+    const kajabi: CoachingRosterClient = {
+      ...ALICE,
+      programs: [program({ offerId: 11, source: "kajabi", sessionsIncluded: null, sessionsUsed: 2 })],
+    };
+    const [row] = rosterRows([kajabi]);
+    expect(sessionsSummary(row)).toEqual({ main: "2 sessions booked", note: null });
+  });
+});
+
+describe("clients per program", () => {
+  it("counts each person once per program and ignores sessions outside one", () => {
+    const twice: CoachingRosterClient = {
+      ...ALICE,
+      key: "c11",
+      programs: [program({ offerId: 9 }), program({ offerId: 9, source: "kajabi" })],
+    };
+    const counts = clientsPerProgram([ALICE, DAN, twice]);
+    expect(counts.get(8)).toBe(1);
+    expect(counts.get(9)).toBe(2);
+    expect([...counts.keys()].sort()).toEqual([8, 9]);
   });
 });

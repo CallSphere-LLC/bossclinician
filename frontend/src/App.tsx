@@ -67,6 +67,9 @@ const CheckoutSuccessPage = lazyRoute(() => import("@/pages/CheckoutSuccess"));
  * here would hydrate against a loading placeholder instead of the server's
  * markup, so the routes and the preload list cannot be allowed to drift apart.
  */
+/** One component for both podcast addresses, so moving between them does not remount and refetch. */
+const PodcastPage = lazyRoute(() => import("@/pages/Podcast"));
+
 export const PUBLIC_ROUTES: readonly { path: string; Component: RouteComponent }[] = [
   { path: "/", Component: lazyRoute(() => import("@/pages/Home")) },
   { path: "/about", Component: lazyRoute(() => import("@/pages/About")) },
@@ -99,6 +102,11 @@ export const PUBLIC_ROUTES: readonly { path: string; Component: RouteComponent }
   { path: "/resource-hub", Component: lazyRoute(() => import("@/pages/ResourceHub")) },
   { path: "/blog", Component: lazyRoute(() => import("@/pages/Blog")) },
   { path: "/blog/:slug", Component: lazyRoute(() => import("@/pages/BlogPost")) },
+  // A public podcast, at the addresses it had on Kajabi (migration 080 removed
+  // the /blog redirects that stood in for it). The member area's own /podcasts
+  // list is a different path and stays behind RequireMember.
+  { path: "/podcasts/:slug", Component: PodcastPage },
+  { path: "/podcasts/:slug/episodes/:episodeId", Component: PodcastPage },
   { path: "/apply", Component: lazyRoute(() => import("@/pages/Apply")) },
   { path: "/checkout/success", Component: CheckoutSuccessPage },
   { path: "/contact", Component: lazyRoute(() => import("@/pages/Contact")) },

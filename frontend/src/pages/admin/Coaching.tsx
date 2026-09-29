@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { adminApi } from "@/lib/api";
 import { coachingAdminApi, type CoachingSessionFile } from "@/lib/coachingAdminApi";
 import {
+  clientsPerProgram,
   coachingTabFrom,
   hasSessionsOutsidePrograms,
   NO_PROGRAM,
@@ -139,10 +140,40 @@ function LoadProblem({ message, onRetry }: { message: string; onRetry: () => voi
   );
 }
 
-const COACHING_TABS: { value: CoachingTab; label: string; icon: typeof Headphones }[] = [
-  { value: "programs", label: "Programs", icon: Headphones },
-  { value: "sessions", label: "Sessions", icon: CalendarClock },
-  { value: "clients", label: "Clients", icon: Users },
+/**
+ * Three tabs, three different things — QA read "Programs" and "Sessions" as the
+ * same screen when each held one row naming the same program. The order and
+ * the one-line explainer under the tabs follow Kajabi's coaching screens: the
+ * programs (Kajabi's coaching products), then the people in them (Kajabi's
+ * Clients), then the calls themselves, which Kajabi keeps per client and this
+ * console also keeps in one list.
+ */
+const COACHING_TABS: {
+  value: CoachingTab;
+  label: string;
+  icon: typeof Headphones;
+  explainer: string;
+}[] = [
+  {
+    value: "programs",
+    label: "Programs",
+    icon: Headphones,
+    explainer: "The coaching packages you sell — what each includes, its price, and how many clients are in it.",
+  },
+  {
+    value: "clients",
+    label: "Clients",
+    icon: Users,
+    explainer:
+      "Everyone you coach, one row per person, with the programs they're in — including the clients who came over from Kajabi.",
+  },
+  {
+    value: "sessions",
+    label: "Booked sessions",
+    icon: CalendarClock,
+    explainer:
+      "Every coaching call on the calendar, past and upcoming, with its agenda, your private notes and what you shared afterwards.",
+  },
 ];
 
 /**
@@ -167,11 +198,15 @@ export default function Coaching() {
       (current) => {
         const next = new URLSearchParams(current);
         next.set("tab", coachingTabFrom(value));
+        // A program chosen from a program card narrows Clients only.
+        if (coachingTabFrom(value) !== "clients") next.delete("program");
         return next;
       },
       { replace: true },
     );
   }
+
+  const explainer = COACHING_TABS.find((item) => item.value === tab)?.explainer;
 
   return (
     <div className="space-y-6">
@@ -194,16 +229,17 @@ export default function Coaching() {
             </Tabs.Trigger>
           ))}
         </Tabs.List>
+        {explainer && <p className="mt-3 text-sm text-ink-soft">{explainer}</p>}
 
         <div className="mt-5">
           <Tabs.Content value="programs">
             <OffersTab />
           </Tabs.Content>
-          <Tabs.Content value="sessions">
-            <SessionsTab />
-          </Tabs.Content>
           <Tabs.Content value="clients">
             <ClientsTab />
+          </Tabs.Content>
+          <Tabs.Content value="sessions">
+            <SessionsTab />
           </Tabs.Content>
         </div>
       </Tabs.Root>
@@ -220,6 +256,9 @@ function OffersTab() {
   // holds the cents; keeping them apart lets her type freely mid-number.
   const [priceInput, setPriceInput] = useState("");
   const [confirm, confirmDialog] = useConfirm();
+  // Who's in each program, from the same roster the Clients tab shows. A
+  // failure leaves the counts off the cards rather than the cards off the page.
+  const [clientCounts, setClientCounts] = useState<Map<number, number> | null>(null);
 
   const load = useCallback(() => {
     setError(null);
@@ -227,6 +266,10 @@ function OffersTab() {
       .growthList<CoachingOffer>("coaching/offers")
       .then(setOffers)
       .catch(() => setError("We couldn't load your coaching programs."));
+    coachingAdminApi
+      .roster()
+      .then((page) => setClientCounts(clientsPerProgram(page.clients)))
+      .catch(() => setClientCounts(null));
   }, []);
 
   useEffect(load, [load]);
@@ -263,7 +306,7 @@ function OffersTab() {
     const ok = await confirm({
       title: `Delete “${offer.title}”?`,
       description:
-        "Sessions you've already booked stay in your list, but they'll no longer be attached to this program.",
+        "Sessions you've already booked stay in your list, but they'll no longer be attached to this program — and the clients listed under it, including the ones who came over from Kajabi, will no longer show as in it.",
       confirmLabel: "Yes, delete it",
       destructive: true,
     });
@@ -338,8 +381,26 @@ function OffersTab() {
                 {offer.priceCents ? formatCurrency(offer.priceCents, offer.currency) : "No price set"}
               </p>
               <p className="mt-1.5 text-xs text-ink-soft">
-                {pluralize(offer.sessionCount, "session")} · {offer.durationMinutes} minutes each
+                {/* 0 is how a program with no known session count is stored;
+                    showing "0 sessions · 60 minutes each" would state both. */}
+                {offer.sessionCount > 0
+                  ? `${pluralize(offer.sessionCount, "session")} · ${offer.durationMinutes} minutes each`
+                  : "No set number of sessions"}
               </p>
+              {offer.kajabiProduct && (
+                <p className="mt-1 text-xs text-ink-soft">
+                  On Kajabi: <span className="font-semibold text-ink">{offer.kajabiProduct}</span>
+                </p>
+              )}
+              {clientCounts && (
+                <Link
+                  to={`?tab=clients&program=${offer.id}`}
+                  className="mt-3 inline-flex items-center gap-1.5 text-sm font-semibold text-plum hover:underline"
+                >
+                  <Users className="size-4" />
+                  {pluralize(clientCounts.get(offer.id) ?? 0, "client")}
+                </Link>
+              )}
               <div className="mt-auto flex gap-2 pt-4">
                 <Button
                   variant="secondary"
@@ -401,7 +462,7 @@ function OffersTab() {
                 onChange={(e) => setDraft((d) => ({ ...d, description: e.target.value }))}
               />
             </Field>
-            <Field label="How many sessions?" hint="0 if it's open-ended">
+            <Field label="How many sessions?" hint="0 if there's no set number">
               <Input
                 type="number"
                 min={0}
@@ -1007,7 +1068,23 @@ function SessionsTab() {
 function ClientsTab() {
   const [clients, setClients] = useState<CoachingRosterClient[] | null>(null);
   const [offers, setOffers] = useState<CoachingOffer[]>([]);
-  const [programFilter, setProgramFilter] = useState("");
+  // The program filter lives in the address too (`&program=9`), so a program
+  // card's client count opens this tab already narrowed to that program.
+  const [params, setParams] = useSearchParams();
+  const programFilter = params.get("program") ?? "";
+  const setProgramFilter = useCallback(
+    (value: string) =>
+      setParams(
+        (current) => {
+          const next = new URLSearchParams(current);
+          if (value) next.set("program", value);
+          else next.delete("program");
+          return next;
+        },
+        { replace: true },
+      ),
+    [setParams],
+  );
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
@@ -1072,6 +1149,7 @@ function ClientsTab() {
               >
                 {program.title ?? "Not part of a program"}
                 {program.access === "ended" && " · ended"}
+                {program.source === "kajabi" && " · from Kajabi"}
               </Badge>
             ))}
           </div>

@@ -561,6 +561,24 @@ adminGrowthRouter.post(
 );
 
 adminGrowthRouter.use("/coaching/sessions", buildAdminCrudRouter(coachingSessionsRepo, anySchema, anySchema, "scheduled_at DESC NULLS LAST"));
+/**
+ * The coaching programs list, minus archived ones.
+ *
+ * Registered ahead of the generic router so every screen that lists programs
+ * (Coaching, All Products, the product catalog's picker) stops showing a
+ * program once it's archived — the dev fixture 078 archived was the first.
+ * `?archived=1` returns them all, archived included. Reading one by id, and
+ * editing it, still go through the generic router below.
+ */
+adminGrowthRouter.get(
+  "/coaching/offers",
+  asyncHandler(async (req, res) => {
+    const withArchived = req.query.archived === "1" || req.query.archived === "true";
+    res.json(
+      await coachingOffersRepo.list(withArchived ? {} : { where: "archived_at IS NULL" }),
+    );
+  }),
+);
 adminGrowthRouter.use("/coaching/offers", buildAdminCrudRouter(coachingOffersRepo, anySchema, anySchema));
 
 /* ---------------------------------------------------------------- Podcasts */

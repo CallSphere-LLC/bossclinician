@@ -3,7 +3,10 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router";
 import { motion } from "motion/react";
 import {
+  Archive,
+  ArchiveRestore,
   ArrowUpRight,
+  ChevronDown,
   Hash,
   MessagesSquare,
   Plus,
@@ -58,10 +61,11 @@ export default function CommunityList() {
     access: "free",
   });
   const [confirm, confirmDialog] = useConfirm();
+  const [showArchived, setShowArchived] = useState(false);
 
   const load = useCallback(() => {
     adminApi
-      .communities()
+      .communities({ includeArchived: true })
       .then(setCommunities)
       .catch(() =>
         setError("We couldn't load your communities. Try refreshing the page."),
@@ -92,6 +96,148 @@ export default function CommunityList() {
     } finally {
       setSaving(false);
     }
+  }
+
+  async function handleArchive(community: Community) {
+    const ok = await confirm({
+      title: `Archive “${community.name}”?`,
+      description:
+        "Members lose access and it leaves this list, but its members, channels and history are kept. You can restore it any time.",
+      confirmLabel: "Archive community",
+    });
+    if (!ok) return;
+    try {
+      await adminApi.communityArchive(Number(community.id));
+      toast.success("Community archived");
+      load();
+    } catch (err) {
+      toast.error(friendlyError(err, "community"));
+    }
+  }
+
+  async function handleRestore(community: Community) {
+    try {
+      await adminApi.communityRestore(Number(community.id));
+      toast.success("Community restored — publish it when you're ready");
+      load();
+    } catch (err) {
+      toast.error(friendlyError(err, "community"));
+    }
+  }
+
+  const active = communities?.filter((c) => !c.archivedAt) ?? [];
+  const archived = communities?.filter((c) => c.archivedAt) ?? [];
+
+  function renderCard(community: Community, i: number) {
+    const isArchived = Boolean(community.archivedAt);
+    return (
+      <motion.div
+        key={community.id}
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: Math.min(i * 0.05, 0.3) }}
+      >
+        <Card className="group relative h-full overflow-hidden transition-all hover:-translate-y-0.5 hover:border-plum/30 hover:shadow-[0_20px_44px_-22px_rgba(15,30,58,0.4)]">
+          <div className="relative h-24 bg-surface-raised">
+            {community.coverImage && (
+              <img
+                src={community.coverImage}
+                alt=""
+                className="size-full object-cover opacity-70"
+              />
+            )}
+            <div className="absolute inset-x-4 bottom-3 flex items-center gap-2">
+              <Badge
+                tone={community.access === "paid" ? "gold" : "neutral"}
+                className="!bg-night-deep/80 !text-white ring-1 ring-white/15 backdrop-blur"
+              >
+                {accessBadge(community.access)}
+              </Badge>
+              {isArchived ? (
+                <Badge
+                  tone="slate"
+                  className="!bg-night-deep/80 !text-white ring-1 ring-white/15 backdrop-blur"
+                >
+                  Archived
+                </Badge>
+              ) : (
+                !community.published && (
+                  <Badge
+                    tone="slate"
+                    className="!bg-night-deep/80 !text-white ring-1 ring-white/15 backdrop-blur"
+                  >
+                    {PUBLISH_LABEL.draft}
+                  </Badge>
+                )
+              )}
+            </div>
+          </div>
+
+          <div className="p-5">
+            <h3 className="font-display text-lg text-ink">{community.name}</h3>
+            <p className="mt-1 line-clamp-2 min-h-[2.5rem] text-sm text-ink-soft">
+              {community.description || "No description yet."}
+            </p>
+
+            <dl className="mt-4 grid grid-cols-3 gap-2 border-t border-hairline/70 pt-3.5">
+              <Stat
+                icon={<Hash className="size-3.5" />}
+                label="Channels"
+                value={community.channelCount}
+              />
+              <Stat
+                icon={<Users className="size-3.5" />}
+                label="Members"
+                value={community.memberCount}
+              />
+              <Stat
+                icon={<MessagesSquare className="size-3.5" />}
+                label="Posts"
+                value={community.postCount}
+              />
+            </dl>
+
+            <div className="mt-4 flex gap-2">
+              <Button asChild size="sm" className="flex-1">
+                <Link to={`/admin/community/${community.id}`}>
+                  Manage
+                  <ArrowUpRight />
+                </Link>
+              </Button>
+              {isArchived ? (
+                <Button
+                  variant="secondary"
+                  size="iconSm"
+                  aria-label={`Restore ${community.name}`}
+                  title="Restore"
+                  onClick={() => handleRestore(community)}
+                >
+                  <ArchiveRestore />
+                </Button>
+              ) : (
+                <Button
+                  variant="secondary"
+                  size="iconSm"
+                  aria-label={`Archive ${community.name}`}
+                  title="Archive"
+                  onClick={() => handleArchive(community)}
+                >
+                  <Archive />
+                </Button>
+              )}
+              <Button
+                variant="dangerGhost"
+                size="iconSm"
+                aria-label={`Delete ${community.name}`}
+                onClick={() => handleDelete(community)}
+              >
+                <Trash2 />
+              </Button>
+            </div>
+          </div>
+        </Card>
+      </motion.div>
+    );
   }
 
   async function handleDelete(community: Community) {
@@ -135,103 +281,53 @@ export default function CommunityList() {
             <Skeleton key={i} className="h-52 w-full" />
           ))}
         </div>
-      ) : communities.length === 0 ? (
-        <Card>
-          <EmptyState
-            icon={<MessagesSquare />}
-            title="No communities yet"
-            description="Create your first space, then add the channels, challenges and live events your members get."
-            action={
-              <Button size="sm" onClick={() => setCreating(true)}>
-                <Plus />
-                Create community
-              </Button>
-            }
-          />
-        </Card>
       ) : (
-        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
-          {communities.map((community, i) => (
-            <motion.div
-              key={community.id}
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: Math.min(i * 0.05, 0.3) }}
-            >
-              <Card className="group relative h-full overflow-hidden transition-all hover:-translate-y-0.5 hover:border-plum/30 hover:shadow-[0_20px_44px_-22px_rgba(15,30,58,0.4)]">
-                <div className="relative h-24 bg-surface-raised">
-                  {community.coverImage && (
-                    <img
-                      src={community.coverImage}
-                      alt=""
-                      className="size-full object-cover opacity-70"
-                    />
-                  )}
-                  <div className="absolute inset-x-4 bottom-3 flex items-center gap-2">
-                    <Badge
-                      tone={community.access === "paid" ? "gold" : "neutral"}
-                      className="!bg-night-deep/80 !text-white ring-1 ring-white/15 backdrop-blur"
-                    >
-                      {accessBadge(community.access)}
-                    </Badge>
-                    {!community.published && (
-                      <Badge
-                        tone="slate"
-                        className="!bg-night-deep/80 !text-white ring-1 ring-white/15 backdrop-blur"
-                      >
-                        {PUBLISH_LABEL.draft}
-                      </Badge>
-                    )}
-                  </div>
+        <>
+          {active.length === 0 ? (
+            <Card>
+              <EmptyState
+                icon={<MessagesSquare />}
+                title="No communities yet"
+                description="Create your first space, then add the channels, challenges and live events your members get."
+                action={
+                  <Button size="sm" onClick={() => setCreating(true)}>
+                    <Plus />
+                    Create community
+                  </Button>
+                }
+              />
+            </Card>
+          ) : (
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+              {active.map(renderCard)}
+            </div>
+          )}
+
+          {archived.length > 0 && (
+            <section aria-label="Archived communities" className="space-y-4">
+              <button
+                type="button"
+                onClick={() => setShowArchived((v) => !v)}
+                aria-expanded={showArchived}
+                className="flex items-center gap-1.5 text-sm font-semibold text-ink-soft transition-colors hover:text-plum"
+              >
+                <ChevronDown
+                  className={
+                    showArchived
+                      ? "size-4 transition-transform"
+                      : "size-4 -rotate-90 transition-transform"
+                  }
+                />
+                Archived ({formatNumber(archived.length)})
+              </button>
+              {showArchived && (
+                <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+                  {archived.map(renderCard)}
                 </div>
-
-                <div className="p-5">
-                  <h3 className="font-display text-lg text-ink">
-                    {community.name}
-                  </h3>
-                  <p className="mt-1 line-clamp-2 min-h-[2.5rem] text-sm text-ink-soft">
-                    {community.description || "No description yet."}
-                  </p>
-
-                  <dl className="mt-4 grid grid-cols-3 gap-2 border-t border-hairline/70 pt-3.5">
-                    <Stat
-                      icon={<Hash className="size-3.5" />}
-                      label="Channels"
-                      value={community.channelCount}
-                    />
-                    <Stat
-                      icon={<Users className="size-3.5" />}
-                      label="Members"
-                      value={community.memberCount}
-                    />
-                    <Stat
-                      icon={<MessagesSquare className="size-3.5" />}
-                      label="Posts"
-                      value={community.postCount}
-                    />
-                  </dl>
-
-                  <div className="mt-4 flex gap-2">
-                    <Button asChild size="sm" className="flex-1">
-                      <Link to={`/admin/community/${community.id}`}>
-                        Manage
-                        <ArrowUpRight />
-                      </Link>
-                    </Button>
-                    <Button
-                      variant="dangerGhost"
-                      size="iconSm"
-                      aria-label={`Delete ${community.name}`}
-                      onClick={() => handleDelete(community)}
-                    >
-                      <Trash2 />
-                    </Button>
-                  </div>
-                </div>
-              </Card>
-            </motion.div>
-          ))}
-        </div>
+              )}
+            </section>
+          )}
+        </>
       )}
 
       <Modal

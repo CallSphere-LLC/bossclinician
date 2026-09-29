@@ -120,6 +120,8 @@ export interface Community {
   coverImage: string;
   access: "free" | "paid" | string;
   published: boolean;
+  /** Set when the community is archived (retired, hidden from members, kept for the record). */
+  archivedAt?: string | null;
   createdAt: string;
   channelCount: number;
   memberCount: number;
@@ -447,6 +449,10 @@ export interface CoachingOffer {
   bookingUrl: string;
   published: boolean;
   sort: number;
+  /** Set when the program is archived; archived programs aren't listed. */
+  archivedAt?: string | null;
+  /** The Kajabi product this program was on Kajabi (migration 078), or "". */
+  kajabiProduct?: string;
 }
 
 export interface CoachingSession {

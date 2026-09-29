@@ -532,7 +532,13 @@ export const adminApi = {
     request<void>(`/admin/members/${id}/enrollments/${courseId}`, { method: "DELETE" }),
 
   // ---- Community ----
-  communities: () => request<Community[]>("/admin/community"),
+  /** Live communities; `includeArchived` also returns the archived ones (the Community page only). */
+  communities: (opts?: { includeArchived?: boolean }) =>
+    request<Community[]>(`/admin/community${opts?.includeArchived ? "?include=archived" : ""}`),
+  communityArchive: (id: number) =>
+    request<Community>(`/admin/community/${id}/archive`, { method: "POST" }),
+  communityRestore: (id: number) =>
+    request<Community>(`/admin/community/${id}/restore`, { method: "POST" }),
   communityCreate: (data: Record<string, unknown>) =>
     request<Community>("/admin/community", { method: "POST", body: JSON.stringify(data) }),
   community: (id: number) => request<CommunityDetail>(`/admin/community/${id}`),

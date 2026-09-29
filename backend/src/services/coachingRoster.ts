@@ -15,6 +15,13 @@ import { pool } from "../db/pool";
  *      left out; expired ones stay, marked as ended, because they were a client.
  *   2. A booked session, whoever booked it. Admin-booked sessions carry no
  *      grant and no credit at all, so a session is enough on its own.
+ *   3. A coaching enrollment (`coaching_enrollments`, migration 078): someone
+ *      who is in a program without having bought it here — today, the Kajabi
+ *      clients, matched on the Kajabi product the program was. It counts like a
+ *      grant for membership but entitles nobody to anything, and because their
+ *      sessions happened on Kajabi a Kajabi-only program reports no allowance
+ *      ("sessionsIncluded" null) instead of a false "0 of 6 used". Enrollments
+ *      in an archived program are left out.
  *
  * `coaching_credits` is deliberately NOT a source of membership. It is written
  * lazily, the first time a member opens their coaching page, so a buyer who
@@ -42,7 +49,9 @@ WITH entries AS (
          NULL::boolean     AS grant_live,
          s.status,
          s.scheduled_at,
-         COALESCE(s.booked_at, s.created_at) AS booked_at
+         COALESCE(s.booked_at, s.created_at) AS booked_at,
+         false             AS is_grant,
+         NULL::text        AS source
     FROM coaching_sessions s
     LEFT JOIN members m ON m.id = s.member_id
    WHERE s.member_id IS NOT NULL OR s.contact_id IS NOT NULL
@@ -52,12 +61,25 @@ WITH entries AS (
          p.coaching_offer_id,
          g.granted_at,
          g.status = 'active' AND (g.expires_at IS NULL OR g.expires_at > now()),
-         NULL, NULL, NULL
+         NULL, NULL, NULL,
+         true,
+         NULL
     FROM access_grants g
     JOIN products p ON p.id = g.product_id AND p.kind = 'coaching'
     JOIN members m  ON m.id = g.member_id
    WHERE g.status <> 'revoked'
      AND m.status <> 'deleted'
+  UNION ALL
+  SELECT e.contact_id,
+         e.member_id,
+         e.coaching_offer_id,
+         e.enrolled_at,
+         e.status = 'active',
+         NULL, NULL, NULL,
+         true,
+         e.source
+    FROM coaching_enrollments e
+    JOIN coaching_offers o ON o.id = e.coaching_offer_id AND o.archived_at IS NULL
 ),
 keyed AS (
   SELECT CASE WHEN contact_id IS NOT NULL THEN 'c' || contact_id ELSE 'm' || member_id END AS person_key,
@@ -67,7 +89,11 @@ keyed AS (
 per_program AS (
   SELECT person_key,
          offer_id,
-         COUNT(granted_at)                                            AS grants,
+         COUNT(*) FILTER (WHERE is_grant)                             AS grants,
+         -- Every grant behind this program is a Kajabi enrollment: the
+         -- sessions happened on Kajabi, so nothing here knows how many are left.
+         COALESCE(bool_and(COALESCE(source, '') = 'kajabi') FILTER (WHERE is_grant), false) AS kajabi_only,
+         COALESCE(bool_or(source = 'kajabi'), false)                  AS from_kajabi,
          MIN(granted_at)                                              AS granted_at,
          bool_or(grant_live)                                          AS grant_live,
          COUNT(*) FILTER (WHERE status IS NOT NULL AND status <> 'cancelled') AS sessions_used,
@@ -111,10 +137,12 @@ SELECT pe.person_key AS key,
            'sessionsUsed',     pp.sessions_used,
            'sessionsIncluded', CASE WHEN o.id IS NULL THEN NULL
                                     WHEN ct.sessions_total IS NOT NULL THEN ct.sessions_total
+                                    WHEN pp.kajabi_only THEN NULL
                                     WHEN pp.grants > 0 THEN GREATEST(o.session_count, 0)
                                     END,
            'openEnded',        o.id IS NOT NULL AND o.session_count <= 0
-                               AND (pp.grants > 0 OR ct.sessions_total IS NOT NULL),
+                               AND ((pp.grants > 0 AND NOT pp.kajabi_only) OR ct.sessions_total IS NOT NULL),
+           'source',           CASE WHEN pp.from_kajabi THEN 'kajabi' END,
            'nextSessionAt',    pp.next_session_at,
            'lastSessionAt',    pp.last_session_at
          )
@@ -146,6 +174,13 @@ export interface CoachingRosterProgram {
   sessionsIncluded: number | null;
   /** The package has no session limit (session count 0). */
   openEnded: boolean;
+  /**
+   * `kajabi` when the person is in this program because Kajabi's contacts
+   * export listed them as holding its Kajabi product (coaching_enrollments,
+   * migration 078). Their sessions happened on Kajabi, so `sessionsIncluded` is
+   * null for them rather than a "0 of 6 used" nobody could vouch for.
+   */
+  source: "kajabi" | null;
   nextSessionAt: string | null;
   lastSessionAt: string | null;
 }

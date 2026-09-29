@@ -144,7 +144,12 @@ function isUniqueViolation(err: unknown): boolean {
 
 adminCommunityRouter.get(
   "/",
-  asyncHandler(async (_req, res) => {
+  asyncHandler(async (req, res) => {
+    // Archived spaces are left out unless asked for: every picker that offers
+    // "which community?" (products, events, automations) reads this list, and
+    // none of them should offer a retired one. The Community page asks for
+    // them to file under "Archived".
+    const includeArchived = req.query.include === "archived";
     const result = await pool.query(
       // Every channel in the room, whatever its visibility or tier and whoever
       // is in it. The card's CHANNELS figure has to agree with the list on the
@@ -163,7 +168,10 @@ adminCommunityRouter.get(
            JOIN community_channels ch2 ON ch2.id = p.channel_id
           WHERE ch2.community_id = c.id)                                                  AS post_count
        FROM communities c
-       ORDER BY c.created_at DESC`,
+       WHERE $1::boolean OR c.archived_at IS NULL
+       -- Live spaces first, then the archived ones Kajabi also files away.
+       ORDER BY (c.archived_at IS NOT NULL), c.created_at DESC`,
+      [includeArchived],
     );
     res.json(rowsToCamel(result.rows));
   }),
@@ -273,6 +281,51 @@ adminCommunityRouter.put(
       `UPDATE communities SET ${update.clause}, updated_at = now()
        WHERE id = $${update.values.length + 1} RETURNING *`,
       [...update.values, req.params.id],
+    );
+    if (result.rowCount === 0) throw notFound("Community not found");
+    // Publishing an archived community brings it back: a space members can
+    // walk into is, by definition, not a retired one.
+    if (req.body?.published === true && result.rows[0].archived_at) {
+      const restored = await pool.query(
+        `UPDATE communities SET archived_at = NULL WHERE id = $1 RETURNING *`,
+        [req.params.id],
+      );
+      res.json(rowToCamel(restored.rows[0]));
+      return;
+    }
+    res.json(rowToCamel(result.rows[0]));
+  }),
+);
+
+/**
+ * POST /:id/archive — retire a community without losing who was in it.
+ *
+ * Kajabi's archive: the space drops out of the live list and out of every
+ * member's reach (it is unpublished, and all member-side queries gate on
+ * `published`), while its members, channels and history stay for the record.
+ * Restoring clears the flag and leaves it unpublished, so going live again is
+ * a deliberate second step.
+ */
+adminCommunityRouter.post(
+  "/:id/archive",
+  asyncHandler(async (req, res) => {
+    const result = await pool.query(
+      `UPDATE communities
+          SET archived_at = COALESCE(archived_at, now()), published = false, updated_at = now()
+        WHERE id = $1 RETURNING *`,
+      [req.params.id],
+    );
+    if (result.rowCount === 0) throw notFound("Community not found");
+    res.json(rowToCamel(result.rows[0]));
+  }),
+);
+
+adminCommunityRouter.post(
+  "/:id/restore",
+  asyncHandler(async (req, res) => {
+    const result = await pool.query(
+      `UPDATE communities SET archived_at = NULL, updated_at = now() WHERE id = $1 RETURNING *`,
+      [req.params.id],
     );
     if (result.rowCount === 0) throw notFound("Community not found");
     res.json(rowToCamel(result.rows[0]));

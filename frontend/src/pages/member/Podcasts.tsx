@@ -14,6 +14,7 @@ import { Seo } from "@/components/Seo";
 import { MemberShell } from "@/components/member/MemberShell";
 import { GlassCard } from "@/components/luxe/GlassCard";
 import { TranscriptPanel } from "@/components/player/TranscriptPanel";
+import { ShowNotesPanel } from "@/components/podcast/ShowNotes";
 import { LuxeButton, LuxePill } from "@/components/luxe/LuxeButton";
 import { MemberApiError } from "@/lib/memberApi";
 import { publishingApi, type MemberPodcast, type PodcastEpisode } from "@/lib/publishingApi";
@@ -381,9 +382,9 @@ function EpisodeRow({
   onToggle: () => void;
 }) {
   const length = episodeLength(episode.durationSeconds);
-  // The API sends it on every episode; `lib/publishingApi` has not named the
-  // field yet, and an older cached response will not carry it at all.
-  const transcript = (episode as PodcastEpisode & { transcript?: string }).transcript ?? "";
+  // An older cached response will not carry either field at all.
+  const transcript = episode.transcript ?? "";
+  const showNotes = episode.showNotesMd ?? "";
 
   return (
     <div className="py-3.5">
@@ -435,6 +436,14 @@ function EpisodeRow({
           className="mt-3 w-full"
           aria-label={`${episode.title} audio player`}
         />
+      )}
+
+      {/* The full notes (links included) behind the two-line summary above —
+          on Kajabi they were the body of each episode's page. */}
+      {showNotes.trim() !== "" && (
+        <div className="mt-3">
+          <ShowNotesPanel markdown={showNotes} />
+        </div>
       )}
 
       {/* Renders nothing for an episode without one. Offered whether or not the

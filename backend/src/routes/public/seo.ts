@@ -119,6 +119,34 @@ seoRouter.get(
           priority: "0.8",
         }),
       },
+      // Public podcast shows and their episodes, at the addresses they had on
+      // Kajabi (frontend pages/Podcast.tsx; the episode id is Kajabi's for an
+      // imported episode — see episodePathId in routes/public/growthPublic.ts).
+      // Members-only shows have no public page and are left out.
+      {
+        sql: `SELECT slug, updated_at FROM podcasts
+               WHERE published = true AND visibility <> 'private' ORDER BY title`,
+        map: (r) => ({
+          loc: `${base}/podcasts/${r.slug as string}`,
+          lastmod: r.updated_at as string,
+          changefreq: "weekly",
+          priority: "0.6",
+        }),
+      },
+      {
+        sql: `SELECT p.slug AS show_slug, e.updated_at,
+                     CASE WHEN e.slug ~ '^kajabi-[0-9]+$' THEN substring(e.slug from 8)
+                          ELSE e.id::text END AS path_id
+                FROM podcast_episodes e JOIN podcasts p ON p.id = e.podcast_id
+               WHERE e.published = true AND p.published = true AND p.visibility <> 'private'
+               ORDER BY e.published_at DESC NULLS LAST`,
+        map: (r) => ({
+          loc: `${base}/podcasts/${r.show_slug as string}/episodes/${r.path_id as string}`,
+          lastmod: r.updated_at as string,
+          changefreq: "monthly",
+          priority: "0.5",
+        }),
+      },
       // Two blocks were removed from here rather than fixed, because there was
       // nothing to fix: they advertised paths the app does not route.
       //
@@ -127,16 +155,14 @@ seoRouter.get(
       //    fill in a page that already has its own route. There is no
       //    `/:slug` route, so every one of those URLs was a 404 with a
       //    priority attached to it.
-      //  - `podcasts` was emitted as `/podcasts/<slug>`. `/podcasts` exists,
-      //    but only inside the member area behind `RequireMember`, and there
-      //    is no per-show route at all.
+      //  - `podcasts` was emitted as `/podcasts/<slug>` before any such page
+      //    existed. It does now (2026-09-29), and is listed again above.
       //
       // Submitting either is worse than omitting it: a sitemap full of 404s is
       // how a domain loses the crawl budget it needs on the week it changes
-      // platforms, which is exactly the week this file matters. If a public
-      // podcast page is built later, its block belongs back here — checked
-      // against the route table in frontend/src/App.tsx, which is the list of
-      // paths that actually resolve.
+      // platforms, which is exactly the week this file matters. Any block added
+      // here is checked against the route table in frontend/src/App.tsx, which
+      // is the list of paths that actually resolve.
     ];
 
     for (const block of blocks) {
