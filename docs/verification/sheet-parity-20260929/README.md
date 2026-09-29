@@ -84,8 +84,13 @@ scheduled job.
 - Coaching: 5 programs (fixture archived); client counts Club 5, Practice Reset Intensive 25.
 - Communities: The Boss and The Lounge active; unicorn and Boss Builders archived.
 - The deployed AdminApp bundle contains the new "Booked sessions" and "from Kajabi" UI.
-- The admin API sits behind nginx basic auth, so the admin views were checked through the
-  live database and the deployed bundle, not a browser session.
+- Admin routes, run inside the deployed backend container with an owner context (nginx basic
+  auth blocks them from outside, and `backend/.env` ADMIN_PASSWORD no longer matches the live
+  login): coaching offers 4 (5 with `?archived=1`), roster 29 clients all with Kajabi-sourced
+  programs and `sessionsIncluded: null`, 0 booked sessions; community list The Lounge + The Boss
+  (4 with archived); offers 23, offer 19 `purchaseCount` 21. No page was opened in a browser.
+- The Lounge going paid locks out no one: its only Kajabi buyer (Lounge VIP, 2026-03-10) was
+  refunded with access revoked.
 
 ## Blocked on Kajabi admin access (export or a signed-in session)
 
