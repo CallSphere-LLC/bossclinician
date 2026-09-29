@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, useParams } from "react-router";
-import { ArrowLeft, CalendarClock, CreditCard, Package, ReceiptText, UserRound } from "lucide-react";
+import { ArrowLeft, CalendarClock, CreditCard, Package, ReceiptText, Tag as TagIcon, UserRound } from "lucide-react";
 import {
   accessDateText,
   purchasesApi,
@@ -244,6 +244,8 @@ export default function PurchaseDetail() {
         </ul>
       </Card>
 
+      {hasDiscount(purchase) && <OrderSummary purchase={purchase} />}
+
       <Card>
         <CardHeader title="Transactions" icon={<ReceiptText className="size-4" />} />
         {detail.transactions.length === 0 ? (
@@ -274,13 +276,67 @@ export default function PurchaseDetail() {
   );
 }
 
+/** "$3,997.00 USD" — the server's money format (purchaseModel `money()`), for figures summed here. */
+function moneyText(cents: number, currency: string): string {
+  const code = (currency || "usd").toUpperCase();
+  return `${new Intl.NumberFormat("en-US", { style: "currency", currency: code, minimumFractionDigits: 2 }).format(cents / 100)} ${code}`;
+}
+
 /** Refunds, summed from the Transactions list so the figure always agrees with it. */
 function refundText(detail: Detail): string {
   const refunds = detail.transactions.filter((t) => t.status === "refunded");
   if (refunds.length === 1) return refunds[0].amountText;
-  const currency = detail.purchase.currency.toUpperCase();
-  const cents = detail.purchase.refundedCents;
-  return `${new Intl.NumberFormat("en-US", { style: "currency", currency, minimumFractionDigits: 2 }).format(cents / 100)} ${currency}`;
+  return moneyText(detail.purchase.refundedCents, detail.purchase.currency);
+}
+
+/** A coupon or a discount is recorded — the only time Kajabi draws an Order summary. */
+function hasDiscount(purchase: Purchase): boolean {
+  return Boolean(purchase.couponCode) || (purchase.discountCents ?? 0) > 0;
+}
+
+/**
+ * Kajabi's "Order summary" for a discounted order: Subtotal $3,997.00 USD,
+ * Discount [CODE] -$3,997.00 USD, Total $0.00 USD. A plan shows only the
+ * discount: its total is every instalment, and the coupon is on one order.
+ */
+function OrderSummary({ purchase }: { purchase: Purchase }) {
+  const oneOff = purchase.kind === "one_time" || purchase.kind === "free";
+  const subtotal = oneOff ? purchase.subtotalCents : null;
+  return (
+    <Card>
+      <CardHeader title="Order summary" icon={<TagIcon className="size-4" />} />
+      <dl className="divide-y divide-hairline/60 px-5 text-sm">
+        {subtotal !== null && (
+          <SummaryRow label="Subtotal" value={<Amount>{moneyText(subtotal, purchase.currency)}</Amount>} />
+        )}
+        <SummaryRow
+          label={
+            <span className="inline-flex flex-wrap items-center gap-2">
+              Discount
+              {purchase.couponCode && <Badge tone="slate">{purchase.couponCode}</Badge>}
+            </span>
+          }
+          value={
+            typeof purchase.discountCents === "number" ? (
+              <Amount>{`−${moneyText(purchase.discountCents, purchase.currency)}`}</Amount>
+            ) : (
+              <Muted>Coupon applied</Muted>
+            )
+          }
+        />
+        {oneOff && <SummaryRow label="Total" value={<Amount>{purchase.totalText}</Amount>} strong />}
+      </dl>
+    </Card>
+  );
+}
+
+function SummaryRow({ label, value, strong = false }: { label: ReactNode; value: ReactNode; strong?: boolean }) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 py-3">
+      <dt className={strong ? "font-semibold text-ink" : "text-ink-soft"}>{label}</dt>
+      <dd className="text-right text-ink">{value}</dd>
+    </div>
+  );
 }
 
 /** One offer of the purchase: picture, title, price, quantity, and the dates it gave access. */

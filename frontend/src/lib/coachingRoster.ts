@@ -51,6 +51,18 @@ export interface CoachingRosterProgram {
   source?: "kajabi" | null;
   nextSessionAt: string | null;
   lastSessionAt: string | null;
+  /**
+   * Program progress's "of 6" (Kajabi's Program Progress column): the
+   * enrollment's own total — a Kajabi client's, migration 086 — or else the
+   * package's allowance. Null when unknown, when the package has no limit, or
+   * when there's no package at all.
+   */
+  sessionsTotal: number | null;
+  /**
+   * Program progress's "Completed 3": sessions marked completed here, plus any
+   * a Kajabi client completed on Kajabi before the move.
+   */
+  sessionsCompleted: number;
 }
 
 export interface CoachingRosterClient {
@@ -84,6 +96,14 @@ export interface CoachingRosterRow {
   sessionsOutside: number;
   /** At least one of the programs came over from Kajabi. */
   fromKajabi: boolean;
+  /** Program progress: sessions completed in the row's programs. */
+  sessionsCompleted: number;
+  /**
+   * Program progress's "of N": what the row's programs hold between them. Null
+   * when none is known, or when a program with sessions completed has no known
+   * total (an "of N" would then leave its sessions out of the N).
+   */
+  sessionsTotal: number | null;
   nextSessionAt: string | null;
   lastSessionAt: string | null;
   joinedAt: string | null;
@@ -136,9 +156,21 @@ export function rosterRows(clients: CoachingRosterClient[], filter = ""): Coachi
     let joined = Number.POSITIVE_INFINITY;
     let joinedAt: string | null = null;
     let fromKajabi = false;
+    let sessionsCompleted = 0;
+    let sessionsTotal: number | null = null;
+    let totalUnknown = false;
 
     for (const program of programs) {
       if (program.source === "kajabi") fromKajabi = true;
+      // Program progress is about programs, so sessions booked outside one
+      // don't count towards it (the Sessions column still shows them). A
+      // program nobody knows the size of adds nothing to the "of N", and only
+      // spoils it once it has sessions completed that the N would leave out.
+      if (program.offerId !== null) {
+        sessionsCompleted += program.sessionsCompleted;
+        if (program.sessionsTotal !== null) sessionsTotal = (sessionsTotal ?? 0) + program.sessionsTotal;
+        else if (program.sessionsCompleted > 0) totalUnknown = true;
+      }
       if (program.access === "sessions" || program.sessionsIncluded === null) {
         sessionsOutside += program.sessionsUsed;
       } else {
@@ -175,6 +207,8 @@ export function rosterRows(clients: CoachingRosterClient[], filter = ""): Coachi
       openEnded,
       sessionsOutside,
       fromKajabi,
+      sessionsCompleted,
+      sessionsTotal: totalUnknown ? null : sessionsTotal,
       nextSessionAt,
       lastSessionAt,
       joinedAt,
@@ -211,6 +245,21 @@ export function sessionsSummary(row: CoachingRosterRow): { main: string; note: s
     return { main: "None booked here yet", note: "earlier sessions were on Kajabi" };
   }
   return { main: `${outside ?? "No sessions"} booked`, note: null };
+}
+
+/**
+ * The Program progress cell, in Kajabi's words: "Completed 3 of 6 sessions";
+ * "Completed 2 sessions" when nobody knows how many the program holds; a dash
+ * when there's nothing to say (no known total and nothing completed).
+ */
+export function progressSummary(row: Pick<CoachingRosterRow, "sessionsCompleted" | "sessionsTotal">): string {
+  const done = row.sessionsCompleted;
+  const total = row.sessionsTotal;
+  if (total !== null && total > 0) {
+    return `Completed ${done} of ${total} ${total === 1 ? "session" : "sessions"}`;
+  }
+  if (done > 0) return `Completed ${done} ${done === 1 ? "session" : "sessions"}`;
+  return "—";
 }
 
 /**

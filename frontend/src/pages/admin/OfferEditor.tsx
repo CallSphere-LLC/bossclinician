@@ -108,6 +108,7 @@ type OfferDraft = Omit<OfferInput, "slug" | "status">;
 function blankDraft(): OfferDraft {
   return {
     title: "",
+    internalTitle: "",
     description: "",
     checkoutHeadline: "",
     thumbnailUrl: "",
@@ -136,6 +137,7 @@ function blankDraft(): OfferDraft {
 function draftFrom(offer: OfferDetail): OfferDraft {
   return {
     title: offer.title,
+    internalTitle: offer.internalTitle ?? "",
     description: offer.description,
     checkoutHeadline: offer.checkoutHeadline,
     thumbnailUrl: offer.thumbnailUrl,
@@ -212,6 +214,7 @@ const TABS: { value: TabKey; label: string; icon: LucideIcon }[] = [
 const FIELD_TAB: Record<string, TabKey> = {
   allowGifting: "gifting",
   title: "selling",
+  internalTitle: "selling",
   slug: "selling",
   description: "selling",
   checkoutHeadline: "selling",
@@ -922,6 +925,18 @@ function SellingTab({
               onChange={(e) => update({ title: e.target.value })}
               placeholder="The Full Practice Reset — pay in full"
               required
+            />
+          </Field>
+
+          <Field
+            label="Internal title (optional)"
+            hint="Only you see this. It is the name shown in your offers list."
+            error={errors.internalTitle}
+          >
+            <Input
+              value={draft.internalTitle ?? ""}
+              onChange={(e) => update({ internalTitle: e.target.value })}
+              maxLength={150}
             />
           </Field>
 

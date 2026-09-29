@@ -383,6 +383,9 @@ const customFieldSchema = z
 
 const offerFields = {
   title: z.string().trim().min(1).max(300),
+  // Kajabi's "Internal Title": only the admin sees it, in the offers list.
+  // Empty means the list shows `title`, as it always did.
+  internalTitle: z.string().trim().max(150).default(""),
   slug: slugSchema,
   status: z.enum(CATALOG_STATUSES).default("draft"),
   description: z.string().trim().max(10_000).default(""),

@@ -1,6 +1,6 @@
 import { Link } from "react-router";
 import { useEffect, useState } from "react";
-import { CalendarDays, Users } from "lucide-react";
+import { CalendarDays, Repeat, Users } from "lucide-react";
 import { toast } from "sonner";
 import { AddToCalendar } from "@/components/booking/AddToCalendar";
 import { SidebarPanel } from "@/components/community/SidebarPanel";
@@ -25,7 +25,15 @@ import { cn } from "@/lib/cn";
  * Times are drawn in the reader's own zone by `formatDateTime`, which is the
  * only zone that can be right without asking. `startsAt` crosses the wire as a
  * UTC instant precisely so that conversion is this side's job.
+ *
+ * A repeating meetup is shown at its next session (`nextStartsAt`), with what
+ * the series is ("Every month") under it; `startsAt` is only where it began.
  */
+
+/** The session a card is about: a series' next one, else the event's own. */
+function sessionOf(event: CommunityEvent): string | null {
+  return event.nextStartsAt ?? event.startsAt;
+}
 
 const RSVP_CHOICES: { status: RsvpStatus; label: string }[] = [
   { status: "going", label: "Going" },
@@ -109,12 +117,19 @@ export function EventsPanel({ communitySlug }: { communitySlug: string }) {
               {event.title}
             </p>
 
-            {event.startsAt && (
+            {sessionOf(event) && (
               <p className="mt-1 text-xs text-orchid">
-                <time dateTime={event.startsAt}>
-                  {formatDateTime(event.startsAt)}
+                <time dateTime={sessionOf(event)!}>
+                  {formatDateTime(sessionOf(event)!)}
                 </time>
                 {event.durationMinutes > 0 && ` · ${event.durationMinutes} min`}
+              </p>
+            )}
+
+            {event.recurrenceLabel && (
+              <p className="mt-1 flex items-center gap-1.5 text-xs text-orchid-faint">
+                <Repeat aria-hidden className="size-3.5" />
+                {event.recurrenceLabel}
               </p>
             )}
 
@@ -176,14 +191,15 @@ export function EventsPanel({ communitySlug }: { communitySlug: string }) {
               })}
             </div>
 
-            {event.startsAt && event.myStatus === "going" && (
+            {sessionOf(event) && event.myStatus === "going" && (
               <div className="mt-3">
                 {/* No `.ics` route exists for community events, so no session
                     id is passed and the component offers only the Google link
-                    it builds from these same fields. */}
+                    it builds from these same fields. For a series that is the
+                    next session, the one the card shows. */}
                 <AddToCalendar
                   title={event.title}
-                  startsAt={event.startsAt}
+                  startsAt={sessionOf(event)!}
                   durationMinutes={event.durationMinutes || 60}
                   meetingUrl={safeLink(event.locationUrl)}
                   agenda={event.description}

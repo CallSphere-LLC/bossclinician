@@ -157,6 +157,12 @@ function PurchaseItem({ item }: { item: Purchase }) {
       <dd className="flex flex-wrap items-center gap-2 text-ink">
         {item.pricePill && <Badge tone="slate">{item.pricePill}</Badge>}
         <span className="font-bold tabular-nums">{item.priceText}</span>
+        {/* The coupon it was bought with; the detail page's Order summary has the figures. */}
+        {item.couponCode && (
+          <span className="basis-full text-xs text-ink-soft">
+            Coupon <span className="font-semibold text-ink">{item.couponCode}</span>
+          </span>
+        )}
       </dd>
 
       <dt className="text-ink-soft">Quantity</dt>

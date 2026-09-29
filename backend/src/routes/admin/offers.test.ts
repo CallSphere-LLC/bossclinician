@@ -34,6 +34,7 @@ async function put(id: string, body: unknown) {
 const legacyPlan = {
   id: 7,
   title: "Full Practice Reset — 3 payments",
+  internal_title: "",
   slug: "reset-plan",
   status: "published",
   description: "",
@@ -82,6 +83,24 @@ describe("PUT /admin/offers/:id", () => {
     expect(error?.status).toBe(400);
     expect(error?.message).toMatch(/cannot have a free trial/);
   });
+
+  it("saves the internal title without touching the checkout title", async () => {
+    query.mockResolvedValueOnce({ rows: [legacyPlan] });
+    query.mockResolvedValueOnce({ rows: [{ ...legacyPlan, internal_title: "Reset — 3-pay (2026)" }] });
+    const { error, body } = await put("7", { internalTitle: "  Reset — 3-pay (2026)  " });
+    expect(error).toBeUndefined();
+    const [sql, params] = query.mock.calls[1] as [string, unknown[]];
+    expect(sql).toMatch(/internal_title\s+= \$30/);
+    expect(params[29]).toBe("Reset — 3-pay (2026)");
+    expect(params[0]).toBe(legacyPlan.title);
+    expect((body as { internalTitle: string }).internalTitle).toBe("Reset — 3-pay (2026)");
+  });
+
+  it("refuses an internal title longer than Kajabi's 150 characters", async () => {
+    const { error } = await put("7", { internalTitle: "x".repeat(151) });
+    expect(error?.status).toBe(400);
+    expect(query).not.toHaveBeenCalled();
+  });
 });
 
 /** Runs the GET / handler the way Express would. */
@@ -115,5 +134,14 @@ describe("GET /admin/offers", () => {
     expect(sql).toMatch(/FROM orders ord\s+WHERE ord\.offer_id = o\.id AND ord\.status = 'paid'/);
     expect(sql).toMatch(/COUNT\(DISTINCT pur\.contact_id\)::int FROM purchases pur\s+WHERE pur\.offer_id = o\.id AND pur\.source = 'kajabi'/);
     expect((body as Array<{ purchaseCount: number }>)[0].purchaseCount).toBe(21);
+  });
+
+  it("searches the internal title as well as the checkout title", async () => {
+    query.mockResolvedValueOnce({ rows: [] });
+    const { error } = await list({ q: "3-pay" });
+    expect(error).toBeUndefined();
+    const sql = String(query.mock.calls[0][0]);
+    expect(sql).toMatch(/o\.title ILIKE \$1 OR o\.internal_title ILIKE \$1 OR o\.slug ILIKE \$1/);
+    expect(sql).toMatch(/o\.internal_title,/);
   });
 });

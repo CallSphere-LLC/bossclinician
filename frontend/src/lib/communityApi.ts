@@ -459,6 +459,13 @@ export interface CommunityEvent {
   myStatus: RsvpStatus | null;
   attended: boolean;
   upcoming: boolean;
+  /** The session to show: a series' next one, or `startsAt` for a single event. */
+  nextStartsAt?: string | null;
+  recurring?: boolean;
+  /** "Every month", or "" for a single session. */
+  recurrenceLabel?: string;
+  /** The next few sessions of a series, as UTC instants. */
+  occurrences?: string[];
 }
 
 export interface EventsResponse {

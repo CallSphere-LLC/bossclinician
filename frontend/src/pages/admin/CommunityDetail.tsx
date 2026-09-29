@@ -2525,17 +2525,31 @@ function ChallengesTab({ communityId }: { communityId: number }) {
 
 /* ------------------------------------------------------------------ Events */
 
+/** A new event's form: the session, how it repeats, and who it is for. */
+const NEW_EVENT_FORM = {
+  title: "",
+  description: "",
+  startsAt: "",
+  durationMinutes: 60,
+  locationUrl: "",
+  /** "" does not repeat; otherwise the rule's frequency (087). */
+  repeats: "" as "" | "daily" | "weekly" | "monthly",
+  repeatInterval: 1,
+  /** Last session on, YYYY-MM-DD. Blank: it keeps repeating, as Kajabi's meetups do. */
+  repeatUntil: "",
+  /** "" is every member of the community. */
+  accessGroupId: "",
+};
+
+const REPEAT_UNIT = { daily: "days", weekly: "weeks", monthly: "months" } as const;
+
 function EventsTab({ communityId }: { communityId: number }) {
   const [joinMode, setJoinMode] = useState<"native" | "external">("native");
   const [events, setEvents] = useState<CommunityEvent[] | null>(null);
   const [creating, setCreating] = useState(false);
-  const [form, setForm] = useState({
-    title: "",
-    description: "",
-    startsAt: "",
-    durationMinutes: 60,
-    locationUrl: "",
-  });
+  const [form, setForm] = useState({ ...NEW_EVENT_FORM });
+  /** Offered in the "Who is it for?" picker. Empty just means no tiers yet. */
+  const [groups, setGroups] = useState<AdminAccessGroup[]>([]);
 
   const load = useCallback(() => {
     adminApi
@@ -2546,30 +2560,44 @@ function EventsTab({ communityId }: { communityId: number }) {
 
   useEffect(load, [load]);
 
+  useEffect(() => {
+    adminApi
+      .accessGroups(communityId)
+      .then(setGroups)
+      .catch(() => setGroups([]));
+  }, [communityId]);
+
   const [confirm, confirmDialog] = useConfirm();
 
   async function create(e: FormEvent) {
     e.preventDefault();
     if (!form.title.trim()) return;
+    if (form.repeats && !form.startsAt) {
+      toast.error("A repeating event needs the date and time of its first session.");
+      return;
+    }
+    const { repeats, repeatInterval, repeatUntil, accessGroupId, ...basics } = form;
     try {
       await adminApi.eventCreate(communityId, {
-        ...form,
+        ...basics,
         joinMode,
         locationUrl: joinMode === "native" ? "" : form.locationUrl,
         // The box speaks her wall clock; the column stores an instant. Sent raw
         // it was read as UTC, and the event she set for 7pm was advertised to
         // her members at 3pm.
         startsAt: fromDateTimeInput(form.startsAt),
+        // A series keeps her wall clock: 10:00 in her zone every month, across
+        // the clock changes, so the zone that box was read in goes with it.
+        recurrenceFreq: repeats || null,
+        recurrenceInterval: repeats ? repeatInterval : 1,
+        recurrenceUntil: repeats && repeatUntil ? repeatUntil : null,
+        recurrenceCount: null,
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        accessGroupId: accessGroupId === "" ? null : Number(accessGroupId),
       });
       toast.success("Event scheduled — your members can see it now");
       setCreating(false);
-      setForm({
-        title: "",
-        description: "",
-        startsAt: "",
-        durationMinutes: 60,
-        locationUrl: "",
-      });
+      setForm({ ...NEW_EVENT_FORM });
       load();
     } catch (err) {
       toast.error(friendlyError(err, "event"));
@@ -2630,11 +2658,27 @@ function EventsTab({ communityId }: { communityId: number }) {
                     {event.title}
                   </p>
                   <p className="truncate text-xs text-ink-soft">
-                    {event.startsAt
-                      ? formatDateTime(event.startsAt)
-                      : "No date set"}{" "}
+                    {event.recurrenceLabel
+                      ? event.nextStartsAt
+                        ? `Next ${formatDateTime(event.nextStartsAt)}`
+                        : "Series ended"
+                      : event.startsAt
+                        ? formatDateTime(event.startsAt)
+                        : "No date set"}{" "}
                     · {event.durationMinutes} minutes
                   </p>
+                  {(event.recurrenceLabel || event.accessGroupName) && (
+                    <p className="truncate text-xs text-ink-soft">
+                      {[
+                        event.recurrenceLabel,
+                        event.accessGroupName
+                          ? `${event.accessGroupName} only`
+                          : "",
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </p>
+                  )}
                 </div>
                 {event.locationUrl && (
                   <Button asChild variant="secondary" size="sm">
@@ -2734,6 +2778,80 @@ function EventsTab({ communityId }: { communityId: number }) {
               />
             </Field>
           </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <Field label="Repeats" htmlFor="event-repeats">
+              <select
+                id="event-repeats"
+                className={selectStyles}
+                value={form.repeats}
+                onChange={(e) =>
+                  setForm((f) => ({
+                    ...f,
+                    repeats: e.target.value as typeof f.repeats,
+                  }))
+                }
+              >
+                <option value="">Does not repeat</option>
+                <option value="daily">Every day</option>
+                <option value="weekly">Every week</option>
+                <option value="monthly">Every month</option>
+              </select>
+            </Field>
+            {form.repeats && (
+              <Field
+                label="Every how many?"
+                hint={REPEAT_UNIT[form.repeats]}
+                htmlFor="event-repeat-interval"
+              >
+                <Input
+                  id="event-repeat-interval"
+                  type="number"
+                  min={1}
+                  max={99}
+                  value={form.repeatInterval}
+                  onChange={(e) =>
+                    setForm((f) => ({
+                      ...f,
+                      repeatInterval: Math.max(1, Number(e.target.value) || 1),
+                    }))
+                  }
+                />
+              </Field>
+            )}
+          </div>
+          {form.repeats && (
+            <Field
+              label="Last session on"
+              hint="optional — leave blank to keep it repeating"
+              htmlFor="event-repeat-until"
+            >
+              <Input
+                id="event-repeat-until"
+                type="date"
+                value={form.repeatUntil}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, repeatUntil: e.target.value }))
+                }
+              />
+            </Field>
+          )}
+          <Field label="Who is it for?" htmlFor="event-access-group">
+            <select
+              id="event-access-group"
+              className={selectStyles}
+              value={form.accessGroupId}
+              onChange={(e) =>
+                setForm((f) => ({ ...f, accessGroupId: e.target.value }))
+              }
+            >
+              <option value="">All members</option>
+              {groups.map((group) => (
+                <option key={group.id} value={String(group.id)}>
+                  {group.name}
+                </option>
+              ))}
+            </select>
+          </Field>
           <Field label="Where do members join?" htmlFor="event-join-mode">
             <select
               id="event-join-mode"

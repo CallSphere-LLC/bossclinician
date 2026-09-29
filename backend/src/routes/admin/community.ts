@@ -2,7 +2,7 @@ import { liveRoster } from "../../services/liveRoomBus";
 import { Router } from "express";
 import { GROUP_PRICE_COLUMNS, saveAccessGroup, deleteAccessGroup } from "../../services/communityGroupPricing";
 import { pool } from "../../db/pool";
-import { rowToCamel, rowsToCamel } from "../../utils/case";
+import { rowToCamel, rowsToCamel, toSnake } from "../../utils/case";
 import { asyncHandler } from "../../utils/asyncHandler";
 import { badRequest, conflict, forbidden, notFound } from "../../utils/httpError";
 import { buildUpdate } from "../../utils/sqlUpdate";
@@ -13,6 +13,13 @@ import { enqueue, PRIORITY } from "../../jobs/queue";
 import { recordAdminActionStrict } from "../../services/adminAudit";
 import { HOST_LINK_TTL_SECONDS, createHostLink } from "../../services/hostLinks";
 import { communityEventLocation } from "../../services/communityEventLocation";
+import {
+  instantOf,
+  seriesAfterSave,
+  seriesView,
+  type CommunityEventSeries,
+  type SeriesColumns,
+} from "../../services/communityEventSeries";
 import { mayEnterCommunity } from "../../services/access";
 
 /**
@@ -119,6 +126,19 @@ const EVENT_FIELDS = [
   "duration_minutes",
   "location_url",
   "published",
+] as const;
+/**
+ * The repeat rule and the access group (087). Never taken from the body as
+ * sent: only the values `seriesAfterSave` and `resolveAccessGroupId` return
+ * are written, so a group from another community or half a rule cannot be.
+ */
+const EVENT_CHECKED_FIELDS = [
+  "recurrence_freq",
+  "recurrence_interval",
+  "recurrence_until",
+  "recurrence_count",
+  "timezone",
+  "access_group_id",
 ] as const;
 
 function slugify(input: string): string {
@@ -1783,14 +1803,34 @@ adminCommunityRouter.put(
 
 /* ------------------------------------------------------------------ Events */
 
+/**
+ * An event as the admin sees it: the row, what the series is ("Every month")
+ * and when it next runs. `startsAt` stays the first session of a series.
+ */
+function adminEventJson(row: Record<string, unknown>, now = new Date()) {
+  const view = seriesView(row as unknown as CommunityEventSeries, now);
+  return {
+    ...rowToCamel(row),
+    recurrenceLabel: view.recurrenceLabel,
+    nextStartsAt: view.nextStartsAt,
+  };
+}
+
 adminCommunityRouter.get(
   "/:id/events",
   asyncHandler(async (req, res) => {
+    // `recurrence_until` is a DATE, read as text so it stays a calendar day
+    // rather than midnight in the server's zone.
     const result = await pool.query(
-      "SELECT * FROM community_events WHERE community_id = $1 ORDER BY starts_at NULLS LAST",
+      `SELECT e.*, e.recurrence_until::text AS recurrence_until, g.name AS access_group_name
+         FROM community_events e
+         LEFT JOIN community_access_groups g ON g.id = e.access_group_id
+        WHERE e.community_id = $1
+        ORDER BY e.starts_at NULLS LAST`,
       [req.params.id],
     );
-    res.json(rowsToCamel(result.rows));
+    const now = new Date();
+    res.json(result.rows.map((row) => adminEventJson(row, now)));
   }),
 );
 
@@ -1801,6 +1841,9 @@ adminCommunityRouter.post(
     if (typeof b.title !== "string" || !b.title.trim()) throw badRequest("Title is required");
 
     const location = communityEventLocation(b, true)!;
+    // How it repeats and who it is for, checked before anything is written.
+    const series = seriesAfterSave(b, null, instantOf(b.startsAt)).columns;
+    const accessGroupId = await resolveAccessGroupId(req.params.id, b.accessGroupId);
     const client = await pool.connect();
     try {
     await client.query("BEGIN");
@@ -1809,8 +1852,11 @@ adminCommunityRouter.post(
     }
     const result = await client.query(
       `INSERT INTO community_events
-         (community_id, title, description, starts_at, duration_minutes, location_url)
-       VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+         (community_id, title, description, starts_at, duration_minutes, location_url,
+          recurrence_freq, recurrence_interval, recurrence_until, recurrence_count, timezone,
+          access_group_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+       RETURNING *, recurrence_until::text AS recurrence_until`,
       [
         req.params.id,
         b.title.trim(),
@@ -1818,10 +1864,16 @@ adminCommunityRouter.post(
         b.startsAt || null,
         b.durationMinutes ?? 60,
         location.locationUrl,
+        series.recurrence_freq,
+        series.recurrence_interval,
+        series.recurrence_until,
+        series.recurrence_count,
+        series.timezone,
+        accessGroupId,
       ],
     );
     await client.query("COMMIT");
-    res.status(201).json(rowToCamel(result.rows[0]));
+    res.status(201).json(adminEventJson(result.rows[0]));
     } catch (error) { await client.query("ROLLBACK"); throw error; }
     finally { client.release(); }
   }),
@@ -1833,14 +1885,42 @@ adminCommunityRouter.put(
     const body = { ...req.body } as Record<string, unknown>;
     const location = communityEventLocation(body);
     if (location) body.locationUrl = location.locationUrl;
-    const update = buildUpdate(body, EVENT_FIELDS);
+
+    // The repeat rule is checked against the row as it will be after this save
+    // (a new date, a cleared date, a new rule), and the access group against
+    // the event's own community. Only the checked values are written.
+    const existing = await pool.query<
+      SeriesColumns & { community_id: number; starts_at: Date | null }
+    >(
+      `SELECT community_id, starts_at, timezone, recurrence_freq, recurrence_interval,
+              recurrence_until::text AS recurrence_until, recurrence_count
+         FROM community_events WHERE id = $1`,
+      [req.params.eventId],
+    );
+    const current = existing.rows[0];
+    if (!current) throw notFound("Event not found");
+    const startsAt =
+      body.startsAt !== undefined ? instantOf(body.startsAt) : current.starts_at;
+    const series = seriesAfterSave(body, current, startsAt);
+    const groupTouched = body.accessGroupId !== undefined;
+    const accessGroupId = groupTouched
+      ? await resolveAccessGroupId(String(current.community_id), body.accessGroupId)
+      : null;
+    for (const key of Object.keys(body)) {
+      if ((EVENT_CHECKED_FIELDS as readonly string[]).includes(toSnake(key))) delete body[key];
+    }
+    if (series.touched) Object.assign(body, series.columns);
+    if (groupTouched) body.access_group_id = accessGroupId;
+
+    const update = buildUpdate(body, [...EVENT_FIELDS, ...EVENT_CHECKED_FIELDS]);
     if (!update) throw badRequest("No updatable fields supplied");
     const client = await pool.connect();
     try {
     await client.query("BEGIN");
     const result = await client.query(
       `UPDATE community_events SET ${update.clause}
-       WHERE id = $${update.values.length + 1} RETURNING *`,
+       WHERE id = $${update.values.length + 1}
+       RETURNING *, recurrence_until::text AS recurrence_until`,
       [...update.values, req.params.eventId],
     );
     if (result.rowCount === 0) throw notFound("Event not found");
@@ -1848,7 +1928,7 @@ adminCommunityRouter.put(
       await client.query("UPDATE communities SET live_room_enabled = true WHERE id = $1", [result.rows[0].community_id]);
     }
     await client.query("COMMIT");
-    res.json(rowToCamel(result.rows[0]));
+    res.json(adminEventJson(result.rows[0]));
     } catch (error) { await client.query("ROLLBACK"); throw error; }
     finally { client.release(); }
   }),

@@ -1,0 +1,13 @@
+-- 085: an optional internal title on offers, as Kajabi has it.
+--
+-- A Kajabi offer has two names: the Title the buyer sees at checkout, and an
+-- optional "Internal Title" (up to 150 characters) that only the admin sees and
+-- that the admin Offers list and reports show instead. With many offers selling
+-- the same few products, the internal title is how the owner tells the
+-- pay-in-full, payment-plan and sale versions of one thing apart without
+-- changing what the buyer reads at checkout.
+--
+-- Empty means "no internal title": the list falls back to the checkout title,
+-- so every existing offer reads exactly as before. The 150-character limit is
+-- enforced by the API, as the other offer text limits are.
+ALTER TABLE offers ADD COLUMN IF NOT EXISTS internal_title text NOT NULL DEFAULT '';

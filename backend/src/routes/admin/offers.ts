@@ -44,6 +44,8 @@ export const adminOffersRouter = Router();
 type OfferRow = {
   id: number;
   title: string;
+  /** Kajabi's "Internal Title" — admin-only; '' means the list shows `title`. */
+  internal_title: string;
   slug: string;
   status: string;
   description: string;
@@ -96,7 +98,7 @@ type PricingOptionRow = {
   updated_at: string;
 };
 
-const OFFER_COLUMNS = `o.id, o.title, o.slug, o.status, o.description, o.checkout_headline,
+const OFFER_COLUMNS = `o.id, o.title, o.internal_title, o.slug, o.status, o.description, o.checkout_headline,
        o.thumbnail_url, o.currency, o.pricing_type, o.amount_cents, o.min_amount_cents,
        o.interval, o.interval_count, o.installment_count, o.trial_days, o.collect_tax,
        o.collect_address, o.collect_phone, o.custom_fields, o.terms_url, o.require_terms,
@@ -279,7 +281,9 @@ adminOffersRouter.get(
     const params: unknown[] = [];
     if (q) {
       params.push(`%${likeLiteral(q)}%`);
-      clauses.push(`(o.title ILIKE $${params.length} OR o.slug ILIKE $${params.length})`);
+      clauses.push(
+        `(o.title ILIKE $${params.length} OR o.internal_title ILIKE $${params.length} OR o.slug ILIKE $${params.length})`,
+      );
     }
     if (status) {
       params.push(status);
@@ -518,9 +522,9 @@ adminOffersRouter.post(
             installment_count, trial_days, collect_tax, collect_address, collect_phone,
             custom_fields, terms_url, require_terms, redirect_url, thank_you_page_id,
             access_expires_after_days, stripe_price_id, stripe_product_id,
-            send_welcome_email, welcome_next_steps, allow_gifting)
+            send_welcome_email, welcome_next_steps, allow_gifting, internal_title)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
-                 $17, $18::jsonb, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28)
+                 $17, $18::jsonb, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29)
          RETURNING ${OFFER_COLUMNS}`,
         [
           data.title,
@@ -551,6 +555,7 @@ adminOffersRouter.post(
           data.sendWelcomeEmail,
           data.welcomeNextSteps,
           data.allowGifting,
+          data.internalTitle,
         ],
       );
       created = result.rows[0];
@@ -695,6 +700,7 @@ adminOffersRouter.put(
                 send_welcome_email        = $26,
                 welcome_next_steps        = $27,
                 allow_gifting             = $29,
+                internal_title            = $30,
                 updated_at                = now()
           WHERE o.id = $28
          RETURNING ${OFFER_COLUMNS}`,
@@ -728,6 +734,7 @@ adminOffersRouter.put(
           patched(patch.welcomeNextSteps, before.welcome_next_steps),
           id,
           patched(patch.allowGifting, before.allow_gifting),
+          patched(patch.internalTitle, before.internal_title),
         ],
       );
       after = result.rows[0];
@@ -807,13 +814,16 @@ adminOffersRouter.post(
             pricing_type, amount_cents, min_amount_cents, interval, interval_count,
             installment_count, trial_days, collect_tax, collect_address, collect_phone,
             custom_fields, terms_url, require_terms, redirect_url, thank_you_page_id,
-            access_expires_after_days, send_welcome_email, welcome_next_steps, allow_gifting)
+            access_expires_after_days, send_welcome_email, welcome_next_steps, allow_gifting,
+            internal_title)
          SELECT left(s.title || ' (copy)', 300), $2, 'draft', s.description, s.checkout_headline,
                 s.thumbnail_url, s.currency, s.pricing_type, s.amount_cents, s.min_amount_cents,
                 s.interval, s.interval_count, s.installment_count, s.trial_days, s.collect_tax,
                 s.collect_address, s.collect_phone, s.custom_fields, s.terms_url, s.require_terms,
                 s.redirect_url, s.thank_you_page_id, s.access_expires_after_days,
-                s.send_welcome_email, s.welcome_next_steps, s.allow_gifting
+                s.send_welcome_email, s.welcome_next_steps, s.allow_gifting,
+                CASE WHEN s.internal_title = '' THEN ''
+                     ELSE left(s.internal_title || ' (copy)', 150) END
            FROM offers s WHERE s.id = $1
          RETURNING ${OFFER_COLUMNS}`,
         [id, slug],

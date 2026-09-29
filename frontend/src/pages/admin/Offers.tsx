@@ -68,6 +68,14 @@ function sellsLine(offer: Offer): string {
   return `${titles[0]} + ${titles.length - 1} more`;
 }
 
+/**
+ * The name the list goes by: the internal title when she has set one (Kajabi's
+ * "Internal Title", which only she sees), otherwise the checkout title.
+ */
+function listName(offer: Offer): string {
+  return offer.internalTitle?.trim() || offer.title;
+}
+
 function MenuItem({
   icon,
   children,
@@ -196,19 +204,28 @@ export default function Offers() {
     () => [
       {
         id: "title",
-        accessorFn: (offer) => `${offer.title} ${sellsLine(offer)}`,
+        // Search and sort both read this string, so it leads with the name the
+        // row shows and still carries the checkout title for searching.
+        accessorFn: (offer) =>
+          `${listName(offer)} ${offer.internalTitle?.trim() ? offer.title : ""} ${sellsLine(offer)}`,
         header: "Offer",
         cell: ({ row }) => {
           const offer = row.original;
           const sells = sellsLine(offer);
+          const internal = offer.internalTitle?.trim();
           return (
             <div className="min-w-0">
               <Link
                 to={`/admin/offers/${offer.id}`}
                 className="font-semibold text-ink transition-colors hover:text-gold"
               >
-                {offer.title}
+                {listName(offer)}
               </Link>
+              {internal && (
+                <p className="mt-0.5 truncate text-xs text-ink-soft">
+                  Checkout title: {offer.title}
+                </p>
+              )}
               <p className="mt-0.5 truncate text-xs text-ink-soft">
                 {sells ? (
                   <>Sells {sells}</>
@@ -279,7 +296,7 @@ export default function Offers() {
                     variant="ghost"
                     size="iconSm"
                     disabled={busyId === offer.id}
-                    aria-label={`More you can do with ${offer.title}`}
+                    aria-label={`More you can do with ${listName(offer)}`}
                   >
                     <MoreHorizontal />
                   </Button>

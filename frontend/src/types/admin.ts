@@ -266,10 +266,27 @@ export interface CommunityEvent {
   communityId: Id;
   title: string;
   description: string;
+  /** The first session; for a series, the one it repeats from. */
   startsAt: string | null;
   durationMinutes: number;
   locationUrl: string;
   published: boolean;
+  /** How it repeats (087). Null: a single session. */
+  recurrenceFreq?: "daily" | "weekly" | "monthly" | null;
+  /** Every N days / weeks / months. */
+  recurrenceInterval?: number;
+  /** Last day a session may fall on, YYYY-MM-DD; null with no count: no end. */
+  recurrenceUntil?: string | null;
+  recurrenceCount?: number | null;
+  /** The zone whose wall clock a series keeps. */
+  timezone?: string;
+  /** The access group it is kept to; null is the whole community. */
+  accessGroupId?: Id | null;
+  accessGroupName?: string | null;
+  /** "Every month", or "" for a single session. */
+  recurrenceLabel?: string;
+  /** A series' next session (null once it is over); `startsAt` for a single one. */
+  nextStartsAt?: string | null;
 }
 
 export interface CommunityBadge {

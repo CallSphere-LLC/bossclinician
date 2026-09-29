@@ -4,6 +4,7 @@ import {
   coachingTabFrom,
   hasSessionsOutsidePrograms,
   NO_PROGRAM,
+  progressSummary,
   rosterRows,
   sessionsSummary,
   type CoachingRosterClient,
@@ -21,6 +22,8 @@ function program(overrides: Partial<CoachingRosterProgram>): CoachingRosterProgr
     openEnded: false,
     nextSessionAt: null,
     lastSessionAt: null,
+    sessionsTotal: 6,
+    sessionsCompleted: 0,
     ...overrides,
   };
 }
@@ -45,6 +48,7 @@ const ALICE: CoachingRosterClient = {
       sessionsUsed: 1,
       sessionsIncluded: 0,
       openEnded: true,
+      sessionsTotal: null,
       nextSessionAt: "2026-09-30T15:00:00Z",
       lastSessionAt: "2026-09-25T15:00:00Z",
     }),
@@ -66,6 +70,7 @@ const DAN: CoachingRosterClient = {
       joinedAt: "2026-08-01T12:00:00Z",
       sessionsUsed: 1,
       sessionsIncluded: null,
+      sessionsTotal: null,
       lastSessionAt: "2026-08-09T12:00:00Z",
     }),
   ],
@@ -159,6 +164,55 @@ describe("coaching roster rows", () => {
     };
     const [row] = rosterRows([kajabi]);
     expect(sessionsSummary(row)).toEqual({ main: "2 sessions booked", note: null });
+  });
+});
+
+describe("program progress", () => {
+  it("reads a Kajabi client's history as Kajabi does: 'Completed 3 of 6 sessions'", () => {
+    const kajabi: CoachingRosterClient = {
+      ...ALICE,
+      programs: [
+        program({ offerId: 11, source: "kajabi", sessionsIncluded: null, sessionsTotal: 6, sessionsCompleted: 3 }),
+      ],
+    };
+    const [row] = rosterRows([kajabi]);
+    expect(progressSummary(row)).toBe("Completed 3 of 6 sessions");
+    // The Sessions column still says nothing was booked here.
+    expect(sessionsSummary(row).main).toBe("None booked here yet");
+  });
+
+  it("says 'Completed 2 sessions' with no known total, and a dash with nothing to say", () => {
+    expect(progressSummary({ sessionsCompleted: 2, sessionsTotal: null })).toBe("Completed 2 sessions");
+    expect(progressSummary({ sessionsCompleted: 1, sessionsTotal: null })).toBe("Completed 1 session");
+    expect(progressSummary({ sessionsCompleted: 0, sessionsTotal: null })).toBe("—");
+    expect(progressSummary({ sessionsCompleted: 0, sessionsTotal: 6 })).toBe("Completed 0 of 6 sessions");
+  });
+
+  it("adds up programs, and drops the 'of N' once a program of unknown size has completions", () => {
+    const [quiet] = rosterRows([ALICE]);
+    expect(progressSummary(quiet)).toBe("Completed 0 of 6 sessions");
+
+    const busy: CoachingRosterClient = {
+      ...ALICE,
+      programs: [
+        program({ sessionsCompleted: 1 }),
+        program({ offerId: 9, sessionsIncluded: 0, openEnded: true, sessionsTotal: null, sessionsCompleted: 2 }),
+      ],
+    };
+    const [row] = rosterRows([busy]);
+    expect(row.sessionsCompleted).toBe(3);
+    expect(row.sessionsTotal).toBeNull();
+    expect(progressSummary(row)).toBe("Completed 3 sessions");
+  });
+
+  it("leaves sessions outside any program out of program progress", () => {
+    const dan: CoachingRosterClient = {
+      ...DAN,
+      programs: [{ ...DAN.programs[0], sessionsCompleted: 1 }],
+    };
+    const [row] = rosterRows([dan]);
+    expect(row.sessionsCompleted).toBe(0);
+    expect(progressSummary(row)).toBe("—");
   });
 });
 

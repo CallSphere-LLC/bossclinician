@@ -34,6 +34,14 @@ import { pool } from "../db/pool";
  * so a grant (which only knows the member) and a session (which may know both)
  * land on the same row even if the two ever disagree.
  *
+ * Program progress ("Completed 3 of 6 sessions", Kajabi's Program Progress
+ * column) is reported apart from "used": `sessionsCompleted` counts only
+ * sessions marked completed here, plus whatever an enrollment carries from
+ * before the move (`coaching_enrollments.sessions_completed`, migration 086 —
+ * a Kajabi client's history, which has no session rows here).
+ * `sessionsTotal` is the enrollment's own total when it has one, else the
+ * package's allowance; null when neither is known or the package has no limit.
+ *
  * "Used" counts sessions that weren't cancelled, no-shows included — the hour
  * was held and the package paid for it. It is counted from the sessions rather
  * than read from `coaching_credits.sessions_used`, which only the member's own
@@ -51,7 +59,9 @@ WITH entries AS (
          s.scheduled_at,
          COALESCE(s.booked_at, s.created_at) AS booked_at,
          false             AS is_grant,
-         NULL::text        AS source
+         NULL::text        AS source,
+         NULL::int         AS enrolled_total,
+         NULL::int         AS enrolled_completed
     FROM coaching_sessions s
     LEFT JOIN members m ON m.id = s.member_id
    WHERE s.member_id IS NOT NULL OR s.contact_id IS NOT NULL
@@ -63,7 +73,7 @@ WITH entries AS (
          g.status = 'active' AND (g.expires_at IS NULL OR g.expires_at > now()),
          NULL, NULL, NULL,
          true,
-         NULL
+         NULL, NULL, NULL
     FROM access_grants g
     JOIN products p ON p.id = g.product_id AND p.kind = 'coaching'
     JOIN members m  ON m.id = g.member_id
@@ -77,7 +87,9 @@ WITH entries AS (
          e.status = 'active',
          NULL, NULL, NULL,
          true,
-         e.source
+         e.source,
+         e.sessions_total,
+         e.sessions_completed
     FROM coaching_enrollments e
     JOIN coaching_offers o ON o.id = e.coaching_offer_id AND o.archived_at IS NULL
 ),
@@ -99,7 +111,13 @@ per_program AS (
          COUNT(*) FILTER (WHERE status IS NOT NULL AND status <> 'cancelled') AS sessions_used,
          MIN(scheduled_at) FILTER (WHERE status = 'scheduled' AND scheduled_at > now()) AS next_session_at,
          MAX(scheduled_at) FILTER (WHERE status IN ('scheduled', 'completed') AND scheduled_at <= now()) AS last_session_at,
-         MIN(booked_at)                                               AS first_booked_at
+         MIN(booked_at)                                               AS first_booked_at,
+         COUNT(*) FILTER (WHERE status = 'completed')                 AS completed_here,
+         -- At most one enrollment per person and program (UNIQUE on program +
+         -- contact, and an enrollment always keys on its contact), so MAX is
+         -- that enrollment's own figure.
+         MAX(enrolled_total)                                          AS enrolled_total,
+         MAX(enrolled_completed)                                      AS enrolled_completed
     FROM keyed
    GROUP BY person_key, offer_id
 ),
@@ -144,7 +162,20 @@ SELECT pe.person_key AS key,
                                AND ((pp.grants > 0 AND NOT pp.kajabi_only) OR ct.sessions_total IS NOT NULL),
            'source',           CASE WHEN pp.from_kajabi THEN 'kajabi' END,
            'nextSessionAt',    pp.next_session_at,
-           'lastSessionAt',    pp.last_session_at
+           'lastSessionAt',    pp.last_session_at,
+           -- Program progress, Kajabi's "Completed 3 of 6 sessions". An
+           -- enrollment's own total wins (for a Kajabi client, the only one
+           -- anybody knows); otherwise it's the package's allowance, null when
+           -- the package has no limit or there's no package at all.
+           'sessionsTotal',    COALESCE(pp.enrolled_total,
+                                        CASE WHEN o.id IS NULL THEN NULL
+                                             WHEN ct.sessions_total IS NOT NULL THEN NULLIF(ct.sessions_total, 0)
+                                             WHEN pp.kajabi_only THEN NULL
+                                             WHEN pp.grants > 0 AND o.session_count > 0 THEN o.session_count
+                                             END),
+           -- Completed before the move (stored on the enrollment, migration
+           -- 086) plus sessions marked completed here.
+           'sessionsCompleted', (COALESCE(pp.enrolled_completed, 0) + pp.completed_here)::int
          )
          ORDER BY COALESCE(pp.granted_at, pp.first_booked_at), pp.offer_id
        ) AS programs
@@ -183,6 +214,17 @@ export interface CoachingRosterProgram {
   source: "kajabi" | null;
   nextSessionAt: string | null;
   lastSessionAt: string | null;
+  /**
+   * Program progress's "of 6": the enrollment's own total (a Kajabi client's,
+   * migration 086) or else the package's allowance. Null when unknown, when
+   * the package has no session limit, or when there's no package at all.
+   */
+  sessionsTotal: number | null;
+  /**
+   * Program progress's "Completed 3": sessions marked completed here plus any
+   * the enrollment carries from before the move (Kajabi's history).
+   */
+  sessionsCompleted: number;
 }
 
 export interface CoachingRosterClient {

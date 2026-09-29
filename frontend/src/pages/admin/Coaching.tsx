@@ -12,6 +12,7 @@ import {
   coachingTabFrom,
   hasSessionsOutsidePrograms,
   NO_PROGRAM,
+  progressSummary,
   rosterRows,
   sessionsSummary,
   type CoachingRosterClient,
@@ -1064,6 +1065,11 @@ function SessionsTab() {
  * narrows to it, so "2 of 6 used", next, last and joined are all about that
  * program (rosterRows in lib/coachingRoster.ts). The search box is the table's
  * own, matching a name, an email or a program.
+ *
+ * "Program progress" is Kajabi's column of that name ("Completed 3 of 6
+ * sessions"): sessions marked completed, plus the ones a Kajabi client
+ * completed on Kajabi (stored on their enrollment, migration 086). "Sessions"
+ * beside it is about booking here — used against the package.
  */
 function ClientsTab() {
   const [clients, setClients] = useState<CoachingRosterClient[] | null>(null);
@@ -1174,6 +1180,23 @@ function ClientsTab() {
         },
       },
       {
+        // Kajabi's "Program Progress": sessions completed out of what the
+        // program holds, a Kajabi client's sessions on Kajabi included
+        // (progressSummary in lib/coachingRoster.ts).
+        id: "progress",
+        header: "Program progress",
+        accessorFn: (row) => row.sessionsCompleted,
+        enableGlobalFilter: false,
+        cell: ({ row }) => {
+          const progress = progressSummary(row.original);
+          return progress === "—" ? (
+            <span className="text-sm text-ink-soft">—</span>
+          ) : (
+            <span className="whitespace-nowrap text-sm font-bold tabular-nums text-ink">{progress}</span>
+          );
+        },
+      },
+      {
         id: "nextSession",
         header: "Next session",
         accessorFn: (row) => row.nextSessionTime,
@@ -1197,7 +1220,7 @@ function ClientsTab() {
       },
       {
         id: "joined",
-        header: "Joined",
+        header: "Date joined",
         accessorFn: (row) => row.joinedTime,
         enableGlobalFilter: false,
         cell: ({ row }) => (
@@ -1240,8 +1263,8 @@ function ClientsTab() {
           data={rows}
           searchPlaceholder="Search your clients…"
           itemNoun={{ one: "client", many: "clients" }}
-          minWidth="1040px"
-          columnWidths={{ client: "24%", actions: "64px" }}
+          minWidth="1220px"
+          columnWidths={{ client: "22%", actions: "64px" }}
           toolbar={
             <select
               value={programFilter}

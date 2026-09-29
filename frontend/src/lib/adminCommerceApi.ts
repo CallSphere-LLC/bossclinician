@@ -285,6 +285,8 @@ export interface OfferUpsell {
 export interface Offer {
   id: number;
   title: string;
+  /** Kajabi's "Internal Title": admin-only, shown in the offers list. '' = none. */
+  internalTitle?: string;
   slug: string;
   status: CatalogStatus;
   description: string;
@@ -344,6 +346,7 @@ export type OfferPricingOptionInput = Omit<OfferPricingOption, "id" | "offerId" 
 
 export interface OfferInput {
   title: string;
+  internalTitle?: string;
   slug: string;
   status: CatalogStatus;
   description: string;

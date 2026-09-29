@@ -26,6 +26,7 @@ import {
   notifyMentions,
 } from "../../services/communityNotifications";
 import { deliverableUrl, readProtectedRef } from "../../services/signedUrls";
+import { seriesView, type CommunityEventSeries } from "../../services/communityEventSeries";
 import type { EntitledMedia } from "./downloads";
 
 /**
@@ -1862,14 +1863,24 @@ memberCommunityRouter.post(
     const parsed = rsvpSchema.safeParse(req.body ?? {});
     if (!parsed.success) throw badRequest("Invalid RSVP", parsed.error.flatten());
 
-    const found = await pool.query<{ id: number; community_id: number }>(
-      `SELECT id, community_id FROM community_events WHERE id = $1 AND published`,
+    const found = await pool.query<{
+      id: number;
+      community_id: number;
+      access_group_id: number | null;
+    }>(
+      `SELECT id, community_id, access_group_id FROM community_events WHERE id = $1 AND published`,
       [eventId]
     );
     const event = found.rows[0];
     if (!event) throw notFound(EVENT_MISSING);
 
     const rsvpCtx = await enterCommunity(member, { id: event.community_id });
+    // An event kept to one access group is answered the way such a channel is
+    // (loadChannel): its members and the room's moderators, a 404 for the rest.
+    if (event.access_group_id !== null && !rsvpCtx.moderator) {
+      const groups = await memberAccessGroupIds(member.id);
+      if (!groups.includes(event.access_group_id)) throw notFound(EVENT_MISSING);
+    }
 
     const saved = await pool.query<{ status: string; created: boolean }>(
       `INSERT INTO community_event_rsvps (event_id, member_id, status)
@@ -2429,45 +2440,67 @@ memberCommunityRouter.get(
     const member = currentMember(req);
     const ctx = await enterFromParams(req);
 
-    const found = await pool.query<{
-      id: number;
-      title: string;
-      description: string;
-      starts_at: Date | null;
-      duration_minutes: number;
-      location_url: string;
-      going_count: number;
-      my_status: string | null;
-      attended: boolean | null;
-    }>(
+    const groupIds = ctx.moderator ? [] : await memberAccessGroupIds(member.id);
+    const found = await pool.query<
+      CommunityEventSeries & {
+        id: number;
+        title: string;
+        description: string;
+        location_url: string;
+        going_count: number;
+        my_status: string | null;
+        attended: boolean | null;
+      }
+    >(
       `SELECT e.id, e.title, e.description, e.starts_at, e.duration_minutes, e.location_url,
+              e.timezone, e.recurrence_freq, e.recurrence_interval,
+              e.recurrence_until::text AS recurrence_until, e.recurrence_count,
               (SELECT COUNT(*)::int FROM community_event_rsvps r
                 WHERE r.event_id = e.id AND r.status = 'going') AS going_count,
               me.status AS my_status, me.attended
          FROM community_events e
          LEFT JOIN community_event_rsvps me ON me.event_id = e.id AND me.member_id = $2
         WHERE e.community_id = $1 AND e.published
+          -- Kept to one access group (087): its members and the room's
+          -- moderators, the rule a channel's access group follows. Null is the
+          -- whole community, which is every event made before the column.
+          AND ($3::bool OR e.access_group_id IS NULL OR e.access_group_id = ANY($4::int[]))
         ORDER BY e.starts_at NULLS LAST, e.id`,
-      [ctx.id, member.id]
+      [ctx.id, member.id, ctx.moderator, groupIds]
     );
 
+    // A repeating event is shown at its next session: `startsAt` stays the
+    // first one, `nextStartsAt` is the one to put in a diary, and a finished
+    // series drops out of "upcoming". A single event keeps its old rule.
     const now = new Date();
-    const events = found.rows.map((row) => ({
-      id: row.id,
-      title: row.title,
-      description: row.description,
-      startsAt: iso(row.starts_at),
-      durationMinutes: row.duration_minutes,
-      locationUrl: row.location_url,
-      goingCount: row.going_count,
-      myStatus: row.my_status,
-      attended: row.attended ?? false,
-      upcoming: row.starts_at === null || row.starts_at >= now,
-    }));
+    const events = found.rows.map((row) => {
+      const series = seriesView(row, now);
+      return {
+        id: row.id,
+        title: row.title,
+        description: row.description,
+        startsAt: iso(row.starts_at),
+        nextStartsAt: series.nextStartsAt,
+        recurring: series.recurring,
+        recurrenceLabel: series.recurrenceLabel,
+        occurrences: series.occurrences,
+        durationMinutes: row.duration_minutes,
+        locationUrl: row.location_url,
+        goingCount: row.going_count,
+        myStatus: row.my_status,
+        attended: row.attended ?? false,
+        upcoming: series.upcoming,
+      };
+    });
+    // Ordered by the session each one shows, so a monthly call that began in
+    // October sits after a one-off next week. No date still sorts last.
+    const nextAt = (e: { nextStartsAt: string | null }) =>
+      e.nextStartsAt ? Date.parse(e.nextStartsAt) : Number.MAX_SAFE_INTEGER;
+    const upcoming = events.filter((e) => e.upcoming).sort((a, b) => nextAt(a) - nextAt(b));
 
     res.json({
       events,
-      upcoming: events.filter((e) => e.upcoming),
+      upcoming,
       past: events.filter((e) => !e.upcoming).reverse(),
     });
   })

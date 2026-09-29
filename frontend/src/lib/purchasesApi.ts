@@ -109,6 +109,15 @@ export interface Purchase {
   orderNo: string | null;
   gift: boolean;
   note: string;
+  /**
+   * The coupon, when one is recorded (our checkout's order, or the Kajabi
+   * import's `meta.coupon_code`), drawn as Kajabi's "Order summary":
+   * Subtotal, Discount <CODE>, Total. All three are null when there is none.
+   */
+  couponCode: string | null;
+  discountCents: number | null;
+  /** Before the discount; null for a plan, whose total is every instalment. */
+  subtotalCents: number | null;
 }
 
 export interface ContactPurchaseList {

@@ -27,6 +27,9 @@ function purchase(key: string, over: Partial<Purchase> = {}): Purchase {
     orderNo: null,
     gift: false,
     note: "",
+    couponCode: null,
+    discountCents: null,
+    subtotalCents: null,
     ...over,
   };
 }
