@@ -143,3 +143,34 @@ the deployed bundles contain the new call and pricing UI; only routine scheduled
 Open: VIP offer 41's group mapping, the description and price of "How to Improve Relations", and
 whether The Lounge is a monthly subscription (Kajabi FAQ) or $1,997 / 6 × $197 (current offer). These need
 Kajabi admin access or the owner.
+
+# Second pass with the Kajabi admin open — releases `20260929195945-ea26dbd`, `20260929200839-709afda`
+
+The first pass had no Kajabi admin access. This pass read the Kajabi admin in the owner's
+signed-in Chrome (read-only: nothing was saved in Kajabi) and fixed what differed. Offer titles,
+prices and copy come from Kajabi's public checkout API and checkout pages, fetched by the server.
+Migrations 085–088. No emails, no Stripe calls. DB backups: `/var/backups/bossclinician/pre-k3s-20260929195945-ea26dbd.dump`
+and `pre-k3s-20260929200839-709afda.dump`.
+
+| Row | Kajabi admin says | Now |
+| --- | --- | --- |
+| 32 | Order #1001: [PIF] PPP Boss Builders $3,997, coupon **4UQUINN** −$3,997, total $0; product The Boss Move | Coupon + order summary on the purchase; The Boss Move granted to its 5 Kajabi holders (product still a draft) |
+| 33 | The Boss Move = the Club (first lesson "Welcome to the Boss Clinician Club"); Boardroom $12,000 or $3,000 every 3 months | Club offer grants The Boss Move; Boardroom quarterly option added |
+| 35 | Only Practice Reset Intensive has clients: 25, "Completed X of N sessions" | Program progress column (086) seeded from Kajabi |
+| 36 | The Lounge: 1 member, **no posts** (chat = 9 automatic meetup invites); channels Boss Clinician Lounge (chat) + Q&A, Q&A in "how to improve relations"; meetup "Monthly Coaching Calls" every month on the 9th, 10:00 PT, live room | Channels added; repeating community meetups (087) + that meetup; fixture "Wins" channel removed |
+| 37 | 24 products | The Practice Elevation, The Lounge VIP, Supervisory Billing Documentation Packet, The Private Practice Planner added as drafts |
+| 38 | Real content is large: The Boss Move 8 modules/~55 lessons, The Practice Elevation 6/~110, Lounge VIP 1/5, plus CSF, CWC, Starter Suite, Ramp-Up, PPP Training and 10 downloads | **Still open** — see below |
+| 40 | 48 offers (6 Kajabi tests); admin list uses internal titles | Internal title (085) in the admin list; 15 missing offers added as drafts; protection pack = Kajabi's published offer; purchases linked by internal title (4 deleted/test Kajabi titles stay unlinked) |
+| 41 | "how to improve relations" is **free**; Lounge = $1,997 or $197/mo × 6 (already right); Lounge VIP grants The Lounge VIP + The Practice Elevation | Free offer for the group (left as a draft here); Lounge/Lounge VIP offers grant Kajabi's products |
+
+**Row 38 blocker (changed):** Kajabi admin access is no longer the problem. Copying lesson bodies,
+videos and files needs a bulk transfer out of the Kajabi session; the automated route from the
+browser tab was refused by the session's safety check, so it is waiting on the owner's decision
+on how to move the content.
+
+**Owner decisions:** CSF $247 vs $17, CWC $127 vs $27, Provider Partnership $97 vs $47; Boardroom
+$12,000 (Kajabi) vs $18,000 (owner page); whether to publish any of the new drafts; Bali rooms'
+$500 deposit can't be charged here yet (no setup-fee support); Kajabi's own "On-Demnad" typo kept.
+
+**Not done, flagged:** Kajabi buyers mostly have no `access_grants` here (19 grants vs 224 Kajabi
+purchases), so they can't see what they bought in the rebuild.
