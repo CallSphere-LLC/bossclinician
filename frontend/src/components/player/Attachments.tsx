@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { toast } from "sonner";
-import { Download, Eye, EyeOff, Loader2, Paperclip } from "lucide-react";
+import { Download, Eye, Loader2, Paperclip } from "lucide-react";
+import { LuxeDialog } from "@/components/booking/LuxeDialog";
 import { cn } from "@/lib/cn";
 import { formatBytes } from "@/lib/format";
 import { MemberApiError } from "@/lib/memberApi";
@@ -86,17 +87,12 @@ export function Attachments({
   };
 
   const view = async (file: AttachmentItem, viewer: ViewerKind) => {
-    if (open?.id === file.id) {
-      setOpen(null);
-      setStatus(`${file.title} closed.`);
-      return;
-    }
     setPending({ id: file.id, action: "view" });
     setStatus(`Opening ${file.title}…`);
     try {
       const blob = await fetchFileBlob(kind, file.id);
       setOpen({ id: file.id, viewer, blob });
-      setStatus(`${file.title} is open below.`);
+      setStatus(`${file.title} is open.`);
     } catch (err) {
       fail(err, "We could not open that file here. Please try again, or download it.");
     } finally {
@@ -105,6 +101,7 @@ export function Attachments({
   };
 
   const Frame = bare ? "div" : "section";
+  const openFile = open ? files.find((file) => file.id === open.id) ?? null : null;
 
   return (
     <Frame
@@ -154,17 +151,15 @@ export function Attachments({
                       type="button"
                       onClick={() => void view(file, viewer)}
                       disabled={busy !== null}
-                      aria-expanded={isOpen}
+                      aria-haspopup="dialog"
                       className={ACTION}
                     >
                       {busy === "view" ? (
                         <Loader2 aria-hidden className="size-4 animate-spin text-gold" />
-                      ) : isOpen ? (
-                        <EyeOff aria-hidden className="size-4" />
                       ) : (
                         <Eye aria-hidden className="size-4" />
                       )}
-                      {isOpen ? "Close" : "View"}
+                      View
                       <span className="sr-only"> {file.title}</span>
                     </button>
                   )}
@@ -193,9 +188,6 @@ export function Attachments({
                 </p>
               )}
 
-              {isOpen && open && (
-                <FileViewer kind={open.viewer} blob={open.blob} filename={file.filename} title={file.title} />
-              )}
             </li>
           );
         })}
@@ -204,6 +196,44 @@ export function Attachments({
       <p aria-live="polite" className="sr-only">
         {status}
       </p>
+
+      {openFile && open && (
+        <LuxeDialog
+          open
+          onOpenChange={(next) => {
+            if (!next) {
+              setOpen(null);
+              setStatus(`${openFile.title} closed.`);
+            }
+          }}
+          title={openFile.title}
+          description={openFile.filename}
+          size="xl"
+          footer={
+            <button
+              type="button"
+              onClick={() => void start(openFile)}
+              disabled={pending !== null}
+              className={ACTION}
+            >
+              {pending?.action === "download" ? (
+                <Loader2 aria-hidden className="size-4 animate-spin text-gold" />
+              ) : (
+                <Download aria-hidden className="size-4" />
+              )}
+              Download
+            </button>
+          }
+        >
+          <FileViewer
+            kind={open.viewer}
+            blob={open.blob}
+            filename={openFile.filename}
+            title={openFile.title}
+            className="mt-0"
+          />
+        </LuxeDialog>
+      )}
     </Frame>
   );
 }

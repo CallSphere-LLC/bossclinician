@@ -31,10 +31,11 @@ export function LuxeDialog({
   description?: ReactNode;
   children: ReactNode;
   footer?: ReactNode;
-  size?: "sm" | "md" | "lg";
+  /** `xl` is the file viewer: wide enough to read a PDF page on a laptop. */
+  size?: "sm" | "md" | "lg" | "xl";
 }) {
   const reduceMotion = useReducedMotion();
-  const width = { sm: "max-w-sm", md: "max-w-lg", lg: "max-w-2xl" }[size];
+  const width = { sm: "max-w-sm", md: "max-w-lg", lg: "max-w-2xl", xl: "max-w-5xl" }[size];
 
   return (
     <RadixDialog.Root open={open} onOpenChange={onOpenChange}>
