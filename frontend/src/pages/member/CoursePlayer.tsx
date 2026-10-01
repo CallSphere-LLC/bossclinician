@@ -609,7 +609,12 @@ function LessonView({ data, productSlug, courseImage, modules, onProgress }: Les
 
       <TranscriptPanel transcript={lesson.transcript} />
 
-      <CompleteBar lessonId={lesson.id} completed={lesson.progress.completed} onSaved={onProgress} />
+      <CompleteBar
+        lessonId={lesson.id}
+        completed={lesson.progress.completed}
+        playsMedia={lesson.contentType === "video" || lesson.contentType === "audio"}
+        onSaved={onProgress}
+      />
 
       {justFinished && (
         <NicelyDone
@@ -755,10 +760,13 @@ function NicelyDone({
 function CompleteBar({
   lessonId,
   completed,
+  playsMedia,
   onSaved,
 }: {
   lessonId: number;
   completed: boolean;
+  /** Only a video or audio lesson ticks itself at 90%; quizzes, reading and tools don't. */
+  playsMedia: boolean;
   onSaved: (result: ProgressResult) => void;
 }) {
   const [busy, setBusy] = useState(false);
@@ -805,7 +813,9 @@ function CompleteBar({
       <p aria-live="polite" className="text-xs text-orchid-faint">
         {completed
           ? "Ticked off. Press again if you want to come back to it."
-          : "This ticks itself once you have watched 90%."}
+          : playsMedia
+            ? "This ticks itself once you have watched 90%."
+            : "Press when you have finished this lesson."}
       </p>
     </div>
   );

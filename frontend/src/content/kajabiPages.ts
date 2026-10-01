@@ -311,9 +311,9 @@ export const thankYouFullyBooked: SimpleThankYou = {
 };
 
 /**
- * Kajabi's copy on this page names the Fully Booked Therapist Toolkit — a
- * template carried over from /thank-you-fullybooked and never edited. The words
- * are kept as they were; the button opens what was actually bought.
+ * Kajabi's copy on this page named the Fully Booked Therapist Toolkit — a
+ * template carried over from /thank-you-fullybooked and never edited. Corrected
+ * here to name what was actually bought; the button opens it.
  */
 export const thankYouRateRenegotiate: SimpleThankYou = {
   seo: {
@@ -324,7 +324,7 @@ export const thankYouRateRenegotiate: SimpleThankYou = {
   },
   title: "Thank You!",
   paragraphs: [
-    "Thank you for purchasing the Fully Booked Therapist Toolkit.",
+    "Thank you for purchasing the Rate Negotiation Letter Templates.",
     "Click the DOWNLOAD NOW button below to get started!",
     "A link has also been sent to your email address.",
   ],
