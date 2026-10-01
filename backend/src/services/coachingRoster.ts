@@ -64,7 +64,9 @@ WITH entries AS (
          NULL::int         AS enrolled_completed
     FROM coaching_sessions s
     LEFT JOIN members m ON m.id = s.member_id
-   WHERE s.member_id IS NOT NULL OR s.contact_id IS NOT NULL
+   WHERE (s.member_id IS NOT NULL OR s.contact_id IS NOT NULL)
+     -- Book A Call bookings (discovery calls) are leads, not coaching clients.
+     AND s.call_type_id IS NULL
   UNION ALL
   SELECT m.contact_id,
          g.member_id,

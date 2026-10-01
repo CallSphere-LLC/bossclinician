@@ -112,10 +112,8 @@ export interface PracticeQuizResult {
   /**
    * Internal routes in place of the source's absolute bossclinician.com links,
    * so nothing on the result screen sends the visitor back to the old site.
-   * Careful Clinician's source link is /offer-quiz, a second Kajabi quiz that
-   * has not been rebuilt here (the redirect map sends /offer-quiz to
-   * /practice-quiz, which would loop), so it lands on /work-with-me, where the
-   * Club and the Lounge sit side by side.
+   * Careful Clinician's source link is /offer-quiz, the second Kajabi quiz,
+   * which now runs on this site at the same address (pages/kajabi/quizzes).
    */
   offerLink: string;
   /** The form this result's lead is filed under (migration 091). */
@@ -154,7 +152,7 @@ export const PRACTICE_QUIZ_RESULTS: Record<BuilderType, PracticeQuizResult> = {
     offerName: "Boss Clinician Club or Lounge",
     offerDesc: "If you're still building your foundation, the Club gives you structure and curriculum. If you're established and just need monthly strategy and accountability, the Lounge is your level. Take the full offer quiz to find out which fits.",
     offerBtn: "Find Your Right Offer →",
-    offerLink: "/work-with-me",
+    offerLink: "/offer-quiz",
     formSlug: "quiz-careful",
   },
   S: {
@@ -212,11 +210,11 @@ export const PRACTICE_QUIZ_RESULT_COPY = {
   offerEyebrow: "Your Recommended Next Step",
   secondaryLead: "Not sure?",
   offerQuizLabel: "Take the full offer quiz →",
-  /** See `offerLink` on Careful Clinician: the offer quiz is not rebuilt here. */
-  offerQuizHref: "/work-with-me",
+  /** The offer quiz, rebuilt at its Kajabi address (pages/kajabi/quizzes/OfferQuiz.tsx). */
+  offerQuizHref: "/offer-quiz",
   secondaryJoin: "or",
   callLabel: "book a free Practice Alignment Call",
-  callHref: "https://tidycal.com/profitwithyvette/alignwithyvette",
+  callHref: "/book-a-call/practice-alignment-call",
   retake: "Take the quiz again",
   shareLabel: "Know someone who needs this?",
   instagramHref: "https://www.instagram.com/bossclinician",

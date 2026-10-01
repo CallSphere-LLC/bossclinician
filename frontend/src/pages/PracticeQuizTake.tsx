@@ -584,14 +584,12 @@ function ResultCard({
             {copy.offerQuizLabel}
           </Link>{" "}
           {copy.secondaryJoin}{" "}
-          <a
-            href={copy.callHref}
-            target="_blank"
-            rel="noopener noreferrer"
+          <Link
+            to={copy.callHref}
             className="font-semibold text-orchid underline underline-offset-4 hover:text-gold"
           >
             {copy.callLabel}
-          </a>
+          </Link>
           .
         </p>
 

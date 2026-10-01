@@ -152,7 +152,7 @@ export default function Retreats() {
               "@type": "Offer",
               price: "5500",
               priceCurrency: "USD",
-              url: RETREAT_RESERVE_ROUTE,
+              url: `${origin}${RETREAT_RESERVE_ROUTE}`,
             },
           },
         ]}

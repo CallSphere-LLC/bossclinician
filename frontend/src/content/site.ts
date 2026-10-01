@@ -41,14 +41,26 @@ export function isNavMenu(entry: NavEntry): entry is NavMenu {
   return "items" in entry;
 }
 
+/**
+ * Yvette's calls, booked on this site (pages/BookACall.tsx, migration 102).
+ * They used to live on tidycal.com/profitwithyvette; nothing here sends a
+ * visitor off-site to book any more.
+ */
+export const bookingLinks = {
+  /** Every call she offers publicly, the free Practice Alignment Call first. */
+  chooser: "/book-a-call",
+  /** The complimentary fit call (TidyCal's "alignwithyvette"). */
+  alignmentCall: "/book-a-call/practice-alignment-call",
+};
+
 /** The header's account and booking actions, as the source site's header has them. */
 export const headerActions = {
   logIn: { label: "Log In", to: "/login" },
-  // The header books the "chat" call; the footer's link is a different booking
-  // (alignwithyvette). Both are as they are on bossclinician.com.
+  // The chooser rather than one call: it leads with the free Practice
+  // Alignment Call and lists every other call she offers beneath it.
   bookACall: {
     label: "Book A Call",
-    href: "https://tidycal.com/profitwithyvette/chatprofitwithyvette",
+    to: bookingLinks.chooser,
   },
 };
 
@@ -88,7 +100,7 @@ export const workWithMeMenu: NavMenu = {
   ],
   footer: [
     { label: "See all programs", to: "/work-with-me" },
-    { label: headerActions.bookACall.label, href: headerActions.bookACall.href },
+    { label: headerActions.bookACall.label, to: headerActions.bookACall.to },
   ],
 };
 
@@ -172,7 +184,7 @@ export const footer = {
   linkedin: "https://www.linkedin.com/in/yvettelcsw/",
   tiktok: "https://www.tiktok.com/@bossclinician",
   tiktokHandle: "@bossclinician",
-  bookACall: "https://tidycal.com/profitwithyvette/alignwithyvette",
+  bookACall: bookingLinks.alignmentCall,
   contactEmail: "yvette@bossclinician.com",
 };
 

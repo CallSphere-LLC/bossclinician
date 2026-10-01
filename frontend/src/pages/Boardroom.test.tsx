@@ -76,7 +76,7 @@ describe("the Boardroom application and the form it posts to", () => {
     path.resolve(here, "../../../backend/src/db/migrations/074_boardroom_page.sql"),
     "utf8",
   );
-  const stored = JSON.parse(migration.split("$fields$")[1]) as {
+  const created = JSON.parse(migration.split("$fields$")[1]) as {
     key: string;
     label: string;
     type: string;
@@ -85,6 +85,23 @@ describe("the Boardroom application and the form it posts to", () => {
     placeholder?: string;
     helpText?: string;
   }[];
+  // Migration 103 re-priced the Boardroom ($18,000 -> $12,000) and rewrote the
+  // payment choices in the stored form; apply the same edit so the comparison is
+  // with the form as the database now holds it.
+  const stored = created.map((field) =>
+    field.key === "payment_preference"
+      ? {
+          ...field,
+          options: [
+            "Pay in full — $12,000",
+            "4 quarterly payments of $3,000",
+            "I'd like to discuss the options before deciding",
+          ],
+        }
+      : field.key === "commitment"
+        ? { ...field, label: field.label.replace("$18,000", "$12,000") }
+        : field,
+  );
   const asked = boardroom.application.steps.flatMap((step) => step.fields);
 
   it("asks the same questions in the same order", () => {

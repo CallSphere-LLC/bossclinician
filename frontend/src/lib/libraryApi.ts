@@ -225,6 +225,8 @@ export interface UnlockedLesson extends LessonCommon {
   attachmentUrl: string;
   /** Linked graded test; null while the test is still a draft or none is attached. */
   assessmentSlug: string | null;
+  /** Key of an interactive tool from components/lesson-tools; null for none. */
+  toolKey?: string | null;
   /**
    * When the four media URLs above stop working, or null if none needed signing.
    *

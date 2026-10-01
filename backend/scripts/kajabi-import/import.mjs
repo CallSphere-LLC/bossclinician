@@ -803,8 +803,13 @@ async function importProduct(client, kp, target, plan, media, report, hasCols) {
         ];
         if (row) {
           await client.query(
-            `UPDATE course_lessons SET module_id = $1, title = $2, slug = $3, body_md = $4, video_url = $5,
-                    content_type = $6, embed_html = $7, thumbnail_url = CASE WHEN $8 = '' THEN thumbnail_url ELSE $8 END,
+            // Quiz lessons (migration 104) and calculator lessons (tool_key) were rebuilt
+            // after the import; a re-run must not turn them back into Kajabi text.
+            `UPDATE course_lessons SET module_id = $1, title = $2, slug = $3,
+                    body_md = CASE WHEN course_lessons.tool_key IS NOT NULL OR course_lessons.content_type = 'assessment' THEN course_lessons.body_md ELSE $4 END,
+                    video_url = $5,
+                    content_type = CASE WHEN course_lessons.content_type = 'assessment' THEN course_lessons.content_type ELSE $6 END,
+                    embed_html = $7, thumbnail_url = CASE WHEN $8 = '' THEN thumbnail_url ELSE $8 END,
                     published = $9, sort = $10, comments_enabled = $11,
                     video_duration_seconds = CASE WHEN $12 > 0 THEN $12 ELSE video_duration_seconds END,
                     duration_minutes = CASE WHEN $13 > 0 THEN $13 ELSE duration_minutes END,

@@ -187,8 +187,7 @@ export function Header({ transparentAtTop = false }: HeaderProps) {
           </Link>
           <div className="hidden xl:block">
             <LuxeButton
-              href={headerActions.bookACall.href}
-              target="_blank"
+              to={headerActions.bookACall.to}
               variant="foil"
               size="sm"
               className="whitespace-nowrap"
@@ -281,8 +280,7 @@ export function Header({ transparentAtTop = false }: HeaderProps) {
                   the programs page), so the sheet's primary action is the one
                   the desktop bar carries: Book A Call. */}
               <LuxeButton
-                href={headerActions.bookACall.href}
-                target="_blank"
+                to={headerActions.bookACall.to}
                 variant="foil"
                 size="md"
                 className="mt-6 w-full"

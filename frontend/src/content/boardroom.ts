@@ -288,11 +288,13 @@ const APPLICATION_STEPS: readonly ApplicationStep[] = [
         required: true,
         hint: SELECT_ALL,
         groupError: "Choose at least one payment option.",
+        // The Boardroom's price is what checkout charges (offer
+        // the-boss-boardroom, Kajabi GSWsHBTx): $12,000 in full, or 4 quarterly
+        // payments of $3,000. Migration 103 writes the same strings to the form
+        // row the server validates replies against.
         options: [
-          "Pay in full — $18,000",
-          "2 payments of $9,000",
-          "6 payments of $3,000",
-          "12 monthly payments of $1,500",
+          "Pay in full — $12,000",
+          "4 quarterly payments of $3,000",
           "I'd like to discuss the options before deciding",
         ],
       },
@@ -307,7 +309,7 @@ const APPLICATION_STEPS: readonly ApplicationStep[] = [
       {
         key: "commitment",
         label:
-          "I understand the 12-month investment is $18,000, and I am willing to review my actual numbers, make decisions, and participate honestly in a small peer room.",
+          "I understand the 12-month investment is $12,000, and I am willing to review my actual numbers, make decisions, and participate honestly in a small peer room.",
         type: "checkbox",
         required: true,
       },

@@ -10,6 +10,13 @@ import { lazyRoute, type RouteComponent } from "@/ssr/lazyRoute";
 import { MemberVoiceMount, PublicVoiceMount } from "@/voice/surfaces/mount";
 
 import NotFound from "@/pages/NotFound";
+// Every page Kajabi published, rebuilt at its own address (2026-10-01): opt-ins
+// and their thank-you pages, the reset/planner pages, legal documents, purchase
+// thank-you pages, and the quizzes. Each family keeps its own route table.
+import { leadMagnetPublicRoutes } from "@/pages/kajabi/leadmagnets/routes";
+import { kajabiPublicRoutes } from "@/pages/kajabi/pages/routes";
+import { quizRouteTable } from "@/pages/kajabi/quizzes/routeTable";
+import { bookACallRoutes } from "@/pages/bookACallRoute";
 
 const AdminApp = lazy(() => import("@/pages/admin/AdminApp"));
 
@@ -138,12 +145,18 @@ export const PUBLIC_ROUTES: readonly { path: string; Component: RouteComponent }
   { path: "/funnel/:slug", Component: lazyRoute(() => import("@/pages/FunnelPage")) },
   { path: "/funnel/:slug/:step", Component: lazyRoute(() => import("@/pages/FunnelPage")) },
   { path: "/privacy-policy", Component: lazyRoute(() => import("@/pages/legal/PrivacyPolicy")) },
-  { path: "/terms", Component: lazyRoute(() => import("@/pages/legal/Terms")) },
+  // Kajabi's current Terms of Use (effective 04/01/2026) replaced the 2025 site
+  // terms; /terms and /terms-of-use show the same document.
+  { path: "/terms", Component: lazyRoute(() => import("@/pages/kajabi/pages/TermsOfUse")) },
   { path: "/disclaimer", Component: lazyRoute(() => import("@/pages/legal/Disclaimer")) },
   {
     path: "/financial-disclaimer",
     Component: lazyRoute(() => import("@/pages/legal/FinancialDisclaimer")),
   },
+  ...leadMagnetPublicRoutes,
+  ...kajabiPublicRoutes,
+  ...quizRouteTable,
+  ...bookACallRoutes.map(({ path, Component }) => ({ path, Component })),
 ];
 
 function PublicRoutes() {

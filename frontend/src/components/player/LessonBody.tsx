@@ -1,4 +1,5 @@
 import { LessonAssessment } from "./LessonAssessment";
+import { LessonTool } from "@/components/lesson-tools";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { ExternalLink, FileDown } from "lucide-react";
@@ -29,6 +30,19 @@ interface LessonBodyProps {
  * wrote.
  */
 export function LessonBody({ lesson, courseImage, onSaved }: LessonBodyProps) {
+  const content = <LessonContent lesson={lesson} courseImage={courseImage} onSaved={onSaved} />;
+  if (!lesson.toolKey) return content;
+  // A lesson carrying an interactive tool (a calculator) shows its written
+  // content first and the tool directly under it, whatever its media type.
+  return (
+    <div className="flex flex-col gap-8">
+      {lesson.bodyMd.trim() || lesson.contentType !== "text" ? content : null}
+      <LessonTool toolKey={lesson.toolKey} />
+    </div>
+  );
+}
+
+function LessonContent({ lesson, courseImage, onSaved }: LessonBodyProps) {
   const notes = lesson.bodyMd.trim() ? <Markdown body={lesson.bodyMd} /> : null;
 
   switch (lesson.contentType) {

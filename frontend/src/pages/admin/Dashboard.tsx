@@ -677,12 +677,6 @@ export default function Dashboard() {
               <Button asChild size="sm">
                 <Link to="/admin/community">Open your community</Link>
               </Button>
-              <Button asChild variant="secondary" size="sm">
-                <a href="https://www.kajabi.com/product/communities" target="_blank" rel="noreferrer">
-                  Compare with Kajabi
-                  <ArrowUpRight />
-                </a>
-              </Button>
             </div>
           </div>
         </Card>

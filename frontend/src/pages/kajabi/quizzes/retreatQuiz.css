@@ -1,0 +1,311 @@
+/* The Burnout Self-Assessment and the retreat thank-you page: the retreat
+   page's editorial palette (../../retreats.css) plus the few pieces the Kajabi
+   quiz styles inline. */
+
+.retreat-page .rq-narrow {
+  width: min(760px, 100% - 32px);
+  margin: 0 auto;
+}
+.retreat-page .rq-hero-intro {
+  max-width: 640px;
+  margin: 0 auto;
+}
+.retreat-page .rq-hero-intro p {
+  font-size: 1.02rem;
+}
+.retreat-page .rq-time {
+  font-style: italic;
+  color: var(--retreat-gold);
+}
+.retreat-page .rq-progress {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: #8a6f2c;
+  text-align: center;
+  margin: 0 0 1.4rem !important;
+}
+.retreat-page .rq-question {
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: clamp(1.45rem, 3vw, 1.9rem);
+  line-height: 1.3;
+  color: #1e2c14;
+  margin: 0 0 1.6rem;
+  outline: none;
+}
+.retreat-page .rq-answers {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.retreat-page .rq-answer {
+  display: block;
+  width: 100%;
+  min-height: 44px;
+  padding: 16px 18px;
+  background: #ffffff;
+  border: 1px solid #d9cfc0;
+  color: #141f0c;
+  font: inherit;
+  font-size: 1.05rem;
+  line-height: 1.55;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 0.2s,
+    background 0.2s;
+}
+.retreat-page .rq-answer:hover {
+  border-color: #b8963e;
+  background: #fbf7ee;
+}
+.retreat-page .rq-answer:focus-visible,
+.retreat-page .rq-form button:focus-visible,
+.retreat-page .rq-form input:focus-visible {
+  outline: 3px solid #a78845;
+  outline-offset: 3px;
+}
+.retreat-page .rq-result {
+  background: #f8f4ec;
+  padding: 44px 32px;
+  border-top: 3px solid #b8963e;
+  text-align: center;
+  color: #1a1508;
+}
+.retreat-page .rq-result .rq-eyebrow {
+  font-size: 0.75rem;
+  letter-spacing: 0.4em;
+  text-transform: uppercase;
+  color: #8a6f2c;
+  margin: 0 0 14px;
+}
+.retreat-page .rq-result h2 {
+  font-family: "Cormorant Garamond", "Playfair Display", Georgia, serif;
+  font-size: clamp(1.9rem, 4vw, 2.3rem);
+  color: #1e2c14;
+  margin: 0 0 6px;
+  outline: none;
+}
+.retreat-page .rq-result .rq-sub {
+  font-size: 0.95rem;
+  font-style: italic;
+  color: #3e4a26;
+  margin: 0 0 24px;
+}
+.retreat-page .rq-result .rq-body {
+  font-size: 1.05rem;
+  line-height: 1.85;
+  text-align: left;
+  margin: 0 0 30px;
+}
+.retreat-page .rq-offer {
+  background: #1e2c14;
+  padding: 28px 24px;
+}
+.retreat-page .rq-offer .rq-triad {
+  font-family: "Cormorant Garamond", "Playfair Display", Georgia, serif;
+  font-size: 1.45rem;
+  font-style: italic;
+  color: #d4b46a;
+  margin: 0 0 16px;
+}
+.retreat-page .rq-offer p {
+  font-size: 1rem;
+  color: #ede7da;
+  line-height: 1.7;
+  margin: 0 0 20px;
+}
+.retreat-page .rq-offer .rq-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  padding: 16px 44px;
+  background: #b8963e;
+  color: #ffffff;
+  font-size: 0.8rem;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  text-decoration: none;
+  font-weight: 500;
+}
+.retreat-page .rq-offer .rq-button:hover {
+  background: #a78845;
+}
+.retreat-page .rq-disclaimer {
+  font-size: 0.82rem;
+  font-style: italic;
+  color: #4a3d2a;
+  margin: 22px 0 0 !important;
+}
+.retreat-page .rq-form {
+  margin-top: 28px;
+  padding: 28px 24px;
+  background: #ffffff;
+  border: 1px solid #d9cfc0;
+  color: #1e2c14;
+  text-align: left;
+}
+.retreat-page .rq-form h3 {
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 1.4rem;
+  margin: 0 0 0.6rem;
+}
+.retreat-page .rq-form .rq-row {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+  margin: 1.2rem 0;
+}
+@media (min-width: 640px) {
+  .retreat-page .rq-form .rq-row {
+    grid-template-columns: 1fr 1fr 1.3fr;
+  }
+}
+.retreat-page .rq-form label {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #5d622e;
+  margin-bottom: 6px;
+}
+.retreat-page .rq-form input {
+  width: 100%;
+  min-height: 46px;
+  padding: 10px 12px;
+  border: 1px solid #d9cfc0;
+  background: #fbf7ee;
+  color: #141f0c;
+  font: inherit;
+  font-size: 1rem;
+}
+.retreat-page .rq-form .rq-submit {
+  min-height: 48px;
+  padding: 14px 32px;
+  background: #1e2c14;
+  color: #efe0bc;
+  border: 0;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.retreat-page .rq-form .rq-submit:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.retreat-page .rq-form .rq-error {
+  color: #9b2c2c;
+  font-weight: 600;
+  margin: 0 0 1rem !important;
+}
+.retreat-page .rq-form .rq-small {
+  font-size: 0.78rem;
+  color: #4a3d2a;
+  margin: 1rem 0 0 !important;
+}
+
+/* Thank-you page */
+.retreat-page .rq-steps {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 18px;
+}
+.retreat-page .rq-step {
+  display: grid;
+  grid-template-columns: 44px 1fr;
+  gap: 18px;
+  align-items: start;
+  background: #ffffff;
+  border: 1px solid #e3dac8;
+  padding: 22px 20px;
+}
+.retreat-page .rq-step-number {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--retreat-forest);
+  color: var(--retreat-gold);
+  font-family: Montserrat, Arial, sans-serif;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  font-size: 1.05rem;
+}
+.retreat-page .rq-step h3 {
+  font-size: 1.3rem;
+  margin: 0 0 0.4rem;
+}
+.retreat-page .rq-step p {
+  margin: 0 !important;
+}
+.retreat-page .rq-step a,
+.retreat-page .rq-inline-link {
+  color: #6c682d;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.retreat-page .rq-step .retreat-button {
+  margin-top: 1rem;
+}
+.retreat-page .rq-dates {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: 1fr;
+}
+@media (min-width: 720px) {
+  .retreat-page .rq-dates {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+.retreat-page .rq-date {
+  border-left: 3px solid var(--retreat-gold);
+  padding: 6px 0 6px 18px;
+}
+.retreat-page .rq-date strong {
+  display: block;
+  font-family: "Playfair Display", Georgia, serif;
+  font-weight: 400;
+  font-size: 1.25rem;
+  color: var(--retreat-gold);
+}
+.retreat-page .rq-date p {
+  margin: 0.3rem 0 0 !important;
+}
+.retreat-page .rq-contact a {
+  color: var(--retreat-gold);
+}
+.retreat-page .rq-legal {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px 20px;
+  font-size: 0.8rem;
+}
+.retreat-page .rq-legal a {
+  color: var(--retreat-gold);
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+}
+@media (max-width: 600px) {
+  .retreat-page .rq-result {
+    padding: 32px 18px;
+  }
+  .retreat-page .rq-offer .rq-button {
+    padding: 16px 24px;
+    letter-spacing: 0.2em;
+  }
+  .retreat-page .rq-step {
+    grid-template-columns: 1fr;
+  }
+}

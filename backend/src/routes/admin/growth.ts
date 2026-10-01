@@ -306,13 +306,15 @@ adminGrowthRouter.get(
     const offerId = req.query.offerId ? Number(req.query.offerId) : null;
     const result = await pool.query(
       `SELECT s.*,
-              COALESCE(NULLIF(m.name, ''), c.name, '') AS member_name,
-              COALESCE(m.email::text, c.email::text, '') AS member_email,
-              o.title AS offer_title
+              COALESCE(NULLIF(m.name, ''), NULLIF(c.name, ''), s.guest_name, '') AS member_name,
+              COALESCE(m.email::text, c.email::text, NULLIF(s.guest_email, ''), '') AS member_email,
+              -- A Book A Call booking has no package; it is named by its call type.
+              COALESCE(o.title, ct.title) AS offer_title
          FROM coaching_sessions s
          LEFT JOIN members m ON m.id = s.member_id
          LEFT JOIN contacts c ON c.id = s.contact_id
          LEFT JOIN coaching_offers o ON o.id = s.offer_id
+         LEFT JOIN book_a_call_types ct ON ct.id = s.call_type_id
         WHERE ($1::int IS NULL OR s.offer_id = $1)
         ORDER BY s.scheduled_at DESC NULLS LAST, s.id DESC`,
       [offerId],

@@ -25,14 +25,6 @@ const VIEWPORT = { once: true, margin: "-12% 0px -8% 0px" } as const;
 const APPLY_ROUTE = "/apply";
 const BLOG_ROUTE = "/blog";
 
-/**
- * The cover has to stop being a rectangle pasted onto the panel: the bottom
- * stop here matches the surface underneath it, so the photograph dissolves into
- * the page instead of ending at a hard edge.
- */
-const COVER_SCRIM =
-  "linear-gradient(to top, rgb(var(--c-night, 9 6 17) / 0.92) 0%, rgb(var(--c-night, 9 6 17) / 0.62) 20%, rgb(var(--c-night, 9 6 17) / 0.2) 52%, rgb(var(--c-night, 9 6 17) / 0) 80%)";
-
 /** One rise recipe for the page; only the delay changes. */
 function rise(reduce: boolean | null, delay: number) {
   return {
@@ -337,10 +329,11 @@ function Arrow({ direction = "forward" }: { direction?: "forward" | "back" }) {
 /* ── Cover ────────────────────────────────────────────────────────────── */
 
 /**
- * Editorial stock at full brightness on near-black reads as a lit rectangle
- * glued to the page. Four passes seat it instead: a plum bloom behind the
- * frame, the photo graded down, a violet multiply that pulls its whites into
- * the page's palette, and a vignette plus scrim that hand it off to the dark.
+ * The cover at full strength, as on the /courses and /blog cards. It used to be
+ * graded down, put under a violet multiply, vignetted and faded out with a
+ * scrim; on the light theme that scrim is white, so the photograph read as
+ * milky and washed out (QA sheet). It now ends on a crisp edge: the gold
+ * hairline frame plus the foil rule along the bottom.
  */
 function CoverPlate({ src }: { src: string }) {
   return (
@@ -364,14 +357,12 @@ function CoverPlate({ src }: { src: string }) {
           // Deliberately not lazy: on desktop this is the largest element in
           // the first viewport, and deferring it would delay the page's LCP.
           decoding="async"
-          className="aspect-[16/10] w-full max-w-full object-cover brightness-[0.8] contrast-[1.06] saturate-[0.8]"
+          className="aspect-[16/10] w-full max-w-full object-cover"
         />
-        <div aria-hidden className="absolute inset-0 bg-glow-violet/35 mix-blend-multiply" />
         <div
           aria-hidden
-          className="absolute inset-0 bg-[radial-gradient(118%_82%_at_50%_24%,transparent_28%,rgba(10,7,19,0.46)_68%,rgba(6,4,11,0.88)_100%)]"
+          className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-gold/60 to-transparent"
         />
-        <div aria-hidden className="absolute inset-0" style={{ background: COVER_SCRIM }} />
       </div>
 
       {/* Offset registration marks — a printer's crop frame a few pixels

@@ -25,6 +25,7 @@ import { emailPrefsRouter } from "./emailPrefs";
 import { redirectsRouter } from "./redirects";
 import { verifyRouter } from "./verify";
 import { receiptLinkRouter } from "./receiptLink";
+import { bookACallRouter } from "./bookACall";
 
 export const publicRouter = Router();
 
@@ -48,6 +49,7 @@ publicRouter.use(stripeWebhookRouter);
 publicRouter.use(growthPublicRouter);
 publicRouter.use(assessmentsPublicRouter);
 publicRouter.use(eventsPublicRouter);
+publicRouter.use(bookACallRouter);
 publicRouter.use(affiliateTrackingRouter);
 publicRouter.use(affiliateSignupRouter);
 publicRouter.use(emailWebhookRouter);

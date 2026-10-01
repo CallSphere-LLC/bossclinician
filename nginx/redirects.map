@@ -2,7 +2,7 @@
 # Source: the `redirects` table. Regenerate with:
 #   docker compose exec backend node scripts/generate-nginx-redirects.js
 #   docker compose exec nginx nginx -s reload
-# Generated from 157 rows.
+# Generated from 108 rows.
 
 # The podcast episode paths (/podcasts/<show>/episodes/<id>) overflow the
 # 64-byte default bucket, and nginx refuses to start rather than truncating.
@@ -12,59 +12,40 @@ map_hash_bucket_size 128;
 # which matches what services/redirects.ts normalizePath() produces.
 map $uri $redirect_target {
     default '';
-    /5-step-marketing /resources;
     /about_yvette /about;
     /aboutyvette /about;
     /account/login /login;
     /all-courses /courses;
+    /almost-form /private-practice-for-you;
     /audit-private-practice-replay /resources;
     /blog/alma-vs-private-pay-group-practice-numbers /blog;
     /blog/how-to-stop-seeing-25-clients-a-week /blog/how-to-stop-seeing-25-clients-a-week-and-still-hit-your-income-goals;
     /blog/is-talkspace-right-for-your-practice-goals /blog;
-    /boss-assessment /practice-quiz;
     /boss-builders-sales-page /work-with-me;
     /boss-clinician-boardroom /boardroom;
     /boss-clinician-home /;
-    /business-plan-guide /resources;
-    /business-plan-ty /resources;
-    /careful-form /practice-quiz;
-    /ceu-terms-boss-clinician /terms;
-    /coaching-terms /terms;
     /confirmation-boss-clinician-lounge /checkout/success;
     /confirmation-page-1 /checkout/success;
-    /continuing-education-boss-clinician /courses;
     /create-account /signup;
-    /credential-with-confidencekit-confirmed /checkout/success;
     /credentialingsuccess /courses/credentialing-success-formula;
     /credentialsolo /courses/credential-with-confidence;
     /credentialwithconfidencekit /courses/credential-with-confidence;
     /csfgrouppractices /courses/credentialing-success-formula;
     /cwcsolopractice /courses/credential-with-confidence;
-    /dos-and-donts-ty /resources;
-    /dos-donts-ty /resources;
     /evergreen-masterclass-register /freedom-masterclass;
     /financialdisclaimer /financial-disclaimer;
     /forgot /forgot-password;
     /fullybooked /courses/fully-booked-toolkit;
     /fullybookedtherapist /courses/fully-booked-toolkit;
     /heyyvettehere /about;
-    /hire-form /practice-quiz;
-    /hiring-quiz /practice-quiz;
-    /insurance-guide /resources;
     /join /signup;
-    /kickstartguide /resources;
-    /leap-accelerator-thank-you /work-with-me;
-    /link-in-bio /resource-hub;
     /log-in /login;
     /log-out /logout;
-    /marketing-step-form /resources;
     /masterclass /freedom-masterclass;
-    /masterclass-review-sheet /freedom-masterclass;
     /member/login /login;
     /members /login;
     /members/login /login;
-    /next-steps-consult /apply;
-    /offer-quiz /practice-quiz;
+    /notyet-form /private-practice-for-you;
     /offers/5rwmdhlj /lounge;
     /offers/5rwmdhlj/checkout /lounge;
     /offers/awvko5oi /lounge;
@@ -83,35 +64,20 @@ map $uri $redirect_target {
     /offers/ykwzvqdz/checkout /store;
     /offers/z9zxy5pi /retreats;
     /offers/z9zxy5pi/checkout /retreats;
-    /on-demand-audit-your-private-practice /resources;
-    /opt-in /resources;
     /password/new /forgot-password;
     /password/reset /forgot-password;
-    /practice-planner /courses/prepare-to-profit-journal;
-    /practice-planner-thank-you /resources;
     /practice-protection-pack /courses/private-practice-protection-pack;
-    /practice-reset-audit-ty /resources;
-    /practice-reset-snapshot /lounge;
     /practice-set-up-quiz /practice-quiz;
-    /practice-set-up-quiz-ty /practice-quiz;
     /privacy-policy-8b664a08-e1e5-4f19-8d9a-5cb8f33bf104 /privacy-policy;
-    /private-practice-for-you /work-with-me;
-    /private-practice-for-you-ty /work-with-me;
-    /profile-audit-ty /resources;
     /profiletoprofitguide /courses/from-profile-to-profit;
-    /profitable-private-practice-leap-accelerator /work-with-me;
     /protect-your-practice /courses/private-practice-protection-pack;
-    /protectionpackthanks /checkout/success;
     /rampedrevenue /courses/ramp-up-rate-formula;
+    /ready-form /private-practice-for-you;
     /ready-quiz /practice-quiz;
     /register /signup;
-    /reluctant-form /practice-quiz;
     /replay-audit-your-ppractice-edu /resources;
     /replay-audit-your-practice /resources;
-    /reset-audit /resources;
-    /reset-audit-form /resources;
     /reset-password /forgot-password;
-    /reset-planner-form /practice-reset-planner;
     /resource_redirect/landing_pages/2150414734 /courses/fully-booked-toolkit;
     /resource_redirect/landing_pages/2150427089 /courses/from-profile-to-profit;
     /resource_redirect/landing_pages/2151053468 /courses/credential-with-confidence;
@@ -135,42 +101,27 @@ map $uri $redirect_target {
     /resource_redirect/offers/wmz5rngn /courses/therapist-niche-clarity-accelerator;
     /resource_redirect/offers/yhc3aisz /courses/client-consultation-call-script;
     /resourcehub /resource-hub;
-    /retreat-needed-quiz /retreats;
-    /retreat-thank-you-page /retreats;
-    /retreatagreement /terms;
     /sign-in /login;
     /sign-out /logout;
     /sign-up /signup;
     /signin /login;
     /signout /logout;
     /start-your-own-private-practice-quiz /practice-quiz;
-    /starterconfirmed /checkout/success;
     /startersuitecourse /courses/private-practice-starter-suite;
-    /steady-form /practice-quiz;
-    /step-by-step-guide-thank-you-page /resources;
     /terms-of-service-boss-clinician /terms;
-    /terms-of-use /terms;
-    /thank-you /checkout/success;
-    /thank-you-audit-proof /checkout/success;
-    /thank-you-fullybooked /checkout/success;
-    /thank-you-rate-renegotiate /checkout/success;
     /the-boss-builders-collective-thank-you-page /work-with-me;
-    /the-club-ty /checkout/success;
     /the-directory-makeover-audit /courses/directory-makeover-audit;
     /the-lounge-suite /lounge;
     /turn-doctor-referrals-into-ideal-client /courses/provider-partnership-guide;
     /users/sign_in /login;
     /users/sign_up /signup;
-    /visionary-form /practice-quiz;
     /webinar-waitlist-thank-you /resources;
 }
 
 map $uri $redirect_target_temp {
     default '';
-    /doc-registration /resources;
     /offers/pq696zyw /resources;
     /offers/pq696zyw/checkout /resources;
     /offers/syqkeslz /resources;
     /offers/syqkeslz/checkout /resources;
-    /replay-documentation /resources;
 }

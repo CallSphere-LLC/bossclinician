@@ -487,7 +487,7 @@ export const SETTING_DEFINITIONS: SettingDefinition[] = [
         label: "Logo at the top of marketing emails",
         help: "A URL to an image. Leave blank for text only — a broken logo looks worse than none.",
         type: "text",
-        placeholder: "https://bossclinician.com/logo.png",
+        placeholder: "https://bossclinician.callsphere.site/uploads/logo.png",
       },
       {
         name: "defaultSendHour",

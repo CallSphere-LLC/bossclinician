@@ -75,14 +75,13 @@ export function Footer() {
               </li>
             ))}
             <li>
-              <a
-                href={footer.bookACall}
-                target="_blank"
-                rel="noopener noreferrer"
+              <Link
+                to={footer.bookACall}
+                onClick={toTopIfCurrent(footer.bookACall)}
                 className={columnLink}
               >
                 Book a Free Call
-              </a>
+              </Link>
             </li>
           </ul>
         </div>

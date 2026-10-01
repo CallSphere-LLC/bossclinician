@@ -107,13 +107,50 @@ export default function Blog() {
   const list = usePageData(ssrKeys.blogList(tag), () => api.blogList({ tag }));
   const loading = list.status === "loading";
 
+  // The API pages the archive (10 per page by default). The first page arrives
+  // with the page (SSR); later pages are appended by "Load more articles" and
+  // are dropped whenever the topic changes.
+  const [extra, setExtra] = useState<BlogCard[]>([]);
+  const [nextPage, setNextPage] = useState(2);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [moreError, setMoreError] = useState(false);
+  useEffect(() => {
+    setExtra([]);
+    setNextPage(2);
+    setMoreError(false);
+  }, [tag]);
+
   const items = useMemo(() => {
     // The bundled archive stands in whenever the API is unreachable, so the
     // page still lists articles rather than reading as empty.
-    const all = list.status === "ready" ? list.data.items : fallbackBlogCards();
-    if (!tag) return all;
-    return all.filter((post) => post.tags.includes(tag));
-  }, [list, tag]);
+    const all = list.status === "ready" ? [...list.data.items, ...extra] : fallbackBlogCards();
+    const seen = new Set<string>();
+    const unique = all.filter((post) => (seen.has(post.slug) ? false : (seen.add(post.slug), true)));
+    if (!tag) return unique;
+    return unique.filter((post) => post.tags.includes(tag));
+  }, [list, extra, tag]);
+
+  const total = list.status === "ready" ? list.data.total : 0;
+  const loadedCount = list.status === "ready" ? list.data.items.length + extra.length : 0;
+  const hasMore = list.status === "ready" && loadedCount < total;
+
+  async function loadMore() {
+    if (loadingMore) return;
+    setLoadingMore(true);
+    setMoreError(false);
+    try {
+      const page = await api.blogList({ tag, page: nextPage });
+      setExtra((previous) => [...previous, ...page.items]);
+      setNextPage((n) => n + 1);
+      // A page that comes back empty means the count moved under us; stop
+      // offering more rather than looping on the same request.
+      if (page.items.length === 0) setNextPage(Number.POSITIVE_INFINITY);
+    } catch {
+      setMoreError(true);
+    } finally {
+      setLoadingMore(false);
+    }
+  }
 
   const featured = items[0];
   const rest = items.slice(1);
@@ -173,6 +210,27 @@ export default function Blog() {
               </RevealItem>
             ))}
           </RevealGroup>
+        )}
+
+        {hasMore && Number.isFinite(nextPage) && (
+          <div className="mt-12 flex flex-col items-center gap-3">
+            <LuxeButton
+              type="button"
+              variant="outline"
+              size="lg"
+              onClick={() => void loadMore()}
+              disabled={loadingMore}
+              aria-busy={loadingMore}
+              className="w-full sm:w-auto"
+            >
+              {loadingMore ? "Loading…" : "Load more articles"}
+            </LuxeButton>
+            <p className="copy-luxe text-sm" aria-live="polite">
+              {moreError
+                ? "Those articles didn’t load. Please try again."
+                : `Showing ${loadedCount} of ${total} articles`}
+            </p>
+          </div>
         )}
       </Section>
 

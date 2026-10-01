@@ -20,22 +20,22 @@
 
 const DOT = " · ";
 
-/** Hosted checkout remains on the original website until its offer is migrated. */
-export const RETREAT_RESERVE_ROUTE = "https://www.bossclinician.com/offers/boofdeo2/checkout";
+/**
+ * This site's checkout for the Bali Private Room offer, the offer Kajabi sold
+ * as /offers/boofdeo2 ($500 retreat deposit, then 9 monthly payments of $556).
+ * Internal on purpose: no button on this site sends a visitor to Kajabi.
+ */
+export const RETREAT_RESERVE_ROUTE = "/checkout/bali-private-room";
 
 /** The travel insurance provider the page names, by its own link. */
 export const RETREAT_TRAWICK_URL = "https://trawickinternational.com/";
 
 /**
- * The six-question Burnout Self-Assessment still lives on the Kajabi site, so
- * this is deliberately an absolute .com URL.
- *
- * CUTOVER BLOCKER: /retreat-needed-quiz already redirects to /retreats in this
- * app's redirect map, so the moment bossclinician.com points here this button
- * becomes a loop back to this page. Publish the assessment here and switch this
- * to `/quiz/retreat-needed-quiz` before the cutover.
+ * The six-question Burnout Self-Assessment, served by this site at its original
+ * path. The legacy `redirects` row /retreat-needed-quiz -> /retreats must be
+ * gone once that page is live, or this button loops back to this page.
  */
-export const RETREAT_QUIZ_URL = "https://www.bossclinician.com/retreat-needed-quiz";
+export const RETREAT_QUIZ_URL = "/retreat-needed-quiz";
 
 export interface RetreatFaq {
   q: string;
@@ -188,7 +188,7 @@ const FAQS: readonly RetreatFaq[] = [
   },
   {
     q: "How does the payment plan work?",
-    a: "A $500 deposit secures your spot. The remaining $5,000 balance is then divided into equal monthly payments based on your enrollment date, with the full balance due by June 8, 2027. Checkout will show your exact monthly schedule. The earlier you enroll, the lower your monthly payment.",
+    a: "Pay in full ($5,500), or reserve today with the first of 9 monthly payments of $612. Checkout shows both options. Every balance must be paid in full by June 8, 2027.",
   },
   {
     q: "When is the final payment due?",
@@ -196,8 +196,8 @@ const FAQS: readonly RetreatFaq[] = [
   },
   {
     q: "What is the cancellation and refund policy?",
-    a: "All retreat payments are non-refundable. If you need to cancel while your payments are current, eligible payments made beyond your $500 non-refundable deposit may be applied as a credit toward a future FlourisHealer retreat within 12 months, subject to availability. Missed payments or failure to pay the balance by the final deadline may result in forfeiture of your reservation and payments made. Please review the full Retreat Terms & Agreement before purchasing.",
-    link: { label: "Retreat Terms & Agreement", to: "https://www.bossclinician.com/retreatagreement" },
+    a: "All retreat payments are non-refundable. If you need to cancel while your payments are current, eligible payments made beyond your first $500 (non-refundable) may be applied as a credit toward a future FlourisHealer retreat within 12 months, subject to availability. Missed payments or failure to pay the balance by the final deadline may result in forfeiture of your reservation and payments made. Please review the full Retreat Terms & Agreement before purchasing.",
+    link: { label: "Retreat Terms & Agreement", to: "/retreatagreement" },
   },
   {
     q: "Do I have to come with someone?",
@@ -469,8 +469,8 @@ export const retreat = {
       },
       {
         label: "PAYMENT PLAN",
-        amount: "$500 deposit",
-        body: "$500 deposit, then the remaining balance divided into monthly payments based on your enrollment date. All balances must be paid in full by June 8, 2027. The earlier you reserve, the lower your monthly payments.",
+        amount: "9 × $612",
+        body: "Reserve today with the first of 9 monthly payments of $612 ($5,508 total), or pay in full. All balances must be paid in full by June 8, 2027.",
         primary: false,
       },
     ],

@@ -12,13 +12,13 @@
  * Where the two "Join" buttons go.
  *
  * On the source they open Kajabi checkouts (/resource_redirect/offers/5RwMdHLj
- * for Member, /resource_redirect/offers/awvKo5oi for VIP). Neither offer exists
- * in this app yet, so both go to the application form. When the offers are
- * published in the admin, point each constant at `/checkout/<offer-slug>`;
- * migration 064 already redirects both Kajabi paths to this page.
+ * for Member, /resource_redirect/offers/awvKo5oi for VIP). Both offers are
+ * published here by migration 103 at Kajabi's checkout prices ($1,997 in full
+ * or 6 x $197; VIP $3,497 or 6 x $347), so each button opens our own checkout.
+ * Migration 064 already redirects both Kajabi paths to this page.
  */
-export const LOUNGE_MEMBER_ROUTE = "/apply";
-export const LOUNGE_VIP_ROUTE = "/apply";
+export const LOUNGE_MEMBER_ROUTE = "/checkout/the-lounge";
+export const LOUNGE_VIP_ROUTE = "/checkout/the-lounge-vip";
 
 export const lounge = {
   seo: {
@@ -223,7 +223,7 @@ export const lounge = {
         name: "Lounge Member",
         tagline: "",
         price: "$197/mo",
-        terms: "Founding rate · 6-month commitment · or $1,997/year (save $367)",
+        terms: "Founding rate · 6 monthly payments ($1,182 total) · or $1,997 paid in full",
         scarcity: "Limited founding seats. When they fill, the monthly rate rises to $247.",
         features: [
           "The Practice Elevation: all four modules, video lessons, worksheets, swipe files, and templates",
@@ -243,7 +243,7 @@ export const lounge = {
         name: "★ Lounge VIP",
         tagline: "The Lounge teaches you how to fix your practice. VIP puts my eyes on yours.",
         price: "$347/mo",
-        terms: "Founding VIP rate · 6-month commitment · or $3,497/year (save $667)",
+        terms: "Founding VIP rate · 6 monthly payments ($2,082 total) · or $3,497 paid in full",
         scarcity: "Four founding VIP seats at this rate. Then $447.",
         features: [
           "Everything in Lounge Member",

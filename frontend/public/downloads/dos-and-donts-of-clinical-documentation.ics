@@ -1,0 +1,15 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Boss Clinician//Workshops//EN
+CALSCALE:GREGORIAN
+METHOD:PUBLISH
+BEGIN:VEVENT
+UID:dos-and-donts-of-clinical-documentation-20260925@bossclinician
+DTSTAMP:20261001T000000Z
+DTSTART:20260925T200000Z
+DTEND:20260925T233000Z
+SUMMARY:The Do's & Don'ts of Clinical Documentation
+DESCRIPTION:Live on Zoom. Your Zoom link is in your confirmation email.
+LOCATION:Zoom
+END:VEVENT
+END:VCALENDAR

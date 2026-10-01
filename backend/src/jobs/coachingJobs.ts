@@ -1,3 +1,4 @@
+import { env } from "../config/env";
 import { pool } from "../db/pool";
 import { renderMarkdown, sendEmail } from "../email/provider";
 import { registerHandler } from "./worker";
@@ -63,6 +64,8 @@ interface DueSession {
   meeting_url: string;
   agenda: string;
   offer_title: string;
+  /** Set on Book A Call bookings, whose guests have no account to reschedule from. */
+  manage_token: string | null;
 }
 
 /**
@@ -106,14 +109,20 @@ async function claimDue(step: ReminderStep): Promise<DueSession[]> {
 
   const detail = await pool.query<DueSession>(
     `SELECT s.id, s.member_id, s.scheduled_at, s.duration_minutes, s.timezone,
-            s.meeting_url, s.agenda,
-            COALESCE(m.email::text, c.email::text, '') AS email,
-            COALESCE(NULLIF(m.first_name, ''), c.first_name, c.name, '') AS first_name,
-            COALESCE(o.title, 'coaching') AS offer_title
+            -- A Book A Call booking takes its room from the call type if the
+            -- owner set one after the visitor booked.
+            COALESCE(NULLIF(s.meeting_url, ''), ct.meeting_url, '') AS meeting_url,
+            s.agenda,
+            COALESCE(m.email::text, c.email::text, NULLIF(s.guest_email, ''), '') AS email,
+            COALESCE(NULLIF(COALESCE(NULLIF(m.first_name, ''), c.first_name, c.name, ''), ''),
+                     split_part(s.guest_name, ' ', 1), '') AS first_name,
+            COALESCE(o.title, ct.title, 'coaching') AS offer_title,
+            s.manage_token
        FROM coaching_sessions s
        LEFT JOIN members m         ON m.id = s.member_id
        LEFT JOIN contacts c        ON c.id = s.contact_id
        LEFT JOIN coaching_offers o ON o.id = s.offer_id
+       LEFT JOIN book_a_call_types ct ON ct.id = s.call_type_id
       WHERE s.id = ANY($1::int[])`,
     [ids]
   );
@@ -164,7 +173,9 @@ async function sendReminders(step: ReminderStep): Promise<number> {
       session.meeting_url ? `[Join the session](${session.meeting_url})` : "",
       session.agenda ? `\n**What we said we'd cover:**\n\n${session.agenda}` : "",
       "",
-      "If something has come up and you need to move it, you can reschedule from your account.",
+      session.manage_token
+        ? `If something has come up, you can [cancel or pick another time here](${env.publicSiteUrl}/book-a-call/manage/${session.manage_token}).`
+        : "If something has come up and you need to move it, you can reschedule from your account.",
       "",
       "— Yvette",
     ]
