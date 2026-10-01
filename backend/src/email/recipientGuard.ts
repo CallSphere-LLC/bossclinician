@@ -123,7 +123,8 @@ export function isAllowListedRecipient(address: string, source: RecipientGuardEn
  * `someone@else.com`, and a list is refused if any member of it is.
  */
 export function refusedRecipients(to: string, source: RecipientGuardEnv = process.env): string[] {
-  let parsed: { name: string; address: string }[];
+  // nodemailer 10 types a parsed entry's address as optional; a missing one is refused below.
+  let parsed: { name?: string; address?: string }[];
   try {
     parsed = addressparser(to, { flatten: true });
   } catch {
