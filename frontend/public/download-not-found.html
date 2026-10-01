@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Download not available · Boss Clinician</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 24px 16px;
+         background: #06040B; color: #DED2EE; font: 400 16.5px/1.65 "Montserrat", system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 560px; text-align: center; }
+  .brand { font: 600 22px/1 Georgia, "Playfair Display", serif; color: #fff; letter-spacing: .01em; }
+  .brand em { color: #C9A36B; }
+  .code { margin-top: 36px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: .3em; color: #C9A36B; font-size: 13px; }
+  h1 { margin: 10px 0 0; font: 500 clamp(28px, 6vw, 38px)/1.15 Georgia, "Playfair Display", serif; color: #fff; }
+  p { margin: 16px 0 0; color: #C4B6DA; }
+  .file { margin-top: 10px; font-size: 13px; color: #A091B8; word-break: break-all; }
+  .actions { margin-top: 28px; display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; }
+  a.btn { display: inline-block; padding: 13px 22px; border-radius: 999px; text-decoration: none; font-weight: 600; font-size: 13px; letter-spacing: .12em; text-transform: uppercase; }
+  a.primary { background: linear-gradient(135deg, #E4C48C, #B88A4A); color: #1A1022; }
+  a.ghost { border: 1px solid rgba(255,255,255,.18); color: #fff; }
+  a.btn:focus-visible { outline: 2px solid #C9A36B; outline-offset: 3px; }
+</style>
+</head>
+<body>
+<main>
+  <div class="brand">Boss <em>Clinician</em></div>
+  <div class="code">404 · FILE NOT FOUND</div>
+  <h1>This download isn't available right now</h1>
+  <p>The file you asked for isn't on our site yet. Write to us and we'll send it to you by email, or browse the other free resources in the meantime.</p>
+  <p class="file" id="file"></p>
+  <div class="actions">
+    <a class="btn primary" href="/contact">Ask us for it</a>
+    <a class="btn ghost" href="/resource-hub">Free resources</a>
+  </div>
+</main>
+<script>
+  try { var n = decodeURIComponent(location.pathname.split("/").pop() || ""); if (n) document.getElementById("file").textContent = "Requested file: " + n; } catch (e) {}
+</script>
+</body>
+</html>
