@@ -1,16 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import { useNavigate, useSearchParams } from "react-router";
+import { Link, useNavigate, useSearchParams } from "react-router";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
   ArrowDown,
   ArrowLeft,
   ArrowUp,
   Download,
+  Eye,
   Inbox,
   ListChecks,
+  Mail,
   Pencil,
   Plus,
   Trash2,
+  UserRound,
 } from "lucide-react";
 import { toast } from "sonner";
 import { formatBytes, formatDateTime } from "@/lib/format";
@@ -110,6 +113,50 @@ function answerText(value: unknown): string {
     return typeof name === "string" ? name : "";
   }
   return String(value);
+}
+
+/** The name the person typed, for a reply with no contact attached. */
+function replyName(reply: FormSubmission): string {
+  const data = reply.data ?? {};
+  const whole = typeof data.name === "string" ? data.name.trim() : "";
+  if (whole) return whole;
+  const first = typeof data.first_name === "string" ? data.first_name.trim() : "";
+  const last = typeof data.last_name === "string" ? data.last_name.trim() : "";
+  return `${first} ${last}`.trim();
+}
+
+interface ReplyAnswer {
+  key: string;
+  label: string;
+  value: string;
+  file?: { name: string; previewUrl: string };
+}
+
+/**
+ * Every answer on one reply, under the question it answers, in the form's
+ * order — then anything the reply carries that the form no longer asks, so a
+ * deleted question never takes its answers with it.
+ */
+function replyAnswers(fields: FormField[], reply: FormSubmission): ReplyAnswer[] {
+  const data = reply.data ?? {};
+  const rows: ReplyAnswer[] = [];
+  const seen = new Set<string>();
+  for (const field of fields) {
+    seen.add(field.key);
+    if (field.type === "hidden" && !(field.key in data)) continue;
+    const sent = field.type === "file" ? reply.files?.find((file) => file.fieldKey === field.key) : undefined;
+    rows.push({
+      key: field.key,
+      label: field.label || field.key,
+      value: answerText(data[field.key]),
+      file: sent ? { name: sent.name, previewUrl: sent.previewUrl } : undefined,
+    });
+  }
+  for (const [key, value] of Object.entries(data)) {
+    if (seen.has(key)) continue;
+    rows.push({ key, label: key.replace(/_/g, " "), value: answerText(value) });
+  }
+  return rows;
 }
 
 /**
@@ -703,6 +750,16 @@ export default function FormBuilder() {
   // `since` otherwise let a slower, older answer overwrite the right one.
   const repliesTicket = useRef(0);
   const [downloading, setDownloading] = useState(false);
+  // The one reply being read in full. The table truncates every answer to one
+  // line, and an application like the Boardroom's is twenty-odd paragraphs —
+  // the table alone left her no way to read what somebody actually wrote.
+  const [viewing, setViewing] = useState<FormSubmission | null>(null);
+  // `?form=<id>&view=replies` opens the form at its replies rather than at the
+  // top of the editor, where the replies sit below every question on the form
+  // (twenty-three of them on the Boardroom Application) and read as missing.
+  const repliesRef = useRef<HTMLDivElement>(null);
+  const wantsReplies = searchParams.get("view") === "replies";
+  const scrolledToReplies = useRef<number | null>(null);
 
   const [adding, setAdding] = useState(false);
   const [newName, setNewName] = useState("");
@@ -746,6 +803,7 @@ export default function FormBuilder() {
   useEffect(() => {
     if (openId === null) {
       repliesTicket.current += 1;
+      scrolledToReplies.current = null;
       setDraft(null);
       setReplies(null);
       // The draft was discarded with the form ("Leave without saving?"); left
@@ -779,6 +837,18 @@ export default function FormBuilder() {
     setReplies(null);
     loadReplies(openId);
   }, [openId, loadReplies]);
+
+  // Once per opened form, when the link asked for its replies.
+  useEffect(() => {
+    if (!wantsReplies || openId === null || !draft || replies === null) return;
+    if (scrolledToReplies.current === openId) return;
+    scrolledToReplies.current = openId;
+    repliesRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [wantsReplies, openId, draft, replies]);
+
+  function showReplies() {
+    repliesRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 
   function clearSince() {
     const next = new URLSearchParams(searchParams);
@@ -869,8 +939,8 @@ export default function FormBuilder() {
     return () => document.removeEventListener("click", intercept, true);
   }, [dirty, confirm, navigate]);
 
-  function openForm(id: number) {
-    setSearchParams({ form: String(id) });
+  function openForm(id: number, view?: "replies") {
+    setSearchParams(view ? { form: String(id), view } : { form: String(id) });
   }
 
   function closeForm() {
@@ -1182,14 +1252,19 @@ export default function FormBuilder() {
         accessorKey: "email",
         header: "Who",
         cell: ({ row }) => (
-          <span className="min-w-0">
-            <span className="block truncate font-semibold text-ink">
-              {row.original.contactName || row.original.email || "No name given"}
+          <button
+            type="button"
+            onClick={() => setViewing(row.original)}
+            className="block min-w-0 text-left hover:text-plum"
+            title="Read the whole reply"
+          >
+            <span className="block truncate font-semibold text-ink hover:text-plum">
+              {row.original.contactName || replyName(row.original) || row.original.email || "No name given"}
             </span>
-            {row.original.contactName && (
+            {(row.original.contactName || replyName(row.original)) && (
               <span className="block truncate text-xs text-ink-soft">{row.original.email}</span>
             )}
-          </span>
+          </button>
         ),
       },
       ...fields.map<ColumnDef<FormSubmission, unknown>>((field) => ({
@@ -1226,6 +1301,15 @@ export default function FormBuilder() {
         enableSorting: false,
         cell: ({ row }) => (
           <RowActions>
+            <Button
+              variant="ghost"
+              size="iconSm"
+              aria-label={`Read the reply from ${row.original.email}`}
+              title="Read the whole reply"
+              onClick={() => setViewing(row.original)}
+            >
+              <Eye />
+            </Button>
             <Button
               variant="dangerGhost"
               size="iconSm"
@@ -1289,11 +1373,17 @@ export default function FormBuilder() {
         accessorKey: "submissionCount",
         header: "Replies",
         cell: ({ row }) => (
-          <span className="text-sm text-ink-soft">
-            {row.original.submissionCount === 0
-              ? "None yet"
-              : pluralize(row.original.submissionCount, "reply", "replies")}
-          </span>
+          row.original.submissionCount === 0 ? (
+            <span className="text-sm text-ink-soft">None yet</span>
+          ) : (
+            <button
+              type="button"
+              onClick={() => openForm(row.original.id, "replies")}
+              className="text-sm font-semibold text-plum hover:underline"
+            >
+              {pluralize(row.original.submissionCount, "reply", "replies")}
+            </button>
+          )
         ),
       },
       {
@@ -1434,6 +1524,14 @@ export default function FormBuilder() {
         actions={
           <>
             <Badge tone={draft.published ? "green" : "slate"}>{publishLabel(draft.published)}</Badge>
+            <Button size="sm" variant="secondary" onClick={showReplies}>
+              <Inbox />
+              {replies === null
+                ? "Replies"
+                : replies.length === 0
+                  ? "No replies yet"
+                  : `See ${pluralize(replies.length, "reply", "replies")}`}
+            </Button>
             <Button
               size="sm"
               variant="ghost"
@@ -1686,7 +1784,7 @@ export default function FormBuilder() {
 
       {/* ---------------------------------------------------------- replies */}
 
-      <div className="space-y-4">
+      <div ref={repliesRef} id="replies" className="scroll-mt-6 space-y-4">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <h2 className="font-display text-lg text-ink">Replies</h2>
@@ -1734,6 +1832,59 @@ export default function FormBuilder() {
           }
         />
       </div>
+
+      {/* ------------------------------------------------------ one reply */}
+
+      <Modal
+        open={viewing !== null}
+        onOpenChange={(open) => !open && setViewing(null)}
+        title={viewing ? viewing.contactName || replyName(viewing) || viewing.email || "A reply" : ""}
+        description={viewing ? `Sent ${formatDateTime(viewing.createdAt)}` : undefined}
+      >
+        {viewing && (
+          <div className="space-y-4">
+            <div className="flex flex-wrap gap-2">
+              {viewing.email && (
+                <Button asChild size="sm" variant="secondary">
+                  <a href={`mailto:${viewing.email}`}>
+                    <Mail />
+                    {viewing.email}
+                  </a>
+                </Button>
+              )}
+              {typeof viewing.contactId === "number" && (
+                <Button asChild size="sm" variant="secondary">
+                  <Link to={`/admin/contacts/${viewing.contactId}`}>
+                    <UserRound />
+                    Open their contact
+                  </Link>
+                </Button>
+              )}
+            </div>
+            <dl className="divide-y divide-hairline/60 rounded-xl border border-hairline">
+              {replyAnswers(draft.fields ?? [], viewing).map((row) => (
+                <div key={row.key} className="px-4 py-3">
+                  <dt className="text-xs font-semibold text-ink-soft">{row.label}</dt>
+                  <dd className="mt-1 whitespace-pre-wrap break-words text-sm text-ink">
+                    {row.file ? (
+                      <a
+                        href={row.file.previewUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="font-semibold text-plum hover:underline"
+                      >
+                        {row.file.name}
+                      </a>
+                    ) : (
+                      row.value || <span className="text-ink-soft">Not answered</span>
+                    )}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          </div>
+        )}
+      </Modal>
 
       {/* ----------------------------------------------------- add question */}
 

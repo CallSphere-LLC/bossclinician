@@ -176,8 +176,9 @@ export function Header({ transparentAtTop = false }: HeaderProps) {
           <SiteThemeToggle />
           {/* Members sign in from the marketing header, as on the source site.
               A text link, not a second button: the bar has ONE primary action,
-              Work With Me. Book A Call sits in the Work With Me panel's footer
-              and in the mobile sheet. */}
+              Book A Call — the call to action bossclinician.com's own header
+              carries. Work With Me is the dropdown in the bar and must not
+              appear twice; the pill used to repeat it. */}
           <Link
             to={headerActions.logIn.to}
             className="hidden whitespace-nowrap py-2 text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-white/55 transition-colors duration-300 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold xl:inline-flex"
@@ -185,8 +186,14 @@ export function Header({ transparentAtTop = false }: HeaderProps) {
             {headerActions.logIn.label}
           </Link>
           <div className="hidden xl:block">
-            <LuxeButton to="/work-with-me" variant="foil" size="sm" className="whitespace-nowrap">
-              Work With Me
+            <LuxeButton
+              href={headerActions.bookACall.href}
+              target="_blank"
+              variant="foil"
+              size="sm"
+              className="whitespace-nowrap"
+            >
+              {headerActions.bookACall.label}
             </LuxeButton>
           </div>
 
@@ -270,21 +277,15 @@ export function Header({ transparentAtTop = false }: HeaderProps) {
               ))}
               <div aria-hidden className="rule-faint" />
 
-              <LuxeButton
-                to="/work-with-me"
-                variant="foil"
-                size="md"
-                className="mt-6 w-full"
-                onClick={() => setOpen(false)}
-              >
-                Work With Me
-              </LuxeButton>
+              {/* Work With Me is already the group heading above (it links to
+                  the programs page), so the sheet's primary action is the one
+                  the desktop bar carries: Book A Call. */}
               <LuxeButton
                 href={headerActions.bookACall.href}
                 target="_blank"
-                variant="glass"
+                variant="foil"
                 size="md"
-                className="mt-3 w-full"
+                className="mt-6 w-full"
                 onClick={() => setOpen(false)}
               >
                 {headerActions.bookACall.label}

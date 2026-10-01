@@ -120,15 +120,6 @@ function serviceNodes(origin: string): JsonLdNode[] {
   });
 }
 
-/**
- * The cover has to stop being a rectangle pasted onto the panel. Two passes do
- * that: a violet multiply that pulls bright brand whites into the page's
- * palette, then this scrim, whose bottom stop matches the composited glass so
- * the image dissolves into the card instead of ending at it.
- */
-const COVER_SCRIM =
-  "linear-gradient(to top, rgb(var(--c-night, 9 6 17) / 0.96) 0%, rgb(var(--c-night, 9 6 17) / 0.72) 18%, rgb(var(--c-night, 9 6 17) / 0.26) 46%, rgb(var(--c-night, 9 6 17) / 0) 76%)";
-
 export default function Store() {
   const { origin } = useHeadContext();
 
@@ -197,11 +188,12 @@ function ServiceCard({ service }: { service: Service }) {
       accent={service.accent}
       className="group flex h-full flex-col overflow-hidden"
     >
-      {/* Cover, graded down before it is composited so a bright brand plate
-          sits *in* the near-black page instead of glowing on top of it. The
-          plate's only words are the service's name, which the heading beneath
-          it already states, so it is decorative to a screen reader. */}
-      <div className="relative aspect-[16/9] w-full overflow-hidden bg-night-deep">
+      {/* Cover, at full strength: no dimming grade, violet multiply or fading
+          scrim (on the light theme the scrim was white and washed the plate
+          out). It ends on a crisp hairline instead. The plate's only words are
+          the service's name, which the heading beneath it already states, so
+          it is decorative to a screen reader. */}
+      <div className="relative aspect-[16/9] w-full overflow-hidden border-b border-hairline bg-night-deep">
         <img
           src={service.image}
           alt=""
@@ -211,20 +203,13 @@ function ServiceCard({ service }: { service: Service }) {
           decoding="async"
           className={cn(
             "h-full w-full max-w-full object-cover",
-            "brightness-[0.8] contrast-[1.06] saturate-[0.8]",
-            "transition-transform duration-700 ease-luxe group-hover:scale-[1.06]",
+            "transition-transform duration-700 ease-luxe group-hover:scale-[1.04]",
           )}
         />
+        {/* Foil hairline along the join between plate and panel. */}
         <div
           aria-hidden
-          className="absolute inset-0 bg-glow-violet/40 mix-blend-multiply transition-opacity duration-700 ease-luxe group-hover:opacity-70"
-        />
-        <div aria-hidden className="absolute inset-0" style={{ background: COVER_SCRIM }} />
-        {/* Foil hairline along the join between plate and panel — what stops
-            the cover reading as a pasted-in box. */}
-        <div
-          aria-hidden
-          className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-gold/45 to-transparent"
+          className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-gold/60 to-transparent"
         />
       </div>
 

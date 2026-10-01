@@ -19,6 +19,8 @@ interface MemberChipProps {
   headline?: string;
   /** Turns the chip into a link to the profile. Host posts have no profile. */
   to?: string;
+  /** Router state for that link — the directory marks where the visit began. */
+  linkState?: unknown;
   /** Trailing badge emoji, role pill, or a timestamp. */
   meta?: React.ReactNode;
   size?: "sm" | "md" | "lg";
@@ -42,6 +44,7 @@ export function MemberChip({
   avatarUrl,
   headline,
   to,
+  linkState,
   meta,
   size = "md",
   className,
@@ -71,6 +74,7 @@ export function MemberChip({
   return (
     <Link
       to={to}
+      state={linkState}
       className={cn(
         "flex min-h-[2.75rem] items-center gap-3 rounded-xl -mx-2 px-2",
         "transition-colors duration-300 hover:bg-white/[0.04]",

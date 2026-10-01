@@ -60,15 +60,6 @@ function splitOnce(text: string, marker: string): [string, string | undefined] {
 
 const [HERO_TITLE, HERO_ACCENT] = splitOnce(HERO_HEADLINE, " Your Private Practice");
 
-/**
- * The cover photo has to stop being a rectangle pasted onto the panel. Two
- * passes do that: a violet multiply that pulls bright stock whites into the
- * page's palette, then this scrim, whose bottom stop matches the composited
- * glass surface so the image dissolves into the card instead of ending at it.
- */
-const COVER_SCRIM =
-  "linear-gradient(to top, rgb(var(--c-night, 9 6 17) / 0.96) 0%, rgb(var(--c-night, 9 6 17) / 0.72) 18%, rgb(var(--c-night, 9 6 17) / 0.26) 46%, rgb(var(--c-night, 9 6 17) / 0) 76%)";
-
 /** Shared grading recipe for the two editorial photographs on this page. */
 const PLATE_GRADE = "brightness-[0.82] contrast-[1.06] saturate-[0.8]";
 
@@ -320,26 +311,26 @@ function CourseCard({ course, accent }: { course: Course; accent: Accent }) {
 
   return (
     <GlassCard as="article" accent={accent} className="group flex h-full flex-col overflow-hidden">
-      {/* Cover. Graded down before it is composited so a daylight product shot
-          sits *in* the near-black page instead of glowing on top of it. */}
-      <Link to={`/courses/${course.slug}`} aria-label={`View ${course.title}`} className="relative block aspect-[16/10] w-full overflow-hidden bg-night-deep">
+      {/* Cover, at full strength. It used to be dimmed, desaturated, put under
+          a violet multiply and faded into the card with a scrim — on the light
+          theme that scrim is white, and the product shots read as milky and
+          washed out (QA sheet). The cover is what sells the course, so it now
+          ends on a crisp edge: a hairline plus the foil rule. */}
+      <Link
+        to={`/courses/${course.slug}`}
+        aria-label={`View ${course.title}`}
+        className="relative block aspect-[16/10] w-full overflow-hidden border-b border-hairline bg-night-deep"
+      >
         <img
           src={course.image}
           alt={meta.imageAlt ?? course.title}
           loading="lazy"
           decoding="async"
-          className="h-full w-full max-w-full object-cover brightness-[0.8] contrast-[1.06] saturate-[0.8] transition-transform duration-700 ease-luxe group-hover:scale-[1.06]"
+          className="h-full w-full max-w-full object-cover transition-transform duration-700 ease-luxe group-hover:scale-[1.04]"
         />
         <div
           aria-hidden
-          className="absolute inset-0 bg-glow-violet/40 mix-blend-multiply transition-opacity duration-700 ease-luxe group-hover:opacity-70"
-        />
-        <div aria-hidden className="absolute inset-0" style={{ background: COVER_SCRIM }} />
-        {/* Foil hairline along the bottom of the frame — the join between plate
-            and panel, which is what stops the cover reading as a pasted-in box. */}
-        <div
-          aria-hidden
-          className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-gold/45 to-transparent"
+          className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-gold/60 to-transparent"
         />
       </Link>
 
@@ -348,19 +339,19 @@ function CourseCard({ course, accent }: { course: Course; accent: Accent }) {
           <Link to={`/courses/${course.slug}`} className="hover:text-gold focus-visible:underline">{course.title}</Link>
         </h3>
 
-        <p className="mt-2.5 text-pretty text-[0.9rem] font-medium leading-snug text-lilac">
+        <p className="mt-2.5 text-pretty text-[0.98rem] font-semibold leading-snug text-lilac">
           {course.subtitle}
         </p>
 
-        <p className="copy-luxe mt-4 text-pretty text-sm">{course.description}</p>
+        <p className="copy-luxe mt-4 text-pretty text-[0.95rem] leading-[1.7]">{course.description}</p>
 
         {features.length > 0 && (
           <div className="mt-5">
-            <p className="text-sm font-semibold text-white/85">{meta.featuresLabel}</p>
+            <p className="text-[0.95rem] font-semibold text-white/90">{meta.featuresLabel}</p>
 
             <ul className="mt-3 space-y-2">
               {features.map((f) => (
-                <li key={f} className="flex gap-2.5 text-sm leading-[1.5] text-orchid-dim">
+                <li key={f} className="flex gap-2.5 text-[0.95rem] leading-[1.55] text-orchid-dim">
                   <svg
                     aria-hidden
                     viewBox="0 0 8 8"
@@ -382,7 +373,7 @@ function CourseCard({ course, accent }: { course: Course; accent: Accent }) {
           <div aria-hidden className="rule-faint w-full" />
 
           {course.priceText && (
-            <p className="mt-5 font-display text-[1.05rem] font-medium text-gold">
+            <p className="mt-5 font-body text-[1rem] font-bold tabular-nums text-gold">
               {course.priceText}
             </p>
           )}

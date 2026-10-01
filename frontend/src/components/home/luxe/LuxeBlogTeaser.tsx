@@ -9,12 +9,10 @@ import { RevealGroup, RevealItem } from "@/components/ui/Reveal";
 import { findBlogPostBySlug } from "@/content/blog";
 
 /**
- * The cover photo has to stop being a rectangle pasted onto the panel. Two
- * passes do that: a plum multiply that pulls bright stock whites into the
- * page's palette, then this scrim, whose bottom stop matches the composited
- * glass surface so the image dissolves into the card instead of ending at it.
- * The same scrim runs over the typographic plate below, so a card with a photo
- * and a card without one meet the copy block on exactly the same gradient.
+ * Fades the typographic plate (a card with no photo) into the copy block.
+ * Photographs no longer get it, nor the plum multiply that went with it: on the
+ * light theme the scrim is white and washed the cover out (QA sheet), so a
+ * photo now shows at full strength and ends on a hairline.
  */
 const COVER_SCRIM =
   "linear-gradient(to top, rgb(var(--c-night, 9 6 17) / 0.96) 0%, rgb(var(--c-night, 9 6 17) / 0.74) 16%, rgb(var(--c-night, 9 6 17) / 0.28) 44%, rgb(var(--c-night, 9 6 17) / 0) 74%)";
@@ -153,22 +151,24 @@ export function LuxeBlogTeaser() {
               <div className="relative aspect-[16/10] w-full overflow-hidden">
                 {local?.coverImage ? (
                   <>
+                    {/* A real photograph shows at full strength — no plum
+                        multiply, no fading scrim (on the light theme the scrim
+                        was white and washed the photo out). */}
                     <img
                       src={local.coverImage}
                       alt=""
                       loading="lazy"
                       decoding="async"
-                      className="h-full w-full object-cover transition-transform duration-700 ease-luxe group-hover:scale-[1.06]"
+                      className="h-full w-full object-cover transition-transform duration-700 ease-luxe group-hover:scale-[1.04]"
                     />
-                    <div
-                      aria-hidden
-                      className="absolute inset-0 bg-glow-violet/45 mix-blend-multiply transition-opacity duration-700 ease-luxe group-hover:opacity-60"
-                    />
+                    <div aria-hidden className="absolute inset-x-0 bottom-0 h-px bg-hairline" />
                   </>
                 ) : (
-                  <CoverPlate accent={post.accent} />
+                  <>
+                    <CoverPlate accent={post.accent} />
+                    <div aria-hidden className="absolute inset-0" style={{ background: COVER_SCRIM }} />
+                  </>
                 )}
-                <div aria-hidden className="absolute inset-0" style={{ background: COVER_SCRIM }} />
               </div>
 
               <div className="flex flex-1 flex-col px-6 pb-6 pt-5 sm:px-7 sm:pb-7">

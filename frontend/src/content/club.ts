@@ -10,8 +10,15 @@
  * "curriculum pace" slider, whose one worked example is kept as static copy.
  */
 
-/** Every Join action uses the owner-specified hosted Club checkout. */
-export const CLUB_JOIN_ROUTE = "https://www.bossclinician.com/offers/tzgjALKU/checkout";
+/**
+ * Every Join action opens the Club's own checkout on this site — the page that
+ * mirrors Kajabi's hosted one (www.bossclinician.com/offers/tzgjALKU/checkout)
+ * and sells it through the site's Stripe checkout.
+ */
+export const CLUB_JOIN_ROUTE = "/club/checkout";
+
+/** The offer /club/checkout sells (offers.slug; migration 089 publishes it). */
+export const CLUB_OFFER_SLUG = "the-club";
 
 export const club = {
   seo: {
@@ -413,4 +420,98 @@ export const club = {
 
   footerLine: "Build it. Sustain it. Lead it. Leave it on your terms.",
   nbcc: "Boss Clinician, LLC has been approved by NBCC as an Approved Continuing Education Provider, ACEP No. 7998. Programs that do not qualify for NBCC credit are clearly identified. Boss Clinician, LLC is solely responsible for all aspects of the programs. CE grievance, refund, and cancellation policies are available by request at support@bossclinician.com.",
+};
+
+/**
+ * `/club/checkout` — transcribed from Kajabi's checkout page for the Club offer
+ * (www.bossclinician.com/offers/tzgjALKU/checkout, 1 October 2026) and its
+ * public checkout API. Prices are NOT here: the order form reads them from the
+ * offer (`the-club`), so the page can never quote different money from the
+ * charge. The one edit: the source's NBCC line says policies are "available at
+ * [LINK] or by request" — an unfilled placeholder — so, as on /club, it reads
+ * "available by request".
+ */
+export const clubCheckout = {
+  seo: {
+    title: "Join The Club | Boss Clinician",
+    description:
+      "You're one step away from the Club: the 6-month coaching program where therapists build a private practice that replaces their salary, without losing their security to get there.",
+  },
+  eyebrow: "THE CLUB · SECURE CHECKOUT",
+  title: "You're One Step Away From the Club",
+  subtitle:
+    "The 6-month coaching program where therapists build a private practice that replaces their salary, without losing their security to get there.",
+  /** The source's own mockup, already self-hosted for /club. */
+  image: {
+    src: "/images/club/club-program-mockup.jpg",
+    alt: "The Club shown on desktop, laptop, tablet and phone screens: lessons, worksheets and a live coaching call",
+    width: 1920,
+    height: 1080,
+  },
+  formHeadline: "Complete your enrollment",
+  includesTitle: "Everything you need to make your boss move:",
+  includes: [
+    {
+      title: "The Boss Move Signature Program",
+      body: "All 5 modules with 4 NBCC clock hours. The exact build order that works: foundation, clients, income, systems. Move at your pace, earn continuing education credit while you build.",
+    },
+    {
+      title: "2 Live Coaching Calls Per Month with Yvette",
+      body: "Twelve live calls across your six months. Real questions, real answers, from a strategist who built a multi-six-figure group practice from your exact starting point.",
+    },
+    {
+      title: "A Community Built for Your Stage",
+      body: "Your cohort of clinicians building in the same season you are, with six full months of support so you are never building alone.",
+    },
+    {
+      title: "The First 30 Days Success Planner + Readiness Tracker",
+      body: "Momentum from day one, with every milestone mapped so you always know what comes next.",
+    },
+    {
+      title: "Every Template You Need",
+      body: "Checklists, client and provider letter templates, plus done-for-you branding and marketing materials including business cards, postcards, email signatures, and 250 blog article ideas.",
+    },
+    {
+      title: "The Prepare to Profit Guided Meditation Journal",
+      body: "The mindset work that keeps the build moving when fear shows up.",
+    },
+  ],
+  bonusesTitle: "Plus these bonuses, included when you enroll:",
+  bonuses: [
+    {
+      label: "BONUS #1",
+      title: "The Therapist Niche Clarity Accelerator",
+      body: "Know exactly who you serve before you see your first client. The guided workbook, mini-training, 15-minute market research method, and Ideal Client Identifier that take you from \"too general\" to clear, confident, and referable. (Sold separately on our site; yours free with enrollment. Does not carry NBCC credit.)",
+    },
+    {
+      label: "BONUS #2",
+      title: "The Boss Move Kickstart Call",
+      body: "A personal 15-minute call with Yvette herself, before you dive in. You'll leave knowing your first three moves. Because you shouldn't start this alone.",
+    },
+    {
+      label: "BONUS #3 · FAST ACTION",
+      title: "The Ramp-Up Rate Pricing Formula",
+      body: "Enroll within 72 hours and get the complete rate-setting system free: the Rate-Setting Blueprint, mindset reset training, Ramp-Up Rate Calculator, Rate Comparison Calculator, and workbook, so you charge with confidence from your very first client. ($197 value, sold separately. Does not carry NBCC credit.)",
+    },
+  ],
+  nbcc: "The Boss Move is approved by NBCC under the program title \"Profitable Private Practices: Training for Clinically-Aligned Private Practices\" for 4 clock hours. Your certificate of completion will carry the approved program title. Boss Clinician, LLC has been approved by NBCC as an Approved Continuing Education Provider, ACEP No. 7998. Programs that do not qualify for NBCC credit are clearly identified. Boss Clinician, LLC is solely responsible for all aspects of the programs. Continuing education credit applies to this course only; coaching calls, community access, and bonus materials do not carry NBCC credit. CE grievance, refund, and cancellation policies are available by request at support@bossclinician.com.",
+  refund: {
+    title: "14 Day Refund Policy",
+    body: "You have to take enough risks in life, this program shouldn’t be one of them. Try the program for 14 days, and if you determine it's not for you - just let us know and we’ll be happy to refund your entire purchase.",
+    link: { label: "Click here for full details.", to: "/terms" },
+  },
+  security: {
+    title: "Security and Privacy Policy",
+    body: "All personal information you submit is encrypted and secure. We will not share or trade online information that you provide us (including e-mail addresses).",
+  },
+  /** Kajabi's service agreement, shown above its "I accept" checkbox. */
+  agreement: {
+    title: "Enrollment terms",
+    body: "By enrolling, I agree to the Terms of Use and confirm that I understand: the Club is a 6-month program; payment plans consist of 6 monthly payments and all 6 payments are owed upon enrollment; refunds are available only under the Boss Move Guarantee, which requires completing onboarding, Start Here, Module 01, and the Module 01 worksheets, and attending or watching the first coaching call, with completed work submitted within 14 days of enrollment; no refunds are provided after 14 days or for change of mind or non-participation. Bonus materials are included at no charge and carry no cash value. All Club content and materials are for my individual use only and may not be shared or distributed. The Club provides business education and coaching, not clinical supervision, legal, tax, or financial advice, and no specific income results are promised or guaranteed.",
+    note: "Accepting the terms in the order form below confirms these enrollment terms.",
+  },
+  unavailable: {
+    title: "Enrollment isn't open right now",
+    body: "Something stopped this checkout from opening. Please try again in a moment, or get in touch and we'll enroll you directly.",
+  },
 };

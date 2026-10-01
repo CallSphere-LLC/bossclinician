@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Link, Navigate, useParams } from "react-router";
+import { Link, Navigate, useLocation, useNavigate, useParams } from "react-router";
 import {
   ArrowLeft,
   Award,
@@ -178,6 +178,7 @@ function Directory({ communitySlug }: { communitySlug: string }) {
                 className={cn("p-4", row.mine && "ring-1 ring-inset ring-gold/30")}
               >
                 <MemberChip
+                  linkState={{ fromDirectory: true }}
                   name={row.name}
                   avatarUrl={row.avatarUrl}
                   headline={row.headline}
@@ -221,6 +222,12 @@ function ProfileView({
 }) {
   const [profile, setProfile] = useState<CommunityMemberProfile | null>(null);
   const [error, setError] = useState("");
+  const navigate = useNavigate();
+  const location = useLocation();
+  // Opened from the directory: "All members" steps back to it (keeping its
+  // place in history) rather than stacking a fresh copy on top of this page.
+  const fromDirectory =
+    (location.state as { fromDirectory?: boolean } | null)?.fromDirectory === true;
 
   useEffect(() => {
     let cancelled = false;
@@ -250,6 +257,11 @@ function ProfileView({
     <div className="flex flex-col gap-5">
       <Link
         to={`/community/${communitySlug}/members`}
+        onClick={(event) => {
+          if (!fromDirectory || event.metaKey || event.ctrlKey || event.shiftKey) return;
+          event.preventDefault();
+          navigate(-1);
+        }}
         className={cn(
           "inline-flex min-h-[2.75rem] items-center gap-2 self-start text-xs font-semibold",
           "uppercase tracking-[0.14em] text-orchid-dim transition-colors duration-300",

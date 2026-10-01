@@ -9,7 +9,7 @@ import { asyncHandler } from "../../utils/asyncHandler";
 import { badRequest, notFound, unauthorized } from "../../utils/httpError";
 import { hashToken } from "../../auth/tokens";
 import { checkPasswordStrength, hashPassword, verifyPassword } from "../../auth/password";
-import { clearRefreshCookie } from "../../auth/memberSession";
+import { MEMBER_IDLE_LIMIT_SECONDS, clearRefreshCookie } from "../../auth/memberSession";
 import { denyImpersonation, requireMember, type AuthedMember } from "../../middleware/memberAuth";
 import { memberAvatarLimiter } from "../../middleware/rateLimit";
 import { sendMail } from "../../email/mailer";
@@ -345,8 +345,10 @@ memberAccountRoutes.get(
         WHERE member_id = $1
           AND revoked_at IS NULL
           AND expires_at > now()
+          -- An idle session is over even before its next refresh revokes it.
+          AND COALESCE(last_active_at, created_at) > now() - make_interval(secs => $2)
         ORDER BY created_at DESC`,
-      [member.id]
+      [member.id, MEMBER_IDLE_LIMIT_SECONDS]
     );
 
     // Mapped by hand rather than with rowsToCamel: token_hash is selected only

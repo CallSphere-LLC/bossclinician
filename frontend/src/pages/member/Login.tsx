@@ -15,6 +15,7 @@ import { LuxeInput } from "@/components/luxe/LuxeField";
 import { api } from "@/lib/api";
 import { MemberApiError, memberApi } from "@/lib/memberApi";
 import { useMember } from "@/hooks/useMember";
+import { clearSignOutReason, signOutReasonMessage } from "@/lib/memberSessionPolicy";
 
 const DEFAULT_DESTINATION = "/library";
 
@@ -46,6 +47,9 @@ export default function Login() {
   // once, as the initial value: the param is stripped from the address just
   // below, and the message should outlive it until the member tries again.
   const [error, setError] = useState<string | null>(() => googleErrorMessage(params.get("error")));
+  // `?reason=idle|expired`, set by RequireMember when the session was ended
+  // for the member rather than by them. Read once, like the Google error.
+  const [signedOutNotice] = useState<string | null>(() => signOutReasonMessage(params.get("reason")));
   const [submitting, setSubmitting] = useState(false);
   const [magicLink, setMagicLink] = useState<MagicLinkState>("checking");
   const [googleEnabled, setGoogleEnabled] = useState(false);
@@ -54,9 +58,13 @@ export default function Login() {
   // after it has stopped being true, and a bookmark keeps it for good.
   // `replaceState`, so Back still goes wherever it went before. `next` stays.
   useEffect(() => {
+    clearSignOutReason();
     const url = new URL(window.location.href);
-    if (!url.searchParams.get("error")?.startsWith("google_")) return;
-    url.searchParams.delete("error");
+    const googleError = url.searchParams.get("error")?.startsWith("google_");
+    const reason = url.searchParams.has("reason");
+    if (!googleError && !reason) return;
+    if (googleError) url.searchParams.delete("error");
+    url.searchParams.delete("reason");
     window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
   }, []);
 
@@ -125,13 +133,22 @@ export default function Login() {
       documentTitle="Sign in · Boss Clinician"
       description="Sign in to your Boss Clinician account."
       title="Welcome back"
-      subtitle="Sign in to pick up where you left off. Your session lasts up to 30 days."
+      subtitle="Sign in to pick up where you left off. For your security, you are signed out after 30 minutes without activity."
       footer={
         <>
           New here? <AuthLink to="/signup">Create your account</AuthLink>
         </>
       }
     >
+      {signedOutNotice && (
+        <p
+          role="status"
+          className="mb-6 rounded-xl border border-gold/30 bg-gold/[0.08] px-4 py-3 text-sm leading-relaxed text-orchid"
+        >
+          {signedOutNotice}
+        </p>
+      )}
+
       {googleEnabled && <GoogleButton next={destination} />}
 
       <form onSubmit={handleSubmit} className="space-y-5" noValidate>

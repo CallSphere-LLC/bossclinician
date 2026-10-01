@@ -268,8 +268,12 @@ export function BoardroomApplication() {
     const social = form.elements.namedItem("social_profile");
     if (data.follow_up === SOCIAL_FOLLOW_UP && !data.social_profile && social instanceof HTMLInputElement) {
       social.setCustomValidity(copy.socialRequired);
+      // The browser's bubble is gone the moment anything else is clicked, and
+      // without it the reader was left on step one with no idea why the
+      // application had not gone. The same sentence stays on the page until
+      // they move on.
       flushSync(() => {
-        setError(null);
+        setError(copy.socialRequired);
         setStep(0);
       });
       social.reportValidity();
@@ -367,12 +371,16 @@ export function BoardroomApplication() {
             >
               {copy.actions.back}
             </button>
+            {/* Keyed, so the "Continue" button just clicked is never the same
+                element as the submit button that replaces it: a button whose
+                type changes to "submit" during its own click can send the form
+                in some browsers before the last step has been seen. */}
             {step < LAST_STEP ? (
-              <button type="button" className="br-next" onClick={next}>
+              <button key="next" type="button" className="br-next" onClick={next}>
                 {copy.actions.next}
               </button>
             ) : (
-              <button type="submit" className="br-next" disabled={sending}>
+              <button key="submit" type="submit" className="br-next" disabled={sending}>
                 {sending ? copy.actions.sending : copy.actions.submit}
               </button>
             )}

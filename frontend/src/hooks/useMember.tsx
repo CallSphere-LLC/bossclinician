@@ -17,6 +17,17 @@ import {
   setSignedOutHandler,
   type MemberProfile,
 } from "@/lib/memberApi";
+import {
+  applySessionPolicy,
+  broadcastSignOut,
+  clearSignOutReason,
+  noteSignOutReason,
+  peekSignOutReason,
+  resetSessionPolicy,
+  type SessionPolicyPayload,
+  type SignOutReason,
+} from "@/lib/memberSessionPolicy";
+import { MemberIdleGuard } from "@/hooks/useMemberIdle";
 
 /**
  * Member auth context — the customer-side counterpart to hooks/useAuth.tsx.
@@ -87,14 +98,19 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
   });
   const refreshTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const applySession = useCallback((profile: MemberProfile, token: string) => {
-    setAccessToken(token);
-    setMemberState(profile);
-  }, []);
+  const applySession = useCallback(
+    (profile: MemberProfile, token: string, policy?: SessionPolicyPayload) => {
+      applySessionPolicy(policy);
+      setAccessToken(token);
+      setMemberState(profile);
+    },
+    [],
+  );
 
   const clearSession = useCallback(() => {
     setAccessToken(null);
     setMemberState(null);
+    resetSessionPolicy();
   }, []);
 
   useEffect(() => {
@@ -166,8 +182,9 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
 
   const signIn = useCallback(
     async (email: string, password: string) => {
-      const { member: profile, accessToken } = await memberApi.login(email, password);
-      applySession(profile, accessToken);
+      const { member: profile, accessToken, session } = await memberApi.login(email, password);
+      clearSignOutReason();
+      applySession(profile, accessToken, session);
     },
     [applySession],
   );
@@ -176,7 +193,7 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
     async (input: { email: string; password: string; firstName: string; lastName?: string }) => {
       const result = await memberApi.register({ ...input, timezone: detectTimezone() });
       if (isRegistrationPending(result)) return false;
-      applySession(result.member, result.accessToken);
+      applySession(result.member, result.accessToken, result.session);
       return true;
     },
     [applySession],
@@ -184,16 +201,18 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
 
   const signInWithToken = useCallback(
     async (token: string) => {
-      const { member: profile, accessToken } = await memberApi.consumeMagicLink(token);
-      applySession(profile, accessToken);
+      const { member: profile, accessToken, session } = await memberApi.consumeMagicLink(token);
+      clearSignOutReason();
+      applySession(profile, accessToken, session);
     },
     [applySession],
   );
 
   const signInAsHost = useCallback(
     async (token: string) => {
-      const { member: profile, accessToken } = await memberApi.consumeHostLink(token);
-      applySession(profile, accessToken);
+      const { member: profile, accessToken, session } = await memberApi.consumeHostLink(token);
+      clearSignOutReason();
+      applySession(profile, accessToken, session);
     },
     [applySession],
   );
@@ -203,8 +222,68 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
       await memberApi.logout();
     } finally {
       clearSession();
+      // Every other open tab forgets the session too, rather than carrying on
+      // until its next refresh discovers the cookie is gone.
+      broadcastSignOut("manual");
     }
   }, [clearSession]);
+
+  /**
+   * The idle (or absolute) clock ran out in this tab. The reason is stashed
+   * for RequireMember, which turns the cleared session into a redirect to
+   * /login?reason=… — so a member page lands on the sign-in form with the
+   * explanation, and a signed-in reader of a public page is simply signed out.
+   */
+  const expireSession = useCallback(
+    async (reason: SignOutReason) => {
+      noteSignOutReason(reason);
+      broadcastSignOut(reason);
+      try {
+        // Only reachable mid-call through the absolute cap (a call counts as
+        // activity), but a call must never outlive the session it belongs to.
+        const room = await import("@/lib/liveRoom/callManager");
+        const { status } = room.getRoomSnapshot();
+        if (["connecting", "waiting", "live", "reconnecting"].includes(status)) {
+          await room.leaveRoom();
+        }
+      } catch {
+        // No call engine loaded, or leaving failed: signing out still happens.
+      }
+      try {
+        await memberApi.logout();
+      } catch {
+        // The server ends the session itself on the next refresh.
+      } finally {
+        clearSession();
+      }
+    },
+    [clearSession],
+  );
+
+  const remoteSignOut = useCallback(
+    (reason: SignOutReason | "manual") => {
+      if (reason !== "manual") noteSignOutReason(reason);
+      // Same rule as expireSession: no call outlives its session, even when the
+      // news came from another tab.
+      void import("@/lib/liveRoom/callManager")
+        .then((room) => {
+          const { status } = room.getRoomSnapshot();
+          if (["connecting", "waiting", "live", "reconnecting"].includes(status)) {
+            return room.leaveRoom();
+          }
+        })
+        .catch(() => {});
+      clearSession();
+    },
+    [clearSession],
+  );
+
+  const onIdleExpire = useCallback(
+    (reason: SignOutReason) => {
+      void expireSession(reason);
+    },
+    [expireSession],
+  );
 
   const refreshMember = useCallback(async () => {
     const profile = await memberApi.me();
@@ -226,7 +305,19 @@ export function MemberAuthProvider({ children }: { children: ReactNode }) {
     [member, loading, signIn, signUp, signInWithToken, signInAsHost, signOut, refreshMember],
   );
 
-  return <MemberAuthContext.Provider value={value}>{children}</MemberAuthContext.Provider>;
+  return (
+    <MemberAuthContext.Provider value={value}>
+      {children}
+      {/* Not for "view as member": an admin's preview has no session to end. */}
+      {member && !member.impersonatedBy && (
+        <MemberIdleGuard
+          key={member.id}
+          onExpire={onIdleExpire}
+          onRemoteSignOut={remoteSignOut}
+        />
+      )}
+    </MemberAuthContext.Provider>
+  );
 }
 
 export function useMember(): MemberAuthValue {
@@ -243,6 +334,13 @@ export function useMember(): MemberAuthValue {
 export function RequireMember({ children }: { children: ReactNode }) {
   const { member, loading } = useMember();
   const location = useLocation();
+  const signedOut = !loading && !member;
+  // Read during render, so the redirect below can carry it; cleared once that
+  // redirect has been committed, so it is said once and not on every visit.
+  const reason = signedOut ? peekSignOutReason() : null;
+  useEffect(() => {
+    if (signedOut) clearSignOutReason();
+  }, [signedOut]);
 
   if (loading) {
     return (
@@ -258,7 +356,8 @@ export function RequireMember({ children }: { children: ReactNode }) {
 
   if (!member) {
     const next = encodeURIComponent(location.pathname + location.search);
-    return <Navigate to={`/login?next=${next}`} replace />;
+    const why = reason ? `&reason=${reason}` : "";
+    return <Navigate to={`/login?next=${next}${why}`} replace />;
   }
 
   return <>{children}</>;

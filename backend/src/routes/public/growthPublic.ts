@@ -827,6 +827,19 @@ growthPublicRouter.post(
     // its files in temp names by now, and those are deleted when this response
     // closes, as they are for any reply that is not kept.
     if (isAutomatedSubmission(parsed.data)) {
+      // Logged, because this is the one path where a person is told "it's in"
+      // and nothing reaches Forms, Leads or the owner's inbox. If a real
+      // applicant ever trips it (an autofilled trap, a clock that jumped), this
+      // line is the only trace that they tried.
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[forms] dropped a reply to ${form.slug} as automated:`,
+        JSON.stringify({
+          trap: Boolean(parsed.data.company?.trim()),
+          elapsedMs: parsed.data.elapsedMs ?? null,
+          ip: req.ip ?? "",
+        }),
+      );
       res.status(201).json({ ok: true, message: form.success_message });
       return;
     }

@@ -20,6 +20,17 @@ interface VideoBandProps {
   src540: string;
   /** The video's own first frame, so the poster-to-footage handoff does not jump. */
   poster: string;
+  /**
+   * CSS `object-position` for the footage. On a desktop the band is far wider
+   * than 16:9, so `cover` discards most of the frame's height; footage with a
+   * person in it has to say where their face is, or the crop takes it.
+   */
+  objectPosition?: string;
+  /**
+   * Where the overlaid line sits. "bottom" sets it as a lower third, over a
+   * deeper shade, so it does not run across the face of whoever is speaking.
+   */
+  captionAt?: "center" | "bottom";
   className?: string;
   "aria-label"?: string;
   children: ReactNode;
@@ -49,6 +60,8 @@ export function VideoBand({
   src720,
   src540,
   poster,
+  objectPosition,
+  captionAt = "center",
   className,
   children,
   ...rest
@@ -135,6 +148,8 @@ export function VideoBand({
         // Generous, but a fraction of the source page's 240px: section padding
         // is symmetric, so every pixel here is paid twice against its neighbours.
         "py-12 sm:py-14 lg:py-20 2xl:py-24 short:py-10",
+        // A lower third keeps clear of the play/pause pill in the corner.
+        captionAt === "bottom" && "items-end pb-16 sm:pb-16 short:pb-12",
         className,
       )}
       {...rest}
@@ -153,12 +168,15 @@ export function VideoBand({
         tabIndex={-1}
         onPlay={() => setPlaying(true)}
         onPause={() => setPlaying(false)}
+        style={objectPosition ? { objectPosition } : undefined}
         className="pointer-events-none absolute inset-0 -z-10 size-full object-cover"
       />
 
       {/* The veil. Night and plum rather than the source page's navy, at about
-          the same density; the vertical gradient closes to the page floor at
-          both edges so the band hands off to its neighbours without a hard line. */}
+          the same density. The fades to the page floor take only the top and
+          bottom fifth: the band still hands off to its neighbours without a
+          hard line, but a face in the upper third of the footage is no longer
+          darkened to nothing by a gradient running the full height. */}
       <div aria-hidden className="absolute inset-0 -z-10 bg-night/60" />
       <div
         aria-hidden
@@ -166,8 +184,18 @@ export function VideoBand({
       />
       <div
         aria-hidden
-        className="absolute inset-0 -z-10 bg-gradient-to-b from-night-deep via-transparent to-night-deep opacity-90"
+        className="absolute inset-x-0 top-0 -z-10 h-1/5 bg-gradient-to-b from-night-deep to-transparent opacity-90"
       />
+      <div
+        aria-hidden
+        className="absolute inset-x-0 bottom-0 -z-10 h-1/5 bg-gradient-to-t from-night-deep to-transparent opacity-90"
+      />
+      {captionAt === "bottom" && (
+        <div
+          aria-hidden
+          className="absolute inset-x-0 bottom-0 -z-10 h-1/2 bg-gradient-to-t from-night-deep/80 to-transparent"
+        />
+      )}
       <div aria-hidden className="rule-faint absolute inset-x-0 top-0 w-full" />
       <div aria-hidden className="rule-faint absolute inset-x-0 bottom-0 w-full" />
 

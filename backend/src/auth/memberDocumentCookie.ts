@@ -3,6 +3,7 @@ import type { Request, Response } from "express";
 import { pool } from "../db/pool";
 import { env } from "../config/env";
 import { hashToken } from "./tokens";
+import { MEMBER_IDLE_LIMIT_SECONDS } from "./memberSessionPolicy";
 import type { AuthedMember } from "../middleware/memberAuth";
 
 /**
@@ -140,8 +141,9 @@ export function verifyDocumentCookie(
 export async function setDocumentCookie(res: Response, rawRefreshToken: string): Promise<void> {
   const found = await pool.query<{ id: string | number; member_id: number; expires_at: Date }>(
     `SELECT id, member_id, expires_at FROM member_sessions
-      WHERE token_hash = $1 AND revoked_at IS NULL AND expires_at > now()`,
-    [hashToken(rawRefreshToken)]
+      WHERE token_hash = $1 AND revoked_at IS NULL AND expires_at > now()
+        AND COALESCE(last_active_at, created_at) > now() - make_interval(secs => $2)`,
+    [hashToken(rawRefreshToken), MEMBER_IDLE_LIMIT_SECONDS]
   );
   const row = found.rows[0];
   if (!row) return;
@@ -190,8 +192,11 @@ export async function memberFromDocumentCookie(req: Request): Promise<AuthedMemb
       WHERE s.id = $1
         AND s.member_id = $2
         AND s.revoked_at IS NULL
-        AND s.expires_at > now()`,
-    [payload.sessionId, payload.memberId]
+        AND s.expires_at > now()
+        -- The idle window too: a receipt link opened from a tab abandoned an
+        -- hour ago must not succeed where a refresh from it would not.
+        AND COALESCE(s.last_active_at, s.created_at) > now() - make_interval(secs => $3)`,
+    [payload.sessionId, payload.memberId, MEMBER_IDLE_LIMIT_SECONDS]
   );
   const row = found.rows[0];
   if (!row || row.status === "suspended" || row.status === "deleted") return null;

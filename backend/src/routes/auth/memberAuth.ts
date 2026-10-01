@@ -5,13 +5,19 @@ import { HttpError, badRequest, notFound, unauthorized } from "../../utils/httpE
 import { generateToken, hashToken, expiresIn } from "../../auth/tokens";
 import { checkPasswordStrength, hashPassword, verifyPassword } from "../../auth/password";
 import {
+  IDLE_HEADER,
+  MEMBER_IDLE_TIMEOUT_SECONDS,
   REFRESH_COOKIE,
   clearRefreshCookie,
+  reportedIdleSeconds,
+  sessionPolicy,
+  type MemberSessionPolicy,
   issueRefreshToken,
   revokeAllMemberSessions,
   revokeRefreshToken,
   rotateRefreshToken,
   setRefreshCookie,
+  touchSessionActivity,
   signMemberAccessToken,
 } from "../../auth/memberSession";
 import { setDocumentCookie } from "../../auth/memberDocumentCookie";
@@ -140,6 +146,8 @@ export function readRefreshCookie(req: Request): string | null {
 export interface AuthSuccess {
   member: MemberProfile;
   accessToken: string;
+  /** The idle window and absolute deadline, so the browser runs the same clocks. */
+  session: MemberSessionPolicy;
 }
 
 /** Mints the refresh cookie and the access token that go with a freshly proven identity. */
@@ -159,6 +167,7 @@ export async function startSession(
   return {
     member,
     accessToken: signMemberAccessToken({ sub: member.id, email: member.email }),
+    session: sessionPolicy(),
   };
 }
 
@@ -626,6 +635,39 @@ memberAuthRoutes.post(
   })
 );
 
+/** The 401 every idle ending answers with; `details.code` is what the browser keys on. */
+function idleSignOut(): HttpError {
+  return new HttpError(
+    401,
+    `You were signed out after ${Math.round(MEMBER_IDLE_TIMEOUT_SECONDS / 60)} minutes of inactivity. Please sign in again.`,
+    { code: "session_idle" }
+  );
+}
+
+/**
+ * POST /api/auth/activity — "the member is still here".
+ *
+ * A heartbeat from an open tab that has seen real activity (or a "Stay signed
+ * in" press), carrying the same idle header as a refresh. Moves the session's
+ * activity stamp without rotating the cookie. 204 on success; 401 with
+ * `session_idle` when the session had already gone idle (and is now ended);
+ * a plain 204 for a token a concurrent refresh has just rotated, because that
+ * is not a sign-out and the next heartbeat will carry the new cookie.
+ */
+memberAuthRoutes.post(
+  "/activity",
+  asyncHandler(async (req, res) => {
+    const raw = readRefreshCookie(req);
+    if (!raw) throw unauthorized("Please sign in to continue");
+    const outcome = await touchSessionActivity(raw, reportedIdleSeconds(req.get(IDLE_HEADER)));
+    if (outcome === "idle") {
+      clearRefreshCookie(res);
+      throw idleSignOut();
+    }
+    res.status(204).end();
+  })
+);
+
 /**
  * POST /api/auth/refresh
  *
@@ -639,7 +681,14 @@ memberAuthRoutes.post(
     const raw = readRefreshCookie(req);
     if (!raw) throw unauthorized("Please sign in to continue");
 
-    const outcome = await rotateRefreshToken(raw, clientMeta(req));
+    const outcome = await rotateRefreshToken(raw, {
+      ...clientMeta(req),
+      idleSeconds: reportedIdleSeconds(req.get(IDLE_HEADER)),
+    });
+    if (outcome.status === "idle") {
+      clearRefreshCookie(res);
+      throw idleSignOut();
+    }
     if (outcome.status !== "ok") {
       clearRefreshCookie(res);
       throw unauthorized("Please sign in to continue");
@@ -660,6 +709,7 @@ memberAuthRoutes.post(
     res.json({
       member: profile,
       accessToken: signMemberAccessToken({ sub: profile.id, email: profile.email }, outcome.expiresAt),
+      session: sessionPolicy(outcome.expiresAt),
     });
   })
 );

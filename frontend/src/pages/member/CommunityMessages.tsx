@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useParams, useNavigate } from "react-router";
+import { useLocation, useNavigate, useParams } from "react-router";
 import { Loader2, MessageSquare, Send } from "lucide-react";
 import { CommunityLayout } from "@/components/community/CommunityLayout";
 import { GlassCard } from "@/components/luxe/GlassCard";
@@ -37,6 +37,15 @@ export default function MemberCommunityMessages() {
 
 function Messages({ slug, openWith }: { slug: string; openWith: number | null }) {
   const navigate = useNavigate();
+  const location = useLocation();
+  // Set when the thread was opened from the list on this page, so "← All" can
+  // step back to it instead of pushing a second copy of the list on top —
+  // which left Back bouncing between the list and the thread.
+  const openedFromList = (location.state as { fromList?: boolean } | null)?.fromList === true;
+  const backToList = () => {
+    if (openedFromList) navigate(-1);
+    else navigate(`/community/${slug}/messages`, { replace: true });
+  };
   const [threads, setThreads] = useState<DmThreadSummary[] | null>(null);
   const [thread, setThread] = useState<DmThread | null>(null);
   const [draft, setDraft] = useState("");
@@ -158,7 +167,14 @@ function Messages({ slug, openWith }: { slug: string; openWith: number | null })
                 <li key={t.id}>
                   <button
                     type="button"
-                    onClick={() => navigate(`/community/${slug}/messages/${t.otherMemberId}`)}
+                    onClick={() =>
+                      navigate(`/community/${slug}/messages/${t.otherMemberId}`, {
+                        // Swapping threads replaces rather than stacks, so
+                        // Back from a thread is the list, not the last thread.
+                        replace: openWith !== null,
+                        state: { fromList: openWith === null || openedFromList },
+                      })
+                    }
                     aria-current={t.otherMemberId === openWith ? "page" : undefined}
                     className={cn(
                       "flex min-h-11 w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors",
@@ -218,7 +234,7 @@ function Messages({ slug, openWith }: { slug: string; openWith: number | null })
             <div className="flex items-center gap-3 border-b border-white/10 pb-3">
               <button
                 type="button"
-                onClick={() => navigate(`/community/${slug}/messages`)}
+                onClick={backToList}
                 className="min-h-11 text-xs font-semibold uppercase tracking-[0.12em] text-orchid-dim lg:hidden"
               >
                 ← All

@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "react-router";
-import { Hash, Loader2, Lock, MessageSquare, Users, Video } from "lucide-react";
+import { ArrowLeft, Hash, Loader2, Lock, MessageSquare, Users, Video } from "lucide-react";
 import { Seo } from "@/components/Seo";
 import { MemberShell } from "@/components/member/MemberShell";
 import { LuxeButton } from "@/components/luxe/LuxeButton";
@@ -20,6 +20,7 @@ import {
 } from "@/lib/communityApi";
 import { formatNumber } from "@/lib/format";
 import { cn } from "@/lib/cn";
+import { useCommunityReturn } from "@/components/community/communityReturn";
 
 /**
  * The chrome every community page sits in: the shell, the channel strip, the
@@ -66,11 +67,22 @@ export function CommunityLayout({
   const [overview, setOverview] = useState<CommunityOverview | null>(null);
   const [error, setError] = useState("");
   const [communities, setCommunities] = useState<CommunitySummary[]>([]);
+  // Every room this member may enter, joined or not — the same list the
+  // `/community` picker counts. More than one means the picker shows a choice;
+  // one means it redirects straight back here.
+  const [enterableCount, setEnterableCount] = useState(0);
+  const way = useCommunityReturn();
   useEffect(() => {
     communityApi
       .list()
-      .then((r) => setCommunities(r.communities.filter((c) => c.joined)))
-      .catch(() => setCommunities([]));
+      .then((r) => {
+        setCommunities(r.communities.filter((c) => c.joined));
+        setEnterableCount(r.communities.length);
+      })
+      .catch(() => {
+        setCommunities([]);
+        setEnterableCount(0);
+      });
   }, []);
 
   useEffect(() => {
@@ -110,6 +122,8 @@ export function CommunityLayout({
             slug={slug}
             overview={overview}
             communities={communities}
+            enterableCount={enterableCount}
+            way={way}
             activeChannel={
               activeChannel ??
               (noChannel ? undefined : overview.channels[0]?.slug)
@@ -124,8 +138,14 @@ export function CommunityLayout({
         {error && (
           <div role="alert" className="flex flex-col items-start gap-4">
             <p className="text-sm font-medium text-red-400">{error}</p>
-            <LuxeButton to="/community" variant="glass" size="sm">
-              Back to your communities
+            {/* Not `/community`: with one room the picker redirects straight
+                back here, into the same error. */}
+            <LuxeButton
+              to={enterableCount > 1 ? "/community" : way.to}
+              variant="glass"
+              size="sm"
+            >
+              {enterableCount > 1 ? "Back to your communities" : way.label}
             </LuxeButton>
           </div>
         )}
@@ -186,6 +206,8 @@ export function CommunityLayout({
                   slug={slug}
                   overview={overview}
                   communities={communities}
+                  enterableCount={enterableCount}
+                  way={way}
                   activeChannel={
                     activeChannel ??
                     (noChannel ? undefined : overview.channels[0]?.slug)
@@ -219,7 +241,11 @@ function CommunityNavigation({
   overview,
   communities,
   activeChannel,
+  enterableCount,
+  way,
 }: {
+  enterableCount: number;
+  way: { to: string; label: string };
   slug: string;
   overview: CommunityOverview;
   communities: CommunitySummary[];
@@ -232,12 +258,27 @@ function CommunityNavigation({
     "flex min-h-11 items-center gap-2 rounded-lg px-3 py-2 text-sm leading-snug transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-gold";
   return (
     <div className="space-y-5">
-      <Link
-        to="/community"
-        className="inline-flex min-h-11 items-center text-xs font-semibold text-orchid-dim hover:text-white"
-      >
-        ← All communities
-      </Link>
+      {/* "All communities" only when there is more than one to choose from:
+          the picker redirects a member with a single room straight back in,
+          which made this link look dead (QA: "back button not working").
+          Everyone else gets a way back to where they came from. */}
+      {enterableCount > 1 ? (
+        <Link
+          to="/community"
+          className="inline-flex min-h-11 items-center gap-1.5 text-xs font-semibold text-orchid-dim hover:text-white"
+        >
+          <ArrowLeft aria-hidden className="size-3.5" />
+          All communities
+        </Link>
+      ) : (
+        <Link
+          to={way.to}
+          className="inline-flex min-h-11 items-center gap-1.5 text-xs font-semibold text-orchid-dim hover:text-white"
+        >
+          <ArrowLeft aria-hidden className="size-3.5" />
+          {way.label}
+        </Link>
+      )}
       <nav aria-label="Your communities" className="space-y-2">
         {(communities.length
           ? communities

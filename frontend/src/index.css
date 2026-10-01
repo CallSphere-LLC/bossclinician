@@ -44,8 +44,16 @@
        opposite everywhere the theme is light. `color-scheme` is the only thing
        that reaches the parts of a form control the page cannot paint. */
     color-scheme: dark;
+    /* Body-copy tokens, declared here rather than left to the Tailwind
+       fallbacks so the admin console (which also falls back to them) is not
+       moved by the public readability pass. Contrast on the #06040B floor:
+       orchid 8.9 -> 14.1:1, orchid-dim 5.2 -> 10.7:1, orchid-faint 3.0 ->
+       7.0:1 (QA sheet: light grey body text was hard to read). */
+    --c-orchid: 222 210 238;
+    --c-orchid-dim: 196 182 218;
+    --c-orchid-faint: 160 145 184;
     --c-ink: 255 255 255;
-    --c-ink-soft: 139 121 168; /* orchid-dim */
+    --c-ink-soft: 196 182 218; /* orchid-dim */
     --c-cream: 10 7 19; /* night */
     --c-sand: 16 11 28; /* night-raised */
     --c-surface: 16 11 28;
@@ -57,7 +65,7 @@
     --c-plum: 185 162 214; /* orchid — readable on night */
     --c-plum-deep: 216 202 235;
     --c-plum-bright: 123 94 167;
-    --c-lilac: 167 139 196;
+    --c-lilac: 190 168 216; /* 6.9 -> 9.5:1 on night */
   }
 
   html {
@@ -227,10 +235,11 @@
     @apply mb-4 inline-block text-[0.74rem] font-semibold uppercase tracking-[0.2em] text-gold/85 sm:mb-5 sm:text-[0.68rem] sm:tracking-[0.28em];
   }
 
-  /* Long-form copy on dark: lighter weight, opened leading, softened colour.
-     Pure white body text on near-black vibrates; orchid reads as calm. */
+  /* Long-form copy: opened leading, softened colour. Pure white body text on
+     near-black vibrates; orchid reads as calm. Regular weight, not light, and
+     16.5px rather than 15.7px — at 300 it read as faint grey (QA sheet). */
   .copy-luxe {
-    @apply text-[0.98rem] font-light leading-[1.85] text-orchid-dim;
+    @apply text-[1.03rem] font-normal leading-[1.85] text-orchid-dim;
   }
 }
 
@@ -456,4 +465,42 @@
     animation: none !important;
     transform: none !important;
   }
+}
+
+/* ── Readability floor ────────────────────────────────────────────────────
+   QA sheet: "the light grey text is difficult to read — make it larger,
+   darker and more prominent throughout". The colour half of that is the
+   orchid / ink-soft / lilac tokens above (and their light-theme values in
+   site-theme.css); these rules are the size and weight half. They live here,
+   after `@tailwind utilities`, so each one is ordered after the utility it
+   corrects; where a rule must also beat a utility on specificity it says so.
+   Public and member pages only — the admin console is `.theme-console`. */
+
+/* Montserrat 300 at body sizes is a hairline that reads as pale grey whatever
+   its colour. Nothing public sets running text lighter than 400. */
+.theme-luxe :is(.font-light, .font-extralight, .font-thin) {
+  font-weight: 400;
+}
+
+/* Small body copy a step up: 14px -> 15px. Only paragraphs and list items —
+   buttons, nav labels, badges and form labels keep their measured sizes — and
+   never where a breakpoint already sets its own size (`text-sm sm:text-base`),
+   which this rule would otherwise outrank and shrink. */
+.theme-luxe :is(p, li, dd, blockquote, figcaption).text-sm:not([class*="sm:text-"], [class*="md:text-"], [class*="lg:text-"], [class*="xl:text-"]) {
+  font-size: 0.9375rem;
+}
+/* `text-sm` also sets a 20px line height, which overrode `.copy-luxe`'s open
+   leading wherever the two were combined; at 15px that is cramped. Restored
+   only where the element states no leading of its own. */
+.theme-luxe :is(p, li, dd, blockquote, figcaption).text-sm:not([class*="leading-"]) {
+  line-height: 1.65;
+}
+
+/* Dark theme: white at 35-45% alpha is 3.2-4.5:1 on the night floor — under
+   AA for text. Lifted to 62% (~7.9:1), still clearly secondary to /85 and
+   full white. `:where()` keeps this at one class of specificity, so the
+   `hover:text-white` and `group-hover:` brightening on the same element still
+   wins. The light theme maps every `text-white/*` to ink already. */
+:where(html:not([data-site-theme="light"]) .theme-luxe) :is(.text-white\/35, .text-white\/40, .text-white\/45) {
+  color: rgb(255 255 255 / 0.62);
 }

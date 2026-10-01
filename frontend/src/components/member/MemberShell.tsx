@@ -1,6 +1,6 @@
 import { SiteThemeToggle } from "@/components/layout/SiteThemeToggle";
-import { useState, type ReactNode } from "react";
-import { Link, NavLink, useNavigate } from "react-router";
+import { useEffect, useState, type ReactNode } from "react";
+import { Link, NavLink, useLocation, useNavigate } from "react-router";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { Toaster } from "sonner";
 import {
@@ -17,6 +17,7 @@ import {
 import { useMember } from "@/hooks/useMember";
 import { TimezonePrompt } from "@/components/member/TimezonePrompt";
 import { FloatingCall } from "@/components/community/FloatingCall";
+import { rememberCommunityReturn } from "@/components/community/communityReturn";
 import { cn } from "@/lib/cn";
 
 /**
@@ -127,6 +128,13 @@ export function MemberShell({
 }: MemberShellProps) {
   const { member, signOut } = useMember();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // The community's "Back" link returns to the last member page outside it
+  // (see components/community/communityReturn.ts).
+  useEffect(() => {
+    rememberCommunityReturn(location.pathname + location.search);
+  }, [location.pathname, location.search]);
 
   const handleSignOut = async () => {
     await signOut();

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Inbox, Mail, Phone, Trash2 } from "lucide-react";
+import { Link } from "react-router";
+import { ClipboardList, Inbox, Mail, Phone, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { adminApi } from "@/lib/api";
 import type { Lead } from "@/types";
@@ -131,6 +132,9 @@ export default function Leads() {
   const [filter, setFilter] = useState<string>("all");
   const [detail, setDetail] = useState<Lead | null>(null);
   const [sourceNames, setSourceNames] = useState<Map<string, string>>(new Map());
+  // `form:<web-address>` → that form, so an enquiry a form made can be read
+  // under the form's own questions and opened at its reply in Forms.
+  const [sourceForms, setSourceForms] = useState<Map<string, AdminForm>>(new Map());
 
   const load = useCallback(() => {
     adminApi
@@ -152,9 +156,14 @@ export default function Leads() {
     ]).then(([forms, funnels]) => {
       if (!current) return;
       const named = new Map<string, string>();
-      for (const form of forms) named.set(`form:${form.slug}`, form.name);
+      const byForm = new Map<string, AdminForm>();
+      for (const form of forms) {
+        named.set(`form:${form.slug}`, form.name);
+        byForm.set(`form:${form.slug}`, form);
+      }
       for (const funnel of funnels) named.set(`funnel:${funnel.slug}`, funnel.name);
       setSourceNames(named);
+      setSourceForms(byForm);
     });
     return () => {
       current = false;
@@ -212,13 +221,21 @@ export default function Leads() {
 
   // Most enquiries carry nothing extra, so the detail panel only grows an
   // answers block when the form that captured them actually attached something.
-  const answerRows = useMemo(
-    () =>
-      Object.entries(detail?.meta ?? {}).flatMap(([key, value]) =>
-        detailRows(value, humaniseKey(key), key, 0),
-      ),
-    [detail],
-  );
+  const detailForm = detail ? sourceForms.get(detail.source?.trim() ?? "") : undefined;
+
+  // A form's enquiry carries the whole reply; it reads under the form's own
+  // questions, in the form's order ("Practice name", not "Practice").
+  const answerRows = useMemo(() => {
+    const meta = detail?.meta ?? {};
+    const fields = detailForm && Array.isArray(detailForm.fields) ? detailForm.fields : [];
+    const labelled = new Map<string, string>(
+      fields.map((field): [string, string] => [field.key, field.label || humaniseKey(field.key)]),
+    );
+    const order = new Map<string, number>(fields.map((field, index): [string, number] => [field.key, index]));
+    return Object.entries(meta)
+      .sort(([a], [b]) => (order.get(a) ?? Infinity) - (order.get(b) ?? Infinity))
+      .flatMap(([key, value]) => detailRows(value, labelled.get(key) ?? humaniseKey(key), key, 0));
+  }, [detail, detailForm]);
 
   const columns = useMemo<ColumnDef<Lead, unknown>[]>(
     () => [
@@ -424,6 +441,15 @@ export default function Leads() {
                   ))}
                 </dl>
               </div>
+            )}
+
+            {detailForm && (
+              <Button asChild size="sm" variant="secondary" className="w-full">
+                <Link to={`/admin/marketing/forms-v2?form=${detailForm.id}&view=replies`}>
+                  <ClipboardList />
+                  See every reply to {detailForm.name}
+                </Link>
+              </Button>
             )}
 
             <Button asChild size="sm" className="w-full">

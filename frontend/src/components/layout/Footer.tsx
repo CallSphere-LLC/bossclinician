@@ -16,7 +16,7 @@ const columnHeading =
  * a clean 4px gutter between them.
  */
 const columnLink =
-  "block py-2.5 text-sm text-white/45 transition-colors duration-300 hover:text-gold";
+  "block py-2.5 text-sm text-white/70 transition-colors duration-300 hover:text-gold";
 
 export function Footer() {
   const { pathname } = useLocation();
@@ -43,7 +43,7 @@ export function Footer() {
           <p className="mt-2 text-[0.62rem] font-bold uppercase tracking-[0.3em] text-gold/75">
             {footer.brandTagline}
           </p>
-          <p className="mt-6 max-w-sm text-sm font-light leading-[1.8] text-white/40">
+          <p className="mt-6 max-w-sm text-sm leading-[1.8] text-white/70">
             {footer.tagline}
           </p>
           <div className="mt-8 max-w-sm">
@@ -150,7 +150,7 @@ export function Footer() {
       </Container>
 
       <div className="relative z-[1] border-t border-white/[0.06]">
-        <Container className="flex flex-col-reverse items-start justify-between gap-4 py-8 text-xs text-white/25 sm:flex-row sm:items-center">
+        <Container className="flex flex-col-reverse items-start justify-between gap-4 py-8 text-xs text-white/60 sm:flex-row sm:items-center">
           {/* UTC on both sides of the handoff. The page is rendered on a server
               running UTC and hydrated in the reader's own zone, so a local year
               would disagree with itself for the few hours either side of New
@@ -164,7 +164,7 @@ export function Footer() {
               <Link
                 key={link.to}
                 to={link.to}
-                className="inline-block py-2 text-[0.78rem] text-white/30 transition-colors duration-300 hover:text-gold/80"
+                className="inline-block py-2 text-[0.78rem] text-white/60 transition-colors duration-300 hover:text-gold/80"
               >
                 {link.label}
               </Link>

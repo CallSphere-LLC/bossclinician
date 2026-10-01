@@ -5,6 +5,10 @@ import { env } from "../config/env";
 import { generateToken, hashToken, expiresIn } from "./tokens";
 import { memberTokenSecret } from "./secrets";
 import { clearDocumentCookie } from "./memberDocumentCookie";
+import {
+  MEMBER_IDLE_LIMIT_SECONDS,
+  REFRESH_TOKEN_TTL_SECONDS,
+} from "./memberSessionPolicy";
 
 /**
  * Member session handling: a short-lived access JWT the browser holds in
@@ -18,7 +22,19 @@ import { clearDocumentCookie } from "./memberDocumentCookie";
  */
 
 export const ACCESS_TOKEN_TTL_SECONDS = 15 * 60;
-export const REFRESH_TOKEN_TTL_SECONDS = 30 * 24 * 60 * 60;
+
+// The idle window and absolute cap live in their own module so the document
+// cookie can check them without importing this file (which imports it).
+export {
+  IDLE_HEADER,
+  MEMBER_IDLE_LIMIT_SECONDS,
+  MEMBER_IDLE_TIMEOUT_SECONDS,
+  MEMBER_SESSION_MAX_SECONDS,
+  REFRESH_TOKEN_TTL_SECONDS,
+  reportedIdleSeconds,
+  sessionPolicy,
+  type MemberSessionPolicy,
+} from "./memberSessionPolicy";
 
 export const REFRESH_COOKIE = "bc_member_refresh";
 
@@ -124,8 +140,8 @@ export interface IssueSessionInput {
 export async function issueRefreshToken(input: IssueSessionInput): Promise<string> {
   const raw = generateToken();
   await pool.query(
-    `INSERT INTO member_sessions (member_id, token_hash, previous_id, user_agent, ip, expires_at)
-     VALUES ($1, $2, $3, $4, $5, $6)`,
+    `INSERT INTO member_sessions (member_id, token_hash, previous_id, user_agent, ip, expires_at, last_active_at)
+     VALUES ($1, $2, $3, $4, $5, $6, now())`,
     [
       input.memberId,
       hashToken(raw),
@@ -144,6 +160,24 @@ interface SessionRow {
   revoked_at: string | null;
   revoked_reason: string;
   expires_at: string;
+  created_at?: string | Date | null;
+  /** Null on rows written before migration 092; `created_at` stands in. */
+  last_active_at?: string | Date | null;
+}
+
+/** When this session last saw the member, in ms. Null when the row cannot say. */
+function lastActiveMs(row: SessionRow): number | null {
+  const stamp = row.last_active_at ?? row.created_at;
+  if (!stamp) return null;
+  const ms = new Date(stamp).getTime();
+  return Number.isFinite(ms) ? ms : null;
+}
+
+/** The successor row's activity stamp: the later of the old one and what the browser reports. */
+function nextLastActive(row: SessionRow, idleSeconds: number): Date {
+  const reported = Date.now() - idleSeconds * 1000;
+  const previous = lastActiveMs(row);
+  return new Date(previous === null ? reported : Math.max(previous, reported));
 }
 
 /**
@@ -158,12 +192,20 @@ interface SessionRow {
  */
 const ROTATION_GRACE_MS = 30_000;
 
-/** Revocations that are the member's own doing, and must never look like theft. */
-const DELIBERATE_REVOCATIONS = new Set(["logout", "admin", "password_change", "suspended"]);
+/**
+ * Revocations that are the member's own doing, and must never look like theft.
+ *
+ * 'idle' is here because tabs share one cookie: when one tab's refresh ends an
+ * idle session, the next tab presenting the same token is not a thief, and
+ * reading it as one would sign out every other device the member has.
+ */
+const DELIBERATE_REVOCATIONS = new Set(["logout", "admin", "password_change", "suspended", "idle"]);
 
 export type RefreshOutcome =
   | { status: "ok"; memberId: number; refreshToken: string; expiresAt: string }
   | { status: "invalid" }
+  /** The session sat unused past the idle window and has just been ended. */
+  | { status: "idle" }
   /** The token was valid once and has already been rotated — treated as theft. */
   | { status: "reused"; memberId: number };
 
@@ -188,14 +230,15 @@ export type RefreshOutcome =
  */
 export async function rotateRefreshToken(
   rawToken: string,
-  meta: { userAgent?: string; ip?: string }
+  meta: { userAgent?: string; ip?: string; idleSeconds?: number }
 ): Promise<RefreshOutcome> {
+  const idleSeconds = meta.idleSeconds ?? 0;
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
 
     const found = await client.query<SessionRow>(
-      `SELECT id, member_id, revoked_at, revoked_reason, expires_at
+      `SELECT id, member_id, revoked_at, revoked_reason, expires_at, created_at, last_active_at
          FROM member_sessions
         WHERE token_hash = $1
         FOR UPDATE`,
@@ -239,8 +282,8 @@ export async function rotateRefreshToken(
           const raced = generateToken();
           await client.query(
             `INSERT INTO member_sessions
-               (member_id, token_hash, previous_id, user_agent, ip, expires_at)
-             VALUES ($1, $2, $3, $4, $5, $6)`,
+               (member_id, token_hash, previous_id, user_agent, ip, expires_at, last_active_at)
+             VALUES ($1, $2, $3, $4, $5, $6, $7)`,
             [
               session.member_id,
               hashToken(raced),
@@ -248,6 +291,7 @@ export async function rotateRefreshToken(
               (meta.userAgent ?? "").slice(0, 500),
               (meta.ip ?? "").slice(0, 64),
               new Date(session.expires_at),
+              nextLastActive(session, idleSeconds),
             ]
           );
           await client.query("COMMIT");
@@ -264,7 +308,18 @@ export async function rotateRefreshToken(
       return { status: "reused", memberId: session.member_id };
     }
 
-
+    // Idle check before anything is rotated: a cookie whose chain has not
+    // reported activity inside the window is finished, whoever presents it.
+    // Recorded as a deliberate revocation, not theft — see DELIBERATE_REVOCATIONS.
+    const lastActive = lastActiveMs(session);
+    if (lastActive !== null && Date.now() - lastActive > MEMBER_IDLE_LIMIT_SECONDS * 1000) {
+      await client.query(
+        `UPDATE member_sessions SET revoked_at = now(), revoked_reason = 'idle' WHERE id = $1`,
+        [session.id]
+      );
+      await client.query("COMMIT");
+      return { status: "idle" };
+    }
 
     const raw = generateToken();
     await client.query(
@@ -274,8 +329,8 @@ export async function rotateRefreshToken(
       [session.id]
     );
     await client.query(
-      `INSERT INTO member_sessions (member_id, token_hash, previous_id, user_agent, ip, expires_at)
-       VALUES ($1, $2, $3, $4, $5, $6)`,
+      `INSERT INTO member_sessions (member_id, token_hash, previous_id, user_agent, ip, expires_at, last_active_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
       [
         session.member_id,
         hashToken(raw),
@@ -283,6 +338,7 @@ export async function rotateRefreshToken(
         (meta.userAgent ?? "").slice(0, 500),
         (meta.ip ?? "").slice(0, 64),
         new Date(session.expires_at),
+        nextLastActive(session, idleSeconds),
       ]
     );
 
@@ -294,6 +350,48 @@ export async function rotateRefreshToken(
   } finally {
     client.release();
   }
+}
+
+/**
+ * Records that the member is still here, without rotating anything.
+ *
+ * The browser calls this (POST /api/auth/activity) at most once a minute while
+ * someone is actually using the site, and at once when they press "Stay signed
+ * in". Rotation would do the same job but mints a row per call; this is one
+ * UPDATE. A session already past the idle window is ended here exactly as a
+ * refresh would end it — a heartbeat is not a way back in.
+ *
+ * "invalid" covers a token that has just been rotated by a concurrent refresh:
+ * the caller must not read that as a sign-out, only "idle" means that.
+ */
+export async function touchSessionActivity(
+  rawToken: string,
+  idleSeconds: number
+): Promise<"ok" | "idle" | "invalid"> {
+  const found = await pool.query<{ id: string | number; fresh: boolean }>(
+    `SELECT id,
+            COALESCE(last_active_at, created_at) > now() - make_interval(secs => $2) AS fresh
+       FROM member_sessions
+      WHERE token_hash = $1 AND revoked_at IS NULL AND expires_at > now()`,
+    [hashToken(rawToken), MEMBER_IDLE_LIMIT_SECONDS]
+  );
+  const row = found.rows[0];
+  if (!row) return "invalid";
+  if (!row.fresh) {
+    await pool.query(
+      `UPDATE member_sessions SET revoked_at = now(), revoked_reason = 'idle'
+        WHERE id = $1 AND revoked_at IS NULL`,
+      [row.id]
+    );
+    return "idle";
+  }
+  await pool.query(
+    `UPDATE member_sessions
+        SET last_active_at = GREATEST(COALESCE(last_active_at, created_at), now() - make_interval(secs => $2))
+      WHERE id = $1`,
+    [row.id, idleSeconds]
+  );
+  return "ok";
 }
 
 /**

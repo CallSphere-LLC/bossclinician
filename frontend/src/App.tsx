@@ -113,6 +113,7 @@ export const PUBLIC_ROUTES: readonly { path: string; Component: RouteComponent }
   { path: "/retreats", Component: lazyRoute(() => import("@/pages/Retreats")) },
   { path: "/store", Component: lazyRoute(() => import("@/pages/Store")) },
   { path: "/club", Component: lazyRoute(() => import("@/pages/Club")) },
+  { path: "/club/checkout", Component: lazyRoute(() => import("@/pages/ClubCheckout")) },
   { path: "/lounge", Component: lazyRoute(() => import("@/pages/Lounge")) },
   { path: "/boardroom", Component: lazyRoute(() => import("@/pages/Boardroom")) },
   // The free masterclass: the sign-up (server-rendered, render.ts), then the
@@ -124,6 +125,7 @@ export const PUBLIC_ROUTES: readonly { path: string; Component: RouteComponent }
   },
   { path: "/watch-now", Component: lazyRoute(() => import("@/pages/WatchNow")) },
   { path: "/practice-quiz", Component: lazyRoute(() => import("@/pages/PracticeQuiz")) },
+  { path: "/practice-quiz/take", Component: lazyRoute(() => import("@/pages/PracticeQuizTake")) },
   {
     path: "/practice-reset-planner",
     Component: lazyRoute(() => import("@/pages/PracticeResetPlanner")),

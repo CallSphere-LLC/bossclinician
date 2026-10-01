@@ -34,8 +34,8 @@ import { useHeadContext } from "@/ssr/context";
  * → proof → pace → value → price → the next move → Yvette's letter →
  * objections. Copy lives in content/club.ts and is the published wording.
  *
- * Every mid-page action scrolls to the pricing band (`#join`), exactly as the
- * source's do; only the pricing band's own button leaves the page.
+ * Every Join action opens the Club's own checkout, `/club/checkout`
+ * (pages/ClubCheckout.tsx) — never the Kajabi site.
  */
 
 const PORTRAIT = "/images/758479b0818b.png";
@@ -193,7 +193,7 @@ export default function Club() {
             <LuxeButton
               variant="foil"
               size="lg"
-              href={JOIN_ANCHOR}
+              to={JOIN_ANCHOR}
               className="w-full tracking-[0.14em] sm:w-auto sm:tracking-[0.2em]"
             >
               {club.hero.cta}
@@ -319,7 +319,17 @@ function HoldingBackSection() {
 
 function QuoteFilmBand() {
   return (
-    <VideoBand {...INTRO_FILM} aria-label="A word from the founder">
+    // Yvette's face sits in the top third of this 16:9 film. A short, wide
+    // band cropped it away entirely (only her chin showed at 1440px), so the
+    // band is tall enough to hold her head, the crop is anchored near the top,
+    // and the line is set as a lower third under her rather than across her face.
+    <VideoBand
+      {...INTRO_FILM}
+      objectPosition="50% 15%"
+      captionAt="bottom"
+      className="min-h-[26rem] md:min-h-[30rem] lg:min-h-[32rem] xl:min-h-[35rem] 2xl:min-h-[40rem] short:min-h-[28rem]"
+      aria-label="A word from the founder"
+    >
       <Pull>&ldquo;{club.holdingBack.quote}&rdquo;</Pull>
     </VideoBand>
   );

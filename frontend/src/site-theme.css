@@ -5,11 +5,14 @@ html[data-site-theme="light"] .theme-luxe {
   --c-night-deep: 255 255 255;
   --c-night-raised: 255 255 255;
   --c-night-veil: 255 255 255;
-  --c-orchid: 67 57 80;
-  --c-orchid-dim: 86 77 96;
-  --c-orchid-faint: 98 88 108;
+  /* Body-copy tokens, contrast on white (QA sheet: text too light):
+     orchid 10.8 -> 14.1:1, orchid-dim/ink-soft 8.0 -> 11.5:1,
+     orchid-faint 6.7 -> 9.0:1, lilac 7.1 -> 9.2:1. */
+  --c-orchid: 48 40 60;
+  --c-orchid-dim: 62 54 74;
+  --c-orchid-faint: 78 69 90;
   --c-ink: 30 24 40;
-  --c-ink-soft: 86 77 96;
+  --c-ink-soft: 62 54 74;
   --c-cream: 255 255 255;
   --c-sand: 255 255 255;
   --c-surface: 255 255 255;
@@ -21,7 +24,7 @@ html[data-site-theme="light"] .theme-luxe {
   --c-plum: 92 69 125;
   --c-plum-deep: 61 45 92;
   --c-plum-bright: 102 75 145;
-  --c-lilac: 102 78 128;
+  --c-lilac: 84 62 110;
   color: rgb(var(--c-ink));
   background: #fff;
   scrollbar-color: #b7afc2 #fff;
@@ -221,11 +224,11 @@ html[data-site-theme="light"] .theme-luxe [data-media-surface] {
   --c-night-deep: 6 4 11;
   --c-night-raised: 16 11 28;
   --c-night-veil: 23 16 38;
-  --c-orchid: 185 162 214;
-  --c-orchid-dim: 139 121 168;
-  --c-orchid-faint: 99 84 115;
+  --c-orchid: 222 210 238;
+  --c-orchid-dim: 196 182 218;
+  --c-orchid-faint: 160 145 184;
   --c-ink: 255 255 255;
-  --c-ink-soft: 139 121 168;
+  --c-ink-soft: 196 182 218;
   --c-hairline: 56 46 78;
 }
 html[data-site-theme="light"] .theme-luxe [data-media-surface] :is([class~="text-white"], [class*="text-white/"], [class*="hover:text-white"]:hover) {

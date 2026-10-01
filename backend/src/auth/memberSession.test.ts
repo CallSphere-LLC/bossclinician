@@ -37,3 +37,33 @@ describe("absolute member session deadline", () => {
     for (const args of cookie.mock.calls) expect(args[2].maxAge).toBe(5 * 60 * 1000);
   });
 });
+
+describe("member idle timeout", () => {
+  function idleDatabase(lastActive: Date) {
+    fixture.query.mockImplementation(async (sql: string) => {
+      if (sql.includes("WHERE token_hash = $1")) {
+        return { rows: [{ id: 1, member_id: 7, revoked_at: null, revoked_reason: "", expires_at: deadline.toISOString(), created_at: lastActive.toISOString(), last_active_at: lastActive.toISOString() }] };
+      }
+      return { rows: [] };
+    });
+  }
+  it("ends a session that has reported no activity for longer than the idle window (plus grace)", async () => {
+    idleDatabase(new Date(now.getTime() - 32 * 60 * 1000));
+    expect(await rotateRefreshToken("test-token", {})).toEqual({ status: "idle" });
+    expect(fixture.query.mock.calls.some(([sql]) => sql.includes("revoked_reason = 'idle'"))).toBe(true);
+    expect(fixture.query.mock.calls.some(([sql]) => sql.includes("INSERT INTO member_sessions"))).toBe(false);
+  });
+  it("carries the activity stamp forward without advancing it for an idle tab's silent refresh", async () => {
+    const lastActive = new Date(now.getTime() - 10 * 60 * 1000);
+    idleDatabase(lastActive);
+    expect(await rotateRefreshToken("test-token", { idleSeconds: 10 * 60 })).toMatchObject({ status: "ok" });
+    const insert = fixture.query.mock.calls.find(([sql]) => sql.includes("INSERT INTO member_sessions"));
+    expect((insert?.[1][6] as Date).getTime()).toBe(lastActive.getTime());
+  });
+  it("advances the activity stamp when the browser reports recent activity", async () => {
+    idleDatabase(new Date(now.getTime() - 20 * 60 * 1000));
+    await rotateRefreshToken("test-token", { idleSeconds: 5 });
+    const insert = fixture.query.mock.calls.find(([sql]) => sql.includes("INSERT INTO member_sessions"));
+    expect((insert?.[1][6] as Date).getTime()).toBe(now.getTime() - 5000);
+  });
+});

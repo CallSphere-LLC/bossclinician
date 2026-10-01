@@ -30,3 +30,19 @@ surface glows, or a second decorative accent. Status colours communicate meaning
 light tint for their background. Elevation comes from a neutral surface, a one-pixel edge, and a
 black shadow. Keep interactive transitions at 150 ms or less and preserve the global
 `prefers-reduced-motion` override.
+
+## Public site body-copy tokens (`theme-luxe`)
+
+Dark values live in `.theme-luxe` in `frontend/src/index.css`; light values in
+`frontend/src/site-theme.css`. Body copy must clear WCAG AA (4.5:1); the main tokens sit at
+roughly 9-14:1. Running text is never lighter than weight 400, and small paragraph copy
+(`p`/`li` with `text-sm`) renders at 15px — see "Readability floor" at the end of `index.css`.
+
+| Token | Dark (on `#06040B`) | Light (on `#FFFFFF`) | Use |
+|---|---|---|---|
+| `--c-orchid` | `222 210 238` (14.1:1) | `48 40 60` (14.1:1) | Primary body copy |
+| `--c-orchid-dim` / `--c-ink-soft` | `196 182 218` (10.7:1) | `62 54 74` (11.5:1) | Secondary copy, `.copy-luxe` |
+| `--c-orchid-faint` | `160 145 184` (7.0:1) | `78 69 90` (9.0:1) | Tertiary copy, captions |
+| `--c-lilac` | `190 168 216` (9.5:1) | `84 62 110` (9.2:1) | Card subtitles, accents |
+
+Prices, stats and counts use the body font, bold, `tabular-nums` — never the display serif.

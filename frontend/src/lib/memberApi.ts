@@ -14,7 +14,32 @@
  * signed out — no retry storm, no infinite loop.
  */
 
+import {
+  applySessionPolicy,
+  idleSecondsNow,
+  noteSignOutReason,
+  type SessionPolicyPayload,
+} from "@/lib/memberSessionPolicy";
+
 const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? "/api";
+
+/**
+ * Every refresh and heartbeat says how long this browser has been idle, so the
+ * server can tell a member reading a lesson from a tab left open overnight —
+ * both refresh on the same timer. See lib/memberSessionPolicy.ts.
+ */
+const IDLE_HEADER = "X-Member-Idle-Seconds";
+
+function idleHeaders(): Record<string, string> {
+  return { [IDLE_HEADER]: String(idleSecondsNow()) };
+}
+
+/** True for the server's "this session went idle" refusal. */
+export function isIdleSignOut(error: unknown): boolean {
+  if (!(error instanceof MemberApiError) || error.status !== 401) return false;
+  const details = error.details as { code?: unknown } | undefined;
+  return details?.code === "session_idle";
+}
 
 let accessToken: string | null = null;
 let onSignedOut: (() => void) | null = null;
@@ -70,6 +95,8 @@ export interface MemberSessionInfo {
 interface AuthSuccess {
   member: MemberProfile;
   accessToken: string;
+  /** The idle window and absolute deadline (absent from servers before 092). */
+  session?: SessionPolicyPayload;
 }
 
 /**
@@ -121,10 +148,17 @@ async function refreshAccessToken(): Promise<boolean> {
         const res = await fetch(`${API_BASE}/auth/refresh`, {
           method: "POST",
           credentials: "include",
+          headers: idleHeaders(),
         });
-        if (!res.ok) return false;
+        if (!res.ok) {
+          // Remembered so the sign-in page can say why, rather than just
+          // appearing in the middle of whatever the member was doing.
+          if (res.status === 401 && isIdleSignOut(await parseError(res))) noteSignOutReason("idle");
+          return false;
+        }
         const body = (await res.json()) as AuthSuccess;
         accessToken = body.accessToken;
+        applySessionPolicy(body.session);
         return true;
       } catch {
         return false;
@@ -235,7 +269,31 @@ export const memberApi = {
   logout: () => request<void>("/auth/logout", { method: "POST", skipRefresh: true }),
 
   /** Bootstraps a page load from the refresh cookie. Rejects when signed out. */
-  refresh: () => request<AuthSuccess>("/auth/refresh", { method: "POST", skipRefresh: true }),
+  refresh: async () => {
+    try {
+      const result = await request<AuthSuccess>("/auth/refresh", {
+        method: "POST",
+        headers: idleHeaders(),
+        skipRefresh: true,
+      });
+      applySessionPolicy(result.session);
+      return result;
+    } catch (error) {
+      if (isIdleSignOut(error)) noteSignOutReason("idle");
+      throw error;
+    }
+  },
+
+  /**
+   * "Still here": moves the server's idle clock without rotating the cookie.
+   * Rejects with `isIdleSignOut` when the session had already gone idle.
+   */
+  reportActivity: () =>
+    request<void>("/auth/activity", {
+      method: "POST",
+      headers: idleHeaders(),
+      skipRefresh: true,
+    }),
 
   /**
    * Always resolves, whether or not the address has an account — the response

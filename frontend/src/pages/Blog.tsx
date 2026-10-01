@@ -1,6 +1,6 @@
-import { Fragment, useMemo } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router";
-import { motion } from "motion/react";
+import { motion, useReducedMotion } from "motion/react";
 import { useEntranceMotion } from "@/hooks/useEntranceMotion";
 import { Seo } from "@/components/Seo";
 import { LuxeButton } from "@/components/luxe/LuxeButton";
@@ -224,8 +224,106 @@ const JOURNAL_PHOTO = {
   height: 720,
 } as const;
 
+/**
+ * The same clip, playing, as it does on the live site. Cleaned the same way as
+ * the still: the burned-in words (the source spells them "CLINICAN JORNAL")
+ * masked by their temporal minimum and inpainted on every frame, and the slate
+ * band over the lower half unblended, so the real h1 below is the only text in
+ * the band. 17.9s loop, H.264 High, no audio, faststart, 30fps — the Club
+ * band's recipe. The source is 720p, so there is no 1080p file.
+ */
+const JOURNAL_VIDEO = {
+  src720: "/videos/blog-journal-hero-720.mp4",
+  src540: "/videos/blog-journal-hero-540.mp4",
+} as const;
+
+/** Phones get the 540p file, as on the Club's video band. */
+const PHONE_QUERY = "(max-width: 767px)";
+
+/** `navigator.connection` is not in lib.dom; only the one field read here is declared. */
+type ConnectionNavigator = Navigator & { connection?: { saveData?: boolean } };
+
+/**
+ * The hero's footage, layered over the still rather than replacing it: the
+ * server render and the first client render are the photograph alone (no
+ * `src`, nothing that reads `window`), so the LCP image and the measured
+ * contrast below are untouched. Once mounted, the clip loads and fades in over
+ * the still on its first painted frame — never a blank flash.
+ *
+ * Reduced motion and Save-Data keep the still: no `src` is ever set. Reduced
+ * motion is read with `useReducedMotion()`, not `useEntranceMotion()`, which
+ * answers `true` for the whole life of a server-rendered component and would
+ * mean the clip never plays on this (server-rendered) page.
+ */
+function useJournalVideo() {
+  const prefersReduced = useReducedMotion();
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [src, setSrc] = useState<string>();
+  // Pause while the hero is scrolled away; the visitor's own pause is separate
+  // so scrolling back never overrules it.
+  const [inView, setInView] = useState(true);
+  const [userPaused, setUserPaused] = useState(false);
+  // What the element is actually doing — autoplay can be refused (iOS Low
+  // Power Mode), and the button has to describe the truth, not the intent.
+  const [playing, setPlaying] = useState(false);
+  // Stays true once the first frame has painted, so a pause holds the frame
+  // instead of cutting back to the still.
+  const [shown, setShown] = useState(false);
+
+  useEffect(() => {
+    if (prefersReduced) {
+      setSrc(undefined);
+      setShown(false);
+      return;
+    }
+    if ((navigator as ConnectionNavigator).connection?.saveData) return;
+    setSrc(window.matchMedia(PHONE_QUERY).matches ? JOURNAL_VIDEO.src540 : JOURNAL_VIDEO.src720);
+  }, [prefersReduced]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !src || typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry) setInView(entry.isIntersecting);
+    });
+    observer.observe(video);
+    return () => observer.disconnect();
+  }, [src]);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !src) return;
+    if (inView && !userPaused && !prefersReduced) {
+      // React does not reliably serialise `muted` to the attribute, and an
+      // element the browser believes has sound is refused autoplay.
+      video.muted = true;
+      video.play().catch(() => {});
+    } else {
+      video.pause();
+    }
+  }, [src, inView, userPaused, prefersReduced]);
+
+  const toggle = () => {
+    const video = videoRef.current;
+    if (!video) return;
+    if (video.paused) {
+      setUserPaused(false);
+      // Also called here: when autoplay was refused the state does not change,
+      // and only a call inside the gesture is allowed to start it.
+      video.muted = true;
+      video.play().catch(() => {});
+    } else {
+      setUserPaused(true);
+      video.pause();
+    }
+  };
+
+  return { videoRef, src, playing, setPlaying, shown, setShown, toggle };
+}
+
 function JournalHero() {
   const reduce = useEntranceMotion();
+  const video = useJournalVideo();
 
   return (
     <Section
@@ -252,6 +350,29 @@ function JournalHero() {
             decoding="async"
             className="pointer-events-none absolute inset-0 size-full object-cover object-[center_40%]"
           />
+          {/* The footage, over the still. Same crop as the photograph, so the
+              fade-in on the first painted frame does not shift anything. */}
+          <video
+            ref={video.videoRef}
+            src={video.src}
+            poster={JOURNAL_PHOTO.src}
+            muted
+            loop
+            playsInline
+            preload="none"
+            disablePictureInPicture
+            disableRemotePlayback
+            aria-hidden
+            tabIndex={-1}
+            onPlaying={() => {
+              video.setPlaying(true);
+              video.setShown(true);
+            }}
+            onPause={() => video.setPlaying(false)}
+            className={`pointer-events-none absolute inset-0 size-full object-cover object-[center_40%] transition-opacity duration-700 ease-out motion-reduce:transition-none ${
+              video.shown && video.src ? "opacity-100" : "opacity-0"
+            }`}
+          />
           {/* Two token-based veils, as on the Club's closing band. The flat one
               calms the whole frame; the second is the source's own dark band
               behind the words, widened to the full text block and softened at
@@ -265,6 +386,22 @@ function JournalHero() {
             aria-hidden
             className="absolute inset-0 bg-gradient-to-b from-night-deep/10 via-night-deep/60 to-night-deep/35"
           />
+          {/* WCAG 2.2.2: motion that starts by itself and runs past five
+              seconds needs a way to stop it. Absent when there is nothing to
+              stop. Above the veils and the content layer (z-[1]). */}
+          {video.src && (
+            <button
+              type="button"
+              onClick={video.toggle}
+              aria-label={video.playing ? "Pause background video" : "Play background video"}
+              className="absolute bottom-4 right-4 z-[2] inline-flex items-center gap-2 rounded-full border border-white/12 bg-night-deep/55 px-3.5 py-1.5 text-[0.64rem] font-semibold uppercase tracking-[0.16em] text-white/80 backdrop-blur transition-colors hover:bg-night-deep/80 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold sm:bottom-5 sm:right-6"
+            >
+              <svg aria-hidden viewBox="0 0 12 12" className="size-2.5 fill-current">
+                {video.playing ? <path d="M2 1h3v10H2zM7 1h3v10H7z" /> : <path d="M2.5 1v10l8-5z" />}
+              </svg>
+              {video.playing ? "Pause" : "Play"}
+            </button>
+          )}
         </>
       }
     >
