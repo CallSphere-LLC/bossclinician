@@ -161,7 +161,32 @@ export function errorHandler(err: unknown, _req: Request, res: Response, _next: 
     return;
   }
 
+  // Stripe failing is not the buyer's fault and not a crash of ours: an expired
+  // or revoked key, Stripe down, or rate limiting. Say payments are unavailable
+  // (503) rather than "Internal server error"; a declined card keeps Stripe's own
+  // buyer-facing reason.
+  const stripeType = stripeErrorType(err);
+  if (stripeType) {
+    // eslint-disable-next-line no-console
+    console.error(`Stripe error (${stripeType}):`, err);
+    if (stripeType === "StripeCardError") {
+      res.status(402).json({ error: (err as { message?: string }).message || "Your card was declined." });
+      return;
+    }
+    res.status(503).json({
+      error: "Payments are temporarily unavailable. Please try again in a few minutes, or contact us and we will help you finish.",
+    });
+    return;
+  }
+
   // eslint-disable-next-line no-console
   console.error("Unhandled error:", err);
   res.status(500).json({ error: "Internal server error" });
+}
+
+/** The Stripe SDK's error class name ("StripeAuthenticationError", …), or null. */
+function stripeErrorType(err: unknown): string | null {
+  if (!err || typeof err !== "object") return null;
+  const type = (err as { type?: unknown }).type;
+  return typeof type === "string" && type.startsWith("Stripe") ? type : null;
 }
