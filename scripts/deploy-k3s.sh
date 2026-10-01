@@ -58,7 +58,7 @@ echo "Database backup saved: $backup"
 # A bridge that lost its port at boot is recreated; a plain start leaves it without a network.
 bridge_recreate=()
 ss -tlnH "sport = :15432" | grep -q "10.42.0.1:15432" || bridge_recreate=(--force-recreate)
-docker compose -f docker-compose.yml -f k8s/docker-compose.data.yml up -d --no-deps "${bridge_recreate[@]}" db-bridge
+docker compose -f docker-compose.yml -f k8s/docker-compose.data.yml -f k8s/docker-compose.security-data.yml up -d --no-deps "${bridge_recreate[@]}" db-bridge
 sudo -n kubectl -n bossclinician get deployment boss-app -o json > "$work/previous-app.json" 2>/dev/null || true
 sudo -n kubectl -n bossclinician get deployment boss-ai -o json > "$work/previous-ai.json" 2>/dev/null || true
 for component in app ai; do
