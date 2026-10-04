@@ -5,6 +5,7 @@ import { pipeline } from "stream/promises";
 import type { Request, Response } from "express";
 import { S3Client, ListObjectsV2Command, HeadObjectCommand, GetObjectCommand, PutObjectCommand, DeleteObjectCommand,
   CreateMultipartUploadCommand, UploadPartCommand, CompleteMultipartUploadCommand, AbortMultipartUploadCommand } from "@aws-sdk/client-s3";
+import { fromProcess } from "@aws-sdk/credential-provider-process";
 import { env } from "../config/env";
 import { resolveStoredFile, uploadPath } from "./signedUrls";
 
@@ -19,8 +20,16 @@ export function objectKey(reference: string): string {
   return `media/${protectedFile ? "protected" : "public"}/${key}`;
 }
 const PART_BYTES = 16 * 1024 * 1024;
+/** Media must never inherit the unrelated SES/static AWS credentials. */
+export function createMediaS3Client(region: string): S3Client {
+  return new S3Client({ region, credentials: fromProcess({
+    profile: "bossclinician-media",
+    configFilepath: "/run/aws-identity/aws-config",
+    filepath: "/run/aws-identity/no-shared-credentials",
+  }) });
+}
 export class S3MediaStore {
-  constructor(readonly config: ObjectStoreConfig, private client = new S3Client({ region: config.region })) {
+  constructor(readonly config: ObjectStoreConfig, private client = createMediaS3Client(config.region)) {
     if (!config.bucket || !config.region || !/^\d{12}$/.test(config.owner) || !config.kmsKey.startsWith(`arn:aws:kms:${config.region}:${config.owner}:key/`)) throw new Error("Incomplete S3 media configuration");
     this.client.middlewareStack.add((next) => async (args) => {
       try { return await next(args); }

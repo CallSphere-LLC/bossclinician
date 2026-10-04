@@ -3,8 +3,8 @@ import fs from "fs/promises";
 import { constants } from "fs";
 import path from "path";
 import crypto from "crypto";
-import { S3Client, HeadObjectCommand } from "@aws-sdk/client-s3";
-import { mediaStore, objectKey } from "../src/services/objectStorage";
+import { HeadObjectCommand } from "@aws-sdk/client-s3";
+import { mediaStore, objectKey, createMediaS3Client } from "../src/services/objectStorage";
 import { env } from "../src/config/env";
 
 const roots = [
@@ -44,7 +44,7 @@ async function main() {
   const lock = await fs.open(path.join(ledgerRoot, "active.lock"), "wx", 0o600);
   const entries: any[] = [];
   let uploaded = 0; let existing = 0; let bytes = 0;
-  const s3 = new S3Client({ region: env.mediaStorage.region });
+  const s3 = createMediaS3Client(env.mediaStorage.region);
   try {
     const store = mediaStore();
     const census = new Map<string, string[]>();
