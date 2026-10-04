@@ -44,9 +44,11 @@ async function main() {
   const s3 = new S3Client({ region: env.mediaStorage.region });
   try {
     const store = mediaStore();
+    const census = new Map<string, string[]>();
     for (const spec of roots) {
       if (await fs.realpath(spec.root) !== spec.root) throw new Error("Source root alias refused");
-      for (const relative of await walk(spec.root)) {
+      const sourceFiles = await walk(spec.root); census.set(spec.root, sourceFiles);
+      for (const relative of sourceFiles) {
         const filename = path.join(spec.root, relative); const reference = spec.prefix + relative; const key = objectKey(reference);
         if (await fs.realpath(filename) !== filename) throw new Error("Source path alias refused");
         const source = await digestFile(filename);
@@ -68,6 +70,13 @@ async function main() {
         const pending = ledgerPath + ".pending";
         await fs.writeFile(pending, JSON.stringify({ schemaVersion: 1, complete: false, generatedAt: new Date().toISOString(), entries }, null, 2), { mode: 0o600 }); await fs.rename(pending, ledgerPath);
       }
+    }
+    // A live upload or late modification invalidates whole-tree coverage; preserve
+    // the partial ledger for a safe retry/final quiesced delta.
+    for (const spec of roots) if (JSON.stringify(await walk(spec.root)) !== JSON.stringify(census.get(spec.root))) throw new Error("Source tree changed during migration");
+    for (const entry of entries) {
+      const current = await fs.lstat(entry.source);
+      if (!current.isFile() || current.dev !== entry.sourceDevice || current.ino !== entry.sourceInode || current.size !== entry.bytes || current.mtimeMs !== entry.sourceMtimeMs) throw new Error("Late source mutation");
     }
     await fs.writeFile(ledgerPath + ".pending", JSON.stringify({ schemaVersion: 1, complete: true, generatedAt: new Date().toISOString(), bucket: env.mediaStorage.bucket, entries }, null, 2), { mode: 0o600 }); await fs.rename(ledgerPath + ".pending", ledgerPath);
     console.log(JSON.stringify({ status: "PASS", files: entries.length, bytes, uploaded, existingVerified: existing, versionPinnedReadback: true, originalsPreserved: true, manifest: ledgerPath }));
