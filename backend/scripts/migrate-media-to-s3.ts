@@ -29,15 +29,18 @@ async function walk(root: string, relative = ""): Promise<string[]> {
   for (const entry of await fs.readdir(path.join(root, relative), { withFileTypes: true })) {
     const rel = path.join(relative, entry.name); const st = await fs.lstat(path.join(root, rel));
     if (st.isSymbolicLink()) throw new Error("Symlink in migration tree");
-    if (st.isDirectory()) { if ([".parts", ".joining", "chunks"].includes(entry.name)) throw new Error("Active staging requires quiesced review"); out.push(...await walk(root, rel)); }
+    if (st.isDirectory()) { const nested = await walk(root, rel); if ([".parts", ".joining", "chunks"].includes(entry.name)) { if (nested.length) throw new Error("Active staging requires quiesced review"); } else out.push(...nested); }
     else if (st.isFile()) out.push(rel);
     else throw new Error("Special file in migration tree");
   }
   return out.sort();
 }
+let stage = "gate";
 async function main() {
   if (process.env.RUN_BOSS_MEDIA_MIGRATION !== "preserve-sources" || process.getuid?.() !== 1000 || env.mediaStorage.store !== "s3" || env.mediaStorage.bucket !== "bossclinician-media-662904411994-us-west-2") throw new Error("Migration gate refused");
+  stage = "ledger-permissions";
   const dir = await fs.lstat(ledgerRoot); if (!dir.isDirectory() || dir.isSymbolicLink() || (dir.mode & 0o077)) throw new Error("Private encrypted manifest directory required");
+  stage = "lock";
   const lock = await fs.open(path.join(ledgerRoot, "active.lock"), "wx", 0o600);
   const entries: any[] = [];
   let uploaded = 0; let existing = 0; let bytes = 0;
@@ -46,22 +49,30 @@ async function main() {
     const store = mediaStore();
     const census = new Map<string, string[]>();
     for (const spec of roots) {
+      stage = "root-confinement";
       if (await fs.realpath(spec.root) !== spec.root) throw new Error("Source root alias refused");
+      stage = "source-census";
       const sourceFiles = await walk(spec.root); census.set(spec.root, sourceFiles);
       for (const relative of sourceFiles) {
+        stage = "reference-validation";
         const filename = path.join(spec.root, relative); const reference = spec.prefix + relative; const key = objectKey(reference);
         if (await fs.realpath(filename) !== filename) throw new Error("Source path alias refused");
+        stage = "source-hash";
         const source = await digestFile(filename);
+        stage = "destination-head";
         let meta = await store.head(reference);
         if (!meta) {
           if (!stable(source.stat, await fs.lstat(filename))) throw new Error("Source changed before upload");
           // If a concurrent writer creates this key, S3 refuses conditional completion.
+          stage = "conditional-upload";
           await store.putFile(reference, filename, "application/octet-stream", true);
           uploaded++; meta = await store.head(reference);
         } else existing++;
         if (!meta?.version || meta.version === "null" || meta.size !== source.stat.size) throw new Error("Destination version/size mismatch");
+        stage = "kms-verification";
         const encryption = await s3.send(new HeadObjectCommand({ Bucket: env.mediaStorage.bucket, Key: key, VersionId: meta.version, ExpectedBucketOwner: env.mediaStorage.owner }));
         if (encryption.ServerSideEncryption !== "aws:kms" || encryption.SSEKMSKeyId !== env.mediaStorage.kmsKey) throw new Error("Destination encryption mismatch");
+        stage = "version-readback";
         const stream = await store.open(reference, meta); const digest = crypto.createHash("sha256"); let received = 0;
         try { for await (const part of stream) { received += part.length; if (received > source.stat.size) throw new Error("Oversized destination stream"); digest.update(part); } } finally { stream.destroy(); }
         if (received !== source.stat.size || digest.digest("hex") !== source.sha256) throw new Error("Independent destination checksum mismatch");
@@ -82,4 +93,4 @@ async function main() {
     console.log(JSON.stringify({ status: "PASS", files: entries.length, bytes, uploaded, existingVerified: existing, versionPinnedReadback: true, originalsPreserved: true, manifest: ledgerPath }));
   } finally { await lock.close(); await fs.unlink(path.join(ledgerRoot, "active.lock")); s3.destroy(); }
 }
-main().catch(() => { console.error(JSON.stringify({ status: "FAIL", reason: "Migration refused or verification failed; protected partial manifest retained; originals untouched" })); process.exitCode = 1; });
+main().catch((error) => { console.error(JSON.stringify({ status: "FAIL", stage, errorClass: error?.constructor?.name, errorCode: /^[A-Z0-9_]{1,40}$/.test(error?.code ?? "") ? error.code : undefined, reason: "Migration refused or verification failed; protected partial manifest retained; originals untouched" })); process.exitCode = 1; });
