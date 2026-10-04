@@ -67,3 +67,5 @@ Deployment script accepts `AWS_HELPER_BUILD_CONTEXT`, default `/usr/local/share/
 Actual scoped workload identity proof passed as UID/GID1000: 17MiB encrypted multipart, version-pinned whole-file SHA256, HTTP Range/HEAD, delete-marker and missing-key handling. The two additional final unit cases prove HEAD403/list denial distinction and conditional create-only migration writes; final focused adapter suite13/13 and PostgreSQL S3 integration suite41/41 passed. No production app rollout is implied by these tests.
 
 The media SDK explicitly uses `credential_process` from fixed profile `bossclinician-media` in `/run/aws-identity/aws-config`; inherited AWS static keys, AWS_PROFILE, shared credentials and unrelated SES credentials cannot select its identity. Existing SES configuration remains intact.
+
+The pinned public helper wrapper uses a minimal isolated subprocess environment (`env -i`) with fixed PATH/HOME and metadata disabled. This also prevents inherited AWS_PROFILE/AWS_CONFIG_FILE from affecting the helper itself; explicit credential-process role, profile ARN, trust anchor and certificate arguments remain authoritative.

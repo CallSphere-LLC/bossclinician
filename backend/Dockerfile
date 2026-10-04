@@ -58,7 +58,7 @@ RUN echo '7d90361df0001887ac0cfed2813dcb814873b46dcd5c3aa7fe3f7f6a0809e4aa  /opt
     && echo 'bda779ea9e9ad234f60315477d7cfd0bdde861cd8ddd9df8cdaf62f18c4cec14  /opt/aws-helper-runtime/ld-linux-x86-64.so.2' | sha256sum -c - \
     && echo '85e64f97e348786a8fb4d9f3d52fec289e2fb86bba20f0731dfe61990525e0f7  /opt/aws-helper-runtime/libc.so.6' | sha256sum -c - \
     && echo '6b99ecf94bcb81732ed1e81615084a5cfe7383eb89ce83106fa51077409ce609  /opt/aws-helper-runtime/libresolv.so.2' | sha256sum -c - \
-    && echo '958ed78c9c3deae7ee2d9fe7d6400bf1c3628033061416c9d1a1c74d06af26e0  /usr/local/bin/aws_signing_helper' | sha256sum -c - \
+    && echo '31a22fd8a6a7350dbc8fd044483fe1513b5fd695690d45ecf3d18283a7cbefcd  /usr/local/bin/aws_signing_helper' | sha256sum -c - \
     && chmod 0755 /usr/local/bin/aws_signing_helper /opt/aws-helper-runtime/* \
     && /usr/local/bin/aws_signing_helper version
 WORKDIR /app
