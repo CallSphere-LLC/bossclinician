@@ -1,3 +1,5 @@
+import { usesS3Media, serveStoredMedia } from "../../services/objectStorage";
+import { mediaRecordingReference } from "../../services/voice/recordingStore";
 import { Router } from "express";
 import { z } from "zod";
 import { asyncHandler } from "../../utils/asyncHandler";
@@ -208,6 +210,11 @@ adminVoiceRecordingRouter.get(
     const key = verifyRecordingToken(String(req.params.token));
     if (key === null) throw notFound("That link has expired. Open the conversation again.");
 
+    if (usesS3Media()) {
+      res.setHeader("Cache-Control", "no-store");
+      res.setHeader("Content-Type", recordingContentType(key));
+      await serveStoredMedia(req, res, mediaRecordingReference(key)); return;
+    }
     const file = new LocalDiskRecordingStore().resolve(key);
     if (file === null) throw notFound("That recording could not be found.");
 

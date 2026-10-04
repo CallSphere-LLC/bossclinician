@@ -1,3 +1,4 @@
+import { writeStoredMedia } from "../../services/objectStorage";
 import crypto from "crypto";
 import fs from "fs/promises";
 import path from "path";
@@ -134,7 +135,7 @@ memberCommunityUploadsRouter.post(
     const stored = `${crypto.randomBytes(12).toString("hex")}${extension}`;
     const directory = storageDir("public");
     await fs.mkdir(directory, { recursive: true });
-    await fs.writeFile(path.join(directory, stored), file.buffer);
+    await writeStoredMedia(`/uploads/${stored}`, file.buffer, mime);
 
     res.status(201).json({
       url: `/uploads/${stored}`,

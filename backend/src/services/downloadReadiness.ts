@@ -1,3 +1,4 @@
+import { usesS3Media, mediaStore } from "./objectStorage";
 import fs from "fs/promises";
 import type { PoolClient } from "pg";
 import { pool } from "../db/pool";
@@ -38,6 +39,7 @@ export async function assertProductsDeliverable(productIds: number[], db: DB = p
   for (const product of rows) {
     let ready = product.paths.length > 0;
     for (const storagePath of product.paths) {
+      if (usesS3Media()) { const object = await mediaStore().head(storagePath); if (!object || object.size <= 0) { ready = false; break; } continue; }
       const file = await resolveStoredFile(storagePath);
       const stat = file ? await fs.stat(file).catch(() => null) : null;
       if (!stat || stat.size <= 0) { ready = false; break; }

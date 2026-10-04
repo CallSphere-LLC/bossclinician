@@ -1,3 +1,4 @@
+import { persistStagedMedia } from "./objectStorage";
 import crypto from "crypto";
 import fs from "fs";
 import path from "path";
@@ -490,5 +491,7 @@ export async function keepStagedFile(
   const filename = `${crypto.randomBytes(16).toString("hex")}${staged.extension}`;
   const absolutePath = path.join(directory, filename);
   await fs.promises.rename(staged.tempPath, absolutePath);
+  try { await persistStagedMedia(protectedRef(filename), absolutePath, staged.mime); }
+  catch (err) { await fs.promises.unlink(absolutePath).catch(() => undefined); throw err; }
   return { filename, reference: protectedRef(filename), absolutePath };
 }

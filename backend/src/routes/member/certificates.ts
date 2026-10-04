@@ -1,3 +1,4 @@
+import { usesS3Media, serveStoredMedia } from "../../services/objectStorage";
 import { Request, Router } from "express";
 import { ipKeyGenerator, rateLimit } from "express-rate-limit";
 import { z } from "zod";
@@ -169,6 +170,7 @@ memberCertificatesRouter.get(
 
     res.setHeader("Cache-Control", "private, no-store");
     res.setHeader("X-Content-Type-Options", "nosniff");
+    if (usesS3Media()) { res.attachment(filename); res.type("application/pdf"); await serveStoredMedia(req, res, absolutePath); return; }
     res.download(absolutePath, filename, (err) => {
       // Nothing can be said to the client once bytes are on the wire; before
       // that, a missing file is still a reportable error.

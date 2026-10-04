@@ -1,3 +1,4 @@
+import { finishStagedMedia, usesS3Media, removeStoredMedia } from "../../services/objectStorage";
 import fs from "fs";
 import { Router, type Request } from "express";
 import { rateLimit } from "express-rate-limit";
@@ -724,6 +725,7 @@ async function storeSubmission(input: {
 
   const answers: Record<string, unknown> = { ...input.data };
   const moved: string[] = [];
+  const remoteReferences: string[] = [];
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -731,6 +733,7 @@ async function storeSubmission(input: {
     for (const file of input.files) {
       const stored = await keepStagedFile(file);
       moved.push(stored.absolutePath);
+      remoteReferences.push(stored.reference);
       const asset = await client.query<{ id: number }>(
         `INSERT INTO media_assets
            (filename, original_name, url, mime, kind, size_bytes, title, folder, form_field_key)
@@ -768,10 +771,12 @@ async function storeSubmission(input: {
       assetIds,
     ]);
     await client.query("COMMIT");
+    await Promise.all(moved.map(finishStagedMedia));
     return { submissionId, answers };
   } catch (err) {
     await client.query("ROLLBACK").catch(() => undefined);
     await Promise.all(moved.map((file) => fs.promises.unlink(file).catch(() => undefined)));
+    if (usesS3Media()) await Promise.all(remoteReferences.map(ref => removeStoredMedia(ref).catch(() => undefined)));
     throw err;
   } finally {
     client.release();

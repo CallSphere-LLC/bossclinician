@@ -1,3 +1,4 @@
+import { usesS3Media, persistStagedMedia, finishStagedMedia } from "./objectStorage";
 import crypto from "crypto";
 import fs from "fs";
 import path from "path";
@@ -520,7 +521,8 @@ export async function completeUploadSession(
   const from = partPath(session);
   const to = path.join(storageDir(session.visibility), session.storedName);
 
-  await moveInto(from, to);
+  if (usesS3Media()) await persistStagedMedia(session.visibility === "protected" ? protectedRef(session.storedName) : `/uploads/${session.storedName}`, from, session.mime);
+  else await moveInto(from, to);
 
   const url =
     session.visibility === "protected"
@@ -550,11 +552,12 @@ export async function completeUploadSession(
         WHERE id = $1`,
       [session.id, asset.id],
     );
+    await finishStagedMedia(from);
     return inserted.rows[0];
   } catch (err) {
     // The row is what makes the file findable. Without it the bytes are litter,
     // so put them back where a retry of this same call will find them.
-    await fs.promises.rename(to, from).catch(() => undefined);
+    if (!usesS3Media()) await fs.promises.rename(to, from).catch(() => undefined);
     throw err;
   }
 }

@@ -1,3 +1,4 @@
+import { usesS3Media, mediaStore, objectKey, serveStoredMedia } from "./services/objectStorage";
 import express, { Express } from "express";
 import cors from "cors";
 import cookieParser from "cookie-parser";
@@ -98,7 +99,17 @@ export function createApp(): Express {
   // enough; a 403 says the path is off limits whether the file exists or not,
   // so a half-uploaded course video cannot be fetched by guessing its session
   // id while it is still being written.
-  app.use("/uploads", express.static(env.uploadDir, { dotfiles: "deny" }));
+  if (usesS3Media()) {
+  mediaStore(); // Fail at startup for incomplete bucket/account/KMS configuration.
+  app.use("/uploads", (req, res, next) => {
+    if (!["GET", "HEAD"].includes(req.method)) { res.sendStatus(405); return; }
+    let reference: string;
+    try { reference = `/uploads/${decodeURIComponent(req.path).replace(/^\//, "")}`; objectKey(reference); }
+    catch { res.sendStatus(404); return; }
+    res.setHeader("Cache-Control", "public, max-age=0, must-revalidate");
+    void serveStoredMedia(req, res, reference).catch(next);
+  });
+} else app.use("/uploads", express.static(env.uploadDir, { dotfiles: "deny" }));
 
   // Root-level, not under /api: crawlers fetch these at fixed paths. nginx
   // routes exactly these two paths here instead of to the SPA.

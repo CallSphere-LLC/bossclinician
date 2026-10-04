@@ -24,6 +24,8 @@ done
 export BUILDX_BUILDER=default
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
+helper_context="${AWS_HELPER_BUILD_CONTEXT:-/usr/local/share/callsphere/aws-helper-runtime}"
+[[ -d "$helper_context" ]] || { echo 'Pinned public AWS helper runtime bundle is required.' >&2; exit 2; }
 python3 scripts/release-source-manifest.py > "$work/source-manifest.json"
 source_hash=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["sourceSha256"])' "$work/source-manifest.json")
 echo "Building source SHA256: $source_hash"
@@ -31,7 +33,7 @@ echo "Building source SHA256: $source_hash"
 public_key=$(docker compose config --format json | python3 -c 'import json,sys; print(json.load(sys.stdin)["services"]["frontend"]["build"]["args"].get("VITE_STRIPE_PUBLISHABLE_KEY", ""))')
 for target in api web; do
   component=backend; [[ "$target" == web ]] && component=frontend
-  docker build --label "io.bossclinician.source-sha256=$source_hash" --target "$target" -f backend/Dockerfile --build-arg "APP_RELEASE=$release" --build-arg VITE_API_BASE=/api --build-arg "VITE_STRIPE_PUBLISHABLE_KEY=$public_key" -t "bossclinician-k3-$component:$release" .
+  docker build --build-context "aws_identity_helper=$helper_context" --label "io.bossclinician.source-sha256=$source_hash" --target "$target" -f backend/Dockerfile --build-arg "APP_RELEASE=$release" --build-arg VITE_API_BASE=/api --build-arg "VITE_STRIPE_PUBLISHABLE_KEY=$public_key" -t "bossclinician-k3-$component:$release" .
 done
 docker build --label "io.bossclinician.source-sha256=$source_hash" -t "bossclinician-k3-ai:$release" ai
 docker build --label "io.bossclinician.source-sha256=$source_hash" -f k8s/gateway.Dockerfile -t "bossclinician-k3-gateway:$release" .

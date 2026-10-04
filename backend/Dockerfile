@@ -51,6 +51,16 @@ ENV NODE_OPTIONS=--max-old-space-size=1024
 RUN npm run build
 
 FROM node:24-alpine AS api
+# Public helper and its private glibc runtime only; credentials are mounted at runtime.
+COPY --from=aws_identity_helper /aws_signing_helper /ld-linux-x86-64.so.2 /libc.so.6 /libresolv.so.2 /opt/aws-helper-runtime/
+COPY --from=aws_identity_helper /credential-helper /usr/local/bin/aws_signing_helper
+RUN echo '7d90361df0001887ac0cfed2813dcb814873b46dcd5c3aa7fe3f7f6a0809e4aa  /opt/aws-helper-runtime/aws_signing_helper' | sha256sum -c - \
+    && echo 'bda779ea9e9ad234f60315477d7cfd0bdde861cd8ddd9df8cdaf62f18c4cec14  /opt/aws-helper-runtime/ld-linux-x86-64.so.2' | sha256sum -c - \
+    && echo '85e64f97e348786a8fb4d9f3d52fec289e2fb86bba20f0731dfe61990525e0f7  /opt/aws-helper-runtime/libc.so.6' | sha256sum -c - \
+    && echo '6b99ecf94bcb81732ed1e81615084a5cfe7383eb89ce83106fa51077409ce609  /opt/aws-helper-runtime/libresolv.so.2' | sha256sum -c - \
+    && echo '958ed78c9c3deae7ee2d9fe7d6400bf1c3628033061416c9d1a1c74d06af26e0  /usr/local/bin/aws_signing_helper' | sha256sum -c - \
+    && chmod 0755 /usr/local/bin/aws_signing_helper /opt/aws-helper-runtime/* \
+    && /usr/local/bin/aws_signing_helper version
 WORKDIR /app
 # Same registry retries as the frontend stage above.
 ENV npm_config_fetch_retries=5 \
@@ -64,7 +74,8 @@ ENV NODE_ENV=production
 # should stay roughly two thirds of the memory limit in docker-compose.yml.
 ENV NODE_OPTIONS=--max-old-space-size=640
 COPY backend/package*.json ./
-RUN npm install --omit=dev
+RUN npm install --omit=dev \
+    && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 COPY --from=build /app/dist ./dist
 
 # The render bundle and the document shell, in the layout `vite build` produces.

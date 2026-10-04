@@ -1,3 +1,4 @@
+import { usesS3Media, mediaStore, readStoredMedia, writeStoredMedia } from "./objectStorage";
 import crypto from "crypto";
 import fs from "fs";
 import path from "path";
@@ -187,8 +188,8 @@ interface CertificateArtwork {
   signatureName: string;
   signatureTitle: string;
   /** Absolute local paths; null when unset or not resolvable on this disk. */
-  signatureImagePath: string | null;
-  logoPath: string | null;
+  signatureImagePath: string | Buffer | null;
+  logoPath: string | Buffer | null;
   providerName: string;
 }
 
@@ -418,15 +419,19 @@ export async function renderCertificatePdf(content: CertificateContent): Promise
  * runs inside a request, and a slow CDN would turn a certificate download into a
  * timeout. Anything not on our own disk is simply left off the page.
  */
-async function localImage(value: string): Promise<string | null> {
+async function localImage(value: string): Promise<string | Buffer | null> {
   if (value.trim() === "") return null;
+  let reference = value;
   if (/^https?:\/\//i.test(value)) {
-    // Our own uploads served through the public origin are still local files.
     const prefix = `${env.publicSiteUrl}/uploads/`;
     if (!value.startsWith(prefix)) return null;
-    return resolveStoredFile(value.slice(prefix.length));
+    reference = `/uploads/${value.slice(prefix.length)}`;
   }
-  return resolveStoredFile(value);
+  if (usesS3Media()) {
+    try { return await readStoredMedia(reference, 2 * 1024 * 1024); }
+    catch { return null; }
+  }
+  return resolveStoredFile(reference);
 }
 
 async function artworkFor(template: TemplateRow | null): Promise<CertificateArtwork> {
@@ -532,12 +537,11 @@ async function writeCertificatePdf(row: CertificateRow): Promise<string> {
   const absolute = uploadPath(reference);
   if (absolute === null) throw new Error("Certificate path escaped the storage directory");
 
-  await fs.promises.mkdir(path.dirname(absolute), { recursive: true });
-  await fs.promises.writeFile(absolute, pdf);
+  await writeStoredMedia(reference, pdf, "application/pdf");
 
   await pool.query(`UPDATE certificates SET pdf_path = $2 WHERE id = $1`, [row.id, reference]);
   row.pdf_path = reference;
-  return absolute;
+  return usesS3Media() ? reference : absolute;
 }
 
 /**
@@ -550,7 +554,7 @@ async function writeCertificatePdf(row: CertificateRow): Promise<string> {
 export async function certificateFile(
   row: CertificateRow
 ): Promise<{ absolutePath: string; filename: string }> {
-  const existing = row.pdf_path === "" ? null : await resolveStoredFile(row.pdf_path);
+  const existing = row.pdf_path === "" ? null : usesS3Media() ? (await mediaStore().head(row.pdf_path) ? row.pdf_path : null) : await resolveStoredFile(row.pdf_path);
   const absolutePath = existing ?? (await writeCertificatePdf(row));
   return { absolutePath, filename: certificateFilename(row) };
 }

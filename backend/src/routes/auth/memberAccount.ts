@@ -1,3 +1,4 @@
+import { persistStagedMedia, finishStagedMedia, removeStoredMedia } from "../../services/objectStorage";
 import { Request, Response, Router } from "express";
 import multer from "multer";
 import crypto from "crypto";
@@ -222,6 +223,7 @@ const UPLOAD_URL_PREFIX = "/uploads/";
 async function unlinkUpload(filename: string): Promise<void> {
   if (filename !== path.basename(filename)) return;
   if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(filename)) return;
+  await removeStoredMedia(`/uploads/${filename}`).catch(() => undefined);
   await fs.promises.unlink(path.join(env.uploadDir, filename)).catch(() => undefined);
 }
 
@@ -267,6 +269,7 @@ memberAccountRoutes.post(
     let replaced: string | null = null;
     const client = await pool.connect();
     try {
+      await persistStagedMedia(url, file.path, file.mimetype);
       await client.query("BEGIN");
 
       // Locked before it is read, so two uploads racing cannot both see the same
@@ -311,6 +314,7 @@ memberAccountRoutes.post(
     // Deliberately after the commit. A filesystem delete cannot be rolled back,
     // so doing it inside the transaction would mean a later failure left the
     // member's row pointing at a file that no longer exists.
+    await finishStagedMedia(file.path);
     if (replaced !== null) await unlinkUpload(replaced);
 
     res.json({ avatarUrl: url });

@@ -1,3 +1,4 @@
+import { usesS3Media, readStoredMedia } from "./objectStorage";
 import fs, { type FileHandle } from "fs/promises";
 import path from "path";
 import { env } from "../config/env";
@@ -56,6 +57,14 @@ export async function loadReceiptLogo(
   const match = UPLOAD_REFERENCE.exec((reference ?? "").trim());
   if (!match) return null;
 
+  if (usesS3Media() && uploadDir === env.uploadDir) {
+    try {
+      const bytes = await readStoredMedia(reference!.trim(), MAX_RECEIPT_LOGO_BYTES);
+      if (!bytes) return null;
+      const mime = sniffLogoMime(bytes);
+      return mime ? { mime, bytes, dataUri: `data:${mime};base64,${bytes.toString("base64")}` } : null;
+    } catch { return null; }
+  }
   const root = path.resolve(uploadDir);
   const file = path.resolve(root, match[1]);
   // The pattern already forbids a separator; this is the belt to that brace.

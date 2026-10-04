@@ -79,7 +79,11 @@ if (
   );
 }
 
+const mediaStorageMode = process.env.MEDIA_STORAGE_STORE ?? "local";
+if (!["local", "s3"].includes(mediaStorageMode)) throw new Error("Invalid MEDIA_STORAGE_STORE");
+
 export const env = {
+  mediaStorage: { store: mediaStorageMode, bucket: process.env.MEDIA_STORAGE_BUCKET ?? "", region: process.env.MEDIA_STORAGE_REGION ?? "us-west-2", kmsKey: process.env.MEDIA_STORAGE_KMS_KEY ?? "", owner: process.env.MEDIA_STORAGE_ACCOUNT ?? "" },
   nodeEnv: process.env.NODE_ENV ?? "development",
   port: parseInt(process.env.PORT ?? "4000", 10),
 

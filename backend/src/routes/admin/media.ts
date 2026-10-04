@@ -1,3 +1,4 @@
+import { persistStagedMedia, finishStagedMedia, removeStoredMedia } from "../../services/objectStorage";
 import { Router, type Request } from "express";
 import multer from "multer";
 import path from "path";
@@ -330,12 +331,14 @@ adminMediaRouter.post("/", (req, res, next) => {
           return;
         }
 
+        await persistStagedMedia(url, file.path, mime);
         const result = await pool.query(
           `INSERT INTO media_assets (filename, original_name, url, mime, kind, size_bytes, title)
            VALUES ($1, $2, $3, $4, $5, $6, $7)
            RETURNING *`,
           [file.filename, file.originalname, url, mime, kind, file.size, file.originalname],
         );
+        await finishStagedMedia(file.path);
         res.status(201).json(toMediaJson(result.rows[0], adminId(req)));
       })
       .catch(async (dbErr: unknown) => {
@@ -427,9 +430,8 @@ adminMediaRouter.delete(
     // The row's own url says which of the two directories holds the bytes, and
     // basename() so a doctored filename column can never escape either of them.
     const stored = result.rows[0] as { filename: unknown; url: unknown };
-    const directory = storageDir(isProtectedRef(String(stored.url)) ? "protected" : "public");
     const filename = path.basename(String(stored.filename));
-    await fs.promises.unlink(path.join(directory, filename)).catch(() => undefined);
+    await removeStoredMedia(isProtectedRef(String(stored.url)) ? protectedRef(filename) : `/uploads/${filename}`);
 
     res.status(204).end();
   }),

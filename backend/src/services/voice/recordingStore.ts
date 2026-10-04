@@ -1,3 +1,4 @@
+import { usesS3Media, mediaStore, persistStagedMedia, finishStagedMedia, removeStoredMedia, objectKey } from "../objectStorage";
 import crypto from "crypto";
 import fs from "fs";
 import path from "path";
@@ -271,6 +272,13 @@ export function recordingContentType(key: string): string {
  * there is no static mount above them and no URL that reaches them. The only
  * way to the audio is a signed link redeemed by an administrator.
  */
+/** Preserve historical recording keys while addressing their protected object location. */
+export function mediaRecordingReference(key: string): string {
+  if (!key.startsWith(LOCAL_PREFIX)) throw new Error("Invalid local recording key");
+  const reference = `protected:${LOCAL_FOLDER}/${key.slice(LOCAL_PREFIX.length)}`;
+  objectKey(reference); return reference;
+}
+
 export class LocalDiskRecordingStore implements RecordingStore {
   /** Exposed so the playback route can stream the file it names. */
   readonly root = path.resolve(env.protectedUploadDir, LOCAL_FOLDER);
@@ -365,8 +373,10 @@ export class LocalDiskRecordingStore implements RecordingStore {
       throw err;
     }
 
-    await fs.promises.rm(dir, { recursive: true, force: true });
     const stat = await fs.promises.stat(file);
+    await persistStagedMedia(mediaRecordingReference(key), file, contentType);
+    await fs.promises.rm(dir, { recursive: true, force: true });
+    await finishStagedMedia(file);
     return { key, bytes: stat.size, contentType };
   }
 
@@ -378,6 +388,7 @@ export class LocalDiskRecordingStore implements RecordingStore {
   async remove(key: string): Promise<void> {
     const file = this.resolve(key);
     if (file === null) return;
+    if (usesS3Media()) await removeStoredMedia(mediaRecordingReference(key));
     // A recording already gone is the state the caller wanted. Deleting the
     // conversation must not fail because the volume was restored from a backup
     // that predates the call.
@@ -393,6 +404,13 @@ export class LocalDiskRecordingStore implements RecordingStore {
   /** A recording this conversation already has, joined by an earlier call. */
   private async findFinished(sessionId: string): Promise<StoredRecording | null> {
     const folder = recordingFolder(sessionId);
+    if (usesS3Media()) {
+      for (const extension of [...EXTENSION_TO_TYPE.keys(), ""]) {
+        const key = `${LOCAL_PREFIX}${folder}${extension}`;
+        const object = await mediaStore().head(mediaRecordingReference(key));
+        if (object) return { key, bytes: object.size, contentType: recordingContentType(key) };
+      }
+    }
     const dir = this.resolve(`${LOCAL_PREFIX}${path.dirname(folder)}`);
     if (dir === null) return null;
 
@@ -413,6 +431,8 @@ export class LocalDiskRecordingStore implements RecordingStore {
 
     const stat = await fs.promises.stat(path.join(dir, found));
     const key = `${LOCAL_PREFIX}${path.dirname(folder)}/${found}`;
+    await persistStagedMedia(mediaRecordingReference(key), path.join(dir, found), recordingContentType(found));
+    await finishStagedMedia(path.join(dir, found));
     return { key, bytes: stat.size, contentType: recordingContentType(found) };
   }
 

@@ -1,3 +1,4 @@
+import { usesS3Media, mediaStore, serveStoredMedia } from "../../services/objectStorage";
 import fs from "fs";
 import path from "path";
 import { Router } from "express";
@@ -199,8 +200,8 @@ verifyRouter.get(
               ? await loadEntitledEpisodeAudio(payload.memberId, payload.fileId)
               : await loadEntitledLessonMedia(payload.memberId, kind, payload.fileId);
 
-      const mediaPath = await resolveStoredFile(media.storagePath);
-      if (mediaPath === null) throw notFound(FILE_GONE);
+      const mediaPath = usesS3Media() ? null : await resolveStoredFile(media.storagePath);
+      if (!usesS3Media() && mediaPath === null) throw notFound(FILE_GONE);
 
       // Content-Type is left to sendFile unless the row recorded one: it reads
       // the extension of a name we generated ourselves, which is a better answer
@@ -217,7 +218,8 @@ verifyRouter.get(
       // sendFile rather than a bare stream: a <video> seeks by asking for byte
       // ranges, and a response that ignores Range is one the player can only
       // ever play from the beginning.
-      res.sendFile(mediaPath, (err) => {
+      if (usesS3Media()) { await serveStoredMedia(req, res, media.storagePath); return; }
+      res.sendFile(mediaPath!, (err) => {
         if (err && !res.headersSent) next(err);
       });
       return;
@@ -225,6 +227,13 @@ verifyRouter.get(
 
     const file = await loadEntitledFile(payload.memberId, kind, payload.fileId);
 
+    if (usesS3Media()) {
+      if (!await mediaStore().head(file.storagePath)) throw notFound(FILE_GONE);
+      await recordDownload({ kind, fileId: file.id, memberId: payload.memberId, ip: req.ip ?? "", userAgent: typeof req.headers["user-agent"] === "string" ? req.headers["user-agent"] : "" });
+      res.attachment(safeFilename(file)); res.setHeader("Content-Type", safeMime(file.mime));
+      res.setHeader("Cache-Control", "private, no-store"); res.setHeader("Referrer-Policy", "no-referrer");
+      await serveStoredMedia(req, res, file.storagePath); return;
+    }
     const absolutePath = await resolveStoredFile(file.storagePath);
     if (absolutePath === null) throw notFound(FILE_GONE);
     const stat = await fs.promises.stat(absolutePath);
@@ -298,8 +307,8 @@ verifyRouter.get(
     const row = asset.rows[0];
     if (row === undefined) throw notFound(FILE_GONE);
 
-    const filePath = await resolveStoredFile(row.url);
-    if (filePath === null) throw notFound(FILE_GONE);
+    const filePath = usesS3Media() ? null : await resolveStoredFile(row.url);
+    if (!usesS3Media() && filePath === null) throw notFound(FILE_GONE);
 
     if (row.mime !== "") res.setHeader("Content-Type", safeMime(row.mime));
     res.setHeader("Content-Disposition", `inline; filename="${safeFilename(row)}"`);
@@ -309,7 +318,8 @@ verifyRouter.get(
 
     // sendFile, not a bare stream: she scrubs through the video to check it, and
     // seeking is Range requests an ordinary stream answers with the whole file.
-    res.sendFile(filePath, (err) => {
+    if (usesS3Media()) { await serveStoredMedia(req, res, row.url); return; }
+    res.sendFile(filePath!, (err) => {
       if (err && !res.headersSent) next(err);
     });
   })
