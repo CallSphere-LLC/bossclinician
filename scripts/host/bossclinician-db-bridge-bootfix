@@ -1,17 +1,46 @@
 #!/usr/bin/env bash
-# db-bridge publishes Postgres on 10.42.0.1:15432, an address that only exists once k3s
-# has created cni0. At boot docker starts the container before that -> exit 128
-# ("cannot assign requested address"), docker never retries, and a plain restart leaves
-# it with no network. The K3s backend then cannot reach the database and crash-loops.
-# Wait for cni0, then recreate db-bridge if it is not listening.
-# Installed to /usr/local/sbin; run by bossclinician-db-bridge-bootfix.service.
-set -u
-for _ in $(seq 1 120); do
-  ip -4 addr show cni0 2>/dev/null | grep -q "inet 10.42.0.1/" && break
-  sleep 5
+# Recover the private PostgreSQL bridge after k3s creates its CNI address.
+set -euo pipefail
+trap 'rc=$?; echo "ERROR: db-bridge recovery failed at line $LINENO (exit $rc)" >&2; exit "$rc"' ERR
+
+# /run is recreated at every boot. This is also safe if invoked manually.
+systemd-tmpfiles --create /etc/tmpfiles.d/callsphere-lock.conf
+
+cni_ready=0
+for ((attempt=0; attempt<120; attempt++)); do
+  if ip -4 addr show cni0 2>/dev/null | grep -q 'inet 10.42.0.1/'; then
+    cni_ready=1
+    break
+  fi
+  sleep 2
 done
-sleep 5
-if ss -tlnH "sport = :15432" | grep -q "10.42.0.1:15432"; then
-  echo "db-bridge already listening on 10.42.0.1:15432"; exit 0
+if (( cni_ready == 0 )); then
+  echo 'ERROR: cni0 did not acquire 10.42.0.1 within 240 seconds' >&2
+  exit 1
 fi
-cd /opt/bossclinician && docker compose -p bossclinician -f docker-compose.yml -f k8s/docker-compose.data.yml up -d --no-deps --force-recreate db-bridge
+
+# Preserve the release lock. Contention is retryable, never reported as success.
+exec 9>>/run/lock/callsphere/build.lock
+if flock -n -E 75 9; then
+  :
+else
+  rc=$?
+  echo "ERROR: could not acquire maintenance/release lock (exit $rc); retry required" >&2
+  exit "$rc"
+fi
+
+if ! ss -tlnH 'sport = :15432' | grep -q '10.42.0.1:15432'; then
+  cd /opt/bossclinician
+  docker compose -p bossclinician -f docker-compose.yml -f k8s/docker-compose.data.yml -f k8s/docker-compose.security-data.yml up -d --pull never --no-deps --force-recreate db-bridge
+fi
+
+# A bound TCP socket alone does not establish database availability.
+for ((attempt=0; attempt<15; attempt++)); do
+  if /usr/bin/pg_isready -h 10.42.0.1 -p 15432 -t 2 >/dev/null 2>&1; then
+    echo 'db-bridge ready: PostgreSQL responds on private 10.42.0.1:15432'
+    exit 0
+  fi
+  sleep 2
+done
+echo 'ERROR: database behind db-bridge did not become ready' >&2
+exit 1
