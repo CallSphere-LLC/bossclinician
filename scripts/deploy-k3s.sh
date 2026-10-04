@@ -21,6 +21,12 @@ for component in backend frontend ai gateway; do
     exit 2
   fi
 done
+# A previously accepted cloud cutover must not silently revert on config loss.
+current_media=$(sudo -n kubectl -n bossclinician get deployment boss-app -o 'jsonpath={.spec.template.spec.containers[?(@.name=="backend")].env[?(@.name=="MEDIA_STORAGE_STORE")].value}' 2>/dev/null || true)
+if [[ "$current_media" == s3 ]] && [[ ! -f /etc/bossclinician/media-storage.json ]]; then
+  echo 'Live media uses S3 but its persistent release configuration is missing.' >&2
+  exit 2
+fi
 export BUILDX_BUILDER=default
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT

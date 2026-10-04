@@ -2,6 +2,9 @@
 """Render non-secret workloads; feed effective Compose env directly to kubectl."""
 import json, os, subprocess, sys, urllib.parse
 from pathlib import Path
+from media_storage_release import load as load_media_state, configure_backend
+
+media_state = load_media_state()
 
 def run(*args, **kw):
     return subprocess.run(args, check=True, capture_output=True, text=True, **kw).stdout
@@ -24,6 +27,7 @@ for name in ('backend', 'ai'):
         env['DATABASE_URL'] = urllib.parse.urlunsplit((u.scheme, u.netloc, u.path, urllib.parse.urlencode(q), u.fragment))
         env['AI_BASE_URL'] = 'http://ai:8000'
         env['APP_RELEASE'] = release
+        if media_state is not None: env.update(media_state['environment'])
     apply({'apiVersion': 'v1', 'kind': 'Secret', 'metadata': {'name': f'boss-{name}-env-{release}', 'namespace': ns}, 'immutable': True, 'type': 'Opaque', 'stringData': env})
 
 def probe(port, path):
@@ -49,6 +53,7 @@ for name, docker_name in [('uploads', 'bossclinician_uploads_data'), ('protected
     path = run('docker', 'volume', 'inspect', docker_name, '--format', '{{.Mountpoint}}').strip()
     volumes.append({'name': name, 'hostPath': {'path': path, 'type': 'Directory'}})
 
+configure_backend(backend, volumes, media_state)
 objects = []
 frontend = container('frontend','frontend',80,'/index.html','96Mi')
 frontend['volumeMounts'] += [{'name': 'browser-assets', 'mountPath': '/srv/browser-assets', 'readOnly': True}]
