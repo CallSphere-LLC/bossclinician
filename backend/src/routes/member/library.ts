@@ -430,7 +430,8 @@ async function loadBundleContents(memberId: number, bundleProductId: number) {
   }));
 }
 
-function toOutlineJson(course: MemberCourseView, productSlug: string) {
+/** Exported for the admin's "Preview as student", which must answer in this exact shape. */
+export function toOutlineJson(course: MemberCourseView, productSlug: string) {
   return {
     courseId: course.courseId,
     slug: course.slug,
@@ -544,7 +545,7 @@ interface LessonContentRow {
   tool_key: string | null;
 }
 
-function neighbour(lesson: MemberLessonView | undefined) {
+export function neighbour(lesson: MemberLessonView | undefined) {
   if (!lesson) return null;
   return {
     slug: lesson.slug,

@@ -11,6 +11,7 @@ import {
   ChevronRight,
   MoreHorizontal,
   Clock,
+  Eye,
   Film,
   Italic,
   Layers,
@@ -29,6 +30,7 @@ import type { Course } from "@/types";
 import { cn } from "@/lib/cn";
 import { formatBytes } from "@/lib/format";
 import { embeddableUrl } from "@/lib/videoEmbed";
+import { coursePreviewPath } from "@/lib/coursePreviewApi";
 import {
   Badge,
   Button,
@@ -630,6 +632,17 @@ export default function CourseBuilder() {
                 <Clock className="size-3" />
                 {courseLength(totalMinutes)} in total
               </Badge>
+            )}
+            {/* A new tab: the preview is the student's page rather than a console
+                screen, and the editor stays here to come back to. It shows
+                drafts too, and saves nothing. */}
+            {courseId > 0 && (
+              <Button asChild variant="secondary" size="sm">
+                <a href={coursePreviewPath(courseId)} target="_blank" rel="noopener noreferrer">
+                  <Eye />
+                  Preview as student
+                </a>
+              </Button>
             )}
             <Button size="sm" onClick={() => setAddingModule(true)}>
               <Plus />

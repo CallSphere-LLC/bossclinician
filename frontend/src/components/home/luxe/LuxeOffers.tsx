@@ -188,7 +188,7 @@ export function LuxeOffers() {
                   </p>
 
                   <LuxeButton
-                    variant="glass"
+                    variant="gild"
                     size="sm"
                     to={offer.to}
                     className="mt-6 min-h-[44px] w-full"

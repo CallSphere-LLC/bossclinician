@@ -1,5 +1,6 @@
 import { sessionFetch } from "@/lib/adminTransport";
 import { ApiError } from "@/lib/api";
+import type { CatalogStatus, Offer, OfferPricingOption } from "@/lib/adminCommerceApi";
 import type { CoachingRosterClient } from "@/lib/coachingRoster";
 
 /**
@@ -50,6 +51,47 @@ export interface NewCoachingSessionFile {
   url: string;
 }
 
+/**
+ * An offer that includes a coaching program: the columns the offers list shows
+ * for it, and nothing the program's Offers tab doesn't draw.
+ */
+export type CoachingProgramOffer = Pick<
+  Offer,
+  | "id"
+  | "title"
+  | "slug"
+  | "currency"
+  | "pricingType"
+  | "amountCents"
+  | "minAmountCents"
+  | "interval"
+  | "intervalCount"
+  | "installmentCount"
+  | "trialDays"
+  | "purchaseCount"
+> & {
+  /** Kajabi's "Internal Title"; '' when she hasn't set one. */
+  internalTitle: string;
+  status: CatalogStatus;
+  /** The other ways to pay on the same checkout — a payment plan beside the full price. */
+  pricingOptions: Pick<
+    OfferPricingOption,
+    | "id"
+    | "label"
+    | "pricingType"
+    | "amountCents"
+    | "minAmountCents"
+    | "currency"
+    | "interval"
+    | "intervalCount"
+    | "installmentCount"
+    | "trialDays"
+    | "recommended"
+  >[];
+  /** The bundle the program comes inside, or null when the offer includes it directly. */
+  bundleTitle: string | null;
+};
+
 export const coachingAdminApi = {
   sessionFiles: (sessionId: number) =>
     request<CoachingSessionFile[]>(`/admin/coaching/sessions/${sessionId}/files`),
@@ -62,4 +104,7 @@ export const coachingAdminApi = {
     request<void>(`/admin/coaching/sessions/${sessionId}/files/${fileId}`, { method: "DELETE" }),
   /** The Clients tab: everyone in a coaching program, one entry per person. */
   roster: () => request<{ clients: CoachingRosterClient[] }>(`/admin/growth/coaching/roster`),
+  /** A program's Offers tab: every offer that includes it, live ones first. */
+  programOffers: (programId: number) =>
+    request<CoachingProgramOffer[]>(`/admin/coaching/programs/${programId}/offers`),
 };

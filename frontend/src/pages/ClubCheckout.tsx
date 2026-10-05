@@ -6,7 +6,7 @@ import { GlassCard } from "@/components/luxe/GlassCard";
 import { LuxeButton } from "@/components/luxe/LuxeButton";
 import { Section } from "@/components/luxe/Section";
 import { stripeTestMode } from "@/components/checkout/stripeClient";
-import { CLUB_OFFER_SLUG, club, clubCheckout } from "@/content/club";
+import { CLUB_OFFER_SLUG, clubCheckout } from "@/content/club";
 import { commerceApi, commerceErrorMessage, type PublicOffer } from "@/lib/commerceApi";
 import { CheckoutExperience } from "./Checkout";
 
@@ -27,6 +27,14 @@ import { CheckoutExperience } from "./Checkout";
  * server render and first client render are the static copy plus a loading
  * line, and nothing here reads `window` while rendering.
  */
+/**
+ * The hero's mockup on the site's own charcoal. The source file
+ * (`clubCheckout.image.src`, still the share image) sits on a flat slate
+ * blue-green field that fought the plum and gold around it; this is the same
+ * picture with only that field repainted, the devices and photos untouched.
+ */
+const HERO_MOCKUP_SRC = "/images/club/club-program-mockup-night.jpg";
+
 export default function ClubCheckout() {
   const [offer, setOffer] = useState<PublicOffer | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -63,9 +71,9 @@ export default function ClubCheckout() {
       {/* 1 · The source's left column, opening lines: mockup, headline, promise. */}
       <Section surface="deep" space="md" aurora="mixed" auroraIntensity={0.5} seam={false} aria-label="The Club">
         <div className="mx-auto grid max-w-6xl grid-cols-1 items-center gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] lg:gap-12">
-          <GlassCard interactive={false} spotlight={false} className="overflow-hidden p-2">
+          <GlassCard accent="gold" interactive={false} spotlight={false} className="overflow-hidden p-2">
             <img
-              src={clubCheckout.image.src}
+              src={HERO_MOCKUP_SRC}
               alt={clubCheckout.image.alt}
               width={clubCheckout.image.width}
               height={clubCheckout.image.height}
@@ -193,11 +201,6 @@ export default function ClubCheckout() {
           </div>
         </div>
 
-        <div className="mx-auto mt-10 flex max-w-6xl justify-center">
-          <LuxeButton variant="foil" size="lg" href="#enrollment-terms" className="w-full sm:w-auto">
-            {club.hero.cta}
-          </LuxeButton>
-        </div>
       </Section>
 
       {/* 4 · The source's footer band: NBCC statement, refund and security notes. */}

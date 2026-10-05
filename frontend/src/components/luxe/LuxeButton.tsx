@@ -3,7 +3,7 @@ import { Link } from "react-router";
 import { cn } from "@/lib/cn";
 import { safeHref } from "@/lib/safeHref";
 
-type Variant = "foil" | "glass" | "outline" | "quiet";
+type Variant = "foil" | "glass" | "outline" | "gild" | "quiet";
 type Size = "sm" | "md" | "lg";
 
 /**
@@ -11,6 +11,11 @@ type Size = "sm" | "md" | "lg";
  * sweep on hover. `glass` is the secondary; `outline` the tertiary; `quiet`
  * is an inline text action. Anything beyond four weights stops being a
  * hierarchy and starts being noise.
+ *
+ * `gild` is not a fifth weight: it is for a set of sibling offers (Club,
+ * Lounge, Boardroom) where no one button may look like the default. Outlined
+ * in gold at rest, filled gold with dark lettering on hover and keyboard
+ * focus. Its colours are `.btn-gild` in index.css and site-theme.css.
  */
 const VARIANT: Record<Variant, string> = {
   foil: cn(
@@ -26,6 +31,7 @@ const VARIANT: Record<Variant, string> = {
     "border border-white/25 text-white/85",
     "hover:border-gold/60 hover:bg-gold/[0.08] hover:text-white",
   ),
+  gild: "btn-gild",
   quiet: "text-orchid hover:text-gold underline underline-offset-[6px] decoration-white/20 hover:decoration-gold/60",
 };
 

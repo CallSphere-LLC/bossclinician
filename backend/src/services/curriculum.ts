@@ -317,6 +317,8 @@ interface OutlineRow {
   lesson_drip_days: number | null;
   lesson_drip_date: Date | null;
   comments_enabled: boolean | null;
+  /** null on a module row with no lesson; false marks a draft (preview only). */
+  lesson_published: boolean | null;
   requires_previous_lesson: boolean | null;
   assessment_requires_pass: boolean;
   notes_enabled: boolean | null;
@@ -333,8 +335,13 @@ interface OutlineRow {
  * back — 17 courses currently have no lessons at all, and an outline that
  * silently omits their modules would look like a loading bug rather than an
  * empty course.
+ *
+ * `publishedOnly` is false in exactly one place: the admin's "Preview as
+ * student" (`loadCourseForPreview`), which has to show lessons still in draft.
+ * Every member-facing read goes through `OUTLINE_SQL` below and keeps the
+ * published filter.
  */
-const OUTLINE_SQL = `
+const outlineSql = (publishedOnly: boolean): string => `
   SELECT m.course_id,
          m.id       AS module_id,
          m.title    AS module_title,
@@ -344,15 +351,18 @@ const OUTLINE_SQL = `
          l.id       AS lesson_id,
          l.slug, l.title, l.content_type, l.duration_minutes, l.video_duration_seconds,
          l.preview, l.comments_enabled, l.notes_enabled, l.requires_previous_lesson,
+         l.published AS lesson_published,
          EXISTS(SELECT 1 FROM assessments a WHERE a.lesson_id=l.id AND a.kind='graded' AND a.require_pass) AS assessment_requires_pass,
          l.drip_days AS lesson_drip_days,
          l.drip_date AS lesson_drip_date,
          lp.last_position_seconds, lp.watched_percent, lp.completed_at, lp.last_viewed_at
     FROM course_modules m
-    LEFT JOIN course_lessons  l  ON l.module_id = m.id AND l.published
+    LEFT JOIN course_lessons  l  ON l.module_id = m.id${publishedOnly ? " AND l.published" : ""}
     LEFT JOIN lesson_progress lp ON lp.lesson_id = l.id AND lp.member_id = $1
    WHERE m.course_id = ANY($2::int[])
    ORDER BY m.course_id, m.sort, m.id, l.sort, l.id`;
+
+const OUTLINE_SQL = outlineSql(true);
 
 function iso(value: Date | string | null): string | null {
   if (value === null) return null;
@@ -608,6 +618,92 @@ export async function loadCourseForMember(
     modules,
     progress: summariseProgress(lessons),
     continueLesson: pickContinueLesson(lessons),
+  };
+}
+
+/* ------------------------------------------------------------ admin preview */
+
+export interface PreviewCourseView extends MemberCourseView {
+  /** Lessons a student cannot see at all yet: `course_lessons.published` is false. */
+  draftLessonIds: number[];
+  /**
+   * By lesson id: what a student who bought today would be told instead of being
+   * let in ("Unlocks Tuesday, 3 March"). Schedule locks only — a "finish the
+   * previous lesson first" lock is true of every sequenced lesson for somebody
+   * who has finished nothing, and says nothing about the course.
+   */
+  studentLocks: Record<number, string>;
+}
+
+/**
+ * The whole course as a brand-new student would see it, for an administrator.
+ *
+ * The admin's "Preview as student". It is the member outline built by the same
+ * `buildModules`, with three deliberate differences, none of which touch what a
+ * member can reach:
+ *
+ *  - no entitlement is asked for or implied — there is no member here at all,
+ *    and the caller is an admin route behind `requireAuth`;
+ *  - draft lessons are included, because checking a lesson before publishing it
+ *    is what a preview is for;
+ *  - every lesson and module comes back unlocked, so the admin can open a lesson
+ *    the drip schedule would hold back. What a student enrolling today would be
+ *    told instead is kept in `studentLocks` for the outline to show.
+ *
+ * Progress is always empty: member id 0 matches no `lesson_progress` row, and
+ * nothing a preview does writes one.
+ */
+export async function loadCourseForPreview(
+  courseId: number,
+  now: Date = new Date()
+): Promise<PreviewCourseView | null> {
+  const [courseRes, settings] = await Promise.all([
+    pool.query<CourseRow>(
+      `SELECT id, slug, title, subtitle, description, image FROM courses WHERE id = $1`,
+      [courseId]
+    ),
+    loadDripSettings(),
+  ]);
+
+  const course = courseRes.rows[0];
+  if (!course) return null;
+
+  const outline = await pool.query<OutlineRow>(outlineSql(false), [0, [courseId]]);
+  const modules = buildModules(outline.rows, now, now, settings);
+
+  const studentLocks: Record<number, string> = {};
+  for (const mod of modules) {
+    for (const lesson of mod.lessons) {
+      if (!lesson.unlocked && lesson.unlocksAt !== null) {
+        studentLocks[lesson.id] = lesson.unlockLabel;
+      }
+      lesson.unlocked = true;
+      lesson.unlocksAt = null;
+      lesson.unlockLabel = "";
+    }
+    mod.unlocked = true;
+    mod.unlocksAt = null;
+    mod.unlockLabel = "";
+  }
+
+  const lessons = flattenLessons(modules);
+
+  return {
+    courseId: course.id,
+    slug: course.slug,
+    title: course.title,
+    subtitle: course.subtitle,
+    description: course.description,
+    image: course.image ?? "",
+    grantedAt: now.toISOString(),
+    timezone: settings.timezone,
+    modules,
+    progress: summariseProgress(lessons),
+    continueLesson: pickContinueLesson(lessons),
+    draftLessonIds: outline.rows.flatMap((row) =>
+      row.lesson_id !== null && row.lesson_published === false ? [row.lesson_id] : []
+    ),
+    studentLocks,
   };
 }
 

@@ -172,9 +172,10 @@ function Chooser() {
         titleAccent="your practice."
         lede="Pick the call that fits where you are. Most people start with the complimentary Practice Alignment Call — fifteen minutes to see what's stuck and what support makes sense next."
         tone="violet"
+        align="center"
       />
 
-      <Section surface="base" space="md" aria-label="Calls you can book" containerClassName="max-w-5xl">
+      <Section surface="base" space="sm" aria-label="Calls you can book" containerClassName="max-w-5xl">
         {calls === null ? (
           <p role="status" className="copy-luxe text-center">
             Loading…

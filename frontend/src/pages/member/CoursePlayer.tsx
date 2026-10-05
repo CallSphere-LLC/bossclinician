@@ -18,9 +18,6 @@ import { GlassCard } from "@/components/luxe/GlassCard";
 import { LuxeButton, LuxePill } from "@/components/luxe/LuxeButton";
 import { MemberApiError } from "@/lib/memberApi";
 import {
-  lessonPath,
-  libraryApi,
-  productPath,
   type CourseOutlineData,
   type LessonResponse,
   type LibraryProduct,
@@ -37,6 +34,7 @@ import { LockedNotice } from "@/components/player/LockedNotice";
 import { TranscriptPanel } from "@/components/player/TranscriptPanel";
 import { Attachments } from "@/components/player/Attachments";
 import { ProgressRing } from "@/components/player/ProgressRing";
+import { usePlayerSource } from "@/components/player/playerSource";
 import { contentTypeLabel, lessonLengthLabel } from "@/components/player/lessonMeta";
 import { cn } from "@/lib/cn";
 
@@ -63,10 +61,15 @@ const MEDIA_RENEW_MARGIN_MS = 2 * 60 * 1000;
  * send one; a component that could show it is a component somebody eventually
  * wires up "just for the preview".
  */
-export default function CoursePlayer() {
+export default function CoursePlayer(props: { productSlug?: string; lessonSlug?: string }) {
   const params = useParams();
-  const productSlug = params.productSlug ?? "";
-  const lessonSlug = params.lessonSlug;
+  // A member's page reads both from the URL. The admin's "Preview as student"
+  // mounts this under its own route and names the course itself.
+  const productSlug = props.productSlug ?? params.productSlug ?? "";
+  const lessonSlug = props.lessonSlug ?? params.lessonSlug;
+  // Where the data comes from: `libraryApi` for a member, the admin's
+  // read-only endpoints in a preview. See components/player/playerSource.
+  const { api } = usePlayerSource();
 
   const [product, setProduct] = useState<LibraryProduct | null>(null);
   const [productError, setProductError] = useState<{ message: string; missing: boolean } | null>(
@@ -81,7 +84,7 @@ export default function CoursePlayer() {
     setProduct(null);
     setProductError(null);
 
-    void libraryApi
+    void api
       .getProduct(productSlug)
       .then((data) => {
         if (!cancelled) setProduct(data);
@@ -94,7 +97,7 @@ export default function CoursePlayer() {
     return () => {
       cancelled = true;
     };
-  }, [productSlug]);
+  }, [api, productSlug]);
 
   useEffect(() => {
     if (!lessonSlug) {
@@ -107,7 +110,7 @@ export default function CoursePlayer() {
     setLessonData(null);
     setLessonError(null);
 
-    void libraryApi
+    void api
       .getLesson(productSlug, lessonSlug)
       .then((data) => {
         if (!cancelled) setLessonData(data);
@@ -120,7 +123,7 @@ export default function CoursePlayer() {
     return () => {
       cancelled = true;
     };
-  }, [productSlug, lessonSlug]);
+  }, [api, productSlug, lessonSlug]);
 
   /*
    * Renew the lesson's signed media URLs before they expire.
@@ -153,7 +156,7 @@ export default function CoursePlayer() {
 
     let cancelled = false;
     const timer = window.setTimeout(() => {
-      void libraryApi
+      void api
         .getLesson(productSlug, lessonSlug)
         .then((fresh) => {
           if (cancelled || fresh.lesson.locked) return;
@@ -188,7 +191,7 @@ export default function CoursePlayer() {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [productSlug, lessonSlug, lessonId, mediaExpiresAt]);
+  }, [api, productSlug, lessonSlug, lessonId, mediaExpiresAt]);
 
   // The graded-test player runs in a same-origin frame. Once it records a pass,
   // re-read both views so the tick and the newly-unlocked next lesson appear
@@ -199,8 +202,8 @@ export default function CoursePlayer() {
       if (event.origin !== window.location.origin) return;
       if (!["boss-assessment-passed", "boss-assessment-completed"].includes((event.data as { type?: string } | null)?.type ?? "")) return;
       void Promise.all([
-        libraryApi.getProduct(productSlug),
-        libraryApi.getLesson(productSlug, lessonSlug),
+        api.getProduct(productSlug),
+        api.getLesson(productSlug, lessonSlug),
       ]).then(([freshProduct, freshLesson]) => {
         setProduct(freshProduct);
         setLessonData(freshLesson);
@@ -209,7 +212,7 @@ export default function CoursePlayer() {
     };
     window.addEventListener("message", passed);
     return () => window.removeEventListener("message", passed);
-  }, [lessonSlug, productSlug]);
+  }, [api, lessonSlug, productSlug]);
 
   /**
    * Folds a progress write back into what is on screen.
@@ -375,6 +378,7 @@ function describeError(err: unknown, fallback: string): { message: string; missi
 }
 
 function NotInLibrary() {
+  const { preview } = usePlayerSource();
   return (
     <MemberShell title="Not in your library">
       <Seo title="Not in your library | Boss Clinician" />
@@ -397,10 +401,17 @@ function NotInLibrary() {
           otherwise your library has everything that is yours.
         </p>
         <div className="mt-7 flex flex-wrap justify-center gap-3">
-          <LuxeButton to="/library">Back to your library</LuxeButton>
-          <LuxeButton to="/courses" variant="glass">
-            Browse the courses
-          </LuxeButton>
+          {preview ? (
+            // The member destinations below do not exist on the admin's address.
+            <LuxeButton to={preview.editorPath}>Back to editor</LuxeButton>
+          ) : (
+            <>
+              <LuxeButton to="/library">Back to your library</LuxeButton>
+              <LuxeButton to="/courses" variant="glass">
+                Browse the courses
+              </LuxeButton>
+            </>
+          )}
         </div>
       </GlassCard>
     </MemberShell>
@@ -408,6 +419,7 @@ function NotInLibrary() {
 }
 
 function BackToCourse({ productSlug, title }: { productSlug: string; title: string }) {
+  const { productPath } = usePlayerSource();
   return (
     <Link
       to={productPath(productSlug)}
@@ -435,6 +447,7 @@ function CourseSummary({
   compact?: boolean;
 }) {
   const { progress } = course;
+  const { productPath } = usePlayerSource();
 
   return (
     <div className={cn("flex items-start gap-4", compact && "pr-1")}>
@@ -465,6 +478,7 @@ function CourseSummary({
 
 function CourseHome({ course, productSlug }: { course: CourseOutlineData; productSlug: string }) {
   const cta = course.continueLesson;
+  const { preview } = usePlayerSource();
   const started = course.progress.lessonsCompleted > 0 || course.progress.percent > 0;
   // `percent` is floored on the server, so 100 means every lesson, not "nearly".
   const finished = course.progress.completedAt !== null || course.progress.percent >= 100;
@@ -503,7 +517,9 @@ function CourseHome({ course, productSlug }: { course: CourseOutlineData; produc
         </div>
       </GlassCard>
 
-      {finished && <CertificateCard courseId={course.courseId} />}
+      {/* Never in an admin preview: the card reads, and can issue, a member's
+          certificate, and there is no member here. */}
+      {finished && !preview && <CertificateCard courseId={course.courseId} />}
 
       {/* On the course home the outline is the page, not a sidebar — so it is
           rendered here too rather than only in the `xl` rail, which does not
@@ -652,6 +668,7 @@ function LessonBreadcrumb({
   moduleTitle: string;
   lessonTitle: string;
 }) {
+  const { productPath } = usePlayerSource();
   return (
     <nav aria-label="Breadcrumb">
       <ol className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[0.68rem] font-semibold uppercase tracking-[0.16em]">
@@ -702,6 +719,7 @@ function NicelyDone({
   modules: OutlineModule[];
 }) {
   const { next } = data;
+  const { productPath, lessonPath } = usePlayerSource();
   const courseFinished =
     data.course.progress.completedAt !== null || data.course.progress.percent >= 100;
 
@@ -770,11 +788,18 @@ function CompleteBar({
   onSaved: (result: ProgressResult) => void;
 }) {
   const [busy, setBusy] = useState(false);
+  const { api, preview } = usePlayerSource();
 
   const toggle = async () => {
+    // An admin preview is read-only: the tick is the student's to make, and
+    // looking at a course must not leave a completion behind.
+    if (preview) {
+      toast("Preview only — nothing is saved.");
+      return;
+    }
     setBusy(true);
     try {
-      onSaved(await libraryApi.toggleComplete(lessonId, !completed));
+      onSaved(await api.toggleComplete(lessonId, !completed));
       toast.success(completed ? "Marked as not finished." : "Lesson complete.");
     } catch (err) {
       toast.error(
@@ -842,6 +867,7 @@ function NavCard({
   productSlug: string;
   direction: "prev" | "next";
 }) {
+  const { lessonPath } = usePlayerSource();
   const label = direction === "prev" ? "Previous" : "Next";
   const Icon = direction === "prev" ? ChevronLeft : ChevronRight;
 

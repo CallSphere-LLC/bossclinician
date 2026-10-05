@@ -125,7 +125,7 @@
 
 /* ── Shared pieces ───────────────────────────────────────────────────────── */
 .br-page .br-section {
-  padding: 110px max(6vw, 24px);
+  padding: 72px max(6vw, 24px);
 }
 .br-page .br-eyebrow {
   text-transform: uppercase;
@@ -1004,8 +1004,8 @@
     gap: 45px;
   }
   .br-page .br-section {
-    padding-top: 80px;
-    padding-bottom: 80px;
+    padding-top: 64px;
+    padding-bottom: 64px;
   }
 }
 
@@ -1043,7 +1043,7 @@
     font-size: 40px;
   }
   .br-page .br-section {
-    padding: 70px 22px;
+    padding: 52px 22px;
   }
   .br-page .br-path-grid,
   .br-page .br-focus-grid {

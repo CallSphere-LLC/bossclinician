@@ -43,10 +43,12 @@ const SPACE: Record<Space, string> = {
   // Tightened once more (19 Sep 2026): measured on /club, every boundary was a
   // uniform 96-101px of nothing on a phone and 133px on a laptop — 17 of them
   // in a row is what reads as "a gap". A phone now gets 72px at `lg`.
-  sm: "py-6 sm:py-8 lg:py-10 2xl:py-12 short:py-6",
-  md: "py-8 sm:py-9 lg:py-11 2xl:py-14 short:py-8",
-  lg: "py-9 sm:py-10 lg:py-12 2xl:py-16 short:py-9",
-  xl: "py-10 sm:py-12 lg:py-14 2xl:py-20 short:py-10",
+  // And once more (5 Oct 2026): a full-site sweep still measured 110-135px of
+  // empty band at most section boundaries on a laptop; each tier came down a step.
+  sm: "py-6 sm:py-7 lg:py-8 2xl:py-10 short:py-6",
+  md: "py-7 sm:py-8 lg:py-9 2xl:py-12 short:py-7",
+  lg: "py-8 sm:py-9 lg:py-10 2xl:py-14 short:py-8",
+  xl: "py-9 sm:py-10 lg:py-12 2xl:py-16 short:py-9",
 };
 
 interface SectionProps {

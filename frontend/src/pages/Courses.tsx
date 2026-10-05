@@ -319,7 +319,7 @@ function CourseCard({ course, accent }: { course: Course; accent: Accent }) {
       <Link
         to={`/courses/${course.slug}`}
         aria-label={`View ${course.title}`}
-        className="relative block aspect-[16/10] w-full overflow-hidden border-b border-hairline bg-night-deep"
+        className="media-well relative block aspect-[16/10] w-full overflow-hidden border-b border-hairline bg-night-deep"
       >
         <img
           src={course.image}

@@ -63,7 +63,7 @@ html[data-site-theme] .theme-luxe .retreat-page .retreat-heading {
   margin: 0 auto;
 }
 .retreat-band {
-  padding: 100px 0;
+  padding: 68px 0;
   scroll-margin-top: 100px;
 }
 .retreat-light {
@@ -97,7 +97,7 @@ html[data-site-theme] .theme-luxe .retreat-page .retreat-heading {
   --retreat-section-background: var(--retreat-deep);
   position: relative;
   isolation: isolate;
-  padding: 110px 0 90px;
+  padding: 84px 0 68px;
   text-align: center;
   background: var(--retreat-deep);
 }
@@ -395,10 +395,10 @@ html[data-site-theme] .theme-luxe .retreat-page .retreat-heading {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .retreat-band {
-    padding: 70px 0;
+    padding: 56px 0;
   }
   .retreat-hero {
-    padding: 75px 0;
+    padding: 60px 0;
   }
   .retreat-gallery {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -415,7 +415,7 @@ html[data-site-theme] .theme-luxe .retreat-page .retreat-heading {
     font-size: 0.9rem;
   }
   .retreat-band {
-    padding: 56px 0;
+    padding: 44px 0;
   }
   .retreat-split,
   .retreat-columns,
@@ -442,7 +442,7 @@ html[data-site-theme] .theme-luxe .retreat-page .retreat-heading {
     letter-spacing: 0.07em;
   }
   .retreat-hero {
-    padding: 64px 0;
+    padding: 52px 0;
   }
   .retreat-eyebrow {
     letter-spacing: 0.12em;

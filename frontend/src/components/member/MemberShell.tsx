@@ -18,6 +18,7 @@ import { useMember } from "@/hooks/useMember";
 import { TimezonePrompt } from "@/components/member/TimezonePrompt";
 import { FloatingCall } from "@/components/community/FloatingCall";
 import { rememberCommunityReturn } from "@/components/community/communityReturn";
+import { PlayerPreviewBanner } from "@/components/player/playerSource";
 import { cn } from "@/lib/cn";
 
 /**
@@ -175,6 +176,8 @@ export function MemberShell({
           lines on a narrow phone. */}
       <div className="sticky top-0 z-40">
         {member?.impersonatedBy != null && <ImpersonationBanner />}
+        {/* The admin's "Preview as student" of a course. Nothing for a member. */}
+        <PlayerPreviewBanner />
 
         <header className="relative border-b border-white/[0.07] bg-night-deep/[0.94] backdrop-blur-xl backdrop-saturate-150">
           <div

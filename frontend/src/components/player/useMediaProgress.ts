@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, type RefObject } from "react";
-import { libraryApi, type ProgressResult } from "@/lib/libraryApi";
+import type { ProgressResult } from "@/lib/libraryApi";
+import { usePlayerSource } from "@/components/player/playerSource";
 
 /**
  * Watch position, written back on a throttle.
@@ -49,6 +50,9 @@ export function useMediaProgress({
   const latest = useRef({ position: startAt, percent: initialPercent });
   const sent = useRef({ position: startAt, percent: initialPercent });
   const failures = useRef(0);
+  // An admin's "Preview as student" plays the lesson and records nothing.
+  const { api, preview } = usePlayerSource();
+  const readOnly = preview !== null;
 
   // Held in a ref so a caller passing an inline callback does not tear down and
   // rebuild every media listener on each render.
@@ -70,6 +74,7 @@ export function useMediaProgress({
    */
   const save = useCallback(
     (keepalive: boolean) => {
+      if (readOnly) return;
       if (failures.current >= MAX_CONSECUTIVE_FAILURES) return;
 
       const { position, percent } = latest.current;
@@ -78,7 +83,7 @@ export function useMediaProgress({
       if (!moved && !advanced) return;
 
       sent.current = { position, percent };
-      void libraryApi
+      void api
         .saveProgress(
           lessonId,
           { positionSeconds: position, watchedPercent: percent },
@@ -92,7 +97,7 @@ export function useMediaProgress({
           failures.current += 1;
         });
     },
-    [lessonId],
+    [api, lessonId, readOnly],
   );
 
   useEffect(() => {

@@ -2,11 +2,12 @@ import { useNewProductRequest } from "./ui/useNewProductRequest";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router";
 import { motion } from "motion/react";
-import { GraduationCap, Image as ImageIcon, Layers, Pencil, Plus, Trash2 } from "lucide-react";
+import { Eye, GraduationCap, Image as ImageIcon, Layers, Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { adminApi } from "@/lib/api";
 import type { Course } from "@/types";
 import { formatCurrency } from "@/lib/format";
+import { coursePreviewPath } from "@/lib/coursePreviewApi";
 import {
   Badge,
   Button,
@@ -261,6 +262,17 @@ export default function CoursesAdmin() {
                         <Layers />
                         Course content
                       </Link>
+                    </Button>
+                    <Button asChild variant="secondary" size="iconSm">
+                      <a
+                        href={coursePreviewPath(course.id)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        aria-label={`Preview ${course.title} as a student`}
+                        title="Preview as student"
+                      >
+                        <Eye />
+                      </a>
                     </Button>
                     <Button
                       variant="secondary"

@@ -1,7 +1,8 @@
 import { Link } from "react-router";
 import { Check, ChevronRight, Lock } from "lucide-react";
 import { cn } from "@/lib/cn";
-import { lessonPath, type OutlineLesson, type OutlineModule } from "@/lib/libraryApi";
+import type { OutlineLesson, OutlineModule } from "@/lib/libraryApi";
+import { usePlayerSource } from "@/components/player/playerSource";
 import { contentTypeIcon, contentTypeLabel, lessonLengthLabel } from "@/components/player/lessonMeta";
 
 interface CourseOutlineProps {
@@ -113,7 +114,13 @@ interface LessonRowProps {
   onNavigate?: () => void;
 }
 
+/** Admin preview only: "Draft", and the date a student would be made to wait for. */
+const PREVIEW_CHIP =
+  "inline-flex items-center rounded-full border border-amber-400/50 bg-amber-400/10 px-2 py-px " +
+  "text-[0.6rem] font-bold uppercase tracking-[0.12em] text-amber-500";
+
 function LessonRow({ lesson, productSlug, active, onNavigate }: LessonRowProps) {
+  const { lessonPath } = usePlayerSource();
   const Icon = contentTypeIcon(lesson.contentType);
   const length = lessonLengthLabel(lesson.durationMinutes, lesson.videoDurationSeconds);
   const inProgress = !lesson.completed && lesson.watchedPercent > 0 && lesson.watchedPercent < 100;
@@ -164,6 +171,14 @@ function LessonRow({ lesson, productSlug, active, onNavigate }: LessonRowProps) 
         >
           {lesson.title}
         </span>
+
+        {(lesson.draft || lesson.studentLock) && (
+          // Only the admin's preview endpoint sends these; a student never sees them.
+          <span className="mt-1 flex flex-wrap gap-1.5">
+            {lesson.draft && <span className={PREVIEW_CHIP}>Draft</span>}
+            {lesson.studentLock && <span className={PREVIEW_CHIP}>{lesson.studentLock}</span>}
+          </span>
+        )}
 
         <span className="mt-1 block text-[0.7rem] text-orchid-faint">
           {lesson.unlocked ? (

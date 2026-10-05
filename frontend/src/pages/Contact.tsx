@@ -67,11 +67,18 @@ export default function Contact() {
             />
 
             <div className="relative overflow-hidden rounded-2xl border border-gold/25 shadow-[0_44px_100px_-36px_rgba(0,0,0,0.95)]">
+              {/* The photograph is a 2:3 full-length portrait with her face in
+                  the top fifth (roughly 9–20% down). A landscape plate cropped
+                  about the centre showed only sweatshirt and jeans, so the
+                  plate is portrait and the crop is anchored near the top: the
+                  whole head stays in frame at every width. */}
               <img
                 src={HERO_PORTRAIT}
                 alt="Yvette Howard"
+                width={960}
+                height={1440}
                 decoding="async"
-                className="aspect-[4/3] w-full max-w-full object-cover"
+                className="aspect-[4/5] h-auto w-full max-w-full object-cover object-[center_15%]"
               />
             </div>
 
@@ -106,14 +113,13 @@ export default function Contact() {
 
         <RevealGroup className="mx-auto mt-10 max-w-3xl">
           <RevealItem>
-            {/* No phone field: this is a general enquiry, and a number is a
-                bigger ask than the question most people arrive with. */}
+            {/* The phone field is optional: some questions are quicker to
+                answer with a call, but nobody has to give a number to ask. */}
             <LeadForm
               source="contact"
               submitLabel="Send Message"
               messageLabel="How can I help?"
               messagePlaceholder="Tell me what you're building, what you're stuck on, or what you'd like to know…"
-              showPhone={false}
               successTitle="Message sent."
               successBody="I read every message myself and you'll hear back from me within 24 hours."
             />

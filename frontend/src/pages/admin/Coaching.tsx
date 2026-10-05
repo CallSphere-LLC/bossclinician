@@ -3,10 +3,15 @@ import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react
 import { Link, useSearchParams } from "react-router";
 import * as Tabs from "@radix-ui/react-tabs";
 import type { ColumnDef } from "@tanstack/react-table";
-import { CalendarClock, Headphones, Link2, Mail, NotebookPen, Paperclip, Plus, RotateCw, Trash2, Users, Video } from "lucide-react";
+import { CalendarClock, Headphones, Link2, Mail, NotebookPen, Paperclip, Plus, RotateCw, Tag, Trash2, Users, Video } from "lucide-react";
 import { toast } from "sonner";
 import { adminApi } from "@/lib/api";
-import { coachingAdminApi, type CoachingSessionFile } from "@/lib/coachingAdminApi";
+import {
+  coachingAdminApi,
+  type CoachingProgramOffer,
+  type CoachingSessionFile,
+} from "@/lib/coachingAdminApi";
+import { OFFER_STATUS_LABEL, priceSummary, type CatalogStatus } from "@/lib/adminCommerceApi";
 import {
   clientsPerProgram,
   coachingTabFrom,
@@ -248,6 +253,141 @@ export default function Coaching() {
   );
 }
 
+/** The two tabs inside an open program — Kajabi's coaching product has the same pair. */
+type ProgramTab = "details" | "offers";
+
+const PROGRAM_TABS: { value: ProgramTab; label: string }[] = [
+  { value: "details", label: "Details" },
+  { value: "offers", label: "Offers" },
+];
+
+/** The offers list's own colours (pages/admin/Offers.tsx), so a status reads the same here. */
+const OFFER_STATUS_TONE: Record<CatalogStatus, NonNullable<BadgeProps["tone"]>> = {
+  published: "green",
+  draft: "slate",
+  archived: "neutral",
+};
+
+/**
+ * The Offers tab of an open program: every offer that includes it — what the
+ * customer pays, whether it's live, and how many people bought it — each one a
+ * link to that offer's own page.
+ *
+ * A program is sold through offers rather than at the price on its card, and
+ * until this tab there was no way to see which from here: QA opened a program,
+ * found no offers, and Kajabi's coaching product lists them.
+ */
+function ProgramOffersPanel({ programId }: { programId: number }) {
+  const [offers, setOffers] = useState<CoachingProgramOffer[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(() => {
+    setError(null);
+    coachingAdminApi
+      .programOffers(programId)
+      .then(setOffers)
+      .catch(() => setError("We couldn't load the offers for this program."));
+  }, [programId]);
+
+  useEffect(load, [load]);
+
+  if (error) return <LoadProblem message={error} onRetry={load} />;
+  if (offers === null) {
+    return (
+      <div className="space-y-3">
+        {Array.from({ length: 2 }, (_, i) => (
+          <Skeleton key={i} className="h-16 w-full" />
+        ))}
+      </div>
+    );
+  }
+
+  // The offer editor is where what an offer includes is chosen, so a new one
+  // starts there; this program is picked under what the offer includes.
+  const newOffer = (
+    <Button asChild size="sm">
+      <Link to="/admin/offers/new">
+        <Plus />
+        New offer
+      </Link>
+    </Button>
+  );
+
+  if (offers.length === 0) {
+    return (
+      <EmptyState
+        icon={<Tag />}
+        title="No offers include this program yet"
+        description="An offer is the price and checkout page people buy it through. Create one and add this program to what they get."
+        action={newOffer}
+      />
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-ink-soft">
+          {pluralize(offers.length, "offer")} {offers.length === 1 ? "includes" : "include"} this
+          program.
+        </p>
+        {newOffer}
+      </div>
+      <ul className="divide-y divide-hairline/70 rounded-xl border border-hairline/70">
+        {offers.map((offer) => {
+          const internal = offer.internalTitle?.trim();
+          return (
+            <li
+              key={offer.id}
+              className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between"
+            >
+              <div className="min-w-0">
+                <Link
+                  to={`/admin/offers/${offer.id}`}
+                  className="font-semibold text-ink transition-colors hover:text-gold"
+                >
+                  {internal || offer.title}
+                </Link>
+                {internal && internal.toLowerCase() !== offer.title.trim().toLowerCase() && (
+                  <p className="mt-0.5 truncate text-xs text-ink-soft">
+                    Checkout title: {offer.title}
+                  </p>
+                )}
+                {offer.bundleTitle && (
+                  <p className="mt-0.5 truncate text-xs text-ink-soft">
+                    Included through the bundle {offer.bundleTitle}
+                  </p>
+                )}
+                <p className="mt-1 text-sm font-semibold text-plum">{priceSummary(offer)}</p>
+                {offer.pricingOptions.map((option) => (
+                  <p key={option.id} className="text-xs text-ink-soft">
+                    or {priceSummary(option)}
+                  </p>
+                ))}
+              </div>
+              <div className="flex shrink-0 flex-wrap items-center gap-3">
+                <Badge tone={OFFER_STATUS_TONE[offer.status]}>
+                  {OFFER_STATUS_LABEL[offer.status]}
+                </Badge>
+                {offer.purchaseCount > 0 ? (
+                  <span className="whitespace-nowrap text-sm tabular-nums text-ink">
+                    {pluralize(offer.purchaseCount, "person", "people")}
+                  </span>
+                ) : (
+                  <span className="text-sm text-ink-soft">Nobody yet</span>
+                )}
+                <Button asChild variant="secondary" size="sm">
+                  <Link to={`/admin/offers/${offer.id}`}>Open offer</Link>
+                </Button>
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
 function OffersTab() {
   const [offers, setOffers] = useState<CoachingOffer[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -256,6 +396,9 @@ function OffersTab() {
   // The price box holds what she typed ("497", "1,200.50") while the draft
   // holds the cents; keeping them apart lets her type freely mid-number.
   const [priceInput, setPriceInput] = useState("");
+  // An open program has two tabs, as Kajabi's does: what it is, and the offers
+  // that sell it. A program that doesn't exist yet has only the first.
+  const [programTab, setProgramTab] = useState<ProgramTab>("details");
   const [confirm, confirmDialog] = useConfirm();
   // Who's in each program, from the same roster the Clients tab shows. A
   // failure leaves the counts off the cards rather than the cards off the page.
@@ -275,9 +418,10 @@ function OffersTab() {
 
   useEffect(load, [load]);
 
-  function openOffer(offer?: CoachingOffer) {
+  function openOffer(offer?: CoachingOffer, tab: ProgramTab = "details") {
     setDraft(offer ?? { ...EMPTY_OFFER });
     setPriceInput(centsToInput(offer?.priceCents));
+    setProgramTab(offer ? tab : "details");
   }
 
   async function save(e: FormEvent) {
@@ -412,6 +556,15 @@ function OffersTab() {
                   Edit
                 </Button>
                 <Button
+                  variant="secondary"
+                  size="sm"
+                  className="flex-1"
+                  onClick={() => openOffer(offer, "offers")}
+                >
+                  <Tag />
+                  Offers
+                </Button>
+                <Button
                   variant="dangerGhost"
                   size="iconSm"
                   aria-label={`Delete ${offer.title}`}
@@ -429,19 +582,47 @@ function OffersTab() {
         open={draft !== null}
         onOpenChange={(open) => !open && setDraft(null)}
         title={draft?.id ? "Edit coaching program" : "New coaching program"}
-        size="lg"
+        size={draft?.id ? "xl" : "lg"}
         footer={
-          <>
+          draft?.id && programTab === "offers" ? (
+            // Nothing on the Offers tab is saved from here: each offer is
+            // edited on its own page.
             <Button variant="secondary" size="sm" onClick={() => setDraft(null)}>
-              Cancel
+              Close
             </Button>
-            <Button size="sm" type="submit" form="offer-form">
-              Save coaching program
-            </Button>
-          </>
+          ) : (
+            <>
+              <Button variant="secondary" size="sm" onClick={() => setDraft(null)}>
+                Cancel
+              </Button>
+              <Button size="sm" type="submit" form="offer-form">
+                Save coaching program
+              </Button>
+            </>
+          )
         }
       >
         {draft && (
+          <Tabs.Root
+            value={draft.id ? programTab : "details"}
+            onValueChange={(value) => setProgramTab(value as ProgramTab)}
+          >
+          {draft.id && (
+            <Tabs.List className="mb-5 flex gap-1 border-b border-hairline/70">
+              {PROGRAM_TABS.map((item) => (
+                <Tabs.Trigger
+                  key={item.value}
+                  value={item.value}
+                  className="-mb-px border-b-2 border-transparent px-3 py-2 text-sm font-semibold text-ink-soft transition-colors hover:text-plum data-[state=active]:border-plum data-[state=active]:text-plum"
+                >
+                  {item.label}
+                </Tabs.Trigger>
+              ))}
+            </Tabs.List>
+          )}
+          {/* Kept mounted while Offers is showing, so what she has typed is
+              still there when she comes back to it. */}
+          <Tabs.Content value="details" forceMount className="data-[state=inactive]:hidden">
           <form id="offer-form" onSubmit={save} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label="What's it called?" className="sm:col-span-2">
               <Input
@@ -531,6 +712,13 @@ function OffersTab() {
               </label>
             </div>
           </form>
+          </Tabs.Content>
+          {draft.id && (
+            <Tabs.Content value="offers">
+              <ProgramOffersPanel programId={Number(draft.id)} />
+            </Tabs.Content>
+          )}
+          </Tabs.Root>
         )}
       </Modal>
 

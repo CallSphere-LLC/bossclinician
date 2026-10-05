@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Check, Loader2, NotebookPen } from "lucide-react";
 import { LuxeTextarea } from "@/components/luxe/LuxeField";
 import { MemberApiError } from "@/lib/memberApi";
-import { libraryApi } from "@/lib/libraryApi";
+import { usePlayerSource } from "@/components/player/playerSource";
 
 /** Long enough that a sentence is one write, short enough to survive a tab close. */
 const AUTOSAVE_DELAY_MS = 1200;
@@ -36,12 +36,13 @@ export function LessonNotes({ lessonId }: { lessonId: number }) {
   const typed = useRef("");
   const persisted = useRef("");
   const timer = useRef<number | null>(null);
+  const { api, preview } = usePlayerSource();
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
 
-    void libraryApi
+    void api
       .getNote(lessonId)
       .then((note) => {
         if (cancelled) return;
@@ -62,15 +63,18 @@ export function LessonNotes({ lessonId }: { lessonId: number }) {
     return () => {
       cancelled = true;
     };
-  }, [lessonId]);
+  }, [api, lessonId]);
 
   const persist = useCallback(async () => {
+    // An admin preview has no notebook to write to; the box still takes text
+    // so the lesson reads as it does for a student, and none of it is kept.
+    if (preview) return;
     const next = typed.current;
     if (next === persisted.current) return;
 
     setState("saving");
     try {
-      const saved = await libraryApi.saveNote(lessonId, next);
+      const saved = await api.saveNote(lessonId, next);
       persisted.current = saved.body;
       setState("saved");
       setError("");
@@ -82,7 +86,7 @@ export function LessonNotes({ lessonId }: { lessonId: number }) {
           : "We could not save that note. Your text is still here — try again in a moment.",
       );
     }
-  }, [lessonId]);
+  }, [api, lessonId, preview]);
 
   const schedule = useCallback(() => {
     if (timer.current !== null) window.clearTimeout(timer.current);

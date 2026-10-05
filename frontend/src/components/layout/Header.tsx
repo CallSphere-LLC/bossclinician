@@ -9,6 +9,7 @@ import { headerActions, isNavMenu, nav } from "@/content/site";
 import { cn } from "@/lib/cn";
 import { ShoppingCart } from "lucide-react";
 import { readCart } from "@/lib/cart";
+import { useMember } from "@/hooks/useMember";
 import { warmPublicRoute } from "@/ssr/preload";
 
 interface HeaderProps {
@@ -30,6 +31,12 @@ export function Header({ transparentAtTop = false }: HeaderProps) {
   const location = useLocation();
   const prefersReducedMotion = useReducedMotion();
   const [cartCount, setCartCount] = useState(0);
+  // A signed-in member gets their account in place of Log In, on every public
+  // page. `member` is null on the server and on the first client render (the
+  // session is restored in an effect), so the markup hydrates as signed-out
+  // and switches once the refresh settles.
+  const { member } = useMember();
+  const accountAction = member ? MEMBER_ACTION : headerActions.logIn;
   useEffect(() => {
     const menu = nav.find((item) => isNavMenu(item) && item.label === openMenu);
     if (menu && isNavMenu(menu)) menu.items.forEach((item) => warmPublicRoute(item.to));
@@ -180,10 +187,10 @@ export function Header({ transparentAtTop = false }: HeaderProps) {
               carries. Work With Me is the dropdown in the bar and must not
               appear twice; the pill used to repeat it. */}
           <Link
-            to={headerActions.logIn.to}
+            to={accountAction.to}
             className="hidden whitespace-nowrap py-2 text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-white/55 transition-colors duration-300 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold xl:inline-flex"
           >
-            {headerActions.logIn.label}
+            {accountAction.label}
           </Link>
           <div className="hidden xl:block">
             <LuxeButton
@@ -289,13 +296,13 @@ export function Header({ transparentAtTop = false }: HeaderProps) {
                 {headerActions.bookACall.label}
               </LuxeButton>
               <LuxeButton
-                to={headerActions.logIn.to}
+                to={accountAction.to}
                 variant="outline"
                 size="md"
                 className="mt-3 w-full"
                 onClick={() => setOpen(false)}
               >
-                {headerActions.logIn.label}
+                {accountAction.label}
               </LuxeButton>
             </Container>
           </motion.div>
@@ -304,6 +311,9 @@ export function Header({ transparentAtTop = false }: HeaderProps) {
     </header>
   );
 }
+
+/** What the Log In link becomes for a signed-in member: their account home. */
+const MEMBER_ACTION = { label: "My Account", to: "/account" };
 
 /** One line of the mobile sheet: a destination, or the gold label over a group. */
 type MobileRow =

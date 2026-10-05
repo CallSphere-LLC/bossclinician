@@ -106,6 +106,13 @@ export interface OutlineLesson {
   lastPositionSeconds: number;
   watchedPercent: number;
   href: string;
+  /**
+   * Admin "Preview as student" only; the member API sends neither.
+   * `draft` marks an unpublished lesson, `studentLock` is what a student
+   * enrolling today would be told instead of being let in.
+   */
+  draft?: boolean;
+  studentLock?: string;
 }
 
 export interface OutlineModule {
@@ -512,6 +519,13 @@ export const libraryApi = {
     }),
 };
 
+/**
+ * Whatever mints the link a file is fetched through. A member's is
+ * `libraryApi.downloadLink`; the admin's course preview passes its own, which
+ * is why the two helpers below take one rather than reaching for the default.
+ */
+export type LinkMinter = (kind: DownloadKind, fileId: number) => Promise<DownloadLink>;
+
 /** Where a certificate's PDF is fetched from. Needs the Bearer token, so not an href. */
 export function certificateDownloadPath(certificateId: number): string {
   return `/member/certificates/${certificateId}/download`;
@@ -574,15 +588,23 @@ export async function downloadCertificate(certificate: MemberCertificate): Promi
  * Same credential as a download: a link minted for this member, fetched once.
  * The response is held in memory and the signed URL never reaches the DOM.
  */
-export async function fetchFileBlob(kind: DownloadKind, fileId: number): Promise<Blob> {
-  const link = await libraryApi.downloadLink(kind, fileId);
+export async function fetchFileBlob(
+  kind: DownloadKind,
+  fileId: number,
+  mint: LinkMinter = libraryApi.downloadLink,
+): Promise<Blob> {
+  const link = await mint(kind, fileId);
   const response = await fetch(link.url, { credentials: "same-origin" });
   if (!response.ok) throw new Error(`file ${response.status}`);
   return response.blob();
 }
 
-export async function downloadFile(kind: DownloadKind, fileId: number): Promise<DownloadLink> {
-  const link = await libraryApi.downloadLink(kind, fileId);
+export async function downloadFile(
+  kind: DownloadKind,
+  fileId: number,
+  mint: LinkMinter = libraryApi.downloadLink,
+): Promise<DownloadLink> {
+  const link = await mint(kind, fileId);
 
   const anchor = document.createElement("a");
   anchor.href = link.url;

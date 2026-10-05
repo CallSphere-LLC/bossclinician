@@ -74,12 +74,16 @@ export function OrderSummary({ offer, state, wording }: OrderSummaryProps) {
           Order summary
         </h2>
 
-        <div className="mt-0 flex items-start gap-4 lg:mt-5">
+        {/* The artwork is stacked over the title and shown whole, at its own
+            proportions. Offer thumbnails are often wide cards with the product
+            name lettered on them; a square `object-cover` tile cut that
+            lettering off at both ends. */}
+        <div className="mt-0 lg:mt-5">
           {offer.thumbnailUrl && (
             <img
               src={offer.thumbnailUrl}
               alt=""
-              className="h-16 w-16 flex-none rounded-xl border border-white/10 object-cover"
+              className="mb-4 block h-auto max-h-28 w-auto max-w-full rounded-xl border border-white/10 object-contain"
             />
           )}
           <div className="min-w-0">

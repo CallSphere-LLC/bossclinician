@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { dripError, embedCodeFor } from "./CourseBuilder";
+import { courseEditorPath, coursePreviewPath } from "@/lib/coursePreviewApi";
 
 /**
  * A blank or zero day count used to save as "open as soon as they buy", so a
@@ -45,5 +46,25 @@ describe("embedCodeFor", () => {
 
   it("leaves an empty value empty", () => {
     expect(embedCodeFor("")).toBe("");
+  });
+});
+
+/**
+ * "Preview as student" opens these in a new tab, and the server builds the same
+ * strings into every link the preview's outline carries. A path the admin router
+ * does not mount is a button that opens the console's 404.
+ */
+describe("coursePreviewPath", () => {
+  it("points at the preview routes the admin app mounts", () => {
+    expect(coursePreviewPath(12)).toBe("/admin/courses/12/preview");
+    expect(coursePreviewPath("12", "welcome")).toBe("/admin/courses/12/preview/lessons/welcome");
+  });
+
+  it("keeps a lesson slug to one path segment", () => {
+    expect(coursePreviewPath(12, "a/b")).toBe("/admin/courses/12/preview/lessons/a%2Fb");
+  });
+
+  it("returns to the builder the preview was opened from", () => {
+    expect(courseEditorPath(12)).toBe("/admin/courses/12/curriculum");
   });
 });

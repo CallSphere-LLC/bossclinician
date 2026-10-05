@@ -778,19 +778,20 @@ function ClosingCta() {
       </motion.p>
 
       {/* Stacked on phones so the longest label never has to fit a 320px line
-          box; a single foil weight keeps the primary action unambiguous. */}
+          box. All three are the same gilded outline: they are sibling offers,
+          and each fills gold on hover or keyboard focus. */}
       <motion.div
         {...rise(reduce, 0.18)}
         className="mx-auto mt-10 flex max-w-sm flex-col items-stretch gap-4 sm:max-w-none sm:flex-row sm:flex-wrap sm:items-center sm:justify-center"
       >
-        <LuxeButton variant="foil" size="md" to={WORK_WITH_ME} className="w-full sm:w-auto">
+        <LuxeButton variant="gild" size="md" to={WORK_WITH_ME} className="w-full sm:w-auto">
           JOIN THE CLUB
         </LuxeButton>
-        <LuxeButton variant="glass" size="md" to={WORK_WITH_ME} className="w-full sm:w-auto">
+        <LuxeButton variant="gild" size="md" to={WORK_WITH_ME} className="w-full sm:w-auto">
           JOIN THE LOUNGE
         </LuxeButton>
         <LuxeButton
-          variant="outline"
+          variant="gild"
           size="md"
           to={BOARDROOM_APPLICATION}
           className="w-full sm:w-auto"

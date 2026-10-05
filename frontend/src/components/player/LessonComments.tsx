@@ -4,7 +4,8 @@ import { Loader2, MessageCircle, Pencil, Reply, Trash2 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { formatRelative } from "@/lib/format";
 import { MemberApiError } from "@/lib/memberApi";
-import { libraryApi, type LessonComment } from "@/lib/libraryApi";
+import type { LessonComment } from "@/lib/libraryApi";
+import { usePlayerSource } from "@/components/player/playerSource";
 import { LuxeButton, LuxePill } from "@/components/luxe/LuxeButton";
 import { MemberAvatar } from "@/components/member/MemberShell";
 import { luxeControlClass } from "@/components/luxe/LuxeField";
@@ -28,10 +29,12 @@ export function LessonComments({ lessonId }: { lessonId: number }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [replyTo, setReplyTo] = useState<number | null>(null);
+  // In an admin preview this reads an empty thread and refuses every post.
+  const { api } = usePlayerSource();
 
   const load = useCallback(async () => {
     try {
-      const data = await libraryApi.getComments(lessonId);
+      const data = await api.getComments(lessonId);
       setComments(data.comments);
       setEnabled(data.commentsEnabled);
       setError("");
@@ -44,7 +47,7 @@ export function LessonComments({ lessonId }: { lessonId: number }) {
     } finally {
       setLoading(false);
     }
-  }, [lessonId]);
+  }, [api, lessonId]);
 
   useEffect(() => {
     setLoading(true);
@@ -53,17 +56,17 @@ export function LessonComments({ lessonId }: { lessonId: number }) {
 
   const post = useCallback(
     async (body: string, parentId: number | null) => {
-      await libraryApi.postComment(lessonId, { body, parentId });
+      await api.postComment(lessonId, { body, parentId });
       setReplyTo(null);
       await load();
     },
-    [lessonId, load],
+    [api, lessonId, load],
   );
 
   const remove = useCallback(
     async (commentId: number) => {
       try {
-        await libraryApi.deleteComment(commentId);
+        await api.deleteComment(commentId);
         toast.success("Your comment was removed.");
         await load();
       } catch (err) {
@@ -72,15 +75,15 @@ export function LessonComments({ lessonId }: { lessonId: number }) {
         );
       }
     },
-    [load],
+    [api, load],
   );
 
   const edit = useCallback(
     async (commentId: number, body: string) => {
-      await libraryApi.editComment(commentId, body);
+      await api.editComment(commentId, body);
       await load();
     },
-    [load],
+    [api, load],
   );
 
   if (!enabled && !loading) {

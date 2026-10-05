@@ -25,6 +25,12 @@ html[data-site-theme="light"] .theme-luxe {
   --c-plum-deep: 61 45 92;
   --c-plum-bright: 102 75 145;
   --c-lilac: 84 62 110;
+  /* The one card surface: a warm ivory, so a panel reads as a panel on the
+     white page; `--c-card-well` is the tint an image well shows before its
+     picture arrives. Body-copy contrast on the ivory is within 6% of the
+     figures above (orchid-faint 8.4:1, gold lettering #76501b 6.5:1). */
+  --c-card: 251 248 243;
+  --c-card-well: 240 233 224;
   color: rgb(var(--c-ink));
   background: #fff;
   scrollbar-color: #b7afc2 #fff;
@@ -56,7 +62,47 @@ html[data-site-theme="light"] .theme-luxe :is(.glass, .glass-soft) {
   background: #fff;
   border-color: rgb(var(--c-hairline));
   box-shadow: 0 12px 36px -24px rgb(30 24 40 / 0.22);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }
+/* A card is one warm surface (QA sheet: stray white on the cards). The night
+   and surface tokens all resolve to white on this theme, so anything inside a
+   card that paints one of them — an image well, a nested panel, a scrim — was
+   a white patch; inside a card they resolve to the card's own colour. */
+html[data-site-theme="light"] .theme-luxe .glass {
+  background: rgb(var(--c-card));
+  --c-night: var(--c-card);
+  --c-night-deep: var(--c-card);
+  --c-night-raised: var(--c-card);
+  --c-night-veil: var(--c-card);
+  --c-cream: var(--c-card);
+  --c-sand: var(--c-card);
+  --c-surface: var(--c-card);
+  --c-surface-raised: var(--c-card);
+}
+/* The section floor above would paint a white band for a <header> or
+   <footer> that sits inside a card. */
+html[data-site-theme="light"] .theme-luxe .glass :is(section, header, footer) {
+  background-color: transparent;
+}
+/* A pill or button of soft glass inside a card is an outline, not a white lozenge. */
+html[data-site-theme="light"] .theme-luxe .glass .glass-soft {
+  background: transparent;
+}
+/* White veils at rest (skeleton bars, option tiles) are invisible on a light
+   card; the same weight in ink. Anchored to a whole class token so the
+   `hover:` and `focus-visible:` forms are not caught. */
+html[data-site-theme="light"] .theme-luxe .glass :is([class^="bg-white/[0.0"], [class*=" bg-white/[0.0"]) {
+  background-color: rgb(var(--c-ink) / 0.04);
+}
+/* An image well shows this until its picture loads, instead of a white block. */
+html[data-site-theme="light"] .theme-luxe .media-well {
+  background-color: rgb(var(--c-card-well));
+}
+/* The bevelled edge is `::before` and the cursor spotlight `::after`. The edge
+   is a white-to-gold gradient: left on, it bleached the hairline border along
+   the top and left of every card. */
+html[data-site-theme="light"] .theme-luxe .glass-edge::before,
 html[data-site-theme="light"] .theme-luxe :is(.glass-edge, .spotlight)::after {
   display: none;
 }
@@ -212,6 +258,24 @@ html[data-site-theme="light"] .theme-luxe .prose-boss {
 html[data-site-theme="light"] .theme-luxe [class~="shadow-glass"] {
   box-shadow: 0 12px 36px -24px rgb(30 24 40 / 0.22);
 }
+/* The hover elevation is a near-black drop with a white inner highlight. */
+html[data-site-theme="light"] .theme-luxe [class*="hover:shadow-glass"]:hover {
+  box-shadow: 0 22px 48px -26px rgb(30 24 40 / 0.32);
+}
+
+/* Gilded outline button (index.css): the darker golds this theme uses for
+   lettering and borders at rest, the same gold fill and dark label on hover
+   and keyboard focus. */
+html[data-site-theme="light"] .theme-luxe .btn-gild {
+  border-color: #a07840;
+  color: #76501b;
+}
+html[data-site-theme="light"] .theme-luxe .btn-gild:is(:hover, :focus-visible) {
+  border-color: #a07840;
+  background-color: #c9a46a;
+  color: #06040b;
+  box-shadow: 0 16px 36px -18px rgb(118 80 27 / 0.55);
+}
 
 /* A surface that is dark in BOTH themes: a video tile, a caption over footage.
    `data-media-surface` puts the dark palette back inside it and undoes the
@@ -245,4 +309,12 @@ html[data-site-theme="light"] .theme-luxe [data-media-surface] [class*="border-w
    or a veiled photograph is ~1.6:1. Foil, as it is on the dark theme. */
 html[data-site-theme="light"] .theme-luxe [data-media-surface] .eyebrow-luxe {
   color: #c9a46a;
+}
+/* A dark frame keeps its bevelled edge (hidden on light cards above). */
+html[data-site-theme="light"] .theme-luxe [data-media-surface] .glass-edge::before {
+  display: block;
+}
+html[data-site-theme="light"] .theme-luxe [data-media-surface] .btn-gild:not(:hover, :focus-visible) {
+  border-color: rgb(201 164 106 / 0.75);
+  color: #e8ce9a;
 }

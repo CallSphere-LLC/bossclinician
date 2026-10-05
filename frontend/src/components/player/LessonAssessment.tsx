@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { CheckCircle2, RotateCcw, XCircle } from "lucide-react";
-import { memberRequest } from "@/lib/memberApi";
+import { usePlayerSource, type QuizAttempt } from "@/components/player/playerSource";
 import type { Quiz, QuizOutcome } from "@/lib/quizApi";
 import { LuxeButton } from "@/components/luxe/LuxeButton";
 import { cn } from "@/lib/cn";
 
-type Attempt = { id: number; percent: number; passed: boolean | null; completedAt: string; responses: { questionId: number; answerIds?: number[]; text?: string }[] };
+type Attempt = QuizAttempt;
 
 /**
  * A graded (or survey) assessment inside a lesson.
@@ -14,6 +14,10 @@ type Attempt = { id: number; percent: number; passed: boolean | null; completedA
  * After a submission the form locks to show what was answered, each question
  * is marked right or wrong from the server's per-question feedback, and
  * "Retake" clears the form for another attempt.
+ *
+ * The three calls go through the player's source: a member's own session, or —
+ * in the admin's "Preview as student" — an endpoint that marks the answers with
+ * the same scorer and stores nothing, so there is no history and no completion.
  */
 export function LessonAssessment({ slug }: { slug: string }) {
   const [quiz, setQuiz] = useState<Quiz | null>(null);
@@ -26,23 +30,24 @@ export function LessonAssessment({ slug }: { slug: string }) {
   const startedAt = useRef(Date.now());
   const resultRef = useRef<HTMLDivElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
-  const path = `/assessments/${encodeURIComponent(slug)}`;
-  const refreshResults = () => memberRequest<Attempt[]>(`${path}/my-results`).then(setAttempts);
+  const { quiz: quizApi, preview } = usePlayerSource();
+  const refreshResults = () => quizApi.results(slug).then(setAttempts);
   useEffect(() => {
     startedAt.current = Date.now();
     setQuiz(null); setAnswers({}); setTexts({}); setOutcome(null); setError("");
     let active = true;
-    void Promise.all([memberRequest<Quiz>(path), memberRequest<Attempt[]>(`${path}/my-results`)]).then(([definition, history]) => { if (active) { setQuiz(definition); setAttempts(history); } }).catch(e => { if (active) setError(e.message); });
+    void Promise.all([quizApi.get(slug), quizApi.results(slug)]).then(([definition, history]) => { if (active) { setQuiz(definition); setAttempts(history); } }).catch(e => { if (active) setError(e.message); });
     return () => { active = false; };
-  }, [path]);
+  }, [quizApi, slug]);
   useEffect(() => { if (outcome) resultRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }); }, [outcome]);
 
   async function submit(event: FormEvent) {
     event.preventDefault(); if (!quiz || outcome) return; setBusy(true); setError("");
     try {
-      const result = await memberRequest<QuizOutcome>(`${path}/submit`, { method: "POST", body: JSON.stringify({ responses: quiz.questions.map(question => ({ questionId: question.id, answerIds: answers[question.id] ?? [], text: texts[question.id] ?? "" })), elapsedMs: Date.now() - startedAt.current }) });
+      const result = await quizApi.submit(slug, { responses: quiz.questions.map(question => ({ questionId: question.id, answerIds: answers[question.id] ?? [], text: texts[question.id] ?? "" })), elapsedMs: Date.now() - startedAt.current });
       setOutcome(result); await refreshResults();
-      window.postMessage({ type: "boss-assessment-completed", passed: result.passed, slug }, window.location.origin);
+      // Tells the player to re-read progress — of which a preview has none.
+      if (!preview) window.postMessage({ type: "boss-assessment-completed", passed: result.passed, slug }, window.location.origin);
     } catch (e) { setError(e instanceof Error ? e.message : "Your answers could not be saved."); }
     finally { setBusy(false); }
   }
@@ -81,10 +86,11 @@ export function LessonAssessment({ slug }: { slug: string }) {
     {outcome && <div ref={resultRef} role="status" className={cn("rounded-lg border p-4", outcome.passed === false ? "border-red-400/40" : "border-gold/30")}>
       <p className="font-body text-lg font-bold tabular-nums">{outcome.passed === null ? "Thanks! Here's your snapshot" : `${outcome.score} of ${outcome.maxScore} correct · ${outcome.percent}% · ${outcome.passed ? "Passed" : "Not passed"}`}</p>
       {outcome.passed === null ? <ul className="mt-3 space-y-2 text-sm">{quiz.questions.map(question => { const chosen = question.kind === "text" ? (texts[question.id] ?? "") : question.answers.filter(answer => (answers[question.id] ?? []).includes(answer.id)).map(answer => answer.label).join(", "); return <li key={question.id}><span className="text-orchid">{question.prompt}</span><br /><strong>{chosen || "No answer"}</strong></li>; })}</ul> : outcome.message && <p className="mt-2 text-sm">{outcome.message}</p>}
-      {outcome.passed === null && <p className="mt-3 text-sm text-orchid">This lesson is now complete. Your answers are saved below.</p>}
+      {outcome.passed === null && !preview && <p className="mt-3 text-sm text-orchid">This lesson is now complete. Your answers are saved below.</p>}
+      {preview && <p className="mt-3 text-sm text-orchid">Preview only — this attempt was not saved and does not complete the lesson.</p>}
       {graded && wrongCount > 0 && <p className="mt-2 text-sm text-orchid">{wrongCount} question{wrongCount === 1 ? " is" : "s are"} marked incorrect above.</p>}
       <div className="mt-4"><LuxeButton type="button" onClick={retake}><RotateCcw aria-hidden className="mr-2 inline size-4" />Retake</LuxeButton></div>
     </div>}
-    <section aria-label="Your assessment results"><h3 className="font-semibold">Your results</h3>{attempts.length === 0 ? <p className="mt-2 text-sm text-orchid">No attempts yet.</p> : <ol className="mt-3 space-y-3">{attempts.map(attempt => <li key={attempt.id} className="rounded-lg border border-white/10 p-3"><p className="text-sm tabular-nums">{new Date(attempt.completedAt).toLocaleString()} · {attempt.passed === null ? "Submitted" : `${attempt.percent}% · ${attempt.passed ? "Passed" : "Not passed"}`}</p><details className="mt-2 text-sm"><summary className="cursor-pointer">Your answers</summary>{attempt.responses.map(response => {const question=quiz.questions.find(q=>q.id===response.questionId);return <p key={response.questionId} className="mt-2"><strong>{question?.prompt}</strong>: {response.text || question?.answers.filter(a=>response.answerIds?.includes(a.id)).map(a=>a.label).join(", ") || "No answer"}</p>;})}</details></li>)}</ol>}</section></>}
+    {!preview && <section aria-label="Your assessment results"><h3 className="font-semibold">Your results</h3>{attempts.length === 0 ? <p className="mt-2 text-sm text-orchid">No attempts yet.</p> : <ol className="mt-3 space-y-3">{attempts.map(attempt => <li key={attempt.id} className="rounded-lg border border-white/10 p-3"><p className="text-sm tabular-nums">{new Date(attempt.completedAt).toLocaleString()} · {attempt.passed === null ? "Submitted" : `${attempt.percent}% · ${attempt.passed ? "Passed" : "Not passed"}`}</p><details className="mt-2 text-sm"><summary className="cursor-pointer">Your answers</summary>{attempt.responses.map(response => {const question=quiz.questions.find(q=>q.id===response.questionId);return <p key={response.questionId} className="mt-2"><strong>{question?.prompt}</strong>: {response.text || question?.answers.filter(a=>response.answerIds?.includes(a.id)).map(a=>a.label).join(", ") || "No answer"}</p>;})}</details></li>)}</ol>}</section>}</>}
   </div>;
 }

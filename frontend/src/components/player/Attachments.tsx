@@ -7,6 +7,7 @@ import { formatBytes } from "@/lib/format";
 import { MemberApiError } from "@/lib/memberApi";
 import { downloadFile, fetchFileBlob, type DownloadKind } from "@/lib/libraryApi";
 import { FileViewer, MAX_VIEW_BYTES, viewerKindFor, type ViewerKind } from "./FileViewer";
+import { usePlayerSource } from "@/components/player/playerSource";
 
 export interface AttachmentItem {
   id: number;
@@ -62,6 +63,9 @@ export function Attachments({
   const [pending, setPending] = useState<{ id: number; action: "view" | "download" } | null>(null);
   const [open, setOpen] = useState<OpenFile | null>(null);
   const [status, setStatus] = useState("");
+  // A member's link is minted against their entitlement; an admin preview's
+  // comes from the admin's own endpoint. Either way it is asked for per click.
+  const { api } = usePlayerSource();
 
   if (files.length === 0) return null;
 
@@ -77,7 +81,7 @@ export function Attachments({
     setPending({ id: file.id, action: "download" });
     setStatus(`Preparing ${file.title}…`);
     try {
-      await downloadFile(kind, file.id);
+      await downloadFile(kind, file.id, api.downloadLink);
       setStatus(`${file.title} is downloading.`);
     } catch (err) {
       fail(err, "We could not start that download. Please try again.");
@@ -90,7 +94,7 @@ export function Attachments({
     setPending({ id: file.id, action: "view" });
     setStatus(`Opening ${file.title}…`);
     try {
-      const blob = await fetchFileBlob(kind, file.id);
+      const blob = await fetchFileBlob(kind, file.id, api.downloadLink);
       setOpen({ id: file.id, viewer, blob });
       setStatus(`${file.title} is open.`);
     } catch (err) {

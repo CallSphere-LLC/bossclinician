@@ -10,6 +10,20 @@ import type { LeadPayload } from "@/types";
 
 const EASE: [number, number, number, number] = [0.22, 1, 0.36, 1];
 
+/** Matches the `phone` cap in backend/src/validation/schemas.ts → leadSchema. */
+const PHONE_MAX = 40;
+
+/**
+ * Deliberately loose: digits with the usual punctuation and an optional
+ * extension, and enough digits to be dialled. Anything stricter starts
+ * rejecting real international numbers.
+ */
+function isPlausiblePhone(value: string): boolean {
+  if (!/^[\d\s()+.\-/#*a-z]*$/i.test(value)) return false;
+  const digits = value.replace(/\D/g, "").length;
+  return digits >= 7 && digits <= 20;
+}
+
 interface LeadFormProps {
   source: LeadPayload["source"];
   submitLabel?: string;
@@ -59,12 +73,16 @@ export function LeadForm({
       setError("Please share your name and email so I can reach you back.");
       return;
     }
+    if (showPhone && phone.trim() && !isPlausiblePhone(phone.trim())) {
+      setError("That phone number doesn't look right. Please check it, or leave it blank.");
+      return;
+    }
     setStatus("loading");
     try {
       await api.submitLead({
         name: name.trim(),
         email: email.trim(),
-        phone: phone.trim() || undefined,
+        phone: (showPhone && phone.trim()) || undefined,
         message: message.trim() || undefined,
         source,
         ...honeypot(),
@@ -115,12 +133,14 @@ export function LeadForm({
     );
   }
 
-  // The form's only validation rule, mirrored here so the offending controls
-  // can be flagged for assistive tech without repeating the message under each
-  // field. Both flags clear themselves as soon as the field is filled.
+  // The form's validation rules, mirrored here so the offending controls can
+  // be flagged for assistive tech without repeating the message under each
+  // field. Each flag clears itself as soon as the field is put right.
   const invalidSubmit = error !== null && status !== "error";
   const nameInvalid = invalidSubmit && !name.trim();
   const emailInvalid = invalidSubmit && !email.trim();
+  const phoneInvalid =
+    invalidSubmit && !nameInvalid && !emailInvalid && !!phone.trim() && !isPlausiblePhone(phone.trim());
 
   return (
     <GlassCard accent="gold" interactive={false} className="p-6 sm:p-8">
@@ -163,8 +183,12 @@ export function LeadForm({
             name="phone"
             type="tel"
             autoComplete="tel"
+            inputMode="tel"
+            maxLength={PHONE_MAX}
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
+            aria-invalid={phoneInvalid ? true : undefined}
+            aria-describedby={phoneInvalid ? errorId : undefined}
           />
         )}
 

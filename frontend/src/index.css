@@ -413,6 +413,33 @@
   animation: sheen 0.9s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
+/* ── Gilded outline button ────────────────────────────────────────────────
+   LuxeButton's `gild` variant: a gold outline at rest that fills with gold on
+   hover and on keyboard focus. Used where sibling offers sit side by side and
+   none of them should read as the default choice. The colours live here, not
+   in utilities, because the light theme remaps `text-gold` / `border-gold`
+   class tokens with selectors that outrank a `hover:` utility — the label
+   would stay brown on the gold fill. #06040B on #C9A46A is 8.7:1. The
+   transition itself is LuxeButton's (`transition-all duration-300`). */
+.btn-gild {
+  border: 1px solid rgba(201, 164, 106, 0.75);
+  background-color: transparent;
+  color: #e8ce9a;
+}
+.btn-gild:hover,
+.btn-gild:focus-visible {
+  border-color: #c9a46a;
+  background-color: #c9a46a;
+  color: #06040b;
+  box-shadow: 0 18px 44px -16px rgba(201, 164, 106, 0.7);
+}
+@media (prefers-reduced-motion: reduce) {
+  .btn-gild:hover,
+  .btn-gild:focus-visible {
+    transform: none;
+  }
+}
+
 /* ── Marquee ──────────────────────────────────────────────────────────── */
 .marquee-mask {
   -webkit-mask-image: linear-gradient(

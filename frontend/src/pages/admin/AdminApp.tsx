@@ -1,3 +1,4 @@
+import { Suspense, lazy } from "react";
 import { Navigate, Route, Routes, useLocation } from "react-router";
 import { useAuth } from "@/hooks/useAuth";
 import { AdminLayout } from "@/pages/admin/AdminLayout";
@@ -72,6 +73,10 @@ import MarketingOverview from "@/pages/admin/MarketingOverview";
 import EmailLog from "@/pages/admin/EmailLog";
 import AdminNotFound, { AliasFirst } from "@/pages/admin/AdminNotFound";
 import { loginPathFor } from "@/pages/admin/adminReturnTo";
+
+// Lazy, unlike the screens above: it is the member course player, and the
+// console should not carry that bundle for the one tab that opens it.
+const CoursePreview = lazy(() => import("@/pages/admin/CoursePreview"));
 
 function LoadingScreen() {
   return (
@@ -197,6 +202,27 @@ function ProtectedRoutes() {
   );
 }
 
+/**
+ * "Preview as student" for a course.
+ *
+ * The same sign-in guard as every console screen, but outside AdminLayout: the
+ * page is the member player in the member's own chrome, and wrapping it in the
+ * console's rail and theme would defeat the point of looking at it.
+ */
+function CoursePreviewRoute() {
+  const { user, loading } = useAuth();
+  const location = useLocation();
+
+  if (loading) return <LoadingScreen />;
+  if (!user) return <Navigate to={loginPathFor(location)} replace />;
+
+  return (
+    <Suspense fallback={<LoadingScreen />}>
+      <CoursePreview />
+    </Suspense>
+  );
+}
+
 export default function AdminApp() {
   return (
     <Routes>
@@ -204,6 +230,10 @@ export default function AdminApp() {
       {/* The invitee has no account yet — a guard here would bounce them to a
           sign-in they cannot pass. The token in the link is the credential. */}
       <Route path="/invite/:token" element={<AcceptInvite />} />
+      {/* Ranked above the catch-all below by being more specific, so these two
+          never reach AdminLayout. Same shape as the member's /library routes. */}
+      <Route path="/courses/:id/preview" element={<CoursePreviewRoute />} />
+      <Route path="/courses/:id/preview/lessons/:lessonSlug" element={<CoursePreviewRoute />} />
       <Route path="/*" element={<ProtectedRoutes />} />
     </Routes>
   );
