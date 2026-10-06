@@ -9,6 +9,8 @@ import {
   Pause,
   Play,
   Plus,
+  Search,
+  SearchX,
   Trash2,
   Workflow,
 } from "lucide-react";
@@ -44,6 +46,38 @@ import {
 import { Modal, useConfirm } from "@/pages/admin/ui/Dialog";
 import { friendlyError } from "@/pages/admin/ui/friendly";
 import { ApiError } from "@/lib/api";
+import {
+  EMPTY_AUTOMATION_FILTERS,
+  activeFilterCount,
+  actionTypesOf,
+  facetValues,
+  filterAutomations,
+  hasActiveFilters,
+  readAutomationFilters,
+  relatedLabel,
+  relatedRefsOf,
+  sourceOf,
+  thenLabel,
+  whenLabel,
+  writeAutomationFilters,
+  type AutomationFilters,
+} from "@/pages/admin/automations/automationFilters";
+import {
+  AutomationFilterChips,
+  AutomationFiltersButton,
+  AutomationFiltersPanel,
+  type FilterLabels,
+} from "@/pages/admin/automations/AutomationListFilters";
+
+// The list's filtering is pure and lives in ./automations; re-exported so the
+// page's tests (and anything else) can reach it from here.
+export {
+  activeFilterCount,
+  filterAutomations,
+  readAutomationFilters,
+  writeAutomationFilters,
+} from "@/pages/admin/automations/automationFilters";
+export type { AutomationFilters } from "@/pages/admin/automations/automationFilters";
 
 /**
  * The automation builder.
@@ -205,6 +239,69 @@ export default function AutomationBuilder() {
   const [creating, setCreating] = useState(false);
   const [confirm, confirmDialog] = useConfirm();
 
+  // Search and Filters (QA row 71, as Kajabi) live in the query string, next to
+  // ?automation=, so a filtered list can be linked to and Back returns to it.
+  const filters = useMemo(() => readAutomationFilters(searchParams), [searchParams]);
+  // The search box keeps its own text: router updates run as transitions, and a
+  // text input driven from the URL alone drops keys when she types quickly. The
+  // URL is written alongside (replace, so typing is not a page of history).
+  const [search, setSearch] = useState(filters.q);
+  const effectiveFilters = useMemo(() => ({ ...filters, q: search }), [filters, search]);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const setFilters = useCallback(
+    (next: Partial<AutomationFilters>, replace = false) => {
+      setSearchParams(
+        (previous) =>
+          writeAutomationFilters(previous, { ...readAutomationFilters(previous), ...next }),
+        { replace },
+      );
+    },
+    [setSearchParams],
+  );
+  const clearFilters = useCallback(() => {
+    setSearch("");
+    setSearchParams((previous) => writeAutomationFilters(previous, EMPTY_AUTOMATION_FILTERS));
+  }, [setSearchParams]);
+
+  const filterLabels = useMemo<FilterLabels>(
+    () => ({
+      when: (type) => whenLabel(type, options?.triggers),
+      then: (type) => thenLabel(type, options?.actions),
+      related: (ref) => relatedLabel(ref, options?.lists),
+    }),
+    [options],
+  );
+
+  const visibleAutomations = useMemo(
+    () =>
+      automations === null
+        ? null
+        : filterAutomations(automations, effectiveFilters, options?.triggers ?? []),
+    [automations, effectiveFilters, options],
+  );
+
+  const facets = useMemo(() => {
+    const rows = automations ?? [];
+    const triggers = options?.triggers ?? [];
+    return {
+      when: facetValues(
+        rows.map((row) => row.triggerType),
+        filters.when,
+        filterLabels.when,
+      ),
+      then: facetValues(
+        rows.flatMap((row) => actionTypesOf(row)),
+        filters.then,
+        filterLabels.then,
+      ),
+      related: facetValues(
+        rows.flatMap((row) => relatedRefsOf(row, triggers)),
+        filters.related,
+        filterLabels.related,
+      ),
+    };
+  }, [automations, options, filters.when, filters.then, filters.related, filterLabels]);
+
   const loadList = useCallback(() => {
     marketingApi
       .automations()
@@ -283,7 +380,64 @@ export default function AutomationBuilder() {
 
       {error && <ErrorNotice message={error} />}
 
-      {automations === null ? (
+      {automations !== null && automations.length > 0 && (
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <div className="relative min-w-[12rem] flex-1">
+              <Search
+                className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-ink-soft/60"
+                aria-hidden
+              />
+              <Input
+                type="search"
+                value={search}
+                onChange={(event) => {
+                  setSearch(event.target.value);
+                  setFilters({ q: event.target.value }, true);
+                }}
+                placeholder="Search automations…"
+                aria-label="Search automations by name or description"
+                className="h-11 pl-10"
+              />
+            </div>
+            <AutomationFiltersButton
+              count={activeFilterCount(filters)}
+              open={filtersOpen}
+              onClick={() => setFiltersOpen((open) => !open)}
+            />
+          </div>
+
+          {filtersOpen && (
+            <AutomationFiltersPanel
+              filters={effectiveFilters}
+              whenValues={facets.when}
+              thenValues={facets.then}
+              relatedValues={facets.related}
+              labels={filterLabels}
+              onChange={(next) => setFilters(next)}
+              onClear={clearFilters}
+              onClose={() => setFiltersOpen(false)}
+            />
+          )}
+
+          <AutomationFilterChips
+            filters={filters}
+            labels={filterLabels}
+            onChange={(next) => setFilters(next)}
+            onClear={clearFilters}
+          />
+
+          {hasActiveFilters(effectiveFilters) && visibleAutomations !== null && (
+            <p className="text-xs text-ink-soft" aria-live="polite">
+              Showing <span className="font-semibold tabular-nums">{visibleAutomations.length}</span>{" "}
+              of <span className="font-semibold tabular-nums">{automations.length}</span>{" "}
+              automations
+            </p>
+          )}
+        </div>
+      )}
+
+      {automations === null || visibleAutomations === null ? (
         <Skeleton className="h-64 rounded-2xl" />
       ) : automations.length === 0 ? (
         <Card>
@@ -299,13 +453,26 @@ export default function AutomationBuilder() {
             }
           />
         </Card>
+      ) : visibleAutomations.length === 0 ? (
+        <Card>
+          <EmptyState
+            icon={<SearchX />}
+            title="No automations match"
+            description="Nothing fits this search and these filters. Loosen them, or clear them to see every automation."
+            action={
+              <Button size="sm" variant="secondary" onClick={clearFilters}>
+                Clear filters
+              </Button>
+            }
+          />
+        </Card>
       ) : (
         // grid-cols-1 is minmax(0, 1fr), and min-w-0 on each item: a bare `grid`
         // sizes its one column to the longest unbreakable word in any card (a
         // pasted link in a reminder, a long tag name), which pushed every card,
         // and every card's Open button, off the right edge of the window.
         <div className="grid grid-cols-1 gap-4">
-          {automations.map((automation, index) => (
+          {visibleAutomations.map((automation, index) => (
             <motion.div
               key={automation.id}
               className="min-w-0"
@@ -323,6 +490,11 @@ export default function AutomationBuilder() {
                     >
                       {automation.name}
                     </button>
+                    {sourceOf(automation) === "kajabi" && (
+                      <div className="mt-1.5">
+                        <Badge tone="plum">Imported from Kajabi — review before turning on</Badge>
+                      </div>
+                    )}
                     <p className="mt-2 text-sm text-ink">{automation.triggerSentence}</p>
                     {automation.actionSentences.length === 0 ? (
                       <p className="mt-1 text-sm text-ink-soft">
@@ -331,9 +503,18 @@ export default function AutomationBuilder() {
                     ) : (
                       <ul className="mt-1 space-y-0.5 text-sm text-ink-soft">
                         {automation.actionSentences.map((sentence, position) => (
-                          <li key={position}>→ {sentence}</li>
+                          <li key={position}>
+                            → <span className="font-semibold text-ink">{position === 0 ? "Then" : "and then"}</span>{" "}
+                            {sentence}
+                          </li>
                         ))}
                       </ul>
+                    )}
+                    {(automation.description ?? "").trim() !== "" && (
+                      <p className="mt-2 text-xs text-ink-soft">
+                        {sourceOf(automation) === "kajabi" ? "In Kajabi: " : ""}
+                        {automation.description}
+                      </p>
                     )}
                   </div>
 
@@ -356,12 +537,17 @@ export default function AutomationBuilder() {
                   </div>
                 </div>
 
-                {automation.lastRunAt && (
-                  <p className="mt-3 border-t border-hairline/60 pt-3 text-xs text-ink-soft">
-                    Last ran {formatDateTime(automation.lastRunAt)} · {automation.runCount} times in
-                    all
-                  </p>
-                )}
+                <p className="mt-3 border-t border-hairline/60 pt-3 text-xs text-ink-soft">
+                  {automation.lastRunAt ? (
+                    <>
+                      Last ran {formatDateTime(automation.lastRunAt)} ·{" "}
+                      <span className="font-semibold tabular-nums">{automation.runCount}</span>{" "}
+                      {automation.runCount === 1 ? "time" : "times"} in all
+                    </>
+                  ) : (
+                    "Hasn't run yet"
+                  )}
+                </p>
               </Card>
             </motion.div>
           ))}

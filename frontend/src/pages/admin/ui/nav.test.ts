@@ -79,13 +79,11 @@ describe("the sidebar's shape", () => {
       "/admin/marketing/events",
       "/admin/marketing/campaigns",
       "/admin/marketing/funnels",
-      "/admin/marketing/sequences",
       "/admin/marketing/automations-v2",
       "/admin/marketing/emails",
       "/admin/marketing/quizzes",
       "/admin/marketing/events-v2",
       "/admin/marketing/forms-v2",
-      "/admin/marketing/forms",
       "/admin/contacts/insights",
       "/admin/contacts",
       "/admin/segments",
@@ -125,7 +123,7 @@ describe("activeNavTarget", () => {
     ["/admin/sales/invoices/9/receipt", "/admin/sales/invoices"],
     ["/admin/partners/7", "/admin/partners"],
     ["/admin/community/3", "/admin/community"],
-    ["/admin/marketing/sequences/5", "/admin/marketing/sequences"],
+    ["/admin/marketing/sequences/5", "/admin/marketing/campaigns"],
     ["/admin/marketing/quizzes/12", "/admin/marketing/quizzes"],
     ["/admin/settings/team", "/admin/settings"],
     ["/admin/settings/email/log", "/admin/settings"],
@@ -137,7 +135,6 @@ describe("activeNavTarget", () => {
     // Whole segments: the old forms screen's address is the start of the new
     // one's, and neither may claim the other.
     ["/admin/marketing/forms-v2", "/admin/marketing/forms-v2"],
-    ["/admin/marketing/forms", "/admin/marketing/forms"],
     ["/admin/marketing/events-v2", "/admin/marketing/events-v2"],
     ["/admin/marketing/events", "/admin/marketing/events"],
     // The router ignores case and a trailing slash; so does the highlight.

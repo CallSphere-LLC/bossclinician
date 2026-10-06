@@ -912,6 +912,28 @@ adminGrowthRouter.put(
   }),
 );
 
+/**
+ * The funnel list, Kajabi-style: each card says how many steps it has and how
+ * many people saw them, so the list carries those counts rather than the page
+ * asking for every funnel's steps one by one. Recently updated first, which is
+ * Kajabi's default sort. Ahead of the generic mount so it answers GET /funnels;
+ * every other verb still falls through to it.
+ */
+adminGrowthRouter.get(
+  "/funnels",
+  asyncHandler(async (_req, res) => {
+    const result = await pool.query(
+      `SELECT f.*,
+              (SELECT count(*)::int FROM funnel_steps s WHERE s.funnel_id = f.id) AS step_count,
+              (SELECT COALESCE(sum(s.views), 0)::int FROM funnel_steps s WHERE s.funnel_id = f.id) AS step_views,
+              (SELECT COALESCE(sum(s.conversions), 0)::int FROM funnel_steps s WHERE s.funnel_id = f.id) AS step_conversions
+         FROM funnels f
+        ORDER BY f.updated_at DESC, f.id DESC`,
+    );
+    res.json(rowsToCamel(result.rows));
+  }),
+);
+
 adminGrowthRouter.use("/steps", buildAdminCrudRouter(funnelStepsRepo, anySchema, anySchema));
 adminGrowthRouter.use("/funnels", buildAdminCrudRouter(funnelsRepo, anySchema, anySchema, "id DESC"));
 

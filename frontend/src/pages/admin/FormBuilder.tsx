@@ -5,7 +5,9 @@ import {
   ArrowDown,
   ArrowLeft,
   ArrowUp,
+  Copy,
   Download,
+  ExternalLink,
   Eye,
   Inbox,
   ListChecks,
@@ -16,7 +18,7 @@ import {
   UserRound,
 } from "lucide-react";
 import { toast } from "sonner";
-import { formatBytes, formatDateTime } from "@/lib/format";
+import { formatBytes, formatDate, formatDateTime, formatNumber } from "@/lib/format";
 import {
   DEFAULT_FILE_CATEGORIES,
   DEFAULT_MAX_SIZE_MB,
@@ -33,11 +35,15 @@ import {
 import {
   CONTACT_FIELD_CHOICES,
   FIELD_TYPE_LABEL,
+  OPT_IN_LABEL,
   POST_ACTION_LABEL,
   formsApi,
+  isFromKajabi,
   needsOptions,
+  optInKind,
   saveCsv,
   sinceDaysFrom,
+  totalSubmissions,
   type FieldType,
   type FormDetail,
   type FormField,
@@ -68,6 +74,7 @@ import {
   friendlyError,
   pluralize,
   publishLabel,
+  shareLink,
   uniqueKey,
   webAddress,
 } from "@/pages/admin/ui/friendly";
@@ -718,6 +725,94 @@ function FieldBlock({
   );
 }
 
+/* ── How it looks ───────────────────────────────────────────────────────── */
+
+/** The browser input type a question's preview box uses. */
+const PREVIEW_INPUT_TYPE: Partial<Record<FieldType, string>> = {
+  email: "email",
+  phone: "tel",
+  number: "number",
+  date: "date",
+};
+
+/**
+ * The form as people will see it, drawn from the working copy so every edit
+ * shows here before it is saved. Nothing in it can be filled in — it is a
+ * picture, not the form. Hidden questions are left out, as they are on the page.
+ */
+function FormPreview({ form }: { form: FormDetail }) {
+  const visible = form.fields.filter((field) => field.type !== "hidden");
+  // `descriptionMd` alone: the editor already copied any older intro into it on
+  // load, and a save that empties it empties the old column too.
+  const intro = form.descriptionMd.trim();
+  return (
+    <div className="rounded-xl border border-hairline bg-white/[0.03] p-5">
+      <p className="font-display text-lg text-ink">{form.name || "Untitled form"}</p>
+      {intro && <p className="mt-1.5 whitespace-pre-wrap text-sm text-ink-soft">{intro}</p>}
+      <div className="mt-4 space-y-3">
+        {visible.length === 0 && (
+          <p className="text-sm text-ink-soft">No questions yet — add one above and it appears here.</p>
+        )}
+        {visible.map((field) => (
+          <div key={field.key}>
+            <p className="mb-1.5 block text-[0.8rem] font-semibold text-ink">
+              {field.label || "Untitled question"}
+              {field.required && <span className="ml-1 text-red-300">*</span>}
+              {field.showIf && (
+                <span className="ml-2 text-[0.7rem] font-normal text-ink-soft">(only shows sometimes)</span>
+              )}
+            </p>
+            {field.type === "textarea" ? (
+              <Textarea rows={3} disabled placeholder={field.placeholder || field.label} />
+            ) : field.type === "checkbox" ? (
+              <input type="checkbox" disabled className={checkboxStyles} aria-label={field.label} />
+            ) : field.type === "select" ? (
+              <select disabled className={selectStyles} aria-label={field.label}>
+                {choicesOf(field).length === 0 ? (
+                  <option>No choices added yet</option>
+                ) : (
+                  choicesOf(field).map((choice) => <option key={choice}>{choice}</option>)
+                )}
+              </select>
+            ) : field.type === "radio" || field.type === "checkboxes" ? (
+              <div className="space-y-1.5">
+                {choicesOf(field).length === 0 ? (
+                  <p className="text-xs text-ink-soft">No choices added yet</p>
+                ) : (
+                  choicesOf(field).map((choice) => (
+                    <label key={choice} className="flex items-center gap-2.5 text-sm text-ink">
+                      <input
+                        type={field.type === "radio" ? "radio" : "checkbox"}
+                        disabled
+                        className={checkboxStyles}
+                      />
+                      {choice}
+                    </label>
+                  ))
+                )}
+              </div>
+            ) : field.type === "file" ? (
+              <div className="rounded-xl border border-dashed border-hairline px-3 py-3 text-xs text-ink-soft">
+                Choose a file · up to {field.maxSizeMb ?? DEFAULT_MAX_SIZE_MB} MB
+              </div>
+            ) : (
+              <Input
+                disabled
+                type={PREVIEW_INPUT_TYPE[field.type] ?? "text"}
+                placeholder={field.placeholder || field.label}
+              />
+            )}
+            {field.helpText && <p className="mt-1 text-xs text-ink-soft">{field.helpText}</p>}
+          </div>
+        ))}
+        <Button disabled className="w-full">
+          {form.submitLabel || "Submit"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 /* ── The screen ─────────────────────────────────────────────────────────── */
 
 export default function FormBuilder() {
@@ -773,7 +868,11 @@ export default function FormBuilder() {
     formsApi
       .list()
       .then((rows) => {
-        setForms(rows);
+        // Newest first, as Kajabi lists them. The server already orders them
+        // so; sorted again here so an older server's alphabetical order can't
+        // leave this screen out of step. The table's own headers re-sort.
+        const stamp = (form: FormSummary) => Date.parse(form.createdAt ?? "") || 0;
+        setForms([...rows].sort((a, b) => stamp(b) - stamp(a) || b.id - a.id));
         setError(null);
       })
       .catch(() => setError("We couldn’t load your forms. Try refreshing the page."));
@@ -820,7 +919,23 @@ export default function FormBuilder() {
     formsApi
       .get(openId)
       .then((form) => {
-        if (current) setDraft(form);
+        if (!current) return;
+        // Not marked dirty: nothing here is her edit, only the form as stored.
+        // The intro of a form written on the old Forms screen lives in the
+        // plain `description` column, which the public page falls back to —
+        // shown in the box so editing it here edits what people actually read.
+        // An imported form can arrive with nulls where the builder expects
+        // text; the boxes below are all controlled inputs.
+        setDraft({
+          ...form,
+          fields: form.fields ?? [],
+          description: form.description ?? "",
+          descriptionMd: form.descriptionMd || form.description || "",
+          submitLabel: form.submitLabel ?? "",
+          successMessage: form.successMessage ?? "",
+          redirectUrl: form.redirectUrl ?? "",
+          applyTagIds: form.applyTagIds ?? [],
+        });
       })
       .catch((err) => {
         if (current) setError(friendlyError(err, "form"));
@@ -1166,7 +1281,11 @@ export default function FormBuilder() {
         redirectUrl: snapshot.redirectUrl,
         applyTagIds: snapshot.applyTagIds,
         subscribeSequenceId: snapshot.subscribeSequenceId,
+        createLead: snapshot.createLead,
         published: snapshot.published,
+        // Emptying the intro empties the old plain column too; left alone, the
+        // public page would fall back to it and the words would come back.
+        ...(snapshot.description && !snapshot.descriptionMd.trim() ? { description: "" } : {}),
       }),
     );
     saveQueue.current = request.catch(() => undefined);
@@ -1339,56 +1458,81 @@ export default function FormBuilder() {
               <ListChecks className="size-4" />
             </span>
             <span className="min-w-0">
-              <span className="block truncate font-semibold text-ink">{row.original.name}</span>
+              <span className="flex min-w-0 flex-wrap items-center gap-2">
+                <span className="truncate font-semibold text-ink">{row.original.name}</span>
+                {isFromKajabi(row.original) && <Badge tone="blue">Imported from Kajabi</Badge>}
+              </span>
               <span className="block truncate text-xs text-ink-soft">
                 {/* What this screen writes is `descriptionMd`; `description` is
-                    the legacy screen's. Same order the public page reads them. */}
-                {(row.original as FormSummary & { descriptionMd?: string }).descriptionMd ||
+                    the old screen's. Same order the public page reads them. */}
+                {row.original.descriptionMd ||
                   row.original.description ||
-                  "No description yet"}
+                  (row.original.fieldCount === 0
+                    ? "No questions yet"
+                    : pluralize(row.original.fieldCount, "question"))}
               </span>
             </span>
           </button>
         ),
       },
       {
-        accessorKey: "slug",
-        header: "Web address",
+        id: "submissions",
+        header: "Submissions",
+        // A number, so sorting on the header is 9 < 10 rather than "10" < "9".
+        accessorFn: (form: FormSummary) => totalSubmissions(form),
+        cell: ({ row }) => {
+          const form = row.original;
+          const total = totalSubmissions(form);
+          const fromKajabi = isFromKajabi(form) ? Number(form.kajabiSubmissionsCount ?? 0) || 0 : 0;
+          const count = (
+            <span className="font-semibold tabular-nums text-sm text-ink">{formatNumber(total)}</span>
+          );
+          return (
+            <span className="block">
+              {form.submissionCount > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => openForm(form.id, "replies")}
+                  className="hover:underline"
+                  title="See the replies sent here"
+                >
+                  {count}
+                </button>
+              ) : (
+                count
+              )}
+              {fromKajabi > 0 && (
+                <span className="block text-xs text-ink-soft">
+                  <span className="tabular-nums">{formatNumber(fromKajabi)}</span> in Kajabi
+                  {form.submissionCount > 0 && (
+                    <>
+                      {" "}· <span className="tabular-nums">{formatNumber(form.submissionCount)}</span> here
+                    </>
+                  )}
+                </span>
+              )}
+            </span>
+          );
+        },
+      },
+      {
+        id: "optIn",
+        header: "Opt-in",
+        accessorFn: (form: FormSummary) => OPT_IN_LABEL[optInKind(form)],
         cell: ({ row }) => (
-          <span className="text-xs text-ink-soft">{webAddress("f", row.original.slug)}</span>
+          <span className="text-sm text-ink-soft">{OPT_IN_LABEL[optInKind(row.original)]}</span>
         ),
       },
       {
-        accessorKey: "fieldCount",
-        header: "Questions",
+        accessorKey: "createdAt",
+        header: "Created",
         cell: ({ row }) => (
-          <span className="text-sm text-ink-soft">
-            {row.original.fieldCount === 0
-              ? "None yet"
-              : pluralize(row.original.fieldCount, "question")}
-          </span>
-        ),
-      },
-      {
-        accessorKey: "submissionCount",
-        header: "Replies",
-        cell: ({ row }) => (
-          row.original.submissionCount === 0 ? (
-            <span className="text-sm text-ink-soft">None yet</span>
-          ) : (
-            <button
-              type="button"
-              onClick={() => openForm(row.original.id, "replies")}
-              className="text-sm font-semibold text-plum hover:underline"
-            >
-              {pluralize(row.original.submissionCount, "reply", "replies")}
-            </button>
-          )
+          <span className="text-sm text-ink-soft">{formatDate(row.original.createdAt)}</span>
         ),
       },
       {
         accessorKey: "published",
-        header: "On your site",
+        header: "Status",
         cell: ({ row }) => (
           <Badge tone={row.original.published ? "green" : "slate"}>
             {publishLabel(row.original.published)}
@@ -1436,7 +1580,7 @@ export default function FormBuilder() {
           actions={
             <Button size="sm" onClick={() => setAdding(true)}>
               <Plus />
-              Add a form
+              New Form
             </Button>
           }
         />
@@ -1446,9 +1590,9 @@ export default function FormBuilder() {
         <DataTable
           columns={listColumns}
           data={forms}
-          searchPlaceholder="Search your forms…"
+          searchPlaceholder="Search forms…"
           itemNoun={{ one: "form", many: "forms" }}
-          minWidth="940px"
+          minWidth="900px"
           emptyState={
             <EmptyState
               icon={<ListChecks />}
@@ -1457,7 +1601,7 @@ export default function FormBuilder() {
               action={
                 <Button size="sm" onClick={() => setAdding(true)}>
                   <Plus />
-                  Add your first form
+                  New Form
                 </Button>
               }
             />
@@ -1467,7 +1611,7 @@ export default function FormBuilder() {
         <Modal
           open={adding}
           onOpenChange={(open) => !open && setAdding(false)}
-          title="Add a form"
+          title="New form"
           description="Name it now — the questions come next."
           footer={
             <>
@@ -1515,6 +1659,18 @@ export default function FormBuilder() {
     );
   }
 
+  // Replies Kajabi collected before the move. They live only as a count, so
+  // they add to the total but never to the table of replies below.
+  const kajabiReplies = isFromKajabi(draft) ? Number(draft.kajabiSubmissionsCount ?? 0) || 0 : 0;
+  // Views are only ever counted here, so the rate compares like with like:
+  // replies sent here over opens here, and only across all time.
+  const views = Number(draft.views) || 0;
+  const conversionRate =
+    views > 0 && replies !== null && sinceDays === null
+      ? Math.round((replies.length / views) * 1000) / 10
+      : null;
+  const publicLink = shareLink("f", draft.slug);
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -1561,6 +1717,107 @@ export default function FormBuilder() {
       />
 
       {saveProblem && <ErrorNotice message={saveProblem} />}
+
+      {/* ------------------------------------------------- numbers + share */}
+
+      <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
+        <Card className="p-5">
+          <p className="text-[0.7rem] font-semibold uppercase tracking-wide text-ink-soft">
+            Times viewed
+          </p>
+          <p className="mt-2 font-bold tabular-nums text-[1.6rem] leading-none text-ink">
+            {formatNumber(views)}
+          </p>
+          <p className="mt-1.5 text-[0.7rem] text-ink-soft">Counted each time the form page opens.</p>
+        </Card>
+        <Card className="p-5">
+          <p className="text-[0.7rem] font-semibold uppercase tracking-wide text-ink-soft">
+            {sinceDays !== null
+              ? `Submissions in the last ${sinceDays === 1 ? "day" : `${sinceDays} days`}`
+              : "Submissions"}
+          </p>
+          <p className="mt-2 font-bold tabular-nums text-[1.6rem] leading-none text-ink">
+            {replies === null
+              ? "…"
+              : formatNumber(replies.length + (sinceDays === null ? kajabiReplies : 0))}
+          </p>
+          {kajabiReplies > 0 && sinceDays === null && (
+            <p className="mt-1.5 text-[0.7rem] text-ink-soft">
+              <span className="tabular-nums">{formatNumber(kajabiReplies)}</span> collected in Kajabi
+              {replies !== null && (
+                <>
+                  {" "}· <span className="tabular-nums">{formatNumber(replies.length)}</span> here
+                </>
+              )}
+            </p>
+          )}
+        </Card>
+        <Card className="p-5">
+          <p className="text-[0.7rem] font-semibold uppercase tracking-wide text-ink-soft">
+            How many who saw it filled it in
+          </p>
+          <p className="mt-2 font-bold tabular-nums text-[1.6rem] leading-none text-plum">
+            {conversionRate !== null ? `${conversionRate}%` : "None yet"}
+          </p>
+          <p className="mt-1.5 text-[0.7rem] text-ink-soft">
+            {sinceDays !== null
+              ? "Shown for all time — clear the date filter below."
+              : "Out of everyone who opened the form here."}
+          </p>
+        </Card>
+      </div>
+
+      <Card className="p-5">
+        <div className="flex flex-wrap items-center gap-2">
+          <p className="text-xs font-bold uppercase tracking-wide text-ink-soft">Share this form</p>
+          {isFromKajabi(draft) && <Badge tone="blue">Imported from Kajabi</Badge>}
+          <Badge tone="neutral">{OPT_IN_LABEL[optInKind(draft)]}</Badge>
+          {draft.createdAt && (
+            <span className="text-xs text-ink-soft">Created {formatDate(draft.createdAt)}</span>
+          )}
+        </div>
+        {draft.published ? (
+          <>
+            <div className="mt-2 flex items-center gap-2 rounded-xl border border-hairline bg-white/[0.03] px-3 py-2">
+              <span className="min-w-0 flex-1 truncate text-xs font-semibold text-ink">{publicLink}</span>
+              <Button
+                variant="secondary"
+                size="sm"
+                aria-label="Copy the link to this form"
+                onClick={() =>
+                  navigator.clipboard
+                    .writeText(publicLink)
+                    .then(() => toast.success("Link copied."))
+                    .catch(() => toast.error("We couldn't copy that. Try selecting it by hand."))
+                }
+              >
+                <Copy />
+              </Button>
+              <Button variant="secondary" size="sm" asChild>
+                <a href={publicLink} target="_blank" rel="noreferrer">
+                  <ExternalLink />
+                  Open
+                </a>
+              </Button>
+            </div>
+            <p className="mt-1.5 text-xs text-ink-soft">
+              Send this to anyone — they can fill it in on their phone or computer.
+              {dirty ? " Changes you haven't saved yet won't show there until they are." : ""}
+            </p>
+          </>
+        ) : (
+          <p className="mt-2 rounded-xl border border-hairline bg-white/[0.03] px-3 py-2.5 text-xs text-ink-soft">
+            This form isn't live yet. Tick “Live on your site” below and you'll get a link you can
+            send to anyone.
+          </p>
+        )}
+        {isFromKajabi(draft) && optInKind(draft) === "double" && (
+          <p className="mt-2 text-xs text-ink-soft">
+            In Kajabi this form asked people to confirm their email address before they were
+            subscribed.
+          </p>
+        )}
+      </Card>
 
       {/* ---------------------------------------------------------- basics */}
 
@@ -1611,6 +1868,20 @@ export default function FormBuilder() {
             </span>
           </label>
         </div>
+        <label className="flex cursor-pointer items-start gap-2.5 text-sm text-ink md:col-span-2">
+          <input
+            type="checkbox"
+            className={`mt-0.5 ${checkboxStyles}`}
+            checked={draft.createLead !== false}
+            onChange={(event) => change({ createLead: event.target.checked })}
+          />
+          <span>
+            Add everyone who fills this in to my enquiries
+            <span className="mt-0.5 block text-xs text-ink-soft">
+              We use the email question on this form to reach them.
+            </span>
+          </span>
+        </label>
       </Card>
 
       {/* -------------------------------------------------------- questions */}
@@ -1656,6 +1927,19 @@ export default function FormBuilder() {
             ))}
           </ol>
         )}
+      </Card>
+
+      {/* ---------------------------------------------------------- preview */}
+
+      <Card>
+        <CardHeader
+          title="How it looks"
+          subtitle="A picture of the form as people will see it, updated as you edit."
+          icon={<Eye />}
+        />
+        <div className="p-5">
+          <FormPreview form={draft} />
+        </div>
       </Card>
 
       {/* -------------------------------------------------- after they send */}

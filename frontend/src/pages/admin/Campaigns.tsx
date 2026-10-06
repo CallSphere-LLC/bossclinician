@@ -6,35 +6,52 @@ import {
   type FormEvent,
 } from "react";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Link, useSearchParams } from "react-router";
+import { Link, useNavigate, useSearchParams } from "react-router";
 import {
+  ArrowLeft,
   CalendarClock,
+  CalendarDays,
   Copy,
+  Eye,
+  Folder,
+  LayoutTemplate,
   Mails,
   Megaphone,
   Plus,
   Send,
   Trash2,
-  Users,
 } from "lucide-react";
 import { toast } from "sonner";
 import { adminApi } from "@/lib/api";
-import { marketingApi, type SequenceSummary } from "@/lib/marketingApi";
+import { marketingApi } from "@/lib/marketingApi";
+import { sequenceSpan } from "@/pages/admin/emailProgramme";
 import {
-  PROGRAMME_STATUS_LABEL,
-  PROGRAMME_TYPES,
-  PROGRAMME_TYPE_LABEL,
-  filterProgramme,
-  mergeProgramme,
-  programmeFolders,
-  readProgrammeFilters,
-  sequenceSpan,
+  EMAIL_KINDS,
+  EMAIL_KIND_LABEL,
+  NO_FILTERS,
+  UNFILED,
+  filterEmails,
+  folderNames,
+  folderSummaries,
+  isReadOnlyCampaign,
+  longDateTime,
+  mergeEmails,
+  percentOf,
+  readEmailFilters,
+  statusLabelFor,
   statusOptionsFor,
-  writeProgrammeFilters,
-  type ProgrammeFilters,
-  type ProgrammeRow,
-  type ProgrammeStatus,
-} from "@/pages/admin/emailProgramme";
+  writeEmailFilters,
+  type CampaignRecord,
+  type EmailFilters,
+  type EmailKind,
+  type EmailRow,
+  type EmailStatus,
+  type SequenceRecord,
+} from "@/pages/admin/campaigns/emailList";
+import NewCampaignDialog, { type NewCampaignStep } from "@/pages/admin/campaigns/NewCampaignDialog";
+import CampaignPreview from "@/pages/admin/campaigns/CampaignPreview";
+import ManageTemplatesDialog from "@/pages/admin/campaigns/ManageTemplatesDialog";
+import { cn } from "@/lib/cn";
 import { contactsApi, type Segment, type Tag } from "@/lib/contactsApi";
 import type { Campaign } from "@/types/admin";
 import { formatDateTime, formatNumber } from "@/lib/format";
@@ -47,6 +64,7 @@ import {
   Field,
   Input,
   PageHeader,
+  Skeleton,
   selectStyles,
   type BadgeProps,
 } from "@/pages/admin/ui/primitives";
@@ -68,37 +86,46 @@ import {
   pluralize,
 } from "@/pages/admin/ui/friendly";
 
-const STATUS_TONE: Record<string, NonNullable<BadgeProps["tone"]>> = {
+/**
+ * Sheet row 67: one status vocabulary for every kind of email, in Kajabi's
+ * words (Draft, Scheduled, Active, In Progress, Sent / Delivered). The pill
+ * colour follows what she would do about it: gold is waiting, blue is going
+ * out now, green is live or done, red never went.
+ */
+const STATUS_TONE: Record<EmailStatus, NonNullable<BadgeProps["tone"]>> = {
   draft: "slate",
   scheduled: "gold",
-  sending: "blue",
-  sent: "green",
-  failed: "red",
-};
-
-/** A3: sequence rows, in the shared status vocabulary of the combined list. */
-const PROGRAMME_STATUS_TONE: Record<ProgrammeStatus, NonNullable<BadgeProps["tone"]>> = {
-  draft: "slate",
-  scheduled: "gold",
-  sending: "green",
+  active: "green",
+  in_progress: "blue",
   sent: "green",
   paused: "gold",
   failed: "red",
   archived: "neutral",
 };
 
-/**
- * Stored status → what actually happened, in her words. The raw values are
- * one-word machine states; "failed" in particular reads like something she did
- * wrong rather than mail that never went out.
- */
-const STATUS_LABEL: Record<string, string> = {
-  draft: "Not sent yet",
-  scheduled: "Scheduled",
-  sending: "Sending now",
-  sent: "Sent",
-  failed: "Didn't send",
+const KIND_TONE: Record<EmailKind, NonNullable<BadgeProps["tone"]>> = {
+  broadcast: "blue",
+  sequence: "plum",
+  event: "gold",
 };
+
+const KIND_ICON: Record<EmailKind, typeof Megaphone> = {
+  broadcast: Megaphone,
+  sequence: Mails,
+  event: CalendarDays,
+};
+
+/** The Type filter's words, as Kajabi has them. */
+const KIND_FILTER_LABEL: Record<EmailKind, string> = {
+  broadcast: "Email Broadcast",
+  sequence: "Email Sequence",
+  event: "Event emails",
+};
+
+/** For sorting the rate columns: a share of sends, with "no figures" sorting below 0%. */
+function ratio(part: number | null, sends: number | null): number {
+  return part === null || sends === null || sends <= 0 ? -1 : part / sends;
+}
 
 const AUDIENCES = [
   { key: "all_subscribers", label: "Everyone on my email list" },
@@ -254,30 +281,34 @@ function campaignAudienceLabel(campaign: Partial<Campaign>, segments: Segment[],
 }
 
 /**
- * The line under a broadcast's status badge: what happened, or what will.
- *
- * Its own component because the combined list shows it inside the Status
- * column rather than in a column of its own (A3, to keep the row's actions on
- * screen at 1280px).
+ * The line under an email's title, the way Kajabi writes it: "Sent September
+ * 26, 2026 05:00 AM", "Scheduled for …", or "6 emails over 11 days" for a
+ * sequence. What an anchored email will do, and why a skipped one didn't go,
+ * are said here too — a silent skip used to read "Didn't send" with no reason.
  */
-function CampaignOutcome({ campaign }: { campaign: Campaign }) {
+function EmailDescription({ row }: { row: EmailRow }) {
+  if (row.source === "sequence") {
+    return (
+      <span className="block truncate text-xs text-ink-soft">
+        {sequenceSpan(row.sequence)}
+        {row.sequence.activeCount > 0 && ` · ${formatNumber(row.sequence.activeCount)} going through now`}
+      </span>
+    );
+  }
+  const campaign = row.campaign;
   if (campaign.status === "sent") {
     return (
-      <span className="block text-xs text-ink-soft">
-        <strong className="text-ink">{formatNumber(campaign.deliveredCount)}</strong> arrived
+      <span className="block truncate text-xs text-ink-soft">
+        {campaign.sentAt
+          ? `Sent ${longDateTime(campaign.sentAt, campaign.timezone || undefined)}`
+          : "Sent"}
         {campaign.failedCount > 0 && (
-          <span className="text-red-300"> · {formatNumber(campaign.failedCount)} didn't</span>
-        )}
-        {campaign.sentAt && (
-          <span className="block whitespace-nowrap">{formatDateTime(campaign.sentAt)}</span>
+          <span className="text-red-300"> · {formatNumber(campaign.failedCount)} didn't arrive</span>
         )}
       </span>
     );
   }
   if (campaign.anchorSkipReason) {
-    // The scheduler passed this over and said why. Without this the campaign
-    // read "Didn't send" and gave no reason, which is the state a silent skip
-    // leaves somebody in.
     return <span className="block text-xs text-red-300">{campaign.anchorSkipReason}</span>;
   }
   if (campaign.anchorKind === "event_registration" && campaign.status === "sending") {
@@ -299,41 +330,58 @@ function CampaignOutcome({ campaign }: { campaign: Campaign }) {
   }
   if (campaign.status === "scheduled" && campaign.scheduledAt) {
     return (
-      <span className="block text-xs text-gold">
-        Sends {scheduledLabel(campaign.scheduledAt, campaign.timezone || DEFAULT_TIMEZONE)}
+      <span className="block truncate text-xs text-gold">
+        Scheduled for {scheduledLabel(campaign.scheduledAt, campaign.timezone || DEFAULT_TIMEZONE)}
       </span>
     );
   }
-  return null;
+  if (campaign.status === "sending") {
+    return <span className="block text-xs text-blue-300">Sending now — the numbers fill in as it goes</span>;
+  }
+  return (
+    <span className="block truncate text-xs text-ink-soft">
+      {campaign.subject ? `Subject: ${campaign.subject}` : "No subject line yet"}
+    </span>
+  );
 }
 
 /* ------------------------------------------------------------------ Screen */
 
 export default function Campaigns() {
-  const [campaigns, setCampaigns] = useState<Campaign[] | null>(null);
+  const navigate = useNavigate();
+  const [campaigns, setCampaigns] = useState<CampaignRecord[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [draft, setDraft] = useState<Partial<Campaign> | null>(null);
   const [audienceCount, setAudienceCount] = useState<number | null>(null);
   const [segments, setSegments] = useState<Segment[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
   /**
-   * A3. Sequences share this list with broadcasts, so the whole programme is
-   * one screen. Filters live in the URL — `?type=sequence&status=sending` — so
-   * a tile on the Marketing Overview or a bookmark opens it already narrowed.
+   * Sheet row 67. Broadcasts, sequences and event emails share one list, as on
+   * Kajabi's Email Campaigns page; Email Sequences is no longer a page of its
+   * own. Filters live in the URL — `?type=sequence&status=active`,
+   * `?view=folders&folder=Launch` — so a tile on the Marketing Overview, the
+   * old sequences address or a bookmark opens it already narrowed.
    */
-  const [sequences, setSequences] = useState<SequenceSummary[] | null>(null);
+  const [sequences, setSequences] = useState<SequenceRecord[] | null>(null);
   const [sequenceError, setSequenceError] = useState<string | null>(null);
   const [searchParams, setSearchParams] = useSearchParams();
-  const filters = readProgrammeFilters(searchParams);
+  const filters = readEmailFilters(searchParams);
   const setFilters = useCallback(
-    (next: Partial<ProgrammeFilters>) =>
+    (next: Partial<EmailFilters>) =>
       setSearchParams(
-        (current) =>
-          writeProgrammeFilters(current, { ...readProgrammeFilters(current), ...next }),
+        (current) => writeEmailFilters(current, { ...readEmailFilters(current), ...next }),
         { replace: true },
       ),
     [setSearchParams],
   );
+  /** "New Email Campaign": the Broadcast / Sequence chooser. */
+  const [chooser, setChooser] = useState<{ open: boolean; step: NewCampaignStep }>({
+    open: false,
+    step: "choose",
+  });
+  /** An imported email that has already gone out, open read-only. */
+  const [previewing, setPreviewing] = useState<CampaignRecord | null>(null);
+  const [managingTemplates, setManagingTemplates] = useState(false);
   const [sendMode, setSendMode] = useState<SendMode>("manual");
   const [events, setEvents] = useState<EventSummary[]>([]);
   /**
@@ -353,45 +401,100 @@ export default function Campaigns() {
    * campaign it is showing — a new draft that inherited the last one's mode
    * would offer to schedule something against an event it was never pointed at.
    */
-  const openDraft = useCallback((campaign?: Campaign) => {
+  const openDraft = useCallback((campaign?: Campaign, defaults?: Partial<Campaign>) => {
     const next: Partial<Campaign> =
-      campaign ?? { audience: "all_subscribers", status: "draft", timezone: DEFAULT_TIMEZONE };
+      campaign ?? {
+        audience: "all_subscribers",
+        status: "draft",
+        timezone: DEFAULT_TIMEZONE,
+        ...defaults,
+      };
     setSendMode(sendModeOf(next));
     setShowErrors(false);
     setDraft(next);
   }, []);
 
+  /**
+   * What clicking an email row does: imported history that has already gone
+   * out opens read-only — it is a record of what Kajabi sent, not something to
+   * edit or send again — and everything else opens in the editor as before.
+   */
+  const openCampaign = useCallback(
+    (campaign: CampaignRecord) => {
+      if (isReadOnlyCampaign(campaign)) setPreviewing(campaign);
+      else openDraft(campaign);
+    },
+    [openDraft],
+  );
+
+  /** A new broadcast from inside a folder starts in that folder. */
+  const newBroadcast = useCallback(() => {
+    setChooser((current) => ({ ...current, open: false }));
+    const folder = filters.folder && filters.folder !== UNFILED ? filters.folder : "";
+    openDraft(undefined, folder ? { folder } : undefined);
+  }, [filters.folder, openDraft]);
+
   const load = useCallback(() => {
     adminApi
-      .growthList<Campaign>("campaigns")
-      .then(setCampaigns)
-      .catch(() => setError("We couldn't load your emails. Try refreshing the page."));
+      .growthList<CampaignRecord>("campaigns")
+      .then((rows) => {
+        setCampaigns(rows);
+        setError(null);
+      })
+      .catch(() => {
+        // Empty rather than null, so the sequences still list instead of the
+        // table waiting forever on the half that failed.
+        setCampaigns((current) => current ?? []);
+        setError("We couldn't load your emails. Try refreshing the page.");
+      });
     // A failure here costs the sequence rows, not the broadcasts — and says so,
-    // rather than showing a programme with its sequences silently missing.
+    // rather than showing a list with its sequences silently missing.
     marketingApi
       .sequences()
       .then((rows) => {
-        setSequences(rows);
+        setSequences(rows as SequenceRecord[]);
         setSequenceError(null);
       })
       .catch(() => {
-        setSequences([]);
+        setSequences((current) => current ?? []);
         setSequenceError("We couldn't load your sequences just now, so only broadcasts are listed.");
       });
   }, []);
 
-  const programme = useMemo(
-    () => (campaigns && sequences ? mergeProgramme(campaigns, sequences) : null),
+  const allRows = useMemo(
+    () => (campaigns && sequences ? mergeEmails(campaigns, sequences) : null),
     [campaigns, sequences],
   );
-  const folders = useMemo(() => (programme ? programmeFolders(programme) : []), [programme]);
+  const folders = useMemo(() => (allRows ? folderNames(allRows) : []), [allRows]);
+  const folderCards = useMemo(() => (allRows ? folderSummaries(allRows) : []), [allRows]);
   const visibleRows = useMemo(
-    () => (programme ? filterProgramme(programme, readProgrammeFilters(searchParams)) : null),
-    [programme, searchParams],
+    () => (allRows ? filterEmails(allRows, readEmailFilters(searchParams)) : null),
+    [allRows, searchParams],
   );
-  const filtering = Boolean(filters.type || filters.status || filters.folder);
+  // Inside a folder the folder is where she is, not a filter to clear.
+  const filtering = Boolean(
+    filters.kind || filters.status || (filters.view === "all" && filters.folder),
+  );
+  /** Folders tab with no folder chosen: the folder cards stand in for the table. */
+  const showingFolderCards = filters.view === "folders" && !filters.folder;
 
   useEffect(load, [load]);
+
+  /*
+   * `?new=1` (or `broadcast` / `sequence`) opens "New Email Campaign" from a
+   * link — the old sequences page's "New sequence" and the Marketing
+   * Overview's buttons land here — and is then taken out of the address so a
+   * refresh doesn't open it again.
+   */
+  useEffect(() => {
+    const wanted = searchParams.get("new");
+    if (!wanted) return;
+    if (wanted === "broadcast") openDraft();
+    else setChooser({ open: true, step: wanted === "sequence" ? "sequence" : "choose" });
+    const next = new URLSearchParams(searchParams);
+    next.delete("new");
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams, openDraft]);
 
   useEffect(() => {
     contactsApi.segments().then(setSegments).catch(() => setSegments([]));
@@ -628,7 +731,7 @@ export default function Campaigns() {
     async (campaign: Campaign) => {
       try {
         const copy = await adminApi.growthCreate<Campaign>("campaigns", {
-          name: `${campaign.name} (copy)`.slice(0, 200),
+          name: `${campaign.name || campaign.subject || "Untitled email"} (copy)`.slice(0, 200),
           folder: campaign.folder,
           subject: campaign.subject,
           subjectB: campaign.subjectB,
@@ -645,6 +748,7 @@ export default function Campaigns() {
         });
         toast.success(`Copied to “${copy.name}” — nothing has been sent.`);
         load();
+        setPreviewing(null);
         openDraft(copy);
       } catch (err) {
         toast.error(friendlyError(err, "email"));
@@ -672,126 +776,141 @@ export default function Campaigns() {
     [confirm, load],
   );
 
+  const removeSequence = useCallback(
+    async (sequence: SequenceRecord) => {
+      const ok = await confirm({
+        title: `Delete ${sequence.name}?`,
+        description:
+          "The emails in it go too, along with the record of who has been through it. This cannot be undone.",
+        confirmLabel: "Delete it",
+        destructive: true,
+      });
+      if (!ok) return;
+      try {
+        await marketingApi.deleteSequence(sequence.id);
+        toast.success("Sequence deleted");
+        load();
+      } catch (err) {
+        toast.error(friendlyError(err, "sequence"));
+      }
+    },
+    [confirm, load],
+  );
+
   /*
-   * A3. One row type for both kinds. Broadcast cells are exactly what they
-   * were; a sequence row reads "6 emails over 11 days" where a broadcast shows
-   * its subject, and opens its own editor rather than this dialog.
+   * Sheet row 67. One row type for every kind, laid out as Kajabi's list is:
+   * the title with its type, folder and one line of what happened under it,
+   * then Sends / Opened / Clicked / Unsubscribed, then the status pill. The
+   * type is a badge under the title rather than a column of its own, which is
+   * what kept the row's actions on screen at 1280px before (A3).
    */
-  const columns = useMemo<ColumnDef<ProgrammeRow, unknown>[]>(
+  const columns = useMemo<ColumnDef<EmailRow, unknown>[]>(
     () => [
       {
         id: "name",
-        // What the search box matches: the name plus the line under it.
+        // What the search box matches: the name, its folder and its subject.
         accessorFn: (row) =>
-          row.type === "broadcast"
-            ? `${row.name} ${row.campaign.subject}`
-            : `${row.name} ${sequenceSpan(row.sequence)}`,
-        header: "Email",
-        /*
-         * The type is said inline — "Sequence · 6 emails over 11 days" — the
-         * way Kajabi lists them, rather than in a column of its own. A Type
-         * column was what pushed Send and Delete past the edge at 1280px.
-         */
+          row.source === "campaign"
+            ? `${row.name} ${row.folder} ${row.campaign.subject}`
+            : `${row.name} ${row.folder} ${row.sequence.description}`,
+        header: "Email Campaign",
         cell: ({ row }) => {
           const item = row.original;
-          if (item.type === "sequence") {
+          const Icon = KIND_ICON[item.kind];
+          const title = (
+            <>
+              <span className="block truncate font-semibold text-ink group-hover/title:text-gold">
+                {item.name}
+              </span>
+              <span className="mt-0.5 flex min-w-0 flex-wrap items-center gap-1.5">
+                <Badge tone={KIND_TONE[item.kind]} className="shrink-0">
+                  <Icon className="size-3 shrink-0" aria-hidden="true" />
+                  {EMAIL_KIND_LABEL[item.kind]}
+                </Badge>
+                {item.folder && (
+                  <span className="inline-flex min-w-0 items-center gap-1 text-xs text-ink-soft">
+                    <Folder className="size-3 shrink-0" aria-hidden="true" />
+                    <span className="truncate">{item.folder}</span>
+                  </span>
+                )}
+              </span>
+              <span className="mt-0.5 block min-w-0">
+                <EmailDescription row={item} />
+              </span>
+            </>
+          );
+          if (item.source === "sequence") {
             return (
               <Link
                 to={`/admin/marketing/sequences/${item.sequence.id}`}
-                className="block min-w-0 max-w-[15rem] text-left"
+                className="group/title block min-w-0 max-w-[24rem] py-1 text-left"
               >
-                <span className="block truncate font-semibold text-ink">{item.name}</span>
-                <span className="flex min-w-0 items-center gap-1 text-xs text-ink-soft">
-                  <Mails className="size-3 shrink-0 text-lilac" aria-hidden="true" />
-                  <span className="shrink-0 font-medium text-lilac">Sequence</span>
-                  <span className="truncate">· {sequenceSpan(item.sequence)}</span>
-                </span>
+                {title}
               </Link>
             );
           }
           return (
             <button
               type="button"
-              onClick={() => openDraft(item.campaign)}
-              className="block min-w-0 max-w-[15rem] text-left"
+              onClick={() => openCampaign(item.campaign)}
+              className="group/title block min-w-0 max-w-[24rem] py-1 text-left"
             >
-              <span className="block truncate font-semibold text-ink">{item.name}</span>
-              <span className="flex min-w-0 items-center gap-1 text-xs text-ink-soft">
-                <Megaphone className="size-3 shrink-0 text-sky-300" aria-hidden="true" />
-                <span className="shrink-0 font-medium text-sky-300">Broadcast</span>
-                <span className="truncate">· {item.campaign.subject || "No subject line yet"}</span>
-              </span>
+              {title}
             </button>
           );
         },
       },
       {
-        id: "folder",
-        accessorFn: (row) => row.folder,
-        header: "Folder",
-        cell: ({ row }) => row.original.folder
-          ? <Badge tone="slate">{row.original.folder}</Badge>
-          : <span className="text-sm text-ink-soft">Unfiled</span>,
+        id: "sends",
+        enableGlobalFilter: false,
+        accessorFn: (row) => row.stats.sends ?? -1,
+        header: "Sends",
+        cell: ({ row }) => (
+          <span className="font-bold tabular-nums text-ink">
+            {row.original.stats.sends === null ? "—" : formatNumber(row.original.stats.sends)}
+          </span>
+        ),
       },
       {
-        id: "audience",
-        accessorFn: (row) =>
-          row.type === "broadcast" ? campaignAudienceLabel(row.campaign, segments, tags) : "",
-        header: "Who gets it",
-        cell: ({ row }) => {
-          const item = row.original;
-          if (item.type === "sequence") {
-            return (
-              <span className="text-sm text-ink-soft">
-                Whoever joins it
-                <span className="block text-xs">
-                  {formatNumber(item.sequence.activeCount)} going through now
-                </span>
-              </span>
-            );
-          }
-          return (
-            <Badge tone="plum" className="max-w-[10rem]" title={campaignAudienceLabel(item.campaign, segments, tags)}>
-              <Users className="size-3 shrink-0" />
-              <span className="truncate">{campaignAudienceLabel(item.campaign, segments, tags)}</span>
-            </Badge>
-          );
-        },
+        id: "opened",
+        enableGlobalFilter: false,
+        accessorFn: (row) => ratio(row.stats.opened, row.stats.sends),
+        header: "Opened",
+        cell: ({ row }) => (
+          <span className="tabular-nums text-ink">
+            {percentOf(row.original.stats.opened, row.original.stats.sends)}
+          </span>
+        ),
       },
       {
-        /*
-         * Status and "how it went" share a column: the badge, and under it the
-         * line that explains it. Two columns here, plus Type and Date sent,
-         * was what put Send and Delete past the right edge at 1280px.
-         */
+        id: "clicked",
+        enableGlobalFilter: false,
+        accessorFn: (row) => ratio(row.stats.clicked, row.stats.sends),
+        header: "Clicked",
+        cell: ({ row }) => (
+          <span className="tabular-nums text-ink">
+            {percentOf(row.original.stats.clicked, row.original.stats.sends)}
+          </span>
+        ),
+      },
+      {
+        id: "unsubscribed",
+        enableGlobalFilter: false,
+        accessorFn: (row) => ratio(row.stats.unsubscribed, row.stats.sends),
+        header: "Unsubscribed",
+        cell: ({ row }) => (
+          <span className="tabular-nums text-ink">
+            {percentOf(row.original.stats.unsubscribed, row.original.stats.sends)}
+          </span>
+        ),
+      },
+      {
         id: "status",
-        accessorFn: (row) => PROGRAMME_STATUS_LABEL[row.status],
+        accessorFn: (row) => statusLabelFor(row),
         header: "Status",
-        cell: ({ row }) => {
-          const item = row.original;
-          if (item.type === "sequence") {
-            return (
-              <div className="space-y-1">
-                <Badge tone={PROGRAMME_STATUS_TONE[item.status]}>
-                  {PROGRAMME_STATUS_LABEL[item.status]}
-                </Badge>
-                <span className="block text-xs text-ink-soft">
-                  <strong className="text-ink">{formatNumber(item.sequence.completedCount)}</strong>{" "}
-                  finished
-                </span>
-              </div>
-            );
-          }
-          const campaign = item.campaign;
-          return (
-            <div className="max-w-[15rem] space-y-1">
-              <Badge tone={STATUS_TONE[campaign.status] ?? "neutral"}>
-                {STATUS_LABEL[campaign.status] ?? humanizeKey(campaign.status)}
-              </Badge>
-              <CampaignOutcome campaign={campaign} />
-            </div>
-          );
-        },
+        cell: ({ row }) => (
+          <Badge tone={STATUS_TONE[row.original.status]}>{statusLabelFor(row.original)}</Badge>
+        ),
       },
       {
         id: "actions",
@@ -799,11 +918,20 @@ export default function Campaigns() {
         enableSorting: false,
         cell: ({ row }) => {
           const item = row.original;
-          if (item.type === "sequence") {
+          if (item.source === "sequence") {
+            const sequence = item.sequence;
             return (
               <RowActions>
                 <Button asChild size="sm" variant="secondary">
-                  <Link to={`/admin/marketing/sequences/${item.sequence.id}`}>Open</Link>
+                  <Link to={`/admin/marketing/sequences/${sequence.id}`}>Open</Link>
+                </Button>
+                <Button
+                  variant="dangerGhost"
+                  size="iconSm"
+                  aria-label={`Delete ${sequence.name}`}
+                  onClick={() => void removeSequence(sequence)}
+                >
+                  <Trash2 />
                 </Button>
               </RowActions>
             );
@@ -811,38 +939,47 @@ export default function Campaigns() {
           const campaign = item.campaign;
           return (
             <RowActions>
-              {campaign.status !== "sent" && campaign.status !== "sending" && (
-                <Button size="sm" onClick={() => send(campaign)}>
-                  <Send />
-                  Send
+              {item.readOnly ? (
+                <Button size="sm" variant="secondary" onClick={() => setPreviewing(campaign)}>
+                  <Eye />
+                  View
                 </Button>
+              ) : (
+                campaign.status !== "sent" &&
+                campaign.status !== "sending" && (
+                  <Button size="sm" onClick={() => send(campaign)}>
+                    <Send />
+                    Send
+                  </Button>
+                )
               )}
-              {(campaign.status === "scheduled" ||
-                (campaign.status === "sending" &&
-                  campaign.anchorKind === "event_registration")) && (
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={async () => {
-                    try {
-                      await adminApi.campaignCancelSchedule(campaign.id);
-                      toast.success("Scheduled send cancelled");
-                      load();
-                    } catch (err) {
-                      toast.error(friendlyError(err, "email"));
-                    }
-                  }}
-                >
-                  {campaign.anchorKind === "event_registration"
-                    ? "Switch off"
-                    : "Cancel schedule"}
-                </Button>
-              )}
+              {!item.readOnly &&
+                (campaign.status === "scheduled" ||
+                  (campaign.status === "sending" &&
+                    campaign.anchorKind === "event_registration")) && (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={async () => {
+                      try {
+                        await adminApi.campaignCancelSchedule(campaign.id);
+                        toast.success("Scheduled send cancelled");
+                        load();
+                      } catch (err) {
+                        toast.error(friendlyError(err, "email"));
+                      }
+                    }}
+                  >
+                    {campaign.anchorKind === "event_registration"
+                      ? "Switch off"
+                      : "Cancel schedule"}
+                  </Button>
+                )}
               <Button
                 variant="ghost"
                 size="iconSm"
                 title="Make a copy"
-                aria-label={`Make a copy of ${campaign.name}`}
+                aria-label={`Make a copy of ${item.name}`}
                 onClick={() => duplicate(campaign)}
               >
                 <Copy />
@@ -850,8 +987,8 @@ export default function Campaigns() {
               <Button
                 variant="dangerGhost"
                 size="iconSm"
-                aria-label={`Delete ${campaign.name}`}
-                onClick={() => remove(campaign)}
+                aria-label={`Delete ${item.name}`}
+                onClick={() => remove({ ...campaign, name: item.name })}
               >
                 <Trash2 />
               </Button>
@@ -860,26 +997,27 @@ export default function Campaigns() {
         },
       },
     ],
-    [send, remove, duplicate, openDraft, load, segments, tags],
+    [send, remove, removeSequence, duplicate, openCampaign, load],
   );
+
+  const clearFilters = () =>
+    setFilters(filters.view === "folders" ? { kind: "", status: "" } : { ...NO_FILTERS });
 
   return (
     <div className="space-y-6">
       <PageHeader
         eyebrow="Marketing"
         title="Email Campaigns"
-        description="Everything you email people, in one list — one-off broadcasts and the sequences that run on their own."
+        description="Everything you email people, in one list — one-time broadcasts, the sequences that run on their own, and your event emails."
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            <Button asChild size="sm" variant="secondary">
-              <Link to="/admin/marketing/sequences?new=1">
-                <Mails />
-                New sequence
-              </Link>
+            <Button size="sm" variant="secondary" onClick={() => setManagingTemplates(true)}>
+              <LayoutTemplate />
+              Manage Templates
             </Button>
-            <Button size="sm" onClick={() => openDraft()}>
+            <Button size="sm" onClick={() => setChooser({ open: true, step: "choose" })}>
               <Plus />
-              Write an email
+              New Email Campaign
             </Button>
           </div>
         }
@@ -888,94 +1026,194 @@ export default function Campaigns() {
       {error && <ErrorNotice message={error} />}
       {sequenceError && <ErrorNotice message={sequenceError} />}
 
-      <DataTable
-        columns={columns}
-        data={visibleRows}
-        searchPlaceholder="Search your emails…"
-        itemNoun={{ one: "email or sequence", many: "emails and sequences" }}
-        minWidth="900px"
-        toolbar={
-          <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Filter the list">
-            <select
-              aria-label="Type"
-              className={`${selectStyles} h-11 w-auto min-w-[9rem]`}
-              value={filters.type}
-              onChange={(event) => {
-                const type = event.target.value as ProgrammeFilters["type"];
-                // A status the new type can't be in would leave an empty list
-                // with no visible reason, so it is dropped with the switch.
-                const keepStatus =
-                  !filters.status || statusOptionsFor(type).includes(filters.status as ProgrammeStatus);
-                setFilters({ type, status: keepStatus ? filters.status : "" });
-              }}
+      {/* All emails / Folders — Kajabi's two views of the same list. */}
+      <div role="tablist" aria-label="How to list your emails" className="flex gap-1 border-b border-hairline/60">
+        {(["all", "folders"] as const).map((view) => {
+          const selected = filters.view === view;
+          return (
+            <button
+              key={view}
+              type="button"
+              role="tab"
+              aria-selected={selected}
+              onClick={() => setFilters({ view, folder: "" })}
+              className={cn(
+                "-mb-px min-h-11 border-b-2 px-4 text-sm font-semibold transition-colors",
+                selected
+                  ? "border-gold text-ink"
+                  : "border-transparent text-ink-soft hover:text-ink",
+              )}
             >
-              <option value="">Every type</option>
-              {PROGRAMME_TYPES.map((type) => (
-                <option key={type} value={type}>{PROGRAMME_TYPE_LABEL[type]}s</option>
-              ))}
-            </select>
-            <select
-              aria-label="Status"
-              className={`${selectStyles} h-11 w-auto min-w-[9rem]`}
-              value={filters.status}
-              onChange={(event) =>
-                setFilters({ status: event.target.value as ProgrammeFilters["status"] })
-              }
-            >
-              <option value="">Every status</option>
-              {statusOptionsFor(filters.type).map((status) => (
-                <option key={status} value={status}>{PROGRAMME_STATUS_LABEL[status]}</option>
-              ))}
-            </select>
-            <select
-              aria-label="Folder"
-              className={`${selectStyles} h-11 w-auto min-w-[9rem]`}
-              value={filters.folder}
-              onChange={(event) => setFilters({ folder: event.target.value })}
-            >
-              <option value="">Every folder</option>
-              {/* A folder named in a link but empty here still shows as chosen. */}
-              {[...new Set([...folders, ...(filters.folder ? [filters.folder] : [])])].map((folder) => (
-                <option key={folder} value={folder}>{folder}</option>
-              ))}
-            </select>
-            {filtering && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setFilters({ type: "", status: "", folder: "" })}
-              >
-                Clear filters
-              </Button>
-            )}
+              {view === "all" ? "All emails" : "Folders"}
+            </button>
+          );
+        })}
+      </div>
+
+      {filters.view === "folders" && filters.folder && (
+        <div className="flex flex-wrap items-center gap-3">
+          <Button variant="ghost" size="sm" onClick={() => setFilters({ folder: "" })}>
+            <ArrowLeft />
+            All folders
+          </Button>
+          <h2 className="flex items-center gap-2 font-semibold text-ink">
+            <Folder className="size-4 text-gold" aria-hidden="true" />
+            {filters.folder === UNFILED ? "Unfiled" : filters.folder}
+          </h2>
+        </div>
+      )}
+
+      {showingFolderCards ? (
+        allRows === null ? (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {[0, 1, 2].map((key) => (
+              <Skeleton key={key} className="h-28 rounded-2xl" />
+            ))}
           </div>
-        }
-        emptyState={
-          filtering && (programme?.length ?? 0) > 0 ? (
+        ) : folderCards.length === 0 ? (
+          <Card>
             <EmptyState
-              icon={<Megaphone />}
-              title="Nothing matches these filters"
-              description="Try another type, status or folder — or clear them to see everything."
-              action={
-                <Button size="sm" variant="secondary" onClick={() => setFilters({ type: "", status: "", folder: "" })}>
+              icon={<Folder />}
+              title="No emails yet"
+              description="Give an email or a sequence a folder and it will be grouped here."
+            />
+          </Card>
+        ) : (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {folderCards.map((folder) => {
+              const kinds = EMAIL_KINDS.filter((kind) => folder.byKind[kind] > 0);
+              return (
+                <button
+                  key={folder.name}
+                  type="button"
+                  onClick={() => setFilters({ folder: folder.name })}
+                  className="flex flex-col gap-2 rounded-2xl border border-hairline bg-surface p-5 text-left transition-colors hover:border-gold/45 hover:bg-surface-raised focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-gold/20"
+                >
+                  <span className="flex min-w-0 items-center gap-2 font-semibold text-ink">
+                    <Folder className="size-4 shrink-0 text-gold" aria-hidden="true" />
+                    <span className="truncate">{folder.name === UNFILED ? "Unfiled" : folder.name}</span>
+                  </span>
+                  <span className="text-sm text-ink-soft">
+                    {pluralize(folder.total, "email")}
+                    {kinds.length > 1 &&
+                      ` — ${kinds
+                        .map((kind) => `${folder.byKind[kind]} ${KIND_FILTER_LABEL[kind].toLowerCase()}`)
+                        .join(", ")}`}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )
+      ) : (
+        <DataTable
+          columns={columns}
+          data={visibleRows}
+          searchPlaceholder="Search email campaigns…"
+          itemNoun={{ one: "email campaign", many: "email campaigns" }}
+          initialPageSize={25}
+          minWidth="1080px"
+          columnWidths={{
+            name: "36%",
+            sends: "88px",
+            opened: "92px",
+            clicked: "92px",
+            unsubscribed: "124px",
+            status: "128px",
+            actions: "200px",
+          }}
+          toolbar={
+            <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Filter the list">
+              <select
+                aria-label="Type"
+                className={`${selectStyles} h-11 w-auto min-w-[9rem]`}
+                value={filters.kind}
+                onChange={(event) => {
+                  const kind = event.target.value as EmailFilters["kind"];
+                  // A status the new type can't be in would leave an empty list
+                  // with no visible reason, so it is dropped with the switch.
+                  const keepStatus =
+                    !filters.status || statusOptionsFor(kind).includes(filters.status as EmailStatus);
+                  setFilters({ kind, status: keepStatus ? filters.status : "" });
+                }}
+              >
+                <option value="">All types</option>
+                {EMAIL_KINDS.map((kind) => (
+                  <option key={kind} value={kind}>{KIND_FILTER_LABEL[kind]}</option>
+                ))}
+              </select>
+              <select
+                aria-label="Status"
+                className={`${selectStyles} h-11 w-auto min-w-[9rem]`}
+                value={filters.status}
+                onChange={(event) =>
+                  setFilters({ status: event.target.value as EmailFilters["status"] })
+                }
+              >
+                <option value="">All statuses</option>
+                {statusOptionsFor(filters.kind).map((status) => (
+                  <option key={status} value={status}>
+                    {statusLabelFor({ kind: filters.kind || "broadcast", status })}
+                  </option>
+                ))}
+              </select>
+              {filters.view === "all" && (
+                <select
+                  aria-label="Folder"
+                  className={`${selectStyles} h-11 w-auto min-w-[9rem]`}
+                  value={filters.folder}
+                  onChange={(event) => setFilters({ folder: event.target.value })}
+                >
+                  <option value="">All folders</option>
+                  <option value={UNFILED}>Unfiled</option>
+                  {/* A folder named in a link but empty here still shows as chosen. */}
+                  {[
+                    ...new Set([
+                      ...folders,
+                      ...(filters.folder && filters.folder !== UNFILED ? [filters.folder] : []),
+                    ]),
+                  ].map((folder) => (
+                    <option key={folder} value={folder}>{folder}</option>
+                  ))}
+                </select>
+              )}
+              {filtering && (
+                <Button variant="ghost" size="sm" onClick={clearFilters}>
                   Clear filters
                 </Button>
-              }
-            />
-          ) : (
-            <EmptyState
-              icon={<Megaphone />}
-              title="No emails yet"
-              description="Write one and send it to your subscribers, members or enquiries, or build a sequence that runs on its own."
-              action={
-                <Button size="sm" onClick={() => openDraft()}>
-                  Write an email
-                </Button>
-              }
-            />
-          )
-        }
-      />
+              )}
+            </div>
+          }
+          emptyState={
+            (filtering || filters.view === "folders") && (allRows?.length ?? 0) > 0 ? (
+              <EmptyState
+                icon={<Megaphone />}
+                title="Nothing matches these filters"
+                description="Try another type or status — or clear the filters to see everything."
+                action={
+                  filtering ? (
+                    <Button size="sm" variant="secondary" onClick={clearFilters}>
+                      Clear filters
+                    </Button>
+                  ) : undefined
+                }
+              />
+            ) : (
+              <EmptyState
+                icon={<Megaphone />}
+                title="No email campaigns yet"
+                description="Send a one-time broadcast to your subscribers, members or enquiries, or build a sequence that runs on its own."
+                action={
+                  <Button size="sm" onClick={() => setChooser({ open: true, step: "choose" })}>
+                    <Plus />
+                    New Email Campaign
+                  </Button>
+                }
+              />
+            )
+          }
+        />
+      )}
 
       <Modal
         open={draft !== null}
@@ -1426,6 +1664,25 @@ export default function Campaigns() {
           safe to close this page — sending carries on without you.
         </p>
       </Card>
+
+      <NewCampaignDialog
+        open={chooser.open}
+        initialStep={chooser.step}
+        onOpenChange={(open) => setChooser((current) => ({ ...current, open }))}
+        onChooseBroadcast={newBroadcast}
+        onSequenceCreated={(sequence) => {
+          setChooser({ open: false, step: "choose" });
+          navigate(`/admin/marketing/sequences/${sequence.id}`);
+        }}
+      />
+
+      <CampaignPreview
+        campaign={previewing}
+        onOpenChange={(open) => !open && setPreviewing(null)}
+        onDuplicate={(campaign) => void duplicate(campaign)}
+      />
+
+      <ManageTemplatesDialog open={managingTemplates} onOpenChange={setManagingTemplates} />
 
       {confirmDialog}
     </div>

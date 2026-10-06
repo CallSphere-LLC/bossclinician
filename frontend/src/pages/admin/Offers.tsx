@@ -11,6 +11,7 @@ import {
   MoreHorizontal,
   Pencil,
   Plus,
+  ScanEye,
   Tag,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -37,6 +38,7 @@ import { DataTable, RowActions } from "@/pages/admin/ui/DataTable";
 import { useConfirm } from "@/pages/admin/ui/Dialog";
 import { StripeBanner } from "@/pages/admin/ui/StripeBanner";
 import { pluralize, shareLink, webAddress } from "@/pages/admin/ui/friendly";
+import { checkoutPreviewPath, openCheckoutPreview } from "@/components/checkout/checkoutPreview";
 
 /**
  * The offers list — every price she sells at, and how each one is doing.
@@ -290,6 +292,19 @@ export default function Offers() {
                   Edit
                 </Link>
               </Button>
+              {/* Kajabi's "Preview": the checkout as a buyer sees it, drafts
+                  included, in a new tab. Nothing can be bought from it. */}
+              <Button asChild variant="ghost" size="sm">
+                <a
+                  href={checkoutPreviewPath(offer.id)}
+                  target="_blank"
+                  rel="noopener"
+                  aria-label={`Preview the checkout for ${listName(offer)}`}
+                >
+                  <ScanEye />
+                  Preview
+                </a>
+              </Button>
               <DropdownMenu.Root>
                 <DropdownMenu.Trigger asChild>
                   <Button
@@ -307,6 +322,9 @@ export default function Offers() {
                     sideOffset={6}
                     className="z-50 min-w-[16rem] rounded-xl border border-hairline bg-surface-raised p-1.5 shadow-[0_24px_54px_-18px_rgba(0,0,0,0.85)]"
                   >
+                    <MenuItem icon={<ScanEye />} onSelect={() => openCheckoutPreview(offer.id)}>
+                      Preview the checkout page
+                    </MenuItem>
                     <MenuItem icon={<Link2 />} onSelect={() => void copyCheckoutLink(offer)}>
                       Copy the checkout link
                     </MenuItem>

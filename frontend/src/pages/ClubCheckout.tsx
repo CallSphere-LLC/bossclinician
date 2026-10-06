@@ -6,6 +6,7 @@ import { GlassCard } from "@/components/luxe/GlassCard";
 import { LuxeButton } from "@/components/luxe/LuxeButton";
 import { Section } from "@/components/luxe/Section";
 import { stripeTestMode } from "@/components/checkout/stripeClient";
+import { useCheckoutPreview } from "@/components/checkout/checkoutPreview";
 import { CLUB_OFFER_SLUG, clubCheckout } from "@/content/club";
 import { commerceApi, commerceErrorMessage, type PublicOffer } from "@/lib/commerceApi";
 import { CheckoutExperience } from "./Checkout";
@@ -38,11 +39,13 @@ const HERO_MOCKUP_SRC = "/images/club/club-program-mockup-night.jpg";
 export default function ClubCheckout() {
   const [offer, setOffer] = useState<PublicOffer | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  // Under the admin's "Preview checkout" the offer comes from the admin preview
+  // endpoint (which also answers while it is a draft) and nothing is bought.
+  const preview = useCheckoutPreview();
 
   useEffect(() => {
     let cancelled = false;
-    commerceApi
-      .getOffer(CLUB_OFFER_SLUG)
+    (preview ? preview.getOffer() : commerceApi.getOffer(CLUB_OFFER_SLUG))
       .then((result) => {
         if (!cancelled) setOffer(result);
       })
@@ -52,7 +55,7 @@ export default function ClubCheckout() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [preview]);
 
   // The order form prints its own headline and the offer's description. The
   // description is this page's copy again (one paragraph per line), which is
@@ -145,7 +148,7 @@ export default function ClubCheckout() {
           ) : (
             <>
               {/* The same warning CheckoutShell shows on /checkout/:offerSlug. */}
-              {stripeTestMode() && (
+              {stripeTestMode() && !preview && (
                 <div role="status" className="rounded-xl border border-gold/40 bg-gold/10 px-5 py-4 text-center text-sm text-gold">
                   Test checkout — no real money will be charged. Use Stripe test card 4242 4242 4242 4242 with any future expiry and any three-digit CVC.
                 </div>

@@ -236,13 +236,22 @@ export function fieldsError(fields: FormField[]): string | null {
 adminFormsRouter.get(
   "/",
   asyncHandler(async (_req, res) => {
+    // The Kajabi columns (source, kajabi_id, kajabi_submissions_count,
+    // kajabi_opt_in) come from the Kajabi forms import and are read through
+    // `to_jsonb(f)` on purpose: a key the row doesn't have is NULL there, where
+    // a bare `f.source` against a database the import migration hasn't reached
+    // yet would fail the whole list. Newest first, the way Kajabi lists them.
     const result = await pool.query(
       `SELECT f.id, f.slug, f.name, f.description, f.description_md, f.published, f.views, f.submit_count,
-              f.post_action, f.updated_at,
+              f.post_action, f.double_opt_in, f.created_at, f.updated_at,
               jsonb_array_length(f.fields) AS field_count,
-              (SELECT count(*)::int FROM form_submissions s WHERE s.form_id = f.id) AS submission_count
+              (SELECT count(*)::int FROM form_submissions s WHERE s.form_id = f.id) AS submission_count,
+              to_jsonb(f) ->> 'source' AS source,
+              to_jsonb(f) ->> 'kajabi_id' AS kajabi_id,
+              (to_jsonb(f) ->> 'kajabi_submissions_count')::int AS kajabi_submissions_count,
+              to_jsonb(f) ->> 'kajabi_opt_in' AS kajabi_opt_in
          FROM forms f
-        ORDER BY f.name`
+        ORDER BY f.created_at DESC, f.id DESC`
     );
     res.json(rowsToCamel(result.rows));
   })

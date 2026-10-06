@@ -171,7 +171,13 @@ adminEventsRouter.get(
               e.timezone, e.published, e.evergreen_interval_minutes, e.updated_at,
               e.recurrence_freq, e.recurrence_interval,
               e.recurrence_until::text AS recurrence_until, e.recurrence_count,
-              e.location_type,
+              e.location_type, e.created_at,
+              -- Read through jsonb so the list keeps working whether or not the
+              -- Kajabi import's columns have been added yet: a missing key is
+              -- null, where a missing column would be a 500 for the whole page.
+              to_jsonb(e) ->> 'source'    AS source,
+              to_jsonb(e) ->> 'kajabi_id' AS kajabi_id,
+              (SELECT count(*)::int FROM email_campaigns c WHERE c.anchor_event_id = e.id) AS email_count,
               (SELECT count(*)::int FROM event_registrations r WHERE r.event_id = e.id) AS registration_count,
               (SELECT count(*)::int FROM event_registrations r
                 WHERE r.event_id = e.id AND r.attended)                                 AS attended_count,
@@ -285,9 +291,22 @@ adminEventsRouter.get(
     );
 
     const eventId = Number(result.rows[0].id);
-    const [reminders, stats] = await Promise.all([
+    const [reminders, stats, emails] = await Promise.all([
       listReminders(eventId),
       reminderStats(eventId),
+      // The emails tied to this event — Kajabi's "Event Actions", imported as
+      // campaigns anchored to the event. Read-only here; they are edited under
+      // Email Campaigns. `kajabi_type` is read through jsonb for the same
+      // reason as the list's Kajabi fields.
+      pool.query(
+        `SELECT c.id, c.name, c.subject, c.status, c.anchor_kind, c.anchor_offset_minutes,
+                c.scheduled_at, c.sent_at, c.recipient_count, c.opened_count, c.clicked_count,
+                to_jsonb(c) ->> 'kajabi_type' AS kajabi_type
+           FROM email_campaigns c
+          WHERE c.anchor_event_id = $1
+          ORDER BY c.anchor_offset_minutes NULLS LAST, c.id`,
+        [eventId]
+      ),
     ]);
     const statsById = new Map(stats.map((row) => [row.reminderId, row]));
 
@@ -306,6 +325,7 @@ adminEventsRouter.get(
       applyTags: rowsToCamel(tags.rows),
       occurrences,
       recurrenceLabel: describeRecurrence(rule),
+      emails: rowsToCamel(emails.rows),
       // The reminders and what has happened to them, in the same payload as
       // the rest of the event: a screen that has to make a second request to
       // find out whether its reminders are working is a screen nobody looks at.
@@ -467,10 +487,11 @@ adminEventsRouter.get(
       created_at: Date;
       order_total_cents: number | null;
       timezone: string;
+      source: string | null;
     }>(
       `SELECT r.id, r.email::text AS email, r.name, r.session_at, r.attended, r.attended_at,
               r.watch_seconds, r.contact_id, r.created_at, o.total_cents AS order_total_cents,
-              e.timezone
+              e.timezone, to_jsonb(r) ->> 'source' AS source
          FROM event_registrations r
          JOIN events e ON e.id = r.event_id
          LEFT JOIN orders o ON o.id = r.converted_order_id

@@ -1,8 +1,19 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent, type RefObject } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+  type RefObject,
+} from "react";
 import { useSearchParams } from "react-router";
 import { motion } from "motion/react";
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import {
   ArrowDown,
+  ArrowLeft,
+  BarChart3,
   Bold,
   CheckCircle2,
   ChevronDown,
@@ -13,6 +24,8 @@ import {
   Italic,
   Link2,
   List,
+  MoreHorizontal,
+  Pencil,
   Plus,
   Split,
   Trash2,
@@ -24,6 +37,7 @@ import { adminCommerceApi, type Offer } from "@/lib/adminCommerceApi";
 import type { Funnel, FunnelStep } from "@/types/admin";
 import { cn } from "@/lib/cn";
 import { formatNumber } from "@/lib/format";
+import { publicSiteUrl } from "@/lib/siteOrigins";
 import {
   Badge,
   Button,
@@ -39,14 +53,7 @@ import {
   Textarea,
 } from "@/pages/admin/ui/primitives";
 import { Modal, useConfirm } from "@/pages/admin/ui/Dialog";
-import {
-  PUBLISH_LABEL,
-  friendlyError,
-  shareLink,
-  slugify,
-  uniqueKey,
-  webAddressLabel,
-} from "@/pages/admin/ui/friendly";
+import { friendlyError, shareLink, slugify, uniqueKey } from "@/pages/admin/ui/friendly";
 
 /**
  * What a stage is for.
@@ -351,11 +358,217 @@ function FormattingToolbar({
   );
 }
 
+/* ------------------------------------------------------- Kajabi-style list */
+
+/**
+ * A funnel as the list sends it: the row, its step counts, and — for one
+ * brought over from Kajabi — Kajabi's own status and visitor count.
+ */
+type FunnelRow = Funnel & {
+  stepCount?: number;
+  stepViews?: number;
+  stepConversions?: number;
+  source?: string | null;
+  kajabiId?: string | number | null;
+  kajabiStatus?: string | null;
+  kajabiVisitors?: number | string | null;
+  createdAt?: string;
+  updatedAt?: string;
+};
+
+function isKajabiFunnel(funnel: FunnelRow): boolean {
+  return funnel.source === "kajabi";
+}
+
+/** Kajabi calls a finished funnel "Ready"; anything else reads from `published`. */
+function funnelStatus(funnel: FunnelRow): { label: string; tone: "green" | "slate" } {
+  if (funnel.kajabiStatus === "finished") return { label: "Ready", tone: "green" };
+  return funnel.published ? { label: "Published", tone: "green" } : { label: "Draft", tone: "slate" };
+}
+
+/** Kajabi's visitor count when it sent one; otherwise every view of every step. */
+function funnelVisitors(funnel: FunnelRow, steps?: FunnelStep[] | null): number {
+  const kajabi = funnel.kajabiVisitors;
+  if (kajabi !== null && kajabi !== undefined && kajabi !== "" && Number.isFinite(Number(kajabi))) {
+    return Number(kajabi);
+  }
+  if (steps) return steps.reduce((sum, step) => sum + step.views, 0);
+  return funnel.stepViews ?? 0;
+}
+
+/**
+ * Where a step's page lives on the public site.
+ *
+ * A Kajabi funnel's pages kept their Kajabi addresses (the sales page is
+ * /profitable-private-practice-leap-accelerator), carried on the step as its
+ * path; a funnel built here serves every step from /funnel/<slug>/<step>, the
+ * same address `FunnelPage` builds.
+ */
+function stepPagePath(funnel: FunnelRow, step: FunnelStep, index: number): string {
+  if (isKajabiFunnel(funnel)) {
+    const own = (step.ctaUrl ?? "").trim();
+    if (own.startsWith("/") && own.length > 1 && !own.startsWith("/funnel/")) return own;
+    if (step.slug) return `/${step.slug.replace(/^\/+/, "")}`;
+  }
+  return `/funnel/${funnel.slug}/${step.slug || index + 1}`;
+}
+
+function formatDay(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(
+    date,
+  );
+}
+
+/** Kajabi's default sort: the funnel touched most recently first. */
+function byRecentlyUpdated(a: FunnelRow, b: FunnelRow): number {
+  const at = a.updatedAt ? new Date(a.updatedAt).getTime() : 0;
+  const bt = b.updatedAt ? new Date(b.updatedAt).getTime() : 0;
+  return bt - at || b.id - a.id;
+}
+
+function MenuItem({
+  icon,
+  children,
+  onSelect,
+  destructive,
+}: {
+  icon: ReactNode;
+  children: ReactNode;
+  onSelect: () => void;
+  destructive?: boolean;
+}) {
+  return (
+    <DropdownMenu.Item
+      onSelect={onSelect}
+      className={cn(
+        "flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-3 py-2 text-sm outline-none [&_svg]:size-4",
+        destructive
+          ? "text-red-400 data-[highlighted]:bg-red-500/10"
+          : "text-ink data-[highlighted]:bg-white/[0.07] [&_svg]:text-ink-soft",
+      )}
+    >
+      {icon}
+      {children}
+    </DropdownMenu.Item>
+  );
+}
+
+/** The card's Options menu: the actions the screen already had, in one place. */
+function FunnelOptions({
+  funnel,
+  onOpen,
+  onEdit,
+  onStats,
+  onCopyLink,
+  onDelete,
+}: {
+  funnel: FunnelRow;
+  onOpen?: () => void;
+  onEdit: () => void;
+  onStats: () => void;
+  onCopyLink: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <DropdownMenu.Root>
+      <DropdownMenu.Trigger asChild>
+        <Button variant="ghost" size="iconSm" aria-label={`Options for “${funnel.name}”`}>
+          <MoreHorizontal />
+        </Button>
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Portal>
+        <DropdownMenu.Content
+          align="end"
+          sideOffset={6}
+          className="z-50 min-w-[13rem] rounded-xl border border-hairline bg-surface-raised p-1.5 shadow-[0_24px_54px_-18px_rgba(0,0,0,0.85)]"
+        >
+          {onOpen && (
+            <MenuItem icon={<Split />} onSelect={onOpen}>
+              Open
+            </MenuItem>
+          )}
+          <MenuItem icon={<Pencil />} onSelect={onEdit}>
+            Edit details
+          </MenuItem>
+          <MenuItem icon={<BarChart3 />} onSelect={onStats}>
+            View stats
+          </MenuItem>
+          <MenuItem icon={<Link2 />} onSelect={onCopyLink}>
+            Copy link
+          </MenuItem>
+          <DropdownMenu.Separator className="my-1 h-px bg-hairline" />
+          <MenuItem icon={<Trash2 />} onSelect={onDelete} destructive>
+            Delete
+          </MenuItem>
+        </DropdownMenu.Content>
+      </DropdownMenu.Portal>
+    </DropdownMenu.Root>
+  );
+}
+
+/**
+ * Kajabi's Funnel Checklist, for a funnel that isn't one of the blueprints
+ * (those have their own readiness card, which checks the form and emails).
+ * Every line is a fact about the saved funnel; "N Steps Left" counts the
+ * ones still open.
+ */
+function FunnelChecklist({ funnel, steps }: { funnel: FunnelRow; steps: FunnelStep[] | null }) {
+  const items: ReadinessItem[] = [
+    {
+      key: "pages",
+      done: steps === null ? undefined : steps.length > 0,
+      label:
+        steps === null
+          ? "Pages"
+          : steps.length === 0
+            ? "Add a first page"
+            : `${steps.length} ${steps.length === 1 ? "page" : "pages"} in this funnel`,
+    },
+  ];
+  if (funnel.offerId) {
+    items.push({ key: "offer", done: true, label: "Offer attached", href: `/admin/offers/${funnel.offerId}` });
+  } else if (!isKajabiFunnel(funnel) && ["sales", "launch"].includes(funnel.kind)) {
+    items.push({ key: "offer", done: false, label: "Choose an offer before publishing" });
+  }
+  const ready = funnel.published || funnel.kajabiStatus === "finished";
+  items.push({
+    key: "status",
+    done: ready,
+    label: funnel.published ? "Published" : ready ? "Ready — finished in Kajabi" : "Publish the funnel",
+  });
+
+  const left = items.filter((item) => item.done === false).length;
+  return (
+    <Card className="p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <p className="font-semibold text-ink">Funnel Checklist</p>
+          <p className="mt-1 text-sm text-ink-soft">
+            {left === 0
+              ? "Everything this funnel needs is in place."
+              : "What is still to do before this funnel works from start to finish."}
+          </p>
+        </div>
+        <Badge tone={left === 0 ? "green" : "gold"}>
+          {left} {left === 1 ? "Step" : "Steps"} Left
+        </Badge>
+      </div>
+      <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
+        {items.map((item) => (
+          <ReadinessRow key={item.key} item={item} />
+        ))}
+      </div>
+    </Card>
+  );
+}
+
 /* ------------------------------------------------------------------ screen */
 
 export default function Funnels() {
-  const [funnels, setFunnels] = useState<Funnel[] | null>(null);
-  const [active, setActive] = useState<Funnel | null>(null);
+  const [funnels, setFunnels] = useState<FunnelRow[] | null>(null);
+  const [active, setActive] = useState<FunnelRow | null>(null);
   const [steps, setSteps] = useState<FunnelStep[] | null>(null);
   // `undefined` while the check is in flight, `null` once it has failed.
   const [readiness, setReadiness] = useState<FunnelReadiness | null | undefined>(undefined);
@@ -376,13 +589,13 @@ export default function Funnels() {
 
   const load = useCallback(async (preferredId?: number) => {
     try {
-      const list = await adminApi.growthList<Funnel>("funnels");
-        setFunnels(list);
-      // Prefer a newly-created funnel explicitly. The former implicit fallback
-      // is what left the detail panel showing the previous funnel after Create.
+      const list = await adminApi.growthList<FunnelRow>("funnels");
+      setFunnels(list);
+      // Prefer a newly-created funnel explicitly. With nothing asked for, the
+      // list of cards shows, as Kajabi's does, rather than the first funnel.
       setActive((prev) => {
         const wantedId = preferredId ?? prev?.id;
-        return (wantedId ? list.find((f) => f.id === wantedId) : undefined) ?? list[0] ?? null;
+        return (wantedId ? list.find((f) => f.id === wantedId) : undefined) ?? null;
       });
     } catch {
       setError("We couldn't load your funnels. Try refreshing the page.");
@@ -398,12 +611,20 @@ export default function Funnels() {
      address reopens. `replace` keeps Back going to the previous screen instead
      of walking her through every funnel she happened to click. */
   useEffect(() => {
-    if (!active) return;
+    if (!active) {
+      // Back on the list: the address stops naming a funnel. Not before the
+      // first load lands, or the link that opened the page would be dropped.
+      if (funnels === null || !searchParams.has("funnel")) return;
+      const next = new URLSearchParams(searchParams);
+      next.delete("funnel");
+      setSearchParams(next, { replace: true });
+      return;
+    }
     if (searchParams.get("funnel") === String(active.id)) return;
     const next = new URLSearchParams(searchParams);
     next.set("funnel", String(active.id));
     setSearchParams(next, { replace: true });
-  }, [active, searchParams, setSearchParams]);
+  }, [active, funnels, searchParams, setSearchParams]);
 
   useEffect(() => {
     adminCommerceApi.offerList().then(setOffers).catch(() => setOffers([]));
@@ -575,13 +796,51 @@ export default function Funnels() {
 
   const totalViews = (steps ?? []).reduce((s, x) => s + x.views, 0);
   const totalConversions = (steps ?? []).reduce((s, x) => s + x.conversions, 0);
+  const activeOffer = active?.offerId ? offers.find((offer) => offer.id === active.offerId) : undefined;
+
+  /**
+   * The link to send someone: the funnel's first page. A funnel brought over
+   * from Kajabi lives on its own page paths, so its first page is read from its
+   * steps; one built here opens at /funnel/<slug>.
+   */
+  async function copyFunnelLink(funnel: FunnelRow, knownSteps?: FunnelStep[] | null) {
+    try {
+      let url: string | null = null;
+      if (isKajabiFunnel(funnel)) {
+        const list = knownSteps ?? (await adminApi.funnelSteps(funnel.id));
+        const first = list[0];
+        url = first ? publicSiteUrl(stepPagePath(funnel, first, 0)) : null;
+      } else if (funnel.published) {
+        url = shareLink("funnel", funnel.slug);
+      }
+      if (!url) {
+        toast.error("This funnel isn't live yet, so there is no link to share.");
+        return;
+      }
+      await navigator.clipboard.writeText(url);
+      toast.success("Link copied.");
+    } catch {
+      toast.error("We couldn't copy that. Try selecting it by hand.");
+    }
+  }
+
+  function openFunnel(funnel: FunnelRow, section?: "stats") {
+    setActive(funnel);
+    if (section === "stats") {
+      window.requestAnimationFrame(() =>
+        document.getElementById("funnel-stats")?.scrollIntoView({ behavior: "smooth", block: "start" }),
+      );
+    }
+  }
+
+  const sortedFunnels = funnels ? [...funnels].sort(byRecentlyUpdated) : null;
 
   return (
     <div className="space-y-6">
       <PageHeader
         eyebrow="Marketing"
         title="Funnels"
-        description="Walk people from a first click through to your offer, and see how many make it to each stage."
+        description="Walk people from a first click through to your offer, and see how many make it to each step."
         actions={
           <Button size="sm" onClick={() => setFunnelDraft({ kind: "opt_in", published: false })}>
             <Plus />
@@ -592,9 +851,9 @@ export default function Funnels() {
 
       {error && <ErrorNotice message={error} />}
 
-      {funnels === null ? (
+      {sortedFunnels === null ? (
         <Skeleton className="h-64 w-full" />
-      ) : funnels.length === 0 ? (
+      ) : sortedFunnels.length === 0 ? (
         <Card>
           <EmptyState
             icon={<Split />}
@@ -607,275 +866,377 @@ export default function Funnels() {
             }
           />
         </Card>
-      ) : (
-        <div className="grid grid-cols-1 gap-5 lg:grid-cols-[17rem_minmax(0,1fr)]">
-          <Card className="h-fit">
-            <CardHeader title="Your funnels" />
-            <ul className="space-y-0.5 p-2">
-              {funnels.map((f) => (
+      ) : !active ? (
+        /* ------------------------------------------------------ the list */
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-ink-soft">
+            <span className="font-semibold">Sort: Recently updated</span>
+            <span>
+              Showing 1-{sortedFunnels.length} of {sortedFunnels.length}{" "}
+              {sortedFunnels.length === 1 ? "result" : "results"}
+            </span>
+          </div>
+          <ul className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {sortedFunnels.map((f) => {
+              const status = funnelStatus(f);
+              const stepCount = f.stepCount;
+              return (
                 <li key={f.id}>
-                  <button
-                    type="button"
-                    onClick={() => setActive(f)}
-                    aria-current={active?.id === f.id ? "true" : undefined}
-                    className={cn(
-                      "flex min-h-11 w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm transition-colors",
-                      active?.id === f.id
-                        ? "bg-lilac-tint font-semibold text-plum-deep"
-                        : "text-ink-soft hover:bg-cream",
-                    )}
-                  >
-                    <Split className="size-4 shrink-0 opacity-60" />
-                    <span className="min-w-0 flex-1 truncate">{f.name}</span>
-                    {!f.published && (
-                      <span className="shrink-0 text-[0.6rem] font-bold uppercase text-ink-soft/60">
-                        {PUBLISH_LABEL.draft}
+                  <Card className="flex h-full flex-col gap-3 p-4 transition-colors hover:border-plum/35">
+                    <div className="flex items-start gap-3">
+                      <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-lilac-tint text-plum">
+                        <Split className="size-4" />
                       </span>
-                    )}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </Card>
-
-          <div className="space-y-5">
-            {active && (
-              <div className="grid grid-cols-1 gap-5 sm:grid-cols-3">
-                <Card className="p-5">
-                  <p className="text-[0.7rem] font-semibold uppercase tracking-wide text-ink-soft">
-                    Times viewed
-                  </p>
-                  <p className="mt-2 font-bold tabular-nums text-[1.6rem] leading-none text-ink">
-                    {formatNumber(totalViews)}
-                  </p>
-                </Card>
-                <Card className="p-5">
-                  <p className="text-[0.7rem] font-semibold uppercase tracking-wide text-ink-soft">
-                    People who went on
-                  </p>
-                  <p className="mt-2 font-bold tabular-nums text-[1.6rem] leading-none text-ink">
-                    {formatNumber(totalConversions)}
-                  </p>
-                </Card>
-                <Card className="p-5">
-                  <p className="text-[0.7rem] font-semibold uppercase tracking-wide text-ink-soft">
-                    How many went on
-                  </p>
-                  <p className="mt-2 font-bold tabular-nums text-[1.6rem] leading-none text-plum">
-                    {totalViews > 0
-                      ? `${Math.round((totalConversions / totalViews) * 1000) / 10}%`
-                      : "None yet"}
-                  </p>
-                  <p className="mt-1.5 text-[0.7rem] text-ink-soft">
-                    Out of everyone who saw a stage.
-                  </p>
-                </Card>
-              </div>
-            )}
-
-            {active && (active.formId || active.sequenceId || active.tagId) && (
-              <BlueprintReadiness
-                funnel={active}
-                stageCount={steps ? steps.length : null}
-                readiness={readiness}
-              />
-            )}
-
-            <Card>
-              <CardHeader
-                title={active ? `${active.name} — stages` : "Stages"}
-                subtitle={
-                  active
-                    ? active.published
-                      ? webAddressLabel("funnel", active.slug)
-                      : PUBLISH_LABEL.draft
-                    : undefined
-                }
-                action={
-                  <div className="flex flex-wrap gap-2">
-                    {active && (
-                      <>
-                        <Button variant="secondary" size="sm" onClick={() => setFunnelDraft(active)}>
-                          Edit this funnel
-                        </Button>
-                        <Button variant="dangerGhost" size="iconSm" aria-label={`Delete “${active.name}”`} onClick={() => deleteFunnel(active)}>
-                          <Trash2 />
-                        </Button>
-                      </>
-                    )}
-                    <Button
-                      size="sm"
-                      disabled={!active}
-                      onClick={() => setStepDraft({ stepType: "landing", ctaLabel: "Continue" })}
-                    >
-                      <Plus />
-                      Add a stage
-                    </Button>
-                  </div>
-                }
-              />
-
-              {steps === null ? (
-                <div className="space-y-2 p-5">
-                  {Array.from({ length: 3 }, (_, i) => (
-                    <Skeleton key={i} className="h-20 w-full" />
-                  ))}
-                </div>
-              ) : steps.length === 0 ? (
-                <EmptyState
-                  icon={<Split />}
-                  title="No stages yet"
-                  description="Start with a landing page — the first thing people see when they arrive."
-                />
-              ) : (
-                <div className="space-y-0 p-5">
-                  {steps.map((step, i) => {
-                    const rate =
-                      step.views > 0
-                        ? Math.round((step.conversions / step.views) * 1000) / 10
-                        : null;
-                    return (
-                      <div key={step.id}>
-                        <motion.div
-                          initial={{ opacity: 0, y: 8 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          transition={{ delay: Math.min(i * 0.05, 0.3) }}
-                          className="flex flex-wrap items-center gap-3 rounded-xl border border-hairline bg-surface p-4 transition-colors hover:border-plum/35"
-                        >
-                          <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-lilac-tint text-sm font-bold text-plum-deep">
-                            {i + 1}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => setStepDraft(step)}
-                            className="min-w-0 flex-1 text-left"
-                          >
-                            <span className="block truncate font-semibold text-ink">
-                              {step.name}
-                            </span>
-                            <span className="block truncate text-xs text-ink-soft">
-                              {step.headline || stageTypeHint(step.stepType)}
-                            </span>
-                          </button>
-                          <Badge tone="plum">{stageTypeLabel(step.stepType)}</Badge>
-                          <div className="text-right">
-                            <p className="text-xs text-ink-soft">
-                              {formatNumber(step.views)} saw this ·{" "}
-                              {formatNumber(step.conversions)} went on
-                            </p>
-                            {rate !== null && (
-                              <p className="flex items-center justify-end gap-1 text-sm font-bold text-green">
-                                <TrendingUp className="size-3.5" />
-                                {rate}%
-                              </p>
-                            )}
-                          </div>
-                          <div className="flex shrink-0 flex-col">
-                            <Button
-                              variant="ghost"
-                              size="iconSm"
-                              className="h-6"
-                              aria-label={`Move “${step.name}” earlier`}
-                              disabled={i === 0 || reordering}
-                              onClick={() => moveStage(i, -1)}
-                            >
-                              <ChevronUp />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="iconSm"
-                              className="h-6"
-                              aria-label={`Move “${step.name}” later`}
-                              disabled={i === steps.length - 1 || reordering}
-                              onClick={() => moveStage(i, 1)}
-                            >
-                              <ChevronDown />
-                            </Button>
-                          </div>
-                          <Button
-                            variant="dangerGhost"
-                            size="iconSm"
-                            aria-label={`Delete “${step.name}”`}
-                            onClick={async () => {
-                              const ok = await confirm({
-                                title: `Delete the stage “${step.name}”?`,
-                                description: "The rest of the funnel stays as it is.",
-                                confirmLabel: "Yes, delete it",
-                                destructive: true,
-                              });
-                              if (!ok || !active) return;
-                              try {
-                                await adminApi.growthDelete("steps", step.id);
-                                loadSteps(active.id);
-                              } catch (err) {
-                                toast.error(friendlyError(err, "stage"));
-                              }
-                            }}
-                          >
-                            <Trash2 />
-                          </Button>
-                        </motion.div>
-                        {i < steps.length - 1 && (
-                          <div className="flex justify-center py-1.5">
-                            <ArrowDown className="size-4 text-ink-soft/40" />
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
-              {active && (
-                <div className="border-t border-hairline/60 p-4">
-                  {/* The link she can send to a person is the only thing worth
-                      showing here. A funnel that isn't live has no page yet, so
-                      it says so rather than offering a dead link. */}
-                  <p className="text-xs font-bold uppercase tracking-wide text-ink-soft">
-                    Share this funnel
-                  </p>
-                  {active.published ? (
-                    <>
-                      <div className="mt-2 flex items-center gap-2 rounded-xl border border-hairline bg-cream/60 px-3 py-2">
-                        <span className="min-w-0 flex-1 truncate text-xs font-semibold text-ink">
-                          {shareLink("funnel", active.slug)}
+                      <button
+                        type="button"
+                        onClick={() => openFunnel(f)}
+                        className="min-w-0 flex-1 text-left"
+                      >
+                        <span className="block truncate font-semibold text-ink hover:text-plum">
+                          {f.name}
                         </span>
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          aria-label="Copy the link to this funnel"
-                          onClick={() =>
-                            navigator.clipboard
-                              .writeText(shareLink("funnel", active.slug))
-                              .then(() => toast.success("Link copied."))
-                              .catch(() =>
-                                toast.error("We couldn't copy that. Try selecting it by hand."),
-                              )
-                          }
-                        >
-                          <Copy />
-                        </Button>
-                        <Button variant="secondary" size="sm" asChild>
-                          <a href={`/funnel/${active.slug}`} target="_blank" rel="noreferrer">
-                            <ExternalLink />
-                            Open
-                          </a>
-                        </Button>
-                      </div>
-                      <p className="mt-1.5 text-xs text-ink-soft">
-                        Send this to anyone — it drops them at the first stage.
-                      </p>
-                    </>
-                  ) : (
-                    <p className="mt-2 rounded-xl border border-hairline bg-cream/60 px-3 py-2.5 text-xs text-ink-soft">
-                      This funnel isn't live yet. Open “Edit this funnel”, turn on “Live on my
-                      site”, and you'll get a link you can share.
+                        <span className="mt-0.5 block text-xs text-ink-soft">
+                          {f.updatedAt ? `Updated ${formatDay(f.updatedAt)}` : " "}
+                        </span>
+                      </button>
+                      <FunnelOptions
+                        funnel={f}
+                        onOpen={() => openFunnel(f)}
+                        onEdit={() => setFunnelDraft(f)}
+                        onStats={() => openFunnel(f, "stats")}
+                        onCopyLink={() => void copyFunnelLink(f)}
+                        onDelete={() => void deleteFunnel(f)}
+                      />
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <Badge tone={status.tone}>{status.label}</Badge>
+                      {isKajabiFunnel(f) && <Badge tone="plum">Imported from Kajabi</Badge>}
+                    </div>
+                    <p className="mt-auto flex flex-wrap gap-x-4 gap-y-1 text-sm text-ink-soft">
+                      <span>
+                        <span className="font-bold tabular-nums text-ink">
+                          {stepCount === undefined ? "–" : formatNumber(stepCount)}
+                        </span>{" "}
+                        {stepCount === 1 ? "step" : "steps"}
+                      </span>
+                      <span>
+                        <span className="font-bold tabular-nums text-ink">
+                          {formatNumber(funnelVisitors(f))}
+                        </span>{" "}
+                        {funnelVisitors(f) === 1 ? "visitor" : "visitors"}
+                      </span>
                     </p>
-                  )}
-                </div>
+                  </Card>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      ) : (
+        /* ---------------------------------------------------- one funnel */
+        <div className="space-y-5">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <Button variant="ghost" size="sm" onClick={() => setActive(null)}>
+                <ArrowLeft />
+                All funnels
+              </Button>
+              <h2 className="mt-2 truncate font-display text-xl text-ink">{active.name}</h2>
+              <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                <Badge tone={funnelStatus(active).tone}>{funnelStatus(active).label}</Badge>
+                {isKajabiFunnel(active) && <Badge tone="plum">Imported from Kajabi</Badge>}
+                {active.createdAt && (
+                  <span className="text-xs text-ink-soft">Created {formatDay(active.createdAt)}</span>
+                )}
+                {active.updatedAt && (
+                  <span className="text-xs text-ink-soft">· Updated {formatDay(active.updatedAt)}</span>
+                )}
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button variant="secondary" size="sm" onClick={() => void copyFunnelLink(active, steps)}>
+                <Copy />
+                Copy Link
+              </Button>
+              <Button variant="secondary" size="sm" onClick={() => setFunnelDraft(active)}>
+                Edit this funnel
+              </Button>
+              <FunnelOptions
+                funnel={active}
+                onEdit={() => setFunnelDraft(active)}
+                onStats={() => openFunnel(active, "stats")}
+                onCopyLink={() => void copyFunnelLink(active, steps)}
+                onDelete={() => void deleteFunnel(active)}
+              />
+            </div>
+          </div>
+
+          {active.formId || active.sequenceId || active.tagId ? (
+            <BlueprintReadiness
+              funnel={active}
+              stageCount={steps ? steps.length : null}
+              readiness={readiness}
+            />
+          ) : (
+            <FunnelChecklist funnel={active} steps={steps} />
+          )}
+
+          <div id="funnel-stats" className="grid scroll-mt-6 grid-cols-1 gap-5 sm:grid-cols-3">
+            <Card className="p-5">
+              <p className="text-[0.7rem] font-semibold uppercase tracking-wide text-ink-soft">
+                Visitors
+              </p>
+              <p className="mt-2 font-bold tabular-nums text-[1.6rem] leading-none text-ink">
+                {formatNumber(funnelVisitors(active, steps))}
+              </p>
+              {isKajabiFunnel(active) && active.kajabiVisitors != null && (
+                <p className="mt-1.5 text-[0.7rem] text-ink-soft">As counted by Kajabi.</p>
               )}
             </Card>
+            <Card className="p-5">
+              <p className="text-[0.7rem] font-semibold uppercase tracking-wide text-ink-soft">
+                People who went on
+              </p>
+              <p className="mt-2 font-bold tabular-nums text-[1.6rem] leading-none text-ink">
+                {formatNumber(totalConversions)}
+              </p>
+            </Card>
+            <Card className="p-5">
+              <p className="text-[0.7rem] font-semibold uppercase tracking-wide text-ink-soft">
+                How many went on
+              </p>
+              <p className="mt-2 font-bold tabular-nums text-[1.6rem] leading-none text-plum">
+                {totalViews > 0
+                  ? `${Math.round((totalConversions / totalViews) * 1000) / 10}%`
+                  : "None yet"}
+              </p>
+              <p className="mt-1.5 text-[0.7rem] text-ink-soft">
+                Out of everyone who saw a page.
+              </p>
+            </Card>
           </div>
+
+          <Card>
+            <CardHeader
+              title="Pages"
+              subtitle={
+                steps === null
+                  ? undefined
+                  : `${steps.length} ${steps.length === 1 ? "page" : "pages"}, in the order people see them`
+              }
+              action={
+                <Button
+                  size="sm"
+                  onClick={() => setStepDraft({ stepType: "landing", ctaLabel: "Continue" })}
+                >
+                  <Plus />
+                  Add a page
+                </Button>
+              }
+            />
+
+            {steps === null ? (
+              <div className="space-y-2 p-5">
+                {Array.from({ length: 3 }, (_, i) => (
+                  <Skeleton key={i} className="h-20 w-full" />
+                ))}
+              </div>
+            ) : steps.length === 0 ? (
+              <EmptyState
+                icon={<Split />}
+                title="No pages yet"
+                description="Start with a landing page — the first thing people see when they arrive."
+              />
+            ) : (
+              <div className="space-y-0 p-5">
+                {steps.map((step, i) => {
+                  const rate =
+                    step.views > 0
+                      ? Math.round((step.conversions / step.views) * 1000) / 10
+                      : null;
+                  const path = stepPagePath(active, step, i);
+                  return (
+                    <div key={step.id}>
+                      <motion.div
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: Math.min(i * 0.05, 0.3) }}
+                        className="flex flex-wrap items-center gap-3 rounded-xl border border-hairline bg-surface p-4 transition-colors hover:border-plum/35"
+                      >
+                        <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-lilac-tint text-sm font-bold text-plum-deep">
+                          {i + 1}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setStepDraft(step)}
+                          className="min-w-0 flex-1 text-left"
+                        >
+                          <span className="block truncate font-semibold text-ink">
+                            {step.name}
+                          </span>
+                          <span className="block truncate text-xs text-ink-soft">{path}</span>
+                        </button>
+                        <Badge tone="plum">{stageTypeLabel(step.stepType)}</Badge>
+                        <div className="text-right">
+                          <p className="text-xs text-ink-soft">
+                            <span className="font-bold tabular-nums text-ink">
+                              {formatNumber(step.views)}
+                            </span>{" "}
+                            views ·{" "}
+                            <span className="font-bold tabular-nums text-ink">
+                              {formatNumber(step.conversions)}
+                            </span>{" "}
+                            went on
+                          </p>
+                          {rate !== null && (
+                            <p className="flex items-center justify-end gap-1 text-sm font-bold tabular-nums text-green">
+                              <TrendingUp className="size-3.5" />
+                              {rate}%
+                            </p>
+                          )}
+                        </div>
+                        <Button variant="secondary" size="sm" asChild>
+                          <a
+                            href={publicSiteUrl(path)}
+                            target="_blank"
+                            rel="noreferrer"
+                            aria-label={`View the page “${step.name}”`}
+                          >
+                            <ExternalLink />
+                            View page
+                          </a>
+                        </Button>
+                        <div className="flex shrink-0 flex-col">
+                          <Button
+                            variant="ghost"
+                            size="iconSm"
+                            className="h-6"
+                            aria-label={`Move “${step.name}” earlier`}
+                            disabled={i === 0 || reordering}
+                            onClick={() => moveStage(i, -1)}
+                          >
+                            <ChevronUp />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="iconSm"
+                            className="h-6"
+                            aria-label={`Move “${step.name}” later`}
+                            disabled={i === steps.length - 1 || reordering}
+                            onClick={() => moveStage(i, 1)}
+                          >
+                            <ChevronDown />
+                          </Button>
+                        </div>
+                        <Button
+                          variant="dangerGhost"
+                          size="iconSm"
+                          aria-label={`Delete “${step.name}”`}
+                          onClick={async () => {
+                            const ok = await confirm({
+                              title: `Delete the page “${step.name}”?`,
+                              description: "The rest of the funnel stays as it is.",
+                              confirmLabel: "Yes, delete it",
+                              destructive: true,
+                            });
+                            if (!ok || !active) return;
+                            try {
+                              await adminApi.growthDelete("steps", step.id);
+                              loadSteps(active.id);
+                            } catch (err) {
+                              toast.error(friendlyError(err, "stage"));
+                            }
+                          }}
+                        >
+                          <Trash2 />
+                        </Button>
+                      </motion.div>
+                      {i < steps.length - 1 && (
+                        <div className="flex justify-center py-1.5">
+                          <ArrowDown className="size-4 text-ink-soft/40" />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </Card>
+
+          <Card className="p-5">
+            <p className="text-xs font-bold uppercase tracking-wide text-ink-soft">Offer</p>
+            {active.offerId ? (
+              <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
+                <p className="text-sm font-semibold text-ink">
+                  {activeOffer?.title ?? "The attached offer"}
+                </p>
+                <Button variant="secondary" size="sm" asChild>
+                  <a href={`/admin/offers/${active.offerId}`}>Open the offer</a>
+                </Button>
+              </div>
+            ) : (
+              <p className="mt-2 text-sm text-ink-soft">No offer — this funnel doesn't sell anything directly.</p>
+            )}
+          </Card>
+
+          <Card className="p-4">
+            {/* The link she can send to a person is the only thing worth
+                showing here. A funnel that isn't live has no page yet, so it
+                says so rather than offering a dead link. */}
+            <p className="text-xs font-bold uppercase tracking-wide text-ink-soft">
+              Share this funnel
+            </p>
+            {isKajabiFunnel(active) && steps && steps[0] ? (
+              <>
+                <div className="mt-2 flex items-center gap-2 rounded-xl border border-hairline bg-cream/60 px-3 py-2">
+                  <span className="min-w-0 flex-1 truncate text-xs font-semibold text-ink">
+                    {publicSiteUrl(stepPagePath(active, steps[0], 0))}
+                  </span>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    aria-label="Copy the link to this funnel"
+                    onClick={() => void copyFunnelLink(active, steps)}
+                  >
+                    <Copy />
+                  </Button>
+                </div>
+                <p className="mt-1.5 text-xs text-ink-soft">
+                  The funnel's first page, at the same address it had on Kajabi.
+                </p>
+              </>
+            ) : active.published ? (
+              <>
+                <div className="mt-2 flex items-center gap-2 rounded-xl border border-hairline bg-cream/60 px-3 py-2">
+                  <span className="min-w-0 flex-1 truncate text-xs font-semibold text-ink">
+                    {shareLink("funnel", active.slug)}
+                  </span>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    aria-label="Copy the link to this funnel"
+                    onClick={() => void copyFunnelLink(active, steps)}
+                  >
+                    <Copy />
+                  </Button>
+                  <Button variant="secondary" size="sm" asChild>
+                    <a href={`/funnel/${active.slug}`} target="_blank" rel="noreferrer">
+                      <ExternalLink />
+                      Open
+                    </a>
+                  </Button>
+                </div>
+                <p className="mt-1.5 text-xs text-ink-soft">
+                  Send this to anyone — it drops them at the first page.
+                </p>
+              </>
+            ) : (
+              <p className="mt-2 rounded-xl border border-hairline bg-cream/60 px-3 py-2.5 text-xs text-ink-soft">
+                This funnel isn't live yet. Open “Edit this funnel”, turn on “Live on my site”, and
+                you'll get a link you can share.
+              </p>
+            )}
+          </Card>
         </div>
       )}
 

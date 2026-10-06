@@ -4,7 +4,7 @@ import { Link, useNavigate, useParams } from "react-router";
 import { Elements, ExpressCheckoutElement, PaymentElement, useElements, useStripe } from "@stripe/react-stripe-js";
 import type { StripeElementsOptions, StripeExpressCheckoutElementConfirmEvent } from "@stripe/stripe-js";
 import { motion, useReducedMotion } from "motion/react";
-import { AlertCircle, Check, Loader2, ShieldCheck } from "lucide-react";
+import { AlertCircle, Check, CreditCard, Loader2, ShieldCheck } from "lucide-react";
 import { Seo } from "@/components/Seo";
 import { GlassCard } from "@/components/luxe/GlassCard";
 import { LuxeButton } from "@/components/luxe/LuxeButton";
@@ -25,6 +25,7 @@ import {
   stripeTestMode,
 } from "@/components/checkout/stripeClient";
 import { useOfferQuote } from "@/components/checkout/useOfferQuote";
+import { PREVIEW_CART_NOTICE, PREVIEW_SUBMIT_NOTICE, useCheckoutPreview } from "@/components/checkout/checkoutPreview";
 import { useMember } from "@/hooks/useMember";
 import { useSiteTheme } from "@/lib/siteTheme";
 import {
@@ -154,7 +155,10 @@ export default function Checkout() {
   );
 }
 
-function CheckoutShell({ children }: { children: ReactNode }) {
+export function CheckoutShell({ children }: { children: ReactNode }) {
+  // The admin's checkout preview takes no payments, so the test-card hint
+  // would only be telling the owner to type a card into a form that ignores it.
+  const preview = useCheckoutPreview();
   // This route is declared outside `Layout`, which is what normally supplies
   // `theme-luxe`. Without that ancestor none of the themed colour variables —
   // dark or light — reach the page, so the shell carries the class itself.
@@ -168,7 +172,7 @@ function CheckoutShell({ children }: { children: ReactNode }) {
         seam={false}
         aria-label="Checkout"
       >
-        {stripeTestMode() && (
+        {stripeTestMode() && !preview && (
           <div role="status" className="mx-auto mb-8 max-w-5xl rounded-xl border border-gold/40 bg-gold/10 px-5 py-4 text-center text-sm text-gold">
             Test checkout — no real money will be charged. Use Stripe test card 4242 4242 4242 4242 with any future expiry and any three-digit CVC.
           </div>
@@ -216,7 +220,10 @@ export function CheckoutExperience({ offer }: { offer: PublicOffer }) {
   );
   const mode = useMemo(() => elementsModeFor(pricedOffer), [pricedOffer]);
   const [amountCents, setAmountCents] = useState(selectedPricing.quote.totalCents);
-  const stripePromise = useMemo(() => getStripe(), []);
+  // A preview never loads Stripe.js: it takes no payment, and the admin host's
+  // CSP would refuse the script anyway. `<Elements stripe={null}>` is allowed.
+  const preview = useCheckoutPreview();
+  const stripePromise = useMemo(() => (preview ? null : getStripe()), [preview]);
   // The Payment Element is an iframe, so the site theme has to be handed to it.
   // `<Elements>` forwards a changed `appearance` through `elements.update`, so a
   // theme toggle repaints the card field without remounting (and emptying) it.
@@ -308,6 +315,9 @@ function CheckoutForm({ offer, pricingOption, mode, onAmountChange }: CheckoutFo
   const elements = useElements();
   const { member } = useMember();
   const reduce = useReducedMotion();
+  // Set only under the admin's "Preview checkout": every call below that would
+  // leave the browser (abandoned capture, checkout, Stripe) is short-circuited.
+  const preview = useCheckoutPreview();
 
   const { orderForm, billing } = offer;
   const currency = offer.currency || "usd";
@@ -319,7 +329,11 @@ function CheckoutForm({ offer, pricingOption, mode, onAmountChange }: CheckoutFo
   const [giftRecipientEmail, setGiftRecipientEmail] = useState("");
   const [giftMessage, setGiftMessage] = useState("");
   const [checkoutSettings, setCheckoutSettings] = useState<Record<string, unknown>>({});
-  useEffect(() => { void api.settings().then(settings => setCheckoutSettings((settings.checkout ?? {}) as Record<string, unknown>)).catch(() => undefined); }, []);
+  useEffect(() => {
+    // The admin host does not serve /api/settings; the preview brings the same allow-listed values.
+    if (preview) { setCheckoutSettings(preview.checkoutSettings); return; }
+    void api.settings().then(settings => setCheckoutSettings((settings.checkout ?? {}) as Record<string, unknown>)).catch(() => undefined);
+  }, [preview]);
   const [address, setAddress] = useState<AddressValue>(EMPTY_ADDRESS);
   const [customValues, setCustomValues] = useState<Record<string, string>>({});
   const [acceptedTerms, setAcceptedTerms] = useState(false);
@@ -334,6 +348,7 @@ function CheckoutForm({ offer, pricingOption, mode, onAmountChange }: CheckoutFo
   const [submitting, setSubmitting] = useState(false);
   const [paymentError, setPaymentError] = useState<string | null>(null);
   const [formNotice, setFormNotice] = useState<string | null>(null);
+  const [previewNotice, setPreviewNotice] = useState<string | null>(null);
 
   // A signed-in buyer's own address is what the server will bill against
   // whatever the form says, so the field shows it rather than pretending to
@@ -357,7 +372,7 @@ function CheckoutForm({ offer, pricingOption, mode, onAmountChange }: CheckoutFo
     taxAddress: orderForm.collectTax
       ? { country: address.country, state: address.state, postalCode: address.postalCode }
       : undefined,
-  });
+  }, preview?.quote);
 
   const { quote } = quoteState;
   const recurring = billing.pricingType === "subscription" || billing.pricingType === "payment_plan";
@@ -384,6 +399,8 @@ function CheckoutForm({ offer, pricingOption, mode, onAmountChange }: CheckoutFo
 
   const captured = useRef(false);
   function captureEmail() {
+    // A preview is the owner typing into her own form, not a lead.
+    if (preview) return;
     const value = email.trim();
     if (captured.current || !EMAIL_PATTERN.test(value)) return;
     captured.current = true;
@@ -493,6 +510,17 @@ function CheckoutForm({ offer, pricingOption, mode, onAmountChange }: CheckoutFo
   async function handleSubmit(event?: FormEvent<HTMLFormElement>, wallet?: StripeExpressCheckoutElementConfirmEvent) {
     event?.preventDefault();
     if (submitting) { wallet?.paymentFailed({reason:"fail"}); return; }
+
+    // Preview: the buyer's own field checks run, so the owner can see what a
+    // missing answer says, and then nothing is sent — no order, no contact, no
+    // PaymentIntent. This return is before every request in this function.
+    if (preview) {
+      wallet?.paymentFailed({ reason: "fail" });
+      setPaymentError(null);
+      setFormNotice(validate() ? null : "Please check the highlighted fields and try again.");
+      setPreviewNotice(PREVIEW_SUBMIT_NOTICE);
+      return;
+    }
 
     if (quoteState.pending || quoteState.error) {
       setFormNotice(quoteState.error || "One moment — we're updating your total.");
@@ -662,11 +690,13 @@ function CheckoutForm({ offer, pricingOption, mode, onAmountChange }: CheckoutFo
           {offer.checkoutHeadline || offer.title}
         </h1>
         {offer.description && <p className="copy-luxe mt-4 max-w-xl whitespace-pre-line text-pretty">{offer.description}</p>}
+        {/* Shown in the preview as buyers see them, but inert there: the cart
+            lives on the public site and the preview may not write to it. */}
         {!offer.cartItems && ["one_time","free"].includes(billing.pricingType) && <div className="mt-4 flex flex-wrap gap-4 text-sm text-gold">
-          <button type="button" className="underline underline-offset-4" onClick={()=>{addToCart({slug:offer.slug,pricingOptionId:pricingOption.id,bumpProductIds:selectedBumps});navigate('/cart');}}>Add to cart</button>
-          <Link to="/cart" className="underline underline-offset-4">View cart</Link>
+          <button type="button" className="underline underline-offset-4" onClick={()=>{if(preview){setPreviewNotice(PREVIEW_CART_NOTICE);return;}addToCart({slug:offer.slug,pricingOptionId:pricingOption.id,bumpProductIds:selectedBumps});navigate('/cart');}}>Add to cart</button>
+          <Link to="/cart" onClick={(e)=>{if(preview){e.preventDefault();setPreviewNotice(PREVIEW_CART_NOTICE);}}} className="underline underline-offset-4">View cart</Link>
         </div>}
-        {offer.cartItems && <Link to="/cart" onClick={()=>window.location.assign('/cart')} className="mt-4 inline-block text-sm text-gold underline">Edit cart</Link>}
+        {!preview && offer.cartItems && <Link to="/cart" onClick={()=>window.location.assign('/cart')} className="mt-4 inline-block text-sm text-gold underline">Edit cart</Link>}
 
 
         {offer.alreadyOwned && (
@@ -814,7 +844,9 @@ function CheckoutForm({ offer, pricingOption, mode, onAmountChange }: CheckoutFo
               />}
 
               {paymentRequired ? (
-                stripeConfigured() && (
+                stripeConfigured() && (preview ? (
+                  <PreviewPaymentPlaceholder setup={mode === "setup"} />
+                ) : (
                   <div className="rounded-2xl border border-white/10 bg-white/[0.02] p-4 sm:p-5">
                     <ExpressCheckoutElement
                       options={{buttonHeight: 48, layout: {maxColumns: 2, maxRows: 2}, paymentMethods: {applePay: "auto", googlePay: "auto"}}}
@@ -836,7 +868,7 @@ function CheckoutForm({ offer, pricingOption, mode, onAmountChange }: CheckoutFo
                       </p>
                     )}
                   </div>
-                )
+                ))
               ) : (
                 <Notice tone="gold">
                   There's nothing to pay — finish below and your access is granted straight away.
@@ -867,6 +899,8 @@ function CheckoutForm({ offer, pricingOption, mode, onAmountChange }: CheckoutFo
               <p className="text-sm leading-relaxed text-red-200">{paymentError ?? formNotice}</p>
             </div>
           )}
+
+          {previewNotice && <Notice tone="gold">{previewNotice}</Notice>}
 
           <div>
             <LuxeButton
@@ -906,6 +940,47 @@ function CheckoutForm({ offer, pricingOption, mode, onAmountChange }: CheckoutFo
 }
 
 /* ── Small pieces ───────────────────────────────────────────────────────── */
+
+/**
+ * Where the Stripe card form sits, drawn for the admin's preview.
+ *
+ * The real Payment Element is a Stripe iframe; the preview does not load
+ * Stripe.js at all (nothing may be paid here, and the admin host's CSP blocks
+ * it), so this keeps the page's shape and says what buyers see in its place.
+ */
+function PreviewPaymentPlaceholder({ setup }: { setup: boolean }) {
+  const field = "flex min-h-[46px] items-center rounded-xl border border-white/10 bg-white/[0.04] px-3.5 text-[0.95rem] text-orchid-faint";
+  const label = "mb-1.5 block text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-orchid";
+  return (
+    <div role="group" aria-label="Card payment (preview)" className="rounded-2xl border border-white/10 bg-white/[0.02] p-4 sm:p-5">
+      <div aria-hidden className="grid grid-cols-2 gap-3">
+        <div className="flex min-h-[48px] items-center justify-center rounded-lg bg-white text-sm font-semibold text-black">Apple Pay</div>
+        <div className="flex min-h-[48px] items-center justify-center rounded-lg bg-white text-sm font-semibold text-black">Google Pay</div>
+      </div>
+      <div aria-hidden className="mt-5 space-y-4">
+        <div>
+          <span className={label}>Card number</span>
+          <div className={cn(field, "justify-between")}>
+            1234 1234 1234 1234
+            <CreditCard className="h-4 w-4" />
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div><span className={label}>Expiration date</span><div className={field}>MM / YY</div></div>
+          <div><span className={label}>Security code</span><div className={field}>CVC</div></div>
+        </div>
+      </div>
+      <p className="mt-4 text-xs leading-relaxed text-orchid-faint">
+        Preview: buyers see Stripe&apos;s secure card form here (card, Apple Pay, Google Pay). It isn&apos;t loaded in preview, so nothing can be charged.
+      </p>
+      {setup && (
+        <p className="mt-2 text-xs leading-relaxed text-orchid-faint">
+          Your card is saved now and charged when the trial ends.
+        </p>
+      )}
+    </div>
+  );
+}
 
 function Fieldset({ legend, children }: { legend: string; children: ReactNode }) {
   return (

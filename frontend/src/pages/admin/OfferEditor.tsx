@@ -25,6 +25,7 @@ import {
   Package,
   Pencil,
   Plus,
+  ScanEye,
   ShoppingBag,
   Sparkles,
   Trash2,
@@ -84,6 +85,7 @@ import {
   uniqueKey,
   webAddress,
 } from "@/pages/admin/ui/friendly";
+import { openCheckoutPreview } from "@/components/checkout/checkoutPreview";
 
 /**
  * The offer editor — one screen, six questions, in the order she'd ask them:
@@ -725,6 +727,21 @@ export default function OfferEditor() {
               <Badge tone={live ? "green" : offer.status === "archived" ? "neutral" : "slate"}>
                 {OFFER_STATUS_LABEL[offer.status]}
               </Badge>
+            )}
+            {offer && (
+              <Button
+                variant="secondary"
+                size="sm"
+                title="See the checkout page as a buyer would, in a new tab. Works for drafts; nothing can be bought from it."
+                onClick={() => {
+                  // The preview reads the saved offer, as a buyer would.
+                  if (dirty) toast.info("The preview shows your last saved version. Save to see your latest changes there.");
+                  openCheckoutPreview(offer.id);
+                }}
+              >
+                <ScanEye />
+                Preview checkout
+              </Button>
             )}
             {offer && (
               <Button variant="secondary" size="sm" onClick={() => void copyLink()}>

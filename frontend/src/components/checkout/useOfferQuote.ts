@@ -3,6 +3,7 @@ import {
   commerceApi,
   commerceErrorMessage,
   type AppliedCoupon,
+  type OfferQuote,
   type Quote,
   type QuoteInput,
 } from "@/lib/commerceApi";
@@ -76,11 +77,20 @@ function buildRequest(selections: QuoteSelections): QuoteInput {
   return request;
 }
 
+/** Where a quote comes from. The admin's checkout preview swaps this; nothing else does. */
+export type QuoteFetcher = (slug: string, input: QuoteInput) => Promise<OfferQuote>;
+
 export function useOfferQuote(
   slug: string,
   listPrice: Quote,
-  selections: QuoteSelections
+  selections: QuoteSelections,
+  fetchQuote: QuoteFetcher = commerceApi.quote
 ): QuoteState {
+  // Held in a ref so a caller passing a new function each render does not
+  // restart the debounce below.
+  const fetchRef = useRef(fetchQuote);
+  fetchRef.current = fetchQuote;
+
   const [state, setState] = useState<QuoteState>({
     quote: listPrice,
     coupon: null,
@@ -125,8 +135,8 @@ export function useOfferQuote(
     setState((prev) => ({ ...prev, pending: true }));
 
     const timer = window.setTimeout(() => {
-      commerceApi
-        .quote(slug, requestRef.current)
+      fetchRef
+        .current(slug, requestRef.current)
         .then((result) => {
           if (cancelled) return;
           setState({

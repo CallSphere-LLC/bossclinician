@@ -77,6 +77,8 @@ import { loginPathFor } from "@/pages/admin/adminReturnTo";
 // Lazy, unlike the screens above: it is the member course player, and the
 // console should not carry that bundle for the one tab that opens it.
 const CoursePreview = lazy(() => import("@/pages/admin/CoursePreview"));
+// Checkout preview for an offer (any status): outside AdminLayout, it checks sign-in itself.
+const CheckoutPreview = lazy(() => import("@/pages/admin/CheckoutPreview"));
 
 function LoadingScreen() {
   return (
@@ -234,6 +236,14 @@ export default function AdminApp() {
           never reach AdminLayout. Same shape as the member's /library routes. */}
       <Route path="/courses/:id/preview" element={<CoursePreviewRoute />} />
       <Route path="/courses/:id/preview/lessons/:lessonSlug" element={<CoursePreviewRoute />} />
+      <Route
+        path="/offers/:id/checkout-preview"
+        element={
+          <Suspense fallback={<LoadingScreen />}>
+            <CheckoutPreview />
+          </Suspense>
+        }
+      />
       <Route path="/*" element={<ProtectedRoutes />} />
     </Routes>
   );

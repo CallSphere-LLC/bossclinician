@@ -280,6 +280,14 @@ function describeMinutes(minutes: number): string {
   return `${days} day${days === 1 ? "" : "s"}`;
 }
 
+/** Config key → name list, for the step targets the list's filters can match on. */
+const ACTION_TARGET_LISTS: ReadonlyArray<readonly [string, string]> = [
+  ["sequenceId", "sequences"],
+  ["tagId", "tags"],
+  ["offerId", "offers"],
+  ["eventId", "events"],
+];
+
 /* ------------------------------------------------------------ automations */
 
 adminAutomationsV2Router.get(
@@ -309,10 +317,26 @@ adminAutomationsV2Router.get(
 
     const byAutomation = new Map<number, string[]>();
     const stepsOf = new Map<number, StoredAction[]>();
+    // For the list's Filters panel (QA row 71, as Kajabi): which kinds of step
+    // each automation has ("Then"), and the things those steps point at.
+    const typesOf = new Map<number, string[]>();
+    const refsOf = new Map<number, string[]>();
     for (const action of actions.rows) {
       const list = byAutomation.get(action.automation_id) ?? [];
       list.push(actionSentence(lookup, action.action_type, action.config ?? {}, action.delay_minutes));
       byAutomation.set(action.automation_id, list);
+
+      const types = typesOf.get(action.automation_id) ?? [];
+      if (!types.includes(action.action_type)) types.push(action.action_type);
+      typesOf.set(action.automation_id, types);
+
+      const refs = refsOf.get(action.automation_id) ?? [];
+      for (const [key, source] of ACTION_TARGET_LISTS) {
+        const id = Number(action.config?.[key]);
+        const ref = `${source}:${id}`;
+        if (Number.isInteger(id) && id > 0 && !refs.includes(ref)) refs.push(ref);
+      }
+      refsOf.set(action.automation_id, refs);
 
       const steps = stepsOf.get(action.automation_id) ?? [];
       steps.push(action);
@@ -324,6 +348,8 @@ adminAutomationsV2Router.get(
         ...rowToCamel(row),
         triggerSentence: triggerSentence(lookup, row.trigger_type, row.trigger_config ?? {}),
         actionSentences: byAutomation.get(row.id) ?? [],
+        actionTypes: typesOf.get(row.id) ?? [],
+        actionRefs: refsOf.get(row.id) ?? [],
         // The list is where she decides which automation to trust, so an
         // unfinished one has to say so here rather than only once she opens it.
         needsAttention:

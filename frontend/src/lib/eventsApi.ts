@@ -178,6 +178,32 @@ export interface EventSummary {
   recurrenceUntil?: string | null;
   recurrenceCount?: number | null;
   locationType?: LocationType;
+  /** 'kajabi' for an event brought over from Kajabi; null for one made here. */
+  source?: string | null;
+  /** The event's id in Kajabi, as text (a bigint does not fit a JS number in general). */
+  kajabiId?: string | null;
+  /** How many email campaigns are tied to this event (Kajabi's "Event Actions"). */
+  emailCount?: number;
+  createdAt?: string;
+}
+
+/** One email tied to an event — sent before or after it, or on registration. */
+export interface EventEmail {
+  id: number;
+  name: string;
+  subject: string;
+  status: string;
+  /** 'event_start' (offset counted from the start), 'event_registration', or 'absolute'. */
+  anchorKind: string | null;
+  /** Minutes from the anchor; negative is before the event starts. */
+  anchorOffsetMinutes: number | null;
+  scheduledAt: string | null;
+  sentAt: string | null;
+  recipientCount: number | null;
+  openedCount: number | null;
+  clickedCount: number | null;
+  /** Kajabi's own name for it, e.g. 'EventOccurrenceAction', when imported. */
+  kajabiType: string | null;
 }
 
 export interface EventDetail extends EventSummary {
@@ -200,6 +226,8 @@ export interface EventDetail extends EventSummary {
   /** Every session of a live event, worked out by the server. One entry for a single session. */
   occurrences?: string[];
   recurrenceLabel?: string;
+  /** The emails tied to this event, read-only here. */
+  emails?: EventEmail[];
 }
 
 export interface EventDraft {
@@ -360,6 +388,8 @@ export interface Registrant {
   contactId: number | null;
   createdAt: string;
   orderTotalCents: number | null;
+  /** 'kajabi' for a registrant brought over from Kajabi. */
+  source?: string | null;
 }
 
 export interface EventReport {

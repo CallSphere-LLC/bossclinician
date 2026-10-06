@@ -99,6 +99,22 @@ export async function loadPublishedOfferById(
   return res.rows[0] ?? null;
 }
 
+/**
+ * The same row whatever its status — for the admin's checkout preview only
+ * (routes/admin/offerPreview.ts), which sits behind the admin session. Nothing
+ * on the public router may call this: a draft is not for sale.
+ */
+export async function loadOfferByIdAnyStatus(
+  id: number,
+  db: Queryable = pool
+): Promise<(OfferRow & { status: string }) | null> {
+  const res = await db.query<OfferRow & { status: string }>(
+    `SELECT ${OFFER_COLUMNS}, status FROM offers WHERE id = $1`,
+    [id]
+  );
+  return res.rows[0] ?? null;
+}
+
 /** The subset of an offer the arithmetic needs, and the only prices it may use. */
 export function toPricedOffer(offer: OfferRow): PricedOffer {
   return {
@@ -504,103 +520,114 @@ offersRouter.get(
     const offer = await loadPublishedOffer(req.params.slug);
     if (!offer) throw notFound("Offer not found");
     await assertOfferDeliverable(offer.id);
-
-    const [products, bumps, upsells, productIds, additionalPricing] = await Promise.all([
-      loadOfferProducts(offer.id),
-      loadOfferBumps(offer.id),
-      loadUpsells(offer.id),
-      offerProductIds(offer.id),
-      loadOfferPricingOptions(offer.id),
-    ]);
-    const selectedOffer = await selectOfferPricing(offer, undefined);
-    const priced = toPricedOffer(selectedOffer);
-    const additionalRecommended = additionalPricing.some((option) => option.recommended);
-
-    let alreadyOwned = false;
-    if (req.member && productIds.length > 0) {
-      const owned = new Set((await listMemberProducts(req.member.id)).map((p) => p.productId));
-      alreadyOwned = productIds.every((id) => owned.has(id));
-    }
-
-    res.json({
-      id: offer.id,
-      slug: offer.slug,
-      title: offer.title,
-      description: offer.description,
-      checkoutHeadline: offer.checkout_headline,
-      thumbnailUrl: offer.thumbnail_url,
-      currency: selectedOffer.currency || "usd",
-      amountCents: selectedOffer.amount_cents,
-      billing: billingToJson(selectedOffer, priced),
-      selectedPricingOptionId: selectedOffer.pricing_option_id ?? null,
-      pricingOptions: [
-        pricingOptionJson(offer, null, pricingLabel(offer), !additionalRecommended),
-        ...additionalPricing.map((option) => {
-          const overlaid = optionOverlay(offer, option);
-          return pricingOptionJson(overlaid, option.id, option.label || pricingLabel(overlaid), option.recommended);
-        }),
-      ],
-      orderForm: {
-        collectTax: offer.collect_tax,
-        collectAddress: offer.collect_address,
-        collectPhone: offer.collect_phone,
-        requireTerms: offer.require_terms,
-        allowGifting: offer.allow_gifting,
-        termsUrl: offer.terms_url,
-        customFields: parseCustomFields(offer.custom_fields),
-      },
-      redirectUrl: offer.redirect_url,
-      thankYouPageSlug: offer.thank_you_page_id,
-      accessExpiresAfterDays: offer.access_expires_after_days,
-      products: products.map((p) => ({
-        id: p.id,
-        slug: p.slug,
-        title: p.title,
-        subtitle: p.subtitle,
-        description: p.description,
-        thumbnailUrl: p.thumbnail_url,
-        kind: p.kind,
-      })),
-      bumps: bumps.map((b) => ({
-        id: b.id,
-        productId: b.product_id,
-        title: b.title || b.product_title,
-        description: b.description,
-        amountCents: b.amount_cents,
-        formattedAmount: formatAmount(b.amount_cents, selectedOffer.currency),
-        product: {
-          slug: b.product_slug,
-          title: b.product_title,
-          thumbnailUrl: b.product_thumbnail_url,
-          kind: b.product_kind,
-        },
-      })),
-      upsells: upsells.map((u) => ({
-        step: u.step,
-        headline: u.headline,
-        body: u.body,
-        offer: {
-          slug: u.offer_slug,
-          title: u.offer_title,
-          description: u.offer_description,
-          thumbnailUrl: u.offer_thumbnail_url,
-          currency: u.offer_currency,
-          pricingType: u.offer_pricing_type,
-          amountCents: u.offer_amount_cents,
-        },
-        downsell: u.downsell_slug
-          ? {
-              slug: u.downsell_slug,
-              title: u.downsell_title,
-              amountCents: u.downsell_amount_cents,
-            }
-          : null,
-      })),
-      quote: totalToJson(computeOrderTotal({ offer: priced })),
-      alreadyOwned,
-    });
+    res.json(await buildOfferView(offer, req.member?.id ?? null));
   })
 );
+
+/**
+ * The checkout page's whole view of one offer, shared by the public GET above
+ * and the admin's checkout preview, so the preview cannot drift from what a
+ * buyer is shown. The caller decides which offers may be viewed at all.
+ */
+export async function buildOfferView(
+  offer: OfferRow,
+  memberId: number | null
+): Promise<Record<string, unknown>> {
+  const [products, bumps, upsells, productIds, additionalPricing] = await Promise.all([
+    loadOfferProducts(offer.id),
+    loadOfferBumps(offer.id),
+    loadUpsells(offer.id),
+    offerProductIds(offer.id),
+    loadOfferPricingOptions(offer.id),
+  ]);
+  const selectedOffer = await selectOfferPricing(offer, undefined);
+  const priced = toPricedOffer(selectedOffer);
+  const additionalRecommended = additionalPricing.some((option) => option.recommended);
+
+  let alreadyOwned = false;
+  if (memberId !== null && productIds.length > 0) {
+    const owned = new Set((await listMemberProducts(memberId)).map((p) => p.productId));
+    alreadyOwned = productIds.every((id) => owned.has(id));
+  }
+
+  return {
+    id: offer.id,
+    slug: offer.slug,
+    title: offer.title,
+    description: offer.description,
+    checkoutHeadline: offer.checkout_headline,
+    thumbnailUrl: offer.thumbnail_url,
+    currency: selectedOffer.currency || "usd",
+    amountCents: selectedOffer.amount_cents,
+    billing: billingToJson(selectedOffer, priced),
+    selectedPricingOptionId: selectedOffer.pricing_option_id ?? null,
+    pricingOptions: [
+      pricingOptionJson(offer, null, pricingLabel(offer), !additionalRecommended),
+      ...additionalPricing.map((option) => {
+        const overlaid = optionOverlay(offer, option);
+        return pricingOptionJson(overlaid, option.id, option.label || pricingLabel(overlaid), option.recommended);
+      }),
+    ],
+    orderForm: {
+      collectTax: offer.collect_tax,
+      collectAddress: offer.collect_address,
+      collectPhone: offer.collect_phone,
+      requireTerms: offer.require_terms,
+      allowGifting: offer.allow_gifting,
+      termsUrl: offer.terms_url,
+      customFields: parseCustomFields(offer.custom_fields),
+    },
+    redirectUrl: offer.redirect_url,
+    thankYouPageSlug: offer.thank_you_page_id,
+    accessExpiresAfterDays: offer.access_expires_after_days,
+    products: products.map((p) => ({
+      id: p.id,
+      slug: p.slug,
+      title: p.title,
+      subtitle: p.subtitle,
+      description: p.description,
+      thumbnailUrl: p.thumbnail_url,
+      kind: p.kind,
+    })),
+    bumps: bumps.map((b) => ({
+      id: b.id,
+      productId: b.product_id,
+      title: b.title || b.product_title,
+      description: b.description,
+      amountCents: b.amount_cents,
+      formattedAmount: formatAmount(b.amount_cents, selectedOffer.currency),
+      product: {
+        slug: b.product_slug,
+        title: b.product_title,
+        thumbnailUrl: b.product_thumbnail_url,
+        kind: b.product_kind,
+      },
+    })),
+    upsells: upsells.map((u) => ({
+      step: u.step,
+      headline: u.headline,
+      body: u.body,
+      offer: {
+        slug: u.offer_slug,
+        title: u.offer_title,
+        description: u.offer_description,
+        thumbnailUrl: u.offer_thumbnail_url,
+        currency: u.offer_currency,
+        pricingType: u.offer_pricing_type,
+        amountCents: u.offer_amount_cents,
+      },
+      downsell: u.downsell_slug
+        ? {
+            slug: u.downsell_slug,
+            title: u.downsell_title,
+            amountCents: u.downsell_amount_cents,
+          }
+        : null,
+    })),
+    quote: totalToJson(computeOrderTotal({ offer: priced })),
+    alreadyOwned,
+  };
+}
 
 /**
  * Looser than the checkout limiter because it protects far less: a quote reads
@@ -615,7 +642,7 @@ const quoteLimiter = rateLimit({
   message: { error: "Too many requests. Please try again later." },
 });
 
-const quoteSchema = z.object({
+export const quoteSchema = z.object({
   pricingOptionId: z.number().int().positive().nullable().optional(),
   couponCode: z.string().trim().max(64).optional(),
   bumpProductIds: z.array(z.number().int().positive()).max(20).optional(),
@@ -647,49 +674,64 @@ offersRouter.post(
 
     const baseOffer = await loadPublishedOffer(req.params.slug);
     if (!baseOffer) throw notFound("Offer not found");
-    const offer = await selectOfferPricing(baseOffer, body.pricingOptionId);
-
-    const priced = toPricedOffer(offer);
-    const bumpRows = await loadOfferBumps(offer.id);
-    const bumps = selectBumps(bumpRows, body.bumpProductIds ?? []);
-    await assertOfferDeliverable(offer.id, body.bumpProductIds ?? []);
-
-    let coupon: ValidatedCoupon | null = null;
-    let couponError: string | null = null;
-    if (body.couponCode) {
-      // Only a signed-in member's own address is used for the once-per-customer
-      // check. Honouring one from the body would turn this endpoint into a way
-      // to ask whether a given stranger has redeemed a given code.
-      const check = await validateCoupon(body.couponCode, offer.id, req.member?.email ?? null);
-      if (check.ok) coupon = check.coupon;
-      else couponError = check.reason;
-    }
-
-    const taxRateBps = await resolveTaxRateBps(offer, submittedTaxAddress(offer, body.address));
-    const total = computeOrderTotal({
-      offer: priced,
-      bumps,
-      coupon,
-      taxRateBps,
-      pwywAmountCents: body.pwywAmountCents,
-    });
-
-    res.json({
-      offerSlug: offer.slug,
-      selectedPricingOptionId: offer.pricing_option_id ?? null,
-      billing: billingToJson(offer, priced),
-      taxRateBps,
-      appliedBumpProductIds: bumps.map((b) => b.productId),
-      coupon: coupon
-        ? {
-            code: coupon.code,
-            percentOff: coupon.percentOff,
-            amountOffCents: coupon.amountOffCents,
-            duration: coupon.duration,
-          }
-        : null,
-      couponError,
-      ...totalToJson(total),
-    });
+    res.json(await buildOfferQuote(baseOffer, body, req.member?.email ?? null));
   })
 );
+
+/**
+ * The quote arithmetic behind `/offers/:slug/quote`, shared with the admin's
+ * checkout preview. Read-only: the coupon check is an unlocked snapshot and
+ * nothing is written.
+ */
+export async function buildOfferQuote(
+  baseOffer: OfferRow,
+  body: z.infer<typeof quoteSchema>,
+  memberEmail: string | null,
+  /** The preview reports an undeliverable offer in its banner instead of failing the quote. */
+  options: { skipDeliverability?: boolean } = {}
+): Promise<Record<string, unknown>> {
+  const offer = await selectOfferPricing(baseOffer, body.pricingOptionId);
+
+  const priced = toPricedOffer(offer);
+  const bumpRows = await loadOfferBumps(offer.id);
+  const bumps = selectBumps(bumpRows, body.bumpProductIds ?? []);
+  if (!options.skipDeliverability) await assertOfferDeliverable(offer.id, body.bumpProductIds ?? []);
+
+  let coupon: ValidatedCoupon | null = null;
+  let couponError: string | null = null;
+  if (body.couponCode) {
+    // Only a signed-in member's own address is used for the once-per-customer
+    // check. Honouring one from the body would turn this endpoint into a way
+    // to ask whether a given stranger has redeemed a given code.
+    const check = await validateCoupon(body.couponCode, offer.id, memberEmail);
+    if (check.ok) coupon = check.coupon;
+    else couponError = check.reason;
+  }
+
+  const taxRateBps = await resolveTaxRateBps(offer, submittedTaxAddress(offer, body.address));
+  const total = computeOrderTotal({
+    offer: priced,
+    bumps,
+    coupon,
+    taxRateBps,
+    pwywAmountCents: body.pwywAmountCents,
+  });
+
+  return {
+    offerSlug: offer.slug,
+    selectedPricingOptionId: offer.pricing_option_id ?? null,
+    billing: billingToJson(offer, priced),
+    taxRateBps,
+    appliedBumpProductIds: bumps.map((b) => b.productId),
+    coupon: coupon
+      ? {
+          code: coupon.code,
+          percentOff: coupon.percentOff,
+          amountOffCents: coupon.amountOffCents,
+          duration: coupon.duration,
+        }
+      : null,
+    couponError,
+    ...totalToJson(total),
+  };
+}

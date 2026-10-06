@@ -92,8 +92,23 @@ export interface FormSummary {
   postAction: PostAction;
   fieldCount: number;
   submissionCount: number;
+  doubleOptIn: boolean;
+  createdAt: string;
   updatedAt: string;
+  /**
+   * Where the form came from: "kajabi" for one brought over by the Kajabi
+   * import, null (or absent) for one built here. The four Kajabi fields are
+   * absent from a server whose database predates that import.
+   */
+  source?: string | null;
+  /** Kajabi's own id. A bigint, so it arrives as text. */
+  kajabiId?: string | number | null;
+  /** Replies Kajabi had collected before the move; they were not brought across one by one. */
+  kajabiSubmissionsCount?: number | null;
+  kajabiOptIn?: OptInKind | null;
 }
+
+export type OptInKind = "single" | "double";
 
 export interface FormDetail extends FormSummary {
   descriptionMd: string;
@@ -108,7 +123,6 @@ export interface FormDetail extends FormSummary {
   subscribeSequenceId: number | null;
   sequenceName: string | null;
   spamProtection: "honeypot" | "turnstile" | "recaptcha";
-  doubleOptIn: boolean;
   createLead: boolean;
 }
 
@@ -251,6 +265,35 @@ export const CONTACT_FIELD_CHOICES: { value: string; label: string }[] = [
   { value: "phone", label: "Their phone number" },
   { value: "timezone", label: "Their timezone" },
 ];
+
+export const OPT_IN_LABEL: Record<OptInKind, string> = {
+  single: "Single opt-in",
+  double: "Double opt-in",
+};
+
+type FormOrigin = Pick<FormSummary, "source" | "kajabiSubmissionsCount" | "kajabiOptIn" | "doubleOptIn">;
+
+/** True for a form brought over by the Kajabi import. */
+export function isFromKajabi(form: Pick<FormSummary, "source">): boolean {
+  return form.source === "kajabi";
+}
+
+/**
+ * Everything a form has collected: for a Kajabi form, the count Kajabi had
+ * before the move plus every reply sent here since; otherwise the replies here.
+ */
+export function totalSubmissions(form: FormOrigin & { submissionCount: number }): number {
+  const kajabi = isFromKajabi(form) ? Number(form.kajabiSubmissionsCount ?? 0) || 0 : 0;
+  return kajabi + (Number(form.submissionCount) || 0);
+}
+
+/** Single or double opt-in — Kajabi's own setting for an imported form. */
+export function optInKind(form: FormOrigin): OptInKind {
+  if (isFromKajabi(form) && (form.kajabiOptIn === "single" || form.kajabiOptIn === "double")) {
+    return form.kajabiOptIn;
+  }
+  return form.doubleOptIn ? "double" : "single";
+}
 
 export const POST_ACTION_LABEL: Record<PostAction, string> = {
   message: "Show them a thank-you message",

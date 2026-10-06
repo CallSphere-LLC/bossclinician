@@ -50,6 +50,7 @@ import { adminCoachingProgramsRouter } from "./coachingPrograms";
 import { adminAuditLogRouter } from "./auditLog";
 import { adminContactAccessRouter } from "./contactAccess";
 import { adminPurchasesRouter } from "./purchases";
+import { adminOfferPreviewRouter } from "./offerPreview";
 import { adminVoiceSessionsRouter, adminVoiceRecordingRouter } from "./voiceSessions";
 
 export const adminRouter = Router();
@@ -199,6 +200,8 @@ adminRouter.use("/sales", requireAuth, requirePermission("orders.view"), adminSa
 adminRouter.use("/growth", requireAuth, growthGate, adminGrowthRouter);
 adminRouter.use("/chats", requireAuth, moduleGate("contacts"), adminChatsRouter);
 adminRouter.use("/products", requireAuth, moduleGate("products"), adminProductsRouter);
+// Checkout preview first: view-only roles may POST its read-only /quote.
+adminRouter.use("/offers/:id/checkout-preview", requireAuth, moduleGate("offers", ["/quote"]), adminOfferPreviewRouter);
 adminRouter.use("/offers", requireAuth, moduleGate("offers"), adminOffersRouter);
 adminRouter.use("/redirects", requireAuth, moduleGate("website"), adminRedirectsRouter);
 adminRouter.use("/contacts", requireAuth, moduleGate("contacts", ["/bulk/export.csv"]), adminContactsRouter);

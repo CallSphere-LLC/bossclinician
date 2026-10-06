@@ -1,12 +1,13 @@
 import { publicSiteUrl } from "@/lib/siteOrigins";
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import { useSearchParams } from "react-router";
+import { Link, useSearchParams } from "react-router";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
   AlertTriangle,
   BellRing,
   CalendarClock,
   Copy,
+  Mail,
   MapPin,
   Pencil,
   Plus,
@@ -33,6 +34,7 @@ import {
   eventsAdminApi,
   type EventDetail,
   type EventDraft,
+  type EventEmail,
   type EventKind,
   type EventReminderWithStats,
   type EventReport,
@@ -48,6 +50,8 @@ import {
   Badge,
   Button,
   Card,
+  Chip,
+  chipRowStyles,
   EmptyState,
   ErrorNotice,
   Field,
@@ -59,7 +63,7 @@ import {
 } from "@/pages/admin/ui/primitives";
 import { DataTable, RowActions } from "@/pages/admin/ui/DataTable";
 import { Modal, useConfirm } from "@/pages/admin/ui/Dialog";
-import { friendlyError, pluralize, publishLabel, webAddress } from "@/pages/admin/ui/friendly";
+import { friendlyError, pluralize, webAddress } from "@/pages/admin/ui/friendly";
 
 /**
  * Events — webinars, workshops and recordings — with the people who signed up
@@ -99,42 +103,369 @@ function ruleOf(event: EventSummary) {
   };
 }
 
-/** When this event happens, whichever kind it is. */
-function whenLabel(event: EventSummary): string {
-  if (event.kind === "evergreen") {
-    return describeCadence(event.evergreenIntervalMinutes) || "No cadence set";
+/* ── Dates, the way Kajabi writes them ──────────────────────────────────── */
+
+const MINUTE_MS = 60_000;
+const DAY_MS = 86_400_000;
+
+/** "PDT" — the zone's short name at that instant, or "" if the zone is unknown. */
+function zoneAbbreviation(instant: Date, timeZone: string): string {
+  try {
+    return (
+      new Intl.DateTimeFormat("en-US", { timeZone, timeZoneName: "short" })
+        .formatToParts(instant)
+        .find((part) => part.type === "timeZoneName")?.value ?? ""
+    );
+  } catch {
+    return "";
   }
-  if (event.kind === "replay") return "As soon as they sign up";
-  const start = describeStart(event.startsAt, event.timezone);
-  const rule = ruleOf(event);
-  return rule ? `From ${start} · ${describeRecurrence(rule).toLowerCase()}` : start;
 }
 
 /**
- * Whether an event still has something to come, for `?when=upcoming`.
- *
- * A live session counts until it has finished; a series until its last session
- * could have finished; an always-on event always counts, because a session
- * starts shortly after anyone signs up; a recording never does, because there
- * is nothing to wait for. A series with a count is judged on the longest a
- * month can be, so it errs towards showing an event rather than hiding one.
+ * "September 25, 2026 10:00 PM (PDT)" — Kajabi's own wording, read in the
+ * event's zone with the zone named. Built from parts so no browser slips an
+ * "at" between the date and the time.
  */
-function isStillToCome(event: EventSummary, now: number): boolean {
-  if (event.kind === "evergreen") return true;
-  if (event.kind === "replay" || !event.startsAt) return false;
-  const start = new Date(event.startsAt).getTime();
-  const length = event.durationMinutes * 60_000;
-  const rule = ruleOf(event);
-  if (!rule) return start + length >= now;
-  if (rule.until) {
-    // The end date is a calendar day in the event's zone; a day's grace covers
-    // every zone's idea of when that day is over.
-    return new Date(`${rule.until}T23:59:59Z`).getTime() + 86_400_000 >= now;
+function kajabiDate(instant: Date, timeZone: string, month: "long" | "short" = "long"): string {
+  if (Number.isNaN(instant.getTime())) return "No date yet";
+  const zone = timeZone || DEFAULT_TIMEZONE;
+  try {
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: zone,
+      month,
+      day: "numeric",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    }).formatToParts(instant);
+    const part = (type: Intl.DateTimeFormatPartTypes) =>
+      parts.find((entry) => entry.type === type)?.value ?? "";
+    const abbreviation = zoneAbbreviation(instant, zone);
+    return `${part("month")} ${part("day")}, ${part("year")} ${part("hour")}:${part("minute")} ${part(
+      "dayPeriod",
+    )}${abbreviation ? ` (${abbreviation})` : ""}`;
+  } catch {
+    return describeStart(instant.toISOString(), zone);
   }
-  const days = { daily: 1, weekly: 7, monthly: 31 }[rule.freq];
-  const lastStart = start + ((rule.count ?? 1) - 1) * rule.interval * days * 86_400_000;
-  return lastStart + length >= now;
 }
+
+/**
+ * Moves an instant by whole calendar days or months on the event's own wall
+ * clock, so a daily 11:00 AM session stays at 11:00 AM across a clock change.
+ * Null when the month has no such day (a monthly series on the 31st skips
+ * those months, as the server does).
+ */
+function shiftWallClock(
+  start: Date,
+  timeZone: string,
+  unit: "day" | "month",
+  amount: number,
+): Date | null {
+  const wall = isoToWallClock(start.toISOString(), timeZone);
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(wall);
+  if (!match) return null;
+  const [year, month, day, hour, minute] = match.slice(1).map(Number) as [
+    number,
+    number,
+    number,
+    number,
+    number,
+  ];
+  let shifted: Date;
+  if (unit === "month") {
+    const probe = new Date(Date.UTC(year, month - 1 + amount, 1));
+    const daysInMonth = new Date(
+      Date.UTC(probe.getUTCFullYear(), probe.getUTCMonth() + 1, 0),
+    ).getUTCDate();
+    if (day > daysInMonth) return null;
+    shifted = new Date(Date.UTC(probe.getUTCFullYear(), probe.getUTCMonth(), day, hour, minute));
+  } else {
+    shifted = new Date(Date.UTC(year, month - 1, day + amount, hour, minute));
+  }
+  const iso = wallClockToIso(shifted.toISOString().slice(0, 16), timeZone);
+  return iso ? new Date(iso) : null;
+}
+
+/** Kajabi's words for an every-N-minutes cadence: "Daily", "Hourly", "Every 15 minutes", "Every 4 days". */
+function cadenceWords(minutes: number): string {
+  if (minutes % 10_080 === 0) {
+    const weeks = minutes / 10_080;
+    return weeks === 1 ? "Weekly" : `Every ${weeks} weeks`;
+  }
+  if (minutes % 1440 === 0) {
+    const days = minutes / 1440;
+    return days === 1 ? "Daily" : `Every ${days} days`;
+  }
+  if (minutes % 60 === 0) {
+    const hours = minutes / 60;
+    return hours === 1 ? "Hourly" : `Every ${hours} hours`;
+  }
+  return minutes === 1 ? "Every minute" : `Every ${minutes} minutes`;
+}
+
+/** The same words for a calendar rule: "Daily", "Every 2 weeks", "Monthly". */
+function ruleWords(freq: RecurrenceFreq, interval: number): string {
+  if (interval > 1) {
+    const unit = { daily: "days", weekly: "weeks", monthly: "months" }[freq];
+    return `Every ${interval} ${unit}`;
+  }
+  return { daily: "Daily", weekly: "Weekly", monthly: "Monthly" }[freq];
+}
+
+/** When an event happens, worked out once per list load. */
+interface EventSchedule {
+  /** What the Date column reads, e.g. "Daily next up Oct 6, 2026 11:00 AM (PDT)". */
+  label: string;
+  repeats: boolean;
+  /** Still has a session to come (or always does, for an always-on event). */
+  upcoming: boolean;
+}
+
+/**
+ * The next session of a repeating event that has not finished yet, or null
+ * once the series is over.
+ *
+ * An always-on event steps from its first session when it has one — which is
+ * how Kajabi counts "Every 4 days next up …" — and otherwise from midnight in
+ * its zone, the boundary the server hands registrants. Whole-day cadences
+ * step on the wall clock; shorter ones in plain minutes.
+ */
+function nextSession(event: EventSummary, now: number): { next: Date | null; last: Date | null } {
+  const zone = event.timezone || DEFAULT_TIMEZONE;
+  const length = Math.max(0, event.durationMinutes) * MINUTE_MS;
+
+  if (event.kind === "evergreen") {
+    const interval = event.evergreenIntervalMinutes ?? 0;
+    if (interval <= 0) return { next: null, last: null };
+    let anchor: Date | null = event.startsAt ? new Date(event.startsAt) : null;
+    if (!anchor || Number.isNaN(anchor.getTime())) {
+      const today = isoToWallClock(new Date(now).toISOString(), zone).slice(0, 10);
+      const midnight = today ? wallClockToIso(`${today}T00:00`, zone) : null;
+      anchor = midnight ? new Date(midnight) : null;
+    }
+    if (!anchor) return { next: null, last: null };
+    if (anchor.getTime() >= now) return { next: anchor, last: null };
+
+    if (interval % 1440 === 0) {
+      const days = interval / 1440;
+      let step = Math.max(0, Math.floor((now - anchor.getTime()) / (days * DAY_MS)) - 1);
+      for (let pass = 0; pass < 6; pass += 1, step += 1) {
+        const candidate = shiftWallClock(anchor, zone, "day", step * days);
+        if (candidate && candidate.getTime() >= now) return { next: candidate, last: null };
+      }
+      return { next: null, last: null };
+    }
+    const span = interval * MINUTE_MS;
+    const steps = Math.ceil((now - anchor.getTime()) / span);
+    return { next: new Date(anchor.getTime() + steps * span), last: null };
+  }
+
+  const rule = ruleOf(event);
+  if (!rule || !event.startsAt) return { next: null, last: null };
+  const start = new Date(event.startsAt);
+  if (Number.isNaN(start.getTime())) return { next: null, last: null };
+
+  const interval = rule.interval > 0 ? rule.interval : 1;
+  const limit = Math.min(rule.count ?? MAX_OCCURRENCES, MAX_OCCURRENCES);
+  // Daily and weekly series never skip a session, so the walk can begin just
+  // short of today rather than at the first one; a monthly series is short.
+  const stepDays = rule.freq === "weekly" ? 7 * interval : interval;
+  let step =
+    rule.freq === "monthly"
+      ? 0
+      : Math.max(0, Math.min(limit - 1, Math.floor((now - start.getTime()) / (stepDays * DAY_MS)) - 1));
+  let produced = step;
+  let last: Date | null = null;
+  for (let guard = 0; guard < limit * 12 + 12 && produced < limit; guard += 1, step += 1) {
+    const candidate =
+      step === 0
+        ? start
+        : rule.freq === "monthly"
+          ? shiftWallClock(start, zone, "month", step * interval)
+          : shiftWallClock(start, zone, "day", step * stepDays);
+    if (!candidate) continue;
+    if (rule.until && isoToWallClock(candidate.toISOString(), zone).slice(0, 10) > rule.until) break;
+    produced += 1;
+    last = candidate;
+    if (candidate.getTime() + length >= now) return { next: candidate, last };
+  }
+  return { next: null, last };
+}
+
+function scheduleOf(event: EventSummary, now: number): EventSchedule {
+  const zone = event.timezone || DEFAULT_TIMEZONE;
+
+  if (event.kind === "replay") {
+    return { label: "Watch any time", repeats: false, upcoming: false };
+  }
+
+  if (event.kind === "evergreen") {
+    const interval = event.evergreenIntervalMinutes ?? 0;
+    if (interval <= 0) return { label: "No cadence set", repeats: true, upcoming: true };
+    const { next } = nextSession(event, now);
+    const words = cadenceWords(interval);
+    return {
+      label: next ? `${words} next up ${kajabiDate(next, zone, "short")}` : words,
+      repeats: true,
+      upcoming: true,
+    };
+  }
+
+  if (!event.startsAt) return { label: "No date yet", repeats: false, upcoming: false };
+  const rule = ruleOf(event);
+  if (!rule) {
+    const start = new Date(event.startsAt);
+    return {
+      label: kajabiDate(start, zone),
+      repeats: false,
+      upcoming: start.getTime() + event.durationMinutes * MINUTE_MS >= now,
+    };
+  }
+
+  const words = ruleWords(rule.freq, rule.interval);
+  const { next, last } = nextSession(event, now);
+  if (next) {
+    return { label: `${words} next up ${kajabiDate(next, zone, "short")}`, repeats: true, upcoming: true };
+  }
+  return {
+    label: last ? `${words} · last session ${kajabiDate(last, zone, "short")}` : words,
+    repeats: true,
+    upcoming: false,
+  };
+}
+
+/** The list's filter, kept in `?when=` so the Marketing Overview can link to "upcoming". */
+type WhenFilter = "all" | "upcoming" | "past" | "recurring";
+
+const WHEN_FILTERS: { value: WhenFilter; label: string }[] = [
+  { value: "all", label: "All" },
+  { value: "upcoming", label: "Upcoming" },
+  { value: "past", label: "Past" },
+  { value: "recurring", label: "Recurring" },
+];
+
+function isKajabi(source: string | null | undefined): boolean {
+  return source === "kajabi";
+}
+
+/* ── Event emails ───────────────────────────────────────────────────────── */
+
+/** "1 day" / "3 hours" / "15 minutes". */
+function spanWords(minutes: number): string {
+  if (minutes % 1440 === 0) return pluralize(minutes / 1440, "day");
+  if (minutes % 60 === 0) return pluralize(minutes / 60, "hour");
+  return pluralize(minutes, "minute");
+}
+
+/** Kajabi's two groups on Event Actions, plus the ones not tied to the start. */
+type EmailGroup = "before" | "after" | "registration" | "other";
+
+function emailGroup(email: EventEmail): EmailGroup {
+  if (email.anchorKind === "event_registration") return "registration";
+  if (email.anchorKind === "event_start") {
+    return (email.anchorOffsetMinutes ?? 0) < 0 ? "before" : "after";
+  }
+  return "other";
+}
+
+function emailTiming(email: EventEmail, timeZone: string): string {
+  const offset = email.anchorOffsetMinutes ?? 0;
+  if (email.anchorKind === "event_registration") {
+    return offset > 0 ? `${spanWords(offset)} after they register` : "As soon as they register";
+  }
+  if (email.anchorKind === "event_start") {
+    if (offset < 0) return `${spanWords(-offset)} before the event`;
+    if (offset === 0) return "When the event starts";
+    return `${spanWords(offset)} after the event`;
+  }
+  if (email.sentAt) return `Sent ${describeStart(email.sentAt, timeZone)}`;
+  if (email.scheduledAt) return `Sends ${describeStart(email.scheduledAt, timeZone)}`;
+  return "No send time set";
+}
+
+const EMAIL_GROUPS: { value: EmailGroup; label: string }[] = [
+  { value: "before", label: "Before the event" },
+  { value: "after", label: "After the event" },
+  { value: "registration", label: "When they register" },
+  { value: "other", label: "Other emails" },
+];
+
+const EMAIL_STATUS_TONE: Record<string, "green" | "gold" | "blue" | "red" | "slate"> = {
+  sent: "green",
+  sending: "blue",
+  scheduled: "gold",
+  failed: "red",
+  draft: "slate",
+};
+
+/** The emails tied to one event, read-only — they are edited under Email Campaigns. */
+function EventEmails({ emails, timeZone }: { emails: EventEmail[]; timeZone: string }) {
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h3 className="flex items-center gap-2 font-display text-base text-ink">
+            <Mail aria-hidden className="size-4" />
+            Event emails
+          </h3>
+          <p className="mt-1 text-sm text-ink-soft">
+            The emails that go out before and after this event. They are edited under Email
+            Campaigns.
+          </p>
+        </div>
+        <Button variant="secondary" size="sm" asChild>
+          <Link to="/admin/marketing/campaigns">Open Email Campaigns</Link>
+        </Button>
+      </div>
+
+      {emails.length === 0 ? (
+        <Card className="p-3">
+          <p className="text-sm text-ink-soft">No emails are tied to this event.</p>
+        </Card>
+      ) : (
+        EMAIL_GROUPS.map((group) => {
+          const rows = emails.filter((email) => emailGroup(email) === group.value);
+          if (rows.length === 0) return null;
+          return (
+            <div key={group.value} className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-[0.08em] text-ink-soft">
+                {group.label}
+              </p>
+              <ul className="space-y-2">
+                {rows.map((email) => (
+                  <li
+                    key={email.id}
+                    className="flex flex-wrap items-start justify-between gap-3 rounded-xl border border-hairline bg-white/[0.03] p-3.5"
+                  >
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-semibold text-ink">
+                        {email.subject || email.name || "Untitled email"}
+                      </span>
+                      <span className="mt-0.5 block text-xs text-ink-soft">
+                        {emailTiming(email, timeZone)}
+                        {email.subject && email.name && email.name !== email.subject
+                          ? ` · ${email.name}`
+                          : ""}
+                      </span>
+                    </span>
+                    <span className="flex shrink-0 flex-wrap items-center gap-1.5">
+                      {email.kajabiType && <Badge tone="plum">From Kajabi</Badge>}
+                      <Badge tone={EMAIL_STATUS_TONE[email.status] ?? "slate"}>
+                        {email.status || "draft"}
+                      </Badge>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          );
+        })
+      )}
+    </div>
+  );
+}
+
+type DetailTab = "details" | "registrations" | "actions";
 
 /* ── Repeats and location ───────────────────────────────────────────────── */
 
@@ -670,6 +1001,7 @@ export default function EventsAdmin() {
   const [report, setReport] = useState<EventReport | null>(null);
   const [selected, setSelected] = useState<number[]>([]);
   const [saving, setSaving] = useState(false);
+  const [tab, setTab] = useState<DetailTab>("details");
 
   const [reminderBusy, setReminderBusy] = useState(false);
   const [newReminder, setNewReminder] = useState(3);
@@ -710,20 +1042,46 @@ export default function EventsAdmin() {
    * that looks like the whole list is how somebody concludes an event vanished.
    */
   const [searchParams, setSearchParams] = useSearchParams();
-  const whenFilter = searchParams.get("when") === "upcoming" ? "upcoming" : null;
+  const whenParam = searchParams.get("when");
+  const whenFilter: WhenFilter =
+    whenParam === "upcoming" || whenParam === "past" || whenParam === "recurring"
+      ? whenParam
+      : "all";
   const linkedEventId = Number(searchParams.get("event")) || null;
   const [linkProblem, setLinkProblem] = useState<string | null>(null);
   const openedFromLink = useRef<number | null>(null);
 
-  const visibleEvents = useMemo(() => {
-    if (events === null || whenFilter !== "upcoming") return events;
+  /*
+   * Each event's Date column and whether it is still to come, worked out once
+   * per load: a repeating event's "next up" walks its series, and the table
+   * re-renders on every keystroke in the search box.
+   */
+  const schedules = useMemo(() => {
     const now = Date.now();
-    return events.filter((row) => isStillToCome(row, now));
-  }, [events, whenFilter]);
+    return new Map((events ?? []).map((row) => [row.id, scheduleOf(row, now)] as const));
+  }, [events]);
+
+  const visibleEvents = useMemo(() => {
+    if (events === null || whenFilter === "all") return events;
+    return events.filter((row) => {
+      const schedule = schedules.get(row.id);
+      if (!schedule) return true;
+      if (whenFilter === "upcoming") return schedule.upcoming;
+      if (whenFilter === "past") return !schedule.upcoming;
+      return schedule.repeats;
+    });
+  }, [events, schedules, whenFilter]);
 
   function clearParam(name: string) {
     const next = new URLSearchParams(searchParams);
     next.delete(name);
+    setSearchParams(next, { replace: true });
+  }
+
+  function setWhen(value: WhenFilter) {
+    const next = new URLSearchParams(searchParams);
+    if (value === "all") next.delete("when");
+    else next.set("when", value);
     setSearchParams(next, { replace: true });
   }
 
@@ -790,6 +1148,7 @@ export default function EventsAdmin() {
     setDetail(null);
     setForm(null);
     setProblems({});
+    setTab("details");
     setRegistrants(null);
     setReport(null);
     setSelected([]);
@@ -913,6 +1272,8 @@ export default function EventsAdmin() {
 
     setProblems(found);
     if (Object.keys(found).length > 0) {
+      // The red text is on the details tab; Save is reachable from every tab.
+      setTab("details");
       // The editor is long; the red text may be a scroll away from the button.
       toast.error("Some details need a look before this saves — they’re marked in red.");
       return;
@@ -948,6 +1309,7 @@ export default function EventsAdmin() {
     } catch (err) {
       const message = saveProblem(err, "event");
       setProblems({ server: message });
+      setTab("details");
       toast.error(message);
     } finally {
       setSaving(false);
@@ -1126,10 +1488,22 @@ export default function EventsAdmin() {
         header: "Who",
         cell: ({ row }) => (
           <span className="min-w-0">
-            <span className="block truncate font-semibold text-ink">
-              {row.original.name || "No name given"}
+            <span className="flex min-w-0 items-center gap-2">
+              <span className="truncate font-semibold text-ink">
+                {row.original.name || "No name given"}
+              </span>
+              {isKajabi(row.original.source) && <Badge tone="plum">From Kajabi</Badge>}
             </span>
             <span className="block truncate text-xs text-ink-soft">{row.original.email}</span>
+          </span>
+        ),
+      },
+      {
+        accessorKey: "createdAt",
+        header: "Registered",
+        cell: ({ row }) => (
+          <span className="text-sm text-ink-soft">
+            {kajabiDate(new Date(row.original.createdAt), detail?.timezone ?? DEFAULT_TIMEZONE, "short")}
           </span>
         ),
       },
@@ -1169,7 +1543,7 @@ export default function EventsAdmin() {
     ],
     // `openId` is in here because the copy action closes over which event the
     // join link belongs to.
-    [allSelected, registrants, selected, openId],
+    [allSelected, registrants, selected, openId, detail?.timezone],
   );
 
   const columns = useMemo<ColumnDef<EventSummary, unknown>[]>(
@@ -1188,51 +1562,44 @@ export default function EventsAdmin() {
             </span>
             <span className="min-w-0">
               <span className="block truncate font-semibold text-ink">{row.original.title}</span>
-              <span className="block truncate text-xs text-ink-soft">
-                {webAddress("events", row.original.slug)}
+              <span className="mt-0.5 flex min-w-0 flex-wrap items-center gap-1.5 text-xs text-ink-soft">
+                <span className="truncate">{EVENT_KIND_LABEL[row.original.kind]}</span>
+                {isKajabi(row.original.source) && (
+                  <Badge tone="plum">Imported from Kajabi</Badge>
+                )}
               </span>
             </span>
           </button>
         ),
       },
       {
-        accessorKey: "kind",
-        header: "What it is",
-        cell: ({ row }) => (
-          <Badge tone={row.original.kind === "live" ? "gold" : "blue"}>
-            {EVENT_KIND_LABEL[row.original.kind]}
-          </Badge>
-        ),
-      },
-      {
-        accessorKey: "startsAt",
-        header: "When",
-        cell: ({ row }) => <span className="text-sm text-ink-soft">{whenLabel(row.original)}</span>,
-      },
-      {
-        accessorKey: "registrationCount",
-        header: "Signed up",
+        id: "date",
+        // The words, so the search box finds "Daily" or "September" too. The
+        // list arrives newest first, which is the order Kajabi shows.
+        accessorFn: (row) => schedules.get(row.id)?.label ?? "",
+        header: "Date",
+        enableSorting: false,
         cell: ({ row }) => (
           <span className="text-sm text-ink-soft">
-            {row.original.registrationCount === 0
-              ? "Nobody yet"
-              : pluralize(row.original.registrationCount, "person", "people")}
+            {schedules.get(row.original.id)?.label ?? "No date yet"}
           </span>
         ),
       },
       {
-        accessorKey: "attendedCount",
-        header: "Turned up",
+        accessorKey: "registrationCount",
+        header: "Registrations",
         cell: ({ row }) => (
-          <span className="text-sm text-ink-soft">{row.original.attendedCount}</span>
+          <span className="font-bold tabular-nums text-sm text-ink">
+            {row.original.registrationCount}
+          </span>
         ),
       },
       {
         accessorKey: "published",
-        header: "On your site",
+        header: "Status",
         cell: ({ row }) => (
           <Badge tone={row.original.published ? "green" : "slate"}>
-            {publishLabel(row.original.published)}
+            {row.original.published ? "Published" : "Draft"}
           </Badge>
         ),
       },
@@ -1262,7 +1629,7 @@ export default function EventsAdmin() {
         ),
       },
     ],
-    [remove],
+    [remove, schedules],
   );
 
   return (
@@ -1282,30 +1649,42 @@ export default function EventsAdmin() {
       {error && <ErrorNotice message={error} />}
       {linkProblem && <ErrorNotice message={linkProblem} />}
 
-      {whenFilter === "upcoming" && (
-        <Card className="flex flex-wrap items-center justify-between gap-3 p-3">
-          <p className="text-sm text-ink-soft">
-            Showing only events still to come: live sessions that haven’t finished, and
-            always-on events.
-          </p>
-          <Button variant="secondary" size="sm" onClick={() => clearParam("when")}>
-            Show all events
-          </Button>
-        </Card>
-      )}
-
       <DataTable
         columns={columns}
         data={visibleEvents}
         searchPlaceholder="Search your events…"
         itemNoun={{ one: "event", many: "events" }}
-        minWidth="1000px"
+        minWidth="860px"
+        initialPageSize={25}
+        toolbar={
+          <div className={chipRowStyles} role="group" aria-label="Filter events">
+            {WHEN_FILTERS.map((choice) => (
+              <Chip
+                key={choice.value}
+                selected={whenFilter === choice.value}
+                onClick={() => setWhen(choice.value)}
+              >
+                {choice.label}
+              </Chip>
+            ))}
+          </div>
+        }
         emptyState={
-          whenFilter === "upcoming" && (events?.length ?? 0) > 0 ? (
+          whenFilter !== "all" && (events?.length ?? 0) > 0 ? (
             <EmptyState
               icon={<CalendarClock />}
-              title="Nothing coming up"
-              description="Every event you have has already happened. Show all events to see them."
+              title={
+                whenFilter === "upcoming"
+                  ? "Nothing coming up"
+                  : whenFilter === "past"
+                    ? "No past events"
+                    : "No repeating events"
+              }
+              description={
+                whenFilter === "upcoming"
+                  ? "Every event you have has already happened. Show all events to see them."
+                  : "None of your events match this filter. Show all events to see them."
+              }
               action={
                 <Button size="sm" variant="secondary" onClick={() => clearParam("when")}>
                   Show all events
@@ -1455,8 +1834,60 @@ export default function EventsAdmin() {
           </div>
         ) : (
           <div className="space-y-8">
+            {/* ------------------------------------------------------ the tabs */}
+            <div className="space-y-4">
+              {isKajabi(detail.source) && (
+                <Card className="flex flex-wrap items-start gap-3 border-plum/30 p-3">
+                  <Badge tone="plum">Imported from Kajabi</Badge>
+                  <p className="min-w-0 flex-1 text-sm text-ink-soft">
+                    Brought over from Kajabi with its registrations and emails. Kajabi still hosts
+                    the live registration page, so it stays unpublished here until you switch it
+                    on — everything below can be edited as normal.
+                  </p>
+                </Card>
+              )}
+              {/* Every tab stays mounted and is only hidden: the footer's Save
+                  submits #event-form, which has to exist whichever tab is open. */}
+              <div
+                role="tablist"
+                aria-label="Event sections"
+                className="flex flex-wrap gap-1 border-b border-hairline"
+              >
+                {(
+                  [
+                    { value: "details", label: "Event details" },
+                    {
+                      value: "registrations",
+                      label: `Registrations${registrants ? ` (${registrants.length})` : ""}`,
+                    },
+                    {
+                      value: "actions",
+                      label: `Event Actions${
+                        detail.emails && detail.emails.length > 0 ? ` (${detail.emails.length})` : ""
+                      }`,
+                    },
+                  ] as { value: DetailTab; label: string }[]
+                ).map((choice) => (
+                  <button
+                    key={choice.value}
+                    type="button"
+                    role="tab"
+                    aria-selected={tab === choice.value}
+                    onClick={() => setTab(choice.value)}
+                    className={`-mb-px min-h-11 border-b-2 px-3 py-2 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-plum/40 ${
+                      tab === choice.value
+                        ? "border-gold text-ink"
+                        : "border-transparent text-ink-soft hover:text-ink"
+                    }`}
+                  >
+                    {choice.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             {/* -------------------------------------------------- the numbers */}
-            {report && (
+            {report && tab !== "actions" && (
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 lg:grid-cols-6">
                 <StatTile label="Signed up" value={String(report.registered)} />
                 <StatTile label="Turned up" value={String(report.attended)} />
@@ -1468,7 +1899,11 @@ export default function EventsAdmin() {
             )}
 
             {/* ------------------------------------------------- the settings */}
-            <form id="event-form" onSubmit={save} className="grid gap-5">
+            <form
+              id="event-form"
+              onSubmit={save}
+              className={tab === "details" ? "grid gap-5" : "hidden"}
+            >
               {problems.server && <ErrorNotice message={problems.server} />}
 
               <Field label="What is this event called?" error={problems.title}>
@@ -1534,7 +1969,13 @@ export default function EventsAdmin() {
                         )
                       }
                     >
-                      {CADENCE_CHOICES.map((minutes) => (
+                      {/* An imported cadence the list doesn't offer (Kajabi's
+                          "every 4 days") is kept as the first choice rather than
+                          shown as whichever option happens to come first. */}
+                      {((CADENCE_CHOICES as readonly number[]).includes(form.cadenceMinutes)
+                        ? (CADENCE_CHOICES as readonly number[])
+                        : [form.cadenceMinutes, ...(CADENCE_CHOICES as readonly number[])]
+                      ).map((minutes) => (
                         <option key={minutes} value={minutes}>
                           {describeCadence(minutes)}
                         </option>
@@ -1787,8 +2228,13 @@ export default function EventsAdmin() {
               </label>
             </form>
 
+            {/* ------------------------------------------- event emails (Kajabi's Event Actions) */}
+            <div className={tab === "actions" ? "block" : "hidden"}>
+              <EventEmails emails={detail.emails ?? []} timeZone={detail.timezone || DEFAULT_TIMEZONE} />
+            </div>
+
             {/* ------------------------------------------------- reminders */}
-            <div className="space-y-3">
+            <div className={tab === "actions" ? "space-y-3" : "hidden"}>
               <div>
                 <h3 className="flex items-center gap-2 font-display text-base text-ink">
                   <BellRing aria-hidden className="size-4" />
@@ -1929,7 +2375,7 @@ export default function EventsAdmin() {
             </div>
 
             {/* ----------------------------------------------- registrants */}
-            <div className="space-y-3">
+            <div className={tab === "registrations" ? "space-y-3" : "hidden"}>
               <div className="flex flex-wrap items-end justify-between gap-3">
                 <div>
                   <h3 className="font-display text-base text-ink">Who signed up</h3>

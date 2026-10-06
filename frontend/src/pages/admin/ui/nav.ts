@@ -137,7 +137,6 @@ export const NAV_GROUPS: NavGroup[] = [
       // every marketing screen.
       { to: "/admin/marketing/overview", label: "Overview", ready: true },
       { to: "/admin/marketing/campaigns", label: "Email Campaigns", ready: true },
-      { to: "/admin/marketing/sequences", label: "Email Sequences", ready: true },
       // Called what its page calls itself: these are the receipts, password
       // resets and welcome notes the site sends on its own, not a design for
       // a campaign.
@@ -156,7 +155,6 @@ export const NAV_GROUPS: NavGroup[] = [
       { to: "/admin/marketing/events-v2", label: "Events", ready: true },
       { to: "/admin/marketing/events", label: "Community Events", ready: true },
       { to: "/admin/marketing/forms-v2", label: "Forms", ready: true },
-      { to: "/admin/marketing/forms", label: "Forms (old)", ready: true },
     ],
   },
   {
@@ -220,9 +218,21 @@ function isWithin(pathname: string, target: string, exact: boolean): boolean {
  * Whole segments, never raw prefixes: the old forms screen's address is the
  * start of the new one's, and a raw prefix would call one the other.
  */
+/**
+ * Screens that no longer have a row of their own but belong to one: sequences
+ * now live inside Email Campaigns (as Kajabi lists them), so a sequence's
+ * editor lights that row.
+ */
+const NAV_PARENTS: { prefix: string; target: string }[] = [
+  { prefix: "/admin/marketing/sequences", target: "/admin/marketing/campaigns" },
+];
+
 export function activeNavTarget(pathname: string): string | null {
   // The router ignores case and a trailing slash, so the highlight does too.
-  const path = pathname.toLowerCase().replace(/\/+$/, "");
+  let path = pathname.toLowerCase().replace(/\/+$/, "");
+  for (const { prefix, target } of NAV_PARENTS) {
+    if (isWithin(path, prefix, false)) path = target;
+  }
   let best: string | null = null;
   for (const group of NAV_GROUPS) {
     const rows = group.to
