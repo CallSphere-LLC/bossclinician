@@ -1,3 +1,4 @@
+import { useCommunityPreview } from "@/components/community/communityPreview";
 import { useEffect, useState } from "react";
 import { Trophy } from "lucide-react";
 import { SidebarPanel } from "@/components/community/SidebarPanel";
@@ -33,11 +34,13 @@ const PERIODS: { value: LeaderboardPeriod; label: string }[] = [
 ];
 
 export function LeaderboardPanel({ communitySlug }: { communitySlug: string }) {
-  const [board, setBoard] = useState<LeaderboardResponse | null>(null);
+  const preview = useCommunityPreview();
+  const [board, setBoard] = useState<LeaderboardResponse | null>(preview?.leaderboard ?? null);
   const [period, setPeriod] = useState<LeaderboardPeriod>("all");
   const [error, setError] = useState("");
 
   useEffect(() => {
+    if (preview) return;
     let cancelled = false;
     (async () => {
       try {

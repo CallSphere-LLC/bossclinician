@@ -76,6 +76,7 @@ import { loginPathFor } from "@/pages/admin/adminReturnTo";
 
 // Lazy, unlike the screens above: it is the member course player, and the
 // console should not carry that bundle for the one tab that opens it.
+const CommunityPreview = lazy(() => import("@/pages/admin/CommunityPreview"));
 const CoursePreview = lazy(() => import("@/pages/admin/CoursePreview"));
 // Checkout preview for an offer (any status): outside AdminLayout, it checks sign-in itself.
 const CheckoutPreview = lazy(() => import("@/pages/admin/CheckoutPreview"));
@@ -211,7 +212,7 @@ function ProtectedRoutes() {
  * page is the member player in the member's own chrome, and wrapping it in the
  * console's rail and theme would defeat the point of looking at it.
  */
-function CoursePreviewRoute() {
+function CoursePreviewRoute({ community = false }: { community?: boolean }) {
   const { user, loading } = useAuth();
   const location = useLocation();
 
@@ -220,7 +221,7 @@ function CoursePreviewRoute() {
 
   return (
     <Suspense fallback={<LoadingScreen />}>
-      <CoursePreview />
+      {community ? <CommunityPreview /> : <CoursePreview />}
     </Suspense>
   );
 }
@@ -234,6 +235,7 @@ export default function AdminApp() {
       <Route path="/invite/:token" element={<AcceptInvite />} />
       {/* Ranked above the catch-all below by being more specific, so these two
           never reach AdminLayout. Same shape as the member's /library routes. */}
+      <Route path="/community/:id/preview" element={<CoursePreviewRoute community />} />
       <Route path="/courses/:id/preview" element={<CoursePreviewRoute />} />
       <Route path="/courses/:id/preview/lessons/:lessonSlug" element={<CoursePreviewRoute />} />
       <Route

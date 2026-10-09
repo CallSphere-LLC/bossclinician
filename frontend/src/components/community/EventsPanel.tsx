@@ -1,3 +1,4 @@
+import { useCommunityPreview } from "@/components/community/communityPreview";
 import { Link } from "react-router";
 import { useEffect, useState } from "react";
 import { CalendarDays, Repeat, Users } from "lucide-react";
@@ -42,11 +43,13 @@ const RSVP_CHOICES: { status: RsvpStatus; label: string }[] = [
 ];
 
 export function EventsPanel({ communitySlug }: { communitySlug: string }) {
-  const [events, setEvents] = useState<CommunityEvent[] | null>(null);
+  const preview = useCommunityPreview();
+  const [events, setEvents] = useState<CommunityEvent[] | null>(preview?.events ?? null);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState<number | null>(null);
 
   useEffect(() => {
+    if (preview) return;
     let cancelled = false;
     (async () => {
       try {

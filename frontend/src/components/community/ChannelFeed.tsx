@@ -1,3 +1,4 @@
+import { useCommunityPreview } from "@/components/community/communityPreview";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 import { Loader2, MessagesSquare } from "lucide-react";
@@ -52,15 +53,16 @@ const PER_PAGE = 20;
 const KNOWN_VIEW_MODES = new Set(["feed", "forum", "gallery"]);
 
 export function ChannelFeed({ communitySlug, channelSlug, role }: ChannelFeedProps) {
+  const preview = useCommunityPreview();
   const { member } = useMember();
   const [searchParams] = useSearchParams();
 
-  const [channel, setChannel] = useState<ChannelFeedPage["channel"] | null>(null);
-  const [posts, setPosts] = useState<CommunityPost[]>([]);
-  const [reactionEmoji, setReactionEmoji] = useState<string[]>([]);
+  const [channel, setChannel] = useState<ChannelFeedPage["channel"] | null>(preview?.feed?.channel ?? null);
+  const [posts, setPosts] = useState<CommunityPost[]>(preview?.feed?.posts ?? []);
+  const [reactionEmoji, setReactionEmoji] = useState<string[]>(preview?.feed?.reactionEmoji ?? []);
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!preview);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState("");
   /**
@@ -93,6 +95,7 @@ export function ChannelFeed({ communitySlug, channelSlug, role }: ChannelFeedPro
 
   const loadPage = useCallback(
     async (wanted: number) => {
+      if (preview) return;
       if (inFlight.current) return;
       inFlight.current = true;
       if (wanted === 1) setLoading(true);
@@ -132,6 +135,7 @@ export function ChannelFeed({ communitySlug, channelSlug, role }: ChannelFeedPro
   // Switching channels starts over rather than appending: the two lists are
   // different rooms, and merging them would put one channel's posts in another.
   useEffect(() => {
+    if (preview) return;
     currentKey.current = feedKey;
     // Cleared outright rather than awaited: the request still running belongs to
     // the channel just left, and its result is discarded by the key check above.
@@ -162,6 +166,7 @@ export function ChannelFeed({ communitySlug, channelSlug, role }: ChannelFeedPro
 
   const createPost = useCallback(
     async (input: NewPostInput): Promise<boolean> => {
+      if (preview) return false;
       /*
        * A scheduled post is not in the channel yet, so there is nothing to
        * insert optimistically — and splicing one in would show every reader a
@@ -309,7 +314,13 @@ export function ChannelFeed({ communitySlug, channelSlug, role }: ChannelFeedPro
         <p className="copy-luxe text-sm">{channel.description}</p>
       )}
 
-      {impersonated ? (
+      {preview ? (
+        <fieldset disabled>
+          <PostComposer communitySlug={communitySlug} channelName={channel?.name ?? "the community"}
+            authorName="Participant" authorEmail="" authorAvatarUrl="" onSubmit={async () => false} canSchedule={false} />
+          <p className="mt-2 text-xs text-orchid-dim">Posting is disabled in preview.</p>
+        </fieldset>
+      ) : impersonated ? (
         <GlassCard spotlight={false} interactive={false} className="p-5">
           <p className="text-sm leading-relaxed text-orchid">
             You are viewing this account as an administrator, so posting is switched off. Anything
@@ -387,7 +398,7 @@ export function ChannelFeed({ communitySlug, channelSlug, role }: ChannelFeedPro
                 communitySlug={communitySlug}
                 reactionEmoji={reactionEmoji}
                 canModerate={canModerate(role)}
-                canWrite={Boolean(verified) && !impersonated}
+                canWrite={!preview && Boolean(verified) && !impersonated}
                 onChange={updatePost}
                 onRemove={removePost}
                 defaultOpenComments={post.id === deepLinkedPost}
@@ -406,7 +417,7 @@ export function ChannelFeed({ communitySlug, channelSlug, role }: ChannelFeedPro
         </p>
       )}
 
-      {!hasMore && posts.length > 0 && !loading && (
+      {!hasMore && !preview && posts.length > 0 && !loading && (
         <p className="py-2 text-center text-xs uppercase tracking-[0.16em] text-orchid-faint">
           You have reached the beginning
         </p>

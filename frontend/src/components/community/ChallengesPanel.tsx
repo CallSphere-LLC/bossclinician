@@ -1,3 +1,4 @@
+import { useCommunityPreview } from "@/components/community/communityPreview";
 import { useEffect, useState } from "react";
 import { CheckCircle2, Clock, Flame, Hourglass } from "lucide-react";
 import { toast } from "sonner";
@@ -20,10 +21,12 @@ import { cn } from "@/lib/cn";
  */
 
 export function ChallengesPanel({ communitySlug }: { communitySlug: string }) {
-  const [challenges, setChallenges] = useState<Challenge[] | null>(null);
+  const preview = useCommunityPreview();
+  const [challenges, setChallenges] = useState<Challenge[] | null>(preview?.challenges ?? null);
   const [error, setError] = useState("");
 
   useEffect(() => {
+    if (preview) return;
     let cancelled = false;
     (async () => {
       try {

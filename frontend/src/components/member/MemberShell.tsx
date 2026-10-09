@@ -1,3 +1,4 @@
+import { useCommunityPreview } from "@/components/community/communityPreview";
 import { SiteThemeToggle } from "@/components/layout/SiteThemeToggle";
 import { useEffect, useState, type ReactNode } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router";
@@ -127,6 +128,7 @@ export function MemberShell({
   children,
   sidebar,
 }: MemberShellProps) {
+  const preview = useCommunityPreview();
   const { member, signOut } = useMember();
   const navigate = useNavigate();
   const location = useLocation();
@@ -134,7 +136,7 @@ export function MemberShell({
   // The community's "Back" link returns to the last member page outside it
   // (see components/community/communityReturn.ts).
   useEffect(() => {
-    rememberCommunityReturn(location.pathname + location.search);
+    if (!preview) rememberCommunityReturn(location.pathname + location.search);
   }, [location.pathname, location.search]);
 
   const handleSignOut = async () => {
@@ -145,7 +147,7 @@ export function MemberShell({
   return (
     <div className="theme-luxe grain-overlay flex min-h-screen flex-col bg-night-deep">
       {/* A call in progress follows the member around the portal. */}
-      <FloatingCall />
+      {!preview && <FloatingCall />}
       <Toaster
         position="top-center"
         toastOptions={{
@@ -175,7 +177,7 @@ export function MemberShell({
           fixed offset between them breaks the moment the banner wraps to two
           lines on a narrow phone. */}
       <div className="sticky top-0 z-40">
-        {member?.impersonatedBy != null && <ImpersonationBanner />}
+        {!preview && member?.impersonatedBy != null && <ImpersonationBanner />}
         {/* The admin's "Preview as student" of a course. Nothing for a member. */}
         <PlayerPreviewBanner />
 
@@ -195,7 +197,7 @@ export function MemberShell({
 
             <SiteThemeToggle />
 
-            {member && (
+            {member && !preview && (
               <DropdownMenu.Root>
                 <DropdownMenu.Trigger asChild>
                   <button
@@ -331,7 +333,7 @@ export function MemberShell({
 
         <main id="member-content" className="min-w-0 flex-1">
           {/* Renders nothing unless the device and the saved time zone disagree. */}
-          <TimezonePrompt className="mb-8" />
+          {!preview && <TimezonePrompt className="mb-8" />}
 
           <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between sm:gap-8">
             <div className="min-w-0">
@@ -339,7 +341,7 @@ export function MemberShell({
                 {title}
               </h1>
               {description && (
-                <p className="copy-luxe mt-3 max-w-xl text-balance">
+                <p className="copy-luxe mt-3 max-w-3xl whitespace-pre-wrap break-words">
                   {description}
                 </p>
               )}

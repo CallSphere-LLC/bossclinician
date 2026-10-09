@@ -8,6 +8,7 @@ import {
   ArrowUpRight,
   ChevronDown,
   Hash,
+  Eye,
   MessagesSquare,
   Plus,
   Trash2,
@@ -86,8 +87,7 @@ export default function CommunityList() {
           ? "Community created — set up a paid access group next"
           : "Community created",
       );
-      if (form.access === "paid")
-        navigate(`/admin/community/${created.id}?tab=groups`);
+      navigate(`/admin/community/${created.id}?tab=${form.access === "paid" ? "groups" : "settings"}`);
       setCreating(false);
       setForm({ name: "", description: "", access: "free" });
       load();
@@ -197,12 +197,15 @@ export default function CommunityList() {
               />
             </dl>
 
-            <div className="mt-4 flex gap-2">
+            <div className="mt-4 flex flex-wrap gap-2">
               <Button asChild size="sm" className="flex-1">
                 <Link to={`/admin/community/${community.id}`}>
                   Manage
                   <ArrowUpRight />
                 </Link>
+              </Button>
+              <Button asChild variant="secondary" size="iconSm" aria-label={`Preview ${community.name} as participant`} title="Preview as participant">
+                <Link to={`/admin/community/${community.id}/preview`} target="_blank" rel="noopener noreferrer"><Eye /></Link>
               </Button>
               {isArchived ? (
                 <Button
@@ -367,13 +370,13 @@ export default function CommunityList() {
             />
           </Field>
           <Field
-            label="What's it for?"
-            hint="people see this before they join"
+            label="Description"
+            hint="Welcome members and explain what this community includes. You can edit this later under Details."
             htmlFor="community-desc"
           >
             <Textarea
               id="community-desc"
-              rows={3}
+              rows={6}
               value={form.description}
               onChange={(e) =>
                 setForm((f) => ({ ...f, description: e.target.value }))

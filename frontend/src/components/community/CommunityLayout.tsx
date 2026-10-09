@@ -1,3 +1,4 @@
+import { useCommunityPreview } from "@/components/community/communityPreview";
 import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import { ArrowLeft, Hash, Loader2, Lock, MessageSquare, Users, Video } from "lucide-react";
@@ -64,7 +65,8 @@ export function CommunityLayout({
   description,
   children,
 }: CommunityLayoutProps) {
-  const [overview, setOverview] = useState<CommunityOverview | null>(null);
+  const preview = useCommunityPreview();
+  const [overview, setOverview] = useState<CommunityOverview | null>(preview?.overview ?? null);
   const [error, setError] = useState("");
   const [communities, setCommunities] = useState<CommunitySummary[]>([]);
   // Every room this member may enter, joined or not — the same list the
@@ -73,6 +75,7 @@ export function CommunityLayout({
   const [enterableCount, setEnterableCount] = useState(0);
   const way = useCommunityReturn();
   useEffect(() => {
+    if (preview) return;
     communityApi
       .list()
       .then((r) => {
@@ -86,6 +89,7 @@ export function CommunityLayout({
   }, []);
 
   useEffect(() => {
+    if (preview) return;
     let cancelled = false;
     setOverview(null);
     (async () => {
@@ -115,7 +119,7 @@ export function CommunityLayout({
     <MemberShell
       title={heading}
       description={description ?? overview?.community.description}
-      actions={<NotificationBell />}
+      actions={preview ? <span className="text-xs text-orchid-dim">Participant view</span> : <NotificationBell />}
       sidebar={
         overview ? (
           <CommunityNavigation
@@ -225,9 +229,11 @@ export function CommunityLayout({
                 badges={overview.membership.badges}
                 nextBadge={overview.membership.nextBadge}
               />
-              <EventsPanel communitySlug={slug} />
-              <ChallengesPanel communitySlug={slug} />
-              <LeaderboardPanel communitySlug={slug} />
+              <fieldset disabled={!!preview} className="contents">
+                <EventsPanel communitySlug={slug} />
+                <ChallengesPanel communitySlug={slug} />
+                <LeaderboardPanel communitySlug={slug} />
+              </fieldset>
             </aside>
           )}
         </div>
@@ -251,6 +257,7 @@ function CommunityNavigation({
   communities: CommunitySummary[];
   activeChannel?: string;
 }) {
+  const preview = useCommunityPreview();
   const groups = Array.from(
     new Set(overview.channels.map((c) => c.accessGroupName || "All members")),
   );
@@ -330,7 +337,7 @@ function CommunityNavigation({
         </Link>
       )}
       <div className="border-t border-white/10 pt-4">
-        <CommandPalette slug={slug} />
+        <fieldset disabled={!!preview}><CommandPalette slug={slug} /></fieldset>
       </div>
       <nav aria-label="Channels and access groups" className="space-y-5">
         {groups.map((group) => (

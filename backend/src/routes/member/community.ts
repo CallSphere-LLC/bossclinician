@@ -790,7 +790,7 @@ memberCommunityRouter.post(
 
 /* ---------------------------------------------------------------- posts */
 
-interface FeedRow {
+export interface FeedRow {
   id: number;
   kind: string;
   title: string;
@@ -810,7 +810,7 @@ interface FeedRow {
   total_count: string;
 }
 
-const FEED_SELECT = `
+export const FEED_SELECT = `
   SELECT p.id, p.kind, p.title, p.body, p.media_url, p.media_label,
          p.pinned, p.locked, p.member_id,
          p.created_at, p.updated_at, p.last_activity_at,
@@ -846,7 +846,7 @@ interface PollOptionJson {
  * leaves them behind, and a feed that shows a number nobody can find the rows
  * for is a bug report waiting to be filed.
  */
-async function loadPostExtras(
+export async function loadPostExtras(
   postIds: number[],
   memberId: number
 ): Promise<{
@@ -890,7 +890,7 @@ async function loadPostExtras(
   return { reactions, polls };
 }
 
-function toPostJson(
+export function toPostJson(
   row: FeedRow,
   memberId: number,
   reactions: ReactionSummary[],

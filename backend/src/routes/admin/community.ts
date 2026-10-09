@@ -1,3 +1,4 @@
+import { adminCommunityPreviewRouter } from "./communityPreview";
 import { liveRoster } from "../../services/liveRoomBus";
 import { Router } from "express";
 import { GROUP_PRICE_COLUMNS, saveAccessGroup, deleteAccessGroup } from "../../services/communityGroupPricing";
@@ -30,6 +31,7 @@ import { mayEnterCommunity } from "../../services/access";
  * plus time-bound challenges and scheduled events.
  */
 export const adminCommunityRouter = Router();
+adminCommunityRouter.use("/:id/preview", adminCommunityPreviewRouter);
 
 const COMMUNITY_FIELDS = [
   "slug",

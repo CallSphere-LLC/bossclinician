@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
+import { CommunitySettings } from "./CommunitySettings";
 import { publicSiteUrl } from "@/lib/siteOrigins";
 import {
   GroupPricingFields,
@@ -20,6 +21,7 @@ import {
   ChevronDown,
   ChevronUp,
   Clock,
+  Eye,
   Hash,
   Layers,
   Lock,
@@ -93,6 +95,7 @@ import {
 } from "@/pages/admin/ui/friendly";
 
 const TAB_LIST = [
+  { value: "settings", label: "Details", icon: Settings },
   { value: "channels", label: "Channels", icon: Hash },
   { value: "live", label: "Live room", icon: Video },
   { value: "members", label: "Members", icon: Users },
@@ -158,7 +161,7 @@ function CommunityDetailPage({ id }: { id: string | undefined }) {
   // Controlled so the header's "Set up the live room" can switch to that tab.
   const [tab, setTab] = useState(() => {
     const asked = searchParams.get("tab");
-    return asked === "groups" || asked === "live" ? asked : "channels";
+    return TAB_LIST.some(t => t.value === asked) ? asked! : "channels";
   });
   const hostJoin = useHostJoin(communityId);
 
@@ -202,6 +205,8 @@ function CommunityDetailPage({ id }: { id: string | undefined }) {
           community && (
             <div className="flex flex-wrap items-center gap-2">
               {community.archivedAt && <Badge tone="slate">Archived</Badge>}
+              <Button asChild size="sm" variant="secondary"><Link to={`/admin/community/${communityId}/preview`} target="_blank" rel="noopener noreferrer"><Eye />Preview as participant</Link></Button>
+              <Button size="sm" variant="secondary" onClick={() => setTab("settings")}><Settings />Edit details</Button>
               <Badge tone={community.access === "paid" ? "gold" : "neutral"}>
                 {community.access === "paid"
                   ? "Paid community"
@@ -296,6 +301,7 @@ function CommunityDetailPage({ id }: { id: string | undefined }) {
         </aside>
 
         <div className="min-w-0">
+          <Tabs.Content value="settings">{community && <CommunitySettings key={community.id} community={community} onSaved={load} />}</Tabs.Content>
           <Tabs.Content value="channels">
             <ChannelsTab
               communityId={communityId}

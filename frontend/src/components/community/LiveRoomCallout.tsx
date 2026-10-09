@@ -1,3 +1,4 @@
+import { useCommunityPreview } from "@/components/community/communityPreview";
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
 import { Video } from "lucide-react";
@@ -28,12 +29,14 @@ export function LiveRoomCallout({
   label: string;
   href: string;
 }) {
+  const preview = useCommunityPreview();
   const [room, setRoom] = useState<LiveRoomStatus | null>(null);
   const [call, setCall] = useState<RoomSnapshot>(getIdleSnapshot);
 
-  useEffect(() => subscribeRoom(setCall), []);
+  useEffect(() => preview ? undefined : subscribeRoom(setCall), [preview]);
 
   useEffect(() => {
+    if (preview) return;
     let cancelled = false;
     const load = () =>
       communityApi

@@ -1,3 +1,4 @@
+import { useCommunityPreview } from "@/components/community/communityPreview";
 import { useState } from "react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import {
@@ -76,6 +77,7 @@ export function PostCard({
   onRemove,
   defaultOpenComments = false,
 }: PostCardProps) {
+  const preview = useCommunityPreview();
   const [showComments, setShowComments] = useState(defaultOpenComments);
   const [editing, setEditing] = useState(false);
   const [reporting, setReporting] = useState(false);
@@ -172,7 +174,7 @@ export function PostCard({
               onEdit={() => setEditing(true)}
               onDelete={() => void remove()}
               onModerate={(action) => void moderate(action)}
-              onReport={() => setReporting(true)}
+              onReport={() => { if (!preview) setReporting(true); }}
             />
           )}
         </div>
@@ -206,7 +208,7 @@ export function PostCard({
             <PollBlock
               postId={post.id}
               poll={post.poll}
-              locked={post.locked}
+              locked={post.locked || !!preview}
               onChange={(poll) => onChange(post.id, (current) => ({ ...current, poll }))}
             />
           )}
@@ -216,6 +218,7 @@ export function PostCard({
       {!pending && (
         <footer className="mt-5 flex flex-wrap items-center justify-between gap-3">
           <ReactionBar
+            disabled={!!preview}
             postId={post.id}
             reactions={post.reactions}
             available={reactionEmoji}
@@ -232,6 +235,7 @@ export function PostCard({
           <button
             type="button"
             onClick={() => setShowComments((open) => !open)}
+            disabled={!!preview}
             aria-expanded={showComments}
             className={cn(
               "inline-flex min-h-[2.75rem] items-center gap-2 rounded-full px-3",
@@ -248,7 +252,7 @@ export function PostCard({
         </footer>
       )}
 
-      {showComments && !pending && (
+      {showComments && !pending && !preview && (
         <CommentThread
           postId={post.id}
           communitySlug={communitySlug}
