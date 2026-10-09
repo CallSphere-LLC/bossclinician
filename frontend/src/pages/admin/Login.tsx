@@ -68,8 +68,8 @@ export default function Login() {
           <h1 className="font-display text-2xl text-ink">Google sign-in did not complete</h1>
           <ErrorNotice message={googleError} />
           <p className="text-sm text-ink-soft">You are still signed in as {user.email} from an earlier session.</p>
-          <Link className="inline-flex min-h-11 items-center rounded-xl bg-gold px-5 py-2.5 text-sm font-semibold text-night-deep" to={returnTo}>Continue with your existing session</Link>
           {googleEnabled && <AdminGoogleButton next={returnTo} />}
+          <Link className="inline-flex min-h-11 items-center rounded-xl bg-gold px-5 py-2.5 text-sm font-semibold text-night-deep" to={returnTo}>Continue with your existing session</Link>
         </section>
       </main>
     );
