@@ -30,7 +30,7 @@ fi
 export BUILDX_BUILDER=default
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
-helper_context="${AWS_HELPER_BUILD_CONTEXT:-/usr/local/share/callsphere/aws-helper-runtime}"
+helper_context="${AWS_HELPER_BUILD_CONTEXT:-/usr/local/share/bossclinician/aws-helper-runtime}"
 [[ -d "$helper_context" ]] || { echo 'Pinned public AWS helper runtime bundle is required.' >&2; exit 2; }
 python3 scripts/release-source-manifest.py > "$work/source-manifest.json"
 source_hash=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["sourceSha256"])' "$work/source-manifest.json")
