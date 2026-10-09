@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { Navigate, useLocation, useSearchParams } from "react-router";
+import { Link, Navigate, useLocation, useSearchParams } from "react-router";
 import { motion } from "motion/react";
 import { ArrowLeft, ArrowRight, Eye, EyeOff, Loader2, ShieldCheck } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
@@ -59,6 +59,20 @@ export default function Login() {
   const notice = error ?? googleError;
 
   if (!loading && user) {
+    // An earlier cookie session must not make a rejected Google attempt look
+    // successful. Keep the callback error visible until the user chooses how
+    // to continue, without signing them out of their existing session.
+    if (googleError) return (
+      <main className="theme-console flex min-h-screen items-center justify-center bg-cream px-5 py-12">
+        <section className="w-full max-w-md space-y-5 rounded-2xl border border-hairline p-6">
+          <h1 className="font-display text-2xl text-ink">Google sign-in did not complete</h1>
+          <ErrorNotice message={googleError} />
+          <p className="text-sm text-ink-soft">You are still signed in as {user.email} from an earlier session.</p>
+          <Link className="inline-flex min-h-11 items-center rounded-xl bg-gold px-5 py-2.5 text-sm font-semibold text-night-deep" to={returnTo}>Continue with your existing session</Link>
+          {googleEnabled && <AdminGoogleButton next={returnTo} />}
+        </section>
+      </main>
+    );
     // Back to the page that sent them here, if it was an admin page.
     return <Navigate to={returnTo} replace />;
   }
