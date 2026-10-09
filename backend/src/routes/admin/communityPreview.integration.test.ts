@@ -30,6 +30,8 @@ describeDb("community participant preview (integration)", () => {
       VALUES($1,'general','General','public',NULL,0),($1,'tier','Tier channel','public',$2,1),($1,'private','Private channel','private',NULL,2)`,[id,group]);
     const channel=(await db.client.query("SELECT id FROM community_channels WHERE community_id=$1 AND slug='general'",[id])).rows[0].id;
     await db.client.query("INSERT INTO community_posts(channel_id,title,body,status) VALUES($1,'Visible post','Read this','visible'),($1,'Hidden post','Hidden','hidden')",[channel]);
+    await db.client.query(`INSERT INTO community_events(community_id,title,published,starts_at,recurrence_freq,recurrence_interval,recurrence_until,access_group_id)
+      VALUES($1,'Tier monthly call',true,now()+interval '1 day','monthly',1,(now()+interval '1 year')::date,$2)`,[id,group]);
   },60000);
   afterAll(async()=>{
     await new Promise<void>(resolve=>server?.close(()=>resolve()));
@@ -50,6 +52,13 @@ describeDb("community participant preview (integration)", () => {
     expect((await read("?group=none&channel=tier")).status).toBe(404);
     expect((await read("?channel=private")).status).toBe(404);
     expect((await read(`?group=${otherGroup}`)).status).toBe(404);
+  });
+  it("previews recurring events with an end date only for their access group",async()=>{
+    const included=await read(`?group=${group}`);
+    expect(included.status).toBe(200);
+    expect(included.body.events.map((e:any)=>e.title)).toEqual(["Tier monthly call"]);
+    expect(included.body.events[0].recurring).toBe(true);
+    expect((await read("?group=none")).body.events).toEqual([]);
   });
   it("rejects malformed identifiers and never exposes a write endpoint",async()=>{
     expect((await fetch(`${base}/invalid/preview`)).status).toBe(404);

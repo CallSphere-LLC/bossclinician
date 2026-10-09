@@ -85,7 +85,7 @@ adminCommunityPreviewRouter.get("/", asyncHandler(async (req, res) => {
       reactionEmoji:["👍","❤️","🎉","🙌","🔥","😂","💡","👀"],page,perPage,total,hasMore:offset+rows.length<total};
   }
   const now = new Date();
-  const events = (await pool.query(`SELECT e.*,
+  const events = (await pool.query(`SELECT e.*, e.recurrence_until::text AS recurrence_until,
     (SELECT COUNT(*)::int FROM community_event_rsvps r WHERE r.event_id=e.id AND r.status='going') AS going_count
     FROM community_events e WHERE e.community_id=$1 AND e.published
       AND (e.access_group_id IS NULL OR e.access_group_id=ANY($2::int[])) ORDER BY e.starts_at,e.id`, [communityId,groupIds])).rows
