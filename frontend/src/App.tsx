@@ -1,7 +1,7 @@
 import { MemberPreviewBridge } from "@/components/admin/MemberPreviewBridge";
 import { AdminOriginBoundary } from "@/components/admin/AdminOriginBoundary";
 import { lazy, Suspense } from "react";
-import { Outlet, Route, Routes } from "react-router";
+import { Navigate, Outlet, Route, Routes } from "react-router";
 import { Layout } from "@/components/layout/Layout";
 import { RouteErrorBoundary } from "@/components/RouteErrorBoundary";
 import { AuthProvider } from "@/hooks/useAuth";
@@ -226,7 +226,7 @@ function memberRoutes() {
         <Route path="/account/billing" element={<MemberBilling />} />
         <Route path="/account/purchases" element={<MemberPurchases />} />
         <Route path="/account/downloads" element={<MemberDownloads />} />
-        <Route path="/downloads" element={<MemberDownloads />} />
+        <Route path="/downloads" element={<Navigate to="/library?tab=documents" replace />} />
         <Route path="/account/email" element={<MemberEmailPreferences />} />
         {/* A receipt's permanent address, and its PDF's. Inside RequireMember,
             so a signed-out visit goes to /login and returns here. */}

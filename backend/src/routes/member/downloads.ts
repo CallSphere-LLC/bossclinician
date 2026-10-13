@@ -6,8 +6,7 @@ import { asyncHandler } from "../../utils/asyncHandler";
 import { notFound, unauthorized } from "../../utils/httpError";
 import { denyImpersonation, type AuthedMember } from "../../middleware/memberAuth";
 import { hasCourseAccess, hasProductAccess } from "../../services/access";
-import { loadDripSettings } from "../../services/curriculum";
-import { describeUnlock, resolveDripState } from "../../services/drip";
+import { loadLessonStatesForMember, loadMemberLesson } from "../../services/curriculum";
 import {
   DOWNLOAD_TTL_SECONDS,
   isProtectedRef,
@@ -114,13 +113,6 @@ const OWNED_COURSES = `
      AND p.status <> 'archived' AND p.course_id IS NOT NULL
    GROUP BY p.course_id`;
 
-async function dripAnchor(memberId: number, courseId: number): Promise<Date | null> {
-  const found = await pool.query<{ granted_at: Date }>(
-    `SELECT granted_at FROM (${OWNED_COURSES}) owned WHERE course_id = $2`,
-    [memberId, courseId]
-  );
-  return found.rows[0]?.granted_at ?? null;
-}
 
 /* -------------------------------------------------------------- entitlement */
 
@@ -168,12 +160,14 @@ function toEntitledFile(kind: DownloadFileKind, row: FileRow): EntitledFile {
 }
 
 /**
- * Refuses anything a lesson's release schedule has not reached yet.
+ * Refuses anything from a lesson the member cannot open yet.
  *
- * An undripped lesson's workbook — or its video — is content that has not been
- * released, so it is refused here rather than filtered out in the client. The
- * unlock date is the one thing the member is told, which is what the player
- * shows too.
+ * An undripped, scheduled or locked lesson's workbook — or its video — is
+ * content that has not been released to this member, so it is refused here
+ * rather than filtered out in the client. The decision is the member outline's
+ * (services/curriculum.ts: drip, Kajabi-style schedule, and "complete / pass the
+ * previous lesson first"), so the file and the player can never disagree, and
+ * the player's own sentence is the one thing the member is told.
  *
  * A preview lesson is exempt, for the same reason it is exempt in the outline
  * and on the player: it is the lesson the sales page already plays to
@@ -181,31 +175,15 @@ function toEntitledFile(kind: DownloadFileKind, row: FileRow): EntitledFile {
  * the player a signed link, and the redemption behind it 404s — a lesson that
  * loads and then stalls, which reads as a broken video rather than as a rule.
  */
-async function assertReleased(
-  memberId: number,
-  courseId: number,
-  drip: {
-    lesson: { dripDays: number | null; dripDate: Date | null };
-    module: { dripDays: number | null; dripDate: Date | null };
-    preview: boolean;
-  }
-): Promise<void> {
-  if (drip.preview) return;
-
-  const grantedAt = await dripAnchor(memberId, courseId);
-  if (grantedAt === null) throw notFound(NOT_FOUND);
-
-  const settings = await loadDripSettings();
-  const state = resolveDripState({
-    lesson: drip.lesson,
-    module: drip.module,
-    grantedAt,
-    now: new Date(),
-    settings,
-  });
-
-  if (!state.unlocked && state.unlocksAt) {
-    throw notFound(`That file unlocks on ${describeUnlock(state.unlocksAt, settings.timezone)}.`);
+async function assertReleased(memberId: number, courseId: number, lessonId: number): Promise<void> {
+  const found = await loadMemberLesson(memberId, courseId, lessonId);
+  if (!found) throw notFound(NOT_FOUND);
+  if (!found.lesson.unlocked) {
+    throw notFound(
+      found.lesson.unlockLabel
+        ? `That file isn't available yet. ${found.lesson.unlockLabel}.`
+        : NOT_FOUND
+    );
   }
 }
 
@@ -256,11 +234,7 @@ export async function loadEntitledFile(
   if (!row || !row.published) throw notFound(NOT_FOUND);
   if (!(await hasCourseAccess(memberId, row.course_id))) throw notFound(NOT_FOUND);
 
-  await assertReleased(memberId, row.course_id, {
-    lesson: { dripDays: row.lesson_drip_days, dripDate: row.lesson_drip_date },
-    module: { dripDays: row.module_drip_days, dripDate: row.module_drip_date },
-    preview: row.preview,
-  });
+  await assertReleased(memberId, row.course_id, row.lesson_id);
 
   return toEntitledFile("lesson", row);
 }
@@ -338,11 +312,7 @@ export async function loadEntitledLessonMedia(
   if (!row || !row.published) throw notFound(NOT_FOUND);
   if (!(await hasCourseAccess(memberId, row.course_id))) throw notFound(NOT_FOUND);
 
-  await assertReleased(memberId, row.course_id, {
-    lesson: { dripDays: row.lesson_drip_days, dripDate: row.lesson_drip_date },
-    module: { dripDays: row.module_drip_days, dripDate: row.module_drip_date },
-    preview: row.preview,
-  });
+  await assertReleased(memberId, row.course_id, lessonId);
 
   const reference = {
     "lesson-video": row.video_url,
@@ -431,7 +401,7 @@ memberDownloadsRouter.get(
   asyncHandler(async (req, res) => {
     const member = currentMember(req);
 
-    const [products, lessons, settings] = await Promise.all([
+    const [products, lessons] = await Promise.all([
       pool.query<ProductFileListRow>(
         `SELECT pf.id, pf.title, pf.description, pf.storage_path, pf.filename, pf.mime,
                 pf.size_bytes, pf.download_count, pf.created_at,
@@ -462,10 +432,14 @@ memberDownloadsRouter.get(
           ORDER BY c.title, m.sort, l.sort, lf.sort, lf.id`,
         [member.id]
       ),
-      loadDripSettings(),
     ]);
 
-    const now = new Date();
+    // Lock, schedule and drip, decided once by the member outline for every
+    // course these attachments come from.
+    const lessonStates = await loadLessonStatesForMember(
+      member.id,
+      [...new Set(lessons.rows.map((row) => row.course_id))]
+    );
 
     const productItems: DownloadItem[] = products.rows.map((row) => {
       const sizeBytes = bigintToNumber(row.size_bytes);
@@ -496,17 +470,15 @@ memberDownloadsRouter.get(
     });
 
     const lessonItems: DownloadItem[] = lessons.rows.map((row) => {
-      const scheduled = resolveDripState({
-        lesson: { dripDays: row.lesson_drip_days, dripDate: row.lesson_drip_date },
-        module: { dripDays: row.module_drip_days, dripDate: row.module_drip_date },
-        grantedAt: row.granted_at,
-        now,
-        settings,
-      });
-      // A preview lesson's workbook is open the moment the course is, exactly as
-      // the lesson itself is — the list and the link endpoint answer the same
-      // question and must not answer it differently.
-      const state = row.preview ? { unlocked: true, unlocksAt: null } : scheduled;
+      // The list and the link endpoint answer the same question — the member
+      // outline's — and must not answer it differently. A lesson missing from
+      // the outline (no live grant) is shut.
+      const view = lessonStates.get(row.lesson_id);
+      const state = {
+        unlocked: view?.unlocked === true,
+        unlocksAt: view?.unlocksAt ? new Date(view.unlocksAt) : null,
+        label: view?.unlockLabel ?? "",
+      };
       // A locked attachment keeps its title and gains an unlock date. That is
       // everything the player shows for a locked lesson, and no more: the
       // filename and size describe a file that has not been released, and there
@@ -524,8 +496,7 @@ memberDownloadsRouter.get(
         sizeLabel: sizeLabel(sizeBytes),
         available: state.unlocked,
         unlocksAt: state.unlocksAt === null ? null : state.unlocksAt.toISOString(),
-        unlockLabel:
-          state.unlocksAt === null ? null : describeUnlock(state.unlocksAt, settings.timezone),
+        unlockLabel: state.unlocked ? null : state.label || null,
         linkUrl: state.unlocked ? downloadLinkPath("lesson", row.id) : null,
         productId: null,
         productTitle: "",

@@ -470,12 +470,7 @@ async function settleOrderPayment(
 
   log(`order ${order.id} paid — granted products [${result.grantedProductIds.join(", ")}]`);
   await sendPurchaseEmails(order, result);
-  notifyOwnerOfSale({
-    description: describe(order),
-    email: order.email,
-    amountCents: order.total_cents,
-    currency: order.currency,
-  });
+  notifyOwnerOfSale({ orderId: order.id });
   fireTriggerAsync("order_paid", {
     email: order.email,
     courseTitle: describe(order),

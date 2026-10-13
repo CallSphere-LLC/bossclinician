@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { Link } from "react-router";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { Link, useSearchParams } from "react-router";
 import {
   Award,
   BookOpen,
@@ -28,6 +28,22 @@ import {
 import { ProgressRing } from "@/components/player/ProgressRing";
 import { contentTypeLabel } from "@/components/player/lessonMeta";
 import { cn } from "@/lib/cn";
+import { DocumentsPanel } from "./Downloads";
+
+/**
+ * The two shelves, as Kajabi's library has them: what you work through, and the
+ * files you keep. `?tab=documents` is the address of the second, so it can be
+ * linked to and survives a reload.
+ */
+type LibraryTab = "courses" | "documents";
+
+const TABS: { id: LibraryTab; label: string; icon: typeof BookOpen }[] = [
+  { id: "courses", label: "Courses", icon: BookOpen },
+  { id: "documents", label: "Documents", icon: FileDown },
+];
+
+/** Download products are files, so they live on the Documents tab rather than as cards here. */
+const DOCUMENT_KIND = "download";
 
 /**
  * The shelf — everything this member has paid for.
@@ -43,6 +59,8 @@ import { cn } from "@/lib/cn";
  * this page has never heard of it.
  */
 export default function Library() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedTab = searchParams.get("tab");
   const [data, setData] = useState<LibraryResponse | null>(null);
   const [error, setError] = useState("");
   // Course ids with a live certificate. Loaded beside the shelf, never before
@@ -109,6 +127,31 @@ export default function Library() {
   }, []);
 
   const empty = data !== null && data.total === 0;
+  const courseGroups = data ? data.groups.filter((group) => group.kind !== DOCUMENT_KIND) : [];
+  const ownsDocuments =
+    data !== null && data.groups.some((group) => group.kind === DOCUMENT_KIND);
+  // An explicit ?tab wins. Without one, somebody who owns only documents lands
+  // on them instead of on an empty Courses tab.
+  const tab: LibraryTab =
+    requestedTab === "documents" || requestedTab === "courses"
+      ? requestedTab
+      : data !== null && courseGroups.length === 0 && ownsDocuments
+        ? "documents"
+        : "courses";
+  // The tabs wait for the shelf, except when the address asked for Documents —
+  // that tab loads its own list and has no reason to wait.
+  const showTabs = (data !== null && !empty) || requestedTab === "documents";
+
+  const selectTab = (next: LibraryTab) => {
+    setSearchParams(
+      (current) => {
+        const params = new URLSearchParams(current);
+        params.set("tab", next);
+        return params;
+      },
+      { replace: true },
+    );
+  };
 
   return (
     <MemberShell
@@ -118,12 +161,12 @@ export default function Library() {
       <Seo title="Your library | Boss Clinician" />
 
       <div aria-live="polite">
-        {error && (
+        {error && tab === "courses" && (
           <p role="alert" className="text-sm font-medium text-red-400">
             {error}
           </p>
         )}
-        {!error && data === null && (
+        {!error && data === null && tab === "courses" && (
           <p className="flex items-center gap-2.5 text-sm text-orchid-dim">
             <Loader2 aria-hidden className="size-4 animate-spin" />
             Opening your library…
@@ -131,11 +174,11 @@ export default function Library() {
         )}
       </div>
 
-      {data && (
+      {(data || showTabs) && (
         <div className="flex flex-col gap-10">
-          {data.continueLesson && <ContinueBand lesson={data.continueLesson} />}
+          {data?.continueLesson && <ContinueBand lesson={data.continueLesson} />}
 
-          {data.expiringSoonCount > 0 && (
+          {data && data.expiringSoonCount > 0 && (
             <p className="flex items-start gap-2.5 rounded-xl border border-gold/25 bg-gold/[0.06] px-4 py-3 text-sm text-gold-bright">
               <CalendarClock aria-hidden className="mt-0.5 size-4 shrink-0" />
               <span>
@@ -147,36 +190,154 @@ export default function Library() {
             </p>
           )}
 
-          {empty ? (
-            <EmptyLibrary />
-          ) : (
-            data.groups.map((group) => (
-              <section key={group.kind} aria-labelledby={`group-${group.kind}`}>
-                <div className="flex items-baseline justify-between gap-4">
-                  <h2 id={`group-${group.kind}`} className="font-display text-xl text-white">
-                    {group.label}
-                  </h2>
-                  <p className="text-[0.7rem] uppercase tracking-[0.14em] text-orchid-faint">
-                    {group.items.length}
-                  </p>
-                </div>
+          {empty && !showTabs && <EmptyLibrary />}
 
-                <ul className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                  {group.items.map((item) => (
-                    <li key={item.productId} className="flex">
-                      <LibraryCard
-                        item={item}
-                        certified={item.courseId !== null && certifiedCourseIds.has(item.courseId)}
-                      />
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            ))
+          {showTabs && (
+            <div className="flex flex-col gap-8">
+              <LibraryTabs active={tab} onSelect={selectTab} />
+
+              <div
+                role="tabpanel"
+                id={`library-panel-${tab}`}
+                aria-labelledby={`library-tab-${tab}`}
+                className="flex flex-col gap-10"
+              >
+                {tab === "documents" ? (
+                  <DocumentsPanel embedded />
+                ) : data === null ? null : courseGroups.length === 0 ? (
+                  <NoCourses />
+                ) : (
+                  courseGroups.map((group) => (
+                    <section key={group.kind} aria-labelledby={`group-${group.kind}`}>
+                      <div className="flex items-baseline justify-between gap-4">
+                        <h2 id={`group-${group.kind}`} className="font-display text-xl text-white">
+                          {group.label}
+                        </h2>
+                        <p className="text-[0.7rem] uppercase tracking-[0.14em] text-orchid-faint">
+                          {group.items.length}
+                        </p>
+                      </div>
+
+                      <ul className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                        {group.items.map((item) => (
+                          <li key={item.productId} className="flex">
+                            <LibraryCard
+                              item={item}
+                              certified={item.courseId !== null && certifiedCourseIds.has(item.courseId)}
+                            />
+                          </li>
+                        ))}
+                      </ul>
+                    </section>
+                  ))
+                )}
+              </div>
+            </div>
           )}
         </div>
       )}
     </MemberShell>
+  );
+}
+
+/* --------------------------------------------------------------------- tabs */
+
+/**
+ * Courses | Documents.
+ *
+ * A real tablist: arrow keys move between the two and select as they go, and
+ * only the selected tab is a tab stop. Full width and split evenly on a phone,
+ * where two thumb-sized halves beat a pill floating at the left.
+ */
+function LibraryTabs({
+  active,
+  onSelect,
+}: {
+  active: LibraryTab;
+  onSelect: (tab: LibraryTab) => void;
+}) {
+  const refs = useRef<Record<LibraryTab, HTMLButtonElement | null>>({
+    courses: null,
+    documents: null,
+  });
+
+  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    const index = TABS.findIndex((t) => t.id === active);
+    let next: number | null = null;
+    if (event.key === "ArrowRight") next = (index + 1) % TABS.length;
+    else if (event.key === "ArrowLeft") next = (index - 1 + TABS.length) % TABS.length;
+    else if (event.key === "Home") next = 0;
+    else if (event.key === "End") next = TABS.length - 1;
+    if (next === null) return;
+    event.preventDefault();
+    const target = TABS[next]!.id;
+    onSelect(target);
+    refs.current[target]?.focus();
+  };
+
+  return (
+    <div
+      role="tablist"
+      aria-label="Your library"
+      onKeyDown={onKeyDown}
+      className="grid w-full grid-cols-2 gap-1 rounded-full border border-white/10 bg-white/[0.03] p-1 sm:inline-grid sm:w-auto sm:self-start"
+    >
+      {TABS.map(({ id, label, icon: Icon }) => {
+        const selected = id === active;
+        return (
+          <button
+            key={id}
+            ref={(node) => {
+              refs.current[id] = node;
+            }}
+            type="button"
+            role="tab"
+            id={`library-tab-${id}`}
+            aria-selected={selected}
+            aria-controls={selected ? `library-panel-${id}` : undefined}
+            tabIndex={selected ? 0 : -1}
+            onClick={() => onSelect(id)}
+            className={cn(
+              "inline-flex min-h-[2.75rem] items-center justify-center gap-2 rounded-full border px-5",
+              "text-[0.72rem] font-semibold uppercase tracking-[0.14em] transition-colors duration-300",
+              "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold",
+              selected
+                ? "border-gold/40 bg-gold/[0.12] text-gold"
+                : "border-transparent text-orchid hover:text-gold",
+            )}
+          >
+            <Icon aria-hidden className="size-4" />
+            {label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/** The Courses tab for somebody whose shelf holds only documents. */
+function NoCourses() {
+  return (
+    <GlassCard
+      spotlight={false}
+      interactive={false}
+      className="flex flex-col items-center px-6 py-14 text-center sm:px-10"
+    >
+      <span
+        aria-hidden
+        className="grid size-14 place-items-center rounded-full border border-gold/25 bg-gold/[0.08]"
+      >
+        <BookOpen className="size-6 text-gold" />
+      </span>
+      <h2 className="mt-5 font-display text-[1.5rem] leading-snug text-white">No courses yet</h2>
+      <p className="copy-luxe mt-3 max-w-md text-balance">
+        The courses you join will be here, ready to pick up where you left off. Your files are on
+        the Documents tab.
+      </p>
+      <div className="mt-7 flex flex-wrap justify-center gap-3">
+        <LuxeButton to="/courses">Browse the courses</LuxeButton>
+      </div>
+    </GlassCard>
   );
 }
 

@@ -57,39 +57,16 @@ function groupFiles(files: DownloadListItem[]): DownloadGroup[] {
   }
 
   // The server already orders files within a product or course; this keeps that
-  // order and only puts the groups themselves in a predictable one.
-  return [...groups.values()].sort((a, b) => a.title.localeCompare(b.title));
+  // order and only puts the groups themselves in a predictable one: the document
+  // collections bought as such first, then the workbooks that came with courses.
+  const rank = (group: DownloadGroup) => (group.key.startsWith("product:") ? 0 : 1);
+  return [...groups.values()].sort(
+    (a, b) => rank(a) - rank(b) || a.title.localeCompare(b.title),
+  );
 }
 
 export default function Downloads() {
   const fromAccount = useLocation().pathname.startsWith("/account");
-  const [data, setData] = useState<DownloadsResponse | null>(null);
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const response = await libraryApi.getDownloads();
-        if (!cancelled) {
-          setData(response);
-          setError("");
-        }
-      } catch (err) {
-        if (cancelled) return;
-        setError(
-          err instanceof MemberApiError
-            ? err.message
-            : "We could not load your downloads just now. Please try again.",
-        );
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const groups = useMemo(() => (data ? groupFiles(data.files) : []), [data]);
 
   return (
     <MemberShell
@@ -114,6 +91,63 @@ export default function Downloads() {
       </Link>
       )}
 
+      <DocumentsPanel />
+    </MemberShell>
+  );
+}
+
+/**
+ * The file list itself — this page's body, and the library's Documents tab.
+ *
+ * Re-read when the member comes back to the tab, as the library shelf is: access
+ * granted or refunded in another window should show here without a reload.
+ * `embedded` is the library's copy, whose empty state points at the Courses tab
+ * beside it rather than back to the page it is already on.
+ */
+export function DocumentsPanel({ embedded = false }: { embedded?: boolean }) {
+  const [data, setData] = useState<DownloadsResponse | null>(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    let cancelled = false;
+    let latestRequest = 0;
+
+    async function load() {
+      const request = ++latestRequest;
+      try {
+        const response = await libraryApi.getDownloads();
+        if (cancelled || request !== latestRequest) return;
+        setData(response);
+        setError("");
+      } catch (err) {
+        if (cancelled || request !== latestRequest) return;
+        setError(
+          err instanceof MemberApiError
+            ? err.message
+            : "We could not load your downloads just now. Please try again.",
+        );
+      }
+    }
+
+    const refreshVisible = () => {
+      if (document.visibilityState === "visible") void load();
+    };
+    void load();
+    window.addEventListener("focus", refreshVisible);
+    window.addEventListener("pageshow", refreshVisible);
+    document.addEventListener("visibilitychange", refreshVisible);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("focus", refreshVisible);
+      window.removeEventListener("pageshow", refreshVisible);
+      document.removeEventListener("visibilitychange", refreshVisible);
+    };
+  }, []);
+
+  const groups = useMemo(() => (data ? groupFiles(data.files) : []), [data]);
+
+  return (
+    <>
       <div aria-live="polite">
         {error && (
           <p role="alert" className="text-sm font-medium text-red-400">
@@ -128,7 +162,7 @@ export default function Downloads() {
         )}
       </div>
 
-      {data && data.total === 0 && <NoDownloads />}
+      {data && data.total === 0 && <NoDownloads embedded={embedded} />}
 
       {data && data.total > 0 && (
         <div className="flex flex-col gap-6">
@@ -142,7 +176,7 @@ export default function Downloads() {
           ))}
         </div>
       )}
-    </MemberShell>
+    </>
   );
 }
 
@@ -224,7 +258,7 @@ function LockedRow({ file }: { file: DownloadListItem }) {
   );
 }
 
-function NoDownloads() {
+function NoDownloads({ embedded }: { embedded: boolean }) {
   return (
     <GlassCard
       spotlight={false}
@@ -245,7 +279,7 @@ function NoDownloads() {
         for you here as well as beside its lesson.
       </p>
       <div className="mt-7 flex flex-wrap justify-center gap-3">
-        <LuxeButton to="/library">Back to your library</LuxeButton>
+        <LuxeButton to="/library">{embedded ? "See your courses" : "Back to your library"}</LuxeButton>
       </div>
     </GlassCard>
   );

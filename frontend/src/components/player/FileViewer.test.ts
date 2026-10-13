@@ -15,6 +15,18 @@ describe("viewerKindFor", () => {
     [{ filename: "notes.md", mime: "" }, "text"],
     [{ filename: "budget.xlsx", mime: "application/vnd.ms-excel" }, "none"],
     [{ filename: "bundle.zip", mime: "application/zip" }, "none"],
+    [
+      { filename: "Referral_Tracker.xlsx", mime: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" },
+      "none",
+    ],
+    [{ filename: "deck.pptx", mime: "application/vnd.openxmlformats-officedocument.presentationml.presentation" }, "none"],
+    [{ filename: "letter.rtf", mime: "text/rtf" }, "none"],
+    [{ filename: "old-form.doc", mime: "application/msword" }, "none"],
+    [{ filename: "One_Pager.docx_1_.pdf", mime: "application/pdf" }, "pdf"],
+    [
+      { filename: "Ideal_Client.docx", mime: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" },
+      "docx",
+    ],
     [{ filename: "no-extension", mime: "" }, "none"],
   ] as const)("%o is shown as %s", (file, expected) => {
     expect(viewerKindFor(file)).toBe(expected);

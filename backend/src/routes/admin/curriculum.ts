@@ -7,6 +7,7 @@ import { buildUpdate } from "../../utils/sqlUpdate";
 import { isExternalRef, isProtectedRef } from "../../services/signedUrls";
 import { DEFAULT_DRIP_SETTINGS, zonedWallClockToUtc, type DripSettings } from "../../services/drip";
 import { loadDripSettings } from "../../services/curriculum";
+import { clearCertificateTemplateCache } from "../../services/certificates";
 import { z } from "zod";
 
 /**
@@ -40,6 +41,10 @@ export interface CourseLesson {
   dripDate: Date | null;
   /** The day `dripDate` names in the owner's release zone, "YYYY-MM-DD". */
   dripDateLocal?: string | null;
+  /** Kajabi "Scheduled": the exact instant the lesson opens. null = not scheduled. */
+  publishAt?: Date | null;
+  /** `publishAt` as "YYYY-MM-DDTHH:MM" in the owner's release zone. */
+  publishAtLocal?: string | null;
 }
 
 export interface CourseModule {
@@ -81,6 +86,7 @@ export const LESSON_FIELDS = [
   "sort",
   "drip_days",
   "drip_date",
+  "publish_at",
 ] as const;
 
 /**
@@ -282,6 +288,74 @@ export function normalizeDrip(
   return { ...rest, drip_days: days, drip_date: date };
 }
 
+/** Every spelling a body may use for the scheduled-publish instant. */
+const PUBLISH_AT_KEYS = ["publishAt", "publish_at", "publishAtLocal", "publish_at_local"];
+
+const LOCAL_DATE_TIME = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::\d{2})?$/;
+
+/**
+ * Kajabi's "Scheduled" status: the instant a lesson opens to members.
+ *
+ * The course builder sends `publishAtLocal`, a bare "2026-10-20T09:00" from a
+ * datetime box, which means that wall-clock time in the owner's release zone
+ * (Settings → Delivery) — the same zone every drip date is quoted in, so the
+ * time she typed is the time her members are told, wherever her browser is. An
+ * API client may send `publishAt` as a full timestamp instead. Empty clears it.
+ *
+ * Bodies that say nothing about it are returned untouched, so a rename does not
+ * quietly unschedule a lesson.
+ */
+export function normalizePublishAt(
+  body: Record<string, unknown>,
+  settings: DripSettings = DEFAULT_DRIP_SETTINGS,
+): Record<string, unknown> {
+  const mentioned = Object.keys(body).filter((key) => PUBLISH_AT_KEYS.includes(key));
+  if (mentioned.length === 0) return body;
+
+  let at: Date | null = null;
+  for (const key of mentioned) {
+    const value = body[key];
+    if (value === null || value === undefined || String(value).trim() === "") continue;
+    const raw = value instanceof Date ? value.toISOString() : String(value).trim();
+    const local = LOCAL_DATE_TIME.exec(raw);
+    if (local && key.toLowerCase().includes("local")) {
+      const [year, month, day, hour, minute] = local.slice(1).map(Number);
+      const real = new Date(Date.UTC(year, month - 1, day));
+      if (real.getUTCMonth() + 1 !== month || real.getUTCDate() !== day || hour > 23 || minute > 59) {
+        throw badRequest("That publish date isn't a real date and time.");
+      }
+      at = zonedWallClockToUtc(year, month, day, hour * 60 + minute, settings.timezone);
+    } else {
+      const parsed = new Date(raw);
+      if (Number.isNaN(parsed.getTime())) throw badRequest("That publish date isn't a real date and time.");
+      at = parsed;
+    }
+  }
+
+  const rest = Object.fromEntries(Object.entries(body).filter(([key]) => !PUBLISH_AT_KEYS.includes(key)));
+  return { ...rest, publish_at: at };
+}
+
+/** A stored publish instant as "YYYY-MM-DDTHH:MM" in the owner's zone, for a datetime box. */
+export function publishAtLocal(value: unknown, timeZone: string): string | null {
+  if (value === null || value === undefined) return null;
+  const at = value instanceof Date ? value : new Date(String(value));
+  if (Number.isNaN(at.getTime())) return null;
+  const parts: Record<string, string> = {};
+  for (const part of new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    hourCycle: "h23",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).formatToParts(at)) {
+    if (part.type !== "literal") parts[part.type] = part.value;
+  }
+  return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}`;
+}
+
 /**
  * The day a stored release instant names, in the owner's release zone.
  *
@@ -362,11 +436,12 @@ adminCurriculumRouter.get(
     );
     const lessons = await pool.query(
       `SELECT l.*, a.id AS assessment_id, a.slug::text AS assessment_slug,
-              a.title AS assessment_title
+              a.title AS assessment_title, a.kind AS assessment_kind,
+              a.require_pass AS assessment_require_pass, a.pass_mark AS assessment_pass_mark
          FROM course_lessons l
        JOIN course_modules m ON m.id = l.module_id
        LEFT JOIN LATERAL (
-         SELECT id, slug, title FROM assessments
+         SELECT id, slug, title, kind, require_pass, pass_mark FROM assessments
           WHERE lesson_id = l.id AND kind IN ('graded','survey')
           ORDER BY id LIMIT 1
        ) a ON true
@@ -380,7 +455,11 @@ adminCurriculumRouter.get(
     const byModule = new Map<number, CourseLesson[]>();
     for (const lesson of rowsToCamel<CourseLesson>(lessons.rows)) {
       const bucket = byModule.get(lesson.moduleId);
-      const withDay = { ...lesson, dripDateLocal: dripDateLocal(lesson.dripDate, timezone) };
+      const withDay = {
+        ...lesson,
+        dripDateLocal: dripDateLocal(lesson.dripDate, timezone),
+        publishAtLocal: publishAtLocal(lesson.publishAt, timezone),
+      };
       if (bucket) bucket.push(withDay);
       else byModule.set(lesson.moduleId, [withDay]);
     }
@@ -455,7 +534,9 @@ adminCurriculumRouter.post(
     // Insert takes the schedule too, so the first save of a brand-new lesson
     // keeps what the form was showing rather than dropping it and reopening the
     // lesson to a blank "release immediately".
-    const drip = normalizeDrip(body, await loadDripSettings());
+    const settings = await loadDripSettings();
+    const drip = normalizeDrip(body, settings);
+    const schedule = normalizePublishAt(body, settings);
 
     // Two lessons called "Introduction" in one section is the ordinary case, so
     // the slug is disambiguated against the ones the section already holds.
@@ -469,9 +550,9 @@ adminCurriculumRouter.post(
       `INSERT INTO course_lessons
          (module_id, slug, title, body_md, video_url, audio_url, attachment_url, thumbnail_url,
           duration_minutes, preview, published, content_type, comments_enabled,
-          requires_previous_lesson, drip_days, drip_date, embed_html, sort)
+          requires_previous_lesson, drip_days, drip_date, embed_html, publish_at, sort)
        SELECT $1, $11::text,
-              $2, $3, $4, $5, $6, $7, $8, $9, $10, $12, $13, $14, $15, $16, $17,
+              $2, $3, $4, $5, $6, $7, $8, $9, $10, $12, $13, $14, $15, $16, $17, $18,
               (SELECT COALESCE(MAX(sort), -1) + 1 FROM course_lessons WHERE module_id = $1)
        RETURNING *`,
       [
@@ -492,6 +573,7 @@ adminCurriculumRouter.post(
         drip.drip_days ?? null,
         drip.drip_date ?? null,
         body.embedHtml ?? "",
+        schedule.publish_at ?? null,
       ],
     );
     res.status(201).json(rowToCamel<CourseLesson>(result.rows[0]));
@@ -505,7 +587,8 @@ adminCurriculumRouter.put(
     assertContentType(req.body as Record<string, unknown>);
     assertEmbedHtml(req.body as Record<string, unknown>);
 
-    const body = normalizeDrip(req.body as Record<string, unknown>, await loadDripSettings());
+    const settings = await loadDripSettings();
+    const body = normalizePublishAt(normalizeDrip(req.body as Record<string, unknown>, settings), settings);
     const update = buildUpdate(body, LESSON_FIELDS);
     if (!update) throw badRequest("No updatable fields supplied");
 
@@ -518,6 +601,157 @@ adminCurriculumRouter.put(
     res.json(rowToCamel<CourseLesson>(result.rows[0]));
   }),
 );
+
+/**
+ * POST /admin/curriculum/:courseId/lock-sequence  { locked: boolean }
+ *
+ * Kajabi's "Lock" for a whole course in one click: every lesson waits for the
+ * one before it (and for a pass on it, where its quiz requires one). The first
+ * lesson has nothing before it, so the flag on it is harmless. Turning it off
+ * clears every lesson's lock. Returns the number of lessons changed.
+ */
+adminCurriculumRouter.post(
+  "/:courseId/lock-sequence",
+  asyncHandler(async (req, res) => {
+    const courseId = Number(req.params.courseId);
+    if (!Number.isInteger(courseId) || courseId <= 0) throw notFound("Course not found");
+    const parsed = z.object({ locked: z.boolean() }).safeParse(req.body);
+    if (!parsed.success) throw badRequest("Say whether lessons should be locked in order.");
+
+    const result = await pool.query(
+      `UPDATE course_lessons l
+          SET requires_previous_lesson = $2, updated_at = now()
+         FROM course_modules m
+        WHERE m.id = l.module_id AND m.course_id = $1
+          AND l.requires_previous_lesson IS DISTINCT FROM $2`,
+      [courseId, parsed.data.locked],
+    );
+    res.json({ locked: parsed.data.locked, updated: result.rowCount ?? 0 });
+  }),
+);
+
+/**
+ * GET /admin/curriculum/:courseId/certificate
+ *
+ * The course's certificate switchboard: whether finishing it issues a
+ * certificate at all, and whether every graded quiz must be passed first. Also
+ * lists the graded quizzes that rule would apply to, so the screen can name them.
+ */
+adminCurriculumRouter.get(
+  "/:courseId/certificate",
+  asyncHandler(async (req, res) => {
+    const courseId = Number(req.params.courseId);
+    if (!Number.isInteger(courseId) || courseId <= 0) throw notFound("Course not found");
+    res.json(await loadCertificateSettings(courseId));
+  }),
+);
+
+/** PUT /admin/curriculum/:courseId/certificate  { enabled?, requirePass?, title? } */
+adminCurriculumRouter.put(
+  "/:courseId/certificate",
+  asyncHandler(async (req, res) => {
+    const courseId = Number(req.params.courseId);
+    if (!Number.isInteger(courseId) || courseId <= 0) throw notFound("Course not found");
+    const parsed = z
+      .object({
+        enabled: z.boolean().optional(),
+        requirePass: z.boolean().optional(),
+        title: z.string().trim().min(1).max(200).optional(),
+      })
+      .safeParse(req.body);
+    if (!parsed.success) throw badRequest("Those certificate settings aren't valid.");
+    const { enabled, requirePass, title } = parsed.data;
+
+    const course = await pool.query(`SELECT id FROM courses WHERE id = $1`, [courseId]);
+    if (course.rowCount === 0) throw notFound("Course not found");
+
+    if (requirePass !== undefined) {
+      await pool.query(`UPDATE courses SET certificate_requires_pass = $2, updated_at = now() WHERE id = $1`, [
+        courseId,
+        requirePass,
+      ]);
+    }
+    if (enabled === true) {
+      const own = await pool.query<{ id: number }>(
+        `SELECT id FROM certificate_templates WHERE course_id = $1 ORDER BY id LIMIT 1`,
+        [courseId],
+      );
+      if (own.rows[0]) {
+        await pool.query(
+          `UPDATE certificate_templates
+              SET enabled = true, issue_on = 'completion', title = COALESCE($2, title), updated_at = now()
+            WHERE id = $1`,
+          [own.rows[0].id, title ?? null],
+        );
+      } else {
+        await pool.query(
+          `INSERT INTO certificate_templates (course_id, title, issue_on, enabled)
+           VALUES ($1, COALESCE($2, 'Certificate of Completion'), 'completion', true)`,
+          [courseId, title ?? null],
+        );
+      }
+    } else if (enabled === false) {
+      await pool.query(
+        `UPDATE certificate_templates SET enabled = false, updated_at = now()
+          WHERE course_id = $1 OR product_id IN (SELECT id FROM products WHERE course_id = $1)`,
+        [courseId],
+      );
+    } else if (title !== undefined) {
+      await pool.query(`UPDATE certificate_templates SET title = $2, updated_at = now() WHERE course_id = $1`, [
+        courseId,
+        title,
+      ]);
+    }
+
+    // The issuer remembers "no template" for a minute; a switch flipped here
+    // should take effect on the very next lesson a student finishes.
+    clearCertificateTemplateCache();
+    res.json(await loadCertificateSettings(courseId));
+  }),
+);
+
+async function loadCertificateSettings(courseId: number) {
+  const [course, template, quizzes] = await Promise.all([
+    pool.query<{ certificate_requires_pass: boolean }>(
+      `SELECT certificate_requires_pass FROM courses WHERE id = $1`,
+      [courseId],
+    ),
+    // The same template the issuer would use (services/certificates.ts).
+    pool.query<{ id: number; title: string }>(
+      `SELECT t.id, t.title
+         FROM certificate_templates t
+         LEFT JOIN products p ON p.id = t.product_id
+        WHERE t.enabled AND t.issue_on = 'completion'
+          AND (t.course_id = $1 OR p.course_id = $1)
+        ORDER BY (t.course_id = $1) DESC, t.id
+        LIMIT 1`,
+      [courseId],
+    ),
+    pool.query<{ lesson_title: string; title: string; pass_mark: number | null; require_pass: boolean; published: boolean }>(
+      `SELECT l.title AS lesson_title, a.title, a.pass_mark, a.require_pass, (a.published AND l.published) AS published
+         FROM assessments a
+         JOIN course_lessons l ON l.id = a.lesson_id
+         JOIN course_modules m ON m.id = l.module_id
+        WHERE m.course_id = $1 AND a.kind = 'graded'
+        ORDER BY m.sort, m.id, l.sort, l.id`,
+      [courseId],
+    ),
+  ]);
+  if (!course.rows[0]) throw notFound("Course not found");
+  return {
+    enabled: template.rows[0] !== undefined,
+    templateId: template.rows[0]?.id ?? null,
+    title: template.rows[0]?.title ?? "Certificate of Completion",
+    requirePass: course.rows[0].certificate_requires_pass,
+    gradedQuizzes: quizzes.rows.map((row) => ({
+      lessonTitle: row.lesson_title,
+      title: row.title,
+      passMark: row.pass_mark,
+      requirePass: row.require_pass,
+      published: row.published,
+    })),
+  };
+}
 
 adminCurriculumRouter.delete(
   "/lessons/:id",

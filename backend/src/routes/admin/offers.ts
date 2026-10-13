@@ -8,6 +8,8 @@ import { asyncHandler } from "../../utils/asyncHandler";
 import { badRequest, notFound } from "../../utils/httpError";
 import { deliverManualGrant } from "../../services/purchaseDelivery";
 import { recordAdminAction } from "../../services/adminAudit";
+import { readSetting } from "../../services/settings";
+import { env } from "../../config/env";
 import { grantOfferAccess, revokeOfferAccess } from "../../services/access";
 import type { BillingInterval, PricingType } from "../../services/pricing";
 import {
@@ -769,6 +771,186 @@ adminOffersRouter.put(
   }),
 );
 
+/* ------------------------------------------------ notifications & reminders */
+
+/**
+ * The offer's Notifications tab (migration 110): "Email me when someone buys
+ * this offer", and its abandoned-checkout reminders. Kept off the main offer
+ * payload on purpose — the tab saves on its own, like bumps and upsells, and
+ * the GET hands back the site-wide defaults the tab shows as placeholders.
+ */
+type OfferNotificationsRow = {
+  notify_owner_on_sale: boolean;
+  notify_owner_recipients: string;
+  recovery_enabled: boolean;
+  recovery_mode: string;
+  recovery_overrides: Record<string, unknown> | null;
+};
+
+const REMINDER_STEPS = [0, 1, 2, 3] as const;
+const REMINDER_FIELD = /^(enabled|hours|subject|body)([0-3])$/;
+
+const offerNotificationsSchema = z
+  .object({
+    notifyOwnerOnSale: z.boolean(),
+    notifyOwnerRecipients: z.string().max(2000),
+    recoveryEnabled: z.boolean(),
+    recoveryMode: z.enum(["default", "custom"]),
+    recoveryOverrides: z.record(z.string(), z.union([z.boolean(), z.number(), z.string(), z.null()])),
+  })
+  .partial();
+
+const recipientTokens = (raw: string) => raw.split(/[,;\s]+/).map((part) => part.trim()).filter(Boolean);
+
+/** Only the enabledN/hoursN/subjectN/bodyN keys, each checked for its own type and bounds. */
+function cleanOverrides(raw: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(raw)) {
+    const match = REMINDER_FIELD.exec(key);
+    if (!match || value === null || value === undefined) continue;
+    const step = Number(match[2]) + 1;
+    switch (match[1]) {
+      case "enabled":
+        if (typeof value !== "boolean") throw issueError({ field: key, message: `Reminder ${step}: choose on or off.` });
+        out[key] = value;
+        break;
+      case "hours": {
+        const hours = Number(value);
+        if (!Number.isFinite(hours) || hours < 0.01 || hours > 720) {
+          throw issueError({ field: key, message: `Reminder ${step}: the delay must be between 0.01 and 720 hours.` });
+        }
+        out[key] = hours;
+        break;
+      }
+      default: {
+        const text = String(value);
+        if (text.length > (match[1] === "subject" ? 300 : 20000)) {
+          throw issueError({ field: key, message: `Reminder ${step}: that ${match[1]} is too long.` });
+        }
+        // Blank means "use the site-wide wording", so it is simply not stored.
+        if (text.trim()) out[key] = match[1] === "subject" ? text.trim() : text;
+      }
+    }
+  }
+  return out;
+}
+
+async function siteNotificationDefaults() {
+  const [notifications, recovery] = await Promise.all([readSetting("notifications"), readSetting("cart_recovery")]);
+  const saved = typeof notifications.notifyEmail === "string" ? notifications.notifyEmail.trim() : "";
+  return {
+    notifyEmail: saved || env.notifyEmail,
+    saleEmailsOn: notifications.onSale !== false,
+    recovery: Object.fromEntries(
+      Object.entries(recovery).filter(([key]) => key === "enabled" || key === "recipients" || REMINDER_FIELD.test(key)),
+    ),
+  };
+}
+
+function notificationsJson(row: OfferNotificationsRow, defaults: Awaited<ReturnType<typeof siteNotificationDefaults>>) {
+  return {
+    notifyOwnerOnSale: row.notify_owner_on_sale,
+    notifyOwnerRecipients: row.notify_owner_recipients,
+    recoveryEnabled: row.recovery_enabled,
+    recoveryMode: row.recovery_mode === "custom" ? "custom" : "default",
+    recoveryOverrides: row.recovery_overrides ?? {},
+    defaults,
+  };
+}
+
+async function loadOfferNotifications(id: number): Promise<OfferNotificationsRow> {
+  const result = await pool.query<OfferNotificationsRow>(
+    `SELECT notify_owner_on_sale, notify_owner_recipients, recovery_enabled, recovery_mode, recovery_overrides
+       FROM offers WHERE id = $1`,
+    [id],
+  );
+  const row = result.rows[0];
+  if (!row) throw notFound("Offer not found");
+  return row;
+}
+
+adminOffersRouter.get(
+  "/:id/notifications",
+  asyncHandler(async (req, res) => {
+    const id = parseId(req.params.id);
+    const row = await loadOfferNotifications(id);
+    res.json(notificationsJson(row, await siteNotificationDefaults()));
+  }),
+);
+
+adminOffersRouter.put(
+  "/:id/notifications",
+  asyncHandler(async (req, res) => {
+    const id = parseId(req.params.id);
+    const parsed = offerNotificationsSchema.safeParse(req.body);
+    if (!parsed.success) throw badRequest("Invalid payload", parsed.error.flatten());
+    const patch = parsed.data;
+    const before = await loadOfferNotifications(id);
+    const defaults = await siteNotificationDefaults();
+
+    const recipients = patched(patch.notifyOwnerRecipients, before.notify_owner_recipients).trim();
+    const badAddress = recipientTokens(recipients).find((part) => !z.string().email().safeParse(part).success);
+    if (badAddress) {
+      throw issueError({
+        field: "notifyOwnerRecipients",
+        message: `"${badAddress}" is not an email address. Separate addresses with commas.`,
+      });
+    }
+
+    const overrides = patch.recoveryOverrides !== undefined
+      ? cleanOverrides(patch.recoveryOverrides)
+      : (before.recovery_overrides ?? {});
+    const mode = patched(patch.recoveryMode, before.recovery_mode === "custom" ? "custom" : "default");
+
+    // The same rule the site-wide reminders follow: each reminder that is on
+    // goes out later than the one before it.
+    if (mode === "custom") {
+      const merged: Record<string, unknown> = { ...defaults.recovery, ...overrides };
+      let previous = 0;
+      for (const step of REMINDER_STEPS) {
+        if (merged[`enabled${step}`] !== true) continue;
+        const hours = Number(merged[`hours${step}`]);
+        if (!(hours > previous)) {
+          throw issueError({
+            field: `hours${step}`,
+            message: `Reminder ${step + 1} has to go out later than the reminder before it.`,
+          });
+        }
+        previous = hours;
+      }
+    }
+
+    const result = await pool.query<OfferNotificationsRow>(
+      `UPDATE offers
+          SET notify_owner_on_sale = $2, notify_owner_recipients = $3, recovery_enabled = $4,
+              recovery_mode = $5, recovery_overrides = $6::jsonb, updated_at = now()
+        WHERE id = $1
+        RETURNING notify_owner_on_sale, notify_owner_recipients, recovery_enabled, recovery_mode, recovery_overrides`,
+      [
+        id,
+        patched(patch.notifyOwnerOnSale, before.notify_owner_on_sale),
+        recipients,
+        patched(patch.recoveryEnabled, before.recovery_enabled),
+        mode,
+        JSON.stringify(overrides),
+      ],
+    );
+    const after = result.rows[0];
+    if (!after) throw notFound("Offer not found");
+
+    await recordAdminAction({
+      req,
+      action: "offer.notifications.update",
+      entityType: "offer",
+      entityId: id,
+      before: rowToCamel(before),
+      after: rowToCamel(after),
+    });
+
+    res.json(notificationsJson(after, defaults));
+  }),
+);
+
 /** The first free `<slug>-copy`, `<slug>-copy-2`, … so duplicating twice works. */
 async function nextCopySlug(client: PoolClient, slug: string): Promise<string> {
   const base = `${slug}-copy`.slice(0, 190);
@@ -815,7 +997,8 @@ adminOffersRouter.post(
             installment_count, trial_days, collect_tax, collect_address, collect_phone,
             custom_fields, terms_url, require_terms, redirect_url, thank_you_page_id,
             access_expires_after_days, send_welcome_email, welcome_next_steps, allow_gifting,
-            internal_title)
+            internal_title, notify_owner_on_sale, notify_owner_recipients, recovery_enabled,
+            recovery_mode, recovery_overrides)
          SELECT left(s.title || ' (copy)', 300), $2, 'draft', s.description, s.checkout_headline,
                 s.thumbnail_url, s.currency, s.pricing_type, s.amount_cents, s.min_amount_cents,
                 s.interval, s.interval_count, s.installment_count, s.trial_days, s.collect_tax,
@@ -823,7 +1006,9 @@ adminOffersRouter.post(
                 s.redirect_url, s.thank_you_page_id, s.access_expires_after_days,
                 s.send_welcome_email, s.welcome_next_steps, s.allow_gifting,
                 CASE WHEN s.internal_title = '' THEN ''
-                     ELSE left(s.internal_title || ' (copy)', 150) END
+                     ELSE left(s.internal_title || ' (copy)', 150) END,
+                s.notify_owner_on_sale, s.notify_owner_recipients, s.recovery_enabled,
+                s.recovery_mode, s.recovery_overrides
            FROM offers s WHERE s.id = $1
          RETURNING ${OFFER_COLUMNS}`,
         [id, slug],

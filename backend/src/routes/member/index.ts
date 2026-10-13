@@ -14,6 +14,7 @@ import { memberCoachingRouter } from "./coaching";
 import { memberEventsRouter } from "./events";
 import { memberPublishingRouter } from "./publishing";
 import { memberAffiliateRouter } from "./affiliatePortal";
+import { memberLessonFormsRouter } from "./lessonForms";
 
 /**
  * `/api/member/*` — everything a signed-in customer can do.
@@ -52,6 +53,8 @@ memberRouter.use("/affiliate", memberAffiliateRouter);
 // the time it reports progress, and routing through the product slug would mean
 // re-deriving one from the other on every ten-second heartbeat.
 memberRouter.use(memberProgressRouter);
+// Native forms embedded in lessons (Lounge VIP submissions); paths are lesson-scoped.
+memberRouter.use(memberLessonFormsRouter);
 
 // Publishing serves two sibling surfaces — "/podcasts" and "/newsletters" —
 // plus the "/email-preferences" toggle they share, so like progress above it

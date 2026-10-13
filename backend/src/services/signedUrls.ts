@@ -370,6 +370,33 @@ export async function resolveStoredFile(storagePath: string): Promise<string | n
   }
 }
 
+/* --------------------------------------------------- delivery header values */
+
+/** A MIME type safe to echo into a response header. */
+export function safeMime(value: string): string {
+  return /^[a-zA-Z0-9!#$&^_.+-]+\/[a-zA-Z0-9!#$&^_.+-]+$/.test(value)
+    ? value
+    : "application/octet-stream";
+}
+
+/**
+ * basename, because `filename` is admin-entered free text.
+ *
+ * Express encodes the header correctly, but the value still becomes the name the
+ * file lands under on the member's disk, and "../../.bashrc" is not a filename.
+ */
+export function safeFilename(file: { filename: string; title?: string }): string {
+  const candidate = path.basename((file.filename || file.title || "download").trim());
+  // Control characters, quotes and backslashes out: the first would let a
+  // filename inject a second header line, and a backslash is a path separator on
+  // the member's machine even though it is not one on ours.
+  const cleaned = candidate
+    .replace(/[\u0000-\u001f\u007f"\\/]/g, "")
+    .trim()
+    .slice(0, 180);
+  return cleaned === "" || cleaned === "." || cleaned === ".." ? "download" : cleaned;
+}
+
 /* ------------------------------------------------- admin preview of a file */
 
 /**

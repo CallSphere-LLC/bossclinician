@@ -18,6 +18,9 @@ import { toast } from "sonner";
 import { adminApi } from "@/lib/api";
 import type { Community } from "@/types/admin";
 import { formatNumber } from "@/lib/format";
+import { CommunityCover } from "@/components/community/CommunityDescription";
+import { CommunityCoverField, CommunityDescriptionEditor } from "@/components/community/CommunityDetailsFields";
+import { stripMarkdown } from "@/components/community/descriptionFormat";
 import {
   Badge,
   Button,
@@ -28,7 +31,6 @@ import {
   Input,
   PageHeader,
   Skeleton,
-  Textarea,
 } from "@/pages/admin/ui/primitives";
 import { Modal, useConfirm } from "@/pages/admin/ui/Dialog";
 import { friendlyError, PUBLISH_LABEL } from "@/pages/admin/ui/friendly";
@@ -59,6 +61,7 @@ export default function CommunityList() {
   const [form, setForm] = useState({
     name: "",
     description: "",
+    coverImage: "",
     access: "free",
   });
   const [confirm, confirmDialog] = useConfirm();
@@ -89,7 +92,7 @@ export default function CommunityList() {
       );
       navigate(`/admin/community/${created.id}?tab=${form.access === "paid" ? "groups" : "settings"}`);
       setCreating(false);
-      setForm({ name: "", description: "", access: "free" });
+      setForm({ name: "", description: "", coverImage: "", access: "free" });
       load();
     } catch (err) {
       toast.error(friendlyError(err, "community"));
@@ -138,14 +141,14 @@ export default function CommunityList() {
         transition={{ delay: Math.min(i * 0.05, 0.3) }}
       >
         <Card className="group relative h-full overflow-hidden transition-all hover:-translate-y-0.5 hover:border-plum/30 hover:shadow-[0_20px_44px_-22px_rgba(15,30,58,0.4)]">
-          <div className="relative h-24 bg-surface-raised">
-            {community.coverImage && (
-              <img
-                src={community.coverImage}
-                alt=""
-                className="size-full object-cover opacity-70"
-              />
-            )}
+          <div
+            className={
+              community.coverImage
+                ? "relative aspect-[8/3] bg-surface-raised"
+                : "relative h-24 bg-surface-raised"
+            }
+          >
+            <CommunityCover src={community.coverImage} className="absolute inset-0" />
             <div className="absolute inset-x-4 bottom-3 flex items-center gap-2">
               <Badge
                 tone={community.access === "paid" ? "gold" : "neutral"}
@@ -176,7 +179,7 @@ export default function CommunityList() {
           <div className="p-5">
             <h3 className="font-display text-lg text-ink">{community.name}</h3>
             <p className="mt-1 line-clamp-2 min-h-[2.5rem] text-sm text-ink-soft">
-              {community.description || "No description yet."}
+              {stripMarkdown(community.description ?? "") || "No description yet."}
             </p>
 
             <dl className="mt-4 grid grid-cols-3 gap-2 border-t border-hairline/70 pt-3.5">
@@ -369,21 +372,18 @@ export default function CommunityList() {
               autoFocus
             />
           </Field>
-          <Field
-            label="Description"
-            hint="Welcome members and explain what this community includes. You can edit this later under Details."
-            htmlFor="community-desc"
-          >
-            <Textarea
-              id="community-desc"
-              rows={6}
-              value={form.description}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, description: e.target.value }))
-              }
-              placeholder="A place for clinicians building their own practice to swap wins, ask questions and stay accountable."
-            />
-          </Field>
+          <CommunityCoverField
+            value={form.coverImage}
+            onChange={(coverImage) => setForm((f) => ({ ...f, coverImage }))}
+          />
+          <CommunityDescriptionEditor
+            id="community-desc"
+            rows={6}
+            value={form.description}
+            onChange={(description) => setForm((f) => ({ ...f, description }))}
+            hint="Welcome members and explain what this community includes. Use the buttons to make words bold or a heading. You can edit this later under Details."
+            placeholder="A place for clinicians building their own practice to swap wins, ask questions and stay accountable."
+          />
           <Field
             label="Who can join?"
             hint="Prices and checkout are configured on access groups inside the community"

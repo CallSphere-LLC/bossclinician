@@ -3,9 +3,11 @@ import { pool } from "../db/pool";
 import { hasCourseAccess } from "./access";
 import {
   DEFAULT_DRIP_SETTINGS,
+  describeScheduled,
   describeUnlock,
   parseReleaseTime,
   resolveDripState,
+  resolveRelease,
   type DripConfig,
   type DripSettings,
 } from "./drip";
@@ -13,9 +15,11 @@ import {
 /**
  * The curriculum as one particular member sees it.
  *
- * Three things have to be true at once for a lesson to be openable: the member
+ * Four things have to be true at once for a lesson to be openable: the member
  * holds a live grant for a product pointing at the course, the lesson is
- * published, and its drip window has opened. This module is where those three
+ * published, its release clock (drip, or Kajabi-style "Scheduled" `publish_at`)
+ * has reached it, and — when it is locked behind the previous lesson — that
+ * lesson is complete and any quiz on it passed. This module is where those four
  * meet, so no route has to remember all of them — and so the answer given to
  * /library, to the player and to a progress write can never differ.
  *
@@ -241,6 +245,17 @@ export function clearDripSettingsCache(): void {
 
 /* -------------------------------------------------------------------- shapes */
 
+/**
+ * Why a lesson is shut, for the player to say so in plain words.
+ *
+ *  - previous_incomplete: Kajabi "Lock" — finish the lesson before it first.
+ *  - previous_quiz_not_passed: the lesson before it carries a graded quiz that
+ *    has not been passed yet (at the pass mark set on that quiz).
+ *  - drip: N days after access, or a fixed drip date.
+ *  - scheduled: Kajabi "Scheduled" — opens at an exact date and time.
+ */
+export type LockReason = "previous_incomplete" | "previous_quiz_not_passed" | "drip" | "scheduled";
+
 export interface MemberLessonView {
   id: number;
   slug: string;
@@ -258,6 +273,8 @@ export interface MemberLessonView {
   unlocksAt: string | null;
   /** "Unlocks Tuesday, 3 March", or "" when it is already open. */
   unlockLabel: string;
+  /** null once the lesson is open. */
+  lockReason: LockReason | null;
   completed: boolean;
   requiresPreviousLesson: boolean;
   completedAt: string | null;
@@ -320,7 +337,11 @@ interface OutlineRow {
   /** null on a module row with no lesson; false marks a draft (preview only). */
   lesson_published: boolean | null;
   requires_previous_lesson: boolean | null;
+  lesson_publish_at: Date | null;
+  /** The lesson carries a published graded quiz that requires a pass. */
   assessment_requires_pass: boolean;
+  /** This member has a completed, passing attempt at a graded quiz on it. */
+  assessment_passed: boolean;
   notes_enabled: boolean | null;
   last_position_seconds: number | null;
   watched_percent: number | null;
@@ -352,7 +373,11 @@ const outlineSql = (publishedOnly: boolean): string => `
          l.slug, l.title, l.content_type, l.duration_minutes, l.video_duration_seconds,
          l.preview, l.comments_enabled, l.notes_enabled, l.requires_previous_lesson,
          l.published AS lesson_published,
-         EXISTS(SELECT 1 FROM assessments a WHERE a.lesson_id=l.id AND a.kind='graded' AND a.require_pass) AS assessment_requires_pass,
+         l.publish_at AS lesson_publish_at,
+         EXISTS(SELECT 1 FROM assessments a WHERE a.lesson_id=l.id AND a.kind='graded' AND a.published AND a.require_pass) AS assessment_requires_pass,
+         EXISTS(SELECT 1 FROM assessments a JOIN assessment_attempts t ON t.assessment_id = a.id
+                 WHERE a.lesson_id=l.id AND a.kind='graded' AND a.published
+                   AND t.member_id = $1 AND t.passed AND t.completed_at IS NOT NULL) AS assessment_passed,
          l.drip_days AS lesson_drip_days,
          l.drip_date AS lesson_drip_date,
          lp.last_position_seconds, lp.watched_percent, lp.completed_at, lp.last_viewed_at
@@ -382,19 +407,28 @@ function toLessonView(
   now: Date,
   settings: DripSettings
 ): MemberLessonView {
-  const state = resolveDripState({
+  // A preview lesson is the one the sales page already plays to strangers.
+  // Holding it back from somebody who has paid, because the module it happens
+  // to sit in drips on day 14, would be the platform arguing with itself. A
+  // scheduled lesson is different: nobody has it yet, so the taster flag does
+  // not open it early (resolveRelease).
+  const state = resolveRelease({
     lesson: dripConfig(row.lesson_drip_days, row.lesson_drip_date),
     module: dripConfig(row.module_drip_days, row.module_drip_date),
+    publishAt: row.lesson_publish_at,
+    preview: row.preview === true,
     grantedAt,
     now,
     settings,
   });
 
-  // A preview lesson is the one the sales page already plays to strangers.
-  // Holding it back from somebody who has paid, because the module it happens
-  // to sit in drips on day 14, would be the platform arguing with itself.
-  const unlocked = row.preview === true || state.unlocked;
+  const unlocked = state.unlocked;
   const unlocksAt = unlocked ? null : state.unlocksAt;
+  const unlockLabel = !unlocksAt
+    ? ""
+    : state.reason === "scheduled"
+      ? `Opens ${describeScheduled(unlocksAt, settings.timezone)}`
+      : `Unlocks ${describeUnlock(unlocksAt, settings.timezone)}`;
 
   return {
     id: row.lesson_id ?? 0,
@@ -411,7 +445,8 @@ function toLessonView(
     requiresPreviousLesson: row.requires_previous_lesson === true,
     unlocked,
     unlocksAt: iso(unlocksAt),
-    unlockLabel: unlocksAt ? `Unlocks ${describeUnlock(unlocksAt, settings.timezone)}` : "",
+    unlockLabel,
+    lockReason: state.reason,
     completed: row.completed_at !== null,
     completedAt: iso(row.completed_at),
     lastPositionSeconds: row.last_position_seconds ?? 0,
@@ -420,7 +455,8 @@ function toLessonView(
   };
 }
 
-function buildModules(
+/** Exported for unit tests; every caller in the app goes through the loaders below. */
+export function buildModules(
   rows: OutlineRow[],
   grantedAt: Date,
   now: Date,
@@ -457,16 +493,38 @@ function buildModules(
     }
   }
 
-  // Completion prerequisites follow the actual course order, across section
-  // boundaries. A preview remains available by definition.
+  // Kajabi "Lock": completion prerequisites follow the actual course order,
+  // across section boundaries. A lesson is held when it is locked behind its
+  // predecessor, or when the predecessor is a required-pass quiz. Where the
+  // predecessor's quiz requires a pass, finishing it means a passing attempt at
+  // the quiz's own pass mark — a tick alone does not open the next lesson. A
+  // quiz set to "no pass required" in the quiz editor only has to be taken; the
+  // course's certificate can still insist on a pass (certificates.ts). A
+  // preview remains available by definition.
   const passRequired = new Set(rows.filter(row => row.assessment_requires_pass).map(row => row.lesson_id));
+  const passed = new Set(rows.filter(row => row.assessment_passed).map(row => row.lesson_id));
   let previous: MemberLessonView | null = null;
   for (const mod of modules) {
     for (const lesson of mod.lessons) {
-      if ((lesson.requiresPreviousLesson || (previous && passRequired.has(previous.id))) && previous && !previous.completed && !lesson.preview) {
-        lesson.unlocked = false;
-        lesson.unlocksAt = null;
-        lesson.unlockLabel = `Finish “${previous.title}” first`;
+      const sequenced = previous !== null && (lesson.requiresPreviousLesson || passRequired.has(previous.id));
+      if (previous && sequenced && !lesson.preview) {
+        const quizOutstanding = passRequired.has(previous.id) && !passed.has(previous.id);
+        if (quizOutstanding || !previous.completed) {
+          const reason: LockReason = quizOutstanding ? "previous_quiz_not_passed" : "previous_incomplete";
+          const sentence = quizOutstanding
+            ? `Pass the quiz in “${previous.title}” to unlock`
+            : `Complete “${previous.title}” to unlock`;
+          if (lesson.lockReason === "drip" || lesson.lockReason === "scheduled") {
+            // Already held by its release date; the date stays the headline and
+            // the prerequisite is added, so nobody is surprised on the day.
+            lesson.unlockLabel = `${lesson.unlockLabel} · ${quizOutstanding ? `pass the quiz in “${previous.title}” first` : `complete “${previous.title}” first`}`;
+          } else {
+            lesson.unlocked = false;
+            lesson.unlocksAt = null;
+            lesson.unlockLabel = sentence;
+            lesson.lockReason = reason;
+          }
+        }
       }
       previous = lesson;
     }
@@ -628,9 +686,9 @@ export interface PreviewCourseView extends MemberCourseView {
   draftLessonIds: number[];
   /**
    * By lesson id: what a student who bought today would be told instead of being
-   * let in ("Unlocks Tuesday, 3 March"). Schedule locks only — a "finish the
-   * previous lesson first" lock is true of every sequenced lesson for somebody
-   * who has finished nothing, and says nothing about the course.
+   * let in ("Unlocks Tuesday, 3 March", "Opens Tuesday, October 20, 9:00 AM
+   * EDT", "Complete “Intro” to unlock"). Sequence locks are included so the owner
+   * can see at a glance which lessons she has locked in order.
    */
   studentLocks: Record<number, string>;
 }
@@ -647,8 +705,9 @@ export interface PreviewCourseView extends MemberCourseView {
  *  - draft lessons are included, because checking a lesson before publishing it
  *    is what a preview is for;
  *  - every lesson and module comes back unlocked, so the admin can open a lesson
- *    the drip schedule would hold back. What a student enrolling today would be
- *    told instead is kept in `studentLocks` for the outline to show.
+ *    the drip schedule, a schedule or a lock would hold back. What a student
+ *    enrolling today would be told instead is kept in `studentLocks` for the
+ *    outline to show as a badge.
  *
  * Progress is always empty: member id 0 matches no `lesson_progress` row, and
  * nothing a preview does writes one.
@@ -674,12 +733,16 @@ export async function loadCourseForPreview(
   const studentLocks: Record<number, string> = {};
   for (const mod of modules) {
     for (const lesson of mod.lessons) {
-      if (!lesson.unlocked && lesson.unlocksAt !== null) {
-        studentLocks[lesson.id] = lesson.unlockLabel;
+      if (!lesson.unlocked || lesson.lockReason !== null) {
+        studentLocks[lesson.id] =
+          lesson.lockReason === "previous_quiz_not_passed" || lesson.lockReason === "previous_incomplete"
+            ? `Locked: ${lesson.unlockLabel.replace(/ to unlock$/, " first")}`
+            : lesson.unlockLabel;
       }
       lesson.unlocked = true;
       lesson.unlocksAt = null;
       lesson.unlockLabel = "";
+      lesson.lockReason = null;
     }
     mod.unlocked = true;
     mod.unlocksAt = null;
@@ -705,6 +768,61 @@ export async function loadCourseForPreview(
     ),
     studentLocks,
   };
+}
+
+/**
+ * One lesson as this member may see it, or null when it is not theirs to see
+ * (no grant, not published, not in this course).
+ *
+ * The single gate for everything that serves a lesson's bytes outside the
+ * player read — attachments, signed media, assessments — so the lock, the
+ * schedule and the drip are decided in exactly one place.
+ */
+export async function loadMemberLesson(
+  memberId: number,
+  courseId: number,
+  lessonId: number,
+  now: Date = new Date()
+): Promise<{ course: MemberCourseView; lesson: MemberLessonView } | null> {
+  const course = await loadCourseForMember(memberId, courseId, now);
+  const lesson = course ? flattenLessons(course.modules).find((row) => row.id === lessonId) : undefined;
+  return course && lesson ? { course, lesson } : null;
+}
+
+/**
+ * Every published lesson's state for many courses at once, by lesson id. For
+ * the downloads list, which shows attachments across every course owned and
+ * must agree with the player about which of them are open.
+ */
+export async function loadLessonStatesForMember(
+  memberId: number,
+  courseIds: number[],
+  now: Date = new Date()
+): Promise<Map<number, MemberLessonView>> {
+  const out = new Map<number, MemberLessonView>();
+  if (courseIds.length === 0) return out;
+
+  const [grantTimes, settings] = await Promise.all([
+    loadCourseGrantTimes(memberId, courseIds),
+    loadDripSettings(),
+  ]);
+  const outline = await pool.query<OutlineRow>(OUTLINE_SQL, [memberId, courseIds]);
+
+  const byCourse = new Map<number, OutlineRow[]>();
+  for (const row of outline.rows) {
+    const bucket = byCourse.get(row.course_id);
+    if (bucket) bucket.push(row);
+    else byCourse.set(row.course_id, [row]);
+  }
+
+  for (const [courseId, rows] of byCourse) {
+    const grantedAt = grantTimes.get(courseId);
+    if (!grantedAt) continue;
+    for (const lesson of flattenLessons(buildModules(rows, grantedAt, now, settings))) {
+      out.set(lesson.id, lesson);
+    }
+  }
+  return out;
 }
 
 export interface CourseCardSummary {

@@ -18,7 +18,16 @@ import { cn } from "@/lib/cn";
 export type ViewerKind = "pdf" | "image" | "video" | "audio" | "text" | "table" | "docx" | "none";
 
 const TEXT_EXTENSIONS = new Set([
-  "txt", "md", "markdown", "json", "xml", "yaml", "yml", "log", "rtf", "html", "htm", "css", "js", "ts", "ics", "vtt", "srt",
+  "txt", "md", "markdown", "json", "xml", "yaml", "yml", "log", "html", "htm", "css", "js", "ts", "ics", "vtt", "srt",
+]);
+/**
+ * Formats no viewer here can draw, whatever their MIME type claims: RTF is
+ * text/rtf but reads as markup soup, and the rest are Office or archive files.
+ * They get Download only, never a View button that is bound to fail.
+ */
+const DOWNLOAD_ONLY_EXTENSIONS = new Set([
+  "rtf", "doc", "xls", "xlsx", "xlsm", "ppt", "pptx", "pps", "ppsx", "key", "pages", "numbers", "odt", "ods", "odp",
+  "zip", "rar", "7z", "gz", "tar",
 ]);
 const IMAGE_EXTENSIONS = new Set(["png", "jpg", "jpeg", "gif", "webp", "avif", "bmp", "svg"]);
 const VIDEO_EXTENSIONS = new Set(["mp4", "webm", "mov", "m4v", "ogv"]);
@@ -40,6 +49,7 @@ export function viewerKindFor(file: { filename: string; mime: string }): ViewerK
   const mime = file.mime.toLowerCase();
   const ext = extensionOf(file.filename);
 
+  if (DOWNLOAD_ONLY_EXTENSIONS.has(ext)) return "none";
   if (mime === "application/pdf" || ext === "pdf") return "pdf";
   if (ext === "docx" || mime === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
     return "docx";

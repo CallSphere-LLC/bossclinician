@@ -842,12 +842,7 @@ checkoutOfferRouter.post(
           memberId: result.memberId,
           createdMember: result.createdMember,
         });
-        notifyOwnerOfSale({
-          description: offer.title,
-          email,
-          amountCents: 0,
-          currency: total.currency,
-        });
+        notifyOwnerOfSale({ orderId });
       }
       res.status(201).json({
         ...receipt,
@@ -1068,7 +1063,14 @@ checkoutOfferRouter.post(
     // person's recovery row — a row keyed on an address, joined to an account
     // that never asked for it. An impersonated session claims nothing, because
     // "view as member" is read-only everywhere else on this router too.
-    const member = req.member?.impersonatedBy === undefined ? req.member : undefined;
+    // ...and it writes no row at all: the address it posts is the
+    // impersonated member's own, and the owner looking through their eyes is
+    // not that member starting a checkout to be reminded about.
+    if (req.member?.impersonatedBy !== undefined) {
+      res.status(204).end();
+      return;
+    }
+    const member = req.member;
     const email = (member?.email ?? parsed.data.email).trim().toLowerCase();
 
     const offer = await loadPublishedOffer(offerSlug);

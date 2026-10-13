@@ -112,6 +112,8 @@ interface OwnedLesson {
   notesEnabled: boolean;
   unlocked: boolean;
   unlocksAt: Date | null;
+  /** The player's own sentence for a shut lesson ("Complete “Intro” to unlock"). */
+  unlockLabel: string;
   timezone: string;
   /** Everything needed to decide what a watch report has earned. */
   videoDurationSeconds: number;
@@ -216,8 +218,13 @@ async function loadOwnedLesson(memberId: number, lessonId: number): Promise<Owne
     notesEnabled: row.notes_enabled,
     // A preview lesson already plays for strangers on the sales page; holding it
     // back from somebody who has paid would be the platform arguing with itself.
+    // The member outline is the authority on everything else — lock, schedule
+    // and drip — so a progress write can never disagree with the player.
     unlocked: (row.preview || state.unlocked) && courseLesson?.unlocked === true,
-    unlocksAt: row.preview ? null : state.unlocksAt,
+    unlocksAt: courseLesson?.unlocksAt
+      ? new Date(courseLesson.unlocksAt)
+      : row.preview ? null : state.unlocksAt,
+    unlockLabel: courseLesson?.unlockLabel ?? "",
     timezone: settings.timezone,
     videoDurationSeconds: row.video_duration_seconds,
     durationMinutes: row.duration_minutes,
@@ -238,6 +245,7 @@ async function loadOwnedLesson(memberId: number, lessonId: number): Promise<Owne
  */
 function assertUnlocked(lesson: OwnedLesson): void {
   if (lesson.unlocked) return;
+  if (lesson.unlockLabel) throw forbidden(`That lesson isn't open yet. ${lesson.unlockLabel}.`);
   const when = lesson.unlocksAt
     ? ` It opens ${describeUnlock(lesson.unlocksAt, lesson.timezone)}.`
     : "";

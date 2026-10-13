@@ -1,15 +1,21 @@
 import { pool } from "../db/pool";
 import { forbidden, notFound } from "../utils/httpError";
-import { loadCourseForMember } from "./curriculum";
+import { loadMemberLesson } from "./curriculum";
 import { hasCourseAccess } from "./access";
 export async function assertLessonAssessmentAccess(memberId: number | undefined, lessonId: number): Promise<void> {
   if (!memberId) throw forbidden("Sign in to take this lesson assessment.");
   const row = await pool.query(`SELECT m.course_id FROM course_lessons l JOIN course_modules m ON m.id=l.module_id WHERE l.id=$1 AND l.published`, [lessonId]);
   const courseId = row.rows[0]?.course_id;
   if (!courseId || !(await hasCourseAccess(memberId, courseId))) throw notFound("Assessment not found");
-  const course = await loadCourseForMember(memberId, courseId);
-  const lesson = course?.modules.flatMap(module => module.lessons).find(lesson => lesson.id === lessonId);
-  if (!lesson?.unlocked) throw forbidden("Complete the earlier lessons before taking this assessment.");
+  // The same gate the player uses: lock, schedule and drip are all decided in
+  // services/curriculum.ts, so a quiz cannot be reached before its lesson opens.
+  const found = await loadMemberLesson(memberId, courseId, lessonId);
+  if (!found) throw notFound("Assessment not found");
+  if (!found.lesson.unlocked) {
+    throw forbidden(found.lesson.unlockLabel
+      ? `This assessment isn't open yet. ${found.lesson.unlockLabel}.`
+      : "Complete the earlier lessons before taking this assessment.");
+  }
 }
 export async function assertAssessmentCompleted(memberId: number, lessonId: number): Promise<void> {
   const result = await pool.query(`SELECT a.kind, a.require_pass,

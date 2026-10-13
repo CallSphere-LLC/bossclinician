@@ -1,3 +1,4 @@
+import { formatAmount } from "../utils/money";
 /** Escapes HTML-significant characters so untrusted strings are safe to interpolate into email HTML. */
 export function escapeHtml(value: string): string {
   return value
@@ -66,6 +67,8 @@ export function formSubmissionNotification(reply: {
   name: string;
   email: string;
   answers: FormAnswerRow[];
+  /** The reply in the admin's Forms screen (migration 112). Optional so older callers still build. */
+  adminUrl?: string;
 }): { subject: string; text: string; html: string } {
   const who = (reply.name || reply.email).replace(/\s+/g, " ").trim().slice(0, 120);
   const formName = reply.formName.replace(/\s+/g, " ").trim();
@@ -75,6 +78,7 @@ export function formSubmissionNotification(reply: {
     ``,
     ...reply.answers.map((row) => `${row.label}: ${row.value}`),
     ``,
+    ...(reply.adminUrl ? [`See every reply to this form: ${reply.adminUrl}`, ``] : []),
     `Reply to this email to write back to them.`,
   ].join("\n");
 
@@ -84,6 +88,9 @@ export function formSubmissionNotification(reply: {
       (row) =>
         `<p><strong>${escapeHtml(row.label)}:</strong> ${escapeHtml(row.value).replace(/\r?\n/g, "<br>")}</p>`,
     ),
+    ...(reply.adminUrl
+      ? [`<p><a href="${escapeHtml(reply.adminUrl)}">See every reply to this form</a></p>`]
+      : []),
     `<p>Reply to this email to write back to them.</p>`,
   ].join("\n");
 
@@ -214,4 +221,60 @@ export function orderPaidNotification(order: {
   ].join("\n");
 
   return { subject: `Purchase: ${order.courseTitle}`, text, html };
+}
+
+/**
+ * The owner's "someone bought this offer" email (services/ownerSaleNotification).
+ *
+ * Everything she would otherwise open the admin to find out: what sold, to
+ * whom, for how much and on what plan, which coupon, and a link straight to
+ * the purchase.
+ */
+export function ownerSaleNotification(sale: {
+  offerTitle: string;
+  buyerName: string;
+  buyerEmail: string;
+  /** What this order charged (the first installment on a plan), in cents. */
+  amountCents: number;
+  currency: string;
+  /** "Payment plan: 3 payments of $1,250.00 every month"; '' to leave the line out. */
+  plan: string;
+  couponCode: string;
+  giftRecipientEmail: string;
+  adminUrl: string;
+}): { subject: string; text: string; html: string } {
+  const amount = formatAmount(sale.amountCents, sale.currency);
+  const buyer = sale.buyerName
+    ? `${sale.buyerName} <${sale.buyerEmail || "no email captured"}>`
+    : sale.buyerEmail || "(no email captured)";
+
+  const rows: [string, string][] = [
+    ["Offer", sale.offerTitle],
+    ["Buyer", buyer],
+    ["Amount paid", amount],
+  ];
+  if (sale.plan) rows.push(["Plan", sale.plan]);
+  if (sale.couponCode) rows.push(["Coupon", sale.couponCode]);
+  if (sale.giftRecipientEmail) rows.push(["Gift for", sale.giftRecipientEmail]);
+
+  const text = [
+    `You made a sale.`,
+    ``,
+    ...rows.map(([label, value]) => `${label}: ${value}`),
+    ``,
+    `View the purchase: ${sale.adminUrl}`,
+    ``,
+    `You can turn these emails off, or send them somewhere else, per offer: Offers -> the offer -> Notifications.`,
+  ].join("\n");
+
+  const html = [
+    `<p>You made a sale.</p>`,
+    `<p>`,
+    rows.map(([label, value]) => `<strong>${escapeHtml(label)}:</strong> ${escapeHtml(value)}`).join("<br>\n"),
+    `</p>`,
+    `<p><a href="${escapeHtml(sale.adminUrl)}">View the purchase</a></p>`,
+    `<p style="color:#888;font-size:12px">You can turn these emails off, or send them somewhere else, per offer: Offers &rarr; the offer &rarr; Notifications.</p>`,
+  ].join("\n");
+
+  return { subject: `New sale: ${sale.offerTitle} (${amount})`, text, html };
 }

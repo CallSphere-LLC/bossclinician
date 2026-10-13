@@ -124,6 +124,23 @@ export interface FormDetail extends FormSummary {
   sequenceName: string | null;
   spamProtection: "honeypot" | "turnstile" | "recaptcha";
   createLead: boolean;
+  /**
+   * "Email me when someone sends this form" and who to (migration 112). Blank
+   * addresses = the notification address in Settings. Optional: absent from a
+   * server that predates the switch.
+   */
+  notifyOnSubmit?: boolean;
+  notifyEmails?: string;
+  /** Lessons that show this form to signed-in students (course_lessons.tool_key = "form-<slug>"). */
+  lessons?: LessonUsingForm[];
+}
+
+export interface LessonUsingForm {
+  id: number;
+  title: string;
+  courseId: number;
+  courseTitle: string;
+  published: boolean;
 }
 
 export interface FormDraft {
@@ -141,6 +158,8 @@ export interface FormDraft {
   doubleOptIn?: boolean;
   createLead?: boolean;
   published?: boolean;
+  notifyOnSubmit?: boolean;
+  notifyEmails?: string;
 }
 
 export interface FormSubmission {
@@ -183,7 +202,7 @@ export interface SentFile {
  */
 export type SavedForm = Omit<
   FormDetail,
-  "applyTags" | "sequenceName" | "downloadFileName" | "fieldCount" | "submissionCount"
+  "applyTags" | "sequenceName" | "downloadFileName" | "fieldCount" | "submissionCount" | "lessons"
 >;
 
 export const formsApi = {

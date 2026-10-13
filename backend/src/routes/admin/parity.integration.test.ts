@@ -512,7 +512,8 @@ describeDb("Kajabi parity admin workflows (integration)", () => {
       expect.objectContaining({
         title: "Price with confidence",
         unlocked: false,
-        unlockLabel: "Finish “Know your numbers” first",
+        unlockLabel: "Complete “Know your numbers” to unlock",
+        lockReason: "previous_incomplete",
       }),
     ]);
   });

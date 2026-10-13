@@ -1,5 +1,6 @@
 import { assertLessonAssessmentAccess } from "../../services/lessonAssessments";
 import { recomputeCourseProgress } from "../../services/curriculum";
+import { issueCertificateIfEarned } from "../../services/certificates";
 import { Router } from "express";
 import { z } from "zod";
 import { pool } from "../../db/pool";
@@ -184,7 +185,11 @@ assessmentsPublicRouter.post(
           [req.member.id, assessment.lesson_id],
         );
         const course = await pool.query(`SELECT m.course_id FROM course_lessons l JOIN course_modules m ON m.id=l.module_id WHERE l.id=$1`,[assessment.lesson_id]);
-        if (course.rows[0]) await recomputeCourseProgress(req.member.id, course.rows[0].course_id);
+        if (course.rows[0]) {
+          await recomputeCourseProgress(req.member.id, course.rows[0].course_id);
+          // A pass can be the last thing a finished course was waiting on.
+          await issueCertificateIfEarned(req.member.id, course.rows[0].course_id);
+        }
       }
     } else if (email) {
       const contact = await upsertContactWithStatus({

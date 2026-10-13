@@ -13,6 +13,7 @@ import { EventsPanel } from "@/components/community/EventsPanel";
 import { ChallengesPanel } from "@/components/community/ChallengesPanel";
 import { LeaderboardPanel } from "@/components/community/LeaderboardPanel";
 import { LiveRoomCallout } from "@/components/community/LiveRoomCallout";
+import { CommunityCover, CommunityDescription } from "@/components/community/CommunityDescription";
 import { MemberApiError } from "@/lib/memberApi";
 import {
   communityApi,
@@ -114,11 +115,25 @@ export function CommunityLayout({
   }, [slug]);
 
   const heading = title ?? overview?.community.name ?? "Community";
+  // The community's own header — its cover photo and formatted description —
+  // unless the page replaces the heading with its own (a member's profile).
+  const ownHeader = title === undefined && description === undefined;
+  const communityDescription = overview?.community.description?.trim()
+    ? <CommunityDescription text={overview.community.description} />
+    : undefined;
 
   return (
     <MemberShell
       title={heading}
-      description={description ?? overview?.community.description}
+      hero={
+        ownHeader ? (
+          <CommunityCover
+            src={overview?.community.coverImage}
+            className="mb-7 aspect-[8/3] max-h-72 w-full rounded-2xl border border-white/10"
+          />
+        ) : undefined
+      }
+      description={description ?? communityDescription}
       actions={preview ? <span className="text-xs text-orchid-dim">Participant view</span> : <NotificationBell />}
       sidebar={
         overview ? (

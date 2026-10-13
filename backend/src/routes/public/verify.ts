@@ -1,6 +1,5 @@
 import { usesS3Media, mediaStore, serveStoredMedia } from "../../services/objectStorage";
 import fs from "fs";
-import path from "path";
 import { Router } from "express";
 import { rateLimit } from "express-rate-limit";
 import { pool } from "../../db/pool";
@@ -15,6 +14,8 @@ import { formatCreditHours, normalizeVerificationCode } from "../../services/cer
 import {
   isStreamKind,
   resolveStoredFile,
+  safeFilename,
+  safeMime,
   verifyAdminPreview,
   verifyDownload,
 } from "../../services/signedUrls";
@@ -71,31 +72,6 @@ const verifyLimiter = rateLimit({
 /* ------------------------------------------------------------ file delivery */
 
 const LINK_DEAD = "This download link has expired. Open it again from your library.";
-
-/** A MIME type safe to echo into a response header. */
-function safeMime(value: string): string {
-  return /^[a-zA-Z0-9!#$&^_.+-]+\/[a-zA-Z0-9!#$&^_.+-]+$/.test(value)
-    ? value
-    : "application/octet-stream";
-}
-
-/**
- * basename, because `filename` is admin-entered free text.
- *
- * Express encodes the header correctly, but the value still becomes the name the
- * file lands under on the member's disk, and "../../.bashrc" is not a filename.
- */
-function safeFilename(file: { filename: string; title?: string }): string {
-  const candidate = path.basename((file.filename || file.title || "download").trim());
-  // Control characters, quotes and backslashes out: the first would let a
-  // filename inject a second header line, and a backslash is a path separator on
-  // the member's machine even though it is not one on ours.
-  const cleaned = candidate
-    .replace(/[\u0000-\u001f\u007f"\\/]/g, "")
-    .trim()
-    .slice(0, 180);
-  return cleaned === "" || cleaned === "." || cleaned === ".." ? "download" : cleaned;
-}
 
 /**
  * Records the download.

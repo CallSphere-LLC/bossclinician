@@ -127,7 +127,7 @@ describe("purchase delivery in Stripe sandbox mode", () => {
     vi.mocked(stripeTestMode).mockReturnValue(true);
     const { notificationRecipients } = await import("./notificationRecipients");
 
-    notifyOwnerOfSale({ description: "Anything", email: "buyer@example.test", amountCents: 4700, currency: "usd" });
+    notifyOwnerOfSale({ orderId: 4242 });
     await Promise.resolve();
 
     expect(notificationRecipients).not.toHaveBeenCalled();

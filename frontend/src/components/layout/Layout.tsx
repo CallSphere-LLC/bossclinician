@@ -14,6 +14,9 @@ import { cn } from "@/lib/cn";
  * tokens re-theme without being rewritten; `grain-overlay` and the dark
  * scrollbars come along with it.
  */
+// Pages with their own complete look (Yvette's Instagram link hub): no site chrome.
+const CHROMELESS_PATHS = new Set(["/link-in-bio"]);
+
 export function Layout({ children }: { children: ReactNode }) {
   const location = useLocation();
 
@@ -22,6 +25,7 @@ export function Layout({ children }: { children: ReactNode }) {
   // scroll. Interior pages begin with their own header band, and a transparent
   // bar over that would leave the nav floating on an arbitrary background.
   const transparentHeader = location.pathname === "/";
+  const chromeless = CHROMELESS_PATHS.has(location.pathname.toLowerCase().replace(/\/+$/, "") || "/");
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior });
@@ -44,11 +48,11 @@ export function Layout({ children }: { children: ReactNode }) {
       >
         Skip to main content
       </a>
-      <Header transparentAtTop={transparentHeader} />
+      {!chromeless && <Header transparentAtTop={transparentHeader} />}
       <main id="main-content" className="flex-1">
         {children}
       </main>
-      <Footer />
+      {!chromeless && <Footer />}
       {/* A community call in progress follows the member onto the public pages too. */}
       <FloatingCall />
     </div>

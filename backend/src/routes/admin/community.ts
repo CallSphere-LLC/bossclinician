@@ -202,6 +202,7 @@ adminCommunityRouter.get(
 adminCommunityRouter.post(
   "/",
   asyncHandler(async (req, res) => {
+    assertCoverImage((req.body ?? {}) as Record<string, unknown>);
     const { name, description, access, coverImage, slug } = req.body as Record<string, string>;
     if (!name?.trim()) throw badRequest("Community name is required");
 
@@ -268,6 +269,33 @@ adminCommunityRouter.get(
 );
 
 /**
+ * The community's cover photo: blank, or an image address a page can load.
+ *
+ * The admin picks it from the media library (whose upload path already checks
+ * the file is an image of an allowed size), which hands back a root-relative
+ * `/uploads/…` URL. Anything that is not http(s) or root-relative — a
+ * `javascript:` or `data:` value sent straight at the API — is refused here
+ * rather than stored and rendered on every member's page.
+ */
+function assertCoverImage(body: Record<string, unknown>): void {
+  // buildUpdate maps keys through toSnake, so the snake_case spelling would
+  // reach the column too and has to be held to the same rule.
+  for (const key of ["coverImage", "cover_image"]) {
+    const value = body[key];
+    if (value === undefined) continue;
+    if (typeof value !== "string" || value.length > 2048) {
+      throw badRequest("That cover photo address isn't valid. Choose the picture again.");
+    }
+    const trimmed = value.trim();
+    const rootRelative = trimmed.startsWith("/") && !trimmed.startsWith("//");
+    if (trimmed && !rootRelative && !/^https?:\/\/[^\s]+$/i.test(trimmed)) {
+      throw badRequest("That cover photo address isn't valid. Choose the picture again.");
+    }
+    body[key] = trimmed;
+  }
+}
+
+/**
  * Guards the two live-room values the database has CHECK constraints on.
  *
  * Without this a typo reaches Postgres and comes back as a 500 with a
@@ -296,6 +324,7 @@ adminCommunityRouter.put(
   "/:id",
   asyncHandler(async (req, res) => {
     assertLiveRoomValues(req.body as Record<string, unknown>);
+    assertCoverImage(req.body as Record<string, unknown>);
     const update = buildUpdate(req.body as Record<string, unknown>, COMMUNITY_FIELDS);
     if (!update) throw badRequest("No updatable fields supplied");
 

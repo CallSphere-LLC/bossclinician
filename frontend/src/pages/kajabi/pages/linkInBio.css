@@ -1,0 +1,589 @@
+/* /link-in-bio — Yvette's Kajabi custom-code page, faithfully.
+
+   Her tokens (navy #0F1E3A, purple #5C457D, lavender #D9CFE6, gold #C9A46A,
+   green #4A7C6B) are written as literals on purpose: the page keeps its own
+   dark look in the site's light theme, and site-theme.css repaints shared
+   tokens and Tailwind colour classes there. Everything is scoped under
+   `.lib-page` so nothing leaks out and the site's base `h1 { text-ink }`
+   cannot leak in.
+
+   Departures from her CSS, all for phones and legibility: tap targets of at
+   least 44px on socials and policy links, the faintest greys (divider labels,
+   footer) raised from 25% to ~45% white, and the hover lift only on devices
+   that hover. */
+
+.lib-page {
+  --lib-navy: #0f1e3a;
+  --lib-purple: #5c457d;
+  --lib-lav-l: #d9cfe6;
+  --lib-gold: #c9a46a;
+  --lib-green: #4a7c6b;
+  --lib-display: "Playfair Display", Georgia, serif;
+  --lib-body: "Montserrat", Arial, sans-serif;
+
+  color-scheme: dark;
+  min-height: 100vh;
+  min-height: 100dvh;
+  background: var(--lib-navy);
+  color: #fff;
+  font-family: var(--lib-body);
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+}
+
+:where(.lib-page) *,
+:where(.lib-page) *::before,
+:where(.lib-page) *::after {
+  box-sizing: border-box;
+}
+
+/* Zero-specificity resets, so any single `lib-` class below overrides them. */
+:where(.lib-page) :where(h1, h2, p, ul, li, blockquote) {
+  margin: 0;
+  padding: 0;
+}
+
+:where(.lib-page) :where(ul) {
+  list-style: none;
+}
+
+:where(.lib-page) :where(a) {
+  color: inherit;
+  text-decoration: none;
+}
+
+:where(.lib-page) :where(img) {
+  display: block;
+  max-width: 100%;
+}
+
+.lib-page em {
+  color: var(--lib-gold);
+  font-style: italic;
+}
+
+/* ── Column ─────────────────────────────── */
+.lib-wrap {
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 0 20px 60px;
+  padding-bottom: max(60px, calc(env(safe-area-inset-bottom) + 40px));
+}
+
+/* ── Profile ────────────────────────────── */
+.lib-profile {
+  padding: 32px 0 24px;
+  text-align: center;
+}
+
+.lib-avatar {
+  width: 96px;
+  height: 96px;
+  margin: 0 auto 14px;
+  overflow: hidden;
+  border: 3px solid var(--lib-gold);
+  border-radius: 50%;
+}
+
+.lib-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center top;
+}
+
+.lib-page .lib-h1 {
+  max-width: 340px;
+  margin: 0 auto 12px;
+  font-family: var(--lib-display);
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1.25;
+  color: #fff;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.6);
+  text-wrap: balance;
+}
+
+.lib-name {
+  margin-bottom: 4px;
+  font-family: var(--lib-display);
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #fff;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.6);
+}
+
+.lib-handle {
+  margin-bottom: 10px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--lib-lav-l);
+}
+
+.lib-bio {
+  max-width: 340px;
+  margin: 0 auto 16px;
+  font-size: 0.82rem;
+  line-height: 1.65;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.lib-creds {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.lib-cred {
+  padding: 4px 12px;
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 100px;
+}
+
+/* ── Callout ────────────────────────────── */
+.lib-callout {
+  margin-bottom: 10px;
+  padding: 16px 18px;
+  text-align: center;
+  background: linear-gradient(135deg, rgba(92, 69, 125, 0.3), rgba(15, 30, 58, 0.5));
+  border: 1px solid rgba(92, 69, 125, 0.3);
+  border-radius: 8px;
+}
+
+.lib-callout p {
+  font-size: 0.78rem;
+  line-height: 1.6;
+  color: rgba(217, 207, 230, 0.8);
+}
+
+.lib-callout .lib-callout-lead {
+  margin-bottom: 8px;
+  font-family: var(--lib-display);
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--lib-gold);
+}
+
+.lib-callout strong {
+  font-weight: 700;
+  color: #fff;
+}
+
+/* ── Divider ────────────────────────────── */
+.lib-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 20px 0 16px;
+}
+
+.lib-divider-line {
+  flex: 1;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.lib-page .lib-divider-label {
+  font-family: var(--lib-body);
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+/* ── Link buttons ───────────────────────── */
+.lib-links {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.lib-btn {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  min-height: 56px;
+  padding: 15px 20px;
+  overflow: hidden;
+  font-family: var(--lib-body);
+  color: #fff;
+  border-radius: 6px;
+  transition:
+    transform 0.15s,
+    box-shadow 0.15s,
+    opacity 0.15s;
+  touch-action: manipulation;
+}
+
+.lib-btn:active {
+  transform: translateY(0) scale(0.99);
+}
+
+.lib-btn:focus-visible {
+  outline: 2px solid var(--lib-gold);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+
+.lib-btn-icon {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  font-size: 1rem;
+  line-height: 1;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 50%;
+}
+
+.lib-btn-text {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+}
+
+.lib-btn-title {
+  display: block;
+  margin-bottom: 2px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1.35;
+}
+
+.lib-btn-sub {
+  display: block;
+  font-size: 0.68rem;
+  font-weight: 400;
+  line-height: 1.4;
+  opacity: 0.75;
+}
+
+.lib-btn-arrow {
+  flex-shrink: 0;
+  font-size: 0.85rem;
+  opacity: 0.5;
+  transition:
+    transform 0.15s,
+    opacity 0.15s;
+}
+
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .lib-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  }
+  .lib-btn:hover .lib-btn-arrow {
+    transform: translateX(3px);
+    opacity: 0.8;
+  }
+}
+
+/* Her colour variants */
+.lib-btn--featured {
+  background: linear-gradient(135deg, rgba(201, 164, 106, 0.12), rgba(92, 69, 125, 0.1));
+  border: 2px solid var(--lib-gold);
+}
+.lib-btn--audit {
+  background: linear-gradient(135deg, #2a1a4a 0%, var(--lib-purple) 100%);
+}
+.lib-btn--quiz {
+  background: linear-gradient(135deg, #3d2060 0%, var(--lib-purple) 100%);
+}
+.lib-btn--club {
+  background: linear-gradient(135deg, #3a6255 0%, var(--lib-green) 100%);
+}
+.lib-btn--lounge {
+  background: linear-gradient(135deg, #4a3570 0%, var(--lib-purple) 100%);
+}
+.lib-btn--boardroom {
+  background: linear-gradient(135deg, #0a1428 0%, var(--lib-navy) 100%);
+  border: 1px solid rgba(201, 164, 106, 0.3);
+}
+.lib-btn--boardroom .lib-btn-title {
+  color: var(--lib-gold);
+}
+.lib-btn--hub {
+  background: linear-gradient(135deg, #2a1a4a 0%, #3d2060 100%);
+}
+.lib-btn--assessment {
+  background: linear-gradient(135deg, #0a1428 0%, #1a2848 100%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+.lib-btn--about {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Badges */
+.lib-badge {
+  display: inline-block;
+  margin-bottom: 5px;
+  padding: 3px 9px;
+  font-size: 0.55rem;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  line-height: 1.4;
+  text-transform: uppercase;
+  border-radius: 100px;
+}
+.lib-badge--gold {
+  margin-bottom: 6px;
+  padding: 2px 8px;
+  letter-spacing: 0.12em;
+  color: var(--lib-navy);
+  background: var(--lib-gold);
+}
+.lib-badge--green {
+  color: #8fc4af;
+  background: rgba(74, 124, 107, 0.25);
+  border: 1px solid rgba(74, 124, 107, 0.5);
+}
+.lib-badge--purple {
+  color: #c9b3e0;
+  background: rgba(92, 69, 125, 0.3);
+  border: 1px solid rgba(167, 139, 196, 0.5);
+}
+.lib-badge--goldSoft {
+  color: #e0c89a;
+  background: rgba(201, 164, 106, 0.2);
+  border: 1px solid rgba(201, 164, 106, 0.5);
+}
+
+/* ── Cards (testimonials, about) ────────── */
+.lib-card {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 8px;
+}
+
+.lib-testimonials {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.lib-testimonial {
+  padding: 18px 18px 16px;
+}
+
+.lib-stars {
+  margin-bottom: 8px;
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  color: var(--lib-gold);
+}
+
+.lib-quote {
+  margin-bottom: 12px;
+  font-family: var(--lib-display);
+  font-size: 0.88rem;
+  font-style: italic;
+  line-height: 1.6;
+  color: rgba(217, 207, 230, 0.9);
+  border: 0;
+  quotes: none;
+}
+
+.lib-author {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.lib-t-avatar {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  font-family: var(--lib-display);
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #fff;
+  border-radius: 50%;
+}
+.lib-t-avatar--green {
+  background: var(--lib-green);
+}
+.lib-t-avatar--purple {
+  background: var(--lib-purple);
+}
+.lib-t-avatar--navy {
+  background: var(--lib-navy);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.lib-t-name {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+.lib-t-practice {
+  display: block;
+  font-size: 0.65rem;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.lib-about {
+  padding: 22px 20px;
+  text-align: center;
+}
+
+.lib-about-name {
+  margin-bottom: 4px;
+  font-family: var(--lib-display);
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+.lib-about-role {
+  margin-bottom: 12px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--lib-gold);
+}
+
+.lib-about-body {
+  font-size: 0.8rem;
+  line-height: 1.7;
+  color: rgba(217, 207, 230, 0.75);
+}
+
+/* ── Socials ────────────────────────────── */
+.lib-social {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 10px 12px;
+  padding: 24px 0 8px;
+}
+
+.lib-social-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 8px 16px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.6);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 100px;
+  transition:
+    color 0.15s,
+    border-color 0.15s;
+}
+
+.lib-social-link:hover,
+.lib-social-link:focus-visible {
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+/* ── Footer ─────────────────────────────── */
+.lib-footer {
+  margin-top: 20px;
+  text-align: center;
+  font-size: 0.66rem;
+  line-height: 1.8;
+  color: rgba(255, 255, 255, 0.45);
+}
+
+/* Her logo is navy lettering on transparent, so it sits on a cream chip. */
+.lib-logo {
+  display: inline-block;
+  margin-bottom: 12px;
+  padding: 6px 14px;
+  background: #faf8fc;
+  border-radius: 10px;
+  opacity: 0.92;
+  transition: opacity 0.15s;
+}
+
+.lib-logo:hover,
+.lib-logo:focus-visible {
+  opacity: 1;
+}
+
+.lib-logo img {
+  width: 92px;
+  height: auto;
+}
+
+.lib-policies {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  column-gap: 4px;
+}
+
+.lib-policies a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 6px;
+  color: rgba(255, 255, 255, 0.55);
+  transition: color 0.15s;
+}
+
+.lib-policies a:hover,
+.lib-policies a:focus-visible {
+  color: var(--lib-gold);
+}
+
+.lib-policies a + a::before {
+  content: "·";
+  margin-right: 10px;
+  color: rgba(255, 255, 255, 0.3);
+}
+
+/* Her small-phone tightening */
+@media (max-width: 400px) {
+  .lib-wrap {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+  .lib-btn {
+    gap: 12px;
+    padding: 13px 16px;
+  }
+  .lib-btn-icon {
+    width: 30px;
+    height: 30px;
+    font-size: 0.85rem;
+  }
+  .lib-btn-title {
+    font-size: 0.78rem;
+  }
+  .lib-btn-sub {
+    font-size: 0.63rem;
+  }
+}

@@ -357,6 +357,12 @@ function CheckoutForm({ offer, pricingOption, mode, onAmountChange }: CheckoutFo
   useEffect(() => {
     if (signedInEmail) setEmail(signedInEmail);
   }, [signedInEmail]);
+  // A signed-in buyer's email box is locked, so it never blurs: opening the
+  // checkout is the moment they started one, for the abandoned-checkout email.
+  useEffect(() => {
+    if (signedInEmail) captureEmail(signedInEmail);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [signedInEmail]);
   useEffect(() => {
     if (member?.name) setName((current) => (current === "" ? member.name : current));
   }, [member?.name]);
@@ -398,14 +404,16 @@ function CheckoutForm({ offer, pricingOption, mode, onAmountChange }: CheckoutFo
   /* ---- abandoned capture ---- */
 
   const captured = useRef(false);
-  function captureEmail() {
-    // A preview is the owner typing into her own form, not a lead.
-    if (preview) return;
-    const value = email.trim();
+  function captureEmail(address: string = email) {
+    // A preview is the owner typing into her own form, not a lead; "view as
+    // member" is the owner looking through someone else's eyes, not that member
+    // starting a checkout.
+    if (preview || member?.impersonatedBy != null) return;
+    const value = address.trim();
     if (captured.current || !EMAIL_PATTERN.test(value)) return;
     captured.current = true;
     // Fire and forget, in every sense: it cannot reject, and nothing waits on it.
-    for (const item of offer.cartItems ?? [{slug:offer.slug}]) void commerceApi.captureAbandoned(item.slug, value, name.trim().split(/\s+/)[0] || undefined);
+    for (const item of offer.cartItems ?? [{slug:offer.slug}]) void commerceApi.captureAbandoned(item.slug, value, (name || member?.name || "").trim().split(/\s+/)[0] || undefined);
   }
 
   /* ---- editing ---- */
@@ -534,6 +542,11 @@ function CheckoutForm({ offer, pricingOption, mode, onAmountChange }: CheckoutFo
       setFormNotice("Please check the highlighted fields and try again.");
       return;
     }
+
+    // An autofilled email never blurs either. Once per page, so a declined
+    // card or a closed 3-D Secure window still leaves a cart to remind about;
+    // a purchase that completes stops the reminders as before.
+    captureEmail();
 
     setSubmitting(true);
     try {
@@ -738,7 +751,7 @@ function CheckoutForm({ offer, pricingOption, mode, onAmountChange }: CheckoutFo
                     : "Your receipt and access details go here."
                 }
                 onChange={(e) => setEmail(e.target.value)}
-                onBlur={captureEmail}
+                onBlur={() => captureEmail()}
               />
               <LuxeInput
                 label="Full name"

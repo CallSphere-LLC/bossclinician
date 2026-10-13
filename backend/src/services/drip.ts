@@ -194,6 +194,60 @@ export function resolveDripState(input: {
   return { unlocked: false, unlocksAt: effective };
 }
 
+/** Why a lesson's release clock is holding it back. */
+export type ReleaseReason = "drip" | "scheduled";
+
+export interface ReleaseState extends DripState {
+  /** null when the lesson is open. */
+  reason: ReleaseReason | null;
+}
+
+/**
+ * Drip plus Kajabi's "Scheduled" status: the whole release clock of one lesson.
+ *
+ * `publishAt` is an exact instant the owner picked, date and time, so it is not
+ * snapped to the site-wide release hour the way a drip date is. A scheduled
+ * lesson is not released yet for anybody — including a free taster, which is
+ * exempt from drip only because it already plays on the sales page, and a
+ * lesson nobody has released does not.
+ *
+ * When both hold the door, the later one is the reason given, because it is the
+ * one that actually decides when the lesson opens.
+ */
+export function resolveRelease(input: {
+  lesson: DripConfig;
+  module?: DripConfig | null;
+  publishAt?: Date | null;
+  preview?: boolean;
+  grantedAt: Date;
+  now: Date;
+  settings?: DripSettings;
+}): ReleaseState {
+  const drip = resolveDripState(input);
+  const dripHeld = !drip.unlocked && input.preview !== true;
+  const publishAt = input.publishAt ?? null;
+  const scheduled = publishAt !== null && input.now.getTime() < publishAt.getTime();
+
+  if (scheduled && (!dripHeld || (drip.unlocksAt?.getTime() ?? 0) <= publishAt.getTime())) {
+    return { unlocked: false, unlocksAt: publishAt, reason: "scheduled" };
+  }
+  if (dripHeld) return { unlocked: false, unlocksAt: drip.unlocksAt, reason: "drip" };
+  return { unlocked: true, unlocksAt: null, reason: null };
+}
+
+/** "Tuesday, October 20, 9:00 AM EDT" — a scheduled lesson's exact opening. */
+export function describeScheduled(at: Date, timeZone: string): string {
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZoneName: "short",
+  }).format(at);
+}
+
 /** "Unlocks Tuesday, 3 March" — for the locked badge in the player sidebar. */
 export function describeUnlock(unlocksAt: Date, timeZone: string): string {
   return new Intl.DateTimeFormat("en-US", {

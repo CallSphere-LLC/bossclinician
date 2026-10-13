@@ -10,6 +10,7 @@ import { hasCourseAccess } from "../../services/access";
 import {
   CERTIFICATE_COLUMNS,
   certificateFile,
+  certificateStatus,
   formatCreditHours,
   issueCertificateIfEarned,
   type CertificateRow,
@@ -135,6 +136,30 @@ memberCertificatesRouter.get(
 );
 
 /**
+ * GET /api/member/certificates/status/:courseId
+ *
+ * Where the member stands on one course's certificate and, when it has not been
+ * issued, the plain reason: lessons left, a quiz still to pass (the course's
+ * "Require passing every quiz" setting), or the CE watch-time standard. Read
+ * only — it never issues a certificate or sends an email; claiming does that.
+ * A course the member does not hold is the same 404 as a missing one.
+ */
+memberCertificatesRouter.get(
+  "/status/:courseId",
+  asyncHandler(async (req, res) => {
+    const member = currentMember(req);
+
+    const parsed = claimSchema.safeParse({ courseId: req.params.courseId });
+    if (!parsed.success) throw notFound(NOT_FOUND);
+    const { courseId } = parsed.data;
+
+    if (!(await hasCourseAccess(member.id, courseId))) throw notFound(NOT_FOUND);
+
+    res.json(await certificateStatus(member.id, courseId));
+  })
+);
+
+/**
  * GET /api/member/certificates/:id/download
  *
  * `member_id` is in the WHERE clause, so somebody else's certificate is a 404
@@ -202,9 +227,13 @@ memberCertificatesRouter.post(
 
     const row = await issueCertificateIfEarned(member.id, courseId);
     if (!row) {
+      // The specific reason — a quiz still to pass, lessons left — rather than a
+      // generic "finish the course" to somebody who already has.
+      const status = await certificateStatus(member.id, courseId);
       res.json({
         certificate: null,
-        message: "Finish every lesson in the course and your certificate will appear here.",
+        message: status.message,
+        status,
       });
       return;
     }

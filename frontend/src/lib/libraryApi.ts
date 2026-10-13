@@ -89,6 +89,17 @@ export interface LibraryResponse {
 
 /* ------------------------------------------------------------ one product */
 
+/**
+ * Why a lesson is shut (mirrors `LockReason` in services/curriculum.ts):
+ * Kajabi "Lock" (previous lesson not complete, or its required quiz not
+ * passed), drip, or a Kajabi-style scheduled publish date and time.
+ */
+export type LessonLockReason =
+  | "previous_incomplete"
+  | "previous_quiz_not_passed"
+  | "drip"
+  | "scheduled";
+
 export interface OutlineLesson {
   id: number;
   slug: string;
@@ -98,8 +109,16 @@ export interface OutlineLesson {
   videoDurationSeconds: number;
   preview: boolean;
   unlocked: boolean;
+  /** The inverse of `unlocked`, sent for clarity alongside `lockReason`. */
+  locked?: boolean;
+  /** null once open. Older responses may omit it. */
+  lockReason?: LessonLockReason | null;
   unlocksAt: string | null;
-  /** "Unlocks Thursday, 22 January", or "" once it is open. */
+  /**
+   * The plain sentence to show for a shut lesson — "Unlocks Thursday, 22
+   * January", "Opens Tuesday, October 20, 9:00 AM EDT", "Complete “Intro” to
+   * unlock", "Pass the quiz in “Phase 1” to unlock" — or "" once it is open.
+   */
   unlockLabel: string;
   completed: boolean;
   completedAt: string | null;
@@ -210,12 +229,19 @@ interface LessonCommon {
 
 export interface LockedLesson extends LessonCommon {
   locked: true;
+  lockReason?: LessonLockReason | null;
   unlocksAt: string | null;
   unlockLabel: string;
 }
 
 export interface UnlockedLesson extends LessonCommon {
   locked: false;
+  lockReason?: null;
+  /**
+   * Admin "Preview as student" only: what a student enrolling today would be
+   * told instead of seeing this lesson. The member API never sends it.
+   */
+  studentLock?: string;
   contentType: LessonContentType;
   unlocksAt: null;
   unlockLabel: string;
@@ -263,6 +289,9 @@ export interface LessonNeighbour {
   title: string;
   /** So "next" can be greyed out rather than opening onto an unlock date. */
   unlocked: boolean;
+  lockReason?: LessonLockReason | null;
+  /** Why it is shut, in the server's words; "" when open. */
+  unlockLabel?: string;
 }
 
 export interface LessonResponse {
@@ -325,6 +354,13 @@ export interface LessonCommentsResponse {
  */
 export interface DownloadLink {
   url: string;
+  /**
+   * Where the in-page viewer reads the bytes, when that is not `url`. Only the
+   * admin's course preview sends one: its `url` is served on the public host,
+   * which from the admin origin is a cross-origin redirect `fetch` may not
+   * follow. A member's `url` is already same-origin.
+   */
+  viewUrl?: string;
   filename: string;
   title: string;
   sizeBytes: number;
@@ -407,6 +443,21 @@ export interface MemberCertificate {
 export interface CertificateClaimResult {
   /** null when there is nothing to issue yet — `message` says why, in the server's words. */
   certificate: MemberCertificate | null;
+  message: string;
+  status?: CertificateStatus;
+}
+
+/** Mirrors `CertificateStatus` in services/certificates.ts. */
+export interface CertificateStatus {
+  /** The course issues a certificate on completion at all. */
+  offered: boolean;
+  issued: boolean;
+  requiresPassingQuizzes: boolean;
+  lessonsRemaining: number;
+  quizzesToPass: { lessonTitle: string; assessmentTitle: string; passMark: number | null }[];
+  ceuPending: boolean;
+  eligible: boolean;
+  /** "Pass the quiz in “Final quiz” (pass mark 80%) to get your certificate." */
   message: string;
 }
 
@@ -508,6 +559,10 @@ export const libraryApi = {
   getCertificates: () =>
     memberRequest<{ certificates: MemberCertificate[] }>("/member/certificates"),
 
+  /** Read-only: why a course's certificate has not been issued yet, if it hasn't. */
+  getCertificateStatus: (courseId: number) =>
+    memberRequest<CertificateStatus>(`/member/certificates/status/${courseId}`),
+
   /**
    * Asks for the certificate of a finished course. Idempotent: one that already
    * exists comes back unchanged, with no second email.
@@ -594,7 +649,7 @@ export async function fetchFileBlob(
   mint: LinkMinter = libraryApi.downloadLink,
 ): Promise<Blob> {
   const link = await mint(kind, fileId);
-  const response = await fetch(link.url, { credentials: "same-origin" });
+  const response = await fetch(link.viewUrl ?? link.url, { credentials: "same-origin" });
   if (!response.ok) throw new Error(`file ${response.status}`);
   return response.blob();
 }

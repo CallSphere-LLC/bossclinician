@@ -45,4 +45,12 @@ describe("formSubmissionNotification", () => {
     expect(html).toContain("Intake<br>Billing &amp; &lt;payroll&gt;");
     expect(html).toContain("<strong>Full name:</strong>");
   });
+
+  it("links to the replies in the admin when given the address, and only then", () => {
+    const adminUrl = "https://admin.example.test/admin/marketing/forms-v2?form=7&view=replies";
+    const linked = formSubmissionNotification({ ...reply, adminUrl });
+    expect(linked.text).toContain(`See every reply to this form: ${adminUrl}`);
+    expect(linked.html).toContain(`href="https://admin.example.test/admin/marketing/forms-v2?form=7&amp;view=replies"`);
+    expect(formSubmissionNotification(reply).text).not.toContain("See every reply");
+  });
 });

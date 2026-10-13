@@ -2,19 +2,21 @@ import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { adminApi } from "@/lib/api";
 import type { CommunityDetail } from "@/types/admin";
-import { Button, Card, Field, Input, Textarea } from "./ui/primitives";
+import { CommunityCoverField, CommunityDescriptionEditor } from "@/components/community/CommunityDetailsFields";
+import { Button, Card, Field, Input } from "./ui/primitives";
 import { friendlyError } from "./ui/friendly";
 
 export function CommunitySettings({ community, onSaved }: { community: CommunityDetail; onSaved: () => void }) {
   const [name, setName] = useState(community.name);
   const [description, setDescription] = useState(community.description ?? "");
+  const [coverImage, setCoverImage] = useState(community.coverImage ?? "");
   const [saving, setSaving] = useState(false);
 
   async function save(event: FormEvent) {
     event.preventDefault();
     setSaving(true);
     try {
-      await adminApi.communityUpdate(Number(community.id), { name: name.trim(), description });
+      await adminApi.communityUpdate(Number(community.id), { name: name.trim(), description, coverImage });
       toast.success("Community details saved");
       onSaved();
     } catch (error) {
@@ -28,9 +30,8 @@ export function CommunitySettings({ community, onSaved }: { community: Community
       <Field label="Community name" htmlFor="community-settings-name">
         <Input id="community-settings-name" required value={name} onChange={event => setName(event.target.value)} />
       </Field>
-      <Field label="Description" htmlFor="community-settings-description" hint="Shown at the top of the participant view. Line breaks are preserved.">
-        <Textarea id="community-settings-description" rows={12} value={description} onChange={event => setDescription(event.target.value)} placeholder="Welcome members and explain what this community includes." />
-      </Field>
+      <CommunityCoverField value={coverImage} onChange={setCoverImage} />
+      <CommunityDescriptionEditor id="community-settings-description" value={description} onChange={setDescription} />
       <Button type="submit" disabled={saving || !name.trim()}>{saving ? "Saving…" : "Save details"}</Button>
     </form>
   </Card>;

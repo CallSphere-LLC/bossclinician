@@ -755,4 +755,32 @@ describeDb("community admin api (integration)", () => {
     expect((await call("POST", "/admin/community/999999/archive")).status).toBe(404);
   });
 
+  it("saves a cover photo from the media library and refuses addresses a page should not load", async () => {
+    const created = await call("POST", "/admin/community", {
+      name: unique("ZZ Cover"),
+      description: "## Welcome\n\nThis is **bold**.",
+      coverImage: "/uploads/zz-cover.png",
+    });
+    expect(created.status).toBe(201);
+    expect(created.body.coverImage).toBe("/uploads/zz-cover.png");
+    expect(created.body.description).toBe("## Welcome\n\nThis is **bold**.");
+
+    const id = created.body.id;
+    const replaced = await call("PUT", `/admin/community/${id}`, {
+      coverImage: " https://cdn.example.com/cover.jpg ",
+    });
+    expect(replaced.status).toBe(200);
+    expect(replaced.body.coverImage).toBe("https://cdn.example.com/cover.jpg");
+
+    for (const bad of ["javascript:alert(1)", "data:image/png;base64,AAAA", "//evil.example/x.png"]) {
+      expect((await call("PUT", `/admin/community/${id}`, { coverImage: bad })).status).toBe(400);
+      expect((await call("PUT", `/admin/community/${id}`, { cover_image: bad })).status).toBe(400);
+    }
+    expect((await call("POST", "/admin/community", { name: unique("ZZ Bad"), coverImage: "javascript:x" })).status).toBe(400);
+
+    const removed = await call("PUT", `/admin/community/${id}`, { coverImage: "" });
+    expect(removed.status).toBe(200);
+    expect(removed.body.coverImage).toBe("");
+  });
+
 });

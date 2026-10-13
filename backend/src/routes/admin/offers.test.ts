@@ -5,6 +5,13 @@ vi.mock("../../db/pool", () => ({ pool: { query: (...args: unknown[]) => query(.
 vi.mock("../../services/adminAudit", () => ({ recordAdminAction: vi.fn() }));
 vi.mock("../../services/purchaseDelivery", () => ({ deliverManualGrant: vi.fn() }));
 vi.mock("../../services/access", () => ({ grantOfferAccess: vi.fn(), revokeOfferAccess: vi.fn() }));
+vi.mock("../../services/settings", () => ({
+  readSetting: vi.fn(async (key: string) =>
+    key === "notifications"
+      ? { notifyEmail: "owner@example.test", onSale: true }
+      : { enabled: true, recipients: "", enabled0: true, hours0: 1, enabled1: true, hours1: 6, enabled2: false, enabled3: false },
+  ),
+}));
 
 import { adminOffersRouter } from "./offers";
 
@@ -143,5 +150,54 @@ describe("GET /admin/offers", () => {
     const sql = String(query.mock.calls[0][0]);
     expect(sql).toMatch(/o\.title ILIKE \$1 OR o\.internal_title ILIKE \$1 OR o\.slug ILIKE \$1/);
     expect(sql).toMatch(/o\.internal_title,/);
+  });
+});
+
+describe("PUT /admin/offers/:id/notifications", () => {
+  beforeEach(() => query.mockReset());
+
+  async function putNotifications(body: unknown) {
+    const layer = (adminOffersRouter.stack as any[]).find(
+      (l) => l.route?.path === "/:id/notifications" && l.route.methods.put,
+    );
+    const handler = layer.route.stack[0].handle;
+    return new Promise<{ body?: any; error?: any }>((resolve) => {
+      const res: any = { status() { return this; }, json(payload: unknown) { resolve({ body: payload }); return this; } };
+      handler({ params: { id: "7" }, body } as any, res, (error: unknown) => resolve({ error }));
+    });
+  }
+  const stored = {
+    notify_owner_on_sale: true,
+    notify_owner_recipients: "",
+    recovery_enabled: true,
+    recovery_mode: "default",
+    recovery_overrides: {},
+  };
+
+  it("refuses a recipient that is not an email address", async () => {
+    query.mockResolvedValueOnce({ rows: [stored] });
+    const { error } = await putNotifications({ notifyOwnerRecipients: "va@example.test, nope" });
+    expect(error?.details?.fieldErrors?.notifyOwnerRecipients?.[0]).toContain("nope");
+  });
+
+  it("refuses custom reminders that go out before the one before them", async () => {
+    query.mockResolvedValueOnce({ rows: [stored] });
+    const { error } = await putNotifications({ recoveryMode: "custom", recoveryOverrides: { hours0: 8 } });
+    expect(error?.details?.fieldErrors?.hours1).toBeTruthy();
+  });
+
+  it("saves custom copy, dropping blank fields and unknown keys", async () => {
+    query.mockResolvedValueOnce({ rows: [stored] });
+    query.mockImplementationOnce(async (_sql: string, params: unknown[]) => ({
+      rows: [{ ...stored, recovery_mode: params[4], recovery_overrides: JSON.parse(String(params[5])) }],
+    }));
+    const { body, error } = await putNotifications({
+      recoveryMode: "custom",
+      recoveryOverrides: { hours0: 0.5, subject0: "  ZZ Come back  ", body0: "  ", hacked: "x" },
+    });
+    expect(error).toBeUndefined();
+    expect(body.recoveryMode).toBe("custom");
+    expect(body.recoveryOverrides).toEqual({ hours0: 0.5, subject0: "ZZ Come back" });
+    expect(body.defaults.notifyEmail).toBe("owner@example.test");
   });
 });

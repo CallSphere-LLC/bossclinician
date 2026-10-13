@@ -12,6 +12,8 @@ import {
   MAX_FILE_QUESTIONS,
 } from "../../services/formUploads";
 import { adminPreviewUrl } from "../../services/signedUrls";
+import { normalizeNotifyEmails, notifyEmailsProblem } from "../../services/formNotifications";
+import { lessonsUsingForm } from "../../services/lessonForms";
 
 /**
  * The form builder — mounted at /api/admin/forms.
@@ -109,7 +111,19 @@ export const formSchema = z.object({
   doubleOptIn: z.boolean().optional(),
   createLead: z.boolean().optional(),
   published: z.boolean().optional(),
+  /** "Email me when someone sends this form" (migration 112). */
+  notifyOnSubmit: z.boolean().optional(),
+  /** Who that email goes to, comma-separated; blank = the address in Settings. Checked in `notifyEmailsInput`. */
+  notifyEmails: z.string().max(2000).optional(),
 });
+
+/** The stored form of the notification list, or a 400 the builder can show. */
+function notifyEmailsInput(raw: string | undefined): string | undefined {
+  if (raw === undefined) return undefined;
+  const problem = notifyEmailsProblem(raw);
+  if (problem) throw badRequest(problem);
+  return normalizeNotifyEmails(raw);
+}
 
 /**
  * The questions a brand-new form starts with.
@@ -268,14 +282,16 @@ adminFormsRouter.post(
     const problem = fieldsError(fields);
     if (problem) throw badRequest(problem);
 
+    const notifyEmails = notifyEmailsInput(input.notifyEmails) ?? "";
     const slug = await freeSlug(slugify(input.name));
 
     const result = await pool.query(
       `INSERT INTO forms
          (slug, name, description, description_md, fields, submit_label, success_message,
           post_action, redirect_url, download_product_file_id, apply_tag_ids,
-          subscribe_sequence_id, spam_protection, double_opt_in, create_lead, published)
-       VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+          subscribe_sequence_id, spam_protection, double_opt_in, create_lead, published,
+          notify_on_submit, notify_emails)
+       VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
        RETURNING *`,
       [
         slug,
@@ -294,6 +310,8 @@ adminFormsRouter.post(
         input.doubleOptIn ?? false,
         input.createLead ?? true,
         input.published ?? true,
+        input.notifyOnSubmit ?? true,
+        notifyEmails,
       ]
     );
     res.status(201).json(rowToCamel(result.rows[0]));
@@ -313,12 +331,16 @@ adminFormsRouter.get(
     );
     if (result.rowCount === 0) throw notFound("Form not found");
 
-    const tags = await pool.query(
-      `SELECT id, name FROM tags WHERE id = ANY($1::int[]) ORDER BY name`,
-      [result.rows[0].apply_tag_ids]
-    );
+    const [tags, lessons] = await Promise.all([
+      pool.query(`SELECT id, name FROM tags WHERE id = ANY($1::int[]) ORDER BY name`, [
+        result.rows[0].apply_tag_ids,
+      ]),
+      // The lessons that show this form to students (migration 112), so the
+      // builder can say where an unpublished form is still being filled in.
+      lessonsUsingForm(result.rows[0].slug),
+    ]);
 
-    res.json({ ...rowToCamel(result.rows[0]), applyTags: rowsToCamel(tags.rows) });
+    res.json({ ...rowToCamel(result.rows[0]), applyTags: rowsToCamel(tags.rows), lessons });
   })
 );
 
@@ -338,6 +360,8 @@ const FORM_COLUMNS = [
   "double_opt_in",
   "create_lead",
   "published",
+  "notify_on_submit",
+  "notify_emails",
 ] as const;
 
 adminFormsRouter.patch(
@@ -360,6 +384,7 @@ adminFormsRouter.patch(
     // renamed.
     const patch: Record<string, unknown> = { ...input };
     if (input.fields) patch.fields = JSON.stringify(input.fields);
+    if (input.notifyEmails !== undefined) patch.notifyEmails = notifyEmailsInput(input.notifyEmails);
 
     const update = buildUpdate(patch, FORM_COLUMNS);
     if (!update) throw badRequest("Nothing to update");

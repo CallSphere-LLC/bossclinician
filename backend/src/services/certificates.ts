@@ -750,6 +750,158 @@ export function clearCertificateTemplateCache(): void {
   noTemplateUntil.clear();
 }
 
+/* ------------------------------------------------------ quiz-gated issuance */
+
+/** A graded quiz in the course this member has not passed yet. */
+export interface CertificateQuizGap {
+  lessonTitle: string;
+  assessmentTitle: string;
+  /** The pass mark set on the quiz itself, in percent. */
+  passMark: number | null;
+}
+
+/**
+ * Every published graded quiz on a published lesson of the course that this
+ * member has no passing attempt at.
+ *
+ * "Passing" is the attempt's own `passed` flag, which assessments.ts sets from
+ * the quiz's pass mark at the moment of submission — so the bar is whatever the
+ * owner set on that quiz, and a later change to it does not retroactively fail
+ * anybody. Surveys (an evaluation form) have no pass mark and are not here:
+ * finishing their lesson already requires submitting them, and a certificate
+ * already requires every lesson finished.
+ */
+export async function loadUnpassedQuizzes(
+  memberId: number,
+  courseId: number
+): Promise<CertificateQuizGap[]> {
+  const found = await pool.query<{ lesson_title: string; title: string; pass_mark: number | null }>(
+    `SELECT l.title AS lesson_title, a.title, a.pass_mark
+       FROM assessments a
+       JOIN course_lessons l ON l.id = a.lesson_id
+       JOIN course_modules m ON m.id = l.module_id
+      WHERE m.course_id = $2 AND l.published AND a.published AND a.kind = 'graded'
+        AND NOT EXISTS (
+          SELECT 1 FROM assessment_attempts t
+           WHERE t.assessment_id = a.id AND t.member_id = $1
+             AND t.passed AND t.completed_at IS NOT NULL
+        )
+      ORDER BY m.sort, m.id, l.sort, l.id`,
+    [memberId, courseId]
+  );
+  return found.rows.map((row) => ({
+    lessonTitle: row.lesson_title,
+    assessmentTitle: row.title,
+    passMark: row.pass_mark,
+  }));
+}
+
+/** The course-level "Require passing every quiz to earn the certificate" switch. */
+async function courseRequiresPassingQuizzes(courseId: number): Promise<boolean> {
+  const found = await pool.query<{ certificate_requires_pass: boolean }>(
+    `SELECT certificate_requires_pass FROM courses WHERE id = $1`,
+    [courseId]
+  );
+  // Missing row: the safe answer for a certificate is the stricter one.
+  return found.rows[0]?.certificate_requires_pass !== false;
+}
+
+export interface CertificateStatus {
+  /** The course issues a certificate on completion at all. */
+  offered: boolean;
+  issued: boolean;
+  requiresPassingQuizzes: boolean;
+  lessonsRemaining: number;
+  quizzesToPass: CertificateQuizGap[];
+  /** Everything is done except the CE watch-time standard. */
+  ceuPending: boolean;
+  /** Every condition is met; claiming will issue it. */
+  eligible: boolean;
+  /** One plain sentence for the member. */
+  message: string;
+}
+
+function quizSentence(gaps: CertificateQuizGap[]): string {
+  const names = gaps.map((gap) => `“${gap.lessonTitle}”`);
+  if (gaps.length === 1) {
+    const mark = gaps[0].passMark !== null ? ` (pass mark ${gaps[0].passMark}%)` : "";
+    return `pass the quiz in ${names[0]}${mark}`;
+  }
+  return `pass the quizzes in ${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+}
+
+/**
+ * Where this member stands on a course's certificate, and why it has not been
+ * issued yet — for the course page to say "Pass the final quiz to get your
+ * certificate" rather than nothing at all. Read-only: never issues or emails.
+ */
+export async function certificateStatus(
+  memberId: number,
+  courseId: number
+): Promise<CertificateStatus> {
+  const [existing, template, requiresPass, counts] = await Promise.all([
+    pool.query(`SELECT 1 FROM certificates WHERE member_id = $1 AND course_id = $2`, [
+      memberId,
+      courseId,
+    ]),
+    loadCompletionTemplate(courseId),
+    courseRequiresPassingQuizzes(courseId),
+    pool.query<{ total: number; done: number }>(
+      `SELECT COUNT(l.id)::int AS total, COUNT(lp.completed_at)::int AS done
+         FROM course_lessons l
+         JOIN course_modules m ON m.id = l.module_id
+         LEFT JOIN lesson_progress lp ON lp.lesson_id = l.id AND lp.member_id = $1
+        WHERE m.course_id = $2 AND l.published`,
+      [memberId, courseId]
+    ),
+  ]);
+
+  const issued = existing.rows.length > 0;
+  const total = counts.rows[0]?.total ?? 0;
+  const lessonsRemaining = Math.max(0, total - (counts.rows[0]?.done ?? 0));
+  const quizzesToPass = requiresPass ? await loadUnpassedQuizzes(memberId, courseId) : [];
+  const ceuPending =
+    !issued &&
+    template !== null &&
+    template.ceu_credit_quarter_hours > 0 &&
+    lessonsRemaining === 0 &&
+    quizzesToPass.length === 0 &&
+    !earnedCeuCredit(await loadCeuLessonRecords(memberId, courseId));
+
+  const offered = template !== null || issued;
+  const eligible =
+    !issued && template !== null && total > 0 && lessonsRemaining === 0 &&
+    quizzesToPass.length === 0 && !ceuPending;
+
+  let message: string;
+  if (issued) message = "Your certificate is ready.";
+  else if (!offered) message = "This course doesn't come with a certificate.";
+  else if (lessonsRemaining > 0 && quizzesToPass.length > 0) {
+    message = `Finish the remaining ${lessonsRemaining === 1 ? "lesson" : `${lessonsRemaining} lessons`} and ${quizSentence(quizzesToPass)} to get your certificate.`;
+  } else if (lessonsRemaining > 0) {
+    message = `Finish the remaining ${lessonsRemaining === 1 ? "lesson" : `${lessonsRemaining} lessons`} to get your certificate.`;
+  } else if (quizzesToPass.length > 0) {
+    const sentence = quizSentence(quizzesToPass);
+    message = `${sentence.charAt(0).toUpperCase()}${sentence.slice(1)} to get your certificate.`;
+  } else if (ceuPending) {
+    message =
+      "This certificate carries CE credit, so every video has to be watched through and every reading given its full time — not only ticked. Revisit any lesson you skipped ahead in, then press Get my certificate.";
+  } else {
+    message = "You have earned your certificate — press Get my certificate to collect it.";
+  }
+
+  return {
+    offered,
+    issued,
+    requiresPassingQuizzes: requiresPass,
+    lessonsRemaining,
+    quizzesToPass,
+    ceuPending,
+    eligible,
+    message,
+  };
+}
+
 /**
  * Issues the certificate for a finished course, or returns null.
  *
@@ -798,6 +950,16 @@ export async function issueCertificateIfEarned(
   );
   const earned = progress.rows[0];
   if (!earned || earned.percent < 100) return null;
+
+  // "Require passing every quiz to earn the certificate" (courses.
+  // certificate_requires_pass, on by default): a quiz the member was allowed to
+  // move past without passing still has to be passed before the certificate.
+  if (
+    (await courseRequiresPassingQuizzes(courseId)) &&
+    (await loadUnpassedQuizzes(memberId, courseId)).length > 0
+  ) {
+    return null;
+  }
 
   // Credit hours turn this from a keepsake into a compliance record, so a course
   // carrying them is held to the stricter standard — on every lesson, not only

@@ -14,6 +14,7 @@ import {
   ArrowLeft,
   ArrowUp,
   BadgeDollarSign,
+  BellRing,
   ClipboardList,
   Eye,
   EyeOff,
@@ -86,6 +87,7 @@ import {
   webAddress,
 } from "@/pages/admin/ui/friendly";
 import { openCheckoutPreview } from "@/components/checkout/checkoutPreview";
+import OfferNotificationsTab from "@/pages/admin/OfferNotificationsTab";
 
 /**
  * The offer editor — one screen, six questions, in the order she'd ask them:
@@ -197,7 +199,7 @@ export function installmentInput(raw: string): number | null {
 
 /* ── Tabs ───────────────────────────────────────────────────────────────── */
 
-type TabKey = "selling" | "price" | "form" | "bumps" | "upsells" | "gifting" | "after";
+type TabKey = "selling" | "price" | "form" | "bumps" | "upsells" | "gifting" | "after" | "notifications";
 
 const TABS: { value: TabKey; label: string; icon: LucideIcon }[] = [
   { value: "selling", label: "What you're selling", icon: Package },
@@ -207,6 +209,7 @@ const TABS: { value: TabKey; label: string; icon: LucideIcon }[] = [
   { value: "upsells", label: "Upsells", icon: Sparkles },
   { value: "gifting", label: "Send as a gift", icon: Gift },
   { value: "after", label: "After purchase", icon: Flag },
+  { value: "notifications", label: "Notifications", icon: BellRing },
 ];
 
 /**
@@ -877,6 +880,14 @@ export default function OfferEditor() {
 
           <Tabs.Content value="after">
             <AfterTab draft={draft} errors={errors} update={update} pages={pages} />
+          </Tabs.Content>
+
+          <Tabs.Content value="notifications">
+            {offer ? (
+              <OfferNotificationsTab offerId={offer.id} />
+            ) : (
+              <SaveFirst what="sale notifications and abandoned checkout emails" />
+            )}
           </Tabs.Content>
         </div>
       </Tabs.Root>

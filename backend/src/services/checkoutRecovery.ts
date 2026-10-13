@@ -13,6 +13,34 @@ const recipientList = (value: unknown): string[] => String(value ?? "").toLowerC
 function nextStep(settings: Record<string, unknown>, done: number): number | undefined {
   return [0, 1, 2, 3].find((step) => step >= done && settings[`enabled${step}`] === true);
 }
+
+/** The offer columns migration 110 added: each offer's own reminder setup. */
+export interface OfferRecoveryColumns {
+  recovery_enabled: boolean;
+  recovery_mode: string;
+  recovery_overrides: Record<string, unknown> | null;
+}
+const OVERRIDE_KEY = /^(enabled|hours|subject|body)[0-3]$/;
+
+/**
+ * The reminder sequence one offer's abandoned checkouts follow, or null for none.
+ *
+ * The site-wide switch stays the master switch, and the site-wide recipient
+ * allow-list applies to every offer (callers check it). Under that, an offer
+ * can turn its reminders off, or swap in its own delays and copy ("custom") —
+ * any reminder field it leaves blank falls back to the site-wide one.
+ */
+export function effectiveRecoverySettings(
+  global: Record<string, unknown>,
+  offer: OfferRecoveryColumns,
+): Record<string, unknown> | null {
+  if (!global.enabled || offer.recovery_enabled === false) return null;
+  if (offer.recovery_mode !== "custom") return global;
+  const overrides = Object.entries(offer.recovery_overrides ?? {}).filter(
+    ([key, value]) => OVERRIDE_KEY.test(key) && value !== null && value !== undefined && value !== "",
+  );
+  return { ...global, ...Object.fromEntries(overrides) };
+}
 function sign(body: string): string {
   return crypto.createHmac("sha256", env.jwtSecret).update(`checkout-reminder-v1:${body}`).digest("base64url");
 }
@@ -36,15 +64,19 @@ export async function followRecoveryLink(token: string): Promise<string | null> 
 }
 
 export async function sweepAbandonedCheckouts(): Promise<{ queued: number }> {
-  const settings = await readSetting("cart_recovery");
-  if (!settings.enabled) return { queued: 0 };
-  const recipients = recipientList(settings.recipients);
-  const due = await pool.query<{id: number; emails_sent: number; age_hours: number; email: string}>(
-    `SELECT id, emails_sent, email::text, EXTRACT(EPOCH FROM (now() - updated_at))/3600 AS age_hours
-       FROM abandoned_checkouts WHERE recovered_at IS NULL AND stopped_at IS NULL AND emails_sent < 4
-       ORDER BY updated_at LIMIT 500`);
+  const global = await readSetting("cart_recovery");
+  if (!global.enabled) return { queued: 0 };
+  const recipients = recipientList(global.recipients);
+  const due = await pool.query<{id: number; emails_sent: number; age_hours: number; email: string} & OfferRecoveryColumns>(
+    `SELECT a.id, a.emails_sent, a.email::text, EXTRACT(EPOCH FROM (now() - a.updated_at))/3600 AS age_hours,
+            o.recovery_enabled, o.recovery_mode, o.recovery_overrides
+       FROM abandoned_checkouts a JOIN offers o ON o.id = a.offer_id
+      WHERE a.recovered_at IS NULL AND a.stopped_at IS NULL AND a.emails_sent < 4 AND o.recovery_enabled
+      ORDER BY a.updated_at LIMIT 500`);
   let queued = 0;
   for (const cart of due.rows) {
+    const settings = effectiveRecoverySettings(global, cart);
+    if (!settings) continue;
     const step = nextStep(settings, cart.emails_sent);
     if (step === undefined || Number(cart.age_hours) < Number(settings[`hours${step}`]) || (recipients.length && !recipients.includes(cart.email.toLowerCase()))) continue;
     if (await enqueue({kind: "checkout.recoveryEmail", payload: {abandonedCheckoutId: cart.id, step}, priority: PRIORITY.bulk, dedupeKey: `cart-recovery:${cart.id}:${step}`})) queued++;
@@ -57,11 +89,13 @@ export async function sweepAbandonedCheckouts(): Promise<{ queued: number }> {
 export async function checkoutRecoveryEmail(payload: Record<string, unknown>): Promise<unknown> {
   const id = Number(payload.abandonedCheckoutId), step = Number(payload.step);
   if (!Number.isSafeInteger(id) || id < 1 || !Number.isInteger(step) || step < 0 || step > 3) throw new Error("Invalid reminder job");
-  const settings = await readSetting("cart_recovery");
-  if (!settings.enabled) return { skipped: "disabled" };
-  const initial = await pool.query(`SELECT email, first_name, recovered_at, stopped_at FROM abandoned_checkouts WHERE id=$1`, [id]);
+  const global = await readSetting("cart_recovery");
+  if (!global.enabled) return { skipped: "disabled" };
+  const initial = await pool.query(`SELECT a.email, a.first_name, a.recovered_at, a.stopped_at, o.recovery_enabled, o.recovery_mode, o.recovery_overrides
+    FROM abandoned_checkouts a JOIN offers o ON o.id=a.offer_id WHERE a.id=$1`, [id]);
   if (!initial.rows[0] || initial.rows[0].recovered_at || initial.rows[0].stopped_at) return {skipped: "already bought or stopped"};
-  const recipients = recipientList(settings.recipients);
+  if (!effectiveRecoverySettings(global, initial.rows[0])) return {skipped: "off for this offer"};
+  const recipients = recipientList(global.recipients);
   if (recipients.length && !recipients.includes(initial.rows[0].email.toLowerCase())) return {skipped: "outside recipients"};
   // Contact writes finish before taking the cart lock: fulfillment also updates
   // contacts and must never deadlock against a worker waiting for that contact.
@@ -71,13 +105,19 @@ export async function checkoutRecoveryEmail(payload: Record<string, unknown>): P
   try {
     await client.query("BEGIN");
     const rows = await client.query(`SELECT a.*, o.title AS offer_title, o.status AS offer_status,
+      o.recovery_enabled, o.recovery_mode, o.recovery_overrides,
       EXTRACT(EPOCH FROM (now() - a.updated_at))/3600 AS age_hours
       FROM abandoned_checkouts a JOIN offers o ON o.id=a.offer_id WHERE a.id=$1 FOR UPDATE OF a`, [id]);
     const cart = rows.rows[0];
-    if (!cart || cart.recovered_at || cart.stopped_at || cart.offer_status !== "published" || nextStep(settings, cart.emails_sent) !== step || Number(cart.age_hours) < Number(settings[`hours${step}`])) {
+    // Re-resolved under the lock: the offer's setup may have changed since the sweep queued this.
+    const settings = cart ? effectiveRecoverySettings(global, cart) : null;
+    if (!cart || !settings || cart.recovered_at || cart.stopped_at || cart.offer_status !== "published" || nextStep(settings, cart.emails_sent) !== step || Number(cart.age_hours) < Number(settings[`hours${step}`])) {
       await client.query("COMMIT"); return {skipped: "not due or already bought"};
     }
-    const paid = await client.query(`SELECT id FROM orders WHERE offer_id=$1 AND email=$2 AND status='paid' AND created_at >= $3 LIMIT 1`, [cart.offer_id, cart.email, cart.created_at]);
+    // A day of slack before the cart: a buyer whose email was captured a moment
+    // after a free order completed (the capture and the checkout race), or who
+    // came back to the page right after buying, has already bought.
+    const paid = await client.query(`SELECT id FROM orders WHERE offer_id=$1 AND email=$2 AND status='paid' AND created_at >= $3::timestamptz - interval '1 day' LIMIT 1`, [cart.offer_id, cart.email, cart.created_at]);
     if (paid.rowCount) {
       await stopCheckoutRecovery(client, {orderId: paid.rows[0].id, offerId: cart.offer_id, email: cart.email});
       await client.query("COMMIT"); return {skipped: "already bought"};

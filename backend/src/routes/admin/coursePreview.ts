@@ -1,3 +1,4 @@
+import fs from "fs";
 import { Request, Router } from "express";
 import { z } from "zod";
 import { pool } from "../../db/pool";
@@ -17,8 +18,13 @@ import {
 import {
   ADMIN_PREVIEW_TTL_SECONDS,
   adminPreviewUrl,
+  isExternalRef,
   isProtectedRef,
+  resolveStoredFile,
+  safeFilename,
+  safeMime,
 } from "../../services/signedUrls";
+import { mediaStore, serveStoredMedia, usesS3Media } from "../../services/objectStorage";
 import { neighbour, toOutlineJson } from "../member/library";
 
 /**
@@ -51,6 +57,14 @@ const COURSE_MISSING = "We couldn't find that course.";
 const LESSON_MISSING = "We couldn't find that lesson.";
 const FILE_MISSING = "We couldn't find that file.";
 const QUIZ_MISSING = "Quiz not found";
+const FILE_GONE = "That file isn't in storage any more. Upload it again in the course builder.";
+const TOO_BIG_TO_VIEW = "That file is too large to open on the page. Download it instead.";
+
+/**
+ * The most the in-page viewer will read in one go. Mirrors `MAX_VIEW_BYTES` in
+ * components/player/FileViewer.tsx, which hides the View button above it.
+ */
+const MAX_VIEW_BYTES = 150 * 1024 * 1024;
 
 const idSchema = z.coerce.number().int().positive().max(MAX_INT4);
 
@@ -82,6 +96,11 @@ function readCourseId(req: Request): number {
 export function previewPath(courseId: number, lessonSlug?: string): string {
   const base = `/admin/courses/${courseId}/preview`;
   return lessonSlug === undefined ? base : `${base}/lessons/${lessonSlug}`;
+}
+
+/** Where the preview's viewer reads one lesson file's bytes, on the admin origin. */
+export function previewFileViewPath(courseId: number, fileId: number): string {
+  return `/api${previewPath(courseId)}/files/${fileId}/view`;
 }
 
 function toPreviewOutline(course: PreviewCourseView) {
@@ -299,8 +318,13 @@ adminCoursePreviewRouter.get(
         moduleId: lesson.moduleId,
         moduleTitle: lesson.moduleTitle,
         locked: false,
+        lockReason: null,
         unlocksAt: null,
         unlockLabel: "",
+        // Preview-only: what a student enrolling today would be told instead of
+        // seeing this lesson (lock, schedule or drip). The admin is let in
+        // regardless; the player shows this as a badge.
+        studentLock: course.studentLocks[lesson.id] ?? "",
         durationMinutes: lesson.durationMinutes,
         videoDurationSeconds: lesson.videoDurationSeconds,
         preview: lesson.preview,
@@ -369,7 +393,14 @@ adminCoursePreviewRouter.get(
 
     const now = new Date();
     const link = await previewMedia(file.storage_path, adminId(req), now);
-    if (link.url === "") {
+    const viewUrl = isExternalRef(file.storage_path)
+      ? undefined
+      : previewFileViewPath(courseId, file.id);
+    // A file with no media-library row has nothing for an admin-files token to
+    // name, but the view route below reads lesson_files directly and answers
+    // with an attachment, so it serves the download too.
+    const url = link.url !== "" ? link.url : viewUrl;
+    if (url === undefined) {
       throw notFound(
         "That file is no longer in the media library, so it cannot be opened in the preview."
       );
@@ -379,12 +410,91 @@ adminCoursePreviewRouter.get(
       link.expiresAt ?? new Date(now.getTime() + ADMIN_PREVIEW_TTL_SECONDS * 1000);
 
     res.json({
-      url: link.url,
+      url,
+      // Where the in-page viewer fetches the bytes. Not `url`: an admin-files
+      // link is served only on the public host, so on this origin it is a 302
+      // to another origin, which `connect-src 'self'` refuses to follow — the
+      // View button failed while Download (a navigation) worked.
+      viewUrl,
       filename: file.filename,
       title: file.title || file.filename,
       sizeBytes: Number(file.size_bytes) || 0,
       expiresAt: expiresAt.toISOString(),
       expiresInSeconds: ADMIN_PREVIEW_TTL_SECONDS,
+    });
+  })
+);
+
+/**
+ * GET /api/admin/courses/:courseId/preview/files/:fileId/view
+ *
+ * The bytes of one lesson file, for the preview's in-page viewer.
+ *
+ * Same-origin on purpose: the admin host proxies `/api/admin/` and nothing else,
+ * so this is the one address its `connect-src 'self'` lets `fetch` read. Behind
+ * requireAuth and `products.view` like the rest of this router, and it writes
+ * nothing — no download event, as for the link above.
+ *
+ * Sent as an attachment with a sandboxing CSP even though the viewer only ever
+ * reads it as a blob: the file is admin-uploaded and its MIME type is free text,
+ * and this origin is the admin's, so a direct visit must save the file rather
+ * than render it here.
+ */
+adminCoursePreviewRouter.get(
+  "/files/:fileId/view",
+  asyncHandler(async (req, res, next) => {
+    const courseId = readCourseId(req);
+    const fileId = idSchema.safeParse(req.params.fileId);
+    if (!fileId.success) throw notFound(FILE_MISSING);
+
+    const found = await pool.query<{
+      id: number;
+      title: string;
+      storage_path: string;
+      filename: string;
+      mime: string;
+    }>(
+      `SELECT lf.id, lf.title, lf.storage_path, lf.filename, lf.mime
+         FROM lesson_files lf
+         JOIN course_lessons l ON l.id = lf.lesson_id
+         JOIN course_modules m ON m.id = l.module_id
+        WHERE lf.id = $1 AND m.course_id = $2`,
+      [fileId.data, courseId]
+    );
+    const file = found.rows[0];
+    if (!file || isExternalRef(file.storage_path)) throw notFound(FILE_MISSING);
+
+    const setHeaders = () => {
+      res.attachment(safeFilename(file));
+      res.setHeader("Content-Type", safeMime(file.mime));
+      res.setHeader("X-Content-Type-Options", "nosniff");
+      res.setHeader("Content-Security-Policy", "sandbox; default-src 'none'");
+      res.setHeader("Cache-Control", "private, no-store");
+      res.setHeader("Referrer-Policy", "no-referrer");
+    };
+
+    if (usesS3Media()) {
+      const stored = await mediaStore().head(file.storage_path);
+      if (stored === null) throw notFound(FILE_GONE);
+      if (stored.size > MAX_VIEW_BYTES) {
+        res.status(413).json({ error: TOO_BIG_TO_VIEW });
+        return;
+      }
+      setHeaders();
+      await serveStoredMedia(req, res, file.storage_path);
+      return;
+    }
+
+    const absolutePath = await resolveStoredFile(file.storage_path);
+    if (absolutePath === null) throw notFound(FILE_GONE);
+    const stat = await fs.promises.stat(absolutePath);
+    if (stat.size > MAX_VIEW_BYTES) {
+      res.status(413).json({ error: TOO_BIG_TO_VIEW });
+      return;
+    }
+    setHeaders();
+    res.sendFile(absolutePath, (err) => {
+      if (err && !res.headersSent) next(err);
     });
   })
 );

@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { AUTO_COMPLETE_PERCENT, creditWatchedPercent, type StoredWatch } from "./curriculum";
+import {
+  AUTO_COMPLETE_PERCENT,
+  buildModules,
+  creditWatchedPercent,
+  flattenLessons,
+  type StoredWatch,
+} from "./curriculum";
 
 /**
  * What a progress ping is allowed to earn.
@@ -192,5 +198,68 @@ describe("creditWatchedPercent", () => {
 
     // Second nought and "watched it all" stay contradictory even here.
     expect(credit({ positionSeconds: 0, claimedPercent: 100, lesson: unmeasured }).ok).toBe(false);
+  });
+});
+
+describe("buildModules lock reasons (Kajabi \"Lock\")", () => {
+  const settings = { releaseMinute: 6 * 60, timezone: "America/New_York" };
+  const granted = new Date("2026-10-01T12:00:00Z");
+  const now = new Date("2026-10-13T12:00:00Z");
+
+  function row(id: number, extra: Record<string, unknown> = {}) {
+    return {
+      course_id: 1, module_id: 1, module_title: "ZZ Module", module_summary: "",
+      module_drip_days: null, module_drip_date: null,
+      lesson_id: id, slug: `zz-${id}`, title: `ZZ Lesson ${id}`, content_type: "text",
+      duration_minutes: 5, video_duration_seconds: 0, preview: false,
+      lesson_drip_days: null, lesson_drip_date: null, comments_enabled: true,
+      lesson_published: true, requires_previous_lesson: false, lesson_publish_at: null,
+      assessment_requires_pass: false, assessment_passed: false, notes_enabled: true,
+      last_position_seconds: null, watched_percent: null, completed_at: null, last_viewed_at: null,
+      ...extra,
+    } as Parameters<typeof buildModules>[0][number];
+  }
+  const lessons = (rows: Parameters<typeof buildModules>[0]) => flattenLessons(buildModules(rows, granted, now, settings));
+
+  it("locks behind an unfinished previous lesson, saying which one", () => {
+    const [, second] = lessons([row(1), row(2, { requires_previous_lesson: true })]);
+    expect(second).toMatchObject({
+      unlocked: false,
+      lockReason: "previous_incomplete",
+      unlockLabel: "Complete “ZZ Lesson 1” to unlock",
+    });
+  });
+
+  it("opens once the previous lesson is complete", () => {
+    const [, second] = lessons([row(1, { completed_at: now }), row(2, { requires_previous_lesson: true })]);
+    expect(second).toMatchObject({ unlocked: true, lockReason: null });
+  });
+
+  it("needs a pass, not just a tick, behind a required-pass quiz", () => {
+    const [, second] = lessons([
+      row(1, { assessment_requires_pass: true, completed_at: now }),
+      row(2),
+    ]);
+    expect(second).toMatchObject({ unlocked: false, lockReason: "previous_quiz_not_passed" });
+    expect(second.unlockLabel).toBe("Pass the quiz in “ZZ Lesson 1” to unlock");
+
+    const [, afterPass] = lessons([
+      row(1, { assessment_requires_pass: true, assessment_passed: true, completed_at: now }),
+      row(2),
+    ]);
+    expect(afterPass.unlocked).toBe(true);
+  });
+
+  it("reports a scheduled lesson with its opening instant", () => {
+    const publishAt = new Date("2026-10-20T13:00:00Z");
+    const [first] = lessons([row(1, { lesson_publish_at: publishAt })]);
+    expect(first).toMatchObject({ unlocked: false, lockReason: "scheduled", unlocksAt: publishAt.toISOString() });
+    expect(first.unlockLabel).toMatch(/^Opens Tuesday, October 20/);
+  });
+
+  it("keeps the date as the headline when a lesson is both dripped and locked", () => {
+    const [, second] = lessons([row(1), row(2, { requires_previous_lesson: true, lesson_drip_days: 30 })]);
+    expect(second.lockReason).toBe("drip");
+    expect(second.unlockLabel).toMatch(/complete “ZZ Lesson 1” first$/);
   });
 });

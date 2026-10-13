@@ -375,11 +375,14 @@ export const replayDocumentation = {
     description: "Watch the replay of The Do's & Don'ts of Clinical Documentation with Yvette Howard, LCSW.",
   },
   /**
-   * The video, as a link `playableVideo()` understands. It is her Kajabi
-   * upload as Wistia serves it; swap it for an `/uploads/...` path once the
-   * file is in this site's media library and nothing else changes.
+   * The video, as a link `playableVideo()` understands: her Kajabi upload
+   * (Wistia k6qwlw67nj, the full 3 h 39 min workshop at 720p, Wistia's best),
+   * copied to this site's media library on 13 Oct 2026. The same file is the
+   * video lesson of the "Do's & Don'ts of Clinical Documentation (On-Demand
+   * Replay)" course (migration 111). The earlier
+   * /uploads/leadmagnet-replay-documentation.mp4 is a shorter 2 h 44 min cut.
    */
-  videoUrl: "/uploads/leadmagnet-replay-documentation.mp4",
+  videoUrl: "/uploads/landing-dos-and-donts-documentation-replay-720p.mp4",
   videoTitle: "The Do's & Don'ts of Clinical Documentation — replay",
   /**
    * Kajabi's countdown ran to "2026-329T23:55:00-08:00" — day 329 of 2026,
@@ -400,7 +403,7 @@ export const replayDocumentation = {
     to: "/about",
     photo: MEET_YVETTE_PHOTO,
   },
-  copyright: "Copyright © 2025 Your Company. All Rights Reserved.",
+  copyright: "Copyright © 2026 Boss Clinician. All Rights Reserved.",
 } as const;
 
 /* ── /on-demand-audit-your-private-practice ─────────────────────────── */
@@ -416,18 +419,23 @@ export const onDemandAudit = {
     href: "/downloads/audit-proof-note-template.pdf",
   },
   step2: { title: "Step 2: Click the play button below to watch the on-demand training" },
-  /** See replayDocumentation.videoUrl. */
-  videoUrl: "/uploads/leadmagnet-on-demand-audit.mp4",
+  /**
+   * Wistia 6hcqynp7xd at 1080p, copied 13 Oct 2026 (see
+   * replayDocumentation.videoUrl); also the video lesson of the "Audit Proof
+   * Your Practice (On-Demand Training)" course (migration 111).
+   */
+  videoUrl: "/uploads/landing-audit-proof-on-demand-1080p.mp4",
   videoTitle: "Audit Proof Your Practice — on-demand training",
   step3: {
     cta: "Step 3: TAKE POST EXAM HERE",
     /**
      * Her Kajabi assessment 2148618320 ("Post-Test: Audit Proof Your Practice",
-     * 15 questions, 75% to pass). It is built here as an assessment once its
-     * answer key is copied out of Kajabi; the slug is fixed now so this link
-     * does not have to change.
+     * 15 questions, 75% to pass), rebuilt by migration 111 as the last lesson
+     * of the on-demand course (assessment slug audit-proof-post-test). A lesson
+     * quiz needs a signed-in member with access, so the button opens the lesson,
+     * which sends a signed-out visitor to sign in first.
      */
-    to: "/quiz/audit-proof-post-test",
+    to: "/library/audit-proof-your-practice-on-demand/lessons/post-test-audit-proof-your-practice",
   },
   meet: {
     title: "Meet Yvette Howard, Boss Clinician",
@@ -444,7 +452,7 @@ export const onDemandAudit = {
       "I am grateful to work with Yvette to help me become further independent with my private practice. Yvette is been helpful every step of the way by providing resources for my internal dilemmas, and providing support with video play backs , and setting goals to help hold me accountable.",
     name: "Mike M. LPC",
   },
-  copyright: "Copyright © 2025 Your Company. All Rights Reserved.",
+  copyright: "Copyright © 2026 Boss Clinician. All Rights Reserved.",
 } as const;
 
 /* ── /profile-audit-ty ──────────────────────────────────────────────── */

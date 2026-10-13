@@ -6,6 +6,8 @@ import { MemberShell } from "@/components/member/MemberShell";
 import { GlassCard } from "@/components/luxe/GlassCard";
 import { LuxeButton } from "@/components/luxe/LuxeButton";
 import { CommunityLayout } from "@/components/community/CommunityLayout";
+import { CommunityCover } from "@/components/community/CommunityDescription";
+import { stripMarkdown } from "@/components/community/descriptionFormat";
 import { ChannelFeed } from "@/components/community/ChannelFeed";
 import { NotificationBell } from "@/components/community/NotificationBell";
 import { MemberApiError } from "@/lib/memberApi";
@@ -136,31 +138,35 @@ function CommunityCard({ community }: { community: CommunitySummary }) {
     <GlassCard accent={community.unreadCount > 0 ? "gold" : "neutral"} className="h-full">
       <Link
         to={community.href}
-        className="flex h-full flex-col p-6 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold"
+        className="flex h-full flex-col focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold"
       >
-        <div className="flex items-start justify-between gap-3">
-          <h2 className="min-w-0 break-words font-display text-xl leading-snug text-white">{community.name}</h2>
-          {community.unreadCount > 0 && (
-            <span className="shrink-0 rounded-full bg-gold px-2.5 py-1 text-[0.62rem] font-bold text-night-deep">
-              {community.unreadCount > 99 ? "99+" : community.unreadCount} new
-            </span>
+        {/* The cover she chose under Details; a card without one keeps its old look. */}
+        <CommunityCover src={community.coverImage} className="aspect-[8/3] w-full rounded-t-2xl border-b border-white/10" />
+        <div className="flex flex-1 flex-col p-6">
+          <div className="flex items-start justify-between gap-3">
+            <h2 className="min-w-0 break-words font-display text-xl leading-snug text-white">{community.name}</h2>
+            {community.unreadCount > 0 && (
+              <span className="shrink-0 rounded-full bg-gold px-2.5 py-1 text-[0.62rem] font-bold text-night-deep">
+                {community.unreadCount > 99 ? "99+" : community.unreadCount} new
+              </span>
+            )}
+          </div>
+
+          {community.description && (
+            <p className="copy-luxe mt-2 line-clamp-3 text-sm">{stripMarkdown(community.description)}</p>
           )}
+
+          <p className="mt-auto flex items-center gap-1.5 pt-5 text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-orchid-faint">
+            <Users aria-hidden className="size-3.5" />
+            {/* Same words, same case and same count as the community's own
+                header. This card said "1 members" in sentence case while the
+                header said "2 MEMBERS": two labels, two definitions of a member,
+                and neither of them agreeing with the other. */}
+            {formatNumber(community.memberCount)}{" "}
+            {community.memberCount === 1 ? "member" : "members"}
+            <ArrowRight aria-hidden className="ml-auto size-4 text-gold" />
+          </p>
         </div>
-
-        {community.description && (
-          <p className="copy-luxe mt-2 line-clamp-3 text-sm">{community.description}</p>
-        )}
-
-        <p className="mt-auto flex items-center gap-1.5 pt-5 text-[0.68rem] font-semibold uppercase tracking-[0.12em] text-orchid-faint">
-          <Users aria-hidden className="size-3.5" />
-          {/* Same words, same case and same count as the community's own
-              header. This card said "1 members" in sentence case while the
-              header said "2 MEMBERS": two labels, two definitions of a member,
-              and neither of them agreeing with the other. */}
-          {formatNumber(community.memberCount)}{" "}
-          {community.memberCount === 1 ? "member" : "members"}
-          <ArrowRight aria-hidden className="ml-auto size-4 text-gold" />
-        </p>
       </Link>
     </GlassCard>
   );

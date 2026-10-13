@@ -461,6 +461,10 @@ export function toOutlineJson(course: MemberCourseView, productSlug: string) {
         videoDurationSeconds: lesson.videoDurationSeconds,
         preview: lesson.preview,
         unlocked: lesson.unlocked,
+        // The per-lesson state the player draws: locked, why, and when (for a
+        // date-based lock). `unlockLabel` is the plain sentence to show.
+        locked: !lesson.unlocked,
+        lockReason: lesson.lockReason,
         unlocksAt: lesson.unlocksAt,
         unlockLabel: lesson.unlockLabel,
         completed: lesson.completed,
@@ -551,8 +555,10 @@ export function neighbour(lesson: MemberLessonView | undefined) {
     slug: lesson.slug,
     title: lesson.title,
     // So the player can grey out "next" rather than offering a door that opens
-    // onto an unlock date.
+    // onto an unlock date — and say why it is shut.
     unlocked: lesson.unlocked,
+    lockReason: lesson.lockReason,
+    unlockLabel: lesson.unlockLabel,
   };
 }
 
@@ -616,6 +622,7 @@ memberLibraryRouter.get(
           moduleId: lesson.moduleId,
           moduleTitle: lesson.moduleTitle,
           locked: true,
+          lockReason: lesson.lockReason,
           unlocksAt: lesson.unlocksAt,
           unlockLabel: lesson.unlockLabel,
         },
@@ -697,6 +704,7 @@ memberLibraryRouter.get(
         moduleId: lesson.moduleId,
         moduleTitle: lesson.moduleTitle,
         locked: false,
+        lockReason: null,
         unlocksAt: null,
         unlockLabel: "",
         durationMinutes: lesson.durationMinutes,

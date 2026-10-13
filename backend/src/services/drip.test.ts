@@ -4,6 +4,7 @@ import {
   describeUnlock,
   parseReleaseTime,
   resolveDripState,
+  resolveRelease,
   unlockAt,
   zonedWallClockToUtc,
   type DripSettings,
@@ -234,5 +235,37 @@ describe("describeUnlock", () => {
     expect(describeUnlock(new Date("2026-01-23T01:00:00Z"), "America/New_York")).toBe(
       "Thursday, January 22",
     );
+  });
+});
+
+describe("resolveRelease (drip + Kajabi \"Scheduled\")", () => {
+  const granted = new Date("2026-10-01T12:00:00Z");
+  const publishAt = new Date("2026-10-20T13:00:00Z");
+  const none = { dripDays: null, dripDate: null };
+
+  it("holds a scheduled lesson until the exact instant, with reason scheduled", () => {
+    expect(
+      resolveRelease({ lesson: none, publishAt, grantedAt: granted, now: new Date("2026-10-20T12:59:00Z"), settings: NY }),
+    ).toEqual({ unlocked: false, unlocksAt: publishAt, reason: "scheduled" });
+    expect(
+      resolveRelease({ lesson: none, publishAt, grantedAt: granted, now: new Date("2026-10-20T13:00:00Z"), settings: NY }),
+    ).toEqual({ unlocked: true, unlocksAt: null, reason: null });
+  });
+
+  it("does not let the free-taster flag open a scheduled lesson early", () => {
+    const state = resolveRelease({ lesson: none, publishAt, preview: true, grantedAt: granted, now: granted, settings: NY });
+    expect(state.reason).toBe("scheduled");
+  });
+
+  it("still lets a free taster skip drip", () => {
+    const state = resolveRelease({ lesson: { dripDays: 30, dripDate: null }, preview: true, grantedAt: granted, now: granted, settings: NY });
+    expect(state).toEqual({ unlocked: true, unlocksAt: null, reason: null });
+  });
+
+  it("names the later of drip and schedule as the reason", () => {
+    const dripLater = resolveRelease({ lesson: { dripDays: 30, dripDate: null }, publishAt, grantedAt: granted, now: granted, settings: NY });
+    expect(dripLater.reason).toBe("drip");
+    const scheduleLater = resolveRelease({ lesson: { dripDays: 2, dripDate: null }, publishAt, grantedAt: granted, now: granted, settings: NY });
+    expect(scheduleLater).toEqual({ unlocked: false, unlocksAt: publishAt, reason: "scheduled" });
   });
 });

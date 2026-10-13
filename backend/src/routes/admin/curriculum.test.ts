@@ -9,6 +9,8 @@ import {
   lessonSlug,
   nextLessonSlug,
   normalizeDrip,
+  normalizePublishAt,
+  publishAtLocal,
 } from "./curriculum";
 import { buildUpdate } from "../../utils/sqlUpdate";
 import { unlockAt } from "../../services/drip";
@@ -236,5 +238,41 @@ describe("nextLessonSlug", () => {
   it("never hands out a slug already in the list", () => {
     const taken = ["week", "week-2", "week-to-go", "week-5"];
     expect(taken).not.toContain(nextLessonSlug("week", taken));
+  });
+});
+
+describe("normalizePublishAt (Kajabi \"Scheduled\")", () => {
+  const NY = { releaseMinute: 6 * 60, timezone: "America/New_York" };
+
+  it("leaves a body that says nothing about scheduling alone", () => {
+    const body = { title: "Week 1" };
+    expect(normalizePublishAt(body, NY)).toBe(body);
+  });
+
+  it("reads the datetime box as wall-clock time in the owner's zone", () => {
+    // 9:00 on 20 October in New York (EDT, UTC-4) is 13:00 UTC.
+    const out = normalizePublishAt({ publishAtLocal: "2026-10-20T09:00" }, NY);
+    expect((out.publish_at as Date).toISOString()).toBe("2026-10-20T13:00:00.000Z");
+    expect(out).not.toHaveProperty("publishAtLocal");
+    expect(publishAtLocal(out.publish_at, NY.timezone)).toBe("2026-10-20T09:00");
+  });
+
+  it("clears the schedule on an empty box", () => {
+    expect(normalizePublishAt({ publishAtLocal: "" }, NY)).toEqual({ publish_at: null });
+    expect(normalizePublishAt({ publishAt: null }, NY)).toEqual({ publish_at: null });
+  });
+
+  it("takes a full timestamp from an API client as given", () => {
+    const out = normalizePublishAt({ publishAt: "2026-10-20T13:00:00Z" }, NY);
+    expect((out.publish_at as Date).toISOString()).toBe("2026-10-20T13:00:00.000Z");
+  });
+
+  it("refuses a date and time that does not exist", () => {
+    expect(() => normalizePublishAt({ publishAtLocal: "2026-02-30T09:00" }, NY)).toThrow();
+    expect(() => normalizePublishAt({ publishAt: "soon" }, NY)).toThrow();
+  });
+
+  it("is a writable lesson column", () => {
+    expect(LESSON_FIELDS).toContain("publish_at");
   });
 });

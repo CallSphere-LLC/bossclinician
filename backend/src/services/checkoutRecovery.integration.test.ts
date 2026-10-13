@@ -92,6 +92,36 @@ describeDb("checkout recovery (integration)", () => {
     expect(results.filter(r=>r.outcome==='sent')).toHaveLength(1); expect(sent.messages).toHaveLength(before+1);
   });
 
+  it("honours an offer's own setup: off sends nothing, custom uses its delay and copy", async () => {
+    await settings.writeSetting("cart_recovery", {recipients: "", hours0: 1, subject0: "ZZ Global {offer}", body0: "ZZ global body"});
+    const off = await cart();
+    await db.client.query(`UPDATE offers SET recovery_enabled=false WHERE id=$1`, [off.offerId]);
+    expect((await recovery.checkoutRecoveryEmail({abandonedCheckoutId: off.id, step: 0}) as any).skipped).toBe("off for this offer");
+
+    const custom = await cart();
+    // The cart is two hours old; a custom first reminder at 3h is not due yet.
+    await db.client.query(`UPDATE offers SET recovery_mode='custom', recovery_overrides=$2 WHERE id=$1`,
+      [custom.offerId, JSON.stringify({hours0: 3, subject0: "ZZ Custom {offer}", body0: ""})]);
+    expect((await recovery.checkoutRecoveryEmail({abandonedCheckoutId: custom.id, step: 0}) as any).skipped).toBeTruthy();
+    await db.client.query(`UPDATE offers SET recovery_overrides=$2 WHERE id=$1`,
+      [custom.offerId, JSON.stringify({hours0: 0.5, subject0: "ZZ Custom {offer}", body0: ""})]);
+    const r: any = await recovery.checkoutRecoveryEmail({abandonedCheckoutId: custom.id, step: 0});
+    expect(r.outcome).toBe("sent");
+    const msg = await db.client.query(`SELECT subject FROM email_messages WHERE id=$1`, [r.messageId]);
+    expect(msg.rows[0].subject).toBe(`ZZ Custom ZZ Recovery ${n}`);
+    // A blank custom body falls back to the site-wide copy.
+    expect(sent.messages.at(-1).text).toContain("ZZ global body");
+  });
+
+  it("does not remind someone who bought just before the cart was captured", async () => {
+    const c = await cart();
+    const id = await order(c);
+    await db.client.query(`UPDATE orders SET status='paid', created_at=now()-interval '3 hours' WHERE id=$1`, [id]);
+    const before = sent.messages.length;
+    expect((await recovery.checkoutRecoveryEmail({abandonedCheckoutId: c.id, step: 0}) as any).skipped).toBe("already bought");
+    expect(sent.messages).toHaveLength(before);
+  });
+
   it("validates recipient addresses, ordered delays and blank copy", async () => {
     await expect(settings.writeSetting("cart_recovery",{recipients:"not-an-email"})).rejects.toThrow();
     await expect(settings.writeSetting("cart_recovery",{hours1:0.5})).rejects.toThrow();

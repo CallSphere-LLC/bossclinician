@@ -4,12 +4,11 @@ import { publishDomainEvent } from "./domainEvents";
 import { purchaseReceipt, purchaseWelcome, type ReceiptLine } from "../email/commerceTemplates";
 import { sendMail, type MailAttachment } from "../email/mailer";
 import { withStoredTemplate } from "../email/templateStore";
-import { orderPaidNotification } from "../email/templates";
 import { ensureOrderReceipt, loadReceiptDocument, renderReceiptPdf } from "./receiptDocument";
 import { issueSetPasswordLink } from "./setPasswordLink";
 import { exitContactOnPurchase } from "./sequences";
 import { readSetting } from "./settings";
-import { notificationRecipients } from "./notificationRecipients";
+import { sendOwnerSaleNotification } from "./ownerSaleNotification";
 
 /**
  * Everything a customer is owed the moment a purchase completes.
@@ -379,28 +378,22 @@ export async function deliverPurchase(
   }
 }
 
-/** Tells the owner she made a sale. Separate because a $0 grant is not one. */
-export function notifyOwnerOfSale(input: {
-  description: string;
-  email: string;
-  amountCents: number;
-  currency: string;
-}): void {
-  if (stripeTestMode()) return;
-  // Still fire-and-forget for both callers; the address and the "someone buys
-  // something" switch now come from settings, with NOTIFY_EMAIL as the fallback.
-  void notificationRecipients("sale").then((to) => {
-    if (!to) return;
-    void sendMail({
-      to,
-      ...orderPaidNotification({
-        courseTitle: input.description,
-        email: input.email,
-        amountCents: input.amountCents,
-        currency: input.currency,
-      }),
-    });
-  });
+/**
+ * Tells the owner she made a sale. Separate because a $0 grant is not one.
+ *
+ * Fire-and-forget for both callers. Who is told — the site-wide address and
+ * "someone buys something" switch, narrowed or redirected by the offer's own
+ * "Email me when someone buys this offer" setting — and the once-per-order
+ * guard that makes a redelivered webhook harmless both live in
+ * services/ownerSaleNotification.ts. Sandbox still sends nothing.
+ */
+export function notifyOwnerOfSale(input: { orderId: number }): void {
+  if (stripeTestMode()) {
+    // eslint-disable-next-line no-console
+    console.log(`[notify] Stripe test mode: owner sale email for order ${input.orderId} not sent`);
+    return;
+  }
+  void sendOwnerSaleNotification(input.orderId);
 }
 
 /**

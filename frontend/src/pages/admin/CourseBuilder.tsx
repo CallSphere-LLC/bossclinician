@@ -17,6 +17,7 @@ import {
   Layers,
   Link2,
   List,
+  Lock,
   Pencil,
   Play,
   Plus,
@@ -47,6 +48,13 @@ import {
 import { Modal, useConfirm } from "@/pages/admin/ui/Dialog";
 import { UploadDropzone } from "@/pages/admin/ui/Uploader";
 import { PUBLISH_LABEL, friendlyError, pluralize } from "@/pages/admin/ui/friendly";
+import {
+  CourseReleasePanel,
+  LessonStatusField,
+  lessonStatusOf,
+  scheduledSummary,
+  type LessonStatus,
+} from "@/pages/admin/courseRelease";
 
 /*
  * A stored "module" is called a **section** everywhere she can see it — that's
@@ -87,6 +95,11 @@ interface LessonExtras {
   assessmentId?: number | null;
   assessmentSlug?: string | null;
   assessmentTitle?: string | null;
+  assessmentKind?: string | null;
+  assessmentRequirePass?: boolean | null;
+  assessmentPassMark?: number | null;
+  /** Kajabi "Scheduled": "YYYY-MM-DDTHH:MM" in the release zone, or null. */
+  publishAtLocal?: string | null;
 }
 
 type BuilderLesson = CourseLesson & Drip & LessonExtras;
@@ -233,6 +246,10 @@ export default function CourseBuilder() {
     lesson: Partial<BuilderLesson>;
     newAssessmentKind?: "graded" | "survey";
     drip: DripChoice;
+    /** Kajabi's lesson status: Draft / Published / Scheduled / Drip. */
+    status: LessonStatus;
+    /** Only read when `status` is "scheduled". */
+    publishAtLocal: string;
   } | null>(null);
   const [savingLesson, setSavingLesson] = useState(false);
   const [picking, setPicking] = useState(false);
@@ -294,6 +311,11 @@ export default function CourseBuilder() {
   useEffect(loadAssessments, [loadAssessments]);
 
   const lessonCount = (modules ?? []).reduce((sum, m) => sum + m.lessons.length, 0);
+  // Kajabi "Lock" across the whole course: every lesson after the first waits
+  // for the one before it. New lessons follow suit while it is on.
+  const flatLessons = (modules ?? []).flatMap((m) => m.lessons);
+  const lockedCount = flatLessons.slice(1).filter((l) => l.requiresPreviousLesson === true).length;
+  const sequenceLocked = flatLessons.length > 1 && lockedCount >= flatLessons.length - 1;
   const totalMinutes = (modules ?? []).reduce(
     (sum, m) => sum + m.lessons.reduce((s, l) => s + (l.durationMinutes || 0), 0),
     0,
@@ -389,10 +411,19 @@ export default function CourseBuilder() {
   async function saveLesson(e: FormEvent) {
     e.preventDefault();
     if (!lessonDraft?.lesson.title?.trim() || savingLesson) return;
-    const dripProblem = dripError(lessonDraft.drip);
-    if (dripProblem) {
-      toast.error(dripProblem);
+    if (lessonDraft.status === "scheduled" && !lessonDraft.publishAtLocal) {
+      toast.error("Choose the date and time this lesson opens.");
       return;
+    }
+    if (lessonDraft.status === "drip") {
+      const dripProblem =
+        lessonDraft.drip.mode === "immediately"
+          ? "Choose how this lesson drips — a number of days after they buy, or a date."
+          : dripError(lessonDraft.drip);
+      if (dripProblem) {
+        toast.error(dripProblem);
+        return;
+      }
     }
     setSavingLesson(true);
 
@@ -407,11 +438,16 @@ export default function CourseBuilder() {
       thumbnailUrl: lesson.thumbnailUrl ?? "",
       durationMinutes: lesson.durationMinutes ?? 0,
       preview: lesson.preview ?? false,
-      published: lesson.published ?? true,
+      // One status, as in Kajabi: the columns it does not use are cleared so a
+      // lesson switched from Drip to Scheduled keeps no stale drip date.
+      published: lessonDraft.status !== "draft",
       contentType: lesson.contentType || "text",
       commentsEnabled: lesson.commentsEnabled !== false,
       requiresPreviousLesson: lesson.requiresPreviousLesson === true,
-      ...dripBody(lessonDraft.drip),
+      ...(lessonDraft.status === "drip"
+        ? dripBody(lessonDraft.drip)
+        : { dripDays: null, dripDate: null }),
+      publishAtLocal: lessonDraft.status === "scheduled" ? lessonDraft.publishAtLocal : "",
     };
 
     try {
@@ -510,7 +546,13 @@ export default function CourseBuilder() {
   }
 
   function openLesson(moduleId: number, lesson: Partial<BuilderLesson>) {
-    setLessonDraft({ moduleId, lesson, drip: dripChoice(lesson) });
+    setLessonDraft({
+      moduleId,
+      lesson,
+      drip: dripChoice(lesson),
+      status: lessonStatusOf(lesson),
+      publishAtLocal: lesson.publishAtLocal ?? "",
+    });
     setPastingLink(false);
     showVideo(lesson.videoUrl ?? "");
     const ticket = (filesRequest.current += 1);
@@ -530,7 +572,13 @@ export default function CourseBuilder() {
   }
 
   function openAssessment(moduleId: number, kind: "graded" | "survey") {
-    openLesson(moduleId, { title: "", published: false, durationMinutes: 0, contentType: "assessment" });
+    openLesson(moduleId, {
+      title: "",
+      published: false,
+      durationMinutes: 0,
+      contentType: "assessment",
+      requiresPreviousLesson: sequenceLocked,
+    });
     setLessonDraft(current => current ? { ...current, newAssessmentKind: kind } : current);
   }
 
@@ -564,6 +612,35 @@ export default function CourseBuilder() {
     } catch (err) {
       toast.error(friendlyError(err, "file"));
     }
+  }
+
+  function updateStatus(status: LessonStatus) {
+    setLessonDraft((d) => {
+      if (!d) return d;
+      // Choosing Drip with nothing set yet starts at "a number of days", so the
+      // box she needs is on screen rather than an option that means "not drip".
+      const drip = status === "drip" && d.drip.mode === "immediately" ? { ...d.drip, mode: "days" as const } : d.drip;
+      return { ...d, status, drip };
+    });
+  }
+
+  function updatePublishAt(publishAtLocal: string) {
+    setLessonDraft((d) => (d ? { ...d, publishAtLocal } : d));
+  }
+
+  /** The lesson a draft would sit behind in course order, for the lock hint. */
+  function previousLessonOf(draft: { moduleId: number; lesson: Partial<BuilderLesson> }): BuilderLesson | null {
+    if (draft.lesson.id) {
+      const index = flatLessons.findIndex((l) => l.id === draft.lesson.id);
+      return index > 0 ? flatLessons[index - 1] : null;
+    }
+    // A new lesson is appended to its section.
+    const upTo = (modules ?? []).slice(
+      0,
+      (modules ?? []).findIndex((m) => Number(m.id) === Number(draft.moduleId)) + 1,
+    );
+    const before = upTo.flatMap((m) => m.lessons);
+    return before[before.length - 1] ?? null;
   }
 
   function updateDrip(drip: DripChoice) {
@@ -653,6 +730,15 @@ export default function CourseBuilder() {
       />
 
       {error && <ErrorNotice message={error} />}
+
+      {modules !== null && courseId > 0 && (
+        <CourseReleasePanel
+          courseId={courseId}
+          lessonCount={flatLessons.length}
+          lockedCount={lockedCount}
+          onChanged={load}
+        />
+      )}
 
       {modules === null ? (
         <div className="space-y-4">
@@ -772,9 +858,17 @@ export default function CourseBuilder() {
                                     : "Length not set"}
                                   {lesson.videoUrl ? " · has a video" : " · no video yet"}
                                   {dripSummary(lesson) ? ` · ${dripSummary(lesson)}` : ""}
+                                  {scheduledSummary(lesson.publishAtLocal) ? ` · ${scheduledSummary(lesson.publishAtLocal)}` : ""}
                                 </span>
                               </button>
                               {lesson.preview && <Badge tone="gold">Free taster</Badge>}
+                              {lesson.publishAtLocal && lesson.published && <Badge tone="blue">Scheduled</Badge>}
+                              {lesson.requiresPreviousLesson && flatLessons[0]?.id !== lesson.id && (
+                                <Badge tone="plum" title="Opens once the previous lesson is complete">
+                                  <Lock className="size-3" />
+                                  Locked
+                                </Badge>
+                              )}
                               {!lesson.published && <Badge tone="slate">{PUBLISH_LABEL.draft}</Badge>}
                               <CourseOrderMenu title={lesson.title} first={lessonIndex === 0} last={lessonIndex === mod.lessons.length - 1}
                                 onMove={(direction) => void moveLesson(mod.id, lessonIndex, direction)} onDelete={() => void removeLesson(lesson)} />
@@ -795,7 +889,12 @@ export default function CourseBuilder() {
                           size="sm"
                           className="flex-1"
                           onClick={() =>
-                            openLesson(mod.id, { title: "", published: true, durationMinutes: 0 })
+                            openLesson(mod.id, {
+                              title: "",
+                              published: true,
+                              durationMinutes: 0,
+                              requiresPreviousLesson: sequenceLocked,
+                            })
                           }
                         >
                           <Plus />
@@ -1163,7 +1262,15 @@ export default function CourseBuilder() {
               )}
             </Field>
 
-            <DripFields value={lessonDraft.drip} onChange={updateDrip} noun="lesson" />
+            <LessonStatusField
+              status={lessonDraft.status}
+              onStatus={updateStatus}
+              publishAtLocal={lessonDraft.publishAtLocal}
+              onPublishAt={updatePublishAt}
+            />
+            {lessonDraft.status === "drip" && (
+              <DripFields value={lessonDraft.drip} onChange={updateDrip} noun="lesson" dripOnly />
+            )}
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               {/*
@@ -1192,7 +1299,7 @@ export default function CourseBuilder() {
                   Free taster
                 </label>
               </div>
-              <div className="flex items-end sm:col-span-2">
+              <div className="sm:col-span-2">
                 <label className="flex cursor-pointer items-center gap-2.5 text-sm font-medium text-ink">
                   <input
                     type="checkbox"
@@ -1200,19 +1307,23 @@ export default function CourseBuilder() {
                     onChange={(e) => updateLesson({ requiresPreviousLesson: e.target.checked })}
                     className="size-4 rounded border-hairline text-plum"
                   />
-                  Require the previous lesson to be completed first
+                  <Lock aria-hidden className="size-3.5 text-ink-soft" />
+                  Lock until the previous lesson is completed
                 </label>
-              </div>
-              <div className="flex items-end">
-                <label className="flex cursor-pointer items-center gap-2.5 text-sm font-medium text-ink">
-                  <input
-                    type="checkbox"
-                    checked={lessonDraft.lesson.published !== false}
-                    onChange={(e) => updateLesson({ published: e.target.checked })}
-                    className="size-4 rounded border-hairline text-plum"
-                  />
-                  Students can see this
-                </label>
+                {(() => {
+                  const before = previousLessonOf(lessonDraft);
+                  if (!before) {
+                    return <p className="mt-1 pl-6 text-xs text-ink-soft">This is the first lesson, so there is nothing before it to wait for.</p>;
+                  }
+                  const passGate = before.assessmentKind === "graded" && before.assessmentRequirePass === true;
+                  return (
+                    <p className="mt-1 pl-6 text-xs text-ink-soft">
+                      {passGate
+                        ? `“${before.title}” has a quiz that requires a pass${typeof before.assessmentPassMark === "number" ? ` (${before.assessmentPassMark}%)` : ""}, so this lesson stays locked until students pass it.`
+                        : `Students must complete “${before.title}” first.`}
+                    </p>
+                  );
+                })()}
               </div>
               <div className="flex items-end">
                 <label className="flex cursor-pointer items-center gap-2.5 text-sm font-medium text-ink">
@@ -1290,14 +1401,17 @@ function DripFields({
   value,
   onChange,
   noun,
+  dripOnly = false,
 }: {
   value: DripChoice;
   onChange: (value: DripChoice) => void;
   noun: "section" | "lesson";
+  /** Lesson "Drip" status: "as soon as they buy" is the Published status instead. */
+  dripOnly?: boolean;
 }) {
   return (
     <Field
-      label="When does this open?"
+      label={dripOnly ? "Drip schedule" : "When does this open?"}
       hint="The time of day comes from Settings → Delivery, and covers your whole site."
     >
       <div className="space-y-2.5">
@@ -1307,7 +1421,7 @@ function DripFields({
           value={value.mode}
           onChange={(e) => onChange({ ...value, mode: e.target.value as DripMode })}
         >
-          <option value="immediately">As soon as they buy</option>
+          {!dripOnly && <option value="immediately">As soon as they buy</option>}
           <option value="days">A set number of days after they buy</option>
           <option value="date">On a date</option>
         </select>

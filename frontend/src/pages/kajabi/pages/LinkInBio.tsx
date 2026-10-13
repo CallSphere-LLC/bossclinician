@@ -1,120 +1,340 @@
-import { motion } from "motion/react";
+import type { ReactNode } from "react";
 import { Link } from "react-router";
 import { Seo } from "@/components/Seo";
-import { GlassCard } from "@/components/luxe/GlassCard";
-import { LuxePill } from "@/components/luxe/LuxeButton";
-import { GoldRule, Section } from "@/components/luxe/Section";
-import { RevealGroup, RevealItem } from "@/components/ui/Reveal";
-import { useEntranceMotion } from "@/hooks/useEntranceMotion";
-import { linkInBio as copy } from "@/content/kajabiPages";
-import { LinkCards, rise } from "./shared";
+// Inlined, not imported: the server render does not link a lazy route's CSS
+// chunk, so a plain import would paint the first visit unstyled until the
+// script loaded. As a string it ships inside the server HTML.
+import pageCss from "./linkInBio.css?inline";
 
 /**
- * /link-in-bio — the Instagram link hub.
+ * /link-in-bio — the Instagram link hub, rebuilt from Yvette's own Kajabi
+ * custom-code page rather than reinterpreted in the site's luxe kit.
  *
- * Kajabi's custom-code page, top to bottom: portrait and promise, the four
- * groups of links, four testimonials, a short bio, socials and policies. One
- * narrow column, because the reader is on a phone that just left Instagram.
+ * Her page was one self-contained document: a 480px column on navy, gold and
+ * purple accents, nine buttons in four groups, four testimonials, a short bio,
+ * socials and policies. That is what someone who just tapped her Instagram bio
+ * should see, so this page keeps its own palette whatever the site theme is:
+ * every colour lives in linkInBio.css under `lib-` classes (no Tailwind colour
+ * utilities, no section/header/footer elements), because site-theme.css
+ * repaints those by class token and by element in light mode.
+ * `data-media-surface` is the site's existing "dark island" hook, kept as a
+ * second line of defence.
+ *
+ * Kajabi opened every button in a new tab because it was linking off to a
+ * different site; here they are our own pages, so they navigate in place.
  */
+
+type Variant = "featured" | "audit" | "quiz" | "club" | "lounge" | "boardroom" | "hub" | "assessment" | "about";
+type BadgeTone = "gold" | "green" | "purple" | "goldSoft";
+
+interface LinkButton {
+  icon: string;
+  title: string;
+  sub: string;
+  to: string;
+  variant: Variant;
+  badge?: { label: string; tone: BadgeTone };
+}
+
+interface LinkGroup {
+  label: string;
+  links: LinkButton[];
+}
+
+const SEO = {
+  title: "Boss Clinician Link In Bio",
+  description:
+    "Private Practice Strategist helping therapists build profitable, sustainable practices. Find your resources, offers, and next step here.",
+  image: "/images/link-in-bio/yvette.webp",
+};
+
+const AVATAR = { src: "/images/link-in-bio/yvette.webp", alt: "Yvette Howard, LCSW" };
+const LOGO = { src: "/images/link-in-bio/boss-clinician-logo.png", alt: "Boss Clinician" };
+
+const CREDENTIALS = ["LCSW", "Group Practice Owner", "Doctoral Candidate"];
+
+const GROUPS: LinkGroup[] = [
+  {
+    label: "Start Here",
+    links: [
+      {
+        icon: "📋",
+        // The live session (Sept 25) is over; the button now opens the on-demand replay.
+        title: "Documentation That Protects Your Practice",
+        sub: "CE training replay. Watch it on demand.",
+        to: "/replay-documentation",
+        variant: "featured",
+      },
+      {
+        icon: "🎥",
+        title: "Free Masterclass: Create a Private Practice That Supports Your Income, Energy & Future",
+        sub: "For established therapists who don't want to see 25 to 30 clients forever. Includes the Practice Freedom Audit.",
+        to: "/freedom-masterclass",
+        variant: "audit",
+      },
+      {
+        icon: "🧠",
+        badge: { label: "Free Quiz", tone: "gold" },
+        title: "Is Your Practice Set Up to Pay You, or Just Keep You Busy?",
+        sub: "2 minutes. Find out what stage your practice is in and what to focus on next.",
+        to: "/practice-quiz",
+        variant: "quiz",
+      },
+    ],
+  },
+  {
+    label: "Work With Me",
+    links: [
+      {
+        icon: "🌱",
+        badge: { label: "Build It", tone: "green" },
+        title: "Boss Clinician Club",
+        sub: "Build a private practice you won't have to undo later. 6-month program for therapists building or rebuilding their private practice foundation.",
+        to: "/club",
+        variant: "club",
+      },
+      {
+        icon: "💜",
+        badge: { label: "Sustain It", tone: "purple" },
+        title: "Boss Clinician Lounge",
+        sub: "Make the practice you already built work better for the life you actually want. Monthly membership for established therapists ready to create more income, capacity, freedom, and sustainability.",
+        to: "/lounge",
+        variant: "lounge",
+      },
+      {
+        icon: "👑",
+        badge: { label: "Lead It", tone: "goldSoft" },
+        title: "Boss Clinician Boardroom",
+        sub: "Build a practice that can grow beyond you. Strategic mastermind for group practice owners ready to lead with stronger systems, structure, and less owner dependence.",
+        to: "/boardroom",
+        variant: "boardroom",
+      },
+    ],
+  },
+  {
+    label: "Free Resources",
+    links: [
+      {
+        icon: "📚",
+        title: "Free Resource Hub",
+        sub: "Free resources for every stage of practice: Build It, Sustain It, or Lead It.",
+        to: "/resource-hub",
+        variant: "hub",
+      },
+      {
+        icon: "📋",
+        title: "Free Group Practice Self-Assessment",
+        sub: "See where your group practice is still too dependent on you, and what needs strengthening next.",
+        to: "/boss-assessment",
+        variant: "assessment",
+      },
+    ],
+  },
+  {
+    label: "About",
+    links: [
+      {
+        icon: "👋🏾",
+        title: "My Story",
+        sub: "From dialysis social worker to multi-six-figure group practice",
+        to: "/about",
+        variant: "about",
+      },
+    ],
+  },
+];
+
+const TESTIMONIALS: { quote: string; initial: string; tone: "green" | "purple" | "navy"; name: string; practice: string }[] = [
+  {
+    quote:
+      "Yvette helped me launch my private practice while still working full-time. Within weeks I was seeing clients and bringing in consistent extra income. That income gave me the confidence to leave my 9 to 5 and go full-time in my own practice.",
+    initial: "K",
+    tone: "green",
+    name: "Kristan L., LCSW",
+    practice: "Intentional Focus Health and Wellness",
+  },
+  {
+    quote:
+      "With Yvette's support and guidance I was able to shift into my journey in private practice. She kept me accountable with clear, realistic goals and provided exactly the resources I needed.",
+    initial: "R",
+    tone: "purple",
+    name: "Rosa M., LCSW",
+    practice: "Follow Your Path Therapy Services",
+  },
+  {
+    quote:
+      "Working with Yvette has been a game changer for my private practice. She supported me through my doubts, provided exactly the resources I needed, and kept me accountable with clear, realistic goals.",
+    initial: "M",
+    tone: "navy",
+    name: "Michael M., LPC",
+    practice: "Mike Counseling",
+  },
+  {
+    quote:
+      "Once I took the time to set up my business legally and got clear on my pricing and structure, I felt like a true CEO. Everything became easier.",
+    initial: "S",
+    tone: "purple",
+    name: "Sharon S., LPC",
+    practice: "Stilwaters Counseling",
+  },
+];
+
+const ABOUT = {
+  name: "Yvette Howard, LCSW",
+  role: "Private Practice Strategist · Boss Clinician",
+  body: "I started my private practice in 2018 while working in dialysis and took it full-time in 2019. I went on to build a multi-six-figure group practice, and learned firsthand that revenue alone does not create freedom. Today, I help therapists build businesses that support their income, energy, life, and future instead of requiring them to stay maxed out forever.",
+};
+
+const SOCIALS = [
+  { label: "📷 Instagram", href: "https://instagram.com/bossclinician" },
+  { label: "Facebook", href: "https://facebook.com/yvette.hwd" },
+  { label: "Threads", href: "https://threads.net/@bossclinician" },
+];
+
+const POLICIES = [
+  { label: "Privacy Policy", to: "/privacy-policy" },
+  { label: "Terms of Use", to: "/terms-of-use" },
+  { label: "Financial Disclaimer", to: "/financial-disclaimer" },
+  { label: "Disclaimer", to: "/disclaimer" },
+];
+
+/** Hairline, label, hairline. A heading for screen readers, a rule for everyone else. */
+function Divider({ children, id }: { children: ReactNode; id?: string }) {
+  return (
+    <div className="lib-divider">
+      <span className="lib-divider-line" aria-hidden />
+      <h2 className="lib-divider-label" id={id}>
+        {children}
+      </h2>
+      <span className="lib-divider-line" aria-hidden />
+    </div>
+  );
+}
+
+function LinkCard({ link }: { link: LinkButton }) {
+  return (
+    <li>
+      <Link to={link.to} className={`lib-btn lib-btn--${link.variant}`}>
+        <span className="lib-btn-icon" aria-hidden>
+          {link.icon}
+        </span>
+        <span className="lib-btn-text">
+          {link.badge && <span className={`lib-badge lib-badge--${link.badge.tone}`}>{link.badge.label}</span>}
+          <span className="lib-btn-title">{link.title}</span>
+          <span className="lib-btn-sub">{link.sub}</span>
+        </span>
+        <span className="lib-btn-arrow" aria-hidden>
+          →
+        </span>
+      </Link>
+    </li>
+  );
+}
+
 export default function LinkInBio() {
-  const reduce = useEntranceMotion();
+  const year = new Date().getFullYear();
 
   return (
-    <>
-      <Seo title={copy.seo.title} description={copy.seo.description} />
+    <div className="lib-page" data-media-surface>
+      <Seo title={SEO.title} description={SEO.description} image={SEO.image} />
+      <style dangerouslySetInnerHTML={{ __html: pageCss }} />
 
-      <Section surface="deep" space="lg" aurora="violet" auroraIntensity={0.85} aria-label={copy.name} containerClassName="max-w-2xl">
-        <motion.div {...rise(reduce)} className="text-center">
-          <div className="mx-auto w-36 overflow-hidden rounded-full border-2 border-gold/50 shadow-[0_24px_60px_-24px_rgba(0,0,0,0.9)] sm:w-44">
-            <img src={copy.portrait.src} alt={copy.portrait.alt} className="block aspect-square w-full object-cover object-top" />
+      <div className="lib-wrap">
+        <div className="lib-profile">
+          <div className="lib-avatar">
+            <img src={AVATAR.src} alt={AVATAR.alt} width={96} height={96} decoding="async" />
           </div>
-          <h1 className="mt-8 text-balance font-display text-[2.1rem] font-normal leading-[1.1] text-white sm:text-[2.7rem]">
-            {copy.title}
+          <h1 className="lib-h1">
+            Build a private practice <em>you can actually stay in.</em>
           </h1>
-          <p className="mt-5 text-lg font-semibold text-white">{copy.name}</p>
-          <p className="text-sm text-gold">{copy.handle}</p>
-          <p className="copy-luxe mx-auto mt-5 max-w-[52ch] text-pretty">{copy.bio}</p>
-          <div className="mt-5 flex flex-wrap justify-center gap-2">
-            {copy.credentials.map((c) => (
-              <LuxePill key={c} accent="gold">
+          <p className="lib-name">
+            Yvette Howard, <em>LCSW</em>
+          </p>
+          <p className="lib-handle">@bossclinician</p>
+          <p className="lib-bio">
+            Helping therapists build private practices that support their income, energy, life, and future, without
+            requiring them to max themselves out to maintain them.
+          </p>
+          <ul className="lib-creds" aria-label="Credentials">
+            {CREDENTIALS.map((c) => (
+              <li key={c} className="lib-cred">
                 {c}
-              </LuxePill>
-            ))}
-          </div>
-          <p className="mt-7 font-display text-[1.35rem] italic text-foil">{copy.tagline}</p>
-          <p className="mx-auto mt-4 max-w-[52ch] text-pretty text-sm leading-[1.7] text-orchid-dim">{copy.intro}</p>
-        </motion.div>
-
-        {copy.groups.map((group) => (
-          <div key={group.heading} className="mt-12">
-            <h2 className="text-center text-[0.72rem] font-semibold uppercase tracking-[0.22em] text-gold">
-              {group.heading}
-            </h2>
-            <GoldRule width="w-10" className="mx-auto mt-3" />
-            <LinkCards items={group.links} className="mt-6" />
-          </div>
-        ))}
-      </Section>
-
-      <Section surface="raised" space="md" aria-label={copy.testimonialsHeading} containerClassName="max-w-4xl">
-        <h2 className="text-center font-display text-[1.8rem] text-white sm:text-[2.2rem]">{copy.testimonialsHeading}</h2>
-        <RevealGroup className="mt-10 grid grid-cols-1 gap-5 md:grid-cols-2">
-          {copy.testimonials.map((t) => (
-            <RevealItem key={t.name} className="h-full">
-              <GlassCard accent="plum" interactive={false} className="flex h-full flex-col p-6 sm:p-7">
-                <p aria-label="Five stars" className="text-gold">
-                  ★★★★★
-                </p>
-                <blockquote className="mt-4 flex-1 text-pretty leading-[1.75] text-orchid">{t.quote}</blockquote>
-                <div className="mt-6 flex items-center gap-3">
-                  <span
-                    aria-hidden
-                    className="flex size-10 shrink-0 items-center justify-center rounded-full bg-gold/15 font-sans font-bold text-gold"
-                  >
-                    {t.initial}
-                  </span>
-                  <span>
-                    <span className="block text-sm font-semibold text-white">{t.name}</span>
-                    <span className="block text-xs text-orchid-dim">{t.practice}</span>
-                  </span>
-                </div>
-              </GlassCard>
-            </RevealItem>
-          ))}
-        </RevealGroup>
-      </Section>
-
-      <Section surface="base" space="md" aria-label={copy.about.eyebrow} containerClassName="max-w-2xl">
-        <motion.div {...rise(reduce)} className="text-center">
-          <span className="eyebrow-luxe">{copy.about.eyebrow}</span>
-          <p className="font-display text-[1.6rem] text-white">{copy.about.name}</p>
-          <p className="text-sm text-gold">{copy.about.role}</p>
-          <p className="copy-luxe mt-6 text-pretty">{copy.about.body}</p>
-
-          <ul className="mt-8 flex flex-wrap justify-center gap-3">
-            {copy.socials.map((s) => (
-              <li key={s.href}>
-                <a
-                  href={s.href}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex min-h-[44px] items-center rounded-full border border-white/20 px-5 text-sm text-white/85 transition-colors duration-300 hover:border-gold/60 hover:text-white"
-                >
-                  {s.label}
-                </a>
               </li>
             ))}
           </ul>
+        </div>
 
-          <nav aria-label="Policies" className="mt-8 flex flex-wrap justify-center gap-x-5 gap-y-1 text-xs text-orchid-faint">
-            {copy.policies.map((p) => (
-              <Link key={p.to} to={p.to} className="min-h-[44px] content-center transition-colors duration-300 hover:text-gold">
+        <div className="lib-callout">
+          <p className="lib-callout-lead">Build it. Sustain it. Lead it. Leave it on your terms.</p>
+          <p>
+            Whether you're building your practice, making an established practice more sustainable, or learning to lead
+            a growing team, <strong>start with the stage you're in now.</strong>
+          </p>
+        </div>
+
+        {GROUPS.map((group, i) => (
+          <nav key={group.label} aria-labelledby={`lib-group-${i}`}>
+            <Divider id={`lib-group-${i}`}>{group.label}</Divider>
+            <ul className="lib-links">
+              {group.links.map((link) => (
+                <LinkCard key={link.to} link={link} />
+              ))}
+            </ul>
+          </nav>
+        ))}
+
+        <Divider>What Clinicians Say</Divider>
+        <ul className="lib-testimonials">
+          {TESTIMONIALS.map((t) => (
+            <li key={t.name} className="lib-card lib-testimonial">
+              <p className="lib-stars" role="img" aria-label="Five stars">
+                ★★★★★
+              </p>
+              <blockquote className="lib-quote">“{t.quote}”</blockquote>
+              <div className="lib-author">
+                <span className={`lib-t-avatar lib-t-avatar--${t.tone}`} aria-hidden>
+                  {t.initial}
+                </span>
+                <span>
+                  <span className="lib-t-name">{t.name}</span>
+                  <span className="lib-t-practice">{t.practice}</span>
+                </span>
+              </div>
+            </li>
+          ))}
+        </ul>
+
+        <Divider>About Yvette</Divider>
+        <div className="lib-card lib-about">
+          <p className="lib-about-name">{ABOUT.name}</p>
+          <p className="lib-about-role">{ABOUT.role}</p>
+          <p className="lib-about-body">{ABOUT.body}</p>
+        </div>
+
+        <ul className="lib-social" aria-label="Social media">
+          {SOCIALS.map((s) => (
+            <li key={s.href}>
+              <a href={s.href} target="_blank" rel="noopener noreferrer" className="lib-social-link">
+                {s.label}
+              </a>
+            </li>
+          ))}
+        </ul>
+
+        <div className="lib-footer">
+          <Link to="/" className="lib-logo" aria-label="Boss Clinician home">
+            <img src={LOGO.src} alt={LOGO.alt} width={92} height={45} decoding="async" />
+          </Link>
+          <p>© {year} Boss Clinician, LLC · Yvette Howard, LCSW</p>
+          <nav aria-label="Policies" className="lib-policies">
+            {POLICIES.map((p) => (
+              <Link key={p.to} to={p.to}>
                 {p.label}
               </Link>
             ))}
           </nav>
-        </motion.div>
-      </Section>
-    </>
+        </div>
+      </div>
+    </div>
   );
 }

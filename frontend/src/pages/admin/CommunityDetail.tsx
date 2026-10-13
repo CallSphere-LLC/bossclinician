@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, useParams, useSearchParams } from "react-router";
 import { CommunitySettings } from "./CommunitySettings";
+import { stripMarkdown } from "@/components/community/descriptionFormat";
 import { publicSiteUrl } from "@/lib/siteOrigins";
 import {
   GroupPricingFields,
@@ -200,7 +201,7 @@ function CommunityDetailPage({ id }: { id: string | undefined }) {
       <PageHeader
         eyebrow="Community"
         title={community?.name ?? "Loading…"}
-        description={community?.description}
+        description={community?.description ? stripMarkdown(community.description) : undefined}
         actions={
           community && (
             <div className="flex flex-wrap items-center gap-2">

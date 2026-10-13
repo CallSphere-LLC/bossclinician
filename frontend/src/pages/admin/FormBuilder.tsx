@@ -1283,6 +1283,10 @@ export default function FormBuilder() {
         subscribeSequenceId: snapshot.subscribeSequenceId,
         createLead: snapshot.createLead,
         published: snapshot.published,
+        // Sent only when the server gave them to us, so saving against an API
+        // that predates the switch (migration 112) can't 400 on an unknown key.
+        ...(snapshot.notifyOnSubmit !== undefined ? { notifyOnSubmit: snapshot.notifyOnSubmit } : {}),
+        ...(snapshot.notifyEmails !== undefined ? { notifyEmails: snapshot.notifyEmails } : {}),
         // Emptying the intro empties the old plain column too; left alone, the
         // public page would fall back to it and the words would come back.
         ...(snapshot.description && !snapshot.descriptionMd.trim() ? { description: "" } : {}),
@@ -1863,7 +1867,9 @@ export default function FormBuilder() {
               <span className="mt-0.5 block text-xs text-ink-soft">
                 {draft.published
                   ? `Anyone can fill it in at ${webAddress("f", draft.slug)}.`
-                  : "Nobody can fill it in yet."}
+                  : (draft.lessons ?? []).length > 0
+                    ? "Not on your public site. Students still fill it in inside the lesson below."
+                    : "Nobody can fill it in yet."}
               </span>
             </span>
           </label>
@@ -1882,6 +1888,63 @@ export default function FormBuilder() {
             </span>
           </span>
         </label>
+        {draft.notifyOnSubmit !== undefined && (
+          <>
+            <label className="flex cursor-pointer items-start gap-2.5 text-sm text-ink md:col-span-2">
+              <input
+                type="checkbox"
+                className={`mt-0.5 ${checkboxStyles}`}
+                checked={draft.notifyOnSubmit}
+                onChange={(event) => change({ notifyOnSubmit: event.target.checked })}
+              />
+              <span>
+                Email me when someone sends this form
+                <span className="mt-0.5 block text-xs text-ink-soft">
+                  The email has their name, every answer, and a link back to the reply here.
+                </span>
+              </span>
+            </label>
+            {draft.notifyOnSubmit && (
+              <Field
+                label="Send that email to"
+                hint="optional · separate addresses with commas"
+                className="md:col-span-2"
+              >
+                {/* Saved when she leaves the box, not on every pause: autosave
+                    mid-address ("sagar@") would be refused and hold back her
+                    other edits until the address was finished. */}
+                <Input
+                  key={draft.id}
+                  aria-label="Send the new-reply email to"
+                  defaultValue={draft.notifyEmails ?? ""}
+                  onBlur={(event) => {
+                    if (event.target.value !== (draft.notifyEmails ?? "")) {
+                      change({ notifyEmails: event.target.value });
+                    }
+                  }}
+                  placeholder="Leave blank to use the address in Settings → Notifications"
+                />
+              </Field>
+            )}
+          </>
+        )}
+        {(draft.lessons ?? []).length > 0 && (
+          <div className="rounded-xl border border-hairline bg-white/[0.03] px-3 py-2.5 text-xs text-ink-soft md:col-span-2">
+            <p className="font-medium text-ink">Shown inside these lessons</p>
+            <ul className="mt-1 space-y-0.5">
+              {(draft.lessons ?? []).map((lesson) => (
+                <li key={lesson.id}>
+                  {lesson.courseTitle} · {lesson.title}
+                  {lesson.published ? "" : " (lesson not published)"}
+                </li>
+              ))}
+            </ul>
+            <p className="mt-1">
+              Signed-in students answer it there under their own name and email, so every reply
+              below shows who sent it.
+            </p>
+          </div>
+        )}
       </Card>
 
       {/* -------------------------------------------------------- questions */}

@@ -518,8 +518,10 @@ function CourseHome({ course, productSlug }: { course: CourseOutlineData; produc
       </GlassCard>
 
       {/* Never in an admin preview: the card reads, and can issue, a member's
-          certificate, and there is no member here. */}
-      {finished && !preview && <CertificateCard courseId={course.courseId} />}
+          certificate, and there is no member here. Shown before the course is
+          finished too when it carries a certificate, so the member knows what
+          is left — lessons, or a quiz to pass. */}
+      {!preview && <CertificateCard courseId={course.courseId} finished={finished} />}
 
       {/* On the course home the outline is the page, not a sidebar — so it is
           rendered here too rather than only in the `xl` rail, which does not
@@ -549,6 +551,7 @@ interface LessonViewProps {
 
 function LessonView({ data, productSlug, courseImage, modules, onProgress }: LessonViewProps) {
   const { lesson } = data;
+  const { preview, lessonPath } = usePlayerSource();
 
   /*
    * "Just finished" is the false → true edge of `completed` on the lesson that
@@ -584,6 +587,20 @@ function LessonView({ data, productSlug, courseImage, modules, onProgress }: Les
   );
 
   if (lesson.locked) {
+    // A sequence lock is opened by going back a lesson, so say where that is.
+    const sequenced =
+      lesson.lockReason === "previous_incomplete" ||
+      lesson.lockReason === "previous_quiz_not_passed";
+    const action =
+      sequenced && data.prev && data.prev.unlocked
+        ? {
+            to: lessonPath(productSlug, data.prev.slug),
+            label:
+              lesson.lockReason === "previous_quiz_not_passed"
+                ? `Take the quiz in ${data.prev.title}`
+                : `Go to ${data.prev.title}`,
+          }
+        : null;
     return (
       <div className="flex flex-col gap-8">
         {breadcrumb}
@@ -592,6 +609,8 @@ function LessonView({ data, productSlug, courseImage, modules, onProgress }: Les
           unlockLabel={lesson.unlockLabel}
           unlocksAt={lesson.unlocksAt}
           timezone={data.course.timezone}
+          lockReason={lesson.lockReason}
+          action={action}
         />
         <LessonNav data={data} productSlug={productSlug} />
       </div>
@@ -608,6 +627,14 @@ function LessonView({ data, productSlug, courseImage, modules, onProgress }: Les
           {contentTypeLabel(lesson.contentType)}
           {length && ` · ${length}`}
         </p>
+        {/* Admin preview only: the admin is let in to every lesson, so what a
+            student enrolling today would meet instead is shown as a badge. */}
+        {preview && lesson.studentLock && (
+          <p className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-gold/30 bg-gold/[0.08] px-3 py-1 text-xs text-gold-bright">
+            <Lock aria-hidden className="size-3" />
+            Students see: {lesson.studentLock}
+          </p>
+        )}
       </div>
 
       {/* Keyed on the lesson so moving to the next one builds a fresh media
@@ -743,7 +770,9 @@ function NicelyDone({
       label: newModule ? "Start the next module" : "Next lesson",
     };
   } else if (next) {
-    message = `Nicely done. The next lesson, ${next.title}, is not open yet — we will let you know when it is.`;
+    message = next.unlockLabel
+      ? `Nicely done. The next lesson, ${next.title}, is not open yet — ${next.unlockLabel.charAt(0).toLowerCase()}${next.unlockLabel.slice(1)}.`
+      : `Nicely done. The next lesson, ${next.title}, is not open yet — we will let you know when it is.`;
     action = { to: productPath(productSlug), label: "Back to the course" };
   } else {
     message = "Nicely done — that was the last lesson. There are still a few earlier ones to finish.";
@@ -905,8 +934,8 @@ function NavCard({
             direction === "next" && "justify-end",
           )}
         >
-          <Lock aria-hidden className="size-3" />
-          Not open yet
+          <Lock aria-hidden className="size-3 shrink-0" />
+          {neighbour.unlockLabel || "Not open yet"}
         </span>
       )}
     </>

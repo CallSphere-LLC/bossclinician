@@ -32,7 +32,7 @@ import {
 } from "../../services/formLogic";
 import { keepStagedFile, receiveFormFiles, type StagedFile } from "../../services/formUploads";
 import { kindFromMime } from "../../services/mediaStorage";
-import { notificationRecipients } from "../../services/notificationRecipients";
+import { adminRepliesUrl, replyRecipients, wantsReplyEmail } from "../../services/formNotifications";
 import { sendMail } from "../../email/mailer";
 import { renderMarkdown } from "../../email/provider";
 import { formSubmissionNotification, type FormAnswerRow } from "../../email/templates";
@@ -550,7 +550,7 @@ function displayName(contact: SubmissionContact): string {
  * lead was captured a moment earlier and losing it to a bookkeeping error is
  * the one outcome worth engineering against.
  */
-async function afterSubmission<T>(what: string, run: () => Promise<T>): Promise<T | null> {
+export async function afterSubmission<T>(what: string, run: () => Promise<T>): Promise<T | null> {
   try {
     return await run();
   } catch (err) {
@@ -617,23 +617,28 @@ export function submissionAnswerRows(
  * before its own error handling starts (it records the send first), and an
  * unawaited rejection would take the process down.
  *
- * Sent under the "someone sends an enquiry" switch in Settings, which is what a
- * reply that makes a lead is. Reply-To is the person who filled it in, so
- * answering the email answers them.
+ * Whether it is sent at all is the form's own "email me when someone sends
+ * this" switch (forms.notify_on_submit, migration 112); where it goes is the
+ * form's own addresses, or — left blank — the address in Settings under the
+ * "someone sends an enquiry" switch (services/formNotifications.ts). Callers
+ * check the switch; this only decides the recipients. Reply-To is the person
+ * who filled it in, so answering the email answers them. Also used by the
+ * in-lesson member forms (routes/member/lessonForms.ts).
  */
-async function notifyOwnerOfReply(
-  form: { name: string; slug: string; fields: unknown },
+export async function notifyOwnerOfReply(
+  form: { id: number; name: string; slug: string; fields: unknown; notify_emails?: unknown },
   who: { name: string; email: string },
   answers: Record<string, unknown>,
 ): Promise<void> {
   try {
-    const to = await notificationRecipients("lead");
+    const to = await replyRecipients(form);
     if (!to) return;
     const { subject, text, html } = formSubmissionNotification({
       formName: form.name,
       name: who.name,
       email: who.email,
       answers: submissionAnswerRows(form.fields, answers),
+      adminUrl: adminRepliesUrl(form.id),
     });
     await sendMail({ to, subject, text, html, replyTo: who.email });
   } catch (err) {
@@ -643,7 +648,7 @@ async function notifyOwnerOfReply(
 }
 
 /** A reply carrying files arrives as multipart; every other reply is JSON, as before. */
-function isMultipart(req: Request): boolean {
+export function isMultipart(req: Request): boolean {
   return Boolean(req.is("multipart/form-data"));
 }
 
@@ -653,7 +658,7 @@ const UPLOAD_WINDOW_MS = 60 * 60 * 1000;
  * Replies with files, per address. Tighter than `leadsLimiter`, because each one
  * can put up to five files on disk. Replies without files are not counted.
  */
-const formUploadIpLimiter = rateLimit({
+export const formUploadIpLimiter = rateLimit({
   windowMs: UPLOAD_WINDOW_MS,
   limit: 20,
   standardHeaders: true,
@@ -667,7 +672,7 @@ const formUploadIpLimiter = rateLimit({
  * through one form either. Keyed on the form's id, which is only known once the
  * slug has been looked up, so a made-up slug 404s before it can mint a key.
  */
-const formUploadFormLimiter = rateLimit({
+export const formUploadFormLimiter = rateLimit({
   windowMs: UPLOAD_WINDOW_MS,
   limit: 200,
   standardHeaders: true,
@@ -680,7 +685,7 @@ const formUploadFormLimiter = rateLimit({
 });
 
 /** The multipart reply's answers: one `payload` field holding the JSON body. */
-function multipartPayload(body: unknown): unknown {
+export function multipartPayload(body: unknown): unknown {
   const raw = (body as Record<string, unknown> | undefined)?.payload;
   if (typeof raw !== "string") return undefined;
   try {
@@ -700,7 +705,7 @@ function multipartPayload(body: unknown): unknown {
  * reply is never stored pointing at a file that isn't there, and a file is never
  * left behind for a reply that wasn't stored.
  */
-async function storeSubmission(input: {
+export async function storeSubmission(input: {
   formId: number;
   data: Record<string, unknown>;
   email: string;
@@ -991,12 +996,14 @@ growthPublicRouter.post(
         if (contactId !== null) await linkContact("lead", lead.rows[0].id, contactId);
         fireTriggerAsync("lead_created", { email, name, source: `form:${form.slug}` });
       });
+    }
 
-      // A reply that makes a lead is an enquiry, and an enquiry through the
-      // lead form has always reached the owner's inbox. Until this line one
-      // through a built form did not: it was filed, and nobody was told.
-      // Outside the afterSubmission call above so a failed lead insert cannot
-      // also cost the email, and not awaited — see notifyOwnerOfReply.
+    // The owner's email about the reply. It used to go out only for a form that
+    // also made an enquiry; it is now the form's own switch (migration 112,
+    // back-filled from create_lead so every form that emailed still does).
+    // Outside the lead block so a failed lead insert cannot also cost the
+    // email, and not awaited — see notifyOwnerOfReply.
+    if (wantsReplyEmail(form)) {
       void notifyOwnerOfReply(form, { name, email }, answers);
     }
 

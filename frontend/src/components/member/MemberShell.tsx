@@ -8,7 +8,6 @@ import {
   BookOpen,
   CalendarDays,
   ChevronDown,
-  Download,
   Eye,
   LogOut,
   Sparkles,
@@ -38,7 +37,10 @@ import { cn } from "@/lib/cn";
 
 interface MemberShellProps {
   title: string;
-  description?: string;
+  /** Plain text keeps its line breaks; a node (a community's formatted description) renders as given. */
+  description?: ReactNode;
+  /** Full-width banner above the title, e.g. a community's cover photo. */
+  hero?: ReactNode;
   /** Page-level actions: beside the title on desktop, beneath it on mobile. */
   actions?: ReactNode;
   children: ReactNode;
@@ -52,10 +54,9 @@ interface RailLink {
 }
 
 const RAIL: RailLink[] = [
+  // Library holds both tabs, Courses and Documents (Kajabi's layout); the old
+  // /downloads address redirects to the Documents tab.
   { to: "/library", label: "Library", icon: BookOpen },
-  // Its own address rather than /account/downloads, so this and Account are
-  // never both lit: NavLink matches by prefix.
-  { to: "/downloads", label: "Downloads", icon: Download },
   { to: "/community", label: "Community", icon: Users },
   { to: "/coaching", label: "Coaching", icon: Sparkles },
   // Between coaching and account, because it is a thing you attend rather than
@@ -124,6 +125,7 @@ export function MemberAvatar({
 export function MemberShell({
   title,
   description,
+  hero,
   actions,
   children,
   sidebar,
@@ -335,16 +337,20 @@ export function MemberShell({
           {/* Renders nothing unless the device and the saved time zone disagree. */}
           {!preview && <TimezonePrompt className="mb-8" />}
 
+          {hero}
+
           <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between sm:gap-8">
             <div className="min-w-0">
               <h1 className="text-balance font-display text-[1.9rem] font-medium leading-[1.15] text-white sm:text-[2.4rem]">
                 {title}
               </h1>
-              {description && (
+              {description && (typeof description === "string" ? (
                 <p className="copy-luxe mt-3 max-w-3xl whitespace-pre-wrap break-words">
                   {description}
                 </p>
-              )}
+              ) : (
+                <div className="mt-3 max-w-3xl">{description}</div>
+              ))}
             </div>
             {actions && (
               <div className="flex shrink-0 flex-wrap gap-3">{actions}</div>
