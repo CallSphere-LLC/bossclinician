@@ -2,7 +2,7 @@
 # Source: the `redirects` table. Regenerate with:
 #   docker compose exec backend node scripts/generate-nginx-redirects.js
 #   docker compose exec nginx nginx -s reload
-# Generated from 108 rows.
+# Generated from 110 rows.
 
 # The podcast episode paths (/podcasts/<show>/episodes/<id>) overflow the
 # 64-byte default bucket, and nginx refuses to start rather than truncating.
@@ -32,6 +32,8 @@ map $uri $redirect_target {
     /credentialwithconfidencekit /courses/credential-with-confidence;
     /csfgrouppractices /courses/credentialing-success-formula;
     /cwcsolopractice /courses/credential-with-confidence;
+    /downloads /library?tab=documents;
+    /downloads/ /library?tab=documents;
     /evergreen-masterclass-register /freedom-masterclass;
     /financialdisclaimer /financial-disclaimer;
     /forgot /forgot-password;
