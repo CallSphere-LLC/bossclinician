@@ -65,6 +65,7 @@ const CheckoutUpsell = lazy(() => import("@/pages/CheckoutUpsell"));
  * drift into loading different chunks.
  */
 const CheckoutSuccessPage = lazyRoute(() => import("@/pages/CheckoutSuccess"));
+const PayPalReturnPage = lazyRoute(() => import("@/pages/PayPalReturn"));
 
 /**
  * The public marketing surface, as data.
@@ -117,6 +118,7 @@ export const PUBLIC_ROUTES: readonly { path: string; Component: RouteComponent }
   { path: "/podcasts/:slug/episodes/:episodeId", Component: PodcastPage },
   { path: "/apply", Component: lazyRoute(() => import("@/pages/Apply")) },
   { path: "/checkout/success", Component: CheckoutSuccessPage },
+  { path: "/checkout/paypal/return", Component: PayPalReturnPage },
   { path: "/contact", Component: lazyRoute(() => import("@/pages/Contact")) },
   { path: "/retreats", Component: lazyRoute(() => import("@/pages/Retreats")) },
   { path: "/store", Component: lazyRoute(() => import("@/pages/Store")) },
@@ -324,6 +326,10 @@ export default function App() {
             rendered here rather than handed to <PublicRoutes>, whose own
             <Routes> would be matching against what is left of the URL after
             this route consumed all of it — and would answer with its 404. */}
+        <Route
+          path="/checkout/paypal/return"
+          element={<Layout><Suspense fallback={<PageFallback />}><PayPalReturnPage /></Suspense></Layout>}
+        />
         <Route
           path="/checkout/success"
           element={

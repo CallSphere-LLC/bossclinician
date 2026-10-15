@@ -217,6 +217,7 @@ export interface CheckoutInput extends QuoteInput {
   phone?: string;
   customFields?: Record<string, string>;
   acceptedTerms?: boolean;
+  paymentProvider?: "stripe" | "paypal";
 }
 
 export type ClientSecretType = "payment_intent" | "setup_intent" | null;
@@ -236,6 +237,7 @@ export interface CheckoutResult extends Quote {
   clientSecret: string | null;
   clientSecretType: ClientSecretType;
   subscriptionId?: string;
+  paypalApproveUrl?: string;
   memberCreated?: boolean;
 }
 
@@ -331,6 +333,11 @@ export const commerceApi = {
       method: "POST",
       body: JSON.stringify(input),
     }),
+  paypalConfig: () => memberRequest<{enabled:boolean; environment:"sandbox"}>("/checkout/paypal/config"),
+  capturePayPal: (orderId:number, orderToken:string, paypalOrderId:string) =>
+    memberRequest<{orderId:number;status:"paid"}>(`/checkout/paypal/${orderId}/capture`,{method:"POST",body:JSON.stringify({orderToken,paypalOrderId})}),
+  cancelPayPal: (orderId:number, orderToken:string) =>
+    memberRequest<{status:string}>(`/checkout/paypal/${orderId}/cancel`,{method:"POST",body:JSON.stringify({orderToken})}),
 
   /**
    * Stores the email typed into the order form before anyone has decided to buy.

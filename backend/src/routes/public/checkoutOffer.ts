@@ -28,6 +28,7 @@ import { addInterval, computeOrderTotal, type OrderTotal } from "../../services/
 import { readSetting } from "../../services/settings";
 import { cleanStatementDescriptor } from "../../services/paymentRules";
 import { applyDescriptorToPrice } from "../../stripe/descriptor";
+import { paypalSandboxReady, createPayPalOrder, getPayPalOrder, capturePayPalOrder, completedCapture } from "../../services/paypalClient";
 import {
   MAX_PWYW_CENTS,
   addressSchema,
@@ -729,6 +730,7 @@ const checkoutOfferSchema = z.object({
   acceptedTerms: z.boolean().optional(),
   giftRecipientEmail: z.string().trim().email().max(320).optional(),
   giftMessage: z.string().trim().max(2000).optional(),
+  paymentProvider: z.enum(["stripe", "paypal"]).optional(),
 });
 
 /**
@@ -757,6 +759,10 @@ checkoutOfferRouter.post(
     const baseOffer = await loadPublishedOffer(req.params.slug);
     if (!baseOffer) throw notFound("Offer not found");
     const offer = await selectOfferPricing(baseOffer, body.pricingOptionId);
+    if (body.paymentProvider === "paypal") {
+      if (!paypalSandboxReady()) throw serviceUnavailable("PayPal sandbox checkout is not configured");
+      if (isRecurring(offer) || offer.currency.toLowerCase() !== "usd") throw badRequest("PayPal sandbox checkout currently supports one-time USD purchases only");
+    }
     if (body.cartItems && (body.cartItems[0].slug !== offer.slug || (body.cartItems[0].pricingOptionId ?? null) !== (offer.pricing_option_id ?? null))) throw badRequest("The cart changed. Refresh it before paying.");
 
     if (body.giftRecipientEmail && (!offer.allow_gifting || isRecurring(offer))) {
@@ -852,6 +858,21 @@ checkoutOfferRouter.post(
         clientSecretType: null,
         memberCreated: result.createdMember,
       });
+      return;
+    }
+
+    if (body.paymentProvider === "paypal") {
+      try {
+        if (total.currency.toLowerCase() !== "usd") throw badRequest("PayPal sandbox checkout supports USD only");
+        const approval = await createPayPalOrder({
+          orderId, amountCents: total.totalCents, title: offer.title,
+          returnUrl: `${env.publicSiteUrl}/checkout/paypal/return?orderId=${orderId}`,
+          cancelUrl: `${env.publicSiteUrl}/checkout/paypal/return?orderId=${orderId}&cancelled=1`,
+        });
+        await pool.query("UPDATE orders SET paypal_order_id=$2, updated_at=now() WHERE id=$1", [orderId, approval.id]);
+        res.status(201).json({ ...receipt, status: "pending", requiresPayment: true,
+          clientSecret: null, clientSecretType: null, paypalApproveUrl: approval.approveUrl });
+      } catch (error) { await markOrderFailed(orderId); throw error; }
       return;
     }
 
@@ -1021,6 +1042,62 @@ checkoutOfferRouter.post(
     }
   })
 );
+
+checkoutOfferRouter.get("/checkout/paypal/config", (_req, res) => {
+  res.setHeader("Cache-Control", "no-store");
+  res.json({ enabled: paypalSandboxReady() && process.env.PAYPAL_ALL_OFFERS_VALIDATED === "true", environment: "sandbox" });
+});
+
+const paypalCaptureSchema = z.object({
+  orderToken: z.string().min(20).max(200),
+  paypalOrderId: z.string().regex(/^[A-Z0-9-]{5,64}$/),
+});
+checkoutOfferRouter.post("/checkout/paypal/:orderId/capture", offerCheckoutLimiter, optionalMember, asyncHandler(async (req, res) => {
+  refuseImpersonation(req);
+  const orderId = Number(req.params.orderId);
+  const parsed = paypalCaptureSchema.safeParse(req.body);
+  if (!Number.isSafeInteger(orderId) || orderId <= 0 || !parsed.success || !orderTokenValid(orderId, parsed.data.orderToken)) throw forbidden("Invalid checkout confirmation");
+  if (!paypalSandboxReady()) throw serviceUnavailable("PayPal sandbox checkout is not configured");
+  const found = await pool.query<{ status: string; paypal_order_id: string | null; total_cents: number; currency: string; email: string }>(
+    "SELECT status,paypal_order_id,total_cents,currency,email FROM orders WHERE id=$1", [orderId]);
+  const order = found.rows[0];
+  if (!order || order.paypal_order_id !== parsed.data.paypalOrderId) throw notFound("Checkout not found");
+  if (order.status === "paid") { res.json({ orderId, status: "paid" }); return; }
+  if (order.status !== "pending" || order.currency.toLowerCase() !== "usd") throw badRequest("This checkout cannot be captured");
+  let paypal = await getPayPalOrder(order.paypal_order_id);
+  if (paypal.status !== "COMPLETED") {
+    if (paypal.status !== "APPROVED") throw badRequest("Approve the payment in PayPal first");
+    try { paypal = await capturePayPalOrder(order.paypal_order_id); }
+    catch (error) {
+      // A timed-out capture can have succeeded. Read PayPal's durable result
+      // before deciding whether to reject or retry; never charge twice.
+      paypal = await getPayPalOrder(order.paypal_order_id);
+      if (paypal.status !== "COMPLETED") throw error;
+    }
+  }
+  const capture = completedCapture(paypal, { orderId, amountCents: order.total_cents });
+  if (!capture) throw badRequest("PayPal payment could not be reconciled to this order");
+  const result = await fulfillPayment({ orderId, amountCents: order.total_cents, currency: "usd", email: order.email,
+    paypalOrderId: paypal.id, paypalCaptureId: capture.id, paymentMethod: { type: "paypal", brand: "PayPal" } });
+  if (result.fulfilled) { await deliverPurchase({ orderId, memberId: result.memberId, createdMember: result.createdMember }); notifyOwnerOfSale({ orderId }); }
+  res.json({ orderId, status: "paid" });
+}));
+
+checkoutOfferRouter.post("/checkout/paypal/:orderId/cancel", offerCheckoutLimiter, asyncHandler(async (req, res) => {
+  const orderId = Number(req.params.orderId);
+  const token = typeof req.body?.orderToken === "string" ? req.body.orderToken : "";
+  if (!Number.isSafeInteger(orderId) || orderId <= 0 || !orderTokenValid(orderId, token)) throw forbidden("Invalid checkout cancellation");
+  const found = await pool.query<{ status:string; paypal_order_id:string | null }>("SELECT status,paypal_order_id FROM orders WHERE id=$1",[orderId]);
+  const order = found.rows[0];
+  if (!order?.paypal_order_id) throw notFound("Checkout not found");
+  if (order.status === "paid") throw badRequest("This payment has already completed");
+  if (order.status === "pending") {
+    const paypal = await getPayPalOrder(order.paypal_order_id);
+    if (paypal.status === "COMPLETED" || paypal.status === "APPROVED") throw badRequest("This payment may still complete; return to checkout confirmation");
+    if (paypal.status === "CREATED" || paypal.status === "VOIDED") await markOrderFailed(orderId);
+  }
+  res.json({ status: "cancelled" });
+}));
 
 checkoutOfferRouter.get("/checkout/recover/:token", abandonedLimiter, asyncHandler(async (req, res) => {
   const slug = await followRecoveryLink(String(req.params.token));

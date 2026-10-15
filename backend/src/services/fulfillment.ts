@@ -31,6 +31,8 @@ export interface FulfillPaymentInput {
   /** Stripe's id for the charge. The idempotency key for the whole operation. */
   paymentIntentId?: string | null;
   chargeId?: string | null;
+  paypalOrderId?: string | null;
+  paypalCaptureId?: string | null;
   amountCents: number;
   currency?: string;
   email?: string | null;
@@ -176,6 +178,8 @@ export async function fulfillPayment(input: FulfillPaymentInput): Promise<Fulfil
               email = CASE WHEN $3 <> '' THEN $3 ELSE email END,
               stripe_payment_intent_id = COALESCE($4, stripe_payment_intent_id),
               stripe_customer_id = COALESCE($5, stripe_customer_id),
+              paypal_order_id = COALESCE($7, paypal_order_id),
+              paypal_capture_id = COALESCE($8, paypal_capture_id),
               updated_at = now()
         WHERE id = $1`,
       [
@@ -185,6 +189,8 @@ export async function fulfillPayment(input: FulfillPaymentInput): Promise<Fulfil
         input.paymentIntentId ?? null,
         input.stripeCustomerId ?? null,
         contactId,
+        input.paypalOrderId ?? null,
+        input.paypalCaptureId ?? null,
       ]
     );
 
@@ -202,9 +208,9 @@ export async function fulfillPayment(input: FulfillPaymentInput): Promise<Fulfil
       `INSERT INTO transactions
          (order_id, member_id, email, kind, status, amount_cents, currency,
           payment_method_brand, payment_method_last4, payment_method_type,
-          country, state, stripe_payment_intent_id, stripe_charge_id, occurred_at)
-       VALUES ($1,$2,$3,'payment','succeeded',$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
-       ON CONFLICT (stripe_payment_intent_id) DO NOTHING
+          country, state, stripe_payment_intent_id, stripe_charge_id, occurred_at, paypal_capture_id)
+       VALUES ($1,$2,$3,'payment','succeeded',$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+       ON CONFLICT DO NOTHING
        RETURNING id`,
       [
         order.id,
@@ -220,6 +226,7 @@ export async function fulfillPayment(input: FulfillPaymentInput): Promise<Fulfil
         input.paymentIntentId ?? null,
         input.chargeId ?? null,
         input.occurredAt ?? new Date(),
+        input.paypalCaptureId ?? null,
       ]
     );
 

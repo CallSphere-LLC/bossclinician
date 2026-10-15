@@ -329,6 +329,11 @@ function CheckoutForm({ offer, pricingOption, mode, onAmountChange }: CheckoutFo
   const [giftRecipientEmail, setGiftRecipientEmail] = useState("");
   const [giftMessage, setGiftMessage] = useState("");
   const [checkoutSettings, setCheckoutSettings] = useState<Record<string, unknown>>({});
+  const [paypalEnabled, setPaypalEnabled] = useState(false);
+  useEffect(() => {
+    if (preview) return;
+    void commerceApi.paypalConfig().then(config => setPaypalEnabled(config.enabled)).catch(() => setPaypalEnabled(false));
+  }, [preview]);
   useEffect(() => {
     // The admin host does not serve /api/settings; the preview brings the same allow-listed values.
     if (preview) { setCheckoutSettings(preview.checkoutSettings); return; }
@@ -515,7 +520,7 @@ function CheckoutForm({ offer, pricingOption, mode, onAmountChange }: CheckoutFo
   const opened = useRef<{ signature: string; result: CheckoutResult } | null>(null);
   const signature = JSON.stringify([payload, quote.totalCents]);
 
-  async function handleSubmit(event?: FormEvent<HTMLFormElement>, wallet?: StripeExpressCheckoutElementConfirmEvent) {
+  async function handleSubmit(event?: FormEvent<HTMLFormElement>, wallet?: StripeExpressCheckoutElementConfirmEvent, provider: "stripe" | "paypal" = "stripe") {
     event?.preventDefault();
     if (submitting) { wallet?.paymentFailed({reason:"fail"}); return; }
 
@@ -550,7 +555,7 @@ function CheckoutForm({ offer, pricingOption, mode, onAmountChange }: CheckoutFo
 
     setSubmitting(true);
     try {
-      if (paymentRequired) {
+      if (paymentRequired && provider === "stripe") {
         if (!stripe || !elements) {
           setPaymentError("The payment form is still loading. Give it a second and try again.");
           return;
@@ -565,10 +570,17 @@ function CheckoutForm({ offer, pricingOption, mode, onAmountChange }: CheckoutFo
         }
       }
 
-      let checkout = opened.current?.signature === signature ? opened.current.result : null;
+      const providerSignature = `${signature}:${provider}`;
+      let checkout = opened.current?.signature === providerSignature ? opened.current.result : null;
       if (!checkout) {
-        checkout = await commerceApi.createCheckout(offer.slug, payload);
-        opened.current = { signature, result: checkout };
+        checkout = await commerceApi.createCheckout(offer.slug, { ...payload, paymentProvider: provider });
+        opened.current = { signature: providerSignature, result: checkout };
+      }
+      if (provider === "paypal") {
+        if (!checkout.paypalApproveUrl) throw new Error("PayPal approval is unavailable for this order.");
+        sessionStorage.setItem(`bc-paypal-order-${checkout.orderId}`, JSON.stringify({orderToken:checkout.orderToken,offerSlug:offer.slug}));
+        window.location.assign(checkout.paypalApproveUrl);
+        return;
       }
 
       if (checkout.requiresPayment && checkout.clientSecret) {
@@ -937,6 +949,12 @@ function CheckoutForm({ offer, pricingOption, mode, onAmountChange }: CheckoutFo
               </p>
             )}
 
+            {paypalEnabled && paymentRequired && mode === "payment" && currency.toLowerCase() === "usd" && offer.upsells.length === 0 && (
+              <button type="button" disabled={submitting || quoteState.pending} onClick={() => void handleSubmit(undefined, undefined, "paypal")}
+                className="mt-3 w-full min-h-[52px] rounded-xl border border-white/30 bg-white px-5 py-3 text-center font-semibold text-[#003087] transition hover:bg-[#f5f7fa] disabled:opacity-50">
+                Pay with PayPal — sandbox test
+              </button>
+            )}
             <p className="mt-3 flex items-center justify-center gap-2 text-xs text-orchid-faint">
               <ShieldCheck aria-hidden className="h-3.5 w-3.5" />
               Secured by Stripe. {typeof checkoutSettings.supportEmail === "string" && checkoutSettings.supportEmail ? <a href={`mailto:${checkoutSettings.supportEmail}`}>Questions? Email us.</a> : "Questions before you buy? We're one email away."}
