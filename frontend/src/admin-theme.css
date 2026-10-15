@@ -234,3 +234,51 @@
     white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere;
   }
 }
+
+/* The shared assistant follows the console palette instead of putting dark
+   translucent glass and pale marketing copy over the White appearance. */
+.theme-console .chat-widget-panel {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-strong);
+  color: var(--text-primary);
+  box-shadow: 0 20px 55px -25px rgb(0 0 0 / 0.45);
+  backdrop-filter: none;
+}
+.theme-console .chat-widget-panel .chat-assistant-message {
+  background: var(--bg-surface-2);
+  color: var(--text-primary);
+  box-shadow: inset 0 0 0 1px var(--border-subtle);
+}
+.theme-console .chat-widget-panel .chat-user-message {
+  background: var(--accent);
+  color: var(--accent-ink);
+  box-shadow: none;
+}
+.theme-console .chat-widget-panel [aria-pressed="true"] {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+.theme-console .chat-widget-panel .chat-suggestion {
+  border-color: var(--border-strong);
+  background: var(--bg-surface-2);
+  color: var(--text-primary);
+}
+.theme-console .chat-widget-panel .chat-composer {
+  border-color: var(--border-strong);
+  background: var(--bg-surface-2);
+  color: var(--text-primary);
+}
+.theme-console .chat-widget-panel .chat-composer::placeholder {
+  color: var(--text-secondary);
+}
+@media (min-width: 1024px) {
+  .coaching-clients-table .admin-data-table {
+    min-width: 1320px !important;
+  }
+}
+:root[data-console-theme="light"] .theme-console .chat-widget-panel .chat-user-message {
+  color: var(--accent-ink);
+}
+:root[data-console-theme="light"] .theme-console .chat-widget-panel .chat-composer {
+  color: var(--text-primary);
+}

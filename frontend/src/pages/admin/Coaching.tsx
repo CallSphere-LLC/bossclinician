@@ -1335,16 +1335,20 @@ function ClientsTab() {
         header: "Program",
         accessorFn: (row) => row.programs.map((p) => p.title ?? "Not part of a program").join(", "),
         cell: ({ row }) => (
-          <div className="flex flex-wrap gap-1.5">
+          <div className="space-y-2">
             {row.original.programs.map((program) => (
-              <Badge
-                key={program.offerId ?? NO_PROGRAM}
-                tone={program.offerId === null ? "neutral" : program.access === "ended" ? "slate" : "plum"}
-              >
-                {program.title ?? "Not part of a program"}
-                {program.access === "ended" && " · ended"}
-                {program.source === "kajabi" && " · from Kajabi"}
-              </Badge>
+              <div key={program.offerId ?? NO_PROGRAM} className="min-w-0">
+                <span className="block text-sm font-medium leading-snug text-ink">
+                  {program.title ?? "Not part of a program"}
+                </span>
+                {(program.access === "ended" || program.source === "kajabi") && (
+                  <span className="block text-xs leading-snug text-ink-soft">
+                    {[program.access === "ended" && "Ended", program.source === "kajabi" && "From Kajabi"]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </span>
+                )}
+              </div>
             ))}
           </div>
         ),
@@ -1380,7 +1384,15 @@ function ClientsTab() {
           return progress === "—" ? (
             <span className="text-sm text-ink-soft">—</span>
           ) : (
-            <span className="whitespace-nowrap text-sm font-bold tabular-nums text-ink">{progress}</span>
+            <span className="block text-sm tabular-nums text-ink" aria-label={progress} title={progress}>
+              <strong className="font-semibold">
+                {row.original.sessionsCompleted}
+                {row.original.sessionsTotal !== null && row.original.sessionsTotal > 0
+                  ? ` of ${row.original.sessionsTotal}`
+                  : ""}
+              </strong>
+              <span className="block text-xs text-ink-soft">sessions completed</span>
+            </span>
           );
         },
       },
@@ -1442,7 +1454,7 @@ function ClientsTab() {
   );
 
   return (
-    <div className="space-y-5">
+    <div className="coaching-clients-table space-y-5">
       {error && <LoadProblem message={error} onRetry={load} />}
 
       {!(error && clients === null) && (
@@ -1451,8 +1463,17 @@ function ClientsTab() {
           data={rows}
           searchPlaceholder="Search your clients…"
           itemNoun={{ one: "client", many: "clients" }}
-          minWidth="1220px"
-          columnWidths={{ client: "22%", actions: "64px" }}
+          minWidth="1320px"
+          columnWidths={{
+            client: "21%",
+            program: "24%",
+            sessions: "13%",
+            progress: "12%",
+            nextSession: "11%",
+            lastSession: "10%",
+            joined: "9%",
+            actions: "52px",
+          }}
           toolbar={
             <select
               value={programFilter}

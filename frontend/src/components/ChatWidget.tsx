@@ -263,7 +263,7 @@ export function ChatWidget() {
               animate={{ opacity: 1, y: 0, scale: 1 }}
               exit={{ opacity: 0, y: 20, scale: 0.96 }}
               transition={panelTransition}
-              className="glass glass-edge flex h-[34rem] max-h-[calc(100dvh-3rem)] w-[min(calc(100vw-2.5rem),24rem)] flex-col overflow-hidden rounded-3xl"
+              className="chat-widget-panel glass glass-edge flex h-[34rem] max-h-[calc(100dvh-2rem)] w-[min(calc(100vw-2rem),26rem)] flex-col overflow-hidden rounded-2xl"
             >
               <div className="relative flex shrink-0 items-center justify-between border-b border-hairline bg-surface-raised px-5 py-4 text-ink">
                 <div aria-hidden className="absolute inset-x-0 bottom-0 h-px bg-rule-gold opacity-50" />
@@ -319,10 +319,10 @@ export function ChatWidget() {
                   >
                     <p
                       className={cn(
-                        "max-w-[85%] whitespace-pre-wrap rounded-2xl px-4 py-2.5 text-sm leading-relaxed",
+                        "max-w-[85%] min-w-0 break-words whitespace-pre-wrap rounded-2xl px-4 py-2.5 text-sm leading-relaxed",
                         m.role === "user"
-                          ? "bg-plum-bright/25 text-white ring-1 ring-inset ring-plum-bright/30"
-                          : "bg-ink/[0.05] text-orchid ring-1 ring-inset ring-ink/[0.07]",
+                          ? "chat-user-message bg-plum-bright/25 text-white ring-1 ring-inset ring-plum-bright/30"
+                          : "chat-assistant-message bg-ink/[0.05] text-orchid ring-1 ring-inset ring-ink/[0.07]",
                       )}
                     >
                       {m.content}
@@ -331,7 +331,7 @@ export function ChatWidget() {
                 ))}
                 {streamingReply && (
                   <div className="flex justify-start" data-testid="chat-streaming-reply">
-                    <p className="max-w-[85%] whitespace-pre-wrap rounded-2xl bg-ink/[0.05] px-4 py-2.5 text-sm leading-relaxed text-orchid ring-1 ring-inset ring-ink/[0.07]">
+                    <p className="chat-assistant-message max-w-[85%] min-w-0 break-words whitespace-pre-wrap rounded-2xl bg-ink/[0.05] px-4 py-2.5 text-sm leading-relaxed text-orchid ring-1 ring-inset ring-ink/[0.07]">
                       {streamingReply}
                       <span aria-hidden="true" className="ml-0.5 inline-block h-3.5 w-0.5 bg-current motion-safe:animate-pulse" />
                     </p>
@@ -355,7 +355,7 @@ export function ChatWidget() {
                       key={s}
                       type="button"
                       onClick={() => void sendMessage(s)}
-                      className="rounded-full border border-white/12 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-orchid transition-colors duration-300 hover:border-gold/45 hover:text-gold"
+                      className="chat-suggestion rounded-full border border-white/12 bg-white/[0.04] px-3 py-1.5 text-xs font-medium text-orchid transition-colors duration-300 hover:border-gold/45 hover:text-gold"
                     >
                       {s}
                     </button>
@@ -372,7 +372,7 @@ export function ChatWidget() {
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   placeholder={pendingApproval ? "Type yes or no…" : "Ask a question…"}
-                  className="min-w-0 flex-1 rounded-full border border-white/12 bg-white/[0.05] px-4 py-2.5 text-sm text-white outline-none transition-colors duration-300 placeholder:text-white/30 focus-visible:border-gold/55"
+                  className="chat-composer min-w-0 flex-1 rounded-full border border-white/12 bg-white/[0.05] px-4 py-2.5 text-sm text-white outline-none transition-colors duration-300 placeholder:text-white/30 focus-visible:border-gold/55"
                 />
                 <button
                   type="submit"
