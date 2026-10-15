@@ -23,7 +23,7 @@ adminContractsRouter.get('/', asyncHandler(async (_req, res) => {
   const assignments = await pool.query(`SELECT a.id,a.contract_id,a.status,a.assigned_at,a.signed_at,
     a.signed_name,a.signed_email,a.evidence_sha256,m.email AS member_email,m.name AS member_name
     FROM participant_contract_assignments a JOIN members m ON m.id=a.member_id ORDER BY a.id DESC`);
-  res.json({ contracts: docs.rows, assignments: assignments.rows });
+  res.json({ contracts: docs.rows.map(row => ({...row,id:Number(row.id)})), assignments: assignments.rows.map(row => ({...row,id:Number(row.id),contract_id:Number(row.contract_id)})) });
 }));
 
 adminContractsRouter.post('/', asyncHandler(async (req, res) => {
@@ -41,7 +41,7 @@ adminContractsRouter.post('/', asyncHandler(async (req, res) => {
     const created = await pool.query(`INSERT INTO participant_contracts(title,storage_ref,pdf_sha256,created_by)
       VALUES($1,$2,$3,$4) RETURNING id,title,pdf_sha256,created_at`,
       [parsed.data.title,reference,pdfSha256,Number(req.user?.sub) || null]);
-    res.status(201).json(created.rows[0]);
+    res.status(201).json({...created.rows[0],id:Number(created.rows[0].id)});
   } catch (error) {
     await removeStoredMedia(reference).catch(() => undefined);
     throw error;
@@ -68,7 +68,7 @@ adminContractsRouter.post('/:id/assign', asyncHandler(async (req, res) => {
     const row = await client.query<{ id: number }>(`INSERT INTO participant_contract_assignments(contract_id,member_id)
       VALUES($1,$2) ON CONFLICT(contract_id,member_id) DO NOTHING RETURNING id`, [contractId,member.rows[0].id]);
     if (!row.rows[0]) throw badRequest('This contract is already assigned to that member.');
-    const assignmentId = row.rows[0].id;
+    const assignmentId = Number(row.rows[0].id);
     await appendContractEvent(client,assignmentId,{ type:'assigned',adminId:Number(req.user?.sub) || undefined,ip:req.ip,userAgent:req.get('user-agent'),data:{ contractId, memberId:member.rows[0].id } });
     await client.query('COMMIT');
     res.status(201).json({ id:assignmentId, memberEmail:member.rows[0].email, status:'pending' });

@@ -19,7 +19,7 @@ const SELECT = `SELECT a.id,a.status,a.assigned_at,a.signed_at,a.signed_name,a.s
 
 memberContractsRouter.get('/contracts', asyncHandler(async (req,res) => {
   const rows = await pool.query(`${SELECT} WHERE a.member_id=$1 ORDER BY a.id DESC`, [memberIdOf(req)]);
-  res.json({ contracts: rows.rows.map(({storage_ref, ...row}) => row), disclosure: ELECTRONIC_CONSENT, intent: SIGNING_INTENT, disclosureVersion: DISCLOSURE_VERSION });
+  res.json({ contracts: rows.rows.map(({storage_ref, ...row}) => ({...row,id:Number(row.id)})), disclosure: ELECTRONIC_CONSENT, intent: SIGNING_INTENT, disclosureVersion: DISCLOSURE_VERSION });
 }));
 
 memberContractsRouter.get('/contracts/:id/file', asyncHandler(async (req,res) => {
