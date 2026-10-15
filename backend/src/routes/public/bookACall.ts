@@ -22,7 +22,8 @@ import { linkContact, recordActivity, upsertContactWithStatus } from "../../serv
 import { publishDomainEvent } from "../../services/domainEvents";
 import { notificationRecipients } from "../../services/notificationRecipients";
 import { asyncHandler } from "../../utils/asyncHandler";
-import { badRequest, notFound } from "../../utils/httpError";
+import { badRequest, notFound, HttpError, serviceUnavailable } from "../../utils/httpError";
+import { tidyCalEnabled, tidyCalBookingType, tidyCalSlots, createTidyCalBooking, cancelTidyCalBooking, TidyCalError } from "../../services/tidyCal";
 
 /**
  * `/api/book-a-call` — Yvette's public calls, booked on this site.
@@ -423,6 +424,7 @@ interface BookingRow {
   updated_at: Date;
   cancelled_at: Date | null;
   call_type_id: number;
+  tidycal_booking_id: number | null;
   type_slug: string;
   type_title: string;
   type_timezone: string;
@@ -433,7 +435,7 @@ interface BookingRow {
 const BOOKING_SELECT = `
   SELECT s.id, s.scheduled_at, s.duration_minutes, s.status, s.meeting_url, s.agenda,
          s.timezone, s.guest_name, s.guest_email, s.answers, s.manage_token,
-         s.created_at, s.updated_at, s.cancelled_at, s.call_type_id,
+         s.created_at, s.updated_at, s.cancelled_at, s.call_type_id, s.tidycal_booking_id,
          t.slug AS type_slug, t.title AS type_title, t.timezone AS type_timezone,
          t.meeting_url AS type_meeting_url, t.location_label AS type_location_label
     FROM coaching_sessions s
@@ -688,7 +690,7 @@ bookACallRouter.get(
       fullDays(row, window.from, window.to),
     ]);
 
-    const slots = computeSlots({
+    let slots = computeSlots({
       rules,
       overrides: overrides.filter((o) => !o.available),
       existingSessions: padSessions(busy, row.padding_minutes),
@@ -700,6 +702,17 @@ bookACallRouter.get(
       now,
       minimumNoticeMinutes: row.min_notice_minutes,
     }).filter((slot) => !full.has(describeInstant(slot.startsAt, zoneOf(row)).day));
+
+    if (tidyCalEnabled()) {
+      try {
+        const typeId = await tidyCalBookingType(row.legacy_slug, row.duration_minutes);
+        const remote = await tidyCalSlots(typeId, window.from, window.to);
+        slots = slots.filter((slot) => remote.has(slot.startsAt.getTime()));
+      } catch (error) {
+        console.error('TidyCal availability unavailable', error instanceof TidyCalError ? error.message : error);
+        throw serviceUnavailable('The booking calendar is temporarily unavailable. Please try again shortly.');
+      }
+    }
 
     res.json({
       call: { slug: row.slug, title: row.title, durationMinutes: row.duration_minutes },
@@ -763,6 +776,8 @@ bookACallRouter.post(
 
     const client = await pool.connect();
     let sessionId: number;
+    let tidycalBookingId: number | null = null;
+    let commitAttempted = false;
     try {
       await client.query("BEGIN");
       await client.query(`SELECT pg_advisory_xact_lock($1, $2)`, [CALENDAR_LOCK_CLASS, CALENDAR_LOCK_KEY]);
@@ -813,11 +828,24 @@ bookACallRouter.post(
         throw badRequest("That day is fully booked for this call. Please pick another day.");
       }
 
+      if (tidyCalEnabled()) {
+        try {
+          const typeId = await tidyCalBookingType(row.legacy_slug, row.duration_minutes);
+          const remote = await tidyCalSlots(typeId, startsAt, new Date(startsAt.getTime() + MINUTE_MS));
+          if (!remote.has(startsAt.getTime())) throw new TidyCalError(409, 'That time has just been taken. Please pick another.');
+          tidycalBookingId = await createTidyCalBooking(typeId, { startsAt, name: input.name, email: input.email, timezone: zone });
+        } catch (error) {
+          if (error instanceof TidyCalError && error.status === 409) throw new HttpError(409, error.message);
+          console.error('TidyCal booking failed', error instanceof TidyCalError ? error.message : error);
+          throw serviceUnavailable('The booking calendar is temporarily unavailable. Please try again shortly.');
+        }
+      }
+
       const inserted = await client.query<{ id: number }>(
         `INSERT INTO coaching_sessions
            (offer_id, member_id, call_type_id, scheduled_at, duration_minutes, status,
-            meeting_url, agenda, timezone, booked_at, guest_name, guest_email, answers, manage_token)
-         VALUES (NULL, NULL, $1, $2, $3, 'scheduled', $4, $5, $6, now(), $7, $8, $9::jsonb, $10)
+            meeting_url, agenda, timezone, booked_at, guest_name, guest_email, answers, manage_token, tidycal_booking_id)
+         VALUES (NULL, NULL, $1, $2, $3, 'scheduled', $4, $5, $6, now(), $7, $8, $9::jsonb, $10, $11)
          RETURNING id`,
         [
           row.id,
@@ -830,12 +858,19 @@ bookACallRouter.post(
           input.email,
           JSON.stringify(answers),
           token,
+          tidycalBookingId,
         ]
       );
       sessionId = inserted.rows[0].id;
+      commitAttempted = true;
       await client.query("COMMIT");
     } catch (err) {
       await client.query("ROLLBACK").catch(() => undefined);
+      if (tidycalBookingId !== null && !commitAttempted) {
+        await cancelTidyCalBooking(tidycalBookingId, 'Boss Clinician booking could not be saved').catch((cancelError) => {
+          console.error('TidyCal compensation failed', tidycalBookingId, cancelError);
+        });
+      }
       throw err;
     } finally {
       client.release();
@@ -977,6 +1012,14 @@ bookACallRouter.post(
     }
 
     const reason = parsed.data.reason ?? "";
+    if (existing.tidycal_booking_id !== null) {
+      try {
+        await cancelTidyCalBooking(existing.tidycal_booking_id, reason || 'Cancelled on Boss Clinician');
+      } catch (error) {
+        console.error('TidyCal cancellation failed', existing.tidycal_booking_id, error);
+        throw serviceUnavailable('We could not cancel this call on the connected calendar. Please try again shortly.');
+      }
+    }
     await pool.query(
       `UPDATE coaching_sessions
           SET status = 'cancelled', cancelled_at = now(), cancel_reason = $2, updated_at = now()
