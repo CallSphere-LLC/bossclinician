@@ -547,6 +547,7 @@ interface LessonContentRow {
   attachment_url: string;
   assessment_slug: string | null;
   tool_key: string | null;
+  tool_config: Record<string, unknown>;
 }
 
 export function neighbour(lesson: MemberLessonView | undefined) {
@@ -651,7 +652,7 @@ memberLibraryRouter.get(
     const [content, files] = await Promise.all([
       pool.query<LessonContentRow>(
         `SELECT l.body_md, l.video_url, l.audio_url, l.embed_html, l.transcript, l.captions_url,
-                l.attachment_url, l.tool_key, a.slug::text AS assessment_slug
+                l.attachment_url, l.tool_key, l.tool_config, a.slug::text AS assessment_slug
            FROM course_lessons l
            LEFT JOIN LATERAL (
              SELECT slug FROM assessments
@@ -723,6 +724,7 @@ memberLibraryRouter.get(
         assessmentSlug: body.assessment_slug,
         // An interactive calculator rendered with the lesson (migration 104).
         toolKey: body.tool_key,
+        toolConfig: body.tool_config,
         // Null when nothing above needed signing. Otherwise the moment the four
         // URLs stop working, so a player left open through a long lesson can
         // reload this response before its source dies mid-sentence.

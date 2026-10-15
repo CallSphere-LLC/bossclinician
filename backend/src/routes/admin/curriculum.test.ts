@@ -4,6 +4,7 @@ import {
   LESSON_FIELDS,
   MODULE_FIELDS,
   assertContentType,
+  assertLessonTool,
   assertPaidMedia,
   dripDateLocal,
   lessonSlug,
@@ -92,7 +93,7 @@ describe("field whitelists", () => {
   });
 
   it("lets through the lesson columns the member player already renders", () => {
-    for (const key of ["contentType", "audioUrl", "commentsEnabled"]) {
+    for (const key of ["contentType", "audioUrl", "commentsEnabled", "toolKey"]) {
       expect(buildUpdate({ [key]: "x" }, LESSON_FIELDS)).not.toBeNull();
     }
   });
@@ -274,5 +275,17 @@ describe("normalizePublishAt (Kajabi \"Scheduled\")", () => {
 
   it("is a writable lesson column", () => {
     expect(LESSON_FIELDS).toContain("publish_at");
+  });
+});
+
+
+describe("custom calculator validation", () => {
+  const config = { title: "Session rate", outputLabel: "Rate", formula: "(x1 + x2) / x3", inputs: [{ label: "Salary", defaultValue: 50000 }, { label: "Expenses", defaultValue: 10000 }, { label: "Sessions", defaultValue: 500 }] };
+  it("accepts a bounded arithmetic definition", () => {
+    expect(() => assertLessonTool({ toolKey: "custom-calculator", toolConfig: config })).not.toThrow();
+  });
+  it("rejects unknown inputs and script-like formulas", () => {
+    expect(() => assertLessonTool({ toolKey: "custom-calculator", toolConfig: { ...config, formula: "x4" } })).toThrow();
+    expect(() => assertLessonTool({ toolKey: "custom-calculator", toolConfig: { ...config, formula: "alert(1)" } })).toThrow();
   });
 });

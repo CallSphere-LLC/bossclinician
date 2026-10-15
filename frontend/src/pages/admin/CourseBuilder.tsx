@@ -46,6 +46,7 @@ import {
   selectStyles,
 } from "@/pages/admin/ui/primitives";
 import { Modal, useConfirm } from "@/pages/admin/ui/Dialog";
+import { CalculatorEditor, DEFAULT_CALCULATOR } from "@/pages/admin/CalculatorEditor";
 import { UploadDropzone } from "@/pages/admin/ui/Uploader";
 import { PUBLISH_LABEL, friendlyError, pluralize } from "@/pages/admin/ui/friendly";
 import {
@@ -87,6 +88,8 @@ interface Drip {
  */
 interface LessonExtras {
   contentType?: string;
+  toolKey?: string | null;
+  toolConfig?: Record<string, unknown>;
   commentsEnabled?: boolean;
   audioUrl?: string;
   embedHtml?: string;
@@ -442,6 +445,8 @@ export default function CourseBuilder() {
       // lesson switched from Drip to Scheduled keeps no stale drip date.
       published: lessonDraft.status !== "draft",
       contentType: lesson.contentType || "text",
+      toolKey: lesson.toolKey || null,
+      toolConfig: lesson.toolConfig ?? {},
       commentsEnabled: lesson.commentsEnabled !== false,
       requiresPreviousLesson: lesson.requiresPreviousLesson === true,
       ...(lessonDraft.status === "drip"
@@ -1025,6 +1030,30 @@ export default function CourseBuilder() {
                 ))}
               </select>
             </Field>
+
+            <Field
+              label="Interactive calculator"
+              hint="Add a calculator below this lesson's text, video, or other content. Students can change the numbers and see the result instantly."
+            >
+              <select
+                className={selectStyles}
+                value={lessonDraft.lesson.toolKey ?? ""}
+                onChange={(e) => updateLesson({ toolKey: e.target.value || null, ...(e.target.value === "custom-calculator" && !lessonDraft.lesson.toolConfig?.title ? { toolConfig: { ...DEFAULT_CALCULATOR } } : {}) })}
+              >
+                <option value="">No calculator</option>
+                {lessonDraft.lesson.toolKey?.startsWith("form-") && (
+                  <option value={lessonDraft.lesson.toolKey}>Attached form: {lessonDraft.lesson.toolKey.slice(5).replaceAll("-", " ")}</option>
+                )}
+                <option value="ramp-up-rate-calculator">Ramp-Up Rate Formula</option>
+                <option value="ramp-up-rate-comparison">Rate comparison</option>
+                <option value="pto-set-aside-calculator">PTO set-aside</option>
+                <option value="custom-calculator">Build my own calculator</option>
+              </select>
+            </Field>
+
+            {lessonDraft.lesson.toolKey === "custom-calculator" && (
+              <CalculatorEditor value={lessonDraft.lesson.toolConfig} onChange={(config) => updateLesson({ toolConfig: config as unknown as Record<string, unknown> })} />
+            )}
 
             {lessonDraft.newAssessmentKind && <p className="rounded-xl border border-hairline bg-panel p-4 text-sm text-ink-soft">
               {lessonDraft.newAssessmentKind === "graded"

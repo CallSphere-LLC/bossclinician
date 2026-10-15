@@ -227,6 +227,7 @@ interface LessonContentRow {
   attachment_url: string;
   assessment_slug: string | null;
   tool_key: string | null;
+  tool_config: Record<string, unknown>;
 }
 
 /**
@@ -260,7 +261,7 @@ adminCoursePreviewRouter.get(
     const [content, files] = await Promise.all([
       pool.query<LessonContentRow>(
         `SELECT l.body_md, l.video_url, l.audio_url, l.embed_html, l.transcript, l.captions_url,
-                l.attachment_url, l.tool_key, a.slug::text AS assessment_slug
+                l.attachment_url, l.tool_key, l.tool_config, a.slug::text AS assessment_slug
            FROM course_lessons l
            LEFT JOIN LATERAL (
              SELECT slug FROM assessments
@@ -337,6 +338,7 @@ adminCoursePreviewRouter.get(
         attachmentUrl: attachment.url,
         assessmentSlug: body.assessment_slug,
         toolKey: body.tool_key,
+        toolConfig: body.tool_config,
         mediaExpiresAt: mediaExpiresAt === null ? null : mediaExpiresAt.toISOString(),
         commentsEnabled: lesson.commentsEnabled,
         notesEnabled: lesson.notesEnabled,

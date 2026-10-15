@@ -1,5 +1,6 @@
 import type { ComponentType } from "react";
 import { LessonForm } from "@/components/player/LessonForm";
+import { CustomCalculator, isCalculatorConfig } from "./CustomCalculator";
 import { PtoSetAsideCalculator } from "./PtoSetAsideCalculator";
 import { RampUpRateCalculator } from "./RampUpRateCalculator";
 import { RampUpRateComparison } from "./RampUpRateComparison";
@@ -21,7 +22,10 @@ export const LESSON_TOOLS: Record<string, ComponentType> = {
  */
 const LESSON_FORM_PREFIX = "form-";
 
-export function LessonTool({ toolKey }: { toolKey: string | null | undefined }) {
+export function LessonTool({ toolKey, toolConfig }: { toolKey: string | null | undefined; toolConfig?: unknown }) {
+  if (toolKey === "custom-calculator") {
+    return isCalculatorConfig(toolConfig) ? <CustomCalculator config={toolConfig} /> : null;
+  }
   if (toolKey?.startsWith(LESSON_FORM_PREFIX) && toolKey.length > LESSON_FORM_PREFIX.length) {
     return <LessonForm slug={toolKey.slice(LESSON_FORM_PREFIX.length)} />;
   }

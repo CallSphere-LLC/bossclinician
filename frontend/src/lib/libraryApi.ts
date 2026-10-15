@@ -260,6 +260,7 @@ export interface UnlockedLesson extends LessonCommon {
   assessmentSlug: string | null;
   /** Key of an interactive tool from components/lesson-tools; null for none. */
   toolKey?: string | null;
+  toolConfig?: Record<string, unknown>;
   /**
    * When the four media URLs above stop working, or null if none needed signing.
    *

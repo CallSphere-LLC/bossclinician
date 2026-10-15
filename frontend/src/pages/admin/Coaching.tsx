@@ -1280,6 +1280,7 @@ function ClientsTab() {
     [setParams],
   );
   const [error, setError] = useState<string | null>(null);
+  const [mobileSearch, setMobileSearch] = useState("");
 
   const load = useCallback(() => {
     setError(null);
@@ -1458,6 +1459,41 @@ function ClientsTab() {
       {error && <LoadProblem message={error} onRetry={load} />}
 
       {!(error && clients === null) && (
+        <>
+        <div className="space-y-4 2xl:hidden">
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <Input aria-label="Search your clients" placeholder="Search your clients…" value={mobileSearch} onChange={(event) => setMobileSearch(event.target.value)} />
+            <select value={programFilter} onChange={(event) => setProgramFilter(event.target.value)} aria-label="Which coaching program to show" className={cn(selectStyles, "min-w-0 sm:max-w-72")}>
+              <option value="">Every program</option>
+              {offers.map((offer) => <option key={offer.id} value={String(offer.id)}>{offer.title}</option>)}
+              {showOutside && <option value={NO_PROGRAM}>Sessions outside a program</option>}
+            </select>
+          </div>
+          <p className="text-xs text-ink-soft">{(rows ?? []).filter((row) => `${row.name} ${row.email} ${row.programs.map((program) => program.title).join(" ")}`.toLowerCase().includes(mobileSearch.toLowerCase())).length} clients</p>
+          {(rows ?? []).filter((row) => `${row.name} ${row.email} ${row.programs.map((program) => program.title).join(" ")}`.toLowerCase().includes(mobileSearch.toLowerCase())).map((row) => {
+            const sessions = sessionsSummary(row);
+            const progress = progressSummary(row);
+            return <article key={row.key} className="min-w-0 rounded-xl border border-hairline bg-surface-raised p-4 shadow-sm">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  {row.contactId ? <Link to={`/admin/contacts/${row.contactId}`} className="block break-words font-semibold text-ink hover:text-plum">{row.name || row.email}</Link> : <strong className="block break-words text-ink">{row.name || row.email}</strong>}
+                  {row.name && <p className="break-all text-xs text-ink-soft">{row.email}</p>}
+                </div>
+                {row.email && <a href={`mailto:${row.email}`} aria-label={`Email ${row.name || row.email}`} className="shrink-0 rounded-lg border border-hairline p-2 text-ink-soft"><Mail className="size-4" /></a>}
+              </div>
+              <div className="mt-3 space-y-1 border-t border-hairline pt-3">
+                {row.programs.map((program) => <p key={program.offerId ?? NO_PROGRAM} className="text-sm text-ink">{program.title ?? "Not part of a program"}{program.source === "kajabi" && <span className="ml-1 text-xs text-ink-soft">· From Kajabi</span>}</p>)}
+              </div>
+              <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
+                <div><dt className="text-xs text-ink-soft">Sessions</dt><dd className="font-semibold text-ink">{sessions.main}</dd>{sessions.note && <dd className="text-xs text-ink-soft">{sessions.note}</dd>}</div>
+                <div><dt className="text-xs text-ink-soft">Progress</dt><dd className="text-ink">{progress}</dd></div>
+                <div><dt className="text-xs text-ink-soft">Next session</dt><dd className="text-ink">{orNone(formatDateTime(row.nextSessionAt), "Nothing booked")}</dd></div>
+                <div><dt className="text-xs text-ink-soft">Joined</dt><dd className="text-ink">{orNone(formatDate(row.joinedAt), "Not known")}</dd></div>
+              </dl>
+            </article>;
+          })}
+        </div>
+        <div className="hidden 2xl:block">
         <DataTable
           columns={columns}
           data={rows}
@@ -1511,6 +1547,8 @@ function ClientsTab() {
             )
           }
         />
+        </div>
+        </>
       )}
     </div>
   );

@@ -28,6 +28,8 @@ export interface CourseLesson {
   videoUrl: string;
   audioUrl: string;
   contentType: string;
+  toolKey: string | null;
+  toolConfig: Record<string, unknown>;
   commentsEnabled: boolean;
   attachmentUrl: string;
   embedHtml: string;
@@ -79,6 +81,8 @@ export const LESSON_FIELDS = [
   "thumbnail_url",
   "requires_previous_lesson",
   "content_type",
+  "tool_key",
+  "tool_config",
   "comments_enabled",
   "duration_minutes",
   "preview",
@@ -165,6 +169,33 @@ export function assertContentType(body: Record<string, unknown>): void {
       continue;
     }
     throw badRequest(`A lesson has to be one of: ${LESSON_CONTENT_TYPES.join(", ")}.`);
+  }
+}
+
+/** Calculator definitions are lesson data; only bounded arithmetic expressions are accepted. */
+const calculatorSchema = z.object({
+  title: z.string().trim().min(1).max(120),
+  outputLabel: z.string().trim().min(1).max(120),
+  unit: z.string().max(20).optional(),
+  formula: z.string().trim().min(1).max(200).regex(/^[0-9x()+*/.\s-]+$/),
+  inputs: z.array(z.object({
+    label: z.string().trim().min(1).max(80),
+    defaultValue: z.number().finite().min(-1_000_000_000).max(1_000_000_000),
+  })).min(1).max(8),
+});
+
+export function assertLessonTool(body: Record<string, unknown>): void {
+  const key = body.toolKey ?? body.tool_key;
+  if (key !== undefined && key !== null && (typeof key !== "string" || key.length > 120)) {
+    throw badRequest("Choose a valid lesson tool.");
+  }
+  if (key === "custom-calculator") {
+    const parsed = calculatorSchema.safeParse(body.toolConfig ?? body.tool_config);
+    if (!parsed.success) throw badRequest("Check the calculator title, inputs, and formula.");
+    const tokens = parsed.data.formula.match(/x\d+/g) ?? [];
+    if (tokens.some((token) => Number(token.slice(1)) < 1 || Number(token.slice(1)) > parsed.data.inputs.length)) {
+      throw badRequest("The formula refers to an input that does not exist.");
+    }
   }
 }
 
@@ -530,6 +561,7 @@ adminCurriculumRouter.post(
     assertPaidMedia(body);
     assertContentType(body);
     assertEmbedHtml(body);
+    assertLessonTool(body);
 
     // Insert takes the schedule too, so the first save of a brand-new lesson
     // keeps what the form was showing rather than dropping it and reopening the
@@ -550,9 +582,9 @@ adminCurriculumRouter.post(
       `INSERT INTO course_lessons
          (module_id, slug, title, body_md, video_url, audio_url, attachment_url, thumbnail_url,
           duration_minutes, preview, published, content_type, comments_enabled,
-          requires_previous_lesson, drip_days, drip_date, embed_html, publish_at, sort)
+          requires_previous_lesson, drip_days, drip_date, embed_html, publish_at, tool_key, tool_config, sort)
        SELECT $1, $11::text,
-              $2, $3, $4, $5, $6, $7, $8, $9, $10, $12, $13, $14, $15, $16, $17, $18,
+              $2, $3, $4, $5, $6, $7, $8, $9, $10, $12, $13, $14, $15, $16, $17, $18, $19, $20::jsonb,
               (SELECT COALESCE(MAX(sort), -1) + 1 FROM course_lessons WHERE module_id = $1)
        RETURNING *`,
       [
@@ -574,6 +606,8 @@ adminCurriculumRouter.post(
         drip.drip_date ?? null,
         body.embedHtml ?? "",
         schedule.publish_at ?? null,
+        body.toolKey ?? null,
+        JSON.stringify(body.toolConfig ?? {}),
       ],
     );
     res.status(201).json(rowToCamel<CourseLesson>(result.rows[0]));
@@ -586,6 +620,7 @@ adminCurriculumRouter.put(
     assertPaidMedia(req.body as Record<string, unknown>);
     assertContentType(req.body as Record<string, unknown>);
     assertEmbedHtml(req.body as Record<string, unknown>);
+    assertLessonTool(req.body as Record<string, unknown>);
 
     const settings = await loadDripSettings();
     const body = normalizePublishAt(normalizeDrip(req.body as Record<string, unknown>, settings), settings);

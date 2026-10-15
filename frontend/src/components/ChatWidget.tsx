@@ -10,6 +10,8 @@ import {
 import { useLocation } from "react-router";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { MessageSquare, Mic } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import type { ChatMessage } from "@/types";
 import type { VoiceSurfacePolicy } from "@/voice/contract";
 import { cn } from "@/lib/cn";
@@ -34,7 +36,7 @@ const ApprovalHost = lazy(() =>
   import("@/voice/ui").then((module) => ({ default: module.ApprovalHost })),
 );
 
-const HISTORY_KEY = "bc_chat_history";
+const historyKey = (surface: VoiceSurfacePolicy["surface"]) => `bc_chat_history_${surface}`;
 
 /**
  * Both readers are guarded rather than left to throw.
@@ -45,9 +47,9 @@ const HISTORY_KEY = "bc_chat_history";
  * fresh conversation, which is the right answer — the alternative is a page
  * that fails to render over a saved chat log.
  */
-function loadHistory(): ChatMessage[] {
+function loadHistory(surface: VoiceSurfacePolicy["surface"]): ChatMessage[] {
   try {
-    const raw = localStorage.getItem(HISTORY_KEY);
+    const raw = localStorage.getItem(historyKey(surface));
     return raw ? (JSON.parse(raw) as ChatMessage[]) : [];
   } catch {
     return [];
@@ -97,7 +99,7 @@ export function ChatWidget() {
   const policy = policyForPath(location.pathname);
 
   const [initialMessages] = useState<ChatMessage[]>(() => {
-    const history = loadHistory();
+    const history = loadHistory(policy.surface);
     return history.length ? history : [{ role: "assistant", content: panelGreeting(policy) }];
   });
 
@@ -141,11 +143,11 @@ export function ChatWidget() {
 
   useEffect(() => {
     try {
-      localStorage.setItem(HISTORY_KEY, JSON.stringify(messages));
+      localStorage.setItem(historyKey(policy.surface), JSON.stringify(messages));
     } catch {
       // A conversation that works matters more than one that survives a reload.
     }
-  }, [messages]);
+  }, [messages, policy.surface]);
 
   useEffect(() => {
     if (open && scrollRef.current) {
@@ -317,16 +319,16 @@ export function ChatWidget() {
                     key={i}
                     className={cn("flex", m.role === "user" ? "justify-end" : "justify-start")}
                   >
-                    <p
+                    <div
                       className={cn(
-                        "max-w-[85%] min-w-0 break-words whitespace-pre-wrap rounded-2xl px-4 py-2.5 text-sm leading-relaxed",
+                        "max-w-[85%] min-w-0 break-words rounded-2xl px-4 py-2.5 text-sm leading-relaxed [&_p+*]:mt-2 [&_ul]:list-disc [&_ul]:pl-4 [&_ol]:list-decimal [&_ol]:pl-4 [&_a]:underline",
                         m.role === "user"
                           ? "chat-user-message bg-plum-bright/25 text-white ring-1 ring-inset ring-plum-bright/30"
                           : "chat-assistant-message bg-ink/[0.05] text-orchid ring-1 ring-inset ring-ink/[0.07]",
                       )}
                     >
-                      {m.content}
-                    </p>
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.content}</ReactMarkdown>
+                    </div>
                   </div>
                 ))}
                 {streamingReply && (

@@ -37,7 +37,7 @@ export function LessonBody({ lesson, courseImage, onSaved }: LessonBodyProps) {
   return (
     <div className="flex flex-col gap-8">
       {lesson.bodyMd.trim() || lesson.contentType !== "text" ? content : null}
-      <LessonTool toolKey={lesson.toolKey} />
+      <LessonTool toolKey={lesson.toolKey} toolConfig={lesson.toolConfig} />
     </div>
   );
 }
