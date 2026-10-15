@@ -47,6 +47,7 @@ const MemberCommunityLive = lazy(() => import("@/pages/member/CommunityLive"));
 const MemberEvents = lazy(() => import("@/pages/member/Events"));
 const MemberCommunityMessages = lazy(() => import("@/pages/member/CommunityMessages"));
 const MemberCoaching = lazy(() => import("@/pages/member/Coaching"));
+const MemberContracts = lazy(() => import("@/pages/member/Contracts"));
 const MemberCoachingSession = lazy(() => import("@/pages/member/CoachingSession"));
 const MemberPodcasts = lazy(() => import("@/pages/member/Podcasts"));
 const MemberNewsletters = lazy(() => import("@/pages/member/Newsletters"));
@@ -274,6 +275,7 @@ function memberRoutes() {
         />
         <Route path="/community/:slug/:channelSlug" element={<MemberCommunityChannel />} />
         <Route path="/coaching" element={<MemberCoaching />} />
+        <Route path="/contracts" element={<MemberContracts />} />
         <Route path="/coaching/sessions/:id" element={<MemberCoachingSession />} />
         <Route path="/podcasts" element={<MemberPodcasts />} />
         <Route path="/partners/dashboard" element={<MemberAffiliatePortal />} />

@@ -47,6 +47,7 @@ import { adminAvailabilityRouter } from "./availability";
 import { adminMarketingOverviewRouter } from "./marketingOverview";
 import { adminCoachingSessionFilesRouter } from "./coachingSessionFiles";
 import { adminCoachingProgramsRouter } from "./coachingPrograms";
+import { adminContractsRouter } from "./contracts";
 import { adminAuditLogRouter } from "./auditLog";
 import { adminContactAccessRouter } from "./contactAccess";
 import { adminPurchasesRouter } from "./purchases";
@@ -185,6 +186,7 @@ adminRouter.use("/media", requireAuth, moduleGate("website"), adminMediaRouter);
 adminRouter.use("/curriculum", requireAuth, moduleGate("products"), adminCurriculumRouter);
 adminRouter.use("/coaching", requireAuth, moduleGate("coaching"), adminCoachingSessionFilesRouter);
 adminRouter.use("/coaching", requireAuth, moduleGate("coaching"), adminCoachingProgramsRouter);
+adminRouter.use("/contracts", requireAuth, moduleGate("coaching"), adminContractsRouter);
 adminRouter.use("/audit-log", requireAuth, requirePermission("admins.view"), adminAuditLogRouter);
 // The concierge's conversations, held to the same permission as the activity
 // log: they carry what customers said in their own words, and the audit of what

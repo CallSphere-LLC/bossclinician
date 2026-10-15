@@ -80,6 +80,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { to: "/admin/products", label: "All Products", ready: true },
       { to: "/admin/courses", label: "Courses", ready: true },
       { to: "/admin/coaching", label: "Coaching", ready: true },
+      { to: "/admin/contracts", label: "Contracts", ready: true },
       { to: "/admin/community", label: "Community", ready: true },
       { to: "/admin/podcasts", label: "Podcasts", ready: true },
       { to: "/admin/newsletters", label: "Newsletters", ready: true },

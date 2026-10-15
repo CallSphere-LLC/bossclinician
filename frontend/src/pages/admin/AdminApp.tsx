@@ -69,6 +69,7 @@ import PagesAdmin from "@/pages/admin/PagesAdmin";
 import Reports from "@/pages/admin/Reports";
 import Availability from "@/pages/admin/Availability";
 import MarketingOverview from "@/pages/admin/MarketingOverview";
+import Contracts from "@/pages/admin/Contracts";
 
 import EmailLog from "@/pages/admin/EmailLog";
 import AdminNotFound, { AliasFirst } from "@/pages/admin/AdminNotFound";
@@ -116,6 +117,7 @@ function ProtectedRoutes() {
         <Route path="/community/:id" element={<CommunityDetail />} />
         <Route path="/media" element={<MediaLibrary />} />
         <Route path="/coaching" element={<Coaching />} />
+        <Route path="/contracts" element={<Contracts />} />
         <Route path="/podcasts" element={<Podcasts />} />
         <Route path="/newsletters" element={<Newsletters />} />
 

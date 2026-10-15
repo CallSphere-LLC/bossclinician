@@ -6,6 +6,7 @@ import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { Toaster } from "sonner";
 import {
   BookOpen,
+  FileSignature,
   CalendarDays,
   ChevronDown,
   Eye,
@@ -59,6 +60,7 @@ const RAIL: RailLink[] = [
   { to: "/library", label: "Library", icon: BookOpen },
   { to: "/community", label: "Community", icon: Users },
   { to: "/coaching", label: "Coaching", icon: Sparkles },
+  { to: "/contracts", label: "Contracts", icon: FileSignature },
   // Between coaching and account, because it is a thing you attend rather than
   // a setting you change.
   { to: "/my-events", label: "Events", icon: CalendarDays },
