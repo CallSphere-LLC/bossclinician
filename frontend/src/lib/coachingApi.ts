@@ -100,7 +100,21 @@ export interface CoachingOverview {
   packages: CoachingPackage[];
   upcoming: CoachingSession[];
   past: CoachingSession[];
+  /**
+   * One-to-one programmes the member holds that have lessons — worksheets and
+   * tools that open in the library's player. Optional so an older server's
+   * answer still reads as "none".
+   */
+  programs?: CoachingProgramMaterials[];
   policy: CoachingPolicy;
+}
+
+export interface CoachingProgramMaterials {
+  productSlug: string;
+  title: string;
+  lessonCount: number;
+  /** The programme's page in the member library, e.g. /library/the-boss-boardroom. */
+  href: string;
 }
 
 export interface CoachingSlot {

@@ -118,25 +118,21 @@ export const exploreMenu: NavMenu = {
       to: "/resource-hub",
       description: "Free tools for where your practice is now, including the income calculator.",
     },
-    {
-      label: "Retreats",
-      to: "/retreats",
-      description: "A luxury wellness retreat for women mental health professionals.",
-    },
   ],
 };
 
-// About first, then the two groups, then the Blog — the order and the grouping
-// of the source site's own menu. The Blog is a bar item rather than a row
-// inside Explore: it is the one thing here a reader returns to on its own
-// schedule, and a destination someone comes back for should not cost a hover
-// to find. The four pages the menu does not carry (Contact, Store, Free
-// Resources, the Practice Quiz) are reached from the footer, which lists every
-// one of them, and from the pages that sell them.
+// About first, then the two groups, then Retreats and the Blog. The Blog is a
+// bar item rather than a row inside Explore: it is the one thing here a reader
+// returns to on its own schedule, and a destination someone comes back for
+// should not cost a hover to find. Retreats moved out of Explore into the bar
+// at the owner's request (QA sheet row 98, 15 Oct). The pages the menu does not
+// carry (Contact, Store, Free Resources, the Practice Quiz) are reached from
+// the footer and from the pages that sell them.
 export const nav: NavEntry[] = [
   { label: "About", to: "/about" },
   workWithMeMenu,
   exploreMenu,
+  { label: "Retreats", to: "/retreats" },
   { label: "Blog", to: "/blog" },
 ];
 
@@ -156,26 +152,24 @@ export const footer = {
     { label: "Store", to: "/store" },
     { label: "Contact", to: "/contact" },
   ] satisfies NavLinkItem[],
-  // The source footer's resource list, under the source's labels. The four
-  // funnels that have not been rebuilt here (assessment, audit, marketing plan,
-  // hiring quiz) point at the Resource Hub, whose cards describe them and which
-  // is the closest page this site has; the offer quiz goes where the redirect
-  // map sends /offer-quiz. No #section anchors: Layout scrolls to the top on a
-  // path change and nothing scrolls to a hash, so an anchor would be a promise
-  // the page does not keep.
+  // The source footer's "Free Resources" list as of 15 Oct 2026, under its
+  // labels (the two free trainings, then the Resource Hub), followed by the
+  // free tools her Resource Hub footer lists, each at its own rebuilt page.
   resourceLinks: [
+    { label: "Club: Free Practice Prep Training", to: "/practicepreptraining" },
+    { label: "Lounge: Free Masterclass", to: "/freedom-masterclass" },
     { label: "Resource Hub", to: "/resource-hub" },
-    { label: "Free Masterclass", to: "/freedom-masterclass" },
-    { label: "Offer Quiz", to: "/practice-quiz" },
-    { label: "Group Practice Assessment", to: "/resource-hub" },
-    { label: "5-Step Marketing Plan", to: "/resource-hub" },
-    { label: "Hiring Readiness Quiz", to: "/resource-hub" },
+    { label: "5-Step Marketing Plan", to: "/5-step-marketing" },
+    { label: "Group Practice Assessment", to: "/boss-assessment" },
+    { label: "Hiring Readiness Quiz", to: "/hiring-quiz" },
   ] satisfies NavLinkItem[],
   legalLinks: [
     { label: "Privacy Policy", to: "/privacy-policy" },
     { label: "Terms of Use", to: "/terms" },
     { label: "Financial Disclaimer", to: "/financial-disclaimer" },
     { label: "Disclaimer", to: "/disclaimer" },
+    { label: "Cookie Policy", to: "/cookie-policy" },
+    { label: "Accessibility", to: "/accessibility" },
   ],
   instagram: "https://instagram.com/bossclinician",
   instagramHandle: "@bossclinician",

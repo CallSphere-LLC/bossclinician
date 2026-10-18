@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router";
 import { motion } from "motion/react";
 import { Seo } from "@/components/Seo";
+import { ConsentGate } from "@/components/consent/ConsentGate";
 import { QuoteCard, rise } from "@/components/home/luxe/ProgramSections";
 import { GlassCard } from "@/components/luxe/GlassCard";
 import { LuxeButton } from "@/components/luxe/LuxeButton";
@@ -35,7 +36,8 @@ async function loadMasterclassSettings(): Promise<MasterclassSettings> {
  * client's words. The video is hers to set without a developer: Settings → Your
  * website → Free masterclass → "Masterclass video". Until she does, Step 2 shows
  * the masterclass cover and says the video is coming soon, never an empty
- * player.
+ * player. Migration 122 sets it to the recording she shared on 15 Oct (her
+ * Descript video, served from the Media Library) where nothing was set.
  *
  * Client-rendered only (not in render.ts) and noindex: it greets the visitor by
  * the name in the query string, which is theirs, not a crawler's. The name is
@@ -192,6 +194,7 @@ function Player({ video }: { video: PlayableVideo }) {
   const { poster } = w.step2;
 
   if (video.kind === "file") {
+    const captions = video.src === w.step2.captions.forSrc ? w.step2.captions.src : null;
     return (
       <div className={frame}>
         {/* No autoplay: a 60-minute talk starting with sound is not a welcome. */}
@@ -203,23 +206,30 @@ function Player({ video }: { video: PlayableVideo }) {
           preload="metadata"
           title={w.step2.videoTitle}
           className="size-full bg-black object-contain"
-        />
+        >
+          {captions && <track kind="captions" src={captions} srcLang="en" label="English" />}
+        </video>
       </div>
     );
   }
 
   if (video.kind === "frame") {
+    // A provider's player (YouTube, Vimeo, Loom, Wistia) sets that provider's
+    // cookies, so it waits for consent to embedded content. A file from the
+    // Media Library (above) needs none.
     return (
-      <div className={frame}>
-        <iframe
-          src={video.src}
-          title={w.step2.videoTitle}
-          allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
-          allowFullScreen
-          referrerPolicy="strict-origin-when-cross-origin"
-          className="size-full border-0"
-        />
-      </div>
+      <ConsentGate category="media" what="the masterclass video" className="aspect-video w-full">
+        <div className={frame}>
+          <iframe
+            src={video.src}
+            title={w.step2.videoTitle}
+            allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
+            allowFullScreen
+            referrerPolicy="strict-origin-when-cross-origin"
+            className="size-full border-0"
+          />
+        </div>
+      </ConsentGate>
     );
   }
 

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router";
 import {
+  BookOpen,
   CalendarClock,
   ChevronRight,
   Clock,
@@ -19,6 +20,7 @@ import {
   coachingApi,
   type CoachingOverview,
   type CoachingPackage,
+  type CoachingProgramMaterials,
   type CoachingSession,
 } from "@/lib/coachingApi";
 import { cn } from "@/lib/cn";
@@ -65,6 +67,7 @@ export default function Coaching() {
 
   const viewingAsAdmin = member?.impersonatedBy != null;
   const hasPackages = (overview?.packages.length ?? 0) > 0;
+  const programs = overview?.programs ?? [];
   const bookable = overview?.packages.filter((row) => row.canBook && row.offerSlug !== null) ?? [];
 
   return (
@@ -96,8 +99,27 @@ export default function Coaching() {
             deviceTimezone={deviceTimezone}
           />
 
+          {programs.length > 0 && (
+            <section aria-labelledby="programs-heading">
+              <h2 id="programs-heading" className="font-display text-xl text-white">
+                Your program materials
+              </h2>
+              <ul className="mt-4 grid gap-3 sm:grid-cols-2">
+                {programs.map((program) => (
+                  <li key={program.productSlug}>
+                    <ProgramCard program={program} />
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
           {!hasPackages && overview.upcoming.length === 0 && overview.past.length === 0 ? (
-            <NoCoachingYet />
+            // Someone whose only coaching is a programme's materials has the
+            // section above; telling them they have no coaching would be wrong.
+            programs.length > 0 ? null : (
+              <NoCoachingYet />
+            )
           ) : (
             <>
               {overview.upcoming.length > 0 && (
@@ -211,6 +233,36 @@ function UpcomingCard({ session, timezone }: { session: CoachingSession; timezon
           <LuxeButton to={`/coaching/sessions/${session.id}`} variant="glass" size="sm">
             Details
           </LuxeButton>
+        </div>
+      </div>
+    </GlassCard>
+  );
+}
+
+/* ── Program materials ──────────────────────────────────────────────────── */
+
+/** A one-to-one programme's workbook: its lessons open in the library player. */
+function ProgramCard({ program }: { program: CoachingProgramMaterials }) {
+  return (
+    <GlassCard spotlight={false} interactive={false} className="h-full p-5 sm:p-6">
+      <div className="flex items-start gap-4">
+        <span
+          aria-hidden
+          className="grid size-11 shrink-0 place-items-center rounded-full border border-gold/25 bg-gold/[0.08]"
+        >
+          <BookOpen className="size-5 text-gold" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <h3 className="font-display text-lg text-white">{program.title}</h3>
+          <p className="mt-1 text-sm text-orchid-dim">
+            <span className="font-bold tabular-nums">{program.lessonCount}</span>{" "}
+            {program.lessonCount === 1 ? "lesson" : "lessons"}
+          </p>
+          <div className="mt-4">
+            <LuxeButton to={program.href} variant="glass" size="sm">
+              Open materials
+            </LuxeButton>
+          </div>
         </div>
       </div>
     </GlassCard>

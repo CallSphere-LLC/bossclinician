@@ -99,20 +99,14 @@ assessmentsPublicRouter.post(
     if (assessment.lesson_id !== null) await assertLessonAssessmentAccess(req.member?.id, assessment.lesson_id);
     let memberIdentity: { contact_id: number | null; name: string } | null = null;
     if (req.member && assessment.lesson_id !== null) {
+      // Entitlement, lock and drip were all proven by assertLessonAssessmentAccess
+      // above, through the same hasCourseAccess the player uses. The old inline
+      // check here only counted a direct course-product grant, so a member whose
+      // access came another way could open a quiz and then get "Quiz not found"
+      // on submit.
       const owned = await pool.query<{ contact_id: number | null; name: string }>(
-        `SELECT m.contact_id, m.name
-           FROM members m
-          WHERE m.id = $1
-            AND EXISTS (
-              SELECT 1
-                FROM course_lessons l
-                JOIN course_modules cm ON cm.id = l.module_id
-                JOIN products p ON p.kind = 'course' AND p.course_id = cm.course_id
-                JOIN access_grants g ON g.product_id = p.id AND g.member_id = m.id
-               WHERE l.id = $2 AND g.status = 'active'
-                 AND (g.expires_at IS NULL OR g.expires_at > now())
-            )`,
-        [req.member.id, assessment.lesson_id],
+        `SELECT contact_id, name FROM members WHERE id = $1`,
+        [req.member.id],
       );
       memberIdentity = owned.rows[0] ?? null;
       if (!memberIdentity) throw notFound("Quiz not found");

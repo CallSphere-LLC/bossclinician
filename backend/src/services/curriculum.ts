@@ -1,6 +1,6 @@
 import type { PoolClient } from "pg";
 import { pool } from "../db/pool";
-import { hasCourseAccess } from "./access";
+import { PRODUCT_CONTENT_COURSE_ID, hasCourseAccess } from "./access";
 import {
   DEFAULT_DRIP_SETTINGS,
   describeScheduled,
@@ -605,12 +605,13 @@ export async function loadCourseGrantTimes(
   if (courseIds.length === 0) return out;
 
   const res = await pool.query<{ course_id: number; granted_at: Date }>(
-    `SELECT p.course_id, MIN(g.granted_at) AS granted_at
+    // A coaching programme's workbook course counts too (see access.ts).
+    `SELECT ${PRODUCT_CONTENT_COURSE_ID} AS course_id, MIN(g.granted_at) AS granted_at
        FROM access_grants g
        JOIN products p ON p.id = g.product_id
-      WHERE g.member_id = $1 AND p.course_id = ANY($2::int[]) AND g.status = 'active'
+      WHERE g.member_id = $1 AND ${PRODUCT_CONTENT_COURSE_ID} = ANY($2::int[]) AND g.status = 'active'
         AND (g.expires_at IS NULL OR g.expires_at > now())
-      GROUP BY p.course_id`,
+      GROUP BY 1`,
     [memberId, courseIds]
   );
 

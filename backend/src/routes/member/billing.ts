@@ -20,6 +20,12 @@ import {
   type ReceiptDocument,
 } from "../../services/receiptDocument";
 import { CardUpdateError, adoptSavedCard } from "../../services/billingPortal";
+import {
+  activatePayPalSubscription,
+  cancelPayPalSubscription,
+  paypalConfig,
+  suspendPayPalSubscription,
+} from "../../services/paypalClient";
 import { signReceiptLink, type ReceiptLinkTarget } from "../../services/receiptLinks";
 
 /**
@@ -1001,6 +1007,8 @@ interface OwnedSubscriptionRow {
   id: number;
   status: string;
   stripe_subscription_id: string | null;
+  /** Set instead of the Stripe id for a membership billed by PayPal. */
+  paypal_subscription_id: string | null;
   cancel_at_period_end: boolean;
   paused_at: Date | null;
   ended_at: Date | null;
@@ -1012,7 +1020,7 @@ async function loadOwnedSubscription(
   subscriptionId: number
 ): Promise<OwnedSubscriptionRow> {
   const found = await pool.query<OwnedSubscriptionRow>(
-    `SELECT id, status, stripe_subscription_id, cancel_at_period_end, paused_at, ended_at
+    `SELECT id, status, stripe_subscription_id, paypal_subscription_id, cancel_at_period_end, paused_at, ended_at
        FROM subscriptions WHERE id = $1 AND member_id = $2`,
     [subscriptionId, memberId]
   );
@@ -1041,6 +1049,10 @@ async function readSubscription(memberId: number, subscriptionId: number): Promi
  */
 function assertStripeReachable(row: OwnedSubscriptionRow): void {
   if (row.stripe_subscription_id !== null && !stripeEnabled()) {
+    throw serviceUnavailable("Billing changes are temporarily unavailable. Please try again later.");
+  }
+  // The same rule for a PayPal membership: no credentials, no local-only edit.
+  if (row.paypal_subscription_id !== null && paypalConfig() === null) {
     throw serviceUnavailable("Billing changes are temporarily unavailable. Please try again later.");
   }
 }
@@ -1101,6 +1113,13 @@ memberBillingRouter.post(
     assertStillLive(row);
     assertStripeReachable(row);
 
+    if (row.paypal_subscription_id !== null) {
+      // PayPal has no "cancel at period end": cancelling stops every future
+      // charge now. Access still runs to the end of the period already paid
+      // for — the BILLING.SUBSCRIPTION.CANCELLED webhook clips the grants to
+      // current_period_end exactly as a Stripe period-end cancellation does.
+      await cancelPayPalSubscription(row.paypal_subscription_id, `Cancelled by member: ${reason}`);
+    }
     if (row.stripe_subscription_id !== null) {
       await stripe().subscriptions.update(row.stripe_subscription_id, {
         cancel_at_period_end: true,
@@ -1165,6 +1184,10 @@ memberBillingRouter.post(
     }
     assertStripeReachable(row);
 
+    if (row.paypal_subscription_id !== null) {
+      // Suspending stops PayPal billing until it is activated again.
+      await suspendPayPalSubscription(row.paypal_subscription_id, "Paused by member");
+    }
     if (row.stripe_subscription_id !== null) {
       await stripe().subscriptions.update(row.stripe_subscription_id, {
         // 'void' rather than 'keep_as_draft': the skipped invoices are never
@@ -1202,6 +1225,9 @@ memberBillingRouter.post(
     }
     assertStripeReachable(row);
 
+    if (row.paypal_subscription_id !== null) {
+      await activatePayPalSubscription(row.paypal_subscription_id, "Resumed by member");
+    }
     if (row.stripe_subscription_id !== null) {
       // The empty string is how the Stripe API clears the field; null would be
       // sent as the literal string "null" in a form-encoded body.
@@ -1395,6 +1421,11 @@ memberBillingRouter.post(
     if (!row.cancel_at_period_end) {
       res.json(await readSubscription(member.id, subscriptionId));
       return;
+    }
+    if (row.paypal_subscription_id !== null) {
+      // A cancelled PayPal subscription cannot be restarted; billing has
+      // already stopped. Saying so beats showing "kept" while nothing renews.
+      throw badRequest("PayPal subscriptions can't be restarted once cancelled. You keep access until the end of this period, and you can subscribe again from the checkout page.");
     }
     assertStripeReachable(row);
 

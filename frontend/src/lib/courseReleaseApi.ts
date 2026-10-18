@@ -45,6 +45,19 @@ export interface CourseCertificateSettings {
   }[];
 }
 
+/** One certificate issued for a course, as GET /admin/curriculum/:id/certificates lists it. */
+export interface IssuedCertificate {
+  id: number;
+  memberId: number;
+  recipientName: string;
+  email: string | null;
+  verificationCode: string;
+  completedAt: string;
+  issuedAt: string;
+  /** Set when the certificate was withdrawn; it then fails verification. */
+  revokedAt: string | null;
+}
+
 export const courseReleaseApi = {
   /** Lock (or unlock) every lesson of the course behind the one before it. */
   lockSequence: (courseId: number, locked: boolean) =>
@@ -54,6 +67,10 @@ export const courseReleaseApi = {
     }),
 
   certificate: (courseId: number) => call<CourseCertificateSettings>(`/${courseId}/certificate`),
+
+  /** Every certificate this course has issued, newest first. */
+  issuedCertificates: (courseId: number) =>
+    call<{ certificates: IssuedCertificate[] }>(`/${courseId}/certificates`),
 
   saveCertificate: (
     courseId: number,

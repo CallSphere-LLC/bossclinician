@@ -6,6 +6,7 @@ import { GlassCard } from "@/components/luxe/GlassCard";
 import { LuxeButton } from "@/components/luxe/LuxeButton";
 import { RevealGroup, RevealItem } from "@/components/ui/Reveal";
 import { cn } from "@/lib/cn";
+import { MASTERCLASS_ROUTE } from "@/lib/masterclass";
 
 type OfferAccent = "green" | "plum" | "gold";
 
@@ -20,6 +21,8 @@ interface Offer {
   cta: string;
   /** Internal route of the offer's own sales page. */
   to: string;
+  /** The free training under the main button (her Club and Lounge cards). */
+  secondary?: { label: string; to: string };
   accent: OfferAccent;
 }
 
@@ -31,34 +34,37 @@ const QUIZ_HREF = "/practice-quiz";
 
 /**
  * Each programme has its own sales page — /club and /lounge, as on the source
- * site, and /boardroom, Yvette's page for the mastermind. "Explore" goes to the
- * top of that page rather than to its application: this card introduces the
- * room, and the page makes the case before it asks.
+ * site, and /boardroom, Yvette's page for the mastermind (its application is at
+ * the foot of that page). Copy as on her home page of 15 Oct 2026, which also
+ * put each programme's free training under its button: the Practice Prep
+ * Training for the Club, the Freedom Masterclass for the Lounge.
  */
 const OFFERS: readonly Offer[] = [
   {
-    ribbon: "6-MONTH COACHING PROGRAM",
+    ribbon: "6-MONTH PROGRAM",
     name: "The Club",
     tagline: "Build a private practice you won't have to undo later.",
     desc: [
-      "A structured 6-month program designed to help practice owners strengthen operations, leadership, growth, and profitability with ongoing coaching and accountability.",
+      "For clinicians building their foundation, attracting clients, and learning how to run the business side of private practice with more confidence and less guessing.",
     ],
     audience: "For: The clinician building or rebuilding",
     cta: "Explore the Club",
     to: "/club",
+    secondary: { label: "Watch the Free Training", to: "/practicepreptraining" },
     accent: "green",
   },
   {
-    ribbon: "MONTHLY MEMBERSHIP",
+    ribbon: "MEMBERSHIP",
     name: "The Lounge",
     tagline: "Make the practice you already built work better for the life you actually want.",
     desc: [
-      "A flexible monthly membership offering ongoing business support, resources, training, and community for clinicians building and growing their practices.",
+      "For established clinicians whose practice is full or nearly full, but still requires more time, energy, or clinical output than they want to maintain long-term.",
       "Strengthen your income model, reduce how much the practice depends on your maximum capacity, build better systems, and create more room for the life and future you actually want.",
     ],
     audience: "For: The Maxed Out Clinician",
     cta: "Explore the Lounge",
     to: "/lounge",
+    secondary: { label: "Watch the Free Masterclass", to: MASTERCLASS_ROUTE },
     accent: "plum",
   },
   {
@@ -66,10 +72,10 @@ const OFFERS: readonly Offer[] = [
     name: "The Boardroom",
     tagline: "Build a practice that can grow beyond you.",
     desc: [
-      "An advanced mastermind for established practice owners who want higher-level strategy, peer collaboration, accountability, and support with scaling their business.",
+      "For group-practice owners and scaling clinicians who need stronger leadership, team systems, and CEO-level decision-making as the business becomes bigger than one person.",
     ],
     audience: "For: The Stretched Thin Clinician",
-    cta: "Explore the Boardroom",
+    cta: "Apply for The Boardroom",
     to: "/boardroom",
     accent: "gold",
   },
@@ -195,6 +201,19 @@ export function LuxeOffers() {
                   >
                     {offer.cta}
                   </LuxeButton>
+                  {offer.secondary && (
+                    <LuxeButton
+                      variant="glass"
+                      size="sm"
+                      to={offer.secondary.to}
+                      className="mt-3 min-h-[44px] w-full"
+                    >
+                      <svg viewBox="0 0 16 16" aria-hidden className="h-3 w-3" fill="currentColor">
+                        <path d="M4.8 3.1 12.6 8l-7.8 4.9Z" />
+                      </svg>
+                      {offer.secondary.label}
+                    </LuxeButton>
+                  )}
                 </div>
               </GlassCard>
             </RevealItem>

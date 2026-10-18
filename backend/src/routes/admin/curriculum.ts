@@ -788,6 +788,31 @@ async function loadCertificateSettings(courseId: number) {
   };
 }
 
+/**
+ * GET /admin/curriculum/:courseId/certificates
+ *
+ * Every certificate issued for this course, newest first: who, when, and the
+ * verification code a board would type in. Revoked ones stay listed and say so.
+ */
+adminCurriculumRouter.get(
+  "/:courseId/certificates",
+  asyncHandler(async (req, res) => {
+    const courseId = Number(req.params.courseId);
+    if (!Number.isInteger(courseId) || courseId <= 0) throw notFound("Course not found");
+    const issued = await pool.query(
+      `SELECT c.id, c.member_id, c.recipient_name, m.email::text AS email,
+              c.verification_code, c.completed_at, c.issued_at, c.revoked_at
+         FROM certificates c
+         LEFT JOIN members m ON m.id = c.member_id
+        WHERE c.course_id = $1
+        ORDER BY c.issued_at DESC, c.id DESC
+        LIMIT 500`,
+      [courseId],
+    );
+    res.json({ certificates: rowsToCamel(issued.rows) });
+  }),
+);
+
 adminCurriculumRouter.delete(
   "/lessons/:id",
   asyncHandler(async (req, res) => {

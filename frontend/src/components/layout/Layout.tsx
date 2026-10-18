@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { Header } from "./Header";
 import { Footer } from "./Footer";
 import { FloatingCall } from "@/components/community/FloatingCall";
+import { CookieConsent } from "@/components/consent/CookieConsent";
 import { cn } from "@/lib/cn";
 
 /**
@@ -49,10 +50,15 @@ export function Layout({ children }: { children: ReactNode }) {
         Skip to main content
       </a>
       {!chromeless && <Header transparentAtTop={transparentHeader} />}
-      <main id="main-content" className="flex-1">
+      {/* tabIndex -1 so the skip link moves keyboard focus here, not only the
+          scroll position (Safari and older Chrome do not otherwise). */}
+      <main id="main-content" tabIndex={-1} className="flex-1 focus:outline-none">
         {children}
       </main>
       {!chromeless && <Footer />}
+      {/* Cookie banner and preferences (lib/consent.ts). On every public page,
+          the chromeless link hub included: it is still this site. */}
+      <CookieConsent />
       {/* A community call in progress follows the member onto the public pages too. */}
       <FloatingCall />
     </div>

@@ -205,6 +205,13 @@ export const watchNow = {
       "Keep this page bookmarked — the video will play right here. Start with your action guide in the meantime.",
     openLabel: "Watch the Masterclass",
     videoTitle: "The Freedom Masterclass with Yvette Howard, LCSW",
+    // English captions for the recording migration 122 sets (her Descript
+    // video's own transcript). Used only while that exact file is the video;
+    // a different video set in Settings plays without them.
+    captions: {
+      forSrc: "/uploads/landing-freedom-masterclass-720p.mp4",
+      src: "/captions/freedom-masterclass.en.vtt",
+    },
   },
   lounge: {
     question:

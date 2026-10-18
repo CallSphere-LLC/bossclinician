@@ -3,6 +3,7 @@ import { pool } from "../../db/pool";
 import { rowsToCamel } from "../../utils/case";
 import { asyncHandler } from "../../utils/asyncHandler";
 import { badRequest, notFound } from "../../utils/httpError";
+import { recordAdminAction } from "../../services/adminAudit";
 
 /**
  * What a coaching program is sold through. Mounted at /admin/coaching.
@@ -116,5 +117,151 @@ adminCoachingProgramsRouter.get(
       [programId],
     );
     res.json(rowsToCamel<CoachingProgramOffer>(result.rows));
+  }),
+);
+
+/* ------------------------------------------------------------ programme content */
+
+/**
+ * A coaching programme's lessons: the workbook course its product opens
+ * (`products.legacy_course_id`, migration 120). The course row is kept out of
+ * the admin Courses list, so this is where it is found and edited from — the
+ * owner moved the one-to-one programmes "over to the coaching area" (QA row 99).
+ */
+export type CoachingProgramContent = {
+  /** The coaching product that grants the programme; null when none does yet. */
+  productId: number | null;
+  productSlug: string | null;
+  course: {
+    id: number;
+    title: string;
+    moduleCount: number;
+    lessonCount: number;
+    publishedLessonCount: number;
+  } | null;
+};
+
+async function loadProgramContent(programId: number): Promise<CoachingProgramContent> {
+  const program = await pool.query(`SELECT 1 FROM coaching_offers WHERE id = $1`, [programId]);
+  if (program.rowCount === 0) throw notFound("Coaching program not found");
+
+  // The live product first: an archived one granted it once but sells nothing now.
+  const result = await pool.query<{
+    product_id: number;
+    product_slug: string;
+    course_id: number | null;
+    course_title: string | null;
+    module_count: number;
+    lesson_count: number;
+    published_lesson_count: number;
+  }>(
+    `SELECT p.id AS product_id, p.slug AS product_slug, c.id AS course_id, c.title AS course_title,
+            (SELECT COUNT(*)::int FROM course_modules m WHERE m.course_id = c.id) AS module_count,
+            (SELECT COUNT(*)::int FROM course_lessons l JOIN course_modules m ON m.id = l.module_id
+              WHERE m.course_id = c.id) AS lesson_count,
+            (SELECT COUNT(*)::int FROM course_lessons l JOIN course_modules m ON m.id = l.module_id
+              WHERE m.course_id = c.id AND l.published) AS published_lesson_count
+       FROM products p
+       LEFT JOIN courses c ON c.id = p.legacy_course_id
+      WHERE p.kind = 'coaching' AND p.coaching_offer_id = $1
+      ORDER BY (p.status = 'archived'), (c.id IS NULL), p.id
+      LIMIT 1`,
+    [programId],
+  );
+  const row = result.rows[0];
+  if (!row) return { productId: null, productSlug: null, course: null };
+  return {
+    productId: row.product_id,
+    productSlug: row.product_slug,
+    course:
+      row.course_id === null
+        ? null
+        : {
+            id: row.course_id,
+            title: row.course_title ?? "",
+            moduleCount: row.module_count,
+            lessonCount: row.lesson_count,
+            publishedLessonCount: row.published_lesson_count,
+          },
+  };
+}
+
+/** GET /programs/:id/content */
+adminCoachingProgramsRouter.get(
+  "/programs/:id/content",
+  asyncHandler(async (req, res) => {
+    const programId = positiveId(req.params.id, "Invalid coaching program id");
+    res.json(await loadProgramContent(programId));
+  }),
+);
+
+/**
+ * POST /programs/:id/content
+ *
+ * Gives a programme somewhere to put lessons: an unpublished course row named
+ * after it, linked to its coaching product. Unpublished keeps it off the public
+ * course catalogue; the programme's buyers reach it through the product.
+ * Answers the existing course when there already is one, so a double click
+ * cannot make two.
+ */
+adminCoachingProgramsRouter.post(
+  "/programs/:id/content",
+  asyncHandler(async (req, res) => {
+    const programId = positiveId(req.params.id, "Invalid coaching program id");
+    const current = await loadProgramContent(programId);
+    if (current.course) {
+      res.json(current);
+      return;
+    }
+    if (current.productId === null || current.productSlug === null) {
+      throw badRequest(
+        "This program isn't sold through a product yet. Add it to a product first, then its lessons can be added here.",
+      );
+    }
+
+    const client = await pool.connect();
+    let courseId = 0;
+    try {
+      await client.query("BEGIN");
+      // Locked so two presses at once link one course, not two.
+      const locked = await client.query<{ legacy_course_id: number | null; title: string }>(
+        `SELECT legacy_course_id, title FROM products WHERE id = $1 FOR UPDATE`,
+        [current.productId],
+      );
+      const existing = locked.rows[0]?.legacy_course_id ?? null;
+      if (existing !== null) {
+        courseId = existing;
+      } else {
+        // The product's slug where it is free, otherwise suffixed — course slugs are unique.
+        const created = await client.query<{ id: number }>(
+          `INSERT INTO courses (slug, title, published)
+           SELECT CASE WHEN NOT EXISTS (SELECT 1 FROM courses WHERE slug = $1) THEN $1
+                       ELSE $1 || '-program-' || $3::text END,
+                  $2, false
+           RETURNING id`,
+          [current.productSlug, locked.rows[0]?.title ?? "Coaching program", current.productId],
+        );
+        courseId = created.rows[0].id;
+        await client.query(
+          `UPDATE products SET legacy_course_id = $2, updated_at = now() WHERE id = $1`,
+          [current.productId, courseId],
+        );
+      }
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+
+    await recordAdminAction({
+      req,
+      action: "coaching.program_content_create",
+      entityType: "coaching_offer",
+      entityId: programId,
+      after: { productId: current.productId, courseId },
+    });
+    res.status(201).json(await loadProgramContent(programId));
   }),
 );

@@ -73,9 +73,12 @@ export function ResourceCard({ card, accent }: ResourceCardProps) {
           {card.title}
         </h3>
 
-        {/* flex-1 here — not on a wrapper — is what bottom-aligns every CTA
-            across cards of unequal copy length. */}
-        <p className="copy-luxe mt-3 flex-1 text-pretty text-sm">{card.description}</p>
+        {/* flex-1 on the copy block is what bottom-aligns every CTA across
+            cards of unequal copy length. */}
+        <div className="mt-3 flex-1">
+          <p className="copy-luxe text-pretty text-sm">{card.description}</p>
+          {card.note && <p className="mt-3 text-pretty text-sm font-semibold text-white">{card.note}</p>}
+        </div>
 
         <LuxeButton
           variant="glass"

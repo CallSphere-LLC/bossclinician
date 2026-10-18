@@ -42,6 +42,9 @@ export const leadMagnetPublicRoutes: readonly { path: string; Component: RouteCo
   { path: "/replay-documentation", Component: lazyRoute(() => import("./ReplayDocumentation")) },
   { path: "/opt-in", Component: lazyRoute(() => import("./OptIn")) },
   { path: "/profile-audit-ty", Component: lazyRoute(() => import("./ProfileAuditThankYou")) },
+  // The free Practice Prep Training and the page its sign-up lands on (migration 122).
+  { path: "/practicepreptraining", Component: lazyRoute(() => import("./PracticePrepTraining")) },
+  { path: "/preparing-for-pp-video", Component: lazyRoute(() => import("./PracticePrepVideo")) },
 ];
 
 export const leadMagnetRoutes: { path: string; element: JSX.Element }[] = leadMagnetPublicRoutes.map(

@@ -68,6 +68,9 @@ const STATIC_ROUTES: SitemapEntry[] = [
   // both are indexed.
   { loc: "/club", changefreq: "monthly", priority: "0.9" },
   { loc: "/lounge", changefreq: "monthly", priority: "0.9" },
+  { loc: "/practicepreptraining", changefreq: "monthly", priority: "0.8" },
+  { loc: "/cookie-policy", changefreq: "yearly", priority: "0.2" },
+  { loc: "/accessibility", changefreq: "yearly", priority: "0.2" },
   // The third programme page. The source site linked /boardroom from its menu
   // but never built it, so this is the first time the address has a page.
   { loc: "/boardroom", changefreq: "monthly", priority: "0.9" },

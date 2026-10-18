@@ -41,7 +41,7 @@ describeDb("lesson assessments (integration)",()=>{
  }
  it("records fail then pass, enforces ownership and completion gating, persists member/admin results and both automation events",async()=>{
   const c=await setup();await db.client.query(`UPDATE course_lessons SET requires_previous_lesson=false WHERE id=$1`,[c.nextLessonId]);const path=`/api/assessments/${c.assessment.slug}`;
-  expect((await call(path,"GET",undefined,"")).status).toBe(403);
+  expect((await call(path,"GET",undefined,"")).status).toBe(401);
   expect((await call(path,"GET",undefined,stranger)).status).toBe(404);
   expect((await call(`/api/member/lessons/${c.nextLessonId}/complete`,"POST",{})).status).toBe(403);
   const editor=await call(`/admin/${c.assessment.id}`);expect(editor.body).toMatchObject({courseId:c.product.courseId,lessonPublished:true});

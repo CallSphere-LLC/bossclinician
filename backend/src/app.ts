@@ -59,6 +59,8 @@ export function createApp(): Express {
   // This MUST stay ahead of express.json() — once JSON parses the stream the
   // original bytes are gone and signature verification can never succeed.
   app.use("/api/stripe/webhook", express.raw({ type: "application/json", limit: "1mb" }));
+  // PayPal signature verification also wants the exact bytes it sent.
+  app.use("/api/paypal/webhook", express.raw({ type: "application/json", limit: "1mb" }));
 
   // Same reason as the Stripe line above: the provider signs the bytes it sent,
   // so once JSON has parsed the stream the original body is gone and no

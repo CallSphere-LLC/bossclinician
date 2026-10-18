@@ -26,6 +26,7 @@ import {
 import { toast } from "sonner";
 import { adminApi } from "@/lib/api";
 import { assessmentsApi, type AssessmentSummary } from "@/lib/quizApi";
+import { assessmentToCreate, attachableAssessments, type NewAssessmentKind } from "@/pages/admin/lessonAssessmentChoice";
 import type { CourseLesson, CourseModule, LessonFile, MediaAsset } from "@/types/admin";
 import type { Course } from "@/types";
 import { cn } from "@/lib/cn";
@@ -184,10 +185,9 @@ function dripSummary(item: Drip): string | null {
  *
  * The column is CHECK-constrained to exactly these six and the member player
  * switches on it to decide what to draw, so a video lesson left at the "text"
- * default shows students the notes and no player at all. Assessment is accepted
- * by the API for the future graded-test player, but is deliberately not offered
- * here until that player and pass gating are complete — a dead Quiz choice is
- * worse than an honest missing feature.
+ * default shows students the notes and no player at all. "Quiz or survey" plays
+ * the lesson's assessment (components/player/LessonAssessment.tsx); saving one
+ * with no existing quiz linked creates a new one (see lessonAssessmentChoice.ts).
  */
 const LESSON_KINDS: { value: string; label: string }[] = [
   { value: "video", label: "Video" },
@@ -247,7 +247,9 @@ export default function CourseBuilder() {
   const [lessonDraft, setLessonDraft] = useState<{
     moduleId: number;
     lesson: Partial<BuilderLesson>;
-    newAssessmentKind?: "graded" | "survey";
+    newAssessmentKind?: NewAssessmentKind;
+    /** Inside the lesson editor: the new quiz or survey to create on save when none is linked. */
+    createKind?: NewAssessmentKind;
     drip: DripChoice;
     /** Kajabi's lesson status: Draft / Published / Scheduled / Drip. */
     status: LessonStatus;
@@ -461,23 +463,27 @@ export default function CourseBuilder() {
         : await adminApi.lessonCreate(moduleId, payload);
       // Retain the saved lesson if linking fails so retry never creates a duplicate.
       setLessonDraft(current => current ? { ...current, lesson: { ...current.lesson, id: Number(saved.id) } } : current);
-      if (lessonDraft.newAssessmentKind && lesson.contentType === "assessment") {
+      const linkedBefore = lesson.id
+        ? modules?.flatMap((section) => section.lessons).find((item) => item.id === lesson.id)?.assessmentId
+        : null;
+      const createKind = assessmentToCreate(lesson, lessonDraft);
+      if (createKind) {
+        // A lesson holds one assessment; the one it had is let go first so the
+        // new one is what students get.
+        if (linkedBefore) await assessmentsApi.update(Number(linkedBefore), { lessonId: null });
         const assessment = await assessmentsApi.create({
-          title: lesson.title!, kind: lessonDraft.newAssessmentKind,
+          title: lesson.title!, kind: createKind,
           lessonId: Number(saved.id), requireEmail: false, published: false,
-          passMark: lessonDraft.newAssessmentKind === "graded" ? 70 : null,
-          requirePass: lessonDraft.newAssessmentKind === "graded",
+          passMark: createKind === "graded" ? 70 : null,
+          requirePass: createKind === "graded",
         });
         setLessonDraft(null);
-        toast.success("Lesson added. Add your questions, then publish when ready.");
+        toast.success("Lesson saved. Add your questions, then publish when ready.");
         navigate(`/admin/marketing/quizzes/${assessment.id}`);
         return;
       }
       const selectedAssessmentId = lesson.contentType === "assessment"
         ? Number(lesson.assessmentId) || null
-        : null;
-      const linkedBefore = lesson.id
-        ? modules?.flatMap((section) => section.lessons).find((item) => item.id === lesson.id)?.assessmentId
         : null;
       if (linkedBefore && Number(linkedBefore) !== selectedAssessmentId) {
         await assessmentsApi.update(Number(linkedBefore), { lessonId: null });
@@ -996,7 +1002,7 @@ export default function CourseBuilder() {
               Cancel
             </Button>
             <Button size="sm" type="submit" form="lesson-form" disabled={savingLesson}>
-              {savingLesson ? "Saving…" : lessonDraft?.newAssessmentKind ? "Save and add questions" : "Save lesson"}
+              {savingLesson ? "Saving…" : lessonDraft && assessmentToCreate(lessonDraft.lesson, lessonDraft) ? "Save and add questions" : "Save lesson"}
             </Button>
           </>
         }
@@ -1047,6 +1053,10 @@ export default function CourseBuilder() {
                 <option value="ramp-up-rate-calculator">Ramp-Up Rate Formula</option>
                 <option value="ramp-up-rate-comparison">Rate comparison</option>
                 <option value="pto-set-aside-calculator">PTO set-aside</option>
+                <option value="boss-move-exit-planner">Boss Move Exit Planner (dashboard)</option>
+                <option value="practice-reset-snapshot">Practice Reset Snapshot (saved quiz)</option>
+                <option value="practice-elevation-dashboard">Practice Elevation Dashboard</option>
+                <option value="boardroom-ceo-dashboard">Boardroom CEO Dashboard</option>
                 <option value="custom-calculator">Build my own calculator</option>
               </select>
             </Field>
@@ -1061,45 +1071,63 @@ export default function CourseBuilder() {
                 : "Add choice, rating or written questions next. Survey responses are saved for each student, without a pass mark."}
               {" "}The lesson and assessment start as drafts so you can finish them before publishing.
             </p>}
-            {lessonDraft.lesson.contentType === "assessment" && !lessonDraft.newAssessmentKind && (
-              <Field
-                label="Quiz or survey students take"
-                hint="Choose an assessment or create one here. Required-pass quizzes keep the next lesson locked. Set pass rules and messages in Edit questions and results."
-              >
-                <div className="flex flex-wrap items-center gap-2">
-                  <select
-                    className={cn(selectStyles, "min-w-0 flex-1")}
-                    value={lessonDraft.lesson.assessmentId ?? ""}
-                    onChange={(event) => updateLesson({
-                      assessmentId: event.target.value ? Number(event.target.value) : null,
-                    })}
-                    required
-                  >
-                    <option value="">Choose a quiz or survey</option>
-                    {gradedTests.filter(assessment => !assessment.lessonId || assessment.lessonId === lessonDraft.lesson.id).map((assessment) => (
-                      <option key={assessment.id} value={assessment.id}>
-                        {assessment.title} — {assessment.kind === "survey" ? "Survey" : `pass ${assessment.passMark ?? 70}%`}{assessment.published ? "" : " (draft)"}
-                      </option>
-                    ))}
-                  </select>
-                  <Button asChild type="button" variant="secondary" size="sm">
-                    <Link to={lessonDraft.lesson.assessmentId ? `/admin/marketing/quizzes/${lessonDraft.lesson.assessmentId}` : "/admin/marketing/quizzes"}>Edit questions and results</Link>
-                  </Button>
-                </div>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {(["graded", "survey"] as const).map(kind => <Button key={kind} type="button" size="sm" variant="secondary" onClick={() => {
-                    void assessmentsApi.create({ title: `${lessonDraft.lesson.title || "New lesson"} ${kind === "survey" ? "survey" : "quiz"}`, kind, requireEmail: false, published: false }).then(created => {
-                      setGradedTests(current => [...current, created as AssessmentSummary]);
-                      updateLesson({ assessmentId: created.id });
-                      toast.success("Assessment created. Save this lesson, then open Edit questions and results.");
-                    }).catch(() => toast.error("The assessment could not be created."));
-                  }}>Create {kind === "survey" ? "survey" : "quiz"} for this lesson</Button>)}
-                </div>
-                {gradedTests.length === 0 && (
-                  <p className="mt-2 text-sm text-ink-soft">Create a quiz or survey using the buttons above.</p>
-                )}
-              </Field>
-            )}
+            {lessonDraft.lesson.contentType === "assessment" && !lessonDraft.newAssessmentKind && (() => {
+              const attachable = attachableAssessments(gradedTests, lessonDraft.lesson.id);
+              const creating = assessmentToCreate(lessonDraft.lesson, lessonDraft);
+              return (
+                <Field
+                  label="Quiz or survey students take"
+                  hint="A scored quiz has right answers and a pass mark; a survey just saves each student's answers. Required-pass quizzes keep the next lesson locked."
+                >
+                  {attachable.length > 0 && (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <select
+                        className={cn(selectStyles, "min-w-0 flex-1")}
+                        value={lessonDraft.lesson.assessmentId ?? ""}
+                        onChange={(event) => updateLesson({
+                          assessmentId: event.target.value ? Number(event.target.value) : null,
+                        })}
+                        aria-label="Use an existing quiz or survey"
+                      >
+                        <option value="">Create a new one for this lesson</option>
+                        {attachable.map((assessment) => (
+                          <option key={assessment.id} value={assessment.id}>
+                            {assessment.title} — {assessment.kind === "survey" ? "Survey" : `pass ${assessment.passMark ?? 70}%`}{assessment.published ? "" : " (draft)"}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                  {lessonDraft.lesson.assessmentId ? (
+                    <Button asChild type="button" variant="secondary" size="sm" className={cn(attachable.length > 0 && "mt-2")}>
+                      <Link to={`/admin/marketing/quizzes/${lessonDraft.lesson.assessmentId}`}>Edit questions and results</Link>
+                    </Button>
+                  ) : null}
+                  {creating && (
+                    <div className={cn(attachable.length > 0 && "mt-3")}>
+                      <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="New quiz or survey">
+                        {(["graded", "survey"] as const).map((kind) => (
+                          <Button
+                            key={kind}
+                            type="button"
+                            size="sm"
+                            variant={creating === kind ? "primary" : "secondary"}
+                            role="radio"
+                            aria-checked={creating === kind}
+                            onClick={() => setLessonDraft((current) => current ? { ...current, createKind: kind } : current)}
+                          >
+                            {kind === "survey" ? "Survey (no right answers)" : "Scored quiz"}
+                          </Button>
+                        ))}
+                      </div>
+                      <p className="mt-2 text-sm text-ink-soft">
+                        Saving creates a new {creating === "survey" ? "survey" : "quiz"} for this lesson and opens it so you can add the questions{creating === "graded" ? ", correct answers and pass mark (starts at 70%)" : ""}. It starts as a draft until you publish it.
+                      </p>
+                    </div>
+                  )}
+                </Field>
+              );
+            })()}
 
             {lessonDraft.lesson.contentType === "video" && <Field label="Video" hint="students watch this at the top of the lesson">
               <div className="space-y-2.5">

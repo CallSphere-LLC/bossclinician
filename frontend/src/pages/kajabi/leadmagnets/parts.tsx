@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router";
 import { motion } from "motion/react";
 import { rise } from "@/components/home/luxe/ProgramSections";
 import { useHoneypot } from "@/components/forms/useHoneypot";
+import { ConsentGate } from "@/components/consent/ConsentGate";
 import { GlassCard, type Accent } from "@/components/luxe/GlassCard";
 import { LuxeButton } from "@/components/luxe/LuxeButton";
 import { LuxeInput, LuxeSelect } from "@/components/luxe/LuxeField";
@@ -180,6 +181,12 @@ export interface LeadMagnetFormProps {
   lastNameLabel?: string;
   /** And how long they had been in practice. */
   practiceYears?: { label: string; options: readonly string[] };
+  /**
+   * Any other required single-choice question, posted under `key` (which must
+   * be one of the form's own field keys, or the server drops the answer).
+   * `practiceYears` is this with the key `years_in_practice`.
+   */
+  question?: { key: string; label: string; options: readonly string[] };
   /** The consent / privacy line under the button. */
   note?: string;
   className?: string;
@@ -203,9 +210,11 @@ export function LeadMagnetForm({
   emailLabel = "Email",
   lastNameLabel,
   practiceYears,
+  question,
   note,
   className,
 }: LeadMagnetFormProps) {
+  const choice = question ?? (practiceYears ? { key: "years_in_practice", ...practiceYears } : undefined);
   const navigate = useNavigate();
   const [honeypot, trapField] = useHoneypot();
   const [firstName, setFirstName] = useState("");
@@ -234,14 +243,14 @@ export function LeadMagnetForm({
       setError("Please enter a valid email address.");
       return;
     }
-    if (practiceYears && !years) {
-      setError(`Please answer “${practiceYears.label}”.`);
+    if (choice && !years) {
+      setError(`Please answer “${choice.label}”.`);
       return;
     }
 
     const data: Record<string, unknown> = { name, email: address };
     if (lastNameLabel) data.last_name = lastName.trim();
-    if (practiceYears) data.years_in_practice = years;
+    if (choice) data[choice.key] = years;
 
     setStatus("sending");
     setError(null);
@@ -329,19 +338,19 @@ export function LeadMagnetForm({
         onChange={(e) => setEmail(e.target.value)}
         disabled={sending}
       />
-      {practiceYears && (
+      {choice && (
         <LuxeSelect
-          label={practiceYears.label}
-          name="years_in_practice"
+          label={choice.label}
+          name={choice.key}
           required
           value={years}
           onChange={(e) => setYears(e.target.value)}
           disabled={sending}
         >
           <option value="" disabled>
-            {practiceYears.label}
+            {choice.label}
           </option>
-          {practiceYears.options.map((option) => (
+          {choice.options.map((option) => (
             <option key={option} value={option}>
               {option}
             </option>
@@ -465,7 +474,21 @@ export function InboxAndDownload({
  * Resolved after mount: the frame is not part of the server render, so the
  * two renders cannot disagree about it.
  */
-export function RecordingPlayer({ url, title, className }: { url: string; title: string; className?: string }) {
+export function RecordingPlayer({
+  url,
+  title,
+  poster,
+  captions,
+  className,
+}: {
+  url: string;
+  title: string;
+  /** Shown before play, and in place of a black frame while the file loads. */
+  poster?: string;
+  /** English captions (WebVTT, same origin) for a file this site serves. */
+  captions?: string;
+  className?: string;
+}) {
   const [host, setHost] = useState<string | null>(null);
   useEffect(() => setHost(window.location.host), []);
   const video = host === null ? null : playableVideo(url, host);
@@ -474,17 +497,23 @@ export function RecordingPlayer({ url, title, className }: { url: string; title:
     <GlassCard interactive={false} spotlight={false} className={cn("overflow-hidden p-2", className)}>
       <div className="relative aspect-video w-full overflow-hidden rounded-xl bg-night-deep">
         {video?.kind === "file" && (
-          <video src={video.src} controls preload="metadata" playsInline className="absolute inset-0 h-full w-full" title={title} />
+          <video src={video.src} poster={poster} controls preload="metadata" playsInline className="absolute inset-0 h-full w-full" title={title}>
+            {captions && <track kind="captions" src={captions} srcLang="en" label="English" />}
+          </video>
         )}
         {video?.kind === "frame" && (
-          <iframe
-            src={video.src}
-            title={title}
-            allow="autoplay; fullscreen; picture-in-picture"
-            allowFullScreen
-            loading="lazy"
-            className="absolute inset-0 h-full w-full border-0"
-          />
+          // A provider's player sets that provider's cookies: it waits for
+          // consent to embedded content (lib/consent.ts).
+          <ConsentGate category="media" what="this recording" className="absolute inset-0 overflow-y-auto rounded-none border-0 p-4 sm:p-6">
+            <iframe
+              src={video.src}
+              title={title}
+              allow="autoplay; fullscreen; picture-in-picture"
+              allowFullScreen
+              loading="lazy"
+              className="absolute inset-0 h-full w-full border-0"
+            />
+          </ConsentGate>
         )}
         {video?.kind === "link" && (
           <div className="absolute inset-0 flex items-center justify-center p-6">

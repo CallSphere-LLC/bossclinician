@@ -16,6 +16,7 @@ import { memberPublishingRouter } from "./publishing";
 import { memberAffiliateRouter } from "./affiliatePortal";
 import { memberLessonFormsRouter } from "./lessonForms";
 import { memberContractsRouter } from "./contracts";
+import { memberToolStateRouter } from "./toolState";
 
 /**
  * `/api/member/*` — everything a signed-in customer can do.
@@ -56,6 +57,7 @@ memberRouter.use("/affiliate", memberAffiliateRouter);
 memberRouter.use(memberProgressRouter);
 // Native forms embedded in lessons (Lounge VIP submissions); paths are lesson-scoped.
 memberRouter.use(memberLessonFormsRouter);
+memberRouter.use(memberToolStateRouter);
 memberRouter.use(memberContractsRouter);
 
 // Publishing serves two sibling surfaces — "/podcasts" and "/newsletters" —

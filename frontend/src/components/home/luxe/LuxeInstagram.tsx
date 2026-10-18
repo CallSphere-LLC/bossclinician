@@ -5,6 +5,7 @@ import { Section, SectionTitle } from "@/components/luxe/Section";
 import { GlassCard } from "@/components/luxe/GlassCard";
 import { LuxeButton, LuxePill } from "@/components/luxe/LuxeButton";
 import { footer } from "@/content/site";
+import { ConsentGate } from "@/components/consent/ConsentGate";
 
 const EASE_LUXE: [number, number, number, number] = [0.22, 1, 0.36, 1];
 const VIEWPORT = { once: true, margin: "-12% 0px -8% 0px" } as const;
@@ -29,6 +30,9 @@ const TOPICS = [
  * The same LightWidget embed bossclinician.com serves, so both sites render the
  * identical grid of @bossclinician's latest posts from one widget Yvette
  * already controls — changing the layout there changes it on both.
+ *
+ * Mounted only behind ConsentGate (category "media"): the script and the
+ * iframe are LightWidget's, so neither loads before the visitor allows it.
  *
  * `aspect-square` is the load-time reservation: the widget is a 3×3 grid of
  * square cells, so its natural ratio is 1:1 and holding that space keeps the
@@ -154,7 +158,11 @@ export function LuxeInstagram() {
         </GlassCard>
       </motion.div>
 
-      <InstagramFeed reduce={reduce} />
+      {/* LightWidget is a third-party embed (its own script and iframe), so it
+          loads only once the visitor allows embedded content. */}
+      <ConsentGate category="media" what="our latest Instagram posts" className="mx-auto mt-12 max-w-2xl">
+        <InstagramFeed reduce={reduce} />
+      </ConsentGate>
 
       <motion.div {...rise(reduce, 0.14)} className="mt-9 text-center">
         <LuxeButton variant="foil" size="md" href={footer.instagram} target="_blank">

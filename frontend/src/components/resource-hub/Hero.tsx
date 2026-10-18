@@ -12,9 +12,10 @@ function splitOnce(text: string, marker: string): [string, string | undefined] {
   return [text.slice(0, at), text.slice(at + 1)];
 }
 
+// Her headline as of 15 Oct 2026; the accent line starts at "of private".
 const [TITLE, TITLE_ACCENT] = splitOnce(
-  "Everything you need to build your practice — wherever you are right now.",
-  " — ",
+  "Resources for every stage of private practice ownership.",
+  " of ",
 );
 
 /** Display the original portrait colors independently of the page theme. */
@@ -32,8 +33,10 @@ function HeroPortrait() {
 
       <div className="relative overflow-hidden rounded-2xl border border-gold/25 shadow-[0_44px_100px_-36px_rgba(0,0,0,0.95)]">
         <img
-          src="/images/yvette-hero-portrait.jpg"
-          alt="Yvette Howard, LCSW — Private Practice Strategist at her desk"
+          src="/images/resource-hub/yvette-hero-standing.webp"
+          alt="Yvette Howard, LCSW, Private Practice Strategist, standing in a Minding My Female Owned Business t-shirt"
+          width={960}
+          height={1440}
           decoding="async"
           className="aspect-[4/5] w-full max-w-full object-cover object-top"
         />
@@ -62,7 +65,7 @@ export function Hero() {
       eyebrow={"Resource Hub  ·  Lead. Heal. Elevate."}
       title={TITLE}
       titleAccent={TITLE_ACCENT}
-      lede="Tools, guides, quizzes, and assessments — organized by your stage. Find your section and start there."
+      lede="Whether you're building the foundation, making an established practice more sustainable, or learning to lead beyond yourself, start with the stage you're in right now. Build it. Sustain it. Lead it."
       tone="violet"
       aside={<HeroPortrait />}
     />

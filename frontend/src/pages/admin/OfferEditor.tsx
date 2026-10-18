@@ -88,6 +88,7 @@ import {
 } from "@/pages/admin/ui/friendly";
 import { openCheckoutPreview } from "@/components/checkout/checkoutPreview";
 import OfferNotificationsTab from "@/pages/admin/OfferNotificationsTab";
+import OfferPaymentLinks from "@/pages/admin/OfferPaymentLinks";
 
 /**
  * The offer editor — one screen, six questions, in the order she'd ask them:
@@ -1298,6 +1299,8 @@ function PriceTab({
             <div className="p-5 text-sm text-ink-soft">Save this offer once to add another way to pay.</div>
           </Card>
         )}
+
+        {offer && <OfferPaymentLinks offer={offer} onChanged={onChanged} confirm={confirm} />}
       </div>
     </div>
   );

@@ -125,12 +125,13 @@ export function Header({ transparentAtTop = false }: HeaderProps) {
           </span>
         </Link>
 
-        {/* One plain link and two category menus, in the source site's own
-            order: About, then everything you can join, then everything you can
-            read or learn from. The bar still starts at xl (below that,
-            including a laptop browser zoomed in, the menu button carries
-            everything) and the labels stay on one line. */}
-        <nav className="hidden items-center gap-5 xl:flex 2xl:gap-8" aria-label="Primary">
+        {/* About, then everything you can join, then everything you can read
+            or learn from, then Retreats and the Blog as plain links. The bar
+            still starts at xl (below that, including a laptop browser zoomed
+            in, the menu button carries everything) and the labels stay on one
+            line; the gap is a step tighter at xl so the fifth item fits beside
+            the account link and Book A Call at 1280px. */}
+        <nav className="hidden items-center gap-4 xl:flex 2xl:gap-8" aria-label="Primary">
           {nav.map((item, index) =>
             isNavMenu(item) ? (
               <NavDropdown
@@ -208,6 +209,7 @@ export function Header({ transparentAtTop = false }: HeaderProps) {
             className="-mr-2 inline-flex h-11 w-11 items-center justify-center rounded-full text-white transition-colors hover:bg-white/[0.06] xl:hidden"
             aria-label={open ? "Close menu" : "Open menu"}
             aria-expanded={open}
+            aria-controls="mobile-menu"
             onClick={() => setOpen((v) => !v)}
           >
             <span className="relative block h-4 w-6">
@@ -237,6 +239,7 @@ export function Header({ transparentAtTop = false }: HeaderProps) {
       <AnimatePresence>
         {open && (
           <motion.div
+            id="mobile-menu"
             initial={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: -12 }}
             animate={{ opacity: 1, y: 0 }}
             exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: -12 }}

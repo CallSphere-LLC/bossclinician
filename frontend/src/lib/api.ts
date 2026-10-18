@@ -43,6 +43,7 @@ import type {
   Plan,
   RevenueSummary,
   StripeStatus,
+  PayPalStatus,
   Subscription,
   AdminAccessGroup,
   AdminAccessGroupGrants,
@@ -854,6 +855,7 @@ export const adminApi = {
   invoices: () => request<Invoice[]>("/admin/sales/invoices"),
   revenue: () => request<RevenueSummary>("/admin/sales/revenue"),
   stripeStatus: () => request<StripeStatus>("/admin/sales/stripe-status"),
+  paypalStatus: () => request<PayPalStatus>("/admin/sales/paypal-status"),
 
   coupons: () => request<Coupon[]>("/admin/sales/coupons"),
   couponCreate: (data: Record<string, unknown>) =>

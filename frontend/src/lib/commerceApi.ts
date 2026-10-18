@@ -237,7 +237,10 @@ export interface CheckoutResult extends Quote {
   clientSecret: string | null;
   clientSecretType: ClientSecretType;
   subscriptionId?: string;
+  /** Set when the buyer chose PayPal: where to send them to approve. */
   paypalApproveUrl?: string;
+  /** "order" for a one-time payment, "subscription" for a membership or payment plan. */
+  paypalKind?: "order" | "subscription";
   memberCreated?: boolean;
 }
 
@@ -308,7 +311,13 @@ async function publicGet<T>(path: string): Promise<T> {
 
 export const commerceApi = {
   /** The sales side of an offer: price, order-form fields, bumps and upsells. */
-  getOffer: (slug: string) => memberRequest<PublicOffer>(`/offers/${encodeURIComponent(slug)}`),
+  getOffer: (slug: string, option?: string | null) =>
+    memberRequest<PublicOffer>(
+      `/offers/${encodeURIComponent(slug)}${
+        // `?option=` from a shared checkout link: which price starts selected.
+        option && /^\d{1,9}$/.test(option) ? `?option=${option}` : ""
+      }`,
+    ),
 
   /**
    * Re-prices the order after a coupon keystroke or a bump toggle.
@@ -333,9 +342,12 @@ export const commerceApi = {
       method: "POST",
       body: JSON.stringify(input),
     }),
-  paypalConfig: () => memberRequest<{enabled:boolean; environment:"sandbox"}>("/checkout/paypal/config"),
+  /** Whether to offer PayPal at all; nothing about the credentials. */
+  paypalConfig: () => memberRequest<{enabled:boolean; environment:"sandbox"|"live"|null}>("/checkout/paypal/config"),
   capturePayPal: (orderId:number, orderToken:string, paypalOrderId:string) =>
-    memberRequest<{orderId:number;status:"paid"}>(`/checkout/paypal/${orderId}/capture`,{method:"POST",body:JSON.stringify({orderToken,paypalOrderId})}),
+    memberRequest<{orderId:number;status:"paid"|"pending"}>(`/checkout/paypal/${orderId}/capture`,{method:"POST",body:JSON.stringify({orderToken,paypalOrderId})}),
+  confirmPayPalSubscription: (orderId:number, orderToken:string, paypalSubscriptionId:string) =>
+    memberRequest<{orderId:number;status:"paid"|"pending"|"cancelled"}>(`/checkout/paypal/${orderId}/subscription`,{method:"POST",body:JSON.stringify({orderToken,paypalSubscriptionId})}),
   cancelPayPal: (orderId:number, orderToken:string) =>
     memberRequest<{status:string}>(`/checkout/paypal/${orderId}/cancel`,{method:"POST",body:JSON.stringify({orderToken})}),
 

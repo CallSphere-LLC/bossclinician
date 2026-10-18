@@ -7,6 +7,7 @@ import { badRequest, notFound, serviceUnavailable } from "../../utils/httpError"
 import { buildUpdate } from "../../utils/sqlUpdate";
 import { stripe } from "../../stripe/client";
 import { stripeEnabled } from "../../config/env";
+import { paypalStatus } from "../../services/paypalClient";
 import { requirePermission } from "../../services/permissions";
 import {
   loadReceiptDocument,
@@ -308,7 +309,7 @@ adminSalesRouter.get(
     const result = await pool.query(
       `SELECT o.id, o.course_slug, o.email, o.amount_cents, o.total_cents,
               o.subtotal_cents, o.discount_cents, o.coupon_code, o.currency, o.status,
-              o.stripe_session_id, o.stripe_payment_intent_id, o.created_at,
+              o.stripe_session_id, o.stripe_payment_intent_id, o.created_at, o.payment_provider,
               COALESCE(NULLIF(f.title, ''), NULLIF(o.course_title, ''),
                        (SELECT i.title FROM order_items i
                          WHERE i.order_id = o.id ORDER BY i.id LIMIT 1),
@@ -816,6 +817,17 @@ adminSalesRouter.get(
       chargesEnabled: account?.charges_enabled ?? false,
       payoutsEnabled: account?.payouts_enabled ?? false,
     });
+  }),
+);
+
+/**
+ * Whether PayPal checkout is switched on, and against which PayPal. Reports
+ * presence only — never a credential.
+ */
+adminSalesRouter.get(
+  "/paypal-status",
+  asyncHandler(async (_req, res) => {
+    res.json(paypalStatus());
   }),
 );
 

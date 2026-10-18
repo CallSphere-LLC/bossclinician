@@ -5,6 +5,16 @@ vi.mock("../../db/pool", () => ({ pool: { query: (...args: unknown[]) => query(.
 vi.mock("../../services/adminAudit", () => ({ recordAdminAction: vi.fn() }));
 vi.mock("../../services/purchaseDelivery", () => ({ deliverManualGrant: vi.fn() }));
 vi.mock("../../services/access", () => ({ grantOfferAccess: vi.fn(), revokeOfferAccess: vi.fn() }));
+// Stripe Payment Links have their own tests (services/paymentLinks.test.ts);
+// here only whether the offer routes ask for a link to be retired.
+const deactivateRepricedPaymentLinks = vi.fn(async () => 0);
+vi.mock("../../services/paymentLinks", () => ({
+  createOfferPaymentLink: vi.fn(),
+  deactivateOfferPaymentLink: vi.fn(),
+  deactivateRepricedPaymentLinks: (...args: unknown[]) => deactivateRepricedPaymentLinks(...(args as [])),
+  listOfferPaymentLinks: vi.fn(async () => []),
+  paymentLinkSupport: vi.fn(() => ({ supported: true })),
+}));
 vi.mock("../../services/settings", () => ({
   readSetting: vi.fn(async (key: string) =>
     key === "notifications"
@@ -74,7 +84,10 @@ const legacyPlan = {
 };
 
 describe("PUT /admin/offers/:id", () => {
-  beforeEach(() => query.mockReset());
+  beforeEach(() => {
+    query.mockReset();
+    deactivateRepricedPaymentLinks.mockClear();
+  });
 
   it("lets a live offer that predates a pricing rule go back to a draft", async () => {
     query.mockResolvedValueOnce({ rows: [legacyPlan] });
@@ -82,6 +95,25 @@ describe("PUT /admin/offers/:id", () => {
     const { error, body } = await put("7", { status: "draft" });
     expect(error).toBeUndefined();
     expect((body as { status: string }).status).toBe("draft");
+    // Off sale on the checkout means off sale on Stripe's payment links too.
+    expect(deactivateRepricedPaymentLinks).toHaveBeenCalledWith(7, "all");
+  });
+
+  it("retires the payment link for the offer's own price when that price changes", async () => {
+    const oneTime = { ...legacyPlan, pricing_type: "one_time", interval: null, installment_count: null, trial_days: 0, amount_cents: 350000 };
+    query.mockResolvedValueOnce({ rows: [oneTime] });
+    query.mockResolvedValueOnce({ rows: [{ ...oneTime, amount_cents: 375000 }] });
+    const { error } = await put("7", { amountCents: 375000 });
+    expect(error).toBeUndefined();
+    expect(deactivateRepricedPaymentLinks).toHaveBeenCalledWith(7, null);
+  });
+
+  it("leaves payment links alone when nothing about the price changed", async () => {
+    query.mockResolvedValueOnce({ rows: [legacyPlan] });
+    query.mockResolvedValueOnce({ rows: [{ ...legacyPlan, internal_title: "x" }] });
+    const { error } = await put("7", { internalTitle: "x" });
+    expect(error).toBeUndefined();
+    expect(deactivateRepricedPaymentLinks).not.toHaveBeenCalled();
   });
 
   it("still refuses an edit to the price that breaks the rule", async () => {

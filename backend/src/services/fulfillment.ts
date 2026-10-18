@@ -33,6 +33,8 @@ export interface FulfillPaymentInput {
   chargeId?: string | null;
   paypalOrderId?: string | null;
   paypalCaptureId?: string | null;
+  /** A PayPal subscription's first payment (services/paypalBilling.ts). */
+  paypalSaleId?: string | null;
   amountCents: number;
   currency?: string;
   email?: string | null;
@@ -208,8 +210,9 @@ export async function fulfillPayment(input: FulfillPaymentInput): Promise<Fulfil
       `INSERT INTO transactions
          (order_id, member_id, email, kind, status, amount_cents, currency,
           payment_method_brand, payment_method_last4, payment_method_type,
-          country, state, stripe_payment_intent_id, stripe_charge_id, occurred_at, paypal_capture_id)
-       VALUES ($1,$2,$3,'payment','succeeded',$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+          country, state, stripe_payment_intent_id, stripe_charge_id, occurred_at, paypal_capture_id,
+          paypal_sale_id)
+       VALUES ($1,$2,$3,'payment','succeeded',$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
        ON CONFLICT DO NOTHING
        RETURNING id`,
       [
@@ -227,6 +230,7 @@ export async function fulfillPayment(input: FulfillPaymentInput): Promise<Fulfil
         input.chargeId ?? null,
         input.occurredAt ?? new Date(),
         input.paypalCaptureId ?? null,
+        input.paypalSaleId ?? null,
       ]
     );
 
@@ -420,6 +424,8 @@ export async function createPaymentPlan(input: {
   startAt?: Date;
   stripeCustomerId?: string | null;
   stripeSubscriptionId?: string | null;
+  /** Set instead of the Stripe ids for a plan billed by PayPal. */
+  paypalSubscriptionId?: string | null;
   firstTransactionId?: number | null;
 }): Promise<number | null> {
   const startAt = input.startAt ?? new Date();
@@ -441,9 +447,11 @@ export async function createPaymentPlan(input: {
       `INSERT INTO payment_plans
          (order_id, offer_id, member_id, email, installment_cents, installment_count,
           installments_paid, currency, interval, interval_count, status,
-          next_charge_at, stripe_customer_id, stripe_subscription_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'active',$11,$12,$13)
-       ON CONFLICT (stripe_subscription_id) DO NOTHING
+          next_charge_at, stripe_customer_id, stripe_subscription_id, paypal_subscription_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'active',$11,$12,$13,$14)
+       -- Either provider's subscription id is unique; a second delivery for
+       -- the same one, Stripe or PayPal, inserts nothing.
+       ON CONFLICT DO NOTHING
        RETURNING id`,
       [
         input.orderId,
@@ -461,6 +469,7 @@ export async function createPaymentPlan(input: {
         schedule[installmentsPaid]?.dueAt ?? null,
         input.stripeCustomerId ?? null,
         input.stripeSubscriptionId ?? null,
+        input.paypalSubscriptionId ?? null,
       ]
     );
 
@@ -532,6 +541,8 @@ export async function recordRefund(input: {
   /** Whether a refund that settles the whole order also takes the access back. */
   revokeAccessOnFullRefund: boolean;
   stripeRefundId?: string | null;
+  /** A refund made in PayPal; unique like stripe_refund_id. */
+  paypalRefundId?: string | null;
   createdByEmail?: string;
 }): Promise<{ recorded: boolean; fullyRefunded: boolean; revokedCount: number }> {
   const client = await pool.connect();
@@ -544,9 +555,9 @@ export async function recordRefund(input: {
     const inserted = await client.query<{ id: number }>(
       `INSERT INTO refunds
          (order_id, transaction_id, amount_cents, currency, reason, revoked_access,
-          stripe_refund_id, created_by_email)
-       VALUES ($1,$2,$3,$4,$5,false,$6,$7)
-       ON CONFLICT (stripe_refund_id) DO NOTHING
+          stripe_refund_id, created_by_email, paypal_refund_id)
+       VALUES ($1,$2,$3,$4,$5,false,$6,$7,$8)
+       ON CONFLICT DO NOTHING
        RETURNING id`,
       [
         input.orderId,
@@ -556,6 +567,7 @@ export async function recordRefund(input: {
         (input.reason ?? "").slice(0, 500),
         input.stripeRefundId ?? null,
         input.createdByEmail ?? "",
+        input.paypalRefundId ?? null,
       ]
     );
 

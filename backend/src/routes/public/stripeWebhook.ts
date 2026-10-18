@@ -44,6 +44,7 @@ import {
   scheduleRetryAfterFailure,
 } from "../../services/dunning";
 import { cancellationFromStripe, parseCancelReasons } from "../../services/cancellationReasons";
+import { recordPaymentLinkOrder } from "../../services/paymentLinks";
 
 /**
  * Stripe webhook receiver — the only place money becomes access.
@@ -93,7 +94,7 @@ const DEFAULT_BILLING_SETTINGS: BillingSettings = billingSettingsSchema.parse({}
  * A half-edited settings row must not be able to stop a payment being fulfilled,
  * so anything unparseable falls back to the defaults rather than throwing.
  */
-async function billingSettings(): Promise<BillingSettings> {
+export async function billingSettings(): Promise<BillingSettings> {
   const res = await pool.query<{ value: unknown }>(
     `SELECT value FROM settings WHERE key = 'billing'`
   );
@@ -280,7 +281,7 @@ async function markFailed(eventId: string, err: unknown): Promise<void> {
 
 /* ------------------------------------------------------------------ orders */
 
-interface OrderRow {
+export interface OrderRow {
   id: number;
   offer_id: number | null;
   member_id: number | null;
@@ -305,7 +306,7 @@ const ORDER_SELECT = `
     FROM orders o
     LEFT JOIN offers f ON f.id = o.offer_id`;
 
-async function loadOrderById(id: number): Promise<OrderRow | null> {
+export async function loadOrderById(id: number): Promise<OrderRow | null> {
   const res = await pool.query<OrderRow>(`${ORDER_SELECT} WHERE o.id = $1`, [id]);
   return res.rows[0] ?? null;
 }
@@ -326,7 +327,7 @@ async function loadOrderBySession(sessionId: string): Promise<OrderRow | null> {
 }
 
 /** What the buyer thinks they bought, for receipts and automation payloads. */
-function describe(order: OrderRow): string {
+export function describe(order: OrderRow): string {
   return order.offer_title || order.course_title || `Order #${order.id}`;
 }
 
@@ -402,7 +403,7 @@ async function sendPurchaseEmails(order: OrderRow, result: FulfillResult): Promi
  * so a handler that dies between `fulfillPayment` and here is put right by the
  * retry. It is a no-op on an order whose redemption was never released.
  */
-async function reclaimOrderRedemption(orderId: number): Promise<void> {
+export async function reclaimOrderRedemption(orderId: number): Promise<void> {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -705,6 +706,11 @@ async function mirrorLegacyPlanSubscription(session: Stripe.Checkout.Session): P
 
 /** A Checkout Session that has actually been paid, whatever collected it. */
 async function settleSessionPayment(session: Stripe.Checkout.Session): Promise<void> {
+  // A Stripe Payment Link made on the Offers screen opens sessions our checkout
+  // never saw, so their order is written here first (idempotent per session);
+  // the lookup below then settles it like any other. No-op for other sessions.
+  await recordPaymentLinkOrder(session);
+
   const meta = readMetadata(session.metadata);
   const paymentIntentId = idOf(session.payment_intent);
 
@@ -1198,7 +1204,7 @@ async function firstTransactionForOrder(orderId: number): Promise<number | null>
  * Stripe applies it once, so the opening installment is discounted and the rest
  * are billed in full.
  */
-async function planInstallmentPricing(
+export async function planInstallmentPricing(
   order: OrderRow,
   listCents: number
 ): Promise<{ recurringCents: number; firstCents: number }> {
@@ -1504,7 +1510,7 @@ async function advancePaymentPlan(input: {
  * disagree with the card statement. Telling somebody they have paid $3,750 when
  * they paid $3,000 is the kind of receipt that starts a chargeback.
  */
-async function planPaidToDate(planId: number): Promise<number> {
+export async function planPaidToDate(planId: number): Promise<number> {
   const res = await pool.query<{ cents: number }>(
     `SELECT COALESCE(SUM(amount_cents), 0)::int AS cents
        FROM payment_plan_installments
@@ -1530,7 +1536,7 @@ async function planPaidToDate(planId: number): Promise<number> {
  * the link. Matching only NULLs is what makes that safe to run twice, and what
  * keeps it off a grant a later outright purchase has since taken over.
  */
-async function linkGrantsToSubscription(orderId: number, subscriptionId: number): Promise<void> {
+export async function linkGrantsToSubscription(orderId: number, subscriptionId: number): Promise<void> {
   await pool.query(
     `UPDATE access_grants
         SET subscription_id = $2, updated_at = now()
@@ -2010,21 +2016,26 @@ const PLAN_DEFAULT_REASON = "payment plan defaulted";
  * the same moment either commits first — and this reads a settled plan — or
  * waits behind it.
  */
-async function endPaymentPlanAccess(input: {
-  stripeSubscriptionId: string;
+export async function endPaymentPlanAccess(input: {
+  /** Exactly one of the two: which provider's subscription ended. */
+  stripeSubscriptionId?: string;
+  /** A plan billed by PayPal (services/paypalBilling.ts) follows the same rules. */
+  paypalSubscriptionId?: string;
   reason: string;
 }): Promise<void> {
   const client: PoolClient = await pool.connect();
   let defaulted: { plan: PlanRow; outstandingCents: number; revokedCount: number } | null = null;
+  const providerColumn = input.paypalSubscriptionId ? "paypal_subscription_id" : "stripe_subscription_id";
+  const providerSubscriptionId = input.paypalSubscriptionId ?? input.stripeSubscriptionId ?? "";
 
   try {
     await client.query("BEGIN");
 
     const planRes = await client.query<PlanRow>(
       `SELECT ${PLAN_COLUMNS} FROM payment_plans
-        WHERE stripe_subscription_id = $1
+        WHERE ${providerColumn} = $1
         FOR UPDATE`,
-      [input.stripeSubscriptionId]
+      [providerSubscriptionId]
     );
     const plan = planRes.rows[0];
     if (!plan) {
@@ -2136,7 +2147,9 @@ async function endPaymentPlanAccess(input: {
         outstandingCents,
         currency: plan.currency,
         revokedCount,
-        stripeSubscriptionId: input.stripeSubscriptionId,
+        stripeSubscriptionId: input.paypalSubscriptionId
+          ? `PayPal ${input.paypalSubscriptionId}`
+          : providerSubscriptionId,
       }),
     });
   }
@@ -2155,7 +2168,7 @@ async function endPaymentPlanAccess(input: {
  * outright, so a grant pointing at a different order is access the member paid
  * for separately and must keep.
  */
-async function endSubscriptionAccess(input: {
+export async function endSubscriptionAccess(input: {
   stripeSubscriptionId: string;
   localSubscriptionId: number | null;
   orderId: number | null;
@@ -2409,7 +2422,7 @@ interface ChargeTransaction {
   email: string;
 }
 
-async function emailRefundReceipt(
+export async function emailRefundReceipt(
   orderId: number,
   amountCents: number,
   currency: string,

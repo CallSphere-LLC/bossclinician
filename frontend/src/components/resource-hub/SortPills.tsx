@@ -41,7 +41,7 @@ export function SortPills() {
         eyebrow="Find Your Section"
         title="Every clinician is at a different stage."
         titleClassName="text-[1.75rem] sm:text-[2.1rem] lg:text-[2.5rem]"
-        body="These resources are organized by where you are — so you get exactly what you need right now, not everything at once."
+        body="These resources are organized by where you are, so you get exactly what you need right now, not everything at once."
       />
 
       <motion.nav

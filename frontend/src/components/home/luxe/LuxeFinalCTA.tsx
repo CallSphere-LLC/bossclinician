@@ -2,8 +2,6 @@ import { motion } from "motion/react";
 import { useEntranceMotion } from "@/hooks/useEntranceMotion";
 import { Section } from "@/components/luxe/Section";
 import { LuxeButton } from "@/components/luxe/LuxeButton";
-// The sign-up page, which sends people on to /watch-now and the video.
-import { MASTERCLASS_ROUTE } from "@/lib/masterclass";
 
 const EASE_LUXE: [number, number, number, number] = [0.22, 1, 0.36, 1];
 const VIEWPORT = { once: true, margin: "-12% 0px -8% 0px" } as const;
@@ -107,9 +105,6 @@ export function LuxeFinalCTA() {
         >
           <LuxeButton variant="foil" size="lg" href="#offers">
             Find Your Path
-          </LuxeButton>
-          <LuxeButton variant="outline" size="lg" to={MASTERCLASS_ROUTE}>
-            Watch the Free Masterclass
           </LuxeButton>
         </motion.div>
 

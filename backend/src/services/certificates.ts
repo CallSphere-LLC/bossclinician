@@ -868,9 +868,41 @@ export async function certificateStatus(
     quizzesToPass.length === 0 &&
     !earnedCeuCredit(await loadCeuLessonRecords(memberId, courseId));
 
-  const offered = template !== null || issued;
+  return summarizeCertificateStatus({
+    issued,
+    hasTemplate: template !== null,
+    requiresPassingQuizzes: requiresPass,
+    totalLessons: total,
+    lessonsRemaining,
+    quizzesToPass,
+    ceuPending,
+  });
+}
+
+/** The facts `certificateStatus` reads from the database, and nothing else. */
+export interface CertificateFacts {
+  issued: boolean;
+  /** An enabled completion template exists for the course. */
+  hasTemplate: boolean;
+  requiresPassingQuizzes: boolean;
+  totalLessons: number;
+  lessonsRemaining: number;
+  /** Already empty when the course does not require passing its quizzes. */
+  quizzesToPass: CertificateQuizGap[];
+  ceuPending: boolean;
+}
+
+/**
+ * Whether a member may claim a course's certificate, and the sentence that says
+ * what is left. Pure, so the rule that decides who gets a certificate is
+ * tested directly rather than through a database.
+ */
+export function summarizeCertificateStatus(facts: CertificateFacts): CertificateStatus {
+  const { issued, hasTemplate, requiresPassingQuizzes, totalLessons, lessonsRemaining, quizzesToPass, ceuPending } =
+    facts;
+  const offered = hasTemplate || issued;
   const eligible =
-    !issued && template !== null && total > 0 && lessonsRemaining === 0 &&
+    !issued && hasTemplate && totalLessons > 0 && lessonsRemaining === 0 &&
     quizzesToPass.length === 0 && !ceuPending;
 
   let message: string;
@@ -893,7 +925,7 @@ export async function certificateStatus(
   return {
     offered,
     issued,
-    requiresPassingQuizzes: requiresPass,
+    requiresPassingQuizzes,
     lessonsRemaining,
     quizzesToPass,
     ceuPending,

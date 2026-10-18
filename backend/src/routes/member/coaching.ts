@@ -828,6 +828,44 @@ function slotJson(slot: Slot) {
   };
 }
 
+/* ------------------------------------------------------- programme lessons */
+
+interface ProgramMaterialsJson {
+  productSlug: string;
+  title: string;
+  lessonCount: number;
+  href: string;
+}
+
+/**
+ * The one-to-one programmes this member holds that have lessons to open — the
+ * workbook course a coaching product links (migration 120). Only published
+ * lessons count, and only live grants: the same entitlement the library and
+ * the player ask access.ts for.
+ */
+async function loadProgramMaterials(memberId: number): Promise<ProgramMaterialsJson[]> {
+  const res = await pool.query<{ slug: string; title: string; lesson_count: number }>(
+    `SELECT p.slug, p.title,
+            (SELECT COUNT(*)::int FROM course_lessons l JOIN course_modules m ON m.id = l.module_id
+              WHERE m.course_id = p.legacy_course_id AND l.published) AS lesson_count
+       FROM products p
+      WHERE p.kind = 'coaching' AND p.legacy_course_id IS NOT NULL AND p.status <> 'archived'
+        AND EXISTS (SELECT 1 FROM access_grants g
+                     WHERE g.product_id = p.id AND g.member_id = $1 AND g.status = 'active'
+                       AND (g.expires_at IS NULL OR g.expires_at > now()))
+      ORDER BY p.sort, p.title`,
+    [memberId]
+  );
+  return res.rows
+    .filter((row) => row.lesson_count > 0)
+    .map((row) => ({
+      productSlug: row.slug,
+      title: row.title,
+      lessonCount: row.lesson_count,
+      href: `/library/${row.slug}`,
+    }));
+}
+
 /* ---------------------------------------------------------------- GET / */
 
 /**
@@ -846,11 +884,12 @@ memberCoachingRouter.get(
     const policy = await loadCoachingPolicy();
     const zone = readTimezone(req.query.timezone, policy.timezone);
 
-    const [credits, sessions] = await Promise.all([
+    const [credits, sessions, programs] = await Promise.all([
       pool.query<CreditRow>(`${CREDIT_SELECT} WHERE c.member_id = $1 ORDER BY c.id`, [member.id]),
       pool.query<SessionRow>(`${SESSION_SELECT} WHERE s.member_id = $1 ORDER BY s.scheduled_at`, [
         member.id,
       ]),
+      loadProgramMaterials(member.id),
     ]);
 
     const upcoming: SessionJson[] = [];
@@ -871,6 +910,7 @@ memberCoachingRouter.get(
       packages: credits.rows.map((row) => toPackageJson(row, now)),
       upcoming,
       past,
+      programs,
       policy: {
         minimumNoticeHours: policy.minimumNoticeMinutes / 60,
         cancellationWindowHours: policy.cancellationWindowMinutes / 60,

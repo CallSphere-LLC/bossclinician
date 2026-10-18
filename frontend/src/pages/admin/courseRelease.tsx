@@ -3,7 +3,12 @@ import { Award, Lock } from "lucide-react";
 import { toast } from "sonner";
 import { Card, Field, Input, selectStyles } from "@/pages/admin/ui/primitives";
 import { friendlyError } from "@/pages/admin/ui/friendly";
-import { courseReleaseApi, type CourseCertificateSettings } from "@/lib/courseReleaseApi";
+import {
+  courseReleaseApi,
+  type CourseCertificateSettings,
+  type IssuedCertificate,
+} from "@/lib/courseReleaseApi";
+import { publicSiteUrl } from "@/lib/siteOrigins";
 
 /*
  * Kajabi-parity release controls for the course builder.
@@ -131,6 +136,7 @@ export function CourseReleasePanel({
   const [busy, setBusy] = useState(false);
   const [certificate, setCertificate] = useState<CourseCertificateSettings | null>(null);
   const [savingCertificate, setSavingCertificate] = useState(false);
+  const [issued, setIssued] = useState<IssuedCertificate[] | null>(null);
 
   const allLocked = lessonCount > 1 && lockedCount >= lessonCount - 1;
 
@@ -142,6 +148,15 @@ export function CourseReleasePanel({
   }, [courseId]);
 
   useEffect(loadCertificate, [loadCertificate]);
+
+  useEffect(() => {
+    let active = true;
+    courseReleaseApi
+      .issuedCertificates(courseId)
+      .then(({ certificates }) => { if (active) setIssued(certificates); })
+      .catch(() => { if (active) setIssued(null); });
+    return () => { active = false; };
+  }, [courseId]);
 
   async function toggleLock() {
     if (busy) return;
@@ -264,11 +279,71 @@ export function CourseReleasePanel({
             <p className="text-xs text-ink-soft">
               An evaluation form works as a survey lesson (“Add survey”): students must submit it
               to complete that lesson, so it is required for the certificate too — it has no pass
-              mark.
+              mark. Each quiz’s pass mark is set in the quiz itself (Edit questions and results →
+              Settings).
             </p>
+            {issued !== null && <IssuedCertificates certificates={issued} />}
           </div>
         </div>
       </Card>
+    </div>
+  );
+}
+
+/**
+ * Who has earned this course's certificate: name, date, and the code a board
+ * types in at /verify. The newest five show; the rest are one click away.
+ */
+function IssuedCertificates({ certificates }: { certificates: IssuedCertificate[] }) {
+  const [showAll, setShowAll] = useState(false);
+  if (certificates.length === 0) {
+    return <p className="border-t border-hairline pt-3 text-xs text-ink-soft">No certificates issued yet.</p>;
+  }
+  const visible = showAll ? certificates : certificates.slice(0, 5);
+  return (
+    <div className="border-t border-hairline pt-3">
+      <p className="text-sm font-semibold text-ink">
+        Issued <span className="font-body font-bold tabular-nums">{certificates.length}</span>
+        {certificates.length === 1 ? " certificate" : " certificates"}
+      </p>
+      <ul className="mt-2 divide-y divide-hairline/70">
+        {visible.map((certificate) => (
+          <li key={certificate.id} className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 py-2 text-xs">
+            <span className="min-w-0">
+              <span className="block truncate font-semibold text-ink">
+                {certificate.recipientName || certificate.email || "Student"}
+              </span>
+              {certificate.email && certificate.recipientName && (
+                <span className="block truncate text-ink-soft">{certificate.email}</span>
+              )}
+            </span>
+            <span className="flex shrink-0 items-baseline gap-2 text-ink-soft">
+              <span className="tabular-nums">{new Date(certificate.issuedAt).toLocaleDateString()}</span>
+              {certificate.revokedAt ? (
+                <span className="font-semibold text-red-700">Revoked</span>
+              ) : (
+                <a
+                  href={publicSiteUrl(`/verify/${encodeURIComponent(certificate.verificationCode)}`)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-mono text-plum underline underline-offset-2 hover:no-underline"
+                >
+                  {certificate.verificationCode}
+                </a>
+              )}
+            </span>
+          </li>
+        ))}
+      </ul>
+      {certificates.length > 5 && (
+        <button
+          type="button"
+          onClick={() => setShowAll((value) => !value)}
+          className="mt-1 text-xs font-semibold text-plum underline underline-offset-2 hover:no-underline"
+        >
+          {showAll ? "Show fewer" : `Show all ${certificates.length}`}
+        </button>
+      )}
     </div>
   );
 }

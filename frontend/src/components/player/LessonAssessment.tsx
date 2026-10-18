@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { CheckCircle2, RotateCcw, XCircle } from "lucide-react";
 import { usePlayerSource, type QuizAttempt } from "@/components/player/playerSource";
+import { missingQuestionIdsOf } from "@/components/player/assessmentErrors";
 import type { Quiz, QuizOutcome } from "@/lib/quizApi";
 import { LuxeButton } from "@/components/luxe/LuxeButton";
 import { cn } from "@/lib/cn";
@@ -26,6 +27,11 @@ export function LessonAssessment({ slug }: { slug: string }) {
   const [attempts, setAttempts] = useState<Attempt[]>([]);
   const [outcome, setOutcome] = useState<QuizOutcome | null>(null);
   const [error, setError] = useState("");
+  /* A failed submit is reported beside the button that was pressed, not only at
+     the top of a fifteen-question form where nobody scrolled to see it — that
+     is what made "Submit" look dead. */
+  const [submitError, setSubmitError] = useState("");
+  const [missing, setMissing] = useState<number[]>([]);
   const [busy, setBusy] = useState(false);
   const startedAt = useRef(Date.now());
   const resultRef = useRef<HTMLDivElement>(null);
@@ -34,7 +40,7 @@ export function LessonAssessment({ slug }: { slug: string }) {
   const refreshResults = () => quizApi.results(slug).then(setAttempts);
   useEffect(() => {
     startedAt.current = Date.now();
-    setQuiz(null); setAnswers({}); setTexts({}); setOutcome(null); setError("");
+    setQuiz(null); setAnswers({}); setTexts({}); setOutcome(null); setError(""); setSubmitError(""); setMissing([]);
     let active = true;
     void Promise.all([quizApi.get(slug), quizApi.results(slug)]).then(([definition, history]) => { if (active) { setQuiz(definition); setAttempts(history); } }).catch(e => { if (active) setError(e.message); });
     return () => { active = false; };
@@ -42,18 +48,25 @@ export function LessonAssessment({ slug }: { slug: string }) {
   useEffect(() => { if (outcome) resultRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }); }, [outcome]);
 
   async function submit(event: FormEvent) {
-    event.preventDefault(); if (!quiz || outcome) return; setBusy(true); setError("");
+    event.preventDefault(); if (!quiz || outcome) return; setBusy(true); setError(""); setSubmitError(""); setMissing([]);
     try {
       const result = await quizApi.submit(slug, { responses: quiz.questions.map(question => ({ questionId: question.id, answerIds: answers[question.id] ?? [], text: texts[question.id] ?? "" })), elapsedMs: Date.now() - startedAt.current });
       setOutcome(result); await refreshResults();
       // Tells the player to re-read progress — of which a preview has none.
       if (!preview) window.postMessage({ type: "boss-assessment-completed", passed: result.passed, slug }, window.location.origin);
-    } catch (e) { setError(e instanceof Error ? e.message : "Your answers could not be saved."); }
+    } catch (e) {
+      const gaps = missingQuestionIdsOf(e);
+      setMissing(gaps);
+      setSubmitError(gaps.length > 0
+        ? `Please answer ${gaps.length === 1 ? "the highlighted question" : `the ${gaps.length} highlighted questions`} first.`
+        : e instanceof Error && e.message ? e.message : "Your answers could not be saved. Please try again.");
+      if (gaps.length > 0) formRef.current?.querySelector<HTMLElement>(`[data-question="${gaps[0]}"]`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
     finally { setBusy(false); }
   }
 
   function retake() {
-    setAnswers({}); setTexts({}); setOutcome(null); setError("");
+    setAnswers({}); setTexts({}); setOutcome(null); setError(""); setSubmitError(""); setMissing([]);
     startedAt.current = Date.now();
     formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
@@ -72,16 +85,22 @@ export function LessonAssessment({ slug }: { slug: string }) {
       {quiz.questions.map((question, index) => {
         const mark = verdict.get(question.id);
         const showMark = outcome !== null && graded && mark !== undefined;
-        return <fieldset key={question.id} disabled={locked} className={cn("space-y-3 rounded-xl p-3 -m-3", showMark && mark && (mark.correct ? "bg-emerald-400/[0.06] ring-1 ring-emerald-400/30" : "bg-red-400/[0.06] ring-1 ring-red-400/40"))}>
+        const unanswered = !outcome && missing.includes(question.id);
+        return <fieldset key={question.id} data-question={question.id} disabled={locked} aria-invalid={unanswered || undefined} className={cn("space-y-3 rounded-xl p-3 -m-3", showMark && mark && (mark.correct ? "bg-emerald-400/[0.06] ring-1 ring-emerald-400/30" : "bg-red-400/[0.06] ring-1 ring-red-400/40"), unanswered && "ring-1 ring-red-400/50")}>
           <legend className="font-semibold">{index + 1}. {question.prompt}{question.required ? " *" : ""}</legend>
           {showMark && mark && <p className={cn("flex items-center gap-1.5 text-sm font-semibold", mark.correct ? "text-emerald-300" : "text-red-300")}>{mark.correct ? <CheckCircle2 aria-hidden className="size-4" /> : <XCircle aria-hidden className="size-4" />}{mark.correct ? "Correct" : "Incorrect"}</p>}
+          {unanswered && <p className="text-sm font-semibold text-red-300">This question needs an answer.</p>}
           {question.helpText && <p className="text-sm text-orchid">{question.helpText}</p>}
           {question.kind === "multiple" && <p className="text-xs text-orchid-dim">Select all that apply.</p>}
-          {question.kind === "text" ? <textarea aria-label={question.prompt} required={question.required} maxLength={2000} value={texts[question.id] ?? ""} onChange={e => setTexts(current => ({...current,[question.id]:e.target.value}))} className="min-h-24 w-full rounded-lg border border-white/20 bg-white/5 p-3" /> : question.answers.map(answer => <label key={answer.id} className="flex cursor-pointer items-start gap-3 rounded-lg border border-white/10 p-3 text-sm"><input type={question.kind === "multiple" ? "checkbox" : "radio"} name={`question-${question.id}`} required={question.required && question.kind !== "multiple"} checked={(answers[question.id] ?? []).includes(answer.id)} onChange={e => setAnswers(current => ({...current,[question.id]:question.kind === "multiple" ? e.target.checked ? [...(current[question.id] ?? []),answer.id] : (current[question.id] ?? []).filter(id => id !== answer.id) : [answer.id]}))} className="mt-0.5" />{answer.label}</label>)}
+          {question.kind === "text" ? <textarea aria-label={question.prompt} required={question.required} maxLength={2000} value={texts[question.id] ?? ""} onChange={e => { setTexts(current => ({...current,[question.id]:e.target.value})); setMissing(current => current.filter(id => id !== question.id)); }} className="min-h-24 w-full rounded-lg border border-white/20 bg-white/5 p-3" /> : question.answers.map(answer => <label key={answer.id} className="flex cursor-pointer items-start gap-3 rounded-lg border border-white/10 p-3 text-sm"><input type={question.kind === "multiple" ? "checkbox" : "radio"} name={`question-${question.id}`} required={question.required && question.kind !== "multiple"} checked={(answers[question.id] ?? []).includes(answer.id)} onChange={e => { setAnswers(current => ({...current,[question.id]:question.kind === "multiple" ? e.target.checked ? [...(current[question.id] ?? []),answer.id] : (current[question.id] ?? []).filter(id => id !== answer.id) : [answer.id]})); setMissing(current => current.filter(id => id !== question.id)); }} className="mt-0.5" />{answer.label}</label>)}
           {outcome && mark?.text && <p className="text-sm text-orchid">{mark.text}</p>}
         </fieldset>;
       })}
-      {!outcome && <LuxeButton type="submit" disabled={busy || quiz.questions.length === 0}>{busy ? "Saving…" : quiz.kind === "survey" ? "Submit survey" : "Submit answers"}</LuxeButton>}
+      {!outcome && <div className="space-y-3">
+        {submitError && <p role="alert" className="rounded-lg border border-red-400/40 bg-red-400/[0.06] px-4 py-3 text-sm text-red-200">{submitError}</p>}
+        {quiz.questions.length === 0 && <p className="text-sm text-orchid">This {quiz.kind === "survey" ? "survey" : "quiz"} has no questions yet. Please check back shortly.</p>}
+        <LuxeButton type="submit" disabled={busy || quiz.questions.length === 0}>{busy ? "Saving…" : quiz.kind === "survey" ? "Submit survey" : "Submit answers"}</LuxeButton>
+      </div>}
     </form>
     {outcome && <div ref={resultRef} role="status" className={cn("rounded-lg border p-4", outcome.passed === false ? "border-red-400/40" : "border-gold/30")}>
       <p className="font-body text-lg font-bold tabular-nums">{outcome.passed === null ? "Thanks! Here's your snapshot" : `${outcome.score} of ${outcome.maxScore} correct · ${outcome.percent}% · ${outcome.passed ? "Passed" : "Not passed"}`}</p>

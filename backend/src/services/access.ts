@@ -254,13 +254,24 @@ export async function hasProductAccess(memberId: number, productId: number): Pro
   return res.rows.length > 0;
 }
 
+/**
+ * The course whose lessons a product (aliased `p`) opens, as SQL.
+ *
+ * A course product names it in `course_id`. A one-to-one coaching programme
+ * names its workbook course in `legacy_course_id` (migration 120) — not in
+ * `course_id`, which the admin product editor reads as the thing the product
+ * sells. A download's `legacy_course_id` is an empty pre-051 shell and opens
+ * nothing, hence the kind check.
+ */
+export const PRODUCT_CONTENT_COURSE_ID = `COALESCE(p.course_id, CASE WHEN p.kind = 'coaching' THEN p.legacy_course_id END)`;
+
 /** The same question asked about a course, which is what the player needs. */
 export async function hasCourseAccess(memberId: number, courseId: number): Promise<boolean> {
   const res = await pool.query(
     `SELECT 1
        FROM access_grants g
        JOIN products p ON p.id = g.product_id
-      WHERE g.member_id = $1 AND p.course_id = $2 AND g.status = 'active'
+      WHERE g.member_id = $1 AND ${PRODUCT_CONTENT_COURSE_ID} = $2 AND g.status = 'active'
         AND (g.expires_at IS NULL OR g.expires_at > now())
       LIMIT 1`,
     [memberId, courseId]

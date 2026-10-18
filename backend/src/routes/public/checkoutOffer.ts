@@ -28,7 +28,15 @@ import { addInterval, computeOrderTotal, type OrderTotal } from "../../services/
 import { readSetting } from "../../services/settings";
 import { cleanStatementDescriptor } from "../../services/paymentRules";
 import { applyDescriptorToPrice } from "../../stripe/descriptor";
-import { paypalSandboxReady, createPayPalOrder, getPayPalOrder, capturePayPalOrder, completedCapture } from "../../services/paypalClient";
+import { paypalEnabled, paypalEnvironment, createPayPalOrder, createPayPalSubscription, getPayPalOrder, getPayPalSubscription } from "../../services/paypalClient";
+import {
+  PayPalPlanError,
+  buildPayPalPlanSpec,
+  ensurePayPalPlan,
+  failPendingPayPalOrder,
+  reconcilePayPalSubscription,
+  settlePayPalOrder,
+} from "../../services/paypalBilling";
 import {
   MAX_PWYW_CENTS,
   addressSchema,
@@ -760,8 +768,9 @@ checkoutOfferRouter.post(
     if (!baseOffer) throw notFound("Offer not found");
     const offer = await selectOfferPricing(baseOffer, body.pricingOptionId);
     if (body.paymentProvider === "paypal") {
-      if (!paypalSandboxReady()) throw serviceUnavailable("PayPal sandbox checkout is not configured");
-      if (isRecurring(offer) || offer.currency.toLowerCase() !== "usd") throw badRequest("PayPal sandbox checkout currently supports one-time USD purchases only");
+      if (!paypalEnabled()) throw serviceUnavailable("PayPal checkout is not available right now. Please pay by card.");
+      if ((offer.currency || "usd").toLowerCase() !== "usd") throw badRequest("PayPal checkout supports US dollar offers only. Please pay by card.");
+      if (isRecurring(offer) && body.cartItems) throw badRequest("Subscriptions and payment plans are bought from their own checkout page.");
     }
     if (body.cartItems && (body.cartItems[0].slug !== offer.slug || (body.cartItems[0].pricingOptionId ?? null) !== (offer.pricing_option_id ?? null))) throw badRequest("The cart changed. Refresh it before paying.");
 
@@ -862,16 +871,60 @@ checkoutOfferRouter.post(
     }
 
     if (body.paymentProvider === "paypal") {
+      // PayPal sends the buyer back here; the receipt token stays in the
+      // browser (sessionStorage) and never travels through PayPal's redirect.
+      const returnBase = `${env.publicSiteUrl}/checkout/paypal/return?orderId=${orderId}`;
       try {
-        if (total.currency.toLowerCase() !== "usd") throw badRequest("PayPal sandbox checkout supports USD only");
+        if (total.currency.toLowerCase() !== "usd") throw badRequest("PayPal checkout supports US dollar offers only. Please pay by card.");
+        await pool.query(`UPDATE orders SET payment_provider = 'paypal', updated_at = now() WHERE id = $1`, [orderId]);
+
+        if (isRecurring(offer)) {
+          // The plan is priced from the order the database just wrote, never
+          // from the request: list price, coupon share, bumps as a one-off.
+          let spec: ReturnType<typeof buildPayPalPlanSpec>;
+          try {
+            spec = buildPayPalPlanSpec({
+              offerId: offer.id,
+              pricingOptionId: offer.pricing_option_id ?? null,
+              title: offer.title,
+              currency: offer.currency,
+              pricingType: offer.pricing_type,
+              interval: offer.interval,
+              intervalCount: offer.interval_count,
+              installmentCount: offer.installment_count,
+              trialDays: offer.trial_days,
+              lines: total.lines,
+              subtotalCents: total.subtotalCents,
+              discountCents: total.discountCents,
+              couponDuration: coupon ? coupon.duration : null,
+            });
+          } catch (error) {
+            if (error instanceof PayPalPlanError) throw badRequest(error.message);
+            throw error;
+          }
+          const planId = await ensurePayPalPlan(spec, { offerId: offer.id, pricingOptionId: offer.pricing_option_id ?? null, title: offer.title });
+          const approval = await createPayPalSubscription({
+            orderId,
+            planId,
+            email,
+            name: billingName,
+            returnUrl: `${returnBase}&kind=subscription`,
+            cancelUrl: `${returnBase}&kind=subscription&cancelled=1`,
+          });
+          await pool.query(`UPDATE orders SET paypal_subscription_id = $2, updated_at = now() WHERE id = $1`, [orderId, approval.id]);
+          res.status(201).json({ ...receipt, status: "pending", requiresPayment: true,
+            clientSecret: null, clientSecretType: null, paypalApproveUrl: approval.approveUrl, paypalKind: "subscription" });
+          return;
+        }
+
         const approval = await createPayPalOrder({
           orderId, amountCents: total.totalCents, title: offer.title,
-          returnUrl: `${env.publicSiteUrl}/checkout/paypal/return?orderId=${orderId}`,
-          cancelUrl: `${env.publicSiteUrl}/checkout/paypal/return?orderId=${orderId}&cancelled=1`,
+          returnUrl: returnBase,
+          cancelUrl: `${returnBase}&cancelled=1`,
         });
         await pool.query("UPDATE orders SET paypal_order_id=$2, updated_at=now() WHERE id=$1", [orderId, approval.id]);
         res.status(201).json({ ...receipt, status: "pending", requiresPayment: true,
-          clientSecret: null, clientSecretType: null, paypalApproveUrl: approval.approveUrl });
+          clientSecret: null, clientSecretType: null, paypalApproveUrl: approval.approveUrl, paypalKind: "order" });
       } catch (error) { await markOrderFailed(orderId); throw error; }
       return;
     }
@@ -1012,8 +1065,15 @@ checkoutOfferRouter.post(
           // this one flag plus the Payment Element on the page.
           automatic_payment_methods: { enabled: true },
           // Keeping the method on file is what makes the post-purchase upsell a
-          // single click instead of a second card entry.
-          setup_future_usage: "off_session",
+          // single click instead of a second card entry. Scoped to card and Link
+          // rather than set for the whole intent: buy-now-pay-later methods
+          // (Klarna, Afterpay/Clearpay, Affirm) cannot be saved, and a
+          // top-level setup_future_usage hides them from the Payment Element.
+          // Checkout.tsx sends the same per-method options; the two must match.
+          payment_method_options: {
+            card: { setup_future_usage: "off_session" },
+            link: { setup_future_usage: "off_session" },
+          },
           receipt_email: email,
           description: offer.title,
           ...(descriptor ? { statement_descriptor_suffix: descriptor } : {}),
@@ -1043,58 +1103,97 @@ checkoutOfferRouter.post(
   })
 );
 
+/**
+ * GET /api/checkout/paypal/config — whether to show the PayPal button. Never
+ * reveals anything about the credentials; the environment only decides
+ * whether the button carries a "sandbox" note.
+ */
 checkoutOfferRouter.get("/checkout/paypal/config", (_req, res) => {
   res.setHeader("Cache-Control", "no-store");
-  res.json({ enabled: paypalSandboxReady() && process.env.PAYPAL_ALL_OFFERS_VALIDATED === "true", environment: "sandbox" });
+  const enabled = paypalEnabled();
+  res.json({ enabled, environment: enabled ? paypalEnvironment() : null });
 });
 
 const paypalCaptureSchema = z.object({
   orderToken: z.string().min(20).max(200),
   paypalOrderId: z.string().regex(/^[A-Z0-9-]{5,64}$/),
 });
+
+/**
+ * POST /api/checkout/paypal/:orderId/capture — the buyer is back from
+ * approving a one-time PayPal payment. Captures it and fulfils the order; the
+ * CHECKOUT.ORDER.APPROVED webhook does the same if the browser never returns.
+ */
 checkoutOfferRouter.post("/checkout/paypal/:orderId/capture", offerCheckoutLimiter, optionalMember, asyncHandler(async (req, res) => {
   refuseImpersonation(req);
   const orderId = Number(req.params.orderId);
   const parsed = paypalCaptureSchema.safeParse(req.body);
   if (!Number.isSafeInteger(orderId) || orderId <= 0 || !parsed.success || !orderTokenValid(orderId, parsed.data.orderToken)) throw forbidden("Invalid checkout confirmation");
-  if (!paypalSandboxReady()) throw serviceUnavailable("PayPal sandbox checkout is not configured");
-  const found = await pool.query<{ status: string; paypal_order_id: string | null; total_cents: number; currency: string; email: string }>(
-    "SELECT status,paypal_order_id,total_cents,currency,email FROM orders WHERE id=$1", [orderId]);
+  if (!paypalEnabled()) throw serviceUnavailable("PayPal checkout is not available right now");
+  const found = await pool.query<{ status: string; paypal_order_id: string | null }>(
+    "SELECT status,paypal_order_id FROM orders WHERE id=$1", [orderId]);
   const order = found.rows[0];
   if (!order || order.paypal_order_id !== parsed.data.paypalOrderId) throw notFound("Checkout not found");
   if (order.status === "paid") { res.json({ orderId, status: "paid" }); return; }
-  if (order.status !== "pending" || order.currency.toLowerCase() !== "usd") throw badRequest("This checkout cannot be captured");
-  let paypal = await getPayPalOrder(order.paypal_order_id);
-  if (paypal.status !== "COMPLETED") {
-    if (paypal.status !== "APPROVED") throw badRequest("Approve the payment in PayPal first");
-    try { paypal = await capturePayPalOrder(order.paypal_order_id); }
-    catch (error) {
-      // A timed-out capture can have succeeded. Read PayPal's durable result
-      // before deciding whether to reject or retry; never charge twice.
-      paypal = await getPayPalOrder(order.paypal_order_id);
-      if (paypal.status !== "COMPLETED") throw error;
-    }
-  }
-  const capture = completedCapture(paypal, { orderId, amountCents: order.total_cents });
-  if (!capture) throw badRequest("PayPal payment could not be reconciled to this order");
-  const result = await fulfillPayment({ orderId, amountCents: order.total_cents, currency: "usd", email: order.email,
-    paypalOrderId: paypal.id, paypalCaptureId: capture.id, paymentMethod: { type: "paypal", brand: "PayPal" } });
-  if (result.fulfilled) { await deliverPurchase({ orderId, memberId: result.memberId, createdMember: result.createdMember }); notifyOwnerOfSale({ orderId }); }
-  res.json({ orderId, status: "paid" });
+  if (order.status !== "pending") throw badRequest("This checkout can no longer be completed. Please start again.");
+  const outcome = await settlePayPalOrder(orderId);
+  if (outcome === "not_approved") throw badRequest("Approve the payment in PayPal first");
+  res.json({ orderId, status: outcome });
 }));
 
+const paypalSubscriptionSchema = z.object({
+  orderToken: z.string().min(20).max(200),
+  paypalSubscriptionId: z.string().regex(/^I-[A-Z0-9]{5,60}$/),
+});
+
+/**
+ * POST /api/checkout/paypal/:orderId/subscription — the buyer is back from
+ * approving a PayPal subscription or payment plan. Reads PayPal's state and
+ * fulfils once the first payment has completed (or straight away for a free
+ * trial). "pending" means PayPal has not finished the first payment yet; the
+ * page asks again, and the webhook finishes the job either way.
+ */
+checkoutOfferRouter.post("/checkout/paypal/:orderId/subscription", orderReadLimiter, optionalMember, asyncHandler(async (req, res) => {
+  refuseImpersonation(req);
+  const orderId = Number(req.params.orderId);
+  const parsed = paypalSubscriptionSchema.safeParse(req.body);
+  if (!Number.isSafeInteger(orderId) || orderId <= 0 || !parsed.success || !orderTokenValid(orderId, parsed.data.orderToken)) throw forbidden("Invalid checkout confirmation");
+  if (!paypalEnabled()) throw serviceUnavailable("PayPal checkout is not available right now");
+  const found = await pool.query<{ status: string; paypal_subscription_id: string | null }>(
+    "SELECT status,paypal_subscription_id FROM orders WHERE id=$1", [orderId]);
+  const order = found.rows[0];
+  if (!order || order.paypal_subscription_id !== parsed.data.paypalSubscriptionId) throw notFound("Checkout not found");
+  if (order.status === "paid") { res.json({ orderId, status: "paid" }); return; }
+  if (order.status !== "pending") throw badRequest("This checkout can no longer be completed. Please start again.");
+  const result = await reconcilePayPalSubscription(parsed.data.paypalSubscriptionId);
+  res.json({ orderId, status: result.status === "paid" ? "paid" : result.status === "cancelled" ? "cancelled" : "pending" });
+}));
+
+/**
+ * POST /api/checkout/paypal/:orderId/cancel — the buyer pressed cancel on
+ * PayPal. Closes the order and hands its coupon back, unless PayPal says the
+ * payment may still go through.
+ */
 checkoutOfferRouter.post("/checkout/paypal/:orderId/cancel", offerCheckoutLimiter, asyncHandler(async (req, res) => {
   const orderId = Number(req.params.orderId);
   const token = typeof req.body?.orderToken === "string" ? req.body.orderToken : "";
   if (!Number.isSafeInteger(orderId) || orderId <= 0 || !orderTokenValid(orderId, token)) throw forbidden("Invalid checkout cancellation");
-  const found = await pool.query<{ status:string; paypal_order_id:string | null }>("SELECT status,paypal_order_id FROM orders WHERE id=$1",[orderId]);
+  const found = await pool.query<{ status: string; paypal_order_id: string | null; paypal_subscription_id: string | null }>(
+    "SELECT status,paypal_order_id,paypal_subscription_id FROM orders WHERE id=$1", [orderId]);
   const order = found.rows[0];
-  if (!order?.paypal_order_id) throw notFound("Checkout not found");
+  if (!order || (!order.paypal_order_id && !order.paypal_subscription_id)) throw notFound("Checkout not found");
   if (order.status === "paid") throw badRequest("This payment has already completed");
   if (order.status === "pending") {
-    const paypal = await getPayPalOrder(order.paypal_order_id);
-    if (paypal.status === "COMPLETED" || paypal.status === "APPROVED") throw badRequest("This payment may still complete; return to checkout confirmation");
-    if (paypal.status === "CREATED" || paypal.status === "VOIDED") await markOrderFailed(orderId);
+    if (order.paypal_subscription_id) {
+      const sub = await getPayPalSubscription(order.paypal_subscription_id);
+      if (sub.status !== "APPROVAL_PENDING" && sub.status !== "CANCELLED" && sub.status !== "EXPIRED") {
+        throw badRequest("This payment may still complete; return to checkout confirmation");
+      }
+    } else if (order.paypal_order_id) {
+      const paypal = await getPayPalOrder(order.paypal_order_id);
+      if (paypal.status === "COMPLETED" || paypal.status === "APPROVED") throw badRequest("This payment may still complete; return to checkout confirmation");
+    }
+    await failPendingPayPalOrder(orderId);
   }
   res.json({ status: "cancelled" });
 }));
@@ -1220,12 +1319,21 @@ interface ParentOrderRow {
 async function savedPaymentMethodId(parent: ParentOrderRow): Promise<string | null> {
   if (!parent.stripe_payment_intent_id) return null;
 
-  const intent = await stripe().paymentIntents.retrieve(parent.stripe_payment_intent_id);
+  const intent = await stripe().paymentIntents.retrieve(parent.stripe_payment_intent_id, {
+    expand: ["payment_method"],
+  });
   if (intent.status !== "succeeded") return null;
 
-  return typeof intent.payment_method === "string"
-    ? intent.payment_method
-    : (intent.payment_method?.id ?? null);
+  // Only a method saved for off-session use can be charged here: older
+  // intents saved whatever was used (top-level setup_future_usage), newer ones
+  // save card and Link only, so a Klarna or Afterpay purchase has nothing on
+  // file and the customer is asked for a card instead.
+  const method = intent.payment_method;
+  if (method === null) return null;
+  if (typeof method === "string") return intent.setup_future_usage === "off_session" ? method : null;
+  const perMethod = (intent.payment_method_options as Record<string, { setup_future_usage?: string } | undefined> | null)?.[method.type];
+  const saved = intent.setup_future_usage === "off_session" || perMethod?.setup_future_usage === "off_session";
+  return saved ? method.id : null;
 }
 
 /**

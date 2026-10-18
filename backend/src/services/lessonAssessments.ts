@@ -1,9 +1,13 @@
 import { pool } from "../db/pool";
-import { forbidden, notFound } from "../utils/httpError";
+import { forbidden, notFound, unauthorized } from "../utils/httpError";
 import { loadMemberLesson } from "./curriculum";
 import { hasCourseAccess } from "./access";
 export async function assertLessonAssessmentAccess(memberId: number | undefined, lessonId: number): Promise<void> {
-  if (!memberId) throw forbidden("Sign in to take this lesson assessment.");
+  // 401, not 403: the member client refreshes its 15-minute access token on a
+  // 401 and retries. optionalMember treats an expired token as "signed out", so
+  // a student who spent longer than that answering a quiz used to get a 403
+  // here, the client never refreshed, and "Submit" appeared to do nothing.
+  if (!memberId) throw unauthorized("Please sign in again to take this lesson assessment.");
   const row = await pool.query(`SELECT m.course_id FROM course_lessons l JOIN course_modules m ON m.id=l.module_id WHERE l.id=$1 AND l.published`, [lessonId]);
   const courseId = row.rows[0]?.course_id;
   if (!courseId || !(await hasCourseAccess(memberId, courseId))) throw notFound("Assessment not found");

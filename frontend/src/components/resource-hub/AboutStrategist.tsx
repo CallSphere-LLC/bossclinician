@@ -118,8 +118,10 @@ export function AboutStrategist() {
 
           <div className="relative overflow-hidden rounded-2xl border border-gold/25 shadow-[0_44px_100px_-36px_rgba(0,0,0,0.95)]">
             <img
-              src="/images/yvette-meet-portrait.jpg"
-              alt="Yvette Howard, LCSW — Private Practice Strategist, Boss Clinician"
+              src="/images/resource-hub/yvette-about-seated.webp"
+              alt="Yvette Howard, LCSW, Private Practice Strategist, Boss Clinician, seated on a bench and smiling"
+              width={960}
+              height={1440}
               loading="lazy"
               decoding="async"
               className="aspect-[4/5] w-full max-w-full object-cover object-top"

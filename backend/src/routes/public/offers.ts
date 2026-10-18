@@ -520,7 +520,7 @@ offersRouter.get(
     const offer = await loadPublishedOffer(req.params.slug);
     if (!offer) throw notFound("Offer not found");
     await assertOfferDeliverable(offer.id);
-    res.json(await buildOfferView(offer, req.member?.id ?? null));
+    res.json(await buildOfferView(offer, req.member?.id ?? null, requestedPricingOption(req.query.option)));
   })
 );
 
@@ -529,9 +529,22 @@ offersRouter.get(
  * and the admin's checkout preview, so the preview cannot drift from what a
  * buyer is shown. The caller decides which offers may be viewed at all.
  */
+/**
+ * `?option=<id>` on a shared checkout link: which way to pay starts selected
+ * (the admin's per-price "Copy checkout link", QA row 92). `0` is the offer's
+ * own price. Anything else unreadable is ignored, and so is an option that has
+ * since been removed — the link still opens the checkout, on its default.
+ */
+export function requestedPricingOption(raw: unknown): number | null | undefined {
+  if (typeof raw !== "string" || !/^\d{1,9}$/.test(raw)) return undefined;
+  const id = Number(raw);
+  return id === 0 ? null : id;
+}
+
 export async function buildOfferView(
   offer: OfferRow,
-  memberId: number | null
+  memberId: number | null,
+  requestedOptionId?: number | null
 ): Promise<Record<string, unknown>> {
   const [products, bumps, upsells, productIds, additionalPricing] = await Promise.all([
     loadOfferProducts(offer.id),
@@ -540,7 +553,10 @@ export async function buildOfferView(
     offerProductIds(offer.id),
     loadOfferPricingOptions(offer.id),
   ]);
-  const selectedOffer = await selectOfferPricing(offer, undefined);
+  const selectedOffer =
+    requestedOptionId === undefined
+      ? await selectOfferPricing(offer, undefined)
+      : await selectOfferPricing(offer, requestedOptionId).catch(() => selectOfferPricing(offer, undefined));
   const priced = toPricedOffer(selectedOffer);
   const additionalRecommended = additionalPricing.some((option) => option.recommended);
 

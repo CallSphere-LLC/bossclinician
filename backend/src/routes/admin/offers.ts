@@ -11,6 +11,13 @@ import { recordAdminAction } from "../../services/adminAudit";
 import { readSetting } from "../../services/settings";
 import { env } from "../../config/env";
 import { grantOfferAccess, revokeOfferAccess } from "../../services/access";
+import {
+  createOfferPaymentLink,
+  deactivateOfferPaymentLink,
+  deactivateRepricedPaymentLinks,
+  listOfferPaymentLinks,
+  paymentLinkSupport,
+} from "../../services/paymentLinks";
 import type { BillingInterval, PricingType } from "../../services/pricing";
 import {
   bumpCreateSchema,
@@ -353,6 +360,7 @@ adminOffersRouter.get(
       bumps: rowsToCamel(bumps.rows),
       upsells: rowsToCamel(upsells.rows),
       pricingOptions: rowsToCamel(pricingOptions.rows),
+      ...(await paymentLinksJson(id, offer as OfferRow, pricingOptions.rows as PricingOptionRow[])),
     });
   }),
 );
@@ -479,6 +487,11 @@ adminOffersRouter.put(
       );
       await client.query("COMMIT");
       await recordAdminAction({ req, action: "offer.pricing_option_update", entityType: "offer", entityId: offerId, before: rowToCamel(before), after: rowToCamel(result.rows[0]) });
+      // A Stripe payment link for this option still sells the old figure, or a
+      // price taken off the checkout. Best effort; see services/paymentLinks.ts.
+      if (repriced || (before.active && !next.active)) {
+        await deactivateRepricedPaymentLinks(offerId, optionId);
+      }
       res.json(rowToCamel(result.rows[0]));
     } catch (error) {
       await client.query("ROLLBACK");
@@ -494,6 +507,9 @@ adminOffersRouter.delete(
   asyncHandler(async (req, res) => {
     const offerId = parseId(req.params.id);
     const optionId = parseId(req.params.optionId, "payment option");
+    // Switched off first: once the option is gone a payment through its link
+    // would be sold against the offer's own price.
+    await deactivateRepricedPaymentLinks(offerId, optionId);
     const removed = await pool.query<PricingOptionRow>(
       `DELETE FROM offer_pricing_options WHERE id = $1 AND offer_id = $2 RETURNING *`,
       [optionId, offerId],
@@ -756,6 +772,15 @@ adminOffersRouter.put(
     }
 
     if (!after) throw notFound("Offer not found");
+    // Stripe payment links (services/paymentLinks.ts), best effort: a new price
+    // retires the link selling the old one, a new currency retires every price's
+    // link (the options were repriced above), and an offer taken off sale stops
+    // selling through Stripe as well as through the checkout.
+    if (currency !== before.currency || (before.status === "published" && after.status !== "published")) {
+      await deactivateRepricedPaymentLinks(id, "all");
+    } else if (repriced) {
+      await deactivateRepricedPaymentLinks(id, null);
+    }
     const json = rowToCamel(after);
 
     await recordAdminAction({
@@ -1113,6 +1138,7 @@ adminOffersRouter.post(
     );
     const after = result.rows[0];
     if (!after) throw notFound("Offer not found");
+    await deactivateRepricedPaymentLinks(id, "all");
 
     await recordAdminAction({
       req,
@@ -1167,6 +1193,9 @@ adminOffersRouter.delete(
       );
     }
 
+    // Before the rows go: a live link whose offer is gone would take money the
+    // webhook can no longer match to anything.
+    await deactivateRepricedPaymentLinks(id, "all");
     await pool.query(`DELETE FROM offers WHERE id = $1`, [id]);
 
     await recordAdminAction({
@@ -1178,6 +1207,126 @@ adminOffersRouter.delete(
     });
 
     res.status(204).end();
+  }),
+);
+
+/* ------------------------------------------------------ stripe payment links */
+
+/**
+ * The offer's Stripe Payment Links (QA row 92), one entry per price on the
+ * checkout: the offer's own (`pricingOptionId` null) and each extra option.
+ * Each carries whether a link can be made for it and why not, the live link if
+ * there is one, and whether that link's figure still matches the price.
+ */
+async function paymentLinksJson(
+  offerId: number,
+  offer: Pick<OfferRow, "pricing_type" | "amount_cents" | "currency" | "status">,
+  options: Pick<PricingOptionRow, "id" | "label" | "pricing_type" | "amount_cents" | "currency" | "active">[],
+): Promise<{ paymentLinks: unknown[]; paymentLinkPrices: unknown[] }> {
+  const links = await listOfferPaymentLinks(offerId);
+  const prices: {
+    pricingOptionId: number | null;
+    label: string;
+    pricing_type: string;
+    amount_cents: number;
+    currency: string;
+    active: boolean;
+  }[] = [
+    {
+      pricingOptionId: null,
+      label: "",
+      pricing_type: offer.pricing_type,
+      amount_cents: offer.amount_cents,
+      currency: offer.currency,
+      active: true,
+    },
+    ...options.map((option) => ({
+      pricingOptionId: option.id,
+      label: option.label,
+      pricing_type: option.pricing_type,
+      amount_cents: option.amount_cents,
+      currency: option.currency,
+      active: option.active,
+    })),
+  ];
+  return {
+    paymentLinks: rowsToCamel(links),
+    paymentLinkPrices: prices.map((price) => {
+      const live = links.find(
+        (link) => link.active && (link.pricing_option_id ?? null) === price.pricingOptionId,
+      );
+      const support = paymentLinkSupport(price);
+      const blocked = !support.supported
+        ? support.reason
+        : offer.status !== "published"
+          ? "Publish this offer first."
+          : !price.active
+            ? "This price is switched off on the checkout."
+            : null;
+      return {
+        pricingOptionId: price.pricingOptionId,
+        label: price.label,
+        supported: blocked === null,
+        reason: blocked,
+        link: live ? rowToCamel(live) : null,
+        // A link that could not be switched off when the price changed.
+        outOfDate: live
+          ? live.amount_cents !== price.amount_cents ||
+            live.currency !== (price.currency || "usd") ||
+            live.pricing_type !== price.pricing_type
+          : false,
+      };
+    }),
+  };
+}
+
+const paymentLinkCreateSchema = z.object({
+  pricingOptionId: z.number().int().positive().nullable().default(null),
+});
+
+/**
+ * POST /admin/offers/:id/payment-links  { pricingOptionId: number | null }
+ *
+ * Creates the Stripe Payment Link for one price. Only ever from this button:
+ * nothing else in the app calls Stripe's Payment Links API.
+ */
+adminOffersRouter.post(
+  "/:id/payment-links",
+  asyncHandler(async (req, res) => {
+    const offerId = parseId(req.params.id);
+    const parsed = paymentLinkCreateSchema.safeParse(req.body ?? {});
+    if (!parsed.success) throw badRequest("Invalid payment link request", parsed.error.flatten());
+    const link = await createOfferPaymentLink({
+      offerId,
+      pricingOptionId: parsed.data.pricingOptionId,
+      createdBy: req.user?.email ?? "",
+    });
+    await recordAdminAction({
+      req,
+      action: "offer.payment_link_create",
+      entityType: "offer",
+      entityId: offerId,
+      after: rowToCamel(link),
+    });
+    res.status(201).json(rowToCamel(link));
+  }),
+);
+
+/** POST /admin/offers/:id/payment-links/:linkId/deactivate */
+adminOffersRouter.post(
+  "/:id/payment-links/:linkId/deactivate",
+  asyncHandler(async (req, res) => {
+    const offerId = parseId(req.params.id);
+    const linkId = parseId(req.params.linkId, "payment link");
+    const link = await deactivateOfferPaymentLink(offerId, linkId);
+    await recordAdminAction({
+      req,
+      action: "offer.payment_link_deactivate",
+      entityType: "offer",
+      entityId: offerId,
+      after: rowToCamel(link),
+    });
+    res.json(rowToCamel(link));
   }),
 );
 

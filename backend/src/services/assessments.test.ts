@@ -258,3 +258,66 @@ describe("scoreResponses — a graded test", () => {
     expect(scored.feedback).toEqual([{ questionId: 1, correct: false, text: "Not quite." }]);
   });
 });
+
+/* ------------------------------------------------------------------ surveys */
+
+/* A Kajabi "Readiness Quiz" as imported: single-choice questions, no correct
+   answers, no bands. Submitting it is what completes the lesson. */
+const SURVEY: AssessmentDefinition = {
+  id: 3,
+  kind: "survey",
+  passMark: null,
+  questions: [
+    question(1, [0, 0, 0]),
+    question(2, [0, 0, 0]),
+    { id: 3, kind: "text", required: false, answers: [] },
+  ],
+  results: ARCHETYPES,
+};
+
+describe("scoreResponses — a survey", () => {
+  it("never passes or fails, and never lands in a result band", () => {
+    const scored = scoreResponses(SURVEY, [
+      { questionId: 1, answerIds: [100] },
+      { questionId: 2, answerIds: [202] },
+    ]);
+    expect(scored.passed).toBeNull();
+    expect(scored.resultId).toBeNull();
+    expect(scored.missingQuestionIds).toEqual([]);
+  });
+
+  it("still reports a required question left blank", () => {
+    const scored = scoreResponses(SURVEY, [{ questionId: 1, answerIds: [101] }]);
+    expect(scored.missingQuestionIds).toEqual([2]);
+  });
+
+  it("does not insist on an optional written answer", () => {
+    const scored = scoreResponses(SURVEY, [
+      { questionId: 1, answerIds: [100] },
+      { questionId: 2, answerIds: [200] },
+      { questionId: 3, text: "   " },
+    ]);
+    expect(scored.missingQuestionIds).toEqual([]);
+  });
+
+  it("keeps the percentage at zero rather than dividing by nothing", () => {
+    const scored = scoreResponses(SURVEY, [
+      { questionId: 1, answerIds: [100] },
+      { questionId: 2, answerIds: [200] },
+    ]);
+    expect(scored.maxScore).toBe(0);
+    expect(scored.percent).toBe(0);
+  });
+});
+
+describe("scoreResponses — a graded test with no pass mark yet", () => {
+  it("reports neither a pass nor a fail instead of failing everybody", () => {
+    const scored = scoreResponses({ ...GRADED, passMark: null }, [
+      { questionId: 1, answerIds: [11] },
+      { questionId: 2, answerIds: [21, 22] },
+      { questionId: 3, answerIds: [31] },
+    ]);
+    expect(scored.percent).toBe(100);
+    expect(scored.passed).toBeNull();
+  });
+});

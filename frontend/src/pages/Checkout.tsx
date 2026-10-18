@@ -77,7 +77,7 @@ export default function Checkout() {
     setLoadError(null);
 
     commerceApi
-      .getOffer(offerSlug)
+      .getOffer(offerSlug, new URLSearchParams(window.location.search).get("option"))
       .then((result) => {
         if (!cancelled) setOffer(result);
       })
@@ -253,8 +253,14 @@ export function CheckoutExperience({ offer }: { offer: PublicOffer }) {
       amount: Math.max(amountCents, 1),
       // Mirrors what the server puts on the PaymentIntent. A mismatch here is
       // refused at confirmation time, and keeping the card on file is what makes
-      // the upsell one click instead of a second card entry.
-      setupFutureUsage: "off_session",
+      // the upsell one click instead of a second card entry. Per method rather
+      // than for the whole intent, so buy-now-pay-later methods that cannot be
+      // saved (Klarna, Afterpay/Clearpay) still appear when they are switched
+      // on in the Stripe Dashboard.
+      paymentMethodOptions: {
+        card: { setup_future_usage: "off_session" },
+        link: { setup_future_usage: "off_session" },
+      },
       appearance,
     };
   }, [mode, amountCents, selectedPricing.currency, siteTheme]);
@@ -329,10 +335,14 @@ function CheckoutForm({ offer, pricingOption, mode, onAmountChange }: CheckoutFo
   const [giftRecipientEmail, setGiftRecipientEmail] = useState("");
   const [giftMessage, setGiftMessage] = useState("");
   const [checkoutSettings, setCheckoutSettings] = useState<Record<string, unknown>>({});
-  const [paypalEnabled, setPaypalEnabled] = useState(false);
+  // PayPal is offered only when the server says it is fully configured; any
+  // failure to ask leaves the page exactly as it was without PayPal.
+  const [paypal, setPaypal] = useState<{ enabled: boolean; sandbox: boolean }>({ enabled: false, sandbox: false });
   useEffect(() => {
     if (preview) return;
-    void commerceApi.paypalConfig().then(config => setPaypalEnabled(config.enabled)).catch(() => setPaypalEnabled(false));
+    void commerceApi.paypalConfig()
+      .then(config => setPaypal({ enabled: config.enabled, sandbox: config.environment === "sandbox" }))
+      .catch(() => setPaypal({ enabled: false, sandbox: false }));
   }, [preview]);
   useEffect(() => {
     // The admin host does not serve /api/settings; the preview brings the same allow-listed values.
@@ -578,7 +588,19 @@ function CheckoutForm({ offer, pricingOption, mode, onAmountChange }: CheckoutFo
       }
       if (provider === "paypal") {
         if (!checkout.paypalApproveUrl) throw new Error("PayPal approval is unavailable for this order.");
-        sessionStorage.setItem(`bc-paypal-order-${checkout.orderId}`, JSON.stringify({orderToken:checkout.orderToken,offerSlug:offer.slug}));
+        // The receipt token stays in this tab and never rides through PayPal's
+        // redirect. The return page also needs where to send the buyer after.
+        try {
+          sessionStorage.setItem(`bc-paypal-order-${checkout.orderId}`, JSON.stringify({
+            orderToken: checkout.orderToken,
+            offerSlug: offer.slug,
+            kind: checkout.paypalKind ?? "order",
+            redirectUrl: offer.redirectUrl || null,
+            isCart: Boolean(offer.cartItems),
+          }));
+        } catch {
+          throw new Error("Your browser blocked this tab's storage, which PayPal checkout needs. Please pay by card instead.");
+        }
         window.location.assign(checkout.paypalApproveUrl);
         return;
       }
@@ -681,6 +703,10 @@ function CheckoutForm({ offer, pricingOption, mode, onAmountChange }: CheckoutFo
   }
 
   /* ---- render ---- */
+
+  // PayPal sells every offer type in US dollars. A PayPal order skips the
+  // one-click upsell (it needs a saved card) and goes straight to its receipt.
+  const showPayPal = paypal.enabled && !preview && paymentRequired && currency.toLowerCase() === "usd";
 
   const buttonLabel = submitting
     ? "Processing…"
@@ -949,15 +975,30 @@ function CheckoutForm({ offer, pricingOption, mode, onAmountChange }: CheckoutFo
               </p>
             )}
 
-            {paypalEnabled && paymentRequired && mode === "payment" && currency.toLowerCase() === "usd" && offer.upsells.length === 0 && (
-              <button type="button" disabled={submitting || quoteState.pending} onClick={() => void handleSubmit(undefined, undefined, "paypal")}
-                className="mt-3 w-full min-h-[52px] rounded-xl border border-white/30 bg-white px-5 py-3 text-center font-semibold text-[#003087] transition hover:bg-[#f5f7fa] disabled:opacity-50">
-                Pay with PayPal — sandbox test
-              </button>
+            {showPayPal && (
+              <div className="mt-4">
+                <p aria-hidden className="mb-3 flex items-center gap-3 text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-orchid-faint">
+                  <span className="h-px flex-1 bg-white/10" />or<span className="h-px flex-1 bg-white/10" />
+                </p>
+                <button
+                  type="button"
+                  disabled={submitting || quoteState.pending}
+                  onClick={() => void handleSubmit(undefined, undefined, "paypal")}
+                  className="w-full min-h-[52px] rounded-xl bg-[#ffc439] px-5 py-3 text-center font-semibold text-[#003087] transition hover:bg-[#f2ba36] disabled:opacity-50"
+                >
+                  {wording.nothingDueToday ? "Start with PayPal" : "Pay with PayPal"}
+                </button>
+                <p className="mt-2 text-center text-xs text-orchid-faint">
+                  {recurring
+                    ? "You'll approve the same schedule in PayPal, and can cancel any time from your account."
+                    : "You'll confirm the payment in PayPal, then come straight back here."}
+                  {paypal.sandbox && " PayPal sandbox: use a sandbox buyer account."}
+                </p>
+              </div>
             )}
             <p className="mt-3 flex items-center justify-center gap-2 text-xs text-orchid-faint">
               <ShieldCheck aria-hidden className="h-3.5 w-3.5" />
-              Secured by Stripe. {typeof checkoutSettings.supportEmail === "string" && checkoutSettings.supportEmail ? <a href={`mailto:${checkoutSettings.supportEmail}`}>Questions? Email us.</a> : "Questions before you buy? We're one email away."}
+              {showPayPal ? "Secured by Stripe and PayPal." : "Secured by Stripe."} {typeof checkoutSettings.supportEmail === "string" && checkoutSettings.supportEmail ? <a href={`mailto:${checkoutSettings.supportEmail}`}>Questions? Email us.</a> : "Questions before you buy? We're one email away."}
             </p>
 
             <p aria-live="polite" className="sr-only">

@@ -92,6 +92,22 @@ export type CoachingProgramOffer = Pick<
   bundleTitle: string | null;
 };
 
+/**
+ * A coaching program's lessons: the workbook course its product opens. Kept out
+ * of the Courses list, so the program's Lessons tab is where it is edited from.
+ */
+export interface CoachingProgramContent {
+  productId: number | null;
+  productSlug: string | null;
+  course: {
+    id: number;
+    title: string;
+    moduleCount: number;
+    lessonCount: number;
+    publishedLessonCount: number;
+  } | null;
+}
+
 export const coachingAdminApi = {
   sessionFiles: (sessionId: number) =>
     request<CoachingSessionFile[]>(`/admin/coaching/sessions/${sessionId}/files`),
@@ -107,4 +123,10 @@ export const coachingAdminApi = {
   /** A program's Offers tab: every offer that includes it, live ones first. */
   programOffers: (programId: number) =>
     request<CoachingProgramOffer[]>(`/admin/coaching/programs/${programId}/offers`),
+  /** A program's Lessons tab: the course its buyers open from their library. */
+  programContent: (programId: number) =>
+    request<CoachingProgramContent>(`/admin/coaching/programs/${programId}/content`),
+  /** Gives a program a (draft) course to hold its lessons; returns the existing one if there is one. */
+  programContentCreate: (programId: number) =>
+    request<CoachingProgramContent>(`/admin/coaching/programs/${programId}/content`, { method: "POST" }),
 };

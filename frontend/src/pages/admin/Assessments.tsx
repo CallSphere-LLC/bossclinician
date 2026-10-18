@@ -184,7 +184,12 @@ export default function Assessments() {
         accessorKey: "slug",
         header: "Web address",
         cell: ({ row }) => (
-          <span className="text-xs text-ink-soft">{webAddress("quiz", row.original.slug)}</span>
+          // A lesson quiz has no public page: it opens only inside its course
+          // lesson, for enrolled students, so showing /quiz/… sent people to a
+          // "Sign in to take this lesson assessment" dead end.
+          <span className="text-xs text-ink-soft">
+            {row.original.lessonId ? "Inside a course lesson" : webAddress("quiz", row.original.slug)}
+          </span>
         ),
       },
       {

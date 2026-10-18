@@ -5,6 +5,8 @@ import {
   normalizeVerificationCode,
   renderCertificatePdf,
   requiredDwellSeconds,
+  summarizeCertificateStatus,
+  type CertificateFacts,
   type CeuLessonRecord,
 } from "./certificates";
 
@@ -217,5 +219,78 @@ describe("earnedCeuCredit", () => {
     // The rollup cannot reach 100% on an empty course, so this is only ever
     // reached with lessons; vacuously true is the honest answer for the rule.
     expect(earnedCeuCredit([])).toBe(true);
+  });
+});
+
+/* ------------------------------------------------------ certificate eligibility */
+
+function facts(overrides: Partial<CertificateFacts> = {}): CertificateFacts {
+  return {
+    issued: false,
+    hasTemplate: true,
+    requiresPassingQuizzes: true,
+    totalLessons: 5,
+    lessonsRemaining: 0,
+    quizzesToPass: [],
+    ceuPending: false,
+    ...overrides,
+  };
+}
+
+const FINAL_QUIZ = { lessonTitle: "Post-Test", assessmentTitle: "Post-Test", passMark: 75 };
+
+describe("summarizeCertificateStatus", () => {
+  it("is eligible once every lesson is finished and every required quiz passed", () => {
+    const status = summarizeCertificateStatus(facts());
+    expect(status.eligible).toBe(true);
+    expect(status.offered).toBe(true);
+    expect(status.message).toMatch(/earned your certificate/);
+  });
+
+  it("is not offered at all when the course has no certificate switched on", () => {
+    const status = summarizeCertificateStatus(facts({ hasTemplate: false }));
+    expect(status.offered).toBe(false);
+    expect(status.eligible).toBe(false);
+    expect(status.message).toBe("This course doesn't come with a certificate.");
+  });
+
+  it("waits for the lessons that are left, and counts them", () => {
+    expect(summarizeCertificateStatus(facts({ lessonsRemaining: 1 })).message).toBe(
+      "Finish the remaining lesson to get your certificate."
+    );
+    const status = summarizeCertificateStatus(facts({ lessonsRemaining: 3 }));
+    expect(status.eligible).toBe(false);
+    expect(status.message).toBe("Finish the remaining 3 lessons to get your certificate.");
+  });
+
+  it("waits for a required quiz to be passed, naming it and its pass mark", () => {
+    const status = summarizeCertificateStatus(facts({ quizzesToPass: [FINAL_QUIZ] }));
+    expect(status.eligible).toBe(false);
+    expect(status.message).toBe("Pass the quiz in “Post-Test” (pass mark 75%) to get your certificate.");
+  });
+
+  it("names both what is left when lessons and a quiz are outstanding", () => {
+    const status = summarizeCertificateStatus(facts({ lessonsRemaining: 2, quizzesToPass: [FINAL_QUIZ] }));
+    expect(status.message).toBe(
+      "Finish the remaining 2 lessons and pass the quiz in “Post-Test” (pass mark 75%) to get your certificate."
+    );
+  });
+
+  it("never treats an empty course as finished", () => {
+    expect(summarizeCertificateStatus(facts({ totalLessons: 0 })).eligible).toBe(false);
+  });
+
+  it("holds a CE certificate back until the watch-time standard is met", () => {
+    const status = summarizeCertificateStatus(facts({ ceuPending: true }));
+    expect(status.eligible).toBe(false);
+    expect(status.message).toMatch(/CE credit/);
+  });
+
+  it("reports an issued certificate as ready, never as claimable again", () => {
+    const status = summarizeCertificateStatus(facts({ issued: true, hasTemplate: false }));
+    expect(status.issued).toBe(true);
+    expect(status.offered).toBe(true);
+    expect(status.eligible).toBe(false);
+    expect(status.message).toBe("Your certificate is ready.");
   });
 });

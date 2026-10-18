@@ -34,6 +34,7 @@ import {
 import { DataTable, RowActions } from "@/pages/admin/ui/DataTable";
 import { Modal, useConfirm } from "@/pages/admin/ui/Dialog";
 import { StripeBanner } from "@/pages/admin/ui/StripeBanner";
+import { PayPalStatusNote } from "@/pages/admin/ui/PayPalStatusNote";
 import {
   friendlyError,
   humanizeKey,
@@ -151,7 +152,7 @@ export function PaymentsPage() {
         accessorKey: "amountCents",
         header: "How much",
         cell: ({ row }) => {
-          const { amountCents, totalCents, discountCents, couponCode, currency } = row.original;
+          const { amountCents, totalCents, discountCents, couponCode, currency, paymentProvider } = row.original;
           // A 100%-off order took nothing and still bought something. Showing
           // "$0.00" alone reads like a bug in the till, so what it was worth
           // and the code that took it off are shown underneath.
@@ -166,6 +167,11 @@ export function PaymentsPage() {
                   {formatCurrency(totalCents + discountCents, currency)} less{" "}
                   {couponCode || "a discount"}
                 </p>
+              )}
+              {/* Card payments are the default and go unlabelled; free and
+                  manual orders have no provider at all. */}
+              {paymentProvider === "paypal" && (
+                <p className="truncate text-xs text-ink-soft">Paid with PayPal</p>
               )}
             </div>
           );
@@ -202,6 +208,7 @@ export function PaymentsPage() {
         actions={rows && <Badge tone="green">{formatCurrency(totalPaid)} collected so far</Badge>}
       />
       <StripeBanner />
+      <PayPalStatusNote />
       {error && <ErrorNotice message={error} />}
       <DataTable
         columns={columns}

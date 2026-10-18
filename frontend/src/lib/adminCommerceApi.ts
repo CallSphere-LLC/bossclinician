@@ -323,6 +323,40 @@ export interface OfferDetail extends Offer {
   bumps: OfferBump[];
   upsells: OfferUpsell[];
   pricingOptions: OfferPricingOption[];
+  /** Every Stripe payment link the offer has had, live ones first. */
+  paymentLinks?: OfferPaymentLink[];
+  /** One entry per price on the checkout: can it have a Stripe payment link, and its live one. */
+  paymentLinkPrices?: OfferPaymentLinkPrice[];
+}
+
+/** A Stripe Payment Link for one of an offer's prices (QA row 92). */
+export interface OfferPaymentLink {
+  id: number;
+  offerId: number;
+  /** null = the offer's own (main) price. */
+  pricingOptionId: number | null;
+  stripePaymentLinkId: string;
+  url: string;
+  pricingType: PricingType;
+  amountCents: number;
+  currency: string;
+  active: boolean;
+  createdBy: string;
+  createdAt: string;
+  deactivatedAt: string | null;
+}
+
+export interface OfferPaymentLinkPrice {
+  /** null = the offer's own (main) price. */
+  pricingOptionId: number | null;
+  label: string;
+  /** Whether a Stripe payment link can be made for this price right now. */
+  supported: boolean;
+  /** Why not, in words for the owner; null when it can. */
+  reason: string | null;
+  link: OfferPaymentLink | null;
+  /** The live link charges a different figure from the price as it stands now. */
+  outOfDate: boolean;
 }
 
 export interface OfferPricingOption {
@@ -427,6 +461,16 @@ export const adminCommerceApi = {
     }),
   pricingOptionDelete: (offerId: number, optionId: number) =>
     commerceRequest<void>(`/admin/offers/${offerId}/pricing-options/${optionId}`, { method: "DELETE" }),
+  /** Creates a Stripe Payment Link for one price — only ever on the admin's click. */
+  paymentLinkCreate: (offerId: number, pricingOptionId: number | null) =>
+    commerceRequest<OfferPaymentLink>(`/admin/offers/${offerId}/payment-links`, {
+      method: "POST",
+      body: JSON.stringify({ pricingOptionId }),
+    }),
+  paymentLinkDeactivate: (offerId: number, linkId: number) =>
+    commerceRequest<OfferPaymentLink>(`/admin/offers/${offerId}/payment-links/${linkId}/deactivate`, {
+      method: "POST",
+    }),
 
   offerProductAdd: (offerId: number, productId: number, sort: number) =>
     commerceRequest<{ offerId: number; productId: number; sort: number }>(

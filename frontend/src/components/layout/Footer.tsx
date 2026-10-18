@@ -4,6 +4,12 @@ import { Aurora } from "@/components/luxe/Aurora";
 import { footer } from "@/content/site";
 import { SubscribeForm } from "@/components/forms/SubscribeForm";
 import { cn } from "@/lib/cn";
+import { openCookiePreferences } from "@/lib/consent";
+
+/** Read after a link's text for links that open a new tab. */
+function NewTab() {
+  return <span className="sr-only"> (opens in a new tab)</span>;
+}
 
 const columnHeading =
   "mb-6 text-[0.6rem] font-bold uppercase tracking-[0.26em] text-gold/70";
@@ -28,7 +34,7 @@ export function Footer() {
   };
 
   return (
-    <footer className="relative isolate overflow-hidden bg-night-deep">
+    <footer className="relative isolate overflow-hidden bg-night-deep" aria-label="Site footer">
       {/* Foil trim along the top edge, then a low-intensity light field. The
           footer is the page's last frame — flat black here undoes the depth
           every section above it just built. */}
@@ -102,6 +108,7 @@ export function Footer() {
                 className={columnLink}
               >
                 Instagram {footer.instagramHandle}
+                <NewTab />
               </a>
             </li>
             <li>
@@ -112,6 +119,7 @@ export function Footer() {
                 className={columnLink}
               >
                 Facebook
+                <NewTab />
               </a>
             </li>
             <li>
@@ -122,6 +130,7 @@ export function Footer() {
                 className={columnLink}
               >
                 Threads
+                <NewTab />
               </a>
             </li>
             <li>
@@ -132,6 +141,7 @@ export function Footer() {
                 className={columnLink}
               >
                 LinkedIn
+                <NewTab />
               </a>
             </li>
             <li>
@@ -142,6 +152,7 @@ export function Footer() {
                 className={columnLink}
               >
                 TikTok {footer.tiktokHandle}
+                <NewTab />
               </a>
             </li>
           </ul>
@@ -158,7 +169,7 @@ export function Footer() {
             &copy; {new Date().getUTCFullYear()} Boss Clinician, LLC &middot; Yvette Howard, LCSW
             &middot; All Rights Reserved
           </p>
-          <div className="flex flex-wrap items-center gap-x-7 gap-y-2">
+          <nav aria-label="Legal" className="flex flex-wrap items-center gap-x-7 gap-y-2">
             {footer.legalLinks.map((link) => (
               <Link
                 key={link.to}
@@ -168,7 +179,15 @@ export function Footer() {
                 {link.label}
               </Link>
             ))}
-          </div>
+            {/* Reopens the cookie panel (components/consent/CookieConsent.tsx). */}
+            <button
+              type="button"
+              onClick={openCookiePreferences}
+              className="inline-block py-2 text-[0.78rem] text-white/60 transition-colors duration-300 hover:text-gold/80"
+            >
+              Cookie preferences
+            </button>
+          </nav>
         </Container>
       </div>
     </footer>

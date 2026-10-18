@@ -156,6 +156,8 @@ export const PUBLIC_ROUTES: readonly { path: string; Component: RouteComponent }
     path: "/financial-disclaimer",
     Component: lazyRoute(() => import("@/pages/legal/FinancialDisclaimer")),
   },
+  { path: "/cookie-policy", Component: lazyRoute(() => import("@/pages/legal/CookiePolicy")) },
+  { path: "/accessibility", Component: lazyRoute(() => import("@/pages/legal/AccessibilityStatement")) },
   ...leadMagnetPublicRoutes,
   ...kajabiPublicRoutes,
   ...quizRouteTable,

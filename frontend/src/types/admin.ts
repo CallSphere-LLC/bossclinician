@@ -342,6 +342,8 @@ export interface Payment {
   createdAt: string;
   /** Everything the order granted, bumps included. */
   items: PaymentItem[];
+  /** Who collected the money. */
+  paymentProvider?: "stripe" | "paypal";
 }
 
 export interface Subscription {
@@ -411,6 +413,15 @@ export interface StripeStatus {
   accountId?: string | null;
   chargesEnabled?: boolean;
   payoutsEnabled?: boolean;
+}
+
+/** PayPal checkout's switch, as the server sees it. Never a credential. */
+export interface PayPalStatus {
+  enabled: boolean;
+  environment: "sandbox" | "live" | null;
+  credentials: boolean;
+  webhook: boolean;
+  merchantId: string;
 }
 
 /* --------------------------------------------------------------- Dashboard */

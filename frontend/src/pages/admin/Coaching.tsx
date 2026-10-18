@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { adminApi } from "@/lib/api";
 import {
   coachingAdminApi,
+  type CoachingProgramContent,
   type CoachingProgramOffer,
   type CoachingSessionFile,
 } from "@/lib/coachingAdminApi";
@@ -253,12 +254,17 @@ export default function Coaching() {
   );
 }
 
-/** The two tabs inside an open program — Kajabi's coaching product has the same pair. */
-type ProgramTab = "details" | "offers";
+/**
+ * The tabs inside an open program — Kajabi's coaching product has the first
+ * pair. Lessons holds the program's workbook: the one-to-one programs moved
+ * here from the Courses list (QA row 99) keep their lessons on this tab.
+ */
+type ProgramTab = "details" | "offers" | "lessons";
 
 const PROGRAM_TABS: { value: ProgramTab; label: string }[] = [
   { value: "details", label: "Details" },
   { value: "offers", label: "Offers" },
+  { value: "lessons", label: "Lessons" },
 ];
 
 /** The offers list's own colours (pages/admin/Offers.tsx), so a status reads the same here. */
@@ -384,6 +390,97 @@ function ProgramOffersPanel({ programId }: { programId: number }) {
           );
         })}
       </ul>
+    </div>
+  );
+}
+
+/**
+ * The Lessons tab of an open program: the course its buyers open from their
+ * library and the Coaching page. That course is kept out of the Courses list —
+ * a one-to-one program is not a course to sell — so it is edited from here.
+ */
+function ProgramLessonsPanel({ programId }: { programId: number }) {
+  const [content, setContent] = useState<CoachingProgramContent | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+
+  const load = useCallback(() => {
+    setError(null);
+    coachingAdminApi
+      .programContent(programId)
+      .then(setContent)
+      .catch(() => setError("We couldn't load the lessons for this program."));
+  }, [programId]);
+
+  useEffect(load, [load]);
+
+  async function create() {
+    setCreating(true);
+    try {
+      setContent(await coachingAdminApi.programContentCreate(programId));
+      toast.success("Lessons are ready to add");
+    } catch (err) {
+      toast.error(friendlyError(err, "coaching program"));
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  if (error) return <LoadProblem message={error} onRetry={load} />;
+  if (content === null) return <Skeleton className="h-24 w-full" />;
+
+  const course = content.course;
+  if (!course) {
+    return (
+      <EmptyState
+        icon={<NotebookPen />}
+        title="No lessons in this program yet"
+        description={
+          content.productId === null
+            ? "This program isn't sold through a product yet. Once a product grants it, you can add workbook lessons here for your clients."
+            : "Add workbook lessons, worksheets or tools for your clients. They open them from their library and their Coaching page."
+        }
+        action={
+          content.productId === null ? undefined : (
+            <Button size="sm" onClick={() => void create()} disabled={creating}>
+              <Plus />
+              {creating ? "Setting up…" : "Add lessons"}
+            </Button>
+          )
+        }
+      />
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-xl border border-hairline/70 p-4">
+        <p className="font-semibold text-ink">{course.title}</p>
+        <p className="mt-1 text-sm text-ink-soft">
+          <span className="font-semibold tabular-nums text-ink">{course.publishedLessonCount}</span>{" "}
+          published {course.publishedLessonCount === 1 ? "lesson" : "lessons"}
+          {course.lessonCount > course.publishedLessonCount && (
+            <>
+              {" "}· <span className="font-semibold tabular-nums text-ink">{course.lessonCount - course.publishedLessonCount}</span> in draft
+            </>
+          )}
+          {" "}in <span className="font-semibold tabular-nums text-ink">{course.moduleCount}</span>{" "}
+          {course.moduleCount === 1 ? "module" : "modules"}
+        </p>
+        <p className="mt-2 text-sm text-ink-soft">
+          {course.publishedLessonCount > 0
+            ? "Everyone with access to this program opens these from their library and their Coaching page."
+            : "Clients will see these once a lesson is published."}
+        </p>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Button asChild size="sm">
+            <Link to={`/admin/courses/${course.id}/curriculum`}>Edit lessons</Link>
+          </Button>
+          <Button asChild variant="secondary" size="sm">
+            <Link to={`/admin/courses/${course.id}/preview`}>Preview as client</Link>
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -546,7 +643,7 @@ function OffersTab() {
                   {pluralize(clientCounts.get(offer.id) ?? 0, "client")}
                 </Link>
               )}
-              <div className="mt-auto flex gap-2 pt-4">
+              <div className="mt-auto flex flex-wrap gap-2 pt-4">
                 <Button
                   variant="secondary"
                   size="sm"
@@ -563,6 +660,15 @@ function OffersTab() {
                 >
                   <Tag />
                   Offers
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="flex-1"
+                  onClick={() => openOffer(offer, "lessons")}
+                >
+                  <NotebookPen />
+                  Lessons
                 </Button>
                 <Button
                   variant="dangerGhost"
@@ -584,7 +690,7 @@ function OffersTab() {
         title={draft?.id ? "Edit coaching program" : "New coaching program"}
         size={draft?.id ? "xl" : "lg"}
         footer={
-          draft?.id && programTab === "offers" ? (
+          draft?.id && (programTab === "offers" || programTab === "lessons") ? (
             // Nothing on the Offers tab is saved from here: each offer is
             // edited on its own page.
             <Button variant="secondary" size="sm" onClick={() => setDraft(null)}>
@@ -716,6 +822,11 @@ function OffersTab() {
           {draft.id && (
             <Tabs.Content value="offers">
               <ProgramOffersPanel programId={Number(draft.id)} />
+            </Tabs.Content>
+          )}
+          {draft.id && (
+            <Tabs.Content value="lessons">
+              <ProgramLessonsPanel programId={Number(draft.id)} />
             </Tabs.Content>
           )}
           </Tabs.Root>

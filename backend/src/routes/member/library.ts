@@ -5,7 +5,7 @@ import { pool } from "../../db/pool";
 import { asyncHandler } from "../../utils/asyncHandler";
 import { notFound, unauthorized } from "../../utils/httpError";
 import type { AuthedMember } from "../../middleware/memberAuth";
-import { hasProductAccess, listMemberProducts } from "../../services/access";
+import { PRODUCT_CONTENT_COURSE_ID, hasProductAccess, listMemberProducts } from "../../services/access";
 import {
   flattenLessons,
   loadCourseForMember,
@@ -321,6 +321,8 @@ interface ProductRow {
   podcast_id: number | null;
   newsletter_id: number | null;
   coaching_offer_id: number | null;
+  /** The course whose lessons this product opens: `course_id`, or a coaching programme's workbook course. */
+  content_course_id: number | null;
 }
 
 /**
@@ -334,8 +336,9 @@ interface ProductRow {
 async function loadOwnedProduct(memberId: number, slug: string): Promise<ProductRow> {
   const found = await pool.query<ProductRow>(
     `SELECT id, slug, title, subtitle, description, instructions, thumbnail_url, kind, course_id,
-            community_id, podcast_id, newsletter_id, coaching_offer_id
-       FROM products
+            community_id, podcast_id, newsletter_id, coaching_offer_id,
+            ${PRODUCT_CONTENT_COURSE_ID} AS content_course_id
+       FROM products p
       WHERE slug = $1 AND status <> 'archived'`,
     [slug]
   );
@@ -513,6 +516,23 @@ memberLibraryRouter.get(
       return;
     }
 
+    // A one-to-one coaching programme with lessons in its workbook course
+    // (migration 120) opens as that course, so the player shows the outline and
+    // its lessons; it keeps its "Coaching" label and the programme id. With no
+    // published lesson yet it falls through to the coaching card below.
+    if (product.kind === "coaching" && product.content_course_id !== null) {
+      const course = await loadCourseForMember(member.id, product.content_course_id);
+      if (course && course.modules.some((module) => module.lessons.length > 0)) {
+        res.json({
+          ...base,
+          kind: "course",
+          coachingOfferId: product.coaching_offer_id,
+          course: toOutlineJson(course, product.slug),
+        });
+        return;
+      }
+    }
+
     if (product.kind === "download") {
       res.json({ ...base, instructions: product.instructions, files: await loadProductFiles(product.id) });
       return;
@@ -587,9 +607,13 @@ memberLibraryRouter.get(
     const { productSlug, lessonSlug } = parsed.data;
 
     const product = await loadOwnedProduct(member.id, productSlug);
-    if (product.kind !== "course" || product.course_id === null) throw notFound(LESSON_MISSING);
+    const lessonCourseId =
+      product.kind === "course" ? product.course_id
+        : product.kind === "coaching" ? product.content_course_id
+          : null;
+    if (lessonCourseId === null) throw notFound(LESSON_MISSING);
 
-    const course = await loadCourseForMember(member.id, product.course_id);
+    const course = await loadCourseForMember(member.id, lessonCourseId);
     if (!course) throw notFound(LESSON_MISSING);
 
     const lessons = flattenLessons(course.modules);
