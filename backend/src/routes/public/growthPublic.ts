@@ -34,6 +34,8 @@ import { keepStagedFile, receiveFormFiles, type StagedFile } from "../../service
 import { kindFromMime } from "../../services/mediaStorage";
 import { adminRepliesUrl, replyRecipients, wantsReplyEmail } from "../../services/formNotifications";
 import { sendMail } from "../../email/mailer";
+import { formConfirmationEmail } from "../../email/formConfirmation";
+import { generateToken, hashToken } from "../../auth/tokens";
 import { renderMarkdown } from "../../email/provider";
 import { formSubmissionNotification, type FormAnswerRow } from "../../email/templates";
 
@@ -978,6 +980,41 @@ growthPublicRouter.post(
       }
     }
 
+    // Double opt-in (the form's own switch, `double_opt_in`): the reply is on
+    // disk and flagged unconfirmed (`confirmed_at` null), the contact exists,
+    // and now one email goes out whose link proves the address. Everything the
+    // form promises after a reply — tags, sequence, the owner's note — still
+    // happens above, because the reply is real; what waits for the click is
+    // the destination (`redirect_url`) and the contact's `opt_in_confirmed_at`.
+    // Sent before the response so the page can honestly say "check your inbox".
+    let confirmationRequired = false;
+    if (form.double_opt_in && email) {
+      const token = generateToken();
+      await afterSubmission(`the confirmation token on submission ${submissionId}`, () =>
+        pool.query(`UPDATE form_submissions SET confirm_token_hash = $2 WHERE id = $1`, [submissionId, hashToken(token)]),
+      );
+      const outcome = await sendMail({
+        to: email,
+        ...formConfirmationEmail({
+          firstName: contact.firstName || name,
+          formName: form.name,
+          token,
+          destination: destinationInWords(form.redirect_url),
+          validDays: CONFIRM_VALID_DAYS,
+        }),
+        topic: "form_confirmation",
+        sourceId: submissionId,
+        contactId,
+      });
+      if (!outcome.sent) {
+        // Logged, not thrown: the reply is saved and the owner can confirm the
+        // contact by hand from People. The page is told the email failed so it
+        // does not promise an inbox that stays empty.
+        console.error(`[forms] confirmation email for ${form.slug} reply ${submissionId} not sent: ${outcome.error}`);
+      }
+      confirmationRequired = outcome.sent;
+    }
+
     if (form.create_lead && email) {
       await afterSubmission(`the lead for ${form.slug}`, async () => {
         const lead = await pool.query<{ id: number }>(
@@ -1045,7 +1082,100 @@ growthPublicRouter.post(
       );
     }
 
-    res.status(201).json({ ok: true, message: form.success_message });
+    res.status(201).json({ ok: true, message: form.success_message, confirmationRequired });
+  }),
+);
+
+/** How long a confirmation link stays valid. Generous: it is a free video, not a password. */
+const CONFIRM_VALID_DAYS = 30;
+
+/** "/watch-now" -> "the masterclass"; anything else -> "what you signed up for". */
+function destinationInWords(redirectUrl: unknown): string {
+  const path = typeof redirectUrl === "string" ? redirectUrl : "";
+  if (path.startsWith("/watch-now")) return "the masterclass";
+  return "what you signed up for";
+}
+
+/**
+ * Only a path on this site, so a `redirect_url` typed into the Forms screen
+ * can never send a confirming visitor to another host. Absolute URLs that are
+ * ours are reduced to their path; anything else falls back to the home page.
+ */
+export function confirmRedirectPath(redirectUrl: unknown): string {
+  const raw = typeof redirectUrl === "string" ? redirectUrl.trim() : "";
+  if (!raw) return "/";
+  if (raw.startsWith("/") && !raw.startsWith("//")) return raw;
+  try {
+    const url = new URL(raw);
+    const site = new URL(env.publicSiteUrl);
+    if (url.host === site.host) return `${url.pathname}${url.search}`;
+  } catch {
+    // Not a URL at all.
+  }
+  return "/";
+}
+
+/**
+ * GET /api/forms/confirm/:token — the link in the double opt-in email.
+ *
+ * Idempotent: the token stays on the reply after it is used, so the same link
+ * clicked twice (or prefetched by a mail client and then clicked) lands on the
+ * same page both times. Stamps the reply (`confirmed_at`) and the contact
+ * (`opt_in_confirmed_at`, the mailing list's double opt-in store — see
+ * services/emailConfirmation.ts) on the first click only, then redirects to the
+ * form's `redirect_url` with the first name for the greeting. A link that is
+ * unknown or older than CONFIRM_VALID_DAYS goes to the home page with
+ * `?confirm=expired`, because the person clicking it is a person, not a client
+ * expecting JSON.
+ */
+growthPublicRouter.get(
+  "/forms/confirm/:token",
+  leadsLimiter,
+  asyncHandler(async (req, res) => {
+    const token = String(req.params.token ?? "");
+    const row = token.length >= 16 && token.length <= 200
+      ? (await pool.query<{
+          id: number; contact_id: number | null; confirmed_at: Date | null; data: Record<string, unknown>;
+          form_name: string; redirect_url: string | null; slug: string;
+        }>(
+          `SELECT s.id, s.contact_id, s.confirmed_at, s.data, f.name AS form_name, f.redirect_url, f.slug
+             FROM form_submissions s JOIN forms f ON f.id = s.form_id
+            WHERE s.confirm_token_hash = $1
+              AND s.created_at > now() - ($2::int * INTERVAL '1 day')`,
+          [hashToken(token), CONFIRM_VALID_DAYS],
+        )).rows[0]
+      : undefined;
+    if (!row) {
+      res.redirect(302, `${env.publicSiteUrl}/?confirm=expired`);
+      return;
+    }
+
+    if (!row.confirmed_at) {
+      await pool.query(`UPDATE form_submissions SET confirmed_at = now() WHERE id = $1 AND confirmed_at IS NULL`, [row.id]);
+      if (row.contact_id !== null) {
+        await pool.query(
+          `UPDATE contacts
+              SET opt_in_confirmed_at = COALESCE(opt_in_confirmed_at, now()),
+                  email_marketing_status = CASE WHEN email_marketing_status = 'unconfirmed' THEN 'subscribed' ELSE email_marketing_status END,
+                  updated_at = now()
+            WHERE id = $1`,
+          [row.contact_id],
+        );
+        await recordActivity({
+          contactId: row.contact_id,
+          kind: "form.confirmed",
+          title: `Confirmed their email for ${row.form_name}`,
+          subjectType: "form_submission",
+          subjectId: row.id,
+        }).catch((error: unknown) => console.error("[forms] could not record the confirmation:", (error as Error).message));
+      }
+    }
+
+    const destination = new URL(confirmRedirectPath(row.redirect_url), env.publicSiteUrl);
+    const firstName = typeof row.data?.name === "string" ? row.data.name.trim().slice(0, 80) : "";
+    if (firstName) destination.searchParams.set("name", firstName);
+    destination.searchParams.set("confirmed", "1");
+    res.redirect(302, destination.toString());
   }),
 );
 

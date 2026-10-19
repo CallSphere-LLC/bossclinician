@@ -23,6 +23,12 @@ interface LuxePageHeroProps {
   tone?: React.ComponentProps<typeof Aurora>["tone"];
   align?: "left" | "center";
   className?: string;
+  /**
+   * A full-bleed photograph behind the band, as her Kajabi landing pages open.
+   * Darkened towards the bottom so the headline stays legible and the band
+   * still hands off to the next section's night surface.
+   */
+  photo?: { src: string; alt: string; width?: number; height?: number; position?: string };
 }
 
 /**
@@ -43,6 +49,7 @@ export function LuxePageHero({
   tone = "violet",
   align = "left",
   className,
+  photo,
 }: LuxePageHeroProps) {
   const reduce = useEntranceMotion();
   const centered = align === "center" && !aside;
@@ -52,14 +59,37 @@ export function LuxePageHero({
       className={cn("relative overflow-hidden bg-night-deep", className)}
       aria-label="Page header"
     >
-      <Aurora tone={tone} intensity={0.85} />
+      {photo ? (
+        <div aria-hidden className="pointer-events-none absolute inset-0">
+          <img
+            src={photo.src}
+            alt=""
+            width={photo.width}
+            height={photo.height}
+            fetchPriority="high"
+            decoding="async"
+            className="h-full w-full object-cover"
+            style={{ objectPosition: photo.position ?? "center 20%" }}
+          />
+          {/* Her page's overlay: near-clear at the top, night at the foot. */}
+          <div className="absolute inset-0 bg-gradient-to-b from-night-deep/20 via-night-deep/60 to-night-deep" />
+        </div>
+      ) : (
+        <Aurora tone={tone} intensity={0.85} />
+      )}
       {/* Hands off to whatever surface the next section uses without a seam. */}
       <div
         aria-hidden
         className="pointer-events-none absolute inset-x-0 bottom-0 h-32 bg-gradient-to-b from-transparent to-night"
       />
 
-      <Container className="relative z-[1] py-8 sm:py-10 lg:py-12 2xl:py-20 short:py-8">
+      <Container
+        className={cn(
+          "relative z-[1] py-8 sm:py-10 lg:py-12 2xl:py-20 short:py-8",
+          // Room for the photograph to be seen above the words, as on her page.
+          photo && "pt-[42vh] sm:pt-[46vh] lg:pt-[50vh] short:pt-[36vh]",
+        )}
+      >
         <div
           className={cn(
             aside && "grid items-center gap-12 lg:grid-cols-[1.15fr_0.85fr] lg:gap-16",

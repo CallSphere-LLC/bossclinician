@@ -16,6 +16,13 @@ export const freedomMasterclass = {
   },
 
   hero: {
+    /** Her Kajabi page's full-bleed photo at the top (sheet row 104, 19 Oct 2026). */
+    photo: {
+      src: "/images/masterclass/masterclass-hero.jpg",
+      alt: "Yvette Howard, LCSW",
+      width: 976,
+      height: 1440,
+    },
     eyebrow: "Free On-Demand Masterclass",
     title: "The Year My Practice Hit $500K Was the Same Year I Almost",
     titleAccent: "Walked Away From It.",
@@ -37,9 +44,40 @@ export const freedomMasterclass = {
       titleAccent: "get your free audit",
       firstName: "First name",
       email: "Email",
+      // Her Kajabi form's two practice questions, word for word (the keys and
+      // options match the `freedom-masterclass` form, migration 123).
+      stage: {
+        key: "practice_stage",
+        label: "Where are you in your private practice right now?",
+        placeholder: "Choose one",
+        options: [
+          "I’m just getting started",
+          "I’m rebuilding or restarting",
+          "I have an established solo practice",
+          "I own a group practice",
+        ],
+      },
+      goal: {
+        key: "practice_goal",
+        label: "What do you want to build next?",
+        placeholder: "Choose one",
+        options: [
+          "A stronger solo practice",
+          "A group practice/team",
+          "More income without adding more 1:1 clients",
+          "More flexibility and time freedom",
+          "I’m not sure yet",
+        ],
+      },
+      chooseOne: "Please choose an answer for each question.",
       submit: "Get Free Access",
       sending: "Saving your seat…",
       privacy: "Your privacy matters. You can unsubscribe anytime.",
+      // After a sign-up: the address is confirmed by email before the video.
+      confirmTitle: "Check your inbox",
+      confirmBody:
+        "We've sent a confirmation link to {email}. Click it and the masterclass opens straight away. Not there in a minute? Check your spam or promotions folder.",
+      confirmAgain: "Use a different email",
     },
     alsoIncluded:
       "Also included: the complimentary Practice Freedom Audit to help you apply what you learn to your own practice.",

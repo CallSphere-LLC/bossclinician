@@ -204,7 +204,7 @@ export const api = {
    * form whose email field is keyed anything else creates no lead at all.
    */
   submitForm: (slug: string, data: Record<string, unknown>, email?: string, honeypot?: HoneypotPayload) =>
-    request<{ ok: true; message: string }>(`/forms/${encodeURIComponent(slug)}/submit`, {
+    request<{ ok: true; message: string; confirmationRequired?: boolean }>(`/forms/${encodeURIComponent(slug)}/submit`, {
       method: "POST",
       body: JSON.stringify(email ? { data, email, ...honeypot } : { data, ...honeypot }),
     }),

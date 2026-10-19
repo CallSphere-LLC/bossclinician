@@ -55,6 +55,15 @@ describe("the Freedom Masterclass sign-up, server-rendered", () => {
     expect(html).toContain('type="submit"');
   });
 
+  it("opens on her photograph and asks her two practice questions, twice (sheet row 104)", () => {
+    expect(html).toContain(freedomMasterclass.hero.photo.src);
+    const { stage, goal } = freedomMasterclass.register.card;
+    expect(html.match(new RegExp(`name="${stage.key}"`, "g"))?.length).toBe(2);
+    expect(html.match(new RegExp(`name="${goal.key}"`, "g"))?.length).toBe(2);
+    expect(html).toContain(escaped(stage.options[0]));
+    expect(html).toContain(escaped(goal.options[goal.options.length - 1]));
+  });
+
   it("never sends anybody to the resources hub or the old Kajabi page", () => {
     expect(html).not.toContain('href="/resources"');
     expect(html).not.toContain("bossclinician.com/freedom-masterclass");

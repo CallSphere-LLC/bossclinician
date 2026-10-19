@@ -27,9 +27,10 @@ const REGISTER = "#register";
  * The form (components/masterclass/MasterclassSignup) files the registration
  * and sends the visitor to /watch-now, where the video is.
  *
- * What changed in the move: her form's three extra dropdowns (confirm your
- * email, license type, practice status) are not carried over — the request was
- * first name and email, and every extra box on an opt-in costs sign-ups.
+ * 19 Oct 2026 (sheet row 104): her page's full-bleed photo is back at the top,
+ * the form asks her two practice questions again, and the address is confirmed
+ * by email before /watch-now opens (the form's `double_opt_in`, migration 123).
+ * Her "did you confirm your email?" dropdown is what that link replaces.
  */
 export default function FreedomMasterclass() {
   const { origin } = useHeadContext();
@@ -47,6 +48,7 @@ export default function FreedomMasterclass() {
       />
 
       <LuxePageHero
+        photo={fm.hero.photo}
         eyebrow={fm.hero.eyebrow}
         title={fm.hero.title}
         titleAccent={fm.hero.titleAccent}
