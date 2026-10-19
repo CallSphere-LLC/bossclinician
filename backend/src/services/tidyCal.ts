@@ -29,7 +29,11 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-type BookingType = { id: number; url_slug: string; duration_minutes: number; disabled_at: string | null; price: number };
+/** TidyCal validates instants as `Y-m-d\TH:i:s\Z` and rejects the milliseconds Date#toISOString adds. */
+export function tidyCalInstant(date: Date): string { return date.toISOString().replace(/\.\d{3}Z$/, 'Z'); }
+
+/** TidyCal returns `price` as a decimal string ("0.00"), not a number. */
+type BookingType = { id: number; url_slug: string; duration_minutes: number; disabled_at: string | null; price: number | string };
 let typesCache: { expires: number; data: BookingType[] } | null = null;
 export async function tidyCalBookingType(legacySlug: string, durationMinutes: number): Promise<number> {
   if (!typesCache || typesCache.expires < Date.now()) {
@@ -45,20 +49,20 @@ export async function tidyCalBookingType(legacySlug: string, durationMinutes: nu
     }
     typesCache = { expires: Date.now() + 5 * 60_000, data };
   }
-  const matches = typesCache.data.filter((t) => t.url_slug === legacySlug && t.duration_minutes === durationMinutes && !t.disabled_at && t.price === 0);
+  const matches = typesCache.data.filter((t) => t.url_slug === legacySlug && t.duration_minutes === durationMinutes && !t.disabled_at && Number(t.price) === 0);
   if (matches.length !== 1) throw new TidyCalError(503, 'This call has not been matched to a TidyCal booking type');
   return matches[0].id;
 }
 
 export async function tidyCalSlots(typeId: number, from: Date, to: Date): Promise<Set<number>> {
-  const query = new URLSearchParams({ starts_at: from.toISOString(), ends_at: to.toISOString() });
+  const query = new URLSearchParams({ starts_at: tidyCalInstant(from), ends_at: tidyCalInstant(to) });
   const result = await request<{ data: Array<{ starts_at: string; available_bookings: number }> }>(`/booking-types/${typeId}/timeslots?${query}`);
   return new Set((result.data || []).filter((slot) => slot.available_bookings > 0).map((slot) => new Date(slot.starts_at).getTime()).filter(Number.isFinite));
 }
 
 export async function createTidyCalBooking(typeId: number, input: { startsAt: Date; name: string; email: string; timezone: string }): Promise<number> {
   const result = await request<{ data: { id: number } }>(`/booking-types/${typeId}/bookings`, {
-    method: 'POST', body: JSON.stringify({ starts_at: input.startsAt.toISOString(), name: input.name, email: input.email, timezone: input.timezone }),
+    method: 'POST', body: JSON.stringify({ starts_at: tidyCalInstant(input.startsAt), name: input.name, email: input.email, timezone: input.timezone }),
   });
   if (!Number.isSafeInteger(result.data?.id) || result.data.id <= 0) throw new TidyCalError(503, 'TidyCal did not confirm the booking');
   return result.data.id;

@@ -170,7 +170,7 @@ function Chooser() {
         eyebrow="Book A Call"
         title="Let's talk about"
         titleAccent="your practice."
-        lede="Pick the call that fits where you are. Most people start with the complimentary Practice Alignment Call — fifteen minutes to see what's stuck and what support makes sense next."
+        lede="Pick the call that fits where you are. Most people start with the complimentary Practice Alignment Call — thirty minutes to see what's stuck and what support makes sense next."
         tone="violet"
         align="center"
       />
@@ -343,7 +343,7 @@ function NotBookableCard({ call }: { call: CallDetail }) {
       <p className="copy-luxe mt-3">
         The {call.title} (<span className={FIGURE}>{call.priceLabel}</span>,{" "}
         <span className={FIGURE}>{durationLabel(call.durationMinutes)}</span>) is scheduled with Yvette directly.
-        Book the free fifteen-minute alignment call and she'll confirm it's the right fit and set it up with you —
+        Book the free thirty-minute alignment call and she'll confirm it's the right fit and set it up with you —
         or email <a href={`mailto:${contactPage.email}`} className="text-gold underline underline-offset-4">{contactPage.email}</a>.
       </p>
       <div className="mt-6 flex flex-wrap gap-3">

@@ -42,3 +42,4 @@ backend/tsconfig.tsbuildinfo
 
 # Contact and member exports carry people's personal details; never commit or ship them.
 *.csv
+api_keys_paypal_.txt

@@ -831,7 +831,8 @@ bookACallRouter.post(
       if (tidyCalEnabled()) {
         try {
           const typeId = await tidyCalBookingType(row.legacy_slug, row.duration_minutes);
-          const remote = await tidyCalSlots(typeId, startsAt, new Date(startsAt.getTime() + MINUTE_MS));
+          // TidyCal lists a slot only when the whole slot fits the window, so ask for exactly this call's span.
+          const remote = await tidyCalSlots(typeId, startsAt, new Date(startsAt.getTime() + row.duration_minutes * MINUTE_MS));
           if (!remote.has(startsAt.getTime())) throw new TidyCalError(409, 'That time has just been taken. Please pick another.');
           tidycalBookingId = await createTidyCalBooking(typeId, { startsAt, name: input.name, email: input.email, timezone: zone });
         } catch (error) {
