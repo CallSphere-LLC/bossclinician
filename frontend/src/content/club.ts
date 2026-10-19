@@ -477,19 +477,17 @@ export const clubCheckout = {
     },
   ],
   bonusesTitle: "Plus these bonuses, included when you enroll:",
+  // QA sheet row 111 (19 Oct): the Niche Clarity Accelerator and the Kickstart
+  // Call are gone; the First 30 Days Success Planner is Bonus 1 in the owner's
+  // words, and the fast action bonus stays.
   bonuses: [
     {
       label: "BONUS #1",
-      title: "The Therapist Niche Clarity Accelerator",
-      body: "Know exactly who you serve before you see your first client. The guided workbook, mini-training, 15-minute market research method, and Ideal Client Identifier that take you from \"too general\" to clear, confident, and referable. (Sold separately on our site; yours free with enrollment. Does not carry NBCC credit.)",
+      title: "The First 30 Days Success Planner",
+      body: "Your first month inside The Club already mapped out. Use the planner to stay focused on the right milestones, track your progress, and know what to work on next as you begin building your practice. Designed to help you implement — not just consume more information.",
     },
     {
-      label: "BONUS #2",
-      title: "The Boss Move Kickstart Call",
-      body: "A personal 15-minute call with Yvette herself, before you dive in. You'll leave knowing your first three moves. Because you shouldn't start this alone.",
-    },
-    {
-      label: "BONUS #3 · FAST ACTION",
+      label: "FAST ACTION BONUS",
       title: "The Ramp-Up Rate Pricing Formula",
       body: "Enroll within 72 hours and get the complete rate-setting system free: the Rate-Setting Blueprint, mindset reset training, Ramp-Up Rate Calculator, Rate Comparison Calculator, and workbook, so you charge with confidence from your very first client. ($197 value, sold separately. Does not carry NBCC credit.)",
     },

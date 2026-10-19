@@ -503,18 +503,68 @@ function PillarsSection() {
 
 /* ── 8 · Bonuses ──────────────────────────────────────────────────────── */
 
+/**
+ * The source page singles out the current enrollment bonus: it is the only
+ * boxed row in the section (tinted, bordered, with a slow pulsing glow and a
+ * floating product shot), it carries a solid badge, and the remaining bonus
+ * sits under it as a plain unboxed row. The same hierarchy here — one glass
+ * card in the page's foil treatment, then quiet rows — rather than twin cards
+ * that gave the two bonuses equal weight (sheet row 109).
+ */
 function BonusesSection() {
+  const [featured, ...rest] = club.bonuses.items;
+
   return (
-    <Section surface="raised" space="lg" aurora="gold" auroraIntensity={0.35} aria-label={club.bonuses.title}>
+    <Section
+      id="bonuses"
+      surface="raised"
+      space="lg"
+      aurora="gold"
+      auroraIntensity={0.35}
+      aria-label={club.bonuses.title}
+    >
       <SectionTitle title={club.bonuses.title} body={club.bonuses.body} />
 
-      <RevealGroup
-        as="ul"
-        className="mx-auto mt-8 sm:mt-10 grid max-w-4xl list-none grid-cols-1 gap-6 md:grid-cols-2"
-      >
-        {club.bonuses.items.map((bonus, i) => (
-          <RevealItem key={bonus.title} as="li" className="h-full">
-            <GlassCard as="article" accent={i === 0 ? "gold" : "plum"} className="flex h-full flex-col p-7 sm:p-8">
+      <RevealGroup as="ul" className="mx-auto mt-8 sm:mt-10 grid max-w-4xl list-none grid-cols-1 gap-6">
+        <RevealItem as="li">
+          <GlassCard
+            as="article"
+            accent="gold"
+            className="grid items-center gap-7 p-7 sm:p-8 md:grid-cols-[0.42fr_0.58fr] md:gap-10 lg:p-10"
+          >
+            {/* The glow the source animates on its featured row: the gold ring
+                breathing behind the card. Still at rest for reduced motion. */}
+            <span
+              aria-hidden
+              className="pointer-events-none absolute inset-0 -z-[1] animate-pulse-glow rounded-2xl shadow-glow-gold motion-reduce:animate-none"
+            />
+            <img
+              src={featured.image.src}
+              alt={featured.image.alt}
+              width={featured.image.width}
+              height={featured.image.height}
+              loading="lazy"
+              decoding="async"
+              className="aspect-[16/9] h-auto w-full max-w-full rounded-xl object-cover motion-safe:animate-float"
+            />
+            <div className="flex flex-col items-start">
+              <span className="inline-flex items-center rounded-full bg-gold-foil px-4 py-2 text-[0.68rem] font-bold uppercase tracking-[0.18em] text-night-deep shadow-[0_10px_28px_-12px_rgba(201,164,106,0.7)]">
+                {featured.label}
+              </span>
+              <h3 className="mt-5 text-balance font-display text-[1.6rem] font-medium leading-[1.2] text-white sm:text-[1.85rem]">
+                {featured.title}
+              </h3>
+              <p className="copy-luxe mt-4 text-pretty text-[0.95rem]">{featured.body}</p>
+              <p className="mt-6 text-pretty text-xs font-bold uppercase leading-[1.7] tracking-[0.14em] text-gold">
+                {featured.note}
+              </p>
+            </div>
+          </GlassCard>
+        </RevealItem>
+
+        {rest.map((bonus) => (
+          <RevealItem key={bonus.title} as="li">
+            <article className="grid items-center gap-6 border-t border-white/[0.07] px-2 pt-8 sm:px-4 md:grid-cols-[0.32fr_0.68fr] md:gap-10">
               <img
                 src={bonus.image.src}
                 alt={bonus.image.alt}
@@ -522,19 +572,19 @@ function BonusesSection() {
                 height={bonus.image.height}
                 loading="lazy"
                 decoding="async"
-                className="mb-6 aspect-[16/9] h-auto w-full max-w-full rounded-xl object-cover"
+                className="aspect-[16/9] h-auto w-full max-w-full rounded-xl object-cover"
               />
-              <LuxePill accent={i === 0 ? "gold" : "plum"} className="self-start">
-                {bonus.label}
-              </LuxePill>
-              <h3 className="mt-5 text-balance font-display text-[1.35rem] font-medium leading-[1.25] text-white">
-                {bonus.title}
-              </h3>
-              <p className="copy-luxe mt-4 flex-1 text-pretty text-[0.95rem]">{bonus.body}</p>
-              <p className="mt-6 text-pretty text-xs font-semibold uppercase leading-[1.7] tracking-[0.12em] text-gold/85">
-                {bonus.note}
-              </p>
-            </GlassCard>
+              <div className="flex flex-col items-start">
+                <LuxePill accent="plum">{bonus.label}</LuxePill>
+                <h3 className="mt-4 text-balance font-display text-[1.35rem] font-medium leading-[1.25] text-white">
+                  {bonus.title}
+                </h3>
+                <p className="copy-luxe mt-3 text-pretty text-[0.95rem]">{bonus.body}</p>
+                <p className="mt-4 text-pretty text-xs font-semibold uppercase leading-[1.7] tracking-[0.12em] text-orchid">
+                  {bonus.note}
+                </p>
+              </div>
+            </article>
           </RevealItem>
         ))}
       </RevealGroup>

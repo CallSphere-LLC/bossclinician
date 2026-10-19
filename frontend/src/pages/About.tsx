@@ -179,7 +179,6 @@ const TESTIMONIAL = {
   quote:
     '"Yvette is the mentor every therapist needs. She\'s built exactly what I\'m trying to create, and her experience showed me how to avoid the mistakes most of us make alone. Her guidance gave me the confidence and clarity to move forward with my group practice. Investing in her was an easy yes."',
   name: "Ashley B., LCSW",
-  role: "Group Practice Owner",
 } as const;
 
 const PERSONAL = [
@@ -208,7 +207,7 @@ export default function About() {
       <Seo
         title="About Yvette"
         description="Yvette Howard is an LCSW, group practice owner, doctoral candidate, and Private Practice Strategist helping therapists and clinicians build sustainable, profitable practices."
-        image="/images/af3deab11f02.jpg"
+        image="/images/about/yvette-hero.jpg"
       />
 
       <LuxePageHero
@@ -219,10 +218,10 @@ export default function About() {
         tone="violet"
         aside={
           <Portrait
-            src="/images/af3deab11f02.jpg"
+            src="/images/about/yvette-hero.jpg"
             alt="Yvette Howard, LCSW, Private Practice Strategist and founder of Boss Clinician"
-            width={977}
-            height={1440}
+            width={898}
+            height={1340}
           />
         }
         actions={
@@ -292,6 +291,14 @@ export default function About() {
         aurora="plum"
         auroraIntensity={0.32}
         dropCap
+        portrait={
+          <Portrait
+            src="/images/about/yvette-early-career.jpg"
+            alt="Yvette Howard early in her career"
+            width={1050}
+            height={1440}
+          />
+        }
       />
 
       <StoryAct
@@ -301,6 +308,25 @@ export default function About() {
         surface="base"
         aurora="violet"
         auroraIntensity={0.3}
+        portrait={
+          /* Two photographs, as on the original page. Side by side on desktop
+             so the sticky rail stays shorter than the viewport; the gap keeps
+             the frames' offset crop marks from colliding. */
+          <div className="grid grid-cols-1 gap-8 lg:grid-cols-2 lg:gap-6">
+            <Portrait
+              src="/images/about/yvette-leap.jpg"
+              alt="Yvette Howard taking the leap into private practice"
+              width={1080}
+              height={1440}
+            />
+            <Portrait
+              src="/images/about/yvette-pregnant.jpg"
+              alt="Yvette Howard pregnant and building her practice"
+              width={1080}
+              height={1440}
+            />
+          </div>
+        }
       />
 
       <StoryAct
@@ -338,6 +364,14 @@ export default function About() {
         surface="base"
         aurora="gold"
         auroraIntensity={0.4}
+        portrait={
+          <Portrait
+            src="/images/about/yvette-group-practice.jpg"
+            alt="Yvette Howard, thriving group practice owner"
+            width={912}
+            height={1294}
+          />
+        }
       >
         {/* `beatMax={0}` keeps this line as plain body copy: it is a lead-in to
             the list beneath it, not one of the narrative's punch lines. */}
@@ -475,7 +509,7 @@ export default function About() {
 
               <figcaption className="mt-7 flex items-center gap-4">
                 <img
-                  src="/images/e342b1098928.jpeg"
+                  src="/images/about/testimonial-ashley-b.jpg"
                   alt={TESTIMONIAL.name}
                   width={320}
                   height={400}
@@ -483,13 +517,8 @@ export default function About() {
                   decoding="async"
                   className="h-14 w-14 shrink-0 rounded-full object-cover object-top ring-1 ring-gold/30"
                 />
-                <span className="min-w-0">
-                  <span className="block text-sm font-semibold text-white">
-                    {TESTIMONIAL.name}
-                  </span>
-                  <span className="mt-1 block text-[0.72rem] uppercase tracking-[0.14em] text-orchid-dim sm:tracking-[0.18em]">
-                    {TESTIMONIAL.role}
-                  </span>
+                <span className="min-w-0 text-sm font-semibold text-white">
+                  {TESTIMONIAL.name}
                 </span>
               </figcaption>
             </GlassCard>
@@ -507,10 +536,10 @@ export default function About() {
         auroraIntensity={0.5}
         portrait={
           <Portrait
-            src="/images/yvette-hero-seated.jpg"
+            src="/images/about/yvette-personal.jpg"
             alt="Yvette Howard, LCSW, away from the therapy room"
-            width={960}
-            height={1309}
+            width={1034}
+            height={1288}
           />
         }
       >

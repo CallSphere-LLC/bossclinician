@@ -433,22 +433,13 @@ export const clubThankYou = {
       action: { label: "Log In to Your Portal", href: "/library" },
     },
     {
-      title: "Book your Kickstart Call",
-      body: "As a Club member, you get a personal 15-minute call with me before you dive in. Come with the one thing loudest in your head about starting this practice. You'll leave knowing your first three moves.",
-      action: {
-        label: "Book Your Kickstart Call",
-        href: "/book-a-call/boss-move-kickstart-call",
-      },
-    },
-    {
       title: "Introduce yourself in the community",
       body: "Post your name, your specialty, and where you're starting from: never seen a client yet, coming back to private practice, or already seeing clients without a structure underneath you. Your cohort is building right alongside you, and nobody in this room is starting from a place you need to explain or defend.",
     },
   ],
   bonusesTitle: "Your bonuses are already unlocked",
   bonuses: [
-    { name: "The Therapist Niche Clarity Accelerator", rest: " — find it in your course library now." },
-    { name: "The Boss Move Kickstart Call", rest: " — book it in Step 3 above." },
+    { name: "The First 30 Days Success Planner", rest: " — find it in your course library now and map your first month." },
     { name: "The Ramp-Up Rate Pricing Formula", rest: " (fast action enrollees) — find it in your course library now." },
   ],
   pace: {

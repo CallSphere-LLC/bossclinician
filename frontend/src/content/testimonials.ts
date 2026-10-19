@@ -73,7 +73,7 @@ export const testimonials: Testimonial[] = [
     credential: "LCSW",
     quote:
       "Yvette is the mentor every therapist needs. She's built exactly what I'm trying to create, and her experience showed me how to avoid the mistakes most of us make alone. Investing in her was an easy yes.",
-    image: "/images/e342b1098928.jpeg",
+    image: "/images/about/testimonial-ashley-b.jpg",
     sort: 7,
     published: true,
   },
