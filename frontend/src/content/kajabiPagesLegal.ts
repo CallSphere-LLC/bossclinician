@@ -1220,9 +1220,9 @@ export const termsOfUse: KajabiLegalDoc = {
           type: "p",
           text: [
             "Boss Clinician, LLC is approved by NBCC as an Approved Continuing Education Provider, ACEP No. 7998. Certificates of completion display the NBCC-approved program title, which may differ from the program's brand name used in marketing. Continuing education grievance, refund, and cancellation policies are available at ",
-            // Kajabi prints a literal "[link]" placeholder here. It is kept, and
-            // pointed at the NBCC continuing-education policy page it stands for.
-            { text: "[link]", href: "/continuing-education-boss-clinician" },
+            // Kajabi printed a literal "[link]" placeholder here; the owner asked
+            // for it to go (sheet row 115). The NBCC policies stay one click away.
+            { text: "our Continuing Education page", href: "/continuing-education-boss-clinician" },
             " or by request at ",
             SUPPORT_BC_MAILTO,
             ".",

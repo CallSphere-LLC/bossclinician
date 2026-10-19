@@ -33,7 +33,7 @@ export const testimonials: Testimonial[] = [
     practice: "Follow Your Path Therapy Services",
     quote:
       "I had a business coaching session with Yvette when I was trying to figure out how to grow into a group practice. From the very beginning, she took the time to truly listen and understand exactly where I was trying to go. She answered all of my questions thoughtfully and offered valuable suggestions that gave me a completely new perspective on what building a group practice could actually look like. I felt completely comfortable being honest about my concerns, and Yvette met me exactly where I was. By the end of our conversation, I felt less fearful and confident enough to move forward. Yvette has a real ability to empower and encourage, and I'm so grateful for her guidance on this journey.",
-    image: "",
+    image: "/images/about/testimonial-rosa-m.jpg",
     sort: 3,
     published: true,
   },

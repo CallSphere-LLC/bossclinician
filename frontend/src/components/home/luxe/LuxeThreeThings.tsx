@@ -102,7 +102,7 @@ export function LuxeThreeThings() {
         transition={{ duration: 0.7, delay: 0.1, ease: [0.22, 1, 0.36, 1] }}
         className="mt-10 flex justify-center sm:mt-10 lg:mt-12"
       >
-        <LuxeButton variant="foil" size="lg" to="/work-with-me">
+        <LuxeButton variant="foil" size="lg" href="#offers">
           Find Your Path
         </LuxeButton>
       </motion.div>

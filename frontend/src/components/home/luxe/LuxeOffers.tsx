@@ -98,7 +98,7 @@ export function LuxeOffers() {
 
   return (
     <Section
-      // The hero and closing "Find Your Path" buttons jump here, as they do on
+      // Every "Find Your Path" button on the home page jumps here, as they do on
       // bossclinician.com (#offers). The scroll margin clears the sticky header.
       id="offers"
       // Where "Find Your Path" lands, and the answer to the question a visitor
