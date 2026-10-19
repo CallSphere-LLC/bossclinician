@@ -103,6 +103,10 @@ services:
       # Explicit, because this Dockerfile has a second runtime stage after it
       # (`web`, below) and the last stage is what an untargeted build produces.
       target: api
+      # The api stage copies the pinned AWS helper bundle from this named
+      # context; same path scripts/deploy-k3s.sh passes with --build-context.
+      additional_contexts:
+        aws_identity_helper: "${AWS_HELPER_BUILD_CONTEXT:-/usr/local/share/bossclinician/aws-helper-runtime}"
       args:
         VITE_API_BASE: /api
         VITE_STRIPE_PUBLISHABLE_KEY: ${VITE_STRIPE_PUBLISHABLE_KEY:-}
@@ -203,6 +207,10 @@ services:
       context: .
       dockerfile: backend/Dockerfile
       target: web
+      # The api stage copies the pinned AWS helper bundle from this named
+      # context; same path scripts/deploy-k3s.sh passes with --build-context.
+      additional_contexts:
+        aws_identity_helper: "${AWS_HELPER_BUILD_CONTEXT:-/usr/local/share/bossclinician/aws-helper-runtime}"
       args:
         VITE_API_BASE: /api
         VITE_STRIPE_PUBLISHABLE_KEY: ${VITE_STRIPE_PUBLISHABLE_KEY:-}

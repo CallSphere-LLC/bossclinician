@@ -82,6 +82,8 @@ Runs on GitHub's machines, never on the server.
 | `ai` | AI service regressions (fallback paths, no OpenAI key) |
 | `stack` | What unit tests cannot see: a Dockerfile that no longer builds, a file `.dockerignore` drops, a migration or seed that fails on an empty database, an nginx config that does not load, SSR crashing at boot, a legacy redirect or paywall check failing, the image not carrying its commit |
 
+The `stack` job builds `backend/Dockerfile` the way `scripts/deploy-k3s.sh` does, including the `aws_identity_helper` build context: the pinned AWS Roles Anywhere signing helper and its private glibc loader. On the server that context is the host bundle at `/usr/local/share/bossclinician/aws-helper-runtime`; on GitHub's machines the job downloads the same bundle from the repository release `aws-helper-runtime-20261013`, checks the tarball's sha256 and every file against `manifest.json`, and points `AWS_HELPER_BUILD_CONTEXT` at it (`docker-compose.yml` passes that variable as `additional_contexts`). When the bundle changes (see `scripts/host/build-aws-signing-helper.sh`), publish a new release asset and update the tag and sha256 in `ci.yml` together with the hashes in `backend/Dockerfile`.
+
 ### Deploy (`.github/workflows/deploy.yml` → `scripts/ci/deploy-release.sh`)
 
 Runs on the runner installed on the production host. One deploy at a time;

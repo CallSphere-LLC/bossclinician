@@ -62,7 +62,7 @@ Build backend with `docker build --build-context aws_identity_helper=<directory-
 
 The gated `backend/scripts/migrate-media-to-s3.ts` runs as UID1000 against read-only source mounts under `/run/boss-media-source/{public,protected}`. Its ledger is private on encrypted pgdata. It only creates absent keys with S3 conditional writes, verifies existing keys without replacing them, independently streams each pinned version back and compares SHA256, and checks source identity/stability. Every source is preserved. A failed or interrupted run can be retried after checking the exact owned lock; it never treats a partial manifest as cutover coverage.
 
-Deployment script accepts `AWS_HELPER_BUILD_CONTEXT`, default `/usr/local/share/callsphere/aws-helper-runtime`. The Dockerfile copies only the five explicitly named public files and validates each pinned hash before checking the helper executable.
+Deployment script accepts `AWS_HELPER_BUILD_CONTEXT`, default `/usr/local/share/bossclinician/aws-helper-runtime`. The Dockerfile copies only the five explicitly named public files and validates each pinned hash before checking the helper executable.
 
 Actual scoped workload identity proof passed as UID/GID1000: 17MiB encrypted multipart, version-pinned whole-file SHA256, HTTP Range/HEAD, delete-marker and missing-key handling. The two additional final unit cases prove HEAD403/list denial distinction and conditional create-only migration writes; final focused adapter suite13/13 and PostgreSQL S3 integration suite41/41 passed. No production app rollout is implied by these tests.
 

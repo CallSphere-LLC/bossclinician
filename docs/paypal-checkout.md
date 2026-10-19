@@ -10,6 +10,14 @@ PayPal is a second way to pay on every checkout (`/checkout/:offer`, the cart, a
 
 The button appears only when PayPal is fully configured (below). Without that configuration nothing about PayPal is shown, and the Stripe checkout behaves exactly as before.
 
+## Current state (19 Oct 2026)
+
+- The owner's REST app credentials are in `backend/.env` with `PAYPAL_ENVIRONMENT=live`. They authenticate only against live PayPal; there is no sandbox app, so the sandbox checklist below cannot be run with them.
+- The webhook is registered on that live app (id `2NS729434A8253147`, URL `https://bossclinician.callsphere.site/api/paypal/webhook`, the 16 events listed below) and the id is in `backend/.env`.
+- `PAYPAL_CHECKOUT_ENABLED` is `false`: Admin → Sales → Payments shows "PayPal checkout: Off — everything is in place". Setting it to `true` and redeploying offers PayPal to customers; the first end-to-end check then has to be a small real purchase, refunded in the PayPal dashboard.
+- `PAYPAL_MERCHANT_ID` is not set (the payee defaults to the app's own account). Set it only if the merchant id has been confirmed in the PayPal dashboard.
+- With checkout off the webhook still receives every live account event of the subscribed types; events for orders, captures and subscriptions the site does not know are logged in `paypal_webhook_events` and ignored.
+
 ## Setup (owner / developer)
 
 1. Sign in at https://developer.paypal.com with the Boss Clinician business account (yvette@bossclinician.com, merchant ID `RVHE6XW3M7452`).

@@ -7,7 +7,7 @@
 # Builds with upstream's own flags on this host (the bundle's private loader,
 # libc and libresolv are this host's), scans the result, and prints its SHA256.
 # It installs nothing: copy build/bin/aws_signing_helper into the bundle
-# (/usr/local/share/callsphere/aws-helper-runtime), update manifest.json and the
+# (/usr/local/share/bossclinician/aws-helper-runtime), update manifest.json and the
 # pinned hash in backend/Dockerfile together, then release through deploy-k3s.sh.
 set -euo pipefail
 tag="${1:?release tag, e.g. v1.8.5}"; shift

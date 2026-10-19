@@ -182,6 +182,23 @@ jobs:
           ref: ${{ env.CHECKOUT_REF }}
       - name: Throwaway secrets
         run: .github/ci/write-env.sh
+      - name: Pinned AWS helper bundle (the aws_identity_helper build context)
+        # The host keeps it at /usr/local/share/bossclinician/aws-helper-runtime;
+        # here it comes from the release asset. Every file is checked against
+        # manifest.json, and backend/Dockerfile re-checks each pinned hash.
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARBALL_SHA256: 3dab68e1def87bc8a0e59f4238edb9e85007efe49fbf9a82ba8a0461ecdf3be5
+        run: |
+          set -euo pipefail
+          dir="$RUNNER_TEMP/aws-helper"
+          mkdir -p "$dir" && cd "$dir"
+          gh release download aws-helper-runtime-20261013 --repo "$GITHUB_REPOSITORY" --pattern aws-helper-runtime.tar.gz
+          echo "$TARBALL_SHA256  aws-helper-runtime.tar.gz" | sha256sum -c -
+          tar -xzf aws-helper-runtime.tar.gz
+          cd aws-helper-runtime
+          jq -r '.files | to_entries[] | "\(.value.sha256)  \(.key)"' manifest.json | sha256sum -c -
+          echo "AWS_HELPER_BUILD_CONTEXT=$PWD" >> "$GITHUB_ENV"
       - name: Compose file resolves
         run: docker compose config --quiet
       - name: Build with the production Dockerfiles

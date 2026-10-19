@@ -108,6 +108,20 @@ The set-password link is minted **once** and carried inside the welcome email
 rather than sent separately: minting twice invalidates the first link, which
 would leave the buyer holding one dead link and one live one.
 
+## Form double opt-in (19 Oct 2026)
+
+A form with **Double opt-in** ticked in Admin → Forms emails a confirmation
+link after every reply (`backend/src/email/formConfirmation.ts`), sent through
+the same SES transport. The reply is saved immediately, tagged and listed in
+Forms with an empty "confirmed" date; `GET /api/forms/confirm/:token`
+(`routes/public/growthPublic.ts`) stamps the reply's `confirmed_at` and the
+contact's `opt_in_confirmed_at`, then redirects to the form's redirect URL
+(site paths only). Links stay valid 30 days and can be clicked more than once.
+If the email cannot be sent the page sends the visitor straight on instead of
+promising an inbox. Only the Freedom Masterclass form has the box ticked; the
+18 Kajabi-imported forms that carried the flag had it cleared the day the
+behaviour went live, so tick it per form when wanted.
+
 ## Fixed along the way
 
 - **`$0` orders sent nothing at all.** A 100%-off coupon granted access in total
