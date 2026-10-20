@@ -30,6 +30,12 @@ import { contentTypeLabel } from "@/components/player/lessonMeta";
 import { cn } from "@/lib/cn";
 import { DocumentsPanel } from "./Downloads";
 import { defaultLibraryTab, shelfGroups, type LibraryTab } from "./libraryShelf";
+import {
+  HIGHLIGHT_CLASSES,
+  readHighlightSlug,
+  useProductHighlight,
+} from "./productHighlight";
+import { PurchaseNotices } from "@/components/member/PurchaseNotices";
 
 /**
  * The two shelves, as Kajabi's library has them: everything you own, and the
@@ -134,6 +140,12 @@ export default function Library() {
   // The tabs wait for the shelf, except when the address asked for Documents —
   // that tab loads its own list and has no reason to wait.
   const showTabs = (data !== null && !empty) || requestedTab === "documents";
+  // `?product=<slug>`, from a purchase notice: scroll to that card and ring it.
+  // The Documents tab does the same for its file groups (DocumentsPanel).
+  const highlighted = useProductHighlight(
+    readHighlightSlug(searchParams.get("product")),
+    data !== null && tab === "courses",
+  );
 
   const selectTab = (next: LibraryTab) => {
     setSearchParams(
@@ -152,6 +164,11 @@ export default function Library() {
       description="Everything you own, in one place — courses, downloads and the rest, exactly where you left them."
     >
       <Seo title="Your library | Boss Clinician" />
+
+      {/* What they just bought, with one button straight to it. */}
+      <div className="mb-8 empty:hidden">
+        <PurchaseNotices />
+      </div>
 
       <div aria-live="polite">
         {error && tab === "courses" && (
@@ -213,7 +230,14 @@ export default function Library() {
 
                       <ul className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                         {group.items.map((item) => (
-                          <li key={item.productId} className="flex">
+                          <li
+                            key={item.productId}
+                            data-product-slug={item.slug}
+                            className={cn(
+                              "flex rounded-2xl",
+                              highlighted === item.slug && HIGHLIGHT_CLASSES,
+                            )}
+                          >
                             <LibraryCard
                               item={item}
                               certified={item.courseId !== null && certifiedCourseIds.has(item.courseId)}

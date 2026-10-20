@@ -1,6 +1,6 @@
 import { useCommunityPreview } from "@/components/community/communityPreview";
 import { SiteThemeToggle } from "@/components/layout/SiteThemeToggle";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { Link, NavLink, useLocation, useNavigate } from "react-router";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { Toaster } from "sonner";
@@ -20,6 +20,8 @@ import { TimezonePrompt } from "@/components/member/TimezonePrompt";
 import { FloatingCall } from "@/components/community/FloatingCall";
 import { rememberCommunityReturn } from "@/components/community/communityReturn";
 import { PlayerPreviewBanner } from "@/components/player/playerSource";
+import { NotificationBell } from "@/components/community/NotificationBell";
+import { MemberAvatar } from "@/components/member/MemberAvatar";
 import { cn } from "@/lib/cn";
 
 /**
@@ -67,62 +69,7 @@ const RAIL: RailLink[] = [
   { to: "/account", label: "Account", icon: User },
 ];
 
-/** Two letters at most: three initials in a 36px circle stop being legible. */
-export function memberInitials(name: string, email: string): string {
-  const fromName = name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0])
-    .join("");
-  return (fromName || email.slice(0, 1) || "?").toUpperCase();
-}
-
-interface MemberAvatarProps {
-  src?: string;
-  name: string;
-  email: string;
-  className?: string;
-}
-
-/**
- * Falls back to foiled initials rather than a grey silhouette — most members
- * never upload a photo, so the placeholder is on screen far more often than
- * any real avatar is. `onError` covers an avatar whose file has since been
- * pruned from storage, which would otherwise render a broken-image glyph.
- */
-export function MemberAvatar({
-  src,
-  name,
-  email,
-  className,
-}: MemberAvatarProps) {
-  const [broken, setBroken] = useState(false);
-
-  if (src && !broken) {
-    return (
-      <img
-        src={src}
-        alt=""
-        onError={() => setBroken(true)}
-        className={cn("size-9 shrink-0 rounded-full object-cover", className)}
-      />
-    );
-  }
-
-  return (
-    <span
-      aria-hidden
-      className={cn(
-        "grid size-9 shrink-0 place-items-center rounded-full bg-gold-foil",
-        "font-body text-xs font-bold text-night-deep",
-        className,
-      )}
-    >
-      {memberInitials(name, email)}
-    </span>
-  );
-}
+export { MemberAvatar, memberInitials } from "@/components/member/MemberAvatar";
 
 export function MemberShell({
   title,
@@ -202,6 +149,11 @@ export function MemberShell({
             <SiteThemeToggle />
 
             {member && !preview && (
+              <div className="flex items-center gap-2">
+              {/* One inbox for the whole member area: purchases ("you now have
+                  access to …", linking straight to the item), community
+                  replies, mentions and badges. */}
+              <NotificationBell />
               <DropdownMenu.Root>
                 <DropdownMenu.Trigger asChild>
                   <button
@@ -271,6 +223,7 @@ export function MemberShell({
                   </DropdownMenu.Content>
                 </DropdownMenu.Portal>
               </DropdownMenu.Root>
+              </div>
             )}
           </div>
         </header>

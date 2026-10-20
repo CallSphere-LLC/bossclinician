@@ -9,7 +9,6 @@ import { CommunityLayout } from "@/components/community/CommunityLayout";
 import { CommunityCover } from "@/components/community/CommunityDescription";
 import { stripMarkdown } from "@/components/community/descriptionFormat";
 import { ChannelFeed } from "@/components/community/ChannelFeed";
-import { NotificationBell } from "@/components/community/NotificationBell";
 import { MemberApiError } from "@/lib/memberApi";
 import { communityApi, type CommunitySummary } from "@/lib/communityApi";
 import { formatNumber } from "@/lib/format";
@@ -100,7 +99,6 @@ function CommunityPicker() {
     <MemberShell
       title="Community"
       description="The rooms you are part of."
-      actions={<NotificationBell />}
     >
       <Seo title="Community | Boss Clinician" />
 

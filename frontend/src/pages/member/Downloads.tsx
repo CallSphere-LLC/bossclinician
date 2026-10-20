@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useLocation } from "react-router";
+import { Link, useLocation, useSearchParams } from "react-router";
 import { ArrowLeft, FileDown, Loader2, Lock } from "lucide-react";
 import { Seo } from "@/components/Seo";
 import { MemberShell } from "@/components/member/MemberShell";
@@ -14,6 +14,11 @@ import {
   type DownloadsResponse,
 } from "@/lib/libraryApi";
 import { cn } from "@/lib/cn";
+import {
+  HIGHLIGHT_CLASSES,
+  readHighlightSlug,
+  useProductHighlight,
+} from "./productHighlight";
 
 /**
  * Every file the member owns, on one page.
@@ -35,6 +40,8 @@ interface DownloadGroup {
   title: string;
   /** Only a product has an address of its own in this payload; a course does not. */
   href: string | null;
+  /** The product's slug, for `?product=` highlighting; null for a course's files. */
+  productSlug: string | null;
   files: DownloadListItem[];
 }
 
@@ -49,6 +56,7 @@ function groupFiles(files: DownloadListItem[]): DownloadGroup[] {
         key,
         title: (file.kind === "product" ? file.productTitle : file.courseTitle) || "Downloads",
         href: file.kind === "product" && file.productSlug ? productPath(file.productSlug) : null,
+        productSlug: file.kind === "product" && file.productSlug ? file.productSlug : null,
         files: [],
       };
       groups.set(key, group);
@@ -145,6 +153,12 @@ export function DocumentsPanel({ embedded = false }: { embedded?: boolean }) {
   }, []);
 
   const groups = useMemo(() => (data ? groupFiles(data.files) : []), [data]);
+  // `?product=<slug>`, from a purchase notice: scroll to that product's files.
+  const [searchParams] = useSearchParams();
+  const highlighted = useProductHighlight(
+    readHighlightSlug(searchParams.get("product")),
+    data !== null && data.total > 0,
+  );
 
   return (
     <>
@@ -172,7 +186,11 @@ export function DocumentsPanel({ embedded = false }: { embedded?: boolean }) {
           </p>
 
           {groups.map((group) => (
-            <DownloadGroupCard key={group.key} group={group} />
+            <DownloadGroupCard
+              key={group.key}
+              group={group}
+              highlighted={group.productSlug !== null && highlighted === group.productSlug}
+            />
           ))}
         </div>
       )}
@@ -180,7 +198,13 @@ export function DocumentsPanel({ embedded = false }: { embedded?: boolean }) {
   );
 }
 
-function DownloadGroupCard({ group }: { group: DownloadGroup }) {
+function DownloadGroupCard({
+  group,
+  highlighted,
+}: {
+  group: DownloadGroup;
+  highlighted: boolean;
+}) {
   // One kind per group by construction: a group is one product or one course.
   const kind = group.files[0]?.kind ?? "product";
   const available = group.files
@@ -196,7 +220,13 @@ function DownloadGroupCard({ group }: { group: DownloadGroup }) {
   const locked = group.files.filter((file) => !file.available);
 
   return (
-    <section className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-5">
+    <section
+      data-product-slug={group.productSlug ?? undefined}
+      className={cn(
+        "rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-5",
+        highlighted && HIGHLIGHT_CLASSES,
+      )}
+    >
       <h2 className="flex items-center gap-2.5 font-display text-base text-white">
         <FileDown aria-hidden className="size-4 shrink-0 text-gold" />
         {group.href ? (

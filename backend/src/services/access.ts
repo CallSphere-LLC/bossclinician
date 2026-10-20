@@ -2,6 +2,7 @@ import type { PoolClient } from "pg";
 import { pool } from "../db/pool";
 import { accessExpiresAt } from "./pricing";
 import { dispatchEvent } from "./webhooksOut";
+import { notifyPurchaseAccessSafely } from "./purchaseNotifications";
 
 /**
  * Access grants — the only answer to "may this member open this product".
@@ -107,6 +108,21 @@ export async function grantAccess(input: GrantAccessInput): Promise<AccessGrant>
     );
 
     const row = res.rows[0];
+
+    // The member's "you now have access" notice, in the same transaction so a
+    // rolled-back grant leaves no notice behind. Only on a real transition: a
+    // webhook retried or a re-grant of live access must not repeat it. Bulk
+    // imports are skipped - those customers bought long ago, elsewhere.
+    if (transitionedToActive && (input.source ?? "purchase") !== "import") {
+      await notifyPurchaseAccessSafely({
+        memberId: input.memberId,
+        productId: input.productId,
+        grantId: row.id,
+        offerId: input.offerId ?? null,
+        client: db,
+      });
+    }
+
     if (ownedClient) await ownedClient.query("COMMIT");
     return {
       id: row.id,

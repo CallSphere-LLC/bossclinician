@@ -5,7 +5,6 @@ import { ArrowLeft, Hash, Loader2, Lock, MessageSquare, Users, Video } from "luc
 import { Seo } from "@/components/Seo";
 import { MemberShell } from "@/components/member/MemberShell";
 import { LuxeButton } from "@/components/luxe/LuxeButton";
-import { NotificationBell } from "@/components/community/NotificationBell";
 import { GuidelinesGate } from "@/components/community/GuidelinesGate";
 import { CommandPalette } from "@/components/community/CommandPalette";
 import { BadgesPanel } from "@/components/community/BadgesPanel";
@@ -134,7 +133,7 @@ export function CommunityLayout({
         ) : undefined
       }
       description={description ?? communityDescription}
-      actions={preview ? <span className="text-xs text-orchid-dim">Participant view</span> : <NotificationBell />}
+      actions={preview ? <span className="text-xs text-orchid-dim">Participant view</span> : undefined}
       sidebar={
         overview ? (
           <CommunityNavigation

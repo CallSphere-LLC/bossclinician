@@ -1,13 +1,21 @@
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { Bell, CheckCheck, Loader2 } from "lucide-react";
+import { Bell, CheckCheck, Loader2, ShoppingBag } from "lucide-react";
 import { toast } from "sonner";
-import { MemberAvatar } from "@/components/member/MemberShell";
+import { MemberAvatar } from "@/components/member/MemberAvatar";
 import { MemberApiError } from "@/lib/memberApi";
-import { communityApi, type CommunityNotification } from "@/lib/communityApi";
+import {
+  PURCHASE_NOTIFICATION_KIND,
+  inAppPath,
+  notificationsApi,
+  type MemberNotification,
+} from "@/lib/notificationsApi";
 import { formatRelative } from "@/lib/format";
-import { NOTIFICATIONS_CHANGED_EVENT } from "@/lib/notificationSignal";
+import {
+  NOTIFICATIONS_CHANGED_EVENT,
+  announceNotificationsChanged,
+} from "@/lib/notificationSignal";
 import { cn } from "@/lib/cn";
 
 /**
@@ -19,29 +27,24 @@ import { cn } from "@/lib/cn";
  * you an hour later, and a persistent connection per reader is a lot of
  * machinery for a number that is allowed to be a minute stale.
  *
- * `link` arrives from the API as an in-app path. It is routed, never opened as
- * a URL, and anything that is not a single-leading-slash path is dropped — a
- * protocol-relative `//evil.example` would otherwise leave the site from what
- * looks like an internal link.
+ * It lives in the member header (MemberShell), so it is on every member page,
+ * and reads the member-wide inbox: a purchase notice ("You now have access to
+ * …") opens the exact place the item lives. `link` is routed through
+ * `inAppPath`, never opened as a URL.
  */
 
 const POLL_MS = 90_000;
 
-/** Same-origin paths only. `//host` is a URL wearing a path's clothes. */
-function inAppPath(link: string): string {
-  return link.startsWith("/") && !link.startsWith("//") ? link : "";
-}
-
 export function NotificationBell() {
   const navigate = useNavigate();
-  const [items, setItems] = useState<CommunityNotification[] | null>(null);
+  const [items, setItems] = useState<MemberNotification[] | null>(null);
   const [unread, setUnread] = useState(0);
   const [open, setOpen] = useState(false);
   const [error, setError] = useState("");
 
   const load = useCallback(async () => {
     try {
-      const page = await communityApi.notifications({ perPage: 12 });
+      const page = await notificationsApi.list({ perPage: 12 });
       setItems(page.notifications);
       setUnread(page.unreadCount);
       setError("");
@@ -80,8 +83,10 @@ export function NotificationBell() {
     setItems(before.map((n) => (ids.includes(n.id) ? { ...n, read: true } : n)));
     setUnread((count) => Math.max(0, count - ids.length));
     try {
-      const result = await communityApi.markRead({ ids });
+      const result = await notificationsApi.markRead({ ids });
       setUnread(result.unreadCount);
+      // The library's "New purchase" banner reads the same rows.
+      announceNotificationsChanged();
     } catch {
       setItems(before);
       void load();
@@ -93,8 +98,9 @@ export function NotificationBell() {
     setItems(before.map((n) => ({ ...n, read: true })));
     setUnread(0);
     try {
-      const result = await communityApi.markRead({ all: true });
+      const result = await notificationsApi.markRead({ all: true });
       setUnread(result.unreadCount);
+      announceNotificationsChanged();
     } catch (err) {
       setItems(before);
       void load();
@@ -104,7 +110,7 @@ export function NotificationBell() {
     }
   };
 
-  const openNotification = (notification: CommunityNotification) => {
+  const openNotification = (notification: MemberNotification) => {
     if (!notification.read) void markRead([notification.id]);
     const path = inAppPath(notification.link);
     if (path) navigate(path);
@@ -189,7 +195,7 @@ export function NotificationBell() {
 
             {!error && items?.length === 0 && (
               <p className="px-3 py-6 text-center text-sm leading-relaxed text-orchid-dim">
-                Nothing yet. Replies, mentions and badges land here.
+                Nothing yet. New purchases, replies, mentions and badges land here.
               </p>
             )}
 
@@ -215,7 +221,11 @@ export function NotificationBell() {
                     aria-hidden
                     className="grid size-8 shrink-0 place-items-center rounded-full bg-white/[0.07]"
                   >
-                    <Bell className="size-3.5 text-gold" />
+                    {notification.kind === PURCHASE_NOTIFICATION_KIND ? (
+                      <ShoppingBag className="size-3.5 text-gold" />
+                    ) : (
+                      <Bell className="size-3.5 text-gold" />
+                    )}
                   </span>
                 )}
 

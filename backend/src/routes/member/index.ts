@@ -17,6 +17,7 @@ import { memberAffiliateRouter } from "./affiliatePortal";
 import { memberLessonFormsRouter } from "./lessonForms";
 import { memberContractsRouter } from "./contracts";
 import { memberToolStateRouter } from "./toolState";
+import { memberNotificationsRouter } from "./notifications";
 
 /**
  * `/api/member/*` — everything a signed-in customer can do.
@@ -34,6 +35,7 @@ memberRouter.use("/billing", memberBillingRouter);
 memberRouter.use("/library", memberLibraryRouter);
 memberRouter.use("/certificates", memberCertificatesRouter);
 memberRouter.use("/downloads", memberDownloadsRouter);
+memberRouter.use("/notifications", memberNotificationsRouter);
 // Before the general community router, whose `/:slug` handler would
 // otherwise swallow `/:slug/live` as a community named "live".
 memberRouter.use("/community", memberCommunityLiveRouter);
