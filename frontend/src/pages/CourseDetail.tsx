@@ -21,6 +21,7 @@ import {
   type CurriculumModule,
 } from "@/components/course/CoursePriceLabel";
 import CourseSalesPage from "@/components/course/CourseSalesPage";
+import StarterSuiteSalesPage from "@/components/course/StarterSuiteSalesPage";
 import { parseSalesPage } from "@/components/course/salesPage";
 
 /**
@@ -163,7 +164,9 @@ export default function CourseDetail() {
         ]}
       />
 
-      {salesPage ? (
+      {course.slug === "private-practice-starter-suite" ? (
+        <StarterSuiteSalesPage course={course} />
+      ) : salesPage ? (
         <CourseSalesPage course={course} page={salesPage} />
       ) : (
         <>
