@@ -168,6 +168,23 @@ describe("certificateGaps", () => {
     expect(done).toMatchObject({ evaluationsToSubmit: [], lessonsRemaining: 0 });
   });
 
+  it("does not accept a completion tick in place of submitting a native evaluation", () => {
+    const evaluation = lesson({
+      title: "Program Evaluation",
+      completed: true,
+      hasSurvey: true,
+      surveySubmitted: false,
+    });
+    const gaps = certificateGaps([trainingVideo(4300), evaluation], { requireFullVideo: true });
+    expect(gaps.evaluationsToSubmit).toEqual(["Program Evaluation"]);
+    expect(summarizeCertificateStatus(facts({
+      totalLessons: gaps.totalLessons,
+      lessonsRemaining: gaps.lessonsRemaining,
+      otherLessonsRemaining: gaps.otherLessonsRemaining,
+      evaluationsToSubmit: gaps.evaluationsToSubmit,
+    })).eligible).toBe(false);
+  });
+
   it("falls back to the 90% watch figure for a video with no recorded length", () => {
     const unmeasured = lesson({ hasMedia: true, watchedPercent: 89 });
     expect(certificateGaps([unmeasured], { requireFullVideo: true }).videosToFinish).toHaveLength(1);
