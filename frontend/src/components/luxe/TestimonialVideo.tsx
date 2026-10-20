@@ -15,6 +15,8 @@ interface TestimonialVideoProps {
   poster: string;
   /** Names the player to a screen reader, e.g. "Mike's testimonial". */
   title: string;
+  /** Same-origin English WebVTT captions, when available. */
+  captions?: string;
   className?: string;
 }
 
@@ -35,10 +37,8 @@ interface TestimonialVideoProps {
  *
  * The frame is a `data-media-surface`: footage is dark in both themes, and the
  * hairline and scrim over it have to stay the dark-theme ones in light theme.
- * No `<track>`: there is no caption file for this recording yet. Add one here
- * when it exists rather than shipping a generated one nobody has checked.
  */
-export function TestimonialVideo({ src720, src540, poster, title, className }: TestimonialVideoProps) {
+export function TestimonialVideo({ src720, src540, poster, title, captions, className }: TestimonialVideoProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [started, setStarted] = useState(false);
 
@@ -74,7 +74,9 @@ export function TestimonialVideo({ src720, src540, poster, title, className }: T
           aria-label={title}
           onPlay={() => setStarted(true)}
           className="absolute inset-0 size-full object-cover"
-        />
+        >
+          {captions && <track kind="captions" src={captions} srcLang="en" label="English" />}
+        </video>
 
         {!started && (
           <button

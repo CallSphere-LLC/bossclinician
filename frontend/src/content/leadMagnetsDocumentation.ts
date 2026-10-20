@@ -383,6 +383,7 @@ export const replayDocumentation = {
    * /uploads/leadmagnet-replay-documentation.mp4 is a shorter 2 h 44 min cut.
    */
   videoUrl: "/uploads/landing-dos-and-donts-documentation-replay-720p.mp4",
+  captionsUrl: "/videos/captions/dos-and-donts-documentation-replay.en.vtt",
   videoTitle: "The Do's & Don'ts of Clinical Documentation — replay",
   /**
    * Kajabi's countdown ran to "2026-329T23:55:00-08:00" — day 329 of 2026,
@@ -425,6 +426,7 @@ export const onDemandAudit = {
    * Your Practice (On-Demand Training)" course (migration 111).
    */
   videoUrl: "/uploads/landing-audit-proof-on-demand-1080p.mp4",
+  captionsUrl: "/videos/captions/audit-proof-on-demand.en.vtt",
   videoTitle: "Audit Proof Your Practice — on-demand training",
   step3: {
     cta: "Step 3: TAKE POST EXAM HERE",

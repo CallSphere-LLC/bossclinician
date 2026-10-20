@@ -29,7 +29,7 @@ export default function OnDemandAudit() {
           <h2 className="text-balance font-display text-[1.7rem] font-medium leading-[1.2] text-white sm:text-[2.2rem]">{c.step2.title}</h2>
         </Rise>
         <Rise delay={0.1} className="mt-8">
-          <RecordingPlayer url={c.videoUrl} title={c.videoTitle} />
+          <RecordingPlayer url={c.videoUrl} title={c.videoTitle} captions={c.captionsUrl} />
         </Rise>
 
         <Rise delay={0.12} className="mt-10 text-center">

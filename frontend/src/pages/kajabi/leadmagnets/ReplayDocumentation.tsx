@@ -87,7 +87,7 @@ export default function ReplayDocumentation() {
               <p className="copy-luxe text-pretty">{c.closed}</p>
             </GlassCard>
           ) : (
-            <RecordingPlayer url={c.videoUrl} title={c.videoTitle} />
+            <RecordingPlayer url={c.videoUrl} title={c.videoTitle} captions={c.captionsUrl} />
           )}
         </Rise>
       </Section>

@@ -1326,7 +1326,7 @@ export function CouponsPage() {
             )}
           </div>
           <Field label="Which offers accept it?" hint="leave all clear to use it everywhere">
-            <div className="max-h-44 space-y-1 overflow-auto rounded-xl border border-hairline p-2">
+            <div className="max-h-44 space-y-1 overflow-auto rounded-xl border border-hairline p-2 text-ink">
               {offers.length === 0 ? (
                 <p className="px-2 py-1 text-sm text-ink-soft">No offers are available yet.</p>
               ) : offers.map((offer) => (

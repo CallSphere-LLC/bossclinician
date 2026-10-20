@@ -543,6 +543,12 @@ async function captionVideo(reference, fp, label) {
     log(`${label}: downloading ${objectKey(reference)}`);
     try {
       await s3Download(reference, video);
+      const streams = await run("ffprobe", ["-v", "error", "-select_streams", "a", "-show_entries", "stream=index", "-of", "csv=p=0", video]);
+      if (!streams.stdout.trim()) {
+        // Nothing to caption: a silent clip (the 4-6 s Kajabi title cards).
+        // Left without captions_url so the player shows no empty CC track.
+        throw Object.assign(new Error("video has no audio stream"), { noAudio: true });
+      }
       await extractAudio(video, audio + ".part");
       fs.renameSync(audio + ".part", audio);
     } finally {
@@ -695,14 +701,20 @@ async function processLessons(rows) {
       delete summary.failed[row.id];
       log(`${label}: done - ${result.cues} cues, ${(result.seconds / 60).toFixed(1)} min, billed ${((result.billedSeconds || 0) / 60).toFixed(1)} min, db ${updated ? "updated" : "unchanged"}`);
     } catch (e) {
-      summary.failed[row.id] = { video: row.video_url, error: String(e.message || e).slice(0, 500) };
-      log(`${label}: FAILED ${String(e.message || e).slice(0, 500)}`);
+      if (e.noAudio) {
+        summary.noAudio = { ...(summary.noAudio || {}), [row.id]: row.video_url };
+        delete summary.failed[row.id];
+        log(`${label}: no audio stream, nothing to caption (captions_url left empty)`);
+      } else {
+        summary.failed[row.id] = { video: row.video_url, error: String(e.message || e).slice(0, 500) };
+        log(`${label}: FAILED ${String(e.message || e).slice(0, 500)}`);
+      }
     }
     summary.updatedAt = new Date().toISOString();
     summary.billedMinutes = Number((summary.billedSeconds / 60).toFixed(1));
     fs.writeFileSync(SUMMARY, JSON.stringify(summary, null, 2));
   }
-  log(`batch finished: ${Object.keys(summary.done).length} done, ${Object.keys(summary.failed).length} failed, billed ${summary.billedMinutes ?? 0} min total`);
+  log(`batch finished: ${Object.keys(summary.done).length} done, ${Object.keys(summary.failed).length} failed, ${Object.keys(summary.noAudio || {}).length} without audio, billed ${summary.billedMinutes ?? 0} min total`);
 }
 
 async function main() {
