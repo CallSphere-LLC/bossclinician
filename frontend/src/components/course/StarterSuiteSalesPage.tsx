@@ -32,7 +32,7 @@ const faqs = [
   { question: "I’m already in private practice—will this still help me?", answer: "If you feel stuck with marketing, client attraction, or pricing, this course provides clarity on foundational business steps." },
   { question: "How long does it take to complete?", answer: "Each core lesson is under 30 minutes. Go through the course at your own pace and start implementing right away." },
   { question: "How do I access the course?", answer: "After purchase, you’ll have access in your Boss Clinician library. Go through the lessons at your own pace, on your own schedule." },
-  { question: "What if I need more support after taking the mini-course?", answer: "Explore the Boss Clinician Club for more training, community, and support as your practice grows." },
+  { question: "What if I need more support after taking the mini-course?", answer: "Inside my Profitable Private Practice Leap Academy Membership, I provide in-depth training, ongoing coaching, and resources to help you grow your practice beyond the first steps. You’ll get a complete marketing system, pricing strategies, and client attraction frameworks—so you never feel lost in your business." },
 ];
 
 function Action({ course, children, secondary = false }: { course: CourseDetailResponse; children: React.ReactNode; secondary?: boolean }) {
@@ -56,7 +56,7 @@ function Video({ id, poster, title }: { id: string; poster: string; title: strin
         <iframe title={title} src={"https://fast.wistia.net/embed/iframe/" + id + "?autoPlay=true"} allow="autoplay; fullscreen; picture-in-picture" allowFullScreen className="absolute inset-0 size-full" />
       ) : (
         <button type="button" onClick={() => setPlaying(true)} className="group absolute inset-0 size-full" aria-label={"Play " + title}>
-          <img src={poster} alt="" className="size-full object-cover" />
+          <img src={poster} alt="" className="size-full object-contain" />
           <span className="absolute inset-0 bg-black/15 transition group-hover:bg-black/25" />
           <span className="absolute left-1/2 top-1/2 flex size-20 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-lg bg-[#172e3c]/90 text-white shadow-lg"><Play className="ml-1 size-9 fill-current" aria-hidden="true" /></span>
         </button>
@@ -135,7 +135,7 @@ export default function StarterSuiteSalesPage({ course }: { course: CourseDetail
       </section>
 
       <section className="bg-white px-5 py-16 sm:py-24">
-        <div className="mx-auto max-w-5xl"><h2 className="text-center font-display text-3xl font-bold sm:text-4xl">Action-oriented resources</h2><p className="mt-3 text-center">Open the materials alongside the video lessons and put each step to work.</p><div className="mt-10 grid gap-5 sm:grid-cols-2">{["Private Practice Starter Suite workbook", "Lesson worksheets for each step", "Private Practice Starter Checklist", "From Employee to CEO mindset affirmations"].map(item => <div key={item} className="flex items-start gap-3 rounded-xl border border-[#c6bede] bg-[#f8f6fc] p-5 font-semibold"><Check className="size-5 shrink-0 text-[#695987]" aria-hidden="true" />{item}</div>)}</div></div>
+        <div className="mx-auto max-w-5xl"><h2 className="text-center font-display text-3xl font-bold sm:text-4xl">Action-oriented resources</h2><p className="mt-3 text-center">Open the materials alongside the video lessons and put each step to work.</p><div className="mt-10 grid gap-5 sm:grid-cols-3">{["Mindset Shift Worksheet", "Niche Clarity & Business Model Worksheet", "Client Attraction Quick-Start Checklist"].map(item => <div key={item} className="flex items-start gap-3 rounded-xl border border-[#c6bede] bg-[#f8f6fc] p-5 font-semibold"><Check className="size-5 shrink-0 text-[#695987]" aria-hidden="true" />{item}</div>)}</div><h3 className="mt-12 text-center font-display text-2xl font-bold">Bonuses to fast-track your progress</h3><div className="mt-6 grid gap-5 sm:grid-cols-2">{["Private Practice Starter Checklist", "From Employee to CEO Mindset Affirmations"].map(item => <div key={item} className="flex items-start gap-3 rounded-xl border border-[#c6bede] bg-[#f8f6fc] p-5 font-semibold"><Check className="size-5 shrink-0 text-[#695987]" aria-hidden="true" />{item}</div>)}</div></div>
       </section>
 
       <section className="bg-[#e8e4f5] px-5 py-16 sm:py-24">
@@ -147,7 +147,7 @@ export default function StarterSuiteSalesPage({ course }: { course: CourseDetail
       </section>
 
       <section className="bg-[#cec7ea] px-5 py-16 sm:py-24">
-        <div className="mx-auto max-w-3xl rounded-2xl bg-white p-6 text-center shadow-xl sm:p-10"><h2 className="font-display text-3xl font-bold">Here’s everything you get</h2><ul className="mt-7 space-y-3 text-left">{["3-step Private Practice Starter Suite video course", "Private Practice Starter Suite workbook", "Lesson worksheets and readiness quizzes", "Private Practice Starter Checklist", "From Employee to CEO mindset affirmations"].map(item => <li key={item} className="flex gap-3 border-b border-[#e8e4f5] pb-3"><Check className="size-5 shrink-0 text-[#695987]" aria-hidden="true" />{item}</li>)}</ul>{price && <p className="mt-8 text-3xl font-black">Get access for {price}</p>}<p className="mt-3">Start building your private practice with clarity and confidence.</p><div className="mt-6"><Action course={course}>I’m ready to learn from Yvette</Action></div><p className="mt-5 flex items-center justify-center gap-2 text-xs"><LockKeyhole className="size-4" aria-hidden="true" /> Secure checkout and access in your library</p></div>
+        <div className="mx-auto max-w-3xl rounded-2xl bg-white p-6 text-center shadow-xl sm:p-10"><h2 className="font-display text-3xl font-bold">Here’s everything you get</h2><ul className="mt-7 space-y-3 text-left">{["3-step Private Practice Starter Suite video course", "Private Practice Starter Suite workbook", "Mindset Shift Worksheet", "Niche Clarity & Business Model Worksheet", "Client Attraction Quick-Start Checklist", "Private Practice Starter Checklist", "From Employee to CEO Mindset Affirmations"].map(item => <li key={item} className="flex gap-3 border-b border-[#e8e4f5] pb-3"><Check className="size-5 shrink-0 text-[#695987]" aria-hidden="true" />{item}</li>)}</ul>{price && <p className="mt-8 text-3xl font-black">Get access for {price}</p>}<p className="mt-3">Start building your private practice with clarity and confidence.</p><div className="mt-6"><Action course={course}>I’m ready to learn from Yvette</Action></div><p className="mt-5 flex items-center justify-center gap-2 text-xs"><LockKeyhole className="size-4" aria-hidden="true" /> Secure checkout and access in your library</p></div>
       </section>
 
       <section className="bg-white px-5 py-16 sm:py-24">
