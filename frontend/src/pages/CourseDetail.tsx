@@ -297,6 +297,48 @@ export default function CourseDetail() {
             </Container>
           </Section>
 
+          {course.slug === "fully-booked-toolkit" && (
+            <Section className="pb-24" aria-label="Fully Booked Toolkit preview">
+              <Container className="max-w-4xl">
+                <GoldRule />
+                <h2 className="mt-10 font-display text-3xl text-ink">
+                  See how the toolkit works
+                </h2>
+                <p className="mt-4 max-w-2xl leading-relaxed text-orchid">
+                  Watch Yvette’s three-minute introduction to getting visible,
+                  attracting aligned clients, and turning inquiries into bookings.
+                </p>
+                <div className="mt-8 aspect-video overflow-hidden rounded-2xl border border-hairline bg-black shadow-xl">
+                  <iframe
+                    src="https://fast.wistia.net/embed/iframe/v4rhn1rmdu?videoFoam=true"
+                    title="The Fully Booked Therapist Toolkit introduction"
+                    allow="autoplay; fullscreen; picture-in-picture"
+                    allowFullScreen
+                    loading="lazy"
+                    referrerPolicy="strict-origin-when-cross-origin"
+                    className="size-full"
+                  />
+                </div>
+                <div className="mt-10 grid gap-5 sm:grid-cols-2">
+                  <GlassCard spotlight={false} interactive={false} className="p-6">
+                    <h3 className="font-display text-xl text-ink">From Profile to Profit</h3>
+                    <p className="mt-3 leading-relaxed text-orchid">
+                      A directory profile guide with steps to improve visibility,
+                      messaging, and how you present your practice online.
+                    </p>
+                  </GlassCard>
+                  <GlassCard spotlight={false} interactive={false} className="p-6">
+                    <h3 className="font-display text-xl text-ink">Client Consultation Call Script</h3>
+                    <p className="mt-3 leading-relaxed text-orchid">
+                      A guided script for consultation calls, including fit,
+                      expectations, and next steps for prospective clients.
+                    </p>
+                  </GlassCard>
+                </div>
+              </Container>
+            </Section>
+          )}
+
           {hasCurriculum && (
             <Section className="pb-24">
               <Container className="max-w-3xl">
