@@ -1,13 +1,15 @@
 -- QA Bugs row 128: import the linked Profitable Private Practice post-exam
 -- into The Boss Move course's existing Post Exam lesson.
 -- Source: https://docs.google.com/forms/d/e/1FAIpQLSeWH_-NAtqEOVOSFMVYX788CiQIQfPtj3urQP5I8wmdyQ8c3w/viewform?usp=header
--- The public form exposes 25 multiple-choice questions and three identity
--- fields. It does NOT expose a verified answer key. All is_correct values
--- remain false and the assessment stays unpublished, so no learner can earn
--- credit from an unverified key. The form says "75% (18/25)", which is
--- inconsistent. The owner selected 18 correct out of 25 (72%) as the rule.
--- Once the key and standard are confirmed, publish the assessment and switch
--- lesson content_type from text to assessment in Admin.
+-- The public form and Kajabi quiz 1539882 match exactly: three required
+-- identity fields and 25 four-choice scored questions. Kajabi's selected key
+-- supplies the correct-answer flags; the identity fields are never scored.
+-- Owner-selected pass mark: 75%, which requires at least 19/25 correct.
+-- SOURCE-KEY WARNING: Kajabi's item 18 (overall form question 21) marks
+-- C. "Disable encryption for faster calls" correct for a HIPAA telehealth
+-- question. This appears wrong, but the owner explicitly chose to preserve
+-- the source key for now. Yvette should review and correct the key if needed.
+-- Do not silently change this answer in a later import.
 DO $do$
 DECLARE
   specs jsonb := $spec$[
@@ -38,7 +40,8 @@ DECLARE
       "B. It increases marketing reach",
       "C. It limits client refunds",
       "D. It is only required for corporations"
-    ]
+    ],
+    "correct": 0
   },
   {
     "prompt": "An essential legal step when opening a private practice includes:",
@@ -49,7 +52,8 @@ DECLARE
       "B. Registering your business entity and obtaining an EIN",
       "C. Designing your logo",
       "D. Hiring an assistant"
-    ]
+    ],
+    "correct": 1
   },
   {
     "prompt": "What ethical principle is most related to maintaining secure client records?",
@@ -60,7 +64,8 @@ DECLARE
       "B. Autonomy",
       "C. Confidentiality",
       "D. Beneficence"
-    ]
+    ],
+    "correct": 2
   },
   {
     "prompt": "Why is it important to obtain an NPI (National Provider Identifier)?",
@@ -71,7 +76,8 @@ DECLARE
       "B. It verifies your clinical license",
       "C. It increases search engine visibility",
       "D. It is optional for private pay therapists"
-    ]
+    ],
+    "correct": 0
   },
   {
     "prompt": "When deciding on a business structure, the main consideration is:",
@@ -82,7 +88,8 @@ DECLARE
       "B. The popularity of the business name",
       "C. The number of clients you expect",
       "D. Whether your friends recommend it"
-    ]
+    ],
+    "correct": 0
   },
   {
     "prompt": "A fair and ethical fee structure should be based on:",
@@ -93,7 +100,8 @@ DECLARE
       "B. The counselor’s credentials, expenses, and client access needs",
       "C. Personal preference",
       "D. Insurance reimbursement rates only"
-    ]
+    ],
+    "correct": 1
   },
   {
     "prompt": "What is a major benefit of setting consistent financial policies?",
@@ -104,7 +112,8 @@ DECLARE
       "B. It guarantees more referrals",
       "C. It prevents clients from requesting receipts",
       "D. It eliminates intake paperwork"
-    ]
+    ],
+    "correct": 0
   },
   {
     "prompt": "Which of the following is most important to discuss during informed consent?",
@@ -115,7 +124,8 @@ DECLARE
       "B. Fees, billing, and cancellation policies",
       "C. Your personal life story",
       "D. Your marketing goals"
-    ]
+    ],
+    "correct": 1
   },
   {
     "prompt": "The best practice when setting session rates is to:",
@@ -126,7 +136,8 @@ DECLARE
       "B. Charge the lowest amount possible to attract more clients",
       "C. Base them on your colleagues’ rates only",
       "D. Avoid adjusting rates over time"
-    ]
+    ],
+    "correct": 0
   },
   {
     "prompt": "Why should therapists conduct regular financial reviews of their practice?",
@@ -137,7 +148,8 @@ DECLARE
       "B. To compare salaries with peers",
       "C. To update social media content",
       "D. To track clinical outcomes"
-    ]
+    ],
+    "correct": 0
   },
   {
     "prompt": "When describing services on your website, you should:",
@@ -148,7 +160,8 @@ DECLARE
       "B. Focus only on your credentials",
       "C. Include every therapeutic approach you’ve ever studied",
       "D. List your fees without context"
-    ]
+    ],
+    "correct": 0
   },
   {
     "prompt": "What is the primary purpose of marketing for therapists?",
@@ -159,7 +172,8 @@ DECLARE
       "B. To outperform competitors",
       "C. To collect data for future sales",
       "D. To promote unrelated services"
-    ]
+    ],
+    "correct": 0
   },
   {
     "prompt": "What makes a good professional referral partnership?",
@@ -170,7 +184,8 @@ DECLARE
       "B. Frequent promotional exchanges",
       "C. Referral payments to other providers",
       "D. Avoiding any discussion of clinical coordination"
-    ]
+    ],
+    "correct": 0
   },
   {
     "prompt": "A lead magnet is most effective when it:",
@@ -181,7 +196,8 @@ DECLARE
       "B. Is heavily sales-focused",
       "C. Requires paid access",
       "D. Only lists your services"
-    ]
+    ],
+    "correct": 0
   },
   {
     "prompt": "Ethically, when marketing your practice, you should:",
@@ -192,7 +208,8 @@ DECLARE
       "B. Avoid making false or misleading claims",
       "C. Use client testimonials freely without consent",
       "D. Exaggerate success stories"
-    ]
+    ],
+    "correct": 1
   },
   {
     "prompt": "Which system feature is most critical for an Electronic Health Record (EHR)?",
@@ -203,7 +220,8 @@ DECLARE
       "B. Ability to post to social media",
       "C. Automatic price discounts",
       "D. Integration with your playlist"
-    ]
+    ],
+    "correct": 0
   },
   {
     "prompt": "Using automation for intake and scheduling can improve:",
@@ -214,7 +232,8 @@ DECLARE
       "B. Clinical accuracy",
       "C. Marketing visibility",
       "D. Tax deductions"
-    ]
+    ],
+    "correct": 0
   },
   {
     "prompt": "To ensure HIPAA compliance in telehealth, a therapist should:",
@@ -225,7 +244,8 @@ DECLARE
       "B. Use FaceTime for convenience",
       "C. Disable encryption for faster calls",
       "D. Share passwords with clients"
-    ]
+    ],
+    "correct": 2
   },
   {
     "prompt": "What is the ethical concern when using email communication with clients?",
@@ -236,7 +256,8 @@ DECLARE
       "B. Protecting confidentiality and using secure platforms",
       "C. Delayed responses",
       "D. Writing too formally"
-    ]
+    ],
+    "correct": 1
   },
   {
     "prompt": "Automating payment systems supports which ethical value?",
@@ -247,7 +268,8 @@ DECLARE
       "B. Client autonomy",
       "C. Cultural competence",
       "D. Beneficence"
-    ]
+    ],
+    "correct": 0
   },
   {
     "prompt": "What’s the biggest benefit of tracking key business metrics?",
@@ -258,7 +280,8 @@ DECLARE
       "B. It replaces supervision",
       "C. It increases your social media followers",
       "D. It allows skipping documentation"
-    ]
+    ],
+    "correct": 0
   },
   {
     "prompt": "A sustainable practice model prioritizes:",
@@ -269,7 +292,8 @@ DECLARE
       "B. Balanced workload, ethical care, and long-term client relationships",
       "C. Maximizing session volume",
       "D. Working without break"
-    ]
+    ],
+    "correct": 1
   },
   {
     "prompt": "Burnout prevention for therapists includes:",
@@ -280,7 +304,8 @@ DECLARE
       "B. Avoiding time off to stay productive",
       "C. Taking on extra clients for income",
       "D. Focusing only on client outcomes"
-    ]
+    ],
+    "correct": 0
   },
   {
     "prompt": "Expanding into group practice should only occur when:",
@@ -291,7 +316,8 @@ DECLARE
       "B. You’ve hired friends",
       "C. You have excess office space",
       "D. You want to work fewer hours immediately"
-    ]
+    ],
+    "correct": 0
   },
   {
     "prompt": "What is the most important long-term benefit of thinking like a CEO as a therapist?",
@@ -302,7 +328,8 @@ DECLARE
       "B. Eliminating client contact",
       "C. Prioritizing profit above all",
       "D. Reducing paperwork alone"
-    ]
+    ],
+    "correct": 0
   }
 ]$spec$;
   v_lesson int;
@@ -329,7 +356,7 @@ BEGIN
      show_feedback, require_email, published, require_pass)
   VALUES
     ('the-boss-move-post-exam', 'The Boss Move Post Exam', '', 'graded',
-     v_lesson, 72, NULL, false, true, false, true)
+     v_lesson, 75, NULL, false, true, true, true)
   RETURNING id INTO v_assessment;
 
   FOR q, qi IN SELECT value, ordinality FROM jsonb_array_elements(specs) WITH ORDINALITY LOOP
@@ -343,8 +370,12 @@ BEGIN
 
     FOR o, oi IN SELECT value, ordinality FROM jsonb_array_elements(q->'options') WITH ORDINALITY LOOP
       INSERT INTO assessment_answers (question_id, position, label, is_correct)
-      VALUES (v_question, oi - 1, o #>> '{}', false);
+      VALUES (v_question, oi - 1, o #>> '{}', (q->>'correct')::int = oi - 1);
     END LOOP;
   END LOOP;
+
+  UPDATE course_lessons
+     SET content_type = 'assessment', updated_at = now()
+   WHERE id = v_lesson AND content_type = 'text';
 END
 $do$;
