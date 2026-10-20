@@ -4,8 +4,8 @@
 -- The public form exposes 25 multiple-choice questions and three identity
 -- fields. It does NOT expose a verified answer key. All is_correct values
 -- remain false and the assessment stays unpublished, so no learner can earn
--- credit from an unverified key. The form also says "75% (18/25)"; 18/25 is
--- 72%, while 75% requires 19/25. The owner must settle the pass standard.
+-- credit from an unverified key. The form says "75% (18/25)", which is
+-- inconsistent. The owner selected 18 correct out of 25 (72%) as the rule.
 -- Once the key and standard are confirmed, publish the assessment and switch
 -- lesson content_type from text to assessment in Admin.
 DO $do$
@@ -329,7 +329,7 @@ BEGIN
      show_feedback, require_email, published, require_pass)
   VALUES
     ('the-boss-move-post-exam', 'The Boss Move Post Exam', '', 'graded',
-     v_lesson, 75, NULL, false, true, false, true)
+     v_lesson, 72, NULL, false, true, false, true)
   RETURNING id INTO v_assessment;
 
   FOR q, qi IN SELECT value, ordinality FROM jsonb_array_elements(specs) WITH ORDINALITY LOOP
