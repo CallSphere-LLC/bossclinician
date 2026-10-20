@@ -27,6 +27,7 @@ import {
 } from "@/lib/coachingRoster";
 import type { CoachingOffer, CoachingSession, MediaAsset } from "@/types/admin";
 import { cn } from "@/lib/cn";
+import { checkoutPlainText } from "@/components/checkout/checkoutMarkdown";
 import { formatCurrency, formatDate, formatDateTime } from "@/lib/format";
 import {
   Badge,
@@ -617,7 +618,7 @@ function OffersTab() {
                 </p>
               )}
               <p className="mt-1.5 line-clamp-2 min-h-[2.5rem] text-sm text-ink-soft">
-                {offer.description || "No description yet."}
+                {checkoutPlainText(offer.description ?? "") || "No description yet."}
               </p>
               <p className="mt-3 font-bold tabular-nums text-[1.5rem] leading-none text-plum">
                 {offer.priceCents ? formatCurrency(offer.priceCents, offer.currency) : "No price set"}

@@ -769,6 +769,11 @@ memberLibraryRouter.get(
           lastPositionSeconds: lesson.lastPositionSeconds,
           watchedPercent: lesson.watchedPercent,
         },
+        // "Require watching the full video before the next lesson": whether it
+        // applies here, how far they have played through, and how far they must.
+        // The player stops seeks past `playedToSeconds` and counts down to
+        // `requiredSeconds`; the server enforces both on its own.
+        fullWatch: lesson.fullWatch,
       },
     });
   })

@@ -8,7 +8,6 @@ import {
   RefreshCw,
   Send,
   Trash2,
-  Zap,
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -33,6 +32,7 @@ import {
   Skeleton,
 } from "@/pages/admin/ui/primitives";
 import { Modal, useConfirm } from "@/pages/admin/ui/Dialog";
+import { AutomationGlyph } from "@/pages/admin/ui/icons";
 import { friendlyError, pluralize } from "@/pages/admin/ui/friendly";
 
 /**
@@ -265,7 +265,7 @@ export default function Integrations() {
       {/* ── Outgoing ───────────────────────────────────────────────────── */}
       <Card>
         <CardHeader
-          icon={<Zap />}
+          icon={<AutomationGlyph />}
           title="Tell another tool when something happens"
           subtitle="We'll send a message the moment somebody buys, signs up or fills in a form."
           action={
@@ -283,7 +283,7 @@ export default function Integrations() {
           </div>
         ) : endpoints.length === 0 ? (
           <EmptyState
-            icon={<Zap />}
+            icon={<AutomationGlyph />}
             title="Nothing connected yet"
             description="Add the web address your other tool gave you, and pick what it should hear about."
             action={

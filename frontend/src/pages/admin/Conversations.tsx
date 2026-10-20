@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { motion } from "motion/react";
-import { Bot, MessagesSquare, Mic, Trash2, User } from "lucide-react";
+import { MessagesSquare, Mic, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { adminApi } from "@/lib/api";
 import type { ChatSessionDetail, ChatSessionSummary } from "@/types/admin";
@@ -18,6 +18,7 @@ import {
 } from "@/pages/admin/ui/primitives";
 import { friendlyError, pluralize } from "@/pages/admin/ui/friendly";
 import { useConfirm } from "@/pages/admin/ui/Dialog";
+import { AssistantGlyph, VisitorGlyph } from "@/pages/admin/ui/icons";
 
 /** The cap the list request pages at; the count below says so rather than implying a total. */
 const LIST_LIMIT = 200;
@@ -224,13 +225,13 @@ export default function Conversations() {
                       >
                         <span
                           className={cn(
-                            "grid size-8 shrink-0 place-items-center rounded-full [&_svg]:size-4",
+                            "grid size-8 shrink-0 place-items-center rounded-full border [&_svg]:size-4",
                             fromVisitor
-                              ? "bg-plum-bright/[0.18] text-lilac"
-                              : "bg-gold/[0.12] text-gold",
+                              ? "border-hairline text-ink-soft"
+                              : "border-gold/40 text-gold",
                           )}
                         >
-                          {fromVisitor ? <User /> : <Bot />}
+                          {fromVisitor ? <VisitorGlyph /> : <AssistantGlyph />}
                         </span>
                         <div className="min-w-0 max-w-[42rem]">
                           <p

@@ -281,6 +281,21 @@ export interface UnlockedLesson extends LessonCommon {
   notesEnabled: boolean;
   files: LessonFile[];
   progress: LessonProgress;
+  /**
+   * "Require watching the full video before the next lesson". Optional because
+   * the admin preview's lesson read does not send it.
+   */
+  fullWatch?: FullWatchState;
+}
+
+/** How far a full-watch lesson has been played through, and how far it must be. */
+export interface FullWatchState {
+  required: boolean;
+  /** Furthest point played through without seeking, in seconds. */
+  playedToSeconds: number;
+  /** 95% of the media's length; 0 when the length is not on record. */
+  requiredSeconds: number;
+  durationSeconds: number;
 }
 
 export type PlayerLesson = LockedLesson | UnlockedLesson;
@@ -318,6 +333,7 @@ export interface ProgressResult {
   completed: boolean;
   completedAt: string | null;
   courseProgress: CourseProgress;
+  fullWatch?: FullWatchState;
 }
 
 export interface LessonNote {
@@ -456,6 +472,12 @@ export interface CertificateStatus {
   requiresPassingQuizzes: boolean;
   lessonsRemaining: number;
   quizzesToPass: { lessonTitle: string; assessmentTitle: string; passMark: number | null }[];
+  /** Videos still to be watched through ("Require watching the full video"). */
+  videosToFinish?: { lessonTitle: string; remainingSeconds: number }[];
+  /** Course evaluations not yet submitted, by lesson title. */
+  evaluationsToSubmit?: string[];
+  /** Access came only through an option sold without the certificate. */
+  excludedByPurchase?: boolean;
   ceuPending: boolean;
   eligible: boolean;
   /** "Pass the quiz in “Final quiz” (pass mark 80%) to get your certificate." */
@@ -502,7 +524,7 @@ export const libraryApi = {
    */
   saveProgress: (
     lessonId: number,
-    input: { positionSeconds: number; watchedPercent: number },
+    input: { positionSeconds: number; watchedPercent: number; playedToSeconds?: number },
     options: Pick<RequestOptions, "keepalive"> = {},
   ) =>
     memberRequest<ProgressResult>(`/member/lessons/${lessonId}/progress`, {

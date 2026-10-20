@@ -34,7 +34,6 @@ import {
   Send,
   Settings,
   ShieldAlert,
-  Sparkles,
   Target,
   Trash2,
   Trophy,
@@ -87,6 +86,7 @@ import {
   chipRowStyles,
 } from "@/pages/admin/ui/primitives";
 import { Modal, useConfirm } from "@/pages/admin/ui/Dialog";
+import { PointsGlyph } from "@/pages/admin/ui/icons";
 import {
   friendlyError,
   fromDateInput,
@@ -105,7 +105,7 @@ const TAB_LIST = [
   { value: "events", label: "Events", icon: CalendarDays },
   { value: "history", label: "Call history", icon: Video },
   { value: "badges", label: "Badges", icon: Award },
-  { value: "points", label: "Points", icon: Sparkles },
+  { value: "points", label: "Points", icon: PointsGlyph },
   { value: "review", label: "Review feed", icon: ShieldAlert },
   { value: "scheduled", label: "Scheduled", icon: Clock },
   { value: "guidelines", label: "Guidelines", icon: ScrollText },
@@ -293,7 +293,9 @@ function CommunityDetailPage({ id }: { id: string | undefined }) {
                   value={tab.value}
                   className="flex min-h-11 shrink-0 items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-semibold text-ink-soft transition-colors hover:text-plum data-[state=active]:bg-brand-gradient data-[state=active]:text-white"
                 >
-                  <Icon className="size-4" />
+                  {/* strokeWidth matches lucide's own, so the one admin glyph in
+                      this list (Points) carries the same weight as its neighbours. */}
+                  <Icon className="size-4" strokeWidth={2} />
                   {tab.label}
                 </Tabs.Trigger>
               );

@@ -404,7 +404,7 @@ export function ChatWidget() {
           <div className="relative">
             <motion.span
               aria-hidden="true"
-              className="absolute inset-0 -z-10 rounded-full bg-gold motion-reduce:hidden"
+              className="chat-launcher-pulse absolute inset-0 -z-10 rounded-full bg-gold motion-reduce:hidden"
               animate={prefersReducedMotion ? undefined : { scale: [1, 1.4, 1], opacity: [0.35, 0, 0.35] }}
               transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
             />
@@ -416,7 +416,7 @@ export function ChatWidget() {
               aria-expanded={false}
               aria-label="Open chat assistant"
               className={cn(
-                "flex h-14 w-14 items-center justify-center rounded-full bg-gold-foil text-night-deep",
+                "chat-launcher flex h-14 w-14 items-center justify-center rounded-full bg-gold-foil text-night-deep",
                 "shadow-[0_14px_36px_-12px_rgba(201,164,106,0.75)] ring-[6px] ring-gold/15",
                 "transition-shadow duration-300",
               )}

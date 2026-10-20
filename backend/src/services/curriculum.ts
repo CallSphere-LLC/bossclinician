@@ -180,6 +180,78 @@ export function creditWatchedPercent(input: {
   };
 }
 
+/* -------------------------------------------- watching the whole video (124) */
+
+/**
+ * How much of the media a "Require watching the full video" lesson has to have
+ * been played through before it counts as finished. Not 100: the last seconds
+ * of a recording are usually credits or silence, and a player that stops a
+ * frame short of the end must not leave somebody unable to finish a CE course.
+ */
+export const FULL_WATCH_PERCENT = 95;
+
+/** Seconds of media that have to be played through, or 0 when the length is unknown. */
+export function fullWatchRequiredSeconds(durationSeconds: number): number {
+  if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) return 0;
+  return Math.ceil((durationSeconds * FULL_WATCH_PERCENT) / 100);
+}
+
+/** Whether a furthest-played position satisfies the full-watch rule. */
+export function isFullyWatched(playedToSeconds: number, durationSeconds: number): boolean {
+  const required = fullWatchRequiredSeconds(durationSeconds);
+  return required > 0 && playedToSeconds >= required;
+}
+
+/**
+ * The furthest point in a lesson's media the member has reached by playing it.
+ *
+ * The player tracks this itself — it only moves forward while the media plays
+ * contiguously, never on a seek — and reports it as `claimedSeconds`. That claim
+ * is evidence, not the answer: it is held to the same wall-clock pace as
+ * `creditWatchedPercent`, so the furthest point can move ahead of the stored one
+ * by no more than the time since the last report at the fastest playback rate.
+ * A seek to the end reported as "played to here" is therefore credited only the
+ * seconds that could really have played since the previous report — and an
+ * honest player, which never reports a seek as played, is never clamped.
+ *
+ * Monotonic: re-watching an earlier part never lowers it.
+ */
+export function advancePlayedTo(input: {
+  claimedSeconds: number;
+  storedSeconds: number;
+  lastViewedAt: Date | null;
+  now: Date;
+  /** The media's length when known; the result never exceeds it. 0 when unknown. */
+  durationSeconds: number;
+}): number {
+  const stored = Math.max(0, Math.round(input.storedSeconds));
+  const claimed = Math.max(0, Math.round(input.claimedSeconds));
+  const sinceLast =
+    input.lastViewedAt === null
+      ? FIRST_REPORT_SECONDS
+      : Math.min(
+          MAX_CREDITED_GAP_SECONDS,
+          Math.max(0, (input.now.getTime() - input.lastViewedAt.getTime()) / 1000)
+        );
+  // No fixed slack on top: a per-report allowance would let a burst of
+  // requests walk the figure forward a few seconds each. MAX_PLAYBACK_RATE
+  // already carries a quarter of head-room over the fastest speed offered.
+  const reach = stored + sinceLast * MAX_PLAYBACK_RATE;
+  let next = Math.max(stored, Math.min(claimed, Math.floor(reach)));
+  if (input.durationSeconds > 0) next = Math.min(next, Math.round(input.durationSeconds));
+  return Math.max(stored, next);
+}
+
+/** "12:40" or "1:02:05" — how long is left, for the player and the certificate. */
+export function formatRemaining(seconds: number): string {
+  const total = Math.max(0, Math.ceil(seconds));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
+}
+
 /* ------------------------------------------------------------ drip settings */
 
 interface CachedSettings {
@@ -256,6 +328,20 @@ export function clearDripSettingsCache(): void {
  */
 export type LockReason = "previous_incomplete" | "previous_quiz_not_passed" | "drip" | "scheduled";
 
+/**
+ * The "Require watching the full video" state of one lesson. `required` is false
+ * for a lesson in a course without the switch, or one with nothing to play.
+ */
+export interface FullWatchView {
+  required: boolean;
+  /** Furthest point played through, in seconds. */
+  playedToSeconds: number;
+  /** Seconds that must be played through (95% of the length); 0 when the length is unknown. */
+  requiredSeconds: number;
+  /** The media's recorded length; 0 when unknown. */
+  durationSeconds: number;
+}
+
 export interface MemberLessonView {
   id: number;
   slug: string;
@@ -281,6 +367,7 @@ export interface MemberLessonView {
   lastPositionSeconds: number;
   watchedPercent: number;
   lastViewedAt: string | null;
+  fullWatch: FullWatchView;
 }
 
 export interface MemberModuleView {
@@ -347,6 +434,11 @@ interface OutlineRow {
   watched_percent: number | null;
   completed_at: Date | null;
   last_viewed_at: Date | null;
+  /** The course has "Require watching the full video before the next lesson" on. */
+  require_full_video?: boolean | null;
+  /** The lesson holds a video or audio file (never the URL itself). */
+  has_media?: boolean | null;
+  max_position_seconds?: number | null;
 }
 
 /**
@@ -377,11 +469,17 @@ const outlineSql = (publishedOnly: boolean): string => `
          EXISTS(SELECT 1 FROM assessments a WHERE a.lesson_id=l.id AND a.kind='graded' AND a.published AND a.require_pass) AS assessment_requires_pass,
          EXISTS(SELECT 1 FROM assessments a JOIN assessment_attempts t ON t.assessment_id = a.id
                  WHERE a.lesson_id=l.id AND a.kind='graded' AND a.published
-                   AND t.member_id = $1 AND t.passed AND t.completed_at IS NOT NULL) AS assessment_passed,
+                   AND t.member_id = $1 AND t.completed_at IS NOT NULL
+                   AND (t.passed OR (a.pass_mark IS NOT NULL AND t.percent >= a.pass_mark))) AS assessment_passed,
+         c.require_full_video,
+         ((l.content_type = 'video' AND COALESCE(l.video_url, '') <> '')
+            OR (l.content_type = 'audio' AND COALESCE(l.audio_url, '') <> '')) AS has_media,
          l.drip_days AS lesson_drip_days,
          l.drip_date AS lesson_drip_date,
-         lp.last_position_seconds, lp.watched_percent, lp.completed_at, lp.last_viewed_at
+         lp.last_position_seconds, lp.watched_percent, lp.completed_at, lp.last_viewed_at,
+         lp.max_position_seconds
     FROM course_modules m
+    JOIN courses c ON c.id = m.course_id
     LEFT JOIN course_lessons  l  ON l.module_id = m.id${publishedOnly ? " AND l.published" : ""}
     LEFT JOIN lesson_progress lp ON lp.lesson_id = l.id AND lp.member_id = $1
    WHERE m.course_id = ANY($2::int[])
@@ -452,7 +550,28 @@ function toLessonView(
     lastPositionSeconds: row.last_position_seconds ?? 0,
     watchedPercent: row.watched_percent ?? 0,
     lastViewedAt: iso(row.last_viewed_at),
+    fullWatch: fullWatchFor(row),
   };
+}
+
+/** The full-watch rule as it applies to one outline row. */
+function fullWatchFor(row: OutlineRow): FullWatchView {
+  const durationSeconds = row.video_duration_seconds ?? 0;
+  return {
+    required: row.require_full_video === true && row.has_media === true,
+    playedToSeconds: row.max_position_seconds ?? 0,
+    requiredSeconds: fullWatchRequiredSeconds(durationSeconds),
+    durationSeconds,
+  };
+}
+
+/** "Finish watching “Intro” to unlock — 12:40 left", or without the time when unknown. */
+export function fullWatchLockLabel(lesson: Pick<MemberLessonView, "title" | "fullWatch">): string {
+  const { playedToSeconds, requiredSeconds } = lesson.fullWatch;
+  const left = requiredSeconds > 0 ? Math.max(0, requiredSeconds - playedToSeconds) : 0;
+  return left > 0
+    ? `Finish watching “${lesson.title}” to unlock — ${formatRemaining(left)} left`
+    : `Finish watching “${lesson.title}” to unlock`;
 }
 
 /** Exported for unit tests; every caller in the app goes through the loaders below. */
@@ -506,14 +625,22 @@ export function buildModules(
   let previous: MemberLessonView | null = null;
   for (const mod of modules) {
     for (const lesson of mod.lessons) {
-      const sequenced = previous !== null && (lesson.requiresPreviousLesson || passRequired.has(previous.id));
+      // "Require watching the full video before the next lesson": a lesson after
+      // a video in such a course waits for it whether or not it is itself
+      // marked "locked in order" — the switch is the owner saying so for every
+      // video in the course.
+      const videoGate = previous !== null && previous.fullWatch.required;
+      const sequenced =
+        previous !== null && (lesson.requiresPreviousLesson || passRequired.has(previous.id) || videoGate);
       if (previous && sequenced && !lesson.preview) {
         const quizOutstanding = passRequired.has(previous.id) && !passed.has(previous.id);
         if (quizOutstanding || !previous.completed) {
           const reason: LockReason = quizOutstanding ? "previous_quiz_not_passed" : "previous_incomplete";
           const sentence = quizOutstanding
             ? `Pass the quiz in “${previous.title}” to unlock`
-            : `Complete “${previous.title}” to unlock`;
+            : previous.fullWatch.required
+              ? fullWatchLockLabel(previous)
+              : `Complete “${previous.title}” to unlock`;
           if (lesson.lockReason === "drip" || lesson.lockReason === "scheduled") {
             // Already held by its release date; the date stays the headline and
             // the prerequisite is added, so nobody is surprised on the day.
@@ -737,7 +864,7 @@ export async function loadCourseForPreview(
       if (!lesson.unlocked || lesson.lockReason !== null) {
         studentLocks[lesson.id] =
           lesson.lockReason === "previous_quiz_not_passed" || lesson.lockReason === "previous_incomplete"
-            ? `Locked: ${lesson.unlockLabel.replace(/ to unlock$/, " first")}`
+            ? `Locked: ${lesson.unlockLabel.replace(/ to unlock( — .*)?$/, " first")}`
             : lesson.unlockLabel;
       }
       lesson.unlocked = true;

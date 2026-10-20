@@ -204,6 +204,40 @@ export async function selectOfferPricing(
   return option ? optionOverlay(offer, option) : { ...offer, pricing_option_id: null };
 }
 
+/**
+ * The checkout option that charges exactly what the offer's own price charges,
+ * or undefined.
+ *
+ * An offer sold "two ways" is often set up as its own price plus two options,
+ * one of which repeats that price under a better name ("Training + CE Credit —
+ * $77" beside the offer's own $77). Shown as it stands, the buyer is asked to
+ * choose between "Pay in full — $77" and "Training + CE Credit — $77", which
+ * reads as a mistake. When an option repeats the offer's price, that option
+ * stands for it at checkout and the offer's own choice is left out.
+ *
+ * Same means every field the charge is built from: kind, amount, currency,
+ * and for recurring prices the cadence, instalments and trial.
+ */
+export function optionDuplicatingBasePrice(
+  offer: Pick<OfferRow, "pricing_type" | "amount_cents" | "min_amount_cents" | "currency" | "interval" | "interval_count" | "installment_count" | "trial_days">,
+  options: readonly OfferPricingOptionRow[],
+): OfferPricingOptionRow | undefined {
+  const currency = (value: string | null | undefined) => (value || "usd").toLowerCase();
+  const recurring = offer.pricing_type === "subscription" || offer.pricing_type === "payment_plan";
+  return options.find(
+    (option) =>
+      option.pricing_type === offer.pricing_type &&
+      option.amount_cents === offer.amount_cents &&
+      currency(option.currency) === currency(offer.currency) &&
+      (offer.pricing_type !== "pwyw" || option.min_amount_cents === offer.min_amount_cents) &&
+      (!recurring ||
+        ((option.interval ?? null) === (offer.interval ?? null) &&
+          (option.interval_count ?? 1) === (offer.interval_count ?? 1) &&
+          (option.installment_count ?? null) === (offer.installment_count ?? null) &&
+          (option.trial_days ?? 0) === (offer.trial_days ?? 0))),
+  );
+}
+
 function pricingLabel(offer: OfferRow): string {
   if (offer.pricing_type === "payment_plan") return "Payment plan";
   if (offer.pricing_type === "subscription") return "Subscription";
@@ -553,10 +587,19 @@ export async function buildOfferView(
     offerProductIds(offer.id),
     loadOfferPricingOptions(offer.id),
   ]);
-  const selectedOffer =
+  // An option that repeats the offer's own price stands in for it (see
+  // optionDuplicatingBasePrice), so the buyer never sees the same price twice.
+  // Anything that would have selected the offer's own price — no recommended
+  // option, or an old `?option=0` link — selects that option instead; it
+  // charges the same amount, and the checkout posts its id.
+  const baseStandIn = optionDuplicatingBasePrice(offer, additionalPricing);
+  let selectedOffer =
     requestedOptionId === undefined
       ? await selectOfferPricing(offer, undefined)
       : await selectOfferPricing(offer, requestedOptionId).catch(() => selectOfferPricing(offer, undefined));
+  if (baseStandIn && (selectedOffer.pricing_option_id ?? null) === null) {
+    selectedOffer = await selectOfferPricing(offer, baseStandIn.id);
+  }
   const priced = toPricedOffer(selectedOffer);
   const additionalRecommended = additionalPricing.some((option) => option.recommended);
 
@@ -578,7 +621,7 @@ export async function buildOfferView(
     billing: billingToJson(selectedOffer, priced),
     selectedPricingOptionId: selectedOffer.pricing_option_id ?? null,
     pricingOptions: [
-      pricingOptionJson(offer, null, pricingLabel(offer), !additionalRecommended),
+      ...(baseStandIn ? [] : [pricingOptionJson(offer, null, pricingLabel(offer), !additionalRecommended)]),
       ...additionalPricing.map((option) => {
         const overlaid = optionOverlay(offer, option);
         return pricingOptionJson(overlaid, option.id, option.label || pricingLabel(overlaid), option.recommended);

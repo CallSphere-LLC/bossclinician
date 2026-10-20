@@ -57,6 +57,7 @@ function LessonContent({ lesson, courseImage, onSaved }: LessonBodyProps) {
             title={lesson.title}
             startAt={lesson.progress.lastPositionSeconds}
             initialPercent={lesson.progress.watchedPercent}
+            fullWatch={lesson.fullWatch}
             onSaved={onSaved}
           />
           {notes}

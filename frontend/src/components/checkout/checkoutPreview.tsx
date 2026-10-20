@@ -66,3 +66,19 @@ export function checkoutPreviewPath(offerId: number | string): string {
 export function openCheckoutPreview(offerId: number | string): void {
   window.open(checkoutPreviewPath(offerId), "_blank", "noopener");
 }
+
+/**
+ * The offer with `?option=<id>` chosen, when that id is one of its options.
+ * The admin preview endpoint does not read the parameter (the public offer
+ * route does), so the choice is made here; every option already carries its
+ * own quote, which is all the form needs to switch.
+ */
+export function withPreselectedOption<T extends Pick<PublicOffer, "pricingOptions" | "selectedPricingOptionId">>(
+  offer: T,
+  optionParam: string | null,
+): T {
+  if (!optionParam || !/^\d+$/.test(optionParam)) return offer;
+  const wanted = Number(optionParam);
+  if (!offer.pricingOptions.some((option) => option.id === wanted)) return offer;
+  return { ...offer, selectedPricingOptionId: wanted };
+}

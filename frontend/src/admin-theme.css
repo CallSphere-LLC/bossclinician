@@ -237,6 +237,18 @@
 
 /* The shared assistant follows the console palette instead of putting dark
    translucent glass and pale marketing copy over the White appearance. */
+/* The chat launcher is shared with the public site, where a breathing gold
+   halo and a glow are the invitation. In the console it is a tool she already
+   knows is there, so it sits still: no pulse, no gold bloom, no ring — a plain
+   shadow to lift it off the page. Hooks are class names only; the public look
+   is untouched. */
+.theme-console .chat-launcher-pulse {
+  display: none;
+}
+.theme-console .chat-launcher {
+  box-shadow: 0 10px 24px -14px rgb(0 0 0 / 0.55), 0 0 0 1px rgb(0 0 0 / 0.06);
+}
+
 .theme-console .chat-widget-panel {
   background: var(--bg-elevated);
   border: 1px solid var(--border-strong);

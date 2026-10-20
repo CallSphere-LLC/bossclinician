@@ -6,8 +6,8 @@ import { badRequest, notFound } from "../../utils/httpError";
 import { buildUpdate } from "../../utils/sqlUpdate";
 import { isExternalRef, isProtectedRef } from "../../services/signedUrls";
 import { DEFAULT_DRIP_SETTINGS, zonedWallClockToUtc, type DripSettings } from "../../services/drip";
-import { loadDripSettings } from "../../services/curriculum";
-import { clearCertificateTemplateCache } from "../../services/certificates";
+import { loadDripSettings, recomputeCourseProgress } from "../../services/curriculum";
+import { clearCertificateTemplateCache, issueCertificateIfEarned } from "../../services/certificates";
 import { z } from "zod";
 
 /**
@@ -681,7 +681,15 @@ adminCurriculumRouter.get(
   }),
 );
 
-/** PUT /admin/curriculum/:courseId/certificate  { enabled?, requirePass?, title? } */
+/**
+ * PUT /admin/curriculum/:courseId/certificate
+ *   { enabled?, requirePass?, title?, requireFullVideo? }
+ *
+ * `requireFullVideo` is the course builder's "Require watching the full video
+ * before the next lesson" (courses.require_full_video, migration 129). It sits
+ * with the certificate settings because, for a CE course, it is part of what the
+ * certificate attests.
+ */
 adminCurriculumRouter.put(
   "/:courseId/certificate",
   asyncHandler(async (req, res) => {
@@ -692,13 +700,21 @@ adminCurriculumRouter.put(
         enabled: z.boolean().optional(),
         requirePass: z.boolean().optional(),
         title: z.string().trim().min(1).max(200).optional(),
+        requireFullVideo: z.boolean().optional(),
       })
       .safeParse(req.body);
     if (!parsed.success) throw badRequest("Those certificate settings aren't valid.");
-    const { enabled, requirePass, title } = parsed.data;
+    const { enabled, requirePass, title, requireFullVideo } = parsed.data;
 
     const course = await pool.query(`SELECT id FROM courses WHERE id = $1`, [courseId]);
     if (course.rowCount === 0) throw notFound("Course not found");
+
+    if (requireFullVideo !== undefined) {
+      await pool.query(`UPDATE courses SET require_full_video = $2, updated_at = now() WHERE id = $1`, [
+        courseId,
+        requireFullVideo,
+      ]);
+    }
 
     if (requirePass !== undefined) {
       await pool.query(`UPDATE courses SET certificate_requires_pass = $2, updated_at = now() WHERE id = $1`, [
@@ -746,9 +762,9 @@ adminCurriculumRouter.put(
 );
 
 async function loadCertificateSettings(courseId: number) {
-  const [course, template, quizzes] = await Promise.all([
-    pool.query<{ certificate_requires_pass: boolean }>(
-      `SELECT certificate_requires_pass FROM courses WHERE id = $1`,
+  const [course, template, quizzes, videos] = await Promise.all([
+    pool.query<{ certificate_requires_pass: boolean; require_full_video: boolean }>(
+      `SELECT certificate_requires_pass, require_full_video FROM courses WHERE id = $1`,
       [courseId],
     ),
     // The same template the issuer would use (services/certificates.ts).
@@ -762,13 +778,25 @@ async function loadCertificateSettings(courseId: number) {
         LIMIT 1`,
       [courseId],
     ),
-    pool.query<{ lesson_title: string; title: string; pass_mark: number | null; require_pass: boolean; published: boolean }>(
-      `SELECT l.title AS lesson_title, a.title, a.pass_mark, a.require_pass, (a.published AND l.published) AS published
+    pool.query<{ id: number; lesson_title: string; title: string; pass_mark: number | null; require_pass: boolean; published: boolean }>(
+      `SELECT a.id, l.title AS lesson_title, a.title, a.pass_mark, a.require_pass, (a.published AND l.published) AS published
          FROM assessments a
          JOIN course_lessons l ON l.id = a.lesson_id
          JOIN course_modules m ON m.id = l.module_id
         WHERE m.course_id = $1 AND a.kind = 'graded'
         ORDER BY m.sort, m.id, l.sort, l.id`,
+      [courseId],
+    ),
+    // Published lessons with something to play, and how many of them have no
+    // recorded length — the full-watch rule falls back to the 90% figure there.
+    pool.query<{ total: number; unmeasured: number }>(
+      `SELECT COUNT(*)::int AS total,
+              COUNT(*) FILTER (WHERE l.video_duration_seconds <= 0)::int AS unmeasured
+         FROM course_lessons l
+         JOIN course_modules m ON m.id = l.module_id
+        WHERE m.course_id = $1 AND l.published
+          AND ((l.content_type = 'video' AND COALESCE(l.video_url, '') <> '')
+               OR (l.content_type = 'audio' AND COALESCE(l.audio_url, '') <> ''))`,
       [courseId],
     ),
   ]);
@@ -778,7 +806,11 @@ async function loadCertificateSettings(courseId: number) {
     templateId: template.rows[0]?.id ?? null,
     title: template.rows[0]?.title ?? "Certificate of Completion",
     requirePass: course.rows[0].certificate_requires_pass,
+    requireFullVideo: course.rows[0].require_full_video,
+    mediaLessons: videos.rows[0]?.total ?? 0,
+    mediaLessonsWithoutLength: videos.rows[0]?.unmeasured ?? 0,
     gradedQuizzes: quizzes.rows.map((row) => ({
+      id: row.id,
       lessonTitle: row.lesson_title,
       title: row.title,
       passMark: row.pass_mark,
@@ -787,6 +819,86 @@ async function loadCertificateSettings(courseId: number) {
     })),
   };
 }
+
+/**
+ * PUT /admin/curriculum/:courseId/certificate/quizzes/:assessmentId  { passMark: 1..100 }
+ *
+ * "Passing score required for certificate": the pass mark of one graded quiz in
+ * this course, edited from the certificate panel. The same column the quiz
+ * editor writes (assessments.pass_mark), so the two can never disagree, and it
+ * is read live everywhere — the next-lesson lock, the certificate gate and the
+ * member's "pass mark 75%" sentence.
+ *
+ * Lowering the mark is honoured for attempts already taken: a member whose
+ * score now clears it has the quiz lesson completed here, their course
+ * progress rebuilt, and — if that was the last thing outstanding — their
+ * certificate issued and emailed. Raising it never takes a pass away.
+ */
+adminCurriculumRouter.put(
+  "/:courseId/certificate/quizzes/:assessmentId",
+  asyncHandler(async (req, res) => {
+    const courseId = Number(req.params.courseId);
+    const assessmentId = Number(req.params.assessmentId);
+    if (!Number.isInteger(courseId) || courseId <= 0) throw notFound("Course not found");
+    if (!Number.isInteger(assessmentId) || assessmentId <= 0) throw notFound("Quiz not found");
+    const parsed = z
+      .object({ passMark: z.number().int().min(1).max(100) })
+      .safeParse(req.body);
+    if (!parsed.success) throw badRequest("The passing score must be a whole number from 1 to 100.");
+    const { passMark } = parsed.data;
+
+    const found = await pool.query<{ lesson_id: number; pass_mark: number | null; require_pass: boolean }>(
+      `SELECT a.lesson_id, a.pass_mark, a.require_pass
+         FROM assessments a
+         JOIN course_lessons l ON l.id = a.lesson_id
+         JOIN course_modules m ON m.id = l.module_id
+        WHERE a.id = $1 AND m.course_id = $2 AND a.kind = 'graded'`,
+      [assessmentId, courseId],
+    );
+    const quiz = found.rows[0];
+    if (!quiz) throw notFound("That quiz isn't part of this course.");
+
+    await pool.query(`UPDATE assessments SET pass_mark = $2, updated_at = now() WHERE id = $1`, [
+      assessmentId,
+      passMark,
+    ]);
+
+    let newlyPassed = 0;
+    if (quiz.pass_mark === null || passMark < quiz.pass_mark) {
+      // Members with a completed attempt that clears the new mark and whose quiz
+      // lesson is still open. Bounded: a pass-mark change is a rare admin act.
+      const members = await pool.query<{ member_id: number }>(
+        `SELECT DISTINCT t.member_id
+           FROM assessment_attempts t
+           LEFT JOIN lesson_progress lp ON lp.lesson_id = $2 AND lp.member_id = t.member_id
+          WHERE t.assessment_id = $1 AND t.member_id IS NOT NULL
+            AND t.completed_at IS NOT NULL AND t.percent >= $3
+            AND lp.completed_at IS NULL
+          LIMIT 2000`,
+        [assessmentId, quiz.lesson_id, passMark],
+      );
+      for (const { member_id: memberId } of members.rows) {
+        try {
+          await pool.query(
+            `INSERT INTO lesson_progress (member_id, lesson_id, completed_at, first_viewed_at, last_viewed_at)
+             VALUES ($1, $2, now(), now(), now())
+             ON CONFLICT (member_id, lesson_id) DO UPDATE
+               SET completed_at = COALESCE(lesson_progress.completed_at, now())`,
+            [memberId, quiz.lesson_id],
+          );
+          await recomputeCourseProgress(memberId, courseId);
+          await issueCertificateIfEarned(memberId, courseId);
+          newlyPassed += 1;
+        } catch (err) {
+          // eslint-disable-next-line no-console
+          console.error(`[curriculum] pass-mark backfill for member ${memberId}:`, err);
+        }
+      }
+    }
+
+    res.json({ ...(await loadCertificateSettings(courseId)), newlyPassed });
+  }),
+);
 
 /**
  * GET /admin/curriculum/:courseId/certificates

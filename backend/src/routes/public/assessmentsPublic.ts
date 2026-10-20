@@ -181,8 +181,16 @@ assessmentsPublicRouter.post(
         const course = await pool.query(`SELECT m.course_id FROM course_lessons l JOIN course_modules m ON m.id=l.module_id WHERE l.id=$1`,[assessment.lesson_id]);
         if (course.rows[0]) {
           await recomputeCourseProgress(req.member.id, course.rows[0].course_id);
-          // A pass can be the last thing a finished course was waiting on.
-          await issueCertificateIfEarned(req.member.id, course.rows[0].course_id);
+          // A pass — or the course evaluation — can be the last thing a
+          // finished course was waiting on; the certificate is issued and
+          // emailed from here. A failure to mint it must not make the member's
+          // saved answers look lost: POST /member/certificates/claim recovers it.
+          try {
+            await issueCertificateIfEarned(req.member.id, course.rows[0].course_id);
+          } catch (err) {
+            // eslint-disable-next-line no-console
+            console.error(`[assessments] certificate for member ${req.member.id}:`, err);
+          }
         }
       }
     } else if (email) {

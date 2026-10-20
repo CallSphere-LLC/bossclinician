@@ -118,6 +118,26 @@ export function CertificateCard({
   };
 
   if (!loaded) return null;
+  // Bought through an option sold without the certificate ("Educational Access
+  // — No CE Credit"): say so plainly rather than leave them looking for it.
+  if (!certificate && status?.excludedByPurchase) {
+    return (
+      <GlassCard accent="gold" spotlight={false} interactive={false} className="p-5 sm:p-7">
+        <div className="flex items-start gap-4">
+          <span
+            aria-hidden
+            className="grid size-11 shrink-0 place-items-center rounded-full border border-gold/25 bg-gold/[0.08]"
+          >
+            <Award className="size-5 text-gold" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <h2 className="font-display text-xl text-white">Certificate</h2>
+            <p className="copy-luxe mt-2 max-w-xl text-sm">{status.message}</p>
+          </div>
+        </div>
+      </GlassCard>
+    );
+  }
   // No certificate on this course, and none issued: nothing to promise.
   if (!certificate && status && !status.offered) return null;
   // Status unknown: the old rule — only once the course is finished.

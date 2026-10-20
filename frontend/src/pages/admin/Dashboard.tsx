@@ -3,19 +3,12 @@ import { Link } from "react-router";
 import { toast } from "sonner";
 import {
   ArrowUpRight,
-  BookOpen,
-  CreditCard,
   FileText,
-  Inbox,
-  Landmark,
-  MessageSquare,
   Plus,
   RefreshCw,
-  Sparkles,
   TrendingDown,
   TrendingUp,
   Upload,
-  Users,
   Wallet,
 } from "lucide-react";
 import { adminApi } from "@/lib/api";
@@ -37,11 +30,20 @@ import {
   EmptyState,
   ErrorNotice,
   LEAD_STATUS_TONE,
+  iconFrameStyles,
   Skeleton,
   leadStatusLabel,
 } from "@/pages/admin/ui/primitives";
 import { friendlyError, pluralize } from "@/pages/admin/ui/friendly";
 import { CHART_COLORS, DonutChart, Sparkline, TrendAreaChart } from "@/pages/admin/ui/Charts";
+import {
+  BankGlyph,
+  CardGlyph,
+  ConversationGlyph,
+  InboxGlyph,
+  LessonsGlyph,
+  MembersGlyph,
+} from "@/pages/admin/ui/icons";
 
 /**
  * The screen Yvette opens every morning.
@@ -353,8 +355,8 @@ export default function Dashboard() {
                   .
                 </p>
               </div>
-              <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-gold/[0.12] text-gold">
-                <Landmark className="size-4" />
+              <span className={iconFrameStyles}>
+                <BankGlyph />
               </span>
             </div>
             <div className="mt-4 border-t border-hairline/70 pt-3">
@@ -439,7 +441,6 @@ export default function Dashboard() {
         {!noRevenue && (
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-1">
           <Card className="relative overflow-hidden bg-surface-raised p-5 text-ink">
-            <div className="pointer-events-none absolute -right-10 -top-12 size-36 rounded-full bg-gold/20 blur-2xl" />
             <p className="text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-white/65">
               Money you've made
             </p>
@@ -472,8 +473,8 @@ export default function Dashboard() {
                   <Skeleton className="mt-2.5 h-6 w-24" />
                 )}
               </div>
-              <span className="grid size-9 place-items-center rounded-xl bg-gold/[0.12] text-gold">
-                <CreditCard className="size-4" />
+              <span className={iconFrameStyles}>
+                <CardGlyph />
               </span>
             </div>
 
@@ -521,7 +522,7 @@ export default function Dashboard() {
                 : `${pluralize(overview.totals.newLeads, "new enquiry", "new enquiries")} to reply to`
               : undefined
           }
-          icon={<Inbox className="size-4" />}
+          icon={<InboxGlyph />}
           to="/admin/leads"
           series={activitySeries}
           seriesKey="leads"
@@ -537,7 +538,7 @@ export default function Dashboard() {
                 : `${formatNumber(overview.totals.enrollments)} students enrolled`
               : undefined
           }
-          icon={<Users className="size-4" />}
+          icon={<MembersGlyph />}
           to="/admin/members"
           series={activitySeries}
           seriesKey="subscribers"
@@ -547,7 +548,7 @@ export default function Dashboard() {
           label="Lessons"
           value={overview?.totals.lessons}
           hint={overview ? `Across ${pluralize(overview.totals.courses, "course")}` : undefined}
-          icon={<BookOpen className="size-4" />}
+          icon={<LessonsGlyph />}
           to="/admin/courses"
           series={activitySeries}
           /* No lessons-per-day figure is collected, and the line under this
@@ -560,7 +561,7 @@ export default function Dashboard() {
           label="AI chat conversations"
           value={overview?.totals.chats}
           hint="Typed and voice chats on your site"
-          icon={<MessageSquare className="size-4" />}
+          icon={<ConversationGlyph />}
           to="/admin/conversations"
           series={activitySeries}
           /* Likewise: this drew email sign-ups under a count of chats. */
@@ -576,7 +577,7 @@ export default function Dashboard() {
           <CardHeader
             title="Latest enquiries"
             subtitle="The most recent people to get in touch"
-            icon={<Inbox className="size-4" />}
+            icon={<InboxGlyph />}
             action={
               <Button asChild variant="ghost" size="sm">
                 <Link to="/admin/leads">See them all</Link>
@@ -591,7 +592,7 @@ export default function Dashboard() {
             </div>
           ) : overview.recentLeads.length === 0 ? (
             <EmptyState
-              icon={<Inbox />}
+              icon={<InboxGlyph />}
               title="No enquiries yet"
               description="They'll appear here as people fill in the forms on your site."
             />
@@ -631,7 +632,7 @@ export default function Dashboard() {
               <Skeleton className="h-[200px] w-full" />
             ) : leadDonut.length === 0 ? (
               <EmptyState
-                icon={<Inbox />}
+                icon={<InboxGlyph />}
                 title="No enquiries yet"
                 description="They'll appear here as they come in."
               />
@@ -661,13 +662,11 @@ export default function Dashboard() {
 
       {/* Community + storage */}
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-3">
-        <Card className="relative overflow-hidden xl:col-span-2">
-          <div className="pointer-events-none absolute -right-16 -top-16 size-56 rounded-full bg-lilac-tint/70 blur-3xl" />
-          <div className="relative p-6">
-            <Badge tone="gold">
-              <Sparkles className="size-3" />
+        <Card className="xl:col-span-2">
+          <div className="p-6">
+            <p className="text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-gold">
               Community
-            </Badge>
+            </p>
             <h3 className="mt-3 font-display text-xl text-ink">Grow more together</h3>
             <p className="mt-1.5 max-w-lg text-sm text-ink-soft">
               Run group conversations, challenges, leaderboards and live events for your members —
@@ -768,10 +767,10 @@ function StatTile({
             )}
             {hint && <p className="mt-1.5 truncate text-xs text-ink-soft">{hint}</p>}
           </div>
-          <span
-            className="grid size-9 shrink-0 place-items-center rounded-xl"
-            style={{ background: `${color}1A`, color }}
-          >
+          {/* The icon stays in the neutral ink: the colour belongs to the line
+              underneath, where it tells one series from another. Four tinted
+              chips in four colours said nothing but "dashboard template". */}
+          <span aria-hidden="true" className="shrink-0 text-ink-soft/80 [&_svg]:size-[1.15rem]">
             {icon}
           </span>
         </div>

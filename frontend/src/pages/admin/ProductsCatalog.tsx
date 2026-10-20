@@ -462,8 +462,8 @@ export default function ProductsCatalog({ downloadOnly = false }: { downloadOnly
                             className="size-11 shrink-0 rounded-xl object-cover"
                           />
                         ) : (
-                          <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-gold/[0.12] text-gold">
-                            <Package className="size-5" />
+                          <span className="grid size-11 shrink-0 place-items-center rounded-xl border border-hairline text-ink-soft/70">
+                            <Package className="size-5" strokeWidth={1.5} />
                           </span>
                         )}
 
@@ -558,7 +558,7 @@ export default function ProductsCatalog({ downloadOnly = false }: { downloadOnly
               onClick={() => startNew(kind)}
               className="flex items-start gap-3 rounded-xl border border-hairline bg-white/[0.02] px-4 py-3 text-left transition-all hover:border-gold/50 hover:bg-gold/[0.06]"
             >
-              <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-gold/[0.12] text-gold">
+              <span className="grid size-9 shrink-0 place-items-center rounded-lg border border-hairline text-ink-soft">
                 <Package className="size-4" />
               </span>
               <span className="min-w-0">

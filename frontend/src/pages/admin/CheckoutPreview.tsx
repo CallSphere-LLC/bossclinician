@@ -7,6 +7,7 @@ import { CLUB_OFFER_SLUG } from "@/content/club";
 import type { OfferQuote, PublicOffer, QuoteInput } from "@/lib/commerceApi";
 import {
   CheckoutPreviewProvider,
+  withPreselectedOption,
   type CheckoutPreviewPage,
   type CheckoutPreviewSource,
 } from "@/components/checkout/checkoutPreview";
@@ -120,6 +121,9 @@ function CheckoutPreviewScreen() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [offer, setOffer] = useState<PreviewOffer | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  // `?option=<id>` opens the preview on that pricing option, as the same
+  // parameter does on the public checkout link.
+  const optionParam = searchParams.get("option");
 
   useEffect(() => {
     let cancelled = false;
@@ -127,7 +131,7 @@ function CheckoutPreviewScreen() {
     setLoadError(null);
     previewRequest<PreviewOffer>(id, "")
       .then((result) => {
-        if (!cancelled) setOffer(result);
+        if (!cancelled) setOffer(withPreselectedOption(result, optionParam));
       })
       .catch((err: unknown) => {
         if (!cancelled) setLoadError(err instanceof Error ? err.message : "We couldn't open this preview.");
@@ -135,7 +139,7 @@ function CheckoutPreviewScreen() {
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [id, optionParam]);
 
   const isClubOffer = offer?.slug === CLUB_OFFER_SLUG;
   // The Club is sold from its own page (/club/checkout), so that is what its
@@ -186,7 +190,9 @@ function CheckoutPreviewScreen() {
   const livePath = page === "club" ? shareLink("club", "checkout") : shareLink("checkout", offer.slug);
 
   function choosePage(next: CheckoutPreviewPage) {
-    setSearchParams(next === "checkout" ? { page: "checkout" } : {}, { replace: true });
+    const params: Record<string, string> = next === "checkout" ? { page: "checkout" } : {};
+    if (optionParam) params.option = optionParam;
+    setSearchParams(params, { replace: true });
   }
 
   return (

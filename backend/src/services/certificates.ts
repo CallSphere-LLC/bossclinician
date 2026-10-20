@@ -8,9 +8,14 @@ import { env } from "../config/env";
 import { sendMail } from "../email/mailer";
 import { escapeHtml } from "../email/templates";
 import type { EmailContent } from "../email/memberTemplates";
-import { hasCourseAccess } from "./access";
+import { PRODUCT_CONTENT_COURSE_ID, hasCourseAccess } from "./access";
 import { automationIdentity, publishDomainEvent } from "./domainEvents";
-import { AUTO_COMPLETE_PERCENT } from "./curriculum";
+import {
+  AUTO_COMPLETE_PERCENT,
+  formatRemaining,
+  fullWatchRequiredSeconds,
+  isFullyWatched,
+} from "./curriculum";
 import { protectedRef, resolveStoredFile, uploadPath } from "./signedUrls";
 
 /**
@@ -765,9 +770,9 @@ export interface CertificateQuizGap {
  * member has no passing attempt at.
  *
  * "Passing" is the attempt's own `passed` flag, which assessments.ts sets from
- * the quiz's pass mark at the moment of submission — so the bar is whatever the
- * owner set on that quiz, and a later change to it does not retroactively fail
- * anybody. Surveys (an evaluation form) have no pass mark and are not here:
+ * the quiz's pass mark at the moment of submission, or a score at or above the
+ * pass mark as it stands now — so a mark the owner lowers applies at once, and
+ * one she raises does not retroactively fail anybody. Surveys (an evaluation form) have no pass mark and are not here:
  * finishing their lesson already requires submitting them, and a certificate
  * already requires every lesson finished.
  */
@@ -784,7 +789,11 @@ export async function loadUnpassedQuizzes(
         AND NOT EXISTS (
           SELECT 1 FROM assessment_attempts t
            WHERE t.assessment_id = a.id AND t.member_id = $1
-             AND t.passed AND t.completed_at IS NOT NULL
+             AND t.completed_at IS NOT NULL
+             -- The quiz's pass mark as it stands now, so lowering it in the
+             -- course builder takes effect at once. Raising it never un-passes
+             -- an attempt that passed at the time (t.passed).
+             AND (t.passed OR (a.pass_mark IS NOT NULL AND t.percent >= a.pass_mark))
         )
       ORDER BY m.sort, m.id, l.sort, l.id`,
     [memberId, courseId]
@@ -806,13 +815,217 @@ async function courseRequiresPassingQuizzes(courseId: number): Promise<boolean> 
   return found.rows[0]?.certificate_requires_pass !== false;
 }
 
+/* --------------------------------------- what the member bought (Edu option) */
+
+/**
+ * Whether the way this member came to hold the course includes its certificate.
+ *
+ * Some offers sell the same course twice: "Training + CE Credit" and
+ * "Educational Access — No CE Credit". Both grant the same product, so the
+ * grant alone cannot tell them apart; the order behind it can, through
+ * `offers.includes_certificate` and `offer_pricing_options.includes_certificate`
+ * (migration 129). The answer is no only when every route this member has into
+ * the course is a no-certificate purchase: an admin grant, an import, a plan, or
+ * any paid order whose offer and option both include the certificate (an
+ * upgrade bought later, say) makes it yes. Default yes — a course nobody flagged
+ * behaves exactly as before.
+ */
+export async function certificateAccessAllowed(memberId: number, courseId: number): Promise<boolean> {
+  const found = await pool.query<{
+    restricted: boolean;
+    unrestricted_grant: boolean;
+    certificate_order: boolean;
+  }>(
+    `WITH grants AS (
+       SELECT COALESCE(f.includes_certificate, true)
+              AND COALESCE(op.includes_certificate, true) AS includes_certificate
+         FROM access_grants g
+         JOIN products p ON p.id = g.product_id
+         LEFT JOIN orders o ON o.id = g.order_id
+         LEFT JOIN offers f ON f.id = o.offer_id
+         LEFT JOIN offer_pricing_options op ON op.id = o.pricing_option_id
+        WHERE g.member_id = $1 AND ${PRODUCT_CONTENT_COURSE_ID} = $2 AND g.status = 'active'
+          AND (g.expires_at IS NULL OR g.expires_at > now())
+     )
+     SELECT EXISTS (SELECT 1 FROM grants WHERE NOT includes_certificate) AS restricted,
+            EXISTS (SELECT 1 FROM grants WHERE includes_certificate) AS unrestricted_grant,
+            EXISTS (
+              SELECT 1
+                FROM orders o
+                JOIN offers f ON f.id = o.offer_id
+                LEFT JOIN offer_pricing_options op ON op.id = o.pricing_option_id
+                JOIN offer_products ofp ON ofp.offer_id = o.offer_id
+                JOIN products p ON p.id = ofp.product_id
+               WHERE o.member_id = $1 AND o.status = 'paid'
+                 AND ${PRODUCT_CONTENT_COURSE_ID} = $2
+                 AND f.includes_certificate AND COALESCE(op.includes_certificate, true)
+            ) AS certificate_order`,
+    [memberId, courseId]
+  );
+  const row = found.rows[0];
+  if (!row) return true;
+  return !row.restricted || row.unrestricted_grant || row.certificate_order;
+}
+
+/* ------------------------------------------ what is left before the document */
+
+/** One published lesson, as the certificate gate reads it. */
+export interface CertificateLessonRow {
+  title: string;
+  completed: boolean;
+  hasMedia: boolean;
+  videoDurationSeconds: number;
+  /** Furthest point played through (lesson_progress.max_position_seconds). */
+  playedToSeconds: number;
+  watchedPercent: number;
+  /** The lesson carries a published survey (the course evaluation). */
+  hasSurvey: boolean;
+  surveySubmitted: boolean;
+}
+
+/** A video that has to be watched through before the certificate. */
+export interface CertificateVideoGap {
+  lessonTitle: string;
+  /** Seconds still to play through; 0 when the media's length is unknown. */
+  remainingSeconds: number;
+}
+
+export interface CertificateGaps {
+  totalLessons: number;
+  lessonsRemaining: number;
+  /** Unfinished lessons that are neither a video to watch nor an evaluation. */
+  otherLessonsRemaining: number;
+  videosToFinish: CertificateVideoGap[];
+  /** Lesson titles of evaluations (survey lessons) not yet submitted. */
+  evaluationsToSubmit: string[];
+}
+
+/**
+ * Sorts a course's lessons into what is still owed: videos to watch through
+ * (only when the course requires full viewing), evaluation forms to submit, and
+ * everything else unfinished. Pure, so the gate is testable without a database.
+ *
+ * A video counts as watched through at 95% of its recorded length, played
+ * contiguously (curriculum.ts `isFullyWatched`). With no length on record it
+ * falls back to the ordinary 90% watch figure rather than becoming impossible.
+ */
+export function certificateGaps(
+  lessons: CertificateLessonRow[],
+  options: { requireFullVideo: boolean }
+): CertificateGaps {
+  const videosToFinish: CertificateVideoGap[] = [];
+  const evaluationsToSubmit: string[] = [];
+  let otherLessonsRemaining = 0;
+  let lessonsRemaining = 0;
+
+  for (const lesson of lessons) {
+    if (!lesson.completed) lessonsRemaining += 1;
+
+    if (options.requireFullVideo && lesson.hasMedia) {
+      const watched =
+        lesson.videoDurationSeconds > 0
+          ? isFullyWatched(lesson.playedToSeconds, lesson.videoDurationSeconds)
+          : lesson.watchedPercent >= AUTO_COMPLETE_PERCENT;
+      if (!watched) {
+        videosToFinish.push({
+          lessonTitle: lesson.title,
+          remainingSeconds:
+            lesson.videoDurationSeconds > 0
+              ? Math.max(
+                  0,
+                  fullWatchRequiredSeconds(lesson.videoDurationSeconds) - lesson.playedToSeconds
+                )
+              : 0,
+        });
+        continue;
+      }
+    }
+    if (lesson.hasSurvey && !lesson.surveySubmitted) {
+      evaluationsToSubmit.push(lesson.title);
+      continue;
+    }
+    if (!lesson.completed) otherLessonsRemaining += 1;
+  }
+
+  return {
+    totalLessons: lessons.length,
+    lessonsRemaining,
+    otherLessonsRemaining,
+    videosToFinish,
+    evaluationsToSubmit,
+  };
+}
+
+async function loadCertificateLessons(
+  memberId: number,
+  courseId: number
+): Promise<{ requireFullVideo: boolean; lessons: CertificateLessonRow[] }> {
+  const [course, found] = await Promise.all([
+    pool.query<{ require_full_video: boolean }>(
+      `SELECT require_full_video FROM courses WHERE id = $1`,
+      [courseId]
+    ),
+    pool.query<{
+      title: string;
+      completed: boolean;
+      has_media: boolean;
+      video_duration_seconds: number;
+      played_to: number;
+      watched_percent: number;
+      has_survey: boolean;
+      survey_submitted: boolean;
+    }>(
+      `SELECT l.title, l.video_duration_seconds,
+              (lp.completed_at IS NOT NULL) AS completed,
+              ((l.content_type = 'video' AND COALESCE(l.video_url, '') <> '')
+            OR (l.content_type = 'audio' AND COALESCE(l.audio_url, '') <> '')) AS has_media,
+              COALESCE(lp.max_position_seconds, 0) AS played_to,
+              COALESCE(lp.watched_percent, 0) AS watched_percent,
+              EXISTS (SELECT 1 FROM assessments a
+                       WHERE a.lesson_id = l.id AND a.kind = 'survey' AND a.published) AS has_survey,
+              EXISTS (SELECT 1 FROM assessments a
+                        JOIN assessment_attempts t ON t.assessment_id = a.id
+                       WHERE a.lesson_id = l.id AND a.kind = 'survey' AND a.published
+                         AND t.member_id = $1 AND t.completed_at IS NOT NULL) AS survey_submitted
+         FROM course_lessons l
+         JOIN course_modules m ON m.id = l.module_id
+         LEFT JOIN lesson_progress lp ON lp.lesson_id = l.id AND lp.member_id = $1
+        WHERE m.course_id = $2 AND l.published
+        ORDER BY m.sort, m.id, l.sort, l.id`,
+      [memberId, courseId]
+    ),
+  ]);
+  return {
+    requireFullVideo: course.rows[0]?.require_full_video === true,
+    lessons: found.rows.map((row) => ({
+      title: row.title,
+      completed: row.completed,
+      hasMedia: row.has_media,
+      videoDurationSeconds: row.video_duration_seconds ?? 0,
+      playedToSeconds: row.played_to ?? 0,
+      watchedPercent: row.watched_percent ?? 0,
+      hasSurvey: row.has_survey,
+      surveySubmitted: row.survey_submitted,
+    })),
+  };
+}
+
 export interface CertificateStatus {
-  /** The course issues a certificate on completion at all. */
+  /** The course issues a certificate on completion at all (to this member). */
   offered: boolean;
   issued: boolean;
   requiresPassingQuizzes: boolean;
   lessonsRemaining: number;
   quizzesToPass: CertificateQuizGap[];
+  /** Videos still to be watched through ("Require watching the full video"). */
+  videosToFinish: CertificateVideoGap[];
+  /** Course evaluations (survey lessons) not yet submitted, by lesson title. */
+  evaluationsToSubmit: string[];
+  /**
+   * The member's access came only through an option sold without the
+   * certificate ("Educational Access — No CE Credit").
+   */
+  excludedByPurchase: boolean;
   /** Everything is done except the CE watch-time standard. */
   ceuPending: boolean;
   /** Every condition is met; claiming will issue it. */
@@ -830,41 +1043,53 @@ function quizSentence(gaps: CertificateQuizGap[]): string {
   return `pass the quizzes in ${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
 }
 
+function videoSentence(gaps: CertificateVideoGap[]): string {
+  return gaps
+    .map((gap) =>
+      gap.remainingSeconds > 0
+        ? `finish watching “${gap.lessonTitle}” (${formatRemaining(gap.remainingSeconds)} left)`
+        : `finish watching “${gap.lessonTitle}”`
+    )
+    .join(", ");
+}
+
+function joinSteps(steps: string[]): string {
+  if (steps.length <= 1) return steps.join("");
+  return `${steps.slice(0, -1).join(", ")} and ${steps[steps.length - 1]}`;
+}
+
 /**
  * Where this member stands on a course's certificate, and why it has not been
- * issued yet — for the course page to say "Pass the final quiz to get your
- * certificate" rather than nothing at all. Read-only: never issues or emails.
+ * issued yet — for the course page to say "Complete the course evaluation to
+ * receive your certificate" rather than nothing at all. Read-only: never issues
+ * or emails.
  */
 export async function certificateStatus(
   memberId: number,
   courseId: number
 ): Promise<CertificateStatus> {
-  const [existing, template, requiresPass, counts] = await Promise.all([
+  const [existing, template, requiresPass, loaded, allowed] = await Promise.all([
     pool.query(`SELECT 1 FROM certificates WHERE member_id = $1 AND course_id = $2`, [
       memberId,
       courseId,
     ]),
     loadCompletionTemplate(courseId),
     courseRequiresPassingQuizzes(courseId),
-    pool.query<{ total: number; done: number }>(
-      `SELECT COUNT(l.id)::int AS total, COUNT(lp.completed_at)::int AS done
-         FROM course_lessons l
-         JOIN course_modules m ON m.id = l.module_id
-         LEFT JOIN lesson_progress lp ON lp.lesson_id = l.id AND lp.member_id = $1
-        WHERE m.course_id = $2 AND l.published`,
-      [memberId, courseId]
-    ),
+    loadCertificateLessons(memberId, courseId),
+    certificateAccessAllowed(memberId, courseId),
   ]);
 
   const issued = existing.rows.length > 0;
-  const total = counts.rows[0]?.total ?? 0;
-  const lessonsRemaining = Math.max(0, total - (counts.rows[0]?.done ?? 0));
+  const gaps = certificateGaps(loaded.lessons, { requireFullVideo: loaded.requireFullVideo });
   const quizzesToPass = requiresPass ? await loadUnpassedQuizzes(memberId, courseId) : [];
   const ceuPending =
     !issued &&
+    allowed &&
     template !== null &&
     template.ceu_credit_quarter_hours > 0 &&
-    lessonsRemaining === 0 &&
+    gaps.lessonsRemaining === 0 &&
+    gaps.videosToFinish.length === 0 &&
+    gaps.evaluationsToSubmit.length === 0 &&
     quizzesToPass.length === 0 &&
     !earnedCeuCredit(await loadCeuLessonRecords(memberId, courseId));
 
@@ -872,9 +1097,13 @@ export async function certificateStatus(
     issued,
     hasTemplate: template !== null,
     requiresPassingQuizzes: requiresPass,
-    totalLessons: total,
-    lessonsRemaining,
+    totalLessons: gaps.totalLessons,
+    lessonsRemaining: gaps.lessonsRemaining,
+    otherLessonsRemaining: gaps.otherLessonsRemaining,
     quizzesToPass,
+    videosToFinish: gaps.videosToFinish,
+    evaluationsToSubmit: gaps.evaluationsToSubmit,
+    excludedByPurchase: !allowed,
     ceuPending,
   });
 }
@@ -887,8 +1116,16 @@ export interface CertificateFacts {
   requiresPassingQuizzes: boolean;
   totalLessons: number;
   lessonsRemaining: number;
+  /**
+   * Unfinished lessons other than videos to watch and evaluations to submit.
+   * Defaults to `lessonsRemaining` when those are not broken out.
+   */
+  otherLessonsRemaining?: number;
   /** Already empty when the course does not require passing its quizzes. */
   quizzesToPass: CertificateQuizGap[];
+  videosToFinish?: CertificateVideoGap[];
+  evaluationsToSubmit?: string[];
+  excludedByPurchase?: boolean;
   ceuPending: boolean;
 }
 
@@ -896,30 +1133,55 @@ export interface CertificateFacts {
  * Whether a member may claim a course's certificate, and the sentence that says
  * what is left. Pure, so the rule that decides who gets a certificate is
  * tested directly rather than through a database.
+ *
+ * The steps are named in the order a student meets them: watch the videos,
+ * finish the other lessons, pass the post-test, then the evaluation — which,
+ * when it is the only thing left, gets its own sentence.
  */
 export function summarizeCertificateStatus(facts: CertificateFacts): CertificateStatus {
   const { issued, hasTemplate, requiresPassingQuizzes, totalLessons, lessonsRemaining, quizzesToPass, ceuPending } =
     facts;
-  const offered = hasTemplate || issued;
+  const videosToFinish = facts.videosToFinish ?? [];
+  const evaluationsToSubmit = facts.evaluationsToSubmit ?? [];
+  const excludedByPurchase = !issued && hasTemplate && facts.excludedByPurchase === true;
+  const otherLessons = facts.otherLessonsRemaining ?? lessonsRemaining;
+
+  const offered = (hasTemplate && !excludedByPurchase) || issued;
   const eligible =
-    !issued && hasTemplate && totalLessons > 0 && lessonsRemaining === 0 &&
-    quizzesToPass.length === 0 && !ceuPending;
+    !issued && hasTemplate && !excludedByPurchase && totalLessons > 0 && lessonsRemaining === 0 &&
+    quizzesToPass.length === 0 && videosToFinish.length === 0 &&
+    evaluationsToSubmit.length === 0 && !ceuPending;
 
   let message: string;
   if (issued) message = "Your certificate is ready.";
-  else if (!offered) message = "This course doesn't come with a certificate.";
-  else if (lessonsRemaining > 0 && quizzesToPass.length > 0) {
-    message = `Finish the remaining ${lessonsRemaining === 1 ? "lesson" : `${lessonsRemaining} lessons`} and ${quizSentence(quizzesToPass)} to get your certificate.`;
-  } else if (lessonsRemaining > 0) {
-    message = `Finish the remaining ${lessonsRemaining === 1 ? "lesson" : `${lessonsRemaining} lessons`} to get your certificate.`;
-  } else if (quizzesToPass.length > 0) {
-    const sentence = quizSentence(quizzesToPass);
-    message = `${sentence.charAt(0).toUpperCase()}${sentence.slice(1)} to get your certificate.`;
-  } else if (ceuPending) {
+  else if (excludedByPurchase) {
     message =
-      "This certificate carries CE credit, so every video has to be watched through and every reading given its full time — not only ticked. Revisit any lesson you skipped ahead in, then press Get my certificate.";
-  } else {
-    message = "You have earned your certificate — press Get my certificate to collect it.";
+      "Your access option (Educational Access) doesn't include the CE certificate. Choose the CE credit option to earn one.";
+  } else if (!offered) message = "This course doesn't come with a certificate.";
+  else {
+    const steps: string[] = [];
+    if (videosToFinish.length > 0) steps.push(videoSentence(videosToFinish));
+    if (otherLessons > 0) {
+      steps.push(
+        `finish the remaining ${otherLessons === 1 ? "lesson" : `${otherLessons} lessons`}`
+      );
+    }
+    if (quizzesToPass.length > 0) steps.push(quizSentence(quizzesToPass));
+    if (evaluationsToSubmit.length > 0) steps.push("complete the course evaluation");
+
+    if (steps.length === 1 && evaluationsToSubmit.length > 0) {
+      message = "Complete the course evaluation to receive your certificate.";
+    } else if (steps.length > 0) {
+      const sentence = joinSteps(steps);
+      message = `${sentence.charAt(0).toUpperCase()}${sentence.slice(1)} to get your certificate.`;
+    } else if (ceuPending) {
+      message =
+        "This certificate carries CE credit, so every video has to be watched through and every reading given its full time — not only ticked. Revisit any lesson you skipped ahead in, then press Get my certificate.";
+    } else if (lessonsRemaining > 0) {
+      message = `Finish the remaining ${lessonsRemaining === 1 ? "lesson" : `${lessonsRemaining} lessons`} to get your certificate.`;
+    } else {
+      message = "You have earned your certificate — press Get my certificate to collect it.";
+    }
   }
 
   return {
@@ -928,6 +1190,9 @@ export function summarizeCertificateStatus(facts: CertificateFacts): Certificate
     requiresPassingQuizzes,
     lessonsRemaining,
     quizzesToPass,
+    videosToFinish,
+    evaluationsToSubmit,
+    excludedByPurchase,
     ceuPending,
     eligible,
     message,
@@ -976,6 +1241,10 @@ export async function issueCertificateIfEarned(
   // a refund must not mint a fresh certificate afterwards.
   if (!(await hasCourseAccess(memberId, courseId))) return null;
 
+  // Bought the course through an option sold without the certificate
+  // ("Educational Access — No CE Credit"), and through nothing else.
+  if (!(await certificateAccessAllowed(memberId, courseId))) return null;
+
   const progress = await pool.query<{ percent: number; completed_at: Date | null }>(
     `SELECT percent, completed_at FROM course_progress WHERE member_id = $1 AND course_id = $2`,
     [memberId, courseId]
@@ -991,6 +1260,17 @@ export async function issueCertificateIfEarned(
     (await loadUnpassedQuizzes(memberId, courseId)).length > 0
   ) {
     return null;
+  }
+
+  // Every video watched through, where the course requires it, and every
+  // course evaluation submitted. Finishing every lesson already implies both
+  // for a member who went through the player; asked again here because a tick
+  // from before the switch was turned on, or an evaluation added after the
+  // member finished, must not slip a certificate through.
+  {
+    const loaded = await loadCertificateLessons(memberId, courseId);
+    const gaps = certificateGaps(loaded.lessons, { requireFullVideo: loaded.requireFullVideo });
+    if (gaps.videosToFinish.length > 0 || gaps.evaluationsToSubmit.length > 0) return null;
   }
 
   // Credit hours turn this from a keepsake into a compliance record, so a course

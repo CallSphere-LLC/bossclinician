@@ -13,6 +13,7 @@ import {
   ArrowDown,
   ArrowLeft,
   ArrowUp,
+  ArrowUpRight,
   BadgeDollarSign,
   BellRing,
   ClipboardList,
@@ -26,9 +27,9 @@ import {
   Package,
   Pencil,
   Plus,
+  Save,
   ScanEye,
   ShoppingBag,
-  Sparkles,
   Trash2,
   TriangleAlert,
   X,
@@ -75,6 +76,7 @@ import {
   selectStyles,
   Skeleton,
   Textarea,
+  iconFrameStyles,
 } from "@/pages/admin/ui/primitives";
 import { Modal, useConfirm } from "@/pages/admin/ui/Dialog";
 import { PicturePickerModal } from "@/pages/admin/CrudManager";
@@ -87,6 +89,7 @@ import {
   webAddress,
 } from "@/pages/admin/ui/friendly";
 import { openCheckoutPreview } from "@/components/checkout/checkoutPreview";
+import { CheckoutDescriptionEditor } from "@/components/checkout/CheckoutDescriptionEditor";
 import OfferNotificationsTab from "@/pages/admin/OfferNotificationsTab";
 import OfferPaymentLinks from "@/pages/admin/OfferPaymentLinks";
 
@@ -207,7 +210,7 @@ const TABS: { value: TabKey; label: string; icon: LucideIcon }[] = [
   { value: "price", label: "Price", icon: BadgeDollarSign },
   { value: "form", label: "Order form", icon: ClipboardList },
   { value: "bumps", label: "Order bumps", icon: ShoppingBag },
-  { value: "upsells", label: "Upsells", icon: Sparkles },
+  { value: "upsells", label: "Upsells", icon: ArrowUpRight },
   { value: "gifting", label: "Send as a gift", icon: Gift },
   { value: "after", label: "After purchase", icon: Flag },
   { value: "notifications", label: "Notifications", icon: BellRing },
@@ -322,7 +325,7 @@ function SaveFirst({ what }: { what: string }) {
   return (
     <Card>
       <EmptyState
-        icon={<Sparkles />}
+        icon={<Save />}
         title="Save this offer first"
         description={`Give it a name and a price, press Save, and you can add ${what} here.`}
       />
@@ -981,20 +984,13 @@ function SellingTab({
             />
           </Field>
 
-          <Field
-            label="Description"
-            hint="what they're getting, in a few lines"
+          <CheckoutDescriptionEditor
+            value={draft.description}
+            onChange={(description) => update({ description })}
             error={errors.description}
-          >
-            <Textarea
-              rows={4}
-              value={draft.description}
-              onChange={(e) => update({ description: e.target.value })}
-              placeholder="Six weeks of teaching, the full workbook, and the templates you can use on Monday morning."
-            />
-          </Field>
+          />
 
-          <Field label="Picture" hint="shown beside the price at checkout">
+          <Field label="Picture" hint="the main photo, shown beside the price at checkout — add more photos inside the description">
             {draft.thumbnailUrl ? (
               <div className="flex flex-wrap items-center gap-3 rounded-xl border border-hairline bg-white/[0.03] p-2.5">
                 <img
@@ -1051,7 +1047,7 @@ function SellingTab({
                       className="size-9 shrink-0 rounded-lg object-cover"
                     />
                   ) : (
-                    <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-gold/[0.12] text-gold">
+                    <span className={iconFrameStyles}>
                       <Package className="size-4" />
                     </span>
                   )}
@@ -2249,7 +2245,7 @@ function UpsellsTab({
     <div className="space-y-5">
       <Card>
         <CardHeader
-          icon={<Sparkles className="size-4" />}
+          icon={<ArrowUpRight className="size-4" />}
           title="After they've paid"
           subtitle="One-click offers shown in order, before they reach the thank-you page"
           action={
@@ -2262,7 +2258,7 @@ function UpsellsTab({
 
         {offer.upsells.length === 0 ? (
           <EmptyState
-            icon={<Sparkles />}
+            icon={<ArrowUpRight />}
             title="Nothing shown after checkout"
             description="They've just paid and their card is already on file, so this is the warmest moment you'll ever get. Show them the next thing — and if they say no, you can show a smaller version of it instead."
             action={

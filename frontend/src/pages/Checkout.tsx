@@ -40,6 +40,8 @@ import { formatCurrency } from "@/lib/format";
 import { cn } from "@/lib/cn";
 import { api } from "@/lib/api";
 import { checkoutButtonStyle } from "@/components/checkout/checkoutStyle";
+import { CheckoutMarkdown } from "@/components/checkout/CheckoutMarkdown";
+import { checkoutPlainText } from "@/components/checkout/checkoutMarkdown";
 
 const EASE_LUXE: [number, number, number, number] = [0.22, 1, 0.36, 1];
 
@@ -144,9 +146,9 @@ export default function Checkout() {
     <>
       <Seo
         title={`${offer.title} - Checkout - Boss Clinician`}
-        // The description is the whole checkout pitch now (Kajabi copy, one line
-        // per paragraph); the meta tag only wants its opening line.
-        description={offer.description.split("\n").find((line) => line.trim())?.trim().slice(0, 160) || `Complete your order for ${offer.title}.`}
+        // The description is the whole checkout pitch now (Markdown, photos and
+        // all); the meta tag only wants its opening words, as plain text.
+        description={checkoutPlainText(offer.description).slice(0, 160) || `Complete your order for ${offer.title}.`}
       />
       <CheckoutShell>
         <CheckoutExperience offer={offer} />
@@ -270,7 +272,7 @@ export function CheckoutExperience({ offer }: { offer: PublicOffer }) {
       {offer.pricingOptions.length > 1 && (
         <GlassCard accent="plum" interactive={false} className="mx-auto max-w-5xl p-4 sm:p-5">
           <fieldset>
-            <legend className="px-1 text-sm font-semibold text-white">Choose how you would like to pay</legend>
+            <legend className="px-1 text-sm font-semibold text-white">Choose your option</legend>
             <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
               {offer.pricingOptions.map((option) => {
                 const selected = option.id === pricingOptionId;
@@ -292,6 +294,15 @@ export function CheckoutExperience({ offer }: { offer: PublicOffer }) {
                         })()}
                       </span>
                     </span>
+                    {/* A one-payment option's words never say the price, so it is
+                        shown beside them: two options side by side are chosen on it. */}
+                    {(option.billing.pricingType === "one_time" || option.billing.pricingType === "free") && (
+                      <span className="shrink-0 self-start pt-0.5 text-lg font-bold tabular-nums text-white">
+                        {option.billing.pricingType === "free" || option.amountCents === 0
+                          ? "Free"
+                          : formatCurrency(option.amountCents, option.currency)}
+                      </span>
+                    )}
                   </label>
                 );
               })}
@@ -740,7 +751,7 @@ function CheckoutForm({ offer, pricingOption, mode, onAmountChange }: CheckoutFo
         <h1 className="text-balance font-display text-[1.9rem] font-normal leading-[1.14] text-white sm:text-[2.5rem]">
           {offer.checkoutHeadline || offer.title}
         </h1>
-        {offer.description && <p className="copy-luxe mt-4 max-w-xl whitespace-pre-line text-pretty">{offer.description}</p>}
+        {offer.description && <CheckoutMarkdown text={offer.description} className="mt-4 max-w-xl text-pretty" />}
         {/* Shown in the preview as buyers see them, but inert there: the cart
             lives on the public site and the preview may not write to it. */}
         {!offer.cartItems && ["one_time","free"].includes(billing.pricingType) && <div className="mt-4 flex flex-wrap gap-4 text-sm text-gold">

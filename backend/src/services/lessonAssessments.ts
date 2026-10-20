@@ -24,7 +24,8 @@ export async function assertLessonAssessmentAccess(memberId: number | undefined,
 export async function assertAssessmentCompleted(memberId: number, lessonId: number): Promise<void> {
   const result = await pool.query(`SELECT a.kind, a.require_pass,
     EXISTS(SELECT 1 FROM assessment_attempts t WHERE t.assessment_id=a.id AND t.member_id=$2
-      AND t.completed_at IS NOT NULL AND (a.kind <> 'graded' OR NOT a.require_pass OR t.passed)) AS complete
+      AND t.completed_at IS NOT NULL AND (a.kind <> 'graded' OR NOT a.require_pass OR t.passed
+        OR (a.pass_mark IS NOT NULL AND t.percent >= a.pass_mark))) AS complete
     FROM course_lessons l LEFT JOIN assessments a ON l.id=a.lesson_id AND a.published
     WHERE l.id=$1 AND l.content_type='assessment' `, [lessonId,memberId]);
   if (result.rows.some(row => !row.complete)) throw forbidden("Complete this assessment before marking the lesson finished. A required pass must be earned first.");

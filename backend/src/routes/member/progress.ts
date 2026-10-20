@@ -14,7 +14,10 @@ import {
 import { hasCourseAccess } from "../../services/access";
 import {
   AUTO_COMPLETE_PERCENT,
+  advancePlayedTo,
   creditWatchedPercent,
+  formatRemaining,
+  fullWatchRequiredSeconds,
   loadDripSettings,
   loadCourseForMember,
   recomputeCourseProgress,
@@ -119,6 +122,13 @@ interface OwnedLesson {
   videoDurationSeconds: number;
   durationMinutes: number;
   watch: StoredWatch;
+  /**
+   * "Require watching the full video before the next lesson" applies to this
+   * lesson: the course has the switch on and the lesson has something to play.
+   */
+  fullWatchRequired: boolean;
+  /** Furthest point played through so far, in seconds. */
+  playedToSeconds: number;
 }
 
 interface LessonGateRow {
@@ -139,6 +149,9 @@ interface LessonGateRow {
   watched_percent: number | null;
   watched_seconds: number | null;
   last_viewed_at: Date | null;
+  require_full_video: boolean;
+  has_media: boolean;
+  max_position_seconds: number | null;
 }
 
 /**
@@ -165,9 +178,14 @@ const LESSON_GATE_SQL = `
          m.drip_days AS module_drip_days,
          m.drip_date AS module_drip_date,
          gr.granted_at,
-         lp.watched_percent, lp.watched_seconds, lp.last_viewed_at
+         lp.watched_percent, lp.watched_seconds, lp.last_viewed_at,
+         lp.max_position_seconds,
+         c.require_full_video,
+         ((l.content_type = 'video' AND COALESCE(l.video_url, '') <> '')
+            OR (l.content_type = 'audio' AND COALESCE(l.audio_url, '') <> '')) AS has_media
     FROM course_lessons l
     JOIN course_modules m ON m.id = l.module_id
+    JOIN courses c ON c.id = m.course_id
     LEFT JOIN lesson_progress lp ON lp.lesson_id = l.id AND lp.member_id = $1
     LEFT JOIN LATERAL (
       SELECT MIN(g.granted_at) AS granted_at
@@ -233,7 +251,21 @@ async function loadOwnedLesson(memberId: number, lessonId: number): Promise<Owne
       watchedSeconds: row.watched_seconds ?? 0,
       lastViewedAt: row.last_viewed_at,
     },
+    fullWatchRequired: row.require_full_video === true && row.has_media === true,
+    playedToSeconds: row.max_position_seconds ?? 0,
   };
+}
+
+/**
+ * Seconds of media still to be played through before a full-watch lesson may
+ * complete, or 0 when nothing more is needed (the rule does not apply, or the
+ * media's length is not on record — then the ordinary 90% rule decides).
+ */
+function fullWatchShortfall(lesson: OwnedLesson): number {
+  if (!lesson.fullWatchRequired) return 0;
+  const required = fullWatchRequiredSeconds(lesson.videoDurationSeconds);
+  if (required === 0) return 0;
+  return Math.max(0, required - lesson.playedToSeconds);
 }
 
 /**
@@ -262,12 +294,19 @@ function assertUnlocked(lesson: OwnedLesson): void {
 const progressSchema = z.object({
   positionSeconds: z.number().finite().min(0).max(1_000_000),
   watchedPercent: z.number().finite().min(0).max(100),
+  /**
+   * The furthest point the player has played through without seeking. Optional
+   * so a page loaded before this field existed keeps saving; the position stands
+   * in for it then, held to the same wall-clock pace.
+   */
+  playedToSeconds: z.number().finite().min(0).max(1_000_000).optional(),
 });
 
 interface ProgressRow {
   last_position_seconds: number;
   watched_percent: number;
   completed_at: Date | null;
+  max_position_seconds: number;
 }
 
 /**
@@ -287,24 +326,35 @@ interface ProgressRow {
  */
 const PROGRESS_UPSERT_SQL = `
   INSERT INTO lesson_progress
-    (member_id, lesson_id, last_position_seconds, watched_percent, watched_seconds, completed_at,
-     first_viewed_at, last_viewed_at)
-  VALUES ($1, $2, $3::int, $4::int, $6::int,
-          CASE WHEN $4::int >= $5::int THEN now() ELSE NULL END, now(), now())
+    (member_id, lesson_id, last_position_seconds, watched_percent, watched_seconds,
+     max_position_seconds, completed_at, first_viewed_at, last_viewed_at)
+  VALUES ($1, $2, $3::int, $4::int, $6::int, $7::int,
+          CASE WHEN $8::int > 0 THEN (CASE WHEN $7::int >= $8::int THEN now() END)
+               WHEN $4::int >= $5::int THEN now() ELSE NULL END,
+          now(), now())
   ON CONFLICT (member_id, lesson_id) DO UPDATE SET
     last_position_seconds = EXCLUDED.last_position_seconds,
     watched_percent       = GREATEST(lesson_progress.watched_percent, EXCLUDED.watched_percent),
     watched_seconds       = GREATEST(lesson_progress.watched_seconds, EXCLUDED.watched_seconds),
+    max_position_seconds  = GREATEST(lesson_progress.max_position_seconds,
+                                     EXCLUDED.max_position_seconds),
     completed_at          = CASE
                               WHEN lesson_progress.completed_at IS NOT NULL
                                 THEN lesson_progress.completed_at
+                              -- "Require watching the full video": only the
+                              -- furthest point played through completes it ($8 is
+                              -- the seconds required, 0 when the rule is off).
+                              WHEN $8::int > 0
+                                THEN CASE WHEN GREATEST(lesson_progress.max_position_seconds,
+                                                        EXCLUDED.max_position_seconds) >= $8::int
+                                          THEN now() END
                               WHEN GREATEST(lesson_progress.watched_percent,
                                             EXCLUDED.watched_percent) >= $5::int
                                 THEN now()
                               ELSE NULL
                             END,
     last_viewed_at        = now()
-  RETURNING last_position_seconds, watched_percent, completed_at`;
+  RETURNING last_position_seconds, watched_percent, completed_at, max_position_seconds`;
 
 /**
  * Writes progress and rebuilds the course rollup in one transaction.
@@ -406,14 +456,23 @@ async function writeProgress(
   return { progress, rollup };
 }
 
-function progressJson(lessonId: number, row: ProgressRow | null, rollup: CourseRollup) {
+function progressJson(lesson: OwnedLesson, row: ProgressRow | null, rollup: CourseRollup) {
   return {
-    lessonId,
+    lessonId: lesson.id,
     lastPositionSeconds: row?.last_position_seconds ?? 0,
     watchedPercent: row?.watched_percent ?? 0,
     completed: (row?.completed_at ?? null) !== null,
     completedAt: iso(row?.completed_at ?? null),
     courseProgress: rollup,
+    // The full-watch rule, so the player can say "12:40 left" without asking.
+    fullWatch: {
+      required: lesson.fullWatchRequired,
+      playedToSeconds: row?.max_position_seconds ?? lesson.playedToSeconds,
+      requiredSeconds: lesson.fullWatchRequired
+        ? fullWatchRequiredSeconds(lesson.videoDurationSeconds)
+        : 0,
+      durationSeconds: lesson.videoDurationSeconds,
+    },
   };
 }
 
@@ -461,6 +520,20 @@ memberProgressRouter.post(
     // thing a silent clamp would achieve is to keep whoever did from noticing.
     if (!verdict.ok) throw badRequest(verdict.message);
 
+    // Furthest point played through: the player's own contiguous figure where it
+    // sends one, the position where it does not — either way held to real time,
+    // so a seek to the end is not "watched to the end".
+    const playedTo = advancePlayedTo({
+      claimedSeconds: parsed.data.playedToSeconds ?? parsed.data.positionSeconds,
+      storedSeconds: lesson.playedToSeconds,
+      lastViewedAt: lesson.watch.lastViewedAt,
+      now: new Date(),
+      durationSeconds: lesson.videoDurationSeconds,
+    });
+    const fullWatchSeconds = lesson.fullWatchRequired
+      ? fullWatchRequiredSeconds(lesson.videoDurationSeconds)
+      : 0;
+
     // The columns are integers; a player reporting 47.6% is rounded rather than
     // rejected, because a fractional percent is not a client error.
     const { progress, rollup } = await writeProgress(
@@ -474,10 +547,12 @@ memberProgressRouter.post(
         verdict.percent,
         AUTO_COMPLETE_PERCENT,
         verdict.watchedSeconds,
+        playedTo,
+        fullWatchSeconds,
       ]
     );
 
-    res.json(progressJson(lesson.id, progress, rollup));
+    res.json(progressJson(lesson, progress, rollup));
   })
 );
 
@@ -504,7 +579,7 @@ const MARK_COMPLETE_SQL = `
     -- certificate is issued against.
     completed_at   = COALESCE(lesson_progress.completed_at, now()),
     last_viewed_at = now()
-  RETURNING last_position_seconds, watched_percent, completed_at`;
+  RETURNING last_position_seconds, watched_percent, completed_at, max_position_seconds`;
 
 /**
  * Un-ticking clears the watched figures along with the completion.
@@ -519,9 +594,10 @@ const MARK_COMPLETE_SQL = `
  */
 const MARK_INCOMPLETE_SQL = `
   UPDATE lesson_progress
-     SET completed_at = NULL, watched_percent = 0, watched_seconds = 0, last_viewed_at = now()
+     SET completed_at = NULL, watched_percent = 0, watched_seconds = 0, max_position_seconds = 0,
+         last_viewed_at = now()
    WHERE member_id = $1 AND lesson_id = $2
-  RETURNING last_position_seconds, watched_percent, completed_at`;
+  RETURNING last_position_seconds, watched_percent, completed_at, max_position_seconds`;
 
 /** POST /api/member/lessons/:lessonId/complete */
 memberProgressRouter.post(
@@ -536,6 +612,24 @@ memberProgressRouter.post(
     assertUnlocked(lesson);
     await assertAssessmentCompleted(member.id, lesson.id);
 
+    // "Require watching the full video before the next lesson": the tick is not
+    // a way round it. A lesson already complete is let through — re-ticking is
+    // a no-op and must not error.
+    const shortfall = fullWatchShortfall(lesson);
+    if (shortfall > 0) {
+      const done = await pool.query(
+        `SELECT 1 FROM lesson_progress
+          WHERE member_id = $1 AND lesson_id = $2 AND completed_at IS NOT NULL`,
+        [member.id, lesson.id]
+      );
+      if (done.rows.length === 0) {
+        throw forbidden(
+          `Finish the video to complete this lesson — ${formatRemaining(shortfall)} left. ` +
+            "It completes itself once you have watched it through."
+        );
+      }
+    }
+
     const { progress, rollup } = await writeProgress(
       member.id,
       lesson.courseId,
@@ -543,7 +637,7 @@ memberProgressRouter.post(
       [member.id, lesson.id]
     );
 
-    res.json(progressJson(lesson.id, progress, rollup));
+    res.json(progressJson(lesson, progress, rollup));
   })
 );
 
@@ -571,7 +665,7 @@ memberProgressRouter.delete(
       [member.id, lesson.id]
     );
 
-    res.json(progressJson(lesson.id, progress, rollup));
+    res.json(progressJson(lesson, progress, rollup));
   })
 );
 

@@ -20,7 +20,6 @@ import {
   ListOrdered,
   Pencil,
   Quote,
-  Sparkles,
   Trash2,
   type LucideIcon,
 } from "lucide-react";
@@ -43,6 +42,7 @@ import {
   Textarea,
 } from "@/pages/admin/ui/primitives";
 import { Modal, useConfirm } from "@/pages/admin/ui/Dialog";
+import { DraftGlyph } from "@/pages/admin/ui/icons";
 import { UploadDropzone } from "@/pages/admin/ui/Uploader";
 import {
   friendlyError,
@@ -454,7 +454,7 @@ export default function BlogEditor() {
 
       <Card>
         <CardHeader
-          icon={<Sparkles />}
+          icon={<DraftGlyph />}
           title="Need a starting point?"
           subtitle="Draft a post with AI — you can edit everything after."
         />

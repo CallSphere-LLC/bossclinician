@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { Link } from "react-router";
 import { Activity, ArrowLeft, MailCheck, ShieldAlert, ShoppingBag, Users } from "lucide-react";
 import { contactsApi, type ContactInsights } from "@/lib/contactsApi";
-import { Card, ErrorNotice, PageHeader, Skeleton } from "@/pages/admin/ui/primitives";
+import { Card, ErrorNotice, PageHeader, Skeleton, iconFrameStyles } from "@/pages/admin/ui/primitives";
 
 function Metric({ label, value, detail, icon, to, linkLabel = "View list" }: { label: string; value: number; detail: string; icon: ReactNode; to: string; linkLabel?: string }) {
   return (
@@ -13,7 +13,7 @@ function Metric({ label, value, detail, icon, to, linkLabel = "View list" }: { l
           <p className="mt-2 font-bold tabular-nums text-3xl text-ink">{value.toLocaleString()}</p>
           <p className="mt-1 text-sm text-ink-soft">{detail}</p>
         </div>
-        <span className="grid size-10 place-items-center rounded-xl bg-plum/10 text-plum">{icon}</span>
+        <span className={iconFrameStyles}>{icon}</span>
       </div>
       <Link to={to} className="mt-4 inline-flex min-h-11 items-center text-sm font-semibold text-plum hover:underline">
         {linkLabel}

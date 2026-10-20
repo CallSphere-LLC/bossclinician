@@ -5,6 +5,7 @@ import { ArrowLeft, ArrowRight, Eye, EyeOff, Loader2, ShieldCheck } from "lucide
 import { useAuth } from "@/hooks/useAuth";
 import { ApiError, isMfaRequiredError } from "@/lib/api";
 import { Button, ErrorNotice, Field, Input } from "@/pages/admin/ui/primitives";
+import { Monogram } from "@/pages/admin/ui/icons";
 import { RETURN_PARAM, safeReturnPath } from "@/pages/admin/adminReturnTo";
 import {
   AdminGoogleButton,
@@ -100,12 +101,8 @@ export default function Login() {
     <div className="theme-console grid grid-cols-1 min-h-screen bg-cream lg:grid-cols-2">
       {/* Brand panel */}
       <div className="relative hidden overflow-hidden border-r border-hairline bg-[var(--bg-base)] p-12 lg:flex lg:flex-col">
-        <div className="pointer-events-none absolute -bottom-24 -right-16 size-96 rounded-full bg-gold/15 blur-3xl" />
-
         <div className="relative flex items-center gap-3">
-          <span className="grid size-10 place-items-center rounded-xl bg-gold-foil font-display text-lg font-bold text-night-deep">
-            B
-          </span>
+          <Monogram className="size-10 text-xl" />
           <span className="font-display text-lg text-white">Boss Clinician</span>
         </div>
 
@@ -151,9 +148,7 @@ export default function Login() {
           className="w-full max-w-sm"
         >
           <div className="mb-8 flex items-center gap-3 lg:hidden">
-            <span className="grid size-10 place-items-center rounded-xl bg-gold-foil font-display text-lg font-bold text-night-deep">
-              B
-            </span>
+            <Monogram className="size-10 text-xl" />
             <span className="font-display text-lg text-ink">Boss Clinician</span>
           </div>
 

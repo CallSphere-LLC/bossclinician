@@ -20,6 +20,8 @@ import {
   type CourseDetailResponse,
   type CurriculumModule,
 } from "@/components/course/CoursePriceLabel";
+import CourseSalesPage from "@/components/course/CourseSalesPage";
+import { parseSalesPage } from "@/components/course/salesPage";
 
 /**
  * The sales page for one course.
@@ -128,6 +130,9 @@ export default function CourseDetail() {
   }
 
   const course = request.data;
+  // A course with long-form copy in `sales_page` (migration 128) gets the
+  // sales layout; everything else keeps the catalogue layout below.
+  const salesPage = parseSalesPage((course as { salesPage?: unknown }).salesPage);
 
   const minutes = totalMinutes(course.modules);
   const lessons = lessonCount(course.modules);
@@ -158,199 +163,205 @@ export default function CourseDetail() {
         ]}
       />
 
-      <Section className="pt-16 sm:pt-24">
-        <Container>
-          <div className="grid grid-cols-1 gap-12 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start">
-            <motion.div
-              initial={reduceMotion ? false : { opacity: 0, y: 18 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-            >
-              <Link
-                to="/courses"
-                className="text-[0.7rem] font-semibold uppercase tracking-[0.18em] text-orchid-dim transition-colors hover:text-gold"
-              >
-                ← The training library
-              </Link>
+      {salesPage ? (
+        <CourseSalesPage course={course} page={salesPage} />
+      ) : (
+        <>
+          <Section className="pt-16 sm:pt-24">
+            <Container>
+              <div className="grid grid-cols-1 gap-12 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start">
+                <motion.div
+                  initial={reduceMotion ? false : { opacity: 0, y: 18 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+                >
+                  <Link
+                    to="/courses"
+                    className="text-[0.7rem] font-semibold uppercase tracking-[0.18em] text-orchid-dim transition-colors hover:text-gold"
+                  >
+                    ← The training library
+                  </Link>
 
-              <h1 className="mt-5 font-display text-4xl leading-tight text-ink sm:text-5xl">
-                {course.title}
-              </h1>
+                  <h1 className="mt-5 font-display text-4xl leading-tight text-ink sm:text-5xl">
+                    {course.title}
+                  </h1>
 
-              {course.subtitle && (
-                <p className="mt-4 text-lg leading-relaxed text-orchid">{course.subtitle}</p>
-              )}
+                  {course.subtitle && (
+                    <p className="mt-4 text-lg leading-relaxed text-orchid">{course.subtitle}</p>
+                  )}
 
-              <div className="mt-6 flex flex-wrap items-center gap-2.5">
-                {course.owned && <LuxePill accent="green">You own this</LuxePill>}
-                {hasCurriculum && (
-                  <LuxePill accent="neutral">
-                    {lessons} {lessons === 1 ? "lesson" : "lessons"}
-                  </LuxePill>
-                )}
-                {minutes > 0 && (
-                  <LuxePill accent="neutral">
-                    {minutes < 60 ? `${minutes} min` : `${Math.round(minutes / 60)} hours`}
-                  </LuxePill>
-                )}
-                <LuxePill accent="gold">Lifetime access</LuxePill>
-              </div>
-
-              {course.description && (
-                <p className="mt-8 whitespace-pre-line text-[1.05rem] leading-relaxed text-orchid">
-                  {course.description}
-                </p>
-              )}
-
-              {features.length > 0 && (
-                <div className="mt-10">
-                  <GoldRule />
-                  <h2 className="mt-8 font-display text-2xl text-ink">What's inside</h2>
-                  <ul className="mt-5 grid gap-3 sm:grid-cols-2">
-                    {features.map((feature) => (
-                      <li key={feature} className="flex gap-3 text-orchid">
-                        <Check className="mt-0.5 size-4 shrink-0 text-gold" aria-hidden />
-                        <span className="text-[0.95rem] leading-relaxed">{feature}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </motion.div>
-
-            {/* The buy panel sticks on desktop: the curriculum below is long,
-                and a price that scrolls away is a price nobody acts on. */}
-            <aside className="lg:sticky lg:top-28">
-              <GlassCard accent="gold" spotlight={false} interactive={false} className="p-7">
-                {course.image && (
-                  <img
-                    src={course.image}
-                    alt=""
-                    className="mb-6 aspect-[4/3] w-full rounded-xl object-cover"
-                    loading="lazy"
-                  />
-                )}
-
-                {stripeTestMode() && (
-                  <p role="status" className="mb-5 rounded-xl border border-gold/40 bg-gold/10 p-4 text-sm text-gold">
-                    Test mode — no real payments.
-                  </p>
-                )}
-                {course.owned ? (
-                  <>
-                    <p className="text-sm text-orchid">
-                      This is already in your library.
-                    </p>
-                    <LuxeButton to="/library" variant="foil" className="mt-5 w-full">
-                      Open it
-                    </LuxeButton>
-                  </>
-                ) : course.offers.length > 0 ? (
-                  <div className="space-y-5">
-                    {course.offers.map((offer) => (
-                      <div key={offer.slug} className="border-b border-hairline pb-5 last:border-0 last:pb-0">
-                        <p className="font-display text-2xl text-ink">{priceLabel(offer)}</p>
-                        {offer.checkoutHeadline && (
-                          <p className="mt-1.5 text-sm text-orchid-dim">{offer.checkoutHeadline}</p>
-                        )}
-                        {offer.available ? <LuxeButton
-                          to={`/checkout/${offer.slug}`}
-                          variant="foil"
-                          className="mt-4 w-full"
-                        >
-                          {offer.pricingType === "free" ? "Get it free" : "Buy course"}
-                        </LuxeButton> : (
-                          <p className="mt-4 text-sm leading-relaxed text-orchid-dim">{offer.unavailableReason}</p>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <>
-                    <p className="text-sm leading-relaxed text-orchid">
-                      {course.priceText
-                        ? course.priceText
-                        : "Enrollment will open when this course’s price and materials are ready."}
-                    </p>
-                    <LuxeButton to="/contact" variant="foil" className="mt-5 w-full">
-                      Ask about this course
-                    </LuxeButton>
-                  </>
-                )}
-
-                <p className="mt-6 flex items-start gap-2.5 text-xs leading-relaxed text-orchid-faint">
-                  <ShieldCheck className="mt-0.5 size-3.5 shrink-0 text-gold/70" aria-hidden />
-                  Secure checkout. Your card details never touch our servers.
-                </p>
-              </GlassCard>
-            </aside>
-          </div>
-        </Container>
-      </Section>
-
-      {hasCurriculum && (
-        <Section className="pb-24">
-          <Container className="max-w-3xl">
-            <GoldRule />
-            <h2 className="mt-10 font-display text-3xl text-ink">What you'll work through</h2>
-
-            <RevealGroup className="mt-8 space-y-5">
-              {course.modules.map((module, index) => (
-                <RevealItem key={module.id}>
-                  <GlassCard spotlight={false} interactive={false} className="p-6">
-                    <div className="flex items-baseline gap-3">
-                      <span className="font-display text-sm text-gold">
-                        {String(index + 1).padStart(2, "0")}
-                      </span>
-                      <h3 className="font-display text-xl text-ink">{module.title}</h3>
-                    </div>
-
-                    {module.summary && (
-                      <p className="mt-2.5 text-sm leading-relaxed text-orchid-dim">
-                        {module.summary}
-                      </p>
+                  <div className="mt-6 flex flex-wrap items-center gap-2.5">
+                    {course.owned && <LuxePill accent="green">You own this</LuxePill>}
+                    {hasCurriculum && (
+                      <LuxePill accent="neutral">
+                        {lessons} {lessons === 1 ? "lesson" : "lessons"}
+                      </LuxePill>
                     )}
+                    {minutes > 0 && (
+                      <LuxePill accent="neutral">
+                        {minutes < 60 ? `${minutes} min` : `${Math.round(minutes / 60)} hours`}
+                      </LuxePill>
+                    )}
+                    <LuxePill accent="gold">Lifetime access</LuxePill>
+                  </div>
 
-                    {module.lessons.length > 0 && (
-                      <ul className="mt-5 space-y-1">
-                        {module.lessons.map((lesson) => (
-                          <li
-                            key={lesson.id}
-                            className="flex items-center gap-3 border-t border-hairline py-2.5 first:border-0"
-                          >
-                            {lesson.preview ? (
-                              <PlayCircle className="size-4 shrink-0 text-gold" aria-hidden />
-                            ) : (
-                              <Lock className="size-4 shrink-0 text-orchid-faint" aria-hidden />
-                            )}
-                            <span className="min-w-0 flex-1 truncate text-[0.95rem] text-orchid">
-                              {lesson.title}
-                            </span>
-                            {lesson.preview && (
-                              <span className="text-[0.62rem] font-semibold uppercase tracking-[0.14em] text-gold">
-                                Free preview
-                              </span>
-                            )}
-                            {lesson.durationMinutes > 0 && (
-                              <span
-                                className={cn(
-                                  "flex shrink-0 items-center gap-1 text-xs text-orchid-faint",
-                                )}
-                              >
-                                <Clock className="size-3" aria-hidden />
-                                {lesson.durationMinutes}m
-                              </span>
-                            )}
+                  {course.description && (
+                    <p className="mt-8 whitespace-pre-line text-[1.05rem] leading-relaxed text-orchid">
+                      {course.description}
+                    </p>
+                  )}
+
+                  {features.length > 0 && (
+                    <div className="mt-10">
+                      <GoldRule />
+                      <h2 className="mt-8 font-display text-2xl text-ink">What's inside</h2>
+                      <ul className="mt-5 grid gap-3 sm:grid-cols-2">
+                        {features.map((feature) => (
+                          <li key={feature} className="flex gap-3 text-orchid">
+                            <Check className="mt-0.5 size-4 shrink-0 text-gold" aria-hidden />
+                            <span className="text-[0.95rem] leading-relaxed">{feature}</span>
                           </li>
                         ))}
                       </ul>
+                    </div>
+                  )}
+                </motion.div>
+
+                {/* The buy panel sticks on desktop: the curriculum below is long,
+                    and a price that scrolls away is a price nobody acts on. */}
+                <aside className="lg:sticky lg:top-28">
+                  <GlassCard accent="gold" spotlight={false} interactive={false} className="p-7">
+                    {course.image && (
+                      <img
+                        src={course.image}
+                        alt=""
+                        className="mb-6 aspect-[4/3] w-full rounded-xl object-cover"
+                        loading="lazy"
+                      />
                     )}
+
+                    {stripeTestMode() && (
+                      <p role="status" className="mb-5 rounded-xl border border-gold/40 bg-gold/10 p-4 text-sm text-gold">
+                        Test mode — no real payments.
+                      </p>
+                    )}
+                    {course.owned ? (
+                      <>
+                        <p className="text-sm text-orchid">
+                          This is already in your library.
+                        </p>
+                        <LuxeButton to="/library" variant="foil" className="mt-5 w-full">
+                          Open it
+                        </LuxeButton>
+                      </>
+                    ) : course.offers.length > 0 ? (
+                      <div className="space-y-5">
+                        {course.offers.map((offer) => (
+                          <div key={offer.slug} className="border-b border-hairline pb-5 last:border-0 last:pb-0">
+                            <p className="font-display text-2xl text-ink">{priceLabel(offer)}</p>
+                            {offer.checkoutHeadline && (
+                              <p className="mt-1.5 text-sm text-orchid-dim">{offer.checkoutHeadline}</p>
+                            )}
+                            {offer.available ? <LuxeButton
+                              to={`/checkout/${offer.slug}`}
+                              variant="foil"
+                              className="mt-4 w-full"
+                            >
+                              {offer.pricingType === "free" ? "Get it free" : "Buy course"}
+                            </LuxeButton> : (
+                              <p className="mt-4 text-sm leading-relaxed text-orchid-dim">{offer.unavailableReason}</p>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <>
+                        <p className="text-sm leading-relaxed text-orchid">
+                          {course.priceText
+                            ? course.priceText
+                            : "Enrollment will open when this course’s price and materials are ready."}
+                        </p>
+                        <LuxeButton to="/contact" variant="foil" className="mt-5 w-full">
+                          Ask about this course
+                        </LuxeButton>
+                      </>
+                    )}
+
+                    <p className="mt-6 flex items-start gap-2.5 text-xs leading-relaxed text-orchid-faint">
+                      <ShieldCheck className="mt-0.5 size-3.5 shrink-0 text-gold/70" aria-hidden />
+                      Secure checkout. Your card details never touch our servers.
+                    </p>
                   </GlassCard>
-                </RevealItem>
-              ))}
-            </RevealGroup>
-          </Container>
-        </Section>
+                </aside>
+              </div>
+            </Container>
+          </Section>
+
+          {hasCurriculum && (
+            <Section className="pb-24">
+              <Container className="max-w-3xl">
+                <GoldRule />
+                <h2 className="mt-10 font-display text-3xl text-ink">What you'll work through</h2>
+
+                <RevealGroup className="mt-8 space-y-5">
+                  {course.modules.map((module, index) => (
+                    <RevealItem key={module.id}>
+                      <GlassCard spotlight={false} interactive={false} className="p-6">
+                        <div className="flex items-baseline gap-3">
+                          <span className="font-display text-sm text-gold">
+                            {String(index + 1).padStart(2, "0")}
+                          </span>
+                          <h3 className="font-display text-xl text-ink">{module.title}</h3>
+                        </div>
+
+                        {module.summary && (
+                          <p className="mt-2.5 text-sm leading-relaxed text-orchid-dim">
+                            {module.summary}
+                          </p>
+                        )}
+
+                        {module.lessons.length > 0 && (
+                          <ul className="mt-5 space-y-1">
+                            {module.lessons.map((lesson) => (
+                              <li
+                                key={lesson.id}
+                                className="flex items-center gap-3 border-t border-hairline py-2.5 first:border-0"
+                              >
+                                {lesson.preview ? (
+                                  <PlayCircle className="size-4 shrink-0 text-gold" aria-hidden />
+                                ) : (
+                                  <Lock className="size-4 shrink-0 text-orchid-faint" aria-hidden />
+                                )}
+                                <span className="min-w-0 flex-1 truncate text-[0.95rem] text-orchid">
+                                  {lesson.title}
+                                </span>
+                                {lesson.preview && (
+                                  <span className="text-[0.62rem] font-semibold uppercase tracking-[0.14em] text-gold">
+                                    Free preview
+                                  </span>
+                                )}
+                                {lesson.durationMinutes > 0 && (
+                                  <span
+                                    className={cn(
+                                      "flex shrink-0 items-center gap-1 text-xs text-orchid-faint",
+                                    )}
+                                  >
+                                    <Clock className="size-3" aria-hidden />
+                                    {lesson.durationMinutes}m
+                                  </span>
+                                )}
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </GlassCard>
+                    </RevealItem>
+                  ))}
+                </RevealGroup>
+              </Container>
+            </Section>
+          )}
+        </>
       )}
     </>
   );

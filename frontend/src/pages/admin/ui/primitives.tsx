@@ -87,6 +87,16 @@ export const Card = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(
 );
 Card.displayName = "Card";
 
+/**
+ * The frame a decorative icon sits in beside a heading or a figure: a hairline
+ * square in the neutral ink, not a tinted tile. A gold wash behind every icon
+ * made the accent mean nothing — gold is kept for the things she can press.
+ * Sizes whatever glyph it is handed, so `<Zap />` and `<Zap className="size-4" />`
+ * come out the same.
+ */
+export const iconFrameStyles =
+  "grid size-9 shrink-0 place-items-center rounded-[0.65rem] border border-hairline text-ink-soft [&_svg]:size-[1.05rem]";
+
 export function CardHeader({
   title,
   subtitle,
@@ -108,11 +118,7 @@ export function CardHeader({
       )}
     >
       <div className="flex min-w-0 items-center gap-3">
-        {icon && (
-          <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-gold/[0.12] text-gold">
-            {icon}
-          </span>
-        )}
+        {icon && <span className={iconFrameStyles}>{icon}</span>}
         <div className="min-w-0">
           <h2 className="truncate font-display text-base text-ink">{title}</h2>
           {subtitle && <p className="mt-0.5 truncate text-xs text-ink-soft">{subtitle}</p>}
@@ -342,10 +348,13 @@ export function EmptyState({
 }) {
   return (
     <div className="flex flex-col items-center justify-center px-6 py-14 text-center">
-      <span className="grid size-14 place-items-center rounded-2xl bg-gold/[0.10] text-gold [&_svg]:size-6">
+      {/* A bare, finer icon rather than a tinted tile stacked over the heading:
+          the tile is the most recognisable template tell there is, and an
+          empty list is the one screen with nothing else to look at. */}
+      <span aria-hidden="true" className="text-ink-soft/70 [&_svg]:size-7 [&_svg]:[stroke-width:1.25]">
         {icon}
       </span>
-      <p className="mt-4 font-display text-lg text-ink">{title}</p>
+      <p className="mt-3 font-display text-lg text-ink">{title}</p>
       {description && <p className="mt-1.5 max-w-sm text-sm text-ink-soft">{description}</p>}
       {action && <div className="mt-5">{action}</div>}
     </div>

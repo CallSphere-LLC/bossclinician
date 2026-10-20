@@ -34,7 +34,15 @@ export interface CourseCertificateSettings {
   title: string;
   /** "Require passing every quiz to earn the certificate". */
   requirePass: boolean;
+  /** "Require watching the full video before the next lesson". */
+  requireFullVideo: boolean;
+  /** Published lessons with a video or audio file to play. */
+  mediaLessons: number;
+  /** Of those, how many have no recorded length (the 90% rule applies to them). */
+  mediaLessonsWithoutLength: number;
   gradedQuizzes: {
+    /** The assessment id, for editing its pass mark. */
+    id: number;
     lessonTitle: string;
     title: string;
     passMark: number | null;
@@ -74,10 +82,21 @@ export const courseReleaseApi = {
 
   saveCertificate: (
     courseId: number,
-    changes: { enabled?: boolean; requirePass?: boolean; title?: string },
+    changes: { enabled?: boolean; requirePass?: boolean; title?: string; requireFullVideo?: boolean },
   ) =>
     call<CourseCertificateSettings>(`/${courseId}/certificate`, {
       method: "PUT",
       body: JSON.stringify(changes),
     }),
+
+  /**
+   * "Passing score required for certificate" for one graded quiz (1–100). The
+   * response is the refreshed settings plus how many members a lowered mark
+   * just passed.
+   */
+  savePassMark: (courseId: number, assessmentId: number, passMark: number) =>
+    call<CourseCertificateSettings & { newlyPassed: number }>(
+      `/${courseId}/certificate/quizzes/${assessmentId}`,
+      { method: "PUT", body: JSON.stringify({ passMark }) },
+    ),
 };

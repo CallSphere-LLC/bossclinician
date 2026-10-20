@@ -65,8 +65,8 @@ function DestinationCard({ destination, index }: { destination: Destination; ind
           to={destination.to}
           className="flex h-full items-start gap-4 rounded-2xl p-5 outline-none focus-visible:ring-4 focus-visible:ring-gold/20"
         >
-          <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-gold/[0.12] text-gold">
-            <Icon className="size-5" />
+          <span className="grid size-10 shrink-0 place-items-center rounded-xl border border-hairline text-ink-soft">
+            <Icon className="size-[1.15rem]" />
           </span>
           <span className="min-w-0 flex-1">
             <span className="flex flex-wrap items-center gap-2">

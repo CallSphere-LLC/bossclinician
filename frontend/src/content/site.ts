@@ -166,6 +166,7 @@ export const footer = {
   legalLinks: [
     { label: "Privacy Policy", to: "/privacy-policy" },
     { label: "Terms of Use", to: "/terms" },
+    { label: "CEU Terms", to: "/ceu-terms-boss-clinician" },
     { label: "Financial Disclaimer", to: "/financial-disclaimer" },
     { label: "Disclaimer", to: "/disclaimer" },
     { label: "Cookie Policy", to: "/cookie-policy" },

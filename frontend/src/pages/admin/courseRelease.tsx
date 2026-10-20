@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Award, Lock } from "lucide-react";
+import { Award, Lock, MonitorPlay } from "lucide-react";
 import { toast } from "sonner";
 import { Card, Field, Input, selectStyles } from "@/pages/admin/ui/primitives";
 import { friendlyError } from "@/pages/admin/ui/friendly";
@@ -177,16 +177,44 @@ export function CourseReleasePanel({
     }
   }
 
-  async function saveCertificate(changes: { enabled?: boolean; requirePass?: boolean }) {
+  async function saveCertificate(changes: {
+    enabled?: boolean;
+    requirePass?: boolean;
+    requireFullVideo?: boolean;
+  }) {
     if (savingCertificate) return;
     setSavingCertificate(true);
     try {
       setCertificate(await courseReleaseApi.saveCertificate(courseId, changes));
-      toast.success("Certificate settings saved");
+      toast.success(
+        changes.requireFullVideo === undefined
+          ? "Certificate settings saved"
+          : changes.requireFullVideo
+            ? "Students now have to watch each video through before the next lesson opens."
+            : "Videos no longer have to be watched through.",
+      );
+      if (changes.requireFullVideo !== undefined) onChanged();
     } catch (err) {
       toast.error(friendlyError(err, "course"));
     } finally {
       setSavingCertificate(false);
+    }
+  }
+
+  async function savePassMark(assessmentId: number, passMark: number) {
+    try {
+      const saved = await courseReleaseApi.savePassMark(courseId, assessmentId, passMark);
+      const { newlyPassed, ...settings } = saved;
+      setCertificate(settings);
+      toast.success(
+        newlyPassed > 0
+          ? `Passing score saved. ${newlyPassed} ${newlyPassed === 1 ? "student's earlier attempt now passes" : "students' earlier attempts now pass"}.`
+          : "Passing score saved",
+      );
+      return true;
+    } catch (err) {
+      toast.error(friendlyError(err, "course"));
+      return false;
     }
   }
 
@@ -228,6 +256,42 @@ export function CourseReleasePanel({
             </p>
           </div>
         </div>
+
+        <div className="mt-5 flex items-start gap-3 border-t border-hairline pt-5">
+          <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-lilac-tint text-plum-deep">
+            <MonitorPlay className="size-4" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <label className="flex cursor-pointer items-start justify-between gap-3">
+              <span>
+                <span className="block text-sm font-semibold text-ink">
+                  Require watching the full video before the next lesson
+                </span>
+                <span className="mt-0.5 block text-xs text-ink-soft">
+                  A video lesson only completes once the student has played it through (95%).
+                  Skipping ahead doesn’t count, the lesson after it stays locked until then, and
+                  “Mark complete” can’t be used to get round it. Use it where CE rules require
+                  full viewing.
+                </span>
+              </span>
+              <input
+                type="checkbox"
+                className="mt-1 size-4 shrink-0 rounded border-hairline text-plum"
+                checked={certificate?.requireFullVideo === true}
+                disabled={certificate === null || savingCertificate}
+                onChange={(e) => void saveCertificate({ requireFullVideo: e.target.checked })}
+                aria-label="Require watching the full video before the next lesson"
+              />
+            </label>
+            {certificate?.requireFullVideo && certificate.mediaLessonsWithoutLength > 0 && (
+              <p className="mt-2 text-xs font-semibold text-amber-800">
+                {certificate.mediaLessonsWithoutLength} of {certificate.mediaLessons} video lessons
+                have no length recorded, so they complete at 90% watched instead. Re-attach the
+                video in the lesson to record its length.
+              </p>
+            )}
+          </div>
+        </div>
       </Card>
 
       <Card className="p-5">
@@ -262,9 +326,7 @@ export function CourseReleasePanel({
                 <span className="mt-0.5 block text-xs text-ink-soft">
                   {liveQuizzes.length === 0
                     ? "This course has no live graded quizzes yet — add one with “Add quiz” in a section."
-                    : `Applies to: ${liveQuizzes
-                        .map((quiz) => `${quiz.lessonTitle}${quiz.passMark !== null ? ` (pass ${quiz.passMark}%)` : ""}`)
-                        .join(", ")}.`}
+                    : `Applies to: ${liveQuizzes.map((quiz) => quiz.lessonTitle).join(", ")}.`}
                 </span>
               </span>
               <input
@@ -276,17 +338,116 @@ export function CourseReleasePanel({
                 aria-label="Require passing every quiz to earn the certificate"
               />
             </label>
+            {certificate !== null && certificate.gradedQuizzes.length > 0 && (
+              <PassMarks
+                quizzes={certificate.gradedQuizzes}
+                requirePass={certificate.requirePass}
+                onSave={savePassMark}
+              />
+            )}
             <p className="text-xs text-ink-soft">
               An evaluation form works as a survey lesson (“Add survey”): students must submit it
-              to complete that lesson, so it is required for the certificate too — it has no pass
-              mark. Each quiz’s pass mark is set in the quiz itself (Edit questions and results →
-              Settings).
+              to complete that lesson, and the certificate is issued and emailed only once it is
+              submitted — it has no pass mark.
             </p>
             {issued !== null && <IssuedCertificates certificates={issued} />}
           </div>
         </div>
       </Card>
     </div>
+  );
+}
+
+/**
+ * "Passing score required for certificate": one row per graded quiz in the
+ * course, its pass mark editable in place. The value is the quiz's own pass
+ * mark (the quiz editor shows the same number), saved on blur or Enter.
+ */
+function PassMarks({
+  quizzes,
+  requirePass,
+  onSave,
+}: {
+  quizzes: CourseCertificateSettings["gradedQuizzes"];
+  requirePass: boolean;
+  onSave: (assessmentId: number, passMark: number) => Promise<boolean>;
+}) {
+  return (
+    <div className="rounded-lg border border-hairline p-3">
+      <p className="text-sm font-semibold text-ink">Passing score required for certificate</p>
+      <p className="mt-0.5 text-xs text-ink-soft">
+        {requirePass
+          ? "Students need at least this score on each quiz to earn the certificate."
+          : "Turn on “Require passing every quiz” above for these scores to gate the certificate."}
+      </p>
+      <ul className="mt-2 divide-y divide-hairline/70">
+        {quizzes.map((quiz) => (
+          <PassMarkRow key={quiz.id} quiz={quiz} onSave={onSave} />
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function PassMarkRow({
+  quiz,
+  onSave,
+}: {
+  quiz: CourseCertificateSettings["gradedQuizzes"][number];
+  onSave: (assessmentId: number, passMark: number) => Promise<boolean>;
+}) {
+  const stored = quiz.passMark ?? 70;
+  const [value, setValue] = useState(String(stored));
+  const [saving, setSaving] = useState(false);
+  useEffect(() => setValue(String(quiz.passMark ?? 70)), [quiz.passMark]);
+
+  const parsed = Number(value);
+  const valid = value.trim() !== "" && Number.isInteger(parsed) && parsed >= 1 && parsed <= 100;
+  const inputId = `pass-mark-${quiz.id}`;
+
+  async function commit() {
+    if (!valid || parsed === quiz.passMark || saving) return;
+    setSaving(true);
+    const ok = await onSave(quiz.id, parsed);
+    setSaving(false);
+    if (!ok) setValue(String(stored));
+  }
+
+  return (
+    <li className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 py-2">
+      <label htmlFor={inputId} className="min-w-0 text-xs">
+        <span className="block truncate font-semibold text-ink">{quiz.lessonTitle}</span>
+        <span className="block text-ink-soft">
+          {valid
+            ? `Learners need ${parsed}% or higher`
+            : "Enter a whole number from 1 to 100"}
+          {quiz.published ? "" : " · draft"}
+        </span>
+      </label>
+      <span className="flex items-center gap-1.5">
+        <Input
+          id={inputId}
+          type="number"
+          inputMode="numeric"
+          min={1}
+          max={100}
+          step={1}
+          value={value}
+          disabled={saving}
+          aria-invalid={!valid}
+          onChange={(e) => setValue(e.target.value)}
+          onBlur={() => void commit()}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              void commit();
+            }
+          }}
+          className="w-20 text-right font-body font-bold tabular-nums"
+        />
+        <span className="text-sm text-ink-soft">%</span>
+      </span>
+    </li>
   );
 }
 

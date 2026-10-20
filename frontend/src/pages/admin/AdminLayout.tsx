@@ -21,6 +21,7 @@ import { NAV_GROUPS, activeNavTarget, groupForPath, type NavGroup } from "@/page
 import { UploadTray } from "@/pages/admin/ui/UploadTray";
 import { AdminVoiceMount } from "@/voice/surfaces/mount";
 import { ConsoleThemeToggle } from "@/pages/admin/ui/ConsoleThemeToggle";
+import { InboxGlyph, Monogram } from "@/pages/admin/ui/icons";
 
 /**
  * Browser storage for the rail's remembered layout. Either call throws where
@@ -129,9 +130,7 @@ export function AdminLayout({ children }: { children: ReactNode }) {
           collapsed ? "justify-center px-3" : "px-5",
         )}
       >
-        <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-gold-foil font-display text-base font-bold text-night-deep shadow-[0_6px_16px_-6px_rgba(201,164,106,0.9)]">
-          B
-        </span>
+        <Monogram />
         {!collapsed && (
           <div className="min-w-0">
             <p className="truncate font-display text-[0.95rem] leading-tight text-white">
@@ -332,10 +331,7 @@ export function AdminLayout({ children }: { children: ReactNode }) {
                 newLeads > 0 ? pluralize(newLeads, "new enquiry", "new enquiries") : "Your enquiries"
               }
             >
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="size-4" strokeWidth={1.8}>
-                <path d="M3.5 13.5 6 5.5h12l2.5 8v5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z" strokeLinejoin="round" />
-                <path d="M3.5 13.5h4.5l1 2h6l1-2h4.5" strokeLinejoin="round" />
-              </svg>
+              <InboxGlyph className="size-[1.05rem]" />
               {newLeads > 0 && (
                 <span className="absolute -right-1 -top-1 grid min-w-[1.15rem] place-items-center rounded-full bg-gold px-1 text-[0.62rem] font-bold text-ink">
                   {newLeads > 99 ? "99+" : newLeads}

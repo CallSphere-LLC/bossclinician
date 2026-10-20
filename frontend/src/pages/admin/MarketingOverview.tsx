@@ -21,6 +21,7 @@ import {
   EmptyState,
   ErrorNotice,
   PageHeader,
+  iconFrameStyles,
   Skeleton,
 } from "@/pages/admin/ui/primitives";
 import { friendlyError, pluralize } from "@/pages/admin/ui/friendly";
@@ -499,9 +500,7 @@ function Tile({
             </div>
             <p className="mt-1.5 text-xs leading-relaxed text-ink-soft">{caption}</p>
           </div>
-          <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-gold/[0.12] text-gold">
-            {icon}
-          </span>
+          <span className={iconFrameStyles}>{icon}</span>
         </div>
         {children && <div className="mt-4">{children}</div>}
       </div>

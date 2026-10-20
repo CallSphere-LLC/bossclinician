@@ -1,0 +1,249 @@
+/*
+ * The checkout description (CheckoutMarkdown.tsx): gold list markers and the
+ * style-line classes from checkoutMarkdown.ts.
+ *
+ * Every rule is scoped under `.checkout-md`, which also out-ranks the
+ * `prose-boss` (Typography) rules — those are written with :where() and so
+ * carry a single class of specificity.
+ */
+
+.checkout-md {
+  --cm-gold: #c9a46a;
+  --cm-gold-bright: #e8ce9a;
+  --cm-on-gold: #211829;
+}
+
+/* ── Lists: no browser markers, ours instead ───────────────────────────── */
+
+.checkout-md ul,
+.checkout-md ol {
+  list-style: none;
+  padding-inline-start: 0;
+}
+
+.checkout-md ul > li,
+.checkout-md ol > li {
+  position: relative;
+  padding-inline-start: 2.1em;
+}
+
+.checkout-md li::marker {
+  content: "";
+}
+
+/* Plain "- " bullets: a small gold diamond. */
+.checkout-md ul > li::before {
+  content: "";
+  position: absolute;
+  left: 0.55em;
+  top: 0.78em;
+  width: 0.42em;
+  height: 0.42em;
+  background: var(--cm-gold);
+  transform: rotate(45deg);
+  border-radius: 1px;
+}
+
+/* Plain "1. " numbers: a gold numbered circle. */
+.checkout-md ol {
+  counter-reset: cm-n;
+}
+
+.checkout-md ol > li {
+  counter-increment: cm-n;
+}
+
+.checkout-md ol > li::before {
+  content: counter(cm-n);
+  position: absolute;
+  left: 0;
+  top: 0.2em;
+  display: grid;
+  place-items: center;
+  width: 1.55em;
+  height: 1.55em;
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--cm-gold-bright), var(--cm-gold));
+  color: var(--cm-on-gold);
+  font-family: Montserrat, Arial, sans-serif;
+  font-size: 0.8em;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+/* ── {checks} {diamonds} {stars} {hearts} {arrows} ─────────────────────── */
+/* These work on "- " and on "1. " lists alike. */
+
+.checkout-md :is(ul, ol):is(.cm-checks, .cm-diamonds, .cm-stars, .cm-hearts, .cm-arrows) > li::before {
+  position: absolute;
+  left: 0;
+  top: 0.12em;
+  display: grid;
+  place-items: center;
+  width: 1.5em;
+  height: 1.5em;
+  transform: none;
+  border-radius: 0;
+  background: none;
+  color: var(--cm-gold);
+  font-family: Montserrat, Arial, sans-serif;
+  font-size: 0.95em;
+  font-weight: 700;
+  line-height: 1;
+  font-variant-emoji: text;
+}
+
+.checkout-md :is(ul, ol).cm-checks > li::before {
+  content: "\2713"; /* ✓ */
+  top: 0.2em;
+  width: 1.4em;
+  height: 1.4em;
+  border-radius: 999px;
+  border: 1.5px solid var(--cm-gold);
+  background: rgb(201 164 106 / 0.14);
+  font-size: 0.8em;
+}
+
+.checkout-md :is(ul, ol).cm-diamonds > li::before {
+  content: "\25C6"; /* ◆ */
+  font-size: 0.85em;
+}
+
+.checkout-md :is(ul, ol).cm-stars > li::before {
+  content: "\2605"; /* ★ */
+}
+
+.checkout-md :is(ul, ol).cm-hearts > li::before {
+  content: "\2665\FE0E"; /* ♥, text not emoji */
+}
+
+.checkout-md :is(ul, ol).cm-arrows > li::before {
+  content: "\279C"; /* ➜ */
+  font-size: 0.9em;
+}
+
+/* ── {circles} {steps} ──────────────────────────────────────────────────── */
+
+.checkout-md :is(ul, ol).cm-circles {
+  counter-reset: cm-n;
+}
+
+.checkout-md :is(ul, ol).cm-circles > li {
+  counter-increment: cm-n;
+}
+
+.checkout-md :is(ul, ol).cm-circles > li::before {
+  content: counter(cm-n);
+  position: absolute;
+  left: 0;
+  top: 0.2em;
+  display: grid;
+  place-items: center;
+  width: 1.55em;
+  height: 1.55em;
+  transform: none;
+  border-radius: 999px;
+  background: linear-gradient(135deg, var(--cm-gold-bright), var(--cm-gold));
+  color: var(--cm-on-gold);
+  font-family: Montserrat, Arial, sans-serif;
+  font-size: 0.8em;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.checkout-md :is(ul, ol).cm-steps {
+  counter-reset: cm-n;
+}
+
+.checkout-md :is(ul, ol).cm-steps > li {
+  counter-increment: cm-n;
+  padding-inline-start: 0;
+  padding-top: 1.9em;
+}
+
+.checkout-md :is(ul, ol).cm-steps > li::before {
+  content: "Step " counter(cm-n);
+  position: absolute;
+  left: 0;
+  top: 0.25em;
+  width: auto;
+  height: auto;
+  display: inline-block;
+  transform: none;
+  padding: 0.3em 0.75em;
+  border-radius: 999px;
+  border: 1px solid rgb(201 164 106 / 0.5);
+  background: rgb(201 164 106 / 0.12);
+  color: var(--cm-gold);
+  font-family: Montserrat, Arial, sans-serif;
+  font-size: 0.68em;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  line-height: 1.2;
+}
+
+/* ── Fonts: {serif} {sans} {italic} ─────────────────────────────────────── */
+
+.checkout-md .cm-serif,
+.checkout-md .cm-serif :is(p, li, strong, em, a) {
+  font-family: "Playfair Display", Georgia, serif;
+  font-style: normal;
+}
+
+.checkout-md .cm-sans,
+.checkout-md .cm-sans :is(p, li, strong, em, a) {
+  font-family: Montserrat, Arial, sans-serif;
+  font-style: normal;
+}
+
+.checkout-md .cm-italic,
+.checkout-md .cm-italic :is(p, li, strong, em, a) {
+  font-family: "Playfair Display", Georgia, serif;
+  font-style: italic;
+}
+
+/* ── {gold} {large} {center} ────────────────────────────────────────────── */
+
+.checkout-md .cm-gold,
+.checkout-md .cm-gold :is(p, li, strong, em) {
+  color: var(--cm-gold);
+}
+
+.checkout-md .cm-large {
+  font-size: 1.2em;
+  line-height: 1.6;
+}
+
+.checkout-md :is(h1, h2, h3, h4).cm-large {
+  font-size: 1.35em;
+}
+
+.checkout-md .cm-center {
+  text-align: center;
+}
+
+/* A centred list keeps its markers beside the words. */
+.checkout-md :is(ul, ol).cm-center {
+  display: table;
+  margin-inline: auto;
+  text-align: start;
+}
+
+/* ── Photos ─────────────────────────────────────────────────────────────── */
+
+.checkout-md img.cm-photo {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin-block: 1.25em;
+  margin-inline: auto;
+  border-radius: 1rem;
+  border: 1px solid rgb(201 164 106 / 0.25);
+  box-shadow: 0 18px 50px -24px rgb(0 0 0 / 0.6);
+}
+
+.checkout-md p:has(> img.cm-photo:only-child) {
+  margin-block: 0;
+}

@@ -193,6 +193,34 @@ export default function CoursePlayer(props: { productSlug?: string; lessonSlug?:
     };
   }, [api, productSlug, lessonSlug, lessonId, mediaExpiresAt]);
 
+  /*
+   * When the open lesson completes while the next one is shut behind it ("Lock"
+   * or "Require watching the full video"), re-read only the neighbours so the
+   * Next card opens without a reload. The lesson itself is left alone: replacing
+   * it would restart the media hook mid-playback.
+   */
+  const lessonCompleted =
+    currentLesson && !currentLesson.locked ? currentLesson.progress.completed : false;
+  const nextShut = lessonData?.next ? !lessonData.next.unlocked : false;
+  useEffect(() => {
+    if (!lessonSlug || !lessonCompleted || !nextShut) return;
+    let cancelled = false;
+    void api
+      .getLesson(productSlug, lessonSlug)
+      .then((fresh) => {
+        if (cancelled) return;
+        setLessonData((current) =>
+          current && current.lesson.id === fresh.lesson.id
+            ? { ...current, prev: fresh.prev, next: fresh.next }
+            : current,
+        );
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [api, productSlug, lessonSlug, lessonCompleted, nextShut]);
+
   // The graded-test player runs in a same-origin frame. Once it records a pass,
   // re-read both views so the tick and the newly-unlocked next lesson appear
   // without asking the student to refresh the whole page.
@@ -554,6 +582,31 @@ function LessonView({ data, productSlug, courseImage, modules, onProgress }: Les
   const { preview, lessonPath } = usePlayerSource();
 
   /*
+   * "Require watching the full video": how far the member has played through,
+   * as the server last credited it. Kept here rather than folded into the lesson
+   * because the lesson's own figures feed the media hook, and changing them
+   * mid-playback would restart it.
+   */
+  const initialWatch = lesson.locked ? undefined : lesson.fullWatch;
+  const [liveWatch, setLiveWatch] = useState(initialWatch);
+  useEffect(() => {
+    setLiveWatch(initialWatch);
+    // Reset on a lesson change only; later figures arrive with each save.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lesson.id]);
+  const handleProgress = useCallback(
+    (result: ProgressResult) => {
+      if (result.lessonId === lesson.id && result.fullWatch) setLiveWatch(result.fullWatch);
+      onProgress(result);
+    },
+    [lesson.id, onProgress],
+  );
+  const watchLeft =
+    liveWatch?.required && liveWatch.requiredSeconds > 0
+      ? Math.max(0, liveWatch.requiredSeconds - liveWatch.playedToSeconds)
+      : 0;
+
+  /*
    * "Just finished" is the false → true edge of `completed` on the lesson that
    * is open, which is why it is watched here rather than raised by the tick
    * button: the player's own auto-complete at 90% arrives through `onProgress`,
@@ -645,7 +698,7 @@ function LessonView({ data, productSlug, courseImage, modules, onProgress }: Les
         key={lesson.id}
         lesson={lesson}
         courseImage={courseImage}
-        onSaved={onProgress}
+        onSaved={handleProgress}
       />
 
       {lesson.files.length > 0 && <Attachments files={lesson.files} kind="lesson" />}
@@ -656,7 +709,9 @@ function LessonView({ data, productSlug, courseImage, modules, onProgress }: Les
         lessonId={lesson.id}
         completed={lesson.progress.completed}
         playsMedia={lesson.contentType === "video" || lesson.contentType === "audio"}
-        onSaved={onProgress}
+        fullWatchRequired={liveWatch?.required === true}
+        watchLeftSeconds={watchLeft}
+        onSaved={handleProgress}
       />
 
       {justFinished && (
@@ -668,7 +723,17 @@ function LessonView({ data, productSlug, courseImage, modules, onProgress }: Les
         />
       )}
 
-      <LessonNav data={data} productSlug={productSlug} />
+      <LessonNav
+        data={data}
+        productSlug={productSlug}
+        nextNotice={
+          liveWatch?.required && !lesson.progress.completed
+            ? watchLeft > 0
+              ? `Finish the video to continue — ${formatClock(watchLeft)} left`
+              : "Finish the video to continue"
+            : undefined
+        }
+      />
 
       {lesson.notesEnabled && <LessonNotes lessonId={lesson.id} />}
 
@@ -804,18 +869,37 @@ function NicelyDone({
  * again — and the server treats that as an instruction, not a glitch, clearing
  * the watched figure so the next ping cannot immediately re-complete it.
  */
+/** "12:40" or "1:02:05". */
+function formatClock(seconds: number): string {
+  const total = Math.max(0, Math.ceil(seconds));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
+}
+
 function CompleteBar({
   lessonId,
   completed,
   playsMedia,
+  fullWatchRequired = false,
+  watchLeftSeconds = 0,
   onSaved,
 }: {
   lessonId: number;
   completed: boolean;
   /** Only a video or audio lesson ticks itself at 90%; quizzes, reading and tools don't. */
   playsMedia: boolean;
+  /** "Require watching the full video": the tick waits for the video. */
+  fullWatchRequired?: boolean;
+  /** Seconds still to watch through; 0 once done or when the length is unknown. */
+  watchLeftSeconds?: number;
   onSaved: (result: ProgressResult) => void;
 }) {
+  // The server refuses an early tick on a full-watch lesson; the button says so
+  // first rather than inviting a press that can only fail.
+  const tickBlocked = fullWatchRequired && !completed && watchLeftSeconds > 0;
   const [busy, setBusy] = useState(false);
   const { api, preview } = usePlayerSource();
 
@@ -844,7 +928,7 @@ function CompleteBar({
       <button
         type="button"
         onClick={() => void toggle()}
-        disabled={busy}
+        disabled={busy || tickBlocked}
         aria-pressed={completed}
         className={cn(
           "inline-flex min-h-[2.75rem] items-center gap-2.5 rounded-full border px-5",
@@ -867,22 +951,37 @@ function CompleteBar({
       <p aria-live="polite" className="text-xs text-orchid-faint">
         {completed
           ? "Ticked off. Press again if you want to come back to it."
-          : playsMedia
-            ? "This ticks itself once you have watched 90%."
-            : "Press when you have finished this lesson."}
+          : fullWatchRequired
+            ? watchLeftSeconds > 0
+              ? `Watch the whole video to complete this lesson — ${formatClock(watchLeftSeconds)} left. It ticks itself when you reach the end.`
+              : "This ticks itself once you have watched the whole video."
+            : playsMedia
+              ? "This ticks itself once you have watched 90%."
+              : "Press when you have finished this lesson."}
       </p>
     </div>
   );
 }
 
-function LessonNav({ data, productSlug }: { data: LessonResponse; productSlug: string }) {
+function LessonNav({
+  data,
+  productSlug,
+  nextNotice,
+}: {
+  data: LessonResponse;
+  productSlug: string;
+  /** Overrides the shut Next card's reason ("Finish the video to continue — 12:40 left"). */
+  nextNotice?: string;
+}) {
   const { prev, next } = data;
   if (!prev && !next) return null;
+  const nextShown =
+    next && !next.unlocked && nextNotice ? { ...next, unlockLabel: nextNotice } : next;
 
   return (
     <nav aria-label="Lessons" className="grid gap-3 sm:grid-cols-2">
       <NavCard neighbour={prev} productSlug={productSlug} direction="prev" />
-      <NavCard neighbour={next} productSlug={productSlug} direction="next" />
+      <NavCard neighbour={nextShown} productSlug={productSlug} direction="next" />
     </nav>
   );
 }

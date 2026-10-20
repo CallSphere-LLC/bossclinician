@@ -89,6 +89,7 @@ const STATIC_ROUTES: SitemapEntry[] = [
   { loc: "/practice-quiz", changefreq: "monthly", priority: "0.7" },
   { loc: "/practice-reset-planner", changefreq: "monthly", priority: "0.6" },
   { loc: "/terms", changefreq: "yearly", priority: "0.2" },
+  { loc: "/ceu-terms-boss-clinician", changefreq: "yearly", priority: "0.2" },
   { loc: "/privacy-policy", changefreq: "yearly", priority: "0.2" },
   { loc: "/disclaimer", changefreq: "yearly", priority: "0.2" },
   { loc: "/financial-disclaimer", changefreq: "yearly", priority: "0.2" },

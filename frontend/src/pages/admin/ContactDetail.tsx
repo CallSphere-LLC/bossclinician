@@ -28,7 +28,6 @@ import {
   UserRound,
   Users,
   X,
-  Zap,
   type LucideIcon,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -64,6 +63,7 @@ import {
   Textarea,
 } from "@/pages/admin/ui/primitives";
 import { Modal, useConfirm } from "@/pages/admin/ui/Dialog";
+import { AutomationGlyph } from "@/pages/admin/ui/icons";
 import { friendlyError, humaniseKey, orNone, pluralize } from "@/pages/admin/ui/friendly";
 import { saveCsv } from "@/lib/formsApi";
 import ContactFilesCard from "@/pages/admin/ContactFilesCard";
@@ -934,7 +934,7 @@ const TYPE_ICON: Record<LifecycleEventType, LucideIcon> = {
   "Expert Agent Chat": MessageSquare,
   "Contact Created": UserPlus,
   "Tag Added": TagIcon,
-  "Automation Enrollment": Zap,
+  "Automation Enrollment": AutomationGlyph,
 };
 
 /** Moments Kajabi has no type for, which keep their own look. */
@@ -1036,7 +1036,7 @@ function Lifecycle({ person }: { person: Person }) {
             return (
               <li key={entry.id} className="flex gap-4 rounded-xl border border-hairline p-4">
                 <span className="grid size-12 shrink-0 place-items-center rounded-lg bg-white/[0.05] text-ink-soft">
-                  <Icon className="size-5" aria-hidden />
+                  <Icon className="size-5" strokeWidth={2} aria-hidden />
                 </span>
                 <div className="min-w-0 flex-1 space-y-1">
                   <p className="text-[0.68rem] font-semibold uppercase tracking-[0.1em] text-ink-soft">

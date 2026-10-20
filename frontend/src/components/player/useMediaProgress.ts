@@ -31,12 +31,55 @@ const RESUME_FLOOR_SECONDS = 5;
 /** Within this of the end, resuming drops them straight onto the last frame. */
 const RESUME_TAIL_SECONDS = 10;
 
+/**
+ * The largest step between two `timeupdate`s that still counts as playing on,
+ * per 1x of playback rate. `timeupdate` fires every quarter second or so; a
+ * background tab can stretch that, and anything longer than this is a seek.
+ */
+const CONTIGUOUS_STEP_SECONDS = 2;
+
+/** How far past the furthest point played a seek may land on a full-watch lesson. */
+const SEEK_TOLERANCE_SECONDS = 2;
+
+/**
+ * The furthest point played through, advanced by one `timeupdate` sample.
+ *
+ * It only moves when the media got from `previous` to `current` by playing —
+ * forward, by a small step, starting from somewhere already played. A seek
+ * (`previous` null, or a big jump) never moves it, so jumping to the end of a
+ * lesson is not having watched to the end. Exported for tests.
+ */
+export function advanceContiguous(input: {
+  playedTo: number;
+  previous: number | null;
+  current: number;
+  playbackRate: number;
+}): number {
+  const { playedTo, previous, current } = input;
+  if (previous === null) return playedTo;
+  const step = current - previous;
+  const maxStep = CONTIGUOUS_STEP_SECONDS * Math.max(1, input.playbackRate);
+  if (step < 0 || step > maxStep) return playedTo;
+  if (previous > playedTo + SEEK_TOLERANCE_SECONDS) return playedTo;
+  return Math.max(playedTo, current);
+}
+
 interface MediaProgressOptions {
   media: RefObject<HTMLMediaElement | null>;
   lessonId: number;
   /** Where the member left off, from the lesson's own progress record. */
   startAt: number;
   initialPercent: number;
+  /** Furthest point already played through, from the lesson's progress record. */
+  initialPlayedTo?: number;
+  /**
+   * "Require watching the full video": a seek past the furthest point played is
+   * pulled back to it. Keyboard skips and the scrub bar both seek, so both are
+   * covered; captions and everything else are untouched.
+   */
+  restrictSeeking?: boolean;
+  /** Told when a seek was pulled back, so the player can say why. */
+  onSeekBlocked?: () => void;
   onSaved?: (result: ProgressResult) => void;
 }
 
@@ -45,11 +88,18 @@ export function useMediaProgress({
   lessonId,
   startAt,
   initialPercent,
+  initialPlayedTo = 0,
+  restrictSeeking = false,
+  onSeekBlocked,
   onSaved,
 }: MediaProgressOptions): { flush: () => void } {
-  const latest = useRef({ position: startAt, percent: initialPercent });
-  const sent = useRef({ position: startAt, percent: initialPercent });
+  const latest = useRef({ position: startAt, percent: initialPercent, playedTo: initialPlayedTo });
+  const sent = useRef({ position: startAt, percent: initialPercent, playedTo: initialPlayedTo });
   const failures = useRef(0);
+  const onSeekBlockedRef = useRef(onSeekBlocked);
+  useEffect(() => {
+    onSeekBlockedRef.current = onSeekBlocked;
+  }, [onSeekBlocked]);
   // An admin's "Preview as student" plays the lesson and records nothing.
   const { api, preview } = usePlayerSource();
   const readOnly = preview !== null;
@@ -62,10 +112,10 @@ export function useMediaProgress({
   }, [onSaved]);
 
   useEffect(() => {
-    latest.current = { position: startAt, percent: initialPercent };
-    sent.current = { position: startAt, percent: initialPercent };
+    latest.current = { position: startAt, percent: initialPercent, playedTo: initialPlayedTo };
+    sent.current = { position: startAt, percent: initialPercent, playedTo: initialPlayedTo };
     failures.current = 0;
-  }, [lessonId, startAt, initialPercent]);
+  }, [lessonId, startAt, initialPercent, initialPlayedTo]);
 
   /**
    * `keepalive` is set by the writes that happen as the page goes away — the tab
@@ -77,16 +127,16 @@ export function useMediaProgress({
       if (readOnly) return;
       if (failures.current >= MAX_CONSECUTIVE_FAILURES) return;
 
-      const { position, percent } = latest.current;
+      const { position, percent, playedTo } = latest.current;
       const moved = Math.abs(position - sent.current.position) >= 1;
-      const advanced = percent > sent.current.percent;
+      const advanced = percent > sent.current.percent || playedTo >= sent.current.playedTo + 1;
       if (!moved && !advanced) return;
 
-      sent.current = { position, percent };
+      sent.current = { position, percent, playedTo };
       void api
         .saveProgress(
           lessonId,
-          { positionSeconds: position, watchedPercent: percent },
+          { positionSeconds: position, watchedPercent: percent, playedToSeconds: playedTo },
           keepalive ? { keepalive: true } : {},
         )
         .then((result) => {
@@ -106,6 +156,8 @@ export function useMediaProgress({
 
     let resumed = false;
     let ticker: number | null = null;
+    // The last `timeupdate` position, or null straight after a seek.
+    let previousTime: number | null = el.currentTime;
 
     /**
      * `percent` only ever goes up. Scrubbing backwards is something people do on
@@ -118,7 +170,37 @@ export function useMediaProgress({
       if (!Number.isFinite(duration) || duration <= 0) return;
       const position = Math.max(0, Math.min(el.currentTime, duration));
       const percent = Math.min(100, Math.round((position / duration) * 100));
-      latest.current = { position, percent: Math.max(latest.current.percent, percent) };
+      const playedTo = el.seeking
+        ? latest.current.playedTo
+        : advanceContiguous({
+            playedTo: latest.current.playedTo,
+            previous: previousTime,
+            current: position,
+            playbackRate: el.playbackRate,
+          });
+      if (!el.seeking) previousTime = position;
+      latest.current = {
+        position,
+        percent: Math.max(latest.current.percent, percent),
+        playedTo,
+      };
+    };
+
+    const onSeeking = () => {
+      previousTime = null;
+      if (!restrictSeeking) return;
+      const limit = latest.current.playedTo + SEEK_TOLERANCE_SECONDS;
+      if (el.currentTime > limit) {
+        el.currentTime = latest.current.playedTo;
+        onSeekBlockedRef.current?.();
+      }
+    };
+
+    // Landing from a seek records the new position without advancing the
+    // furthest point; playback from here moves it only by playing on.
+    const onSeeked = () => {
+      previousTime = null;
+      record();
     };
 
     const resume = () => {
@@ -158,6 +240,8 @@ export function useMediaProgress({
       record();
       // Media that runs to its end is finished even if the last `timeupdate`
       // landed on 99: rounding must not be the reason a lesson stays untick.
+      // (The furthest point played is left to `record`: ending is only having
+      // watched to the end if the media got there by playing.)
       latest.current = { ...latest.current, percent: 100 };
       save(false);
     };
@@ -170,7 +254,8 @@ export function useMediaProgress({
 
     el.addEventListener("loadedmetadata", resume);
     el.addEventListener("timeupdate", record);
-    el.addEventListener("seeked", record);
+    el.addEventListener("seeking", onSeeking);
+    el.addEventListener("seeked", onSeeked);
     el.addEventListener("play", onPlay);
     el.addEventListener("pause", onPause);
     el.addEventListener("ended", onEnded);
@@ -184,7 +269,8 @@ export function useMediaProgress({
       stopTicker();
       el.removeEventListener("loadedmetadata", resume);
       el.removeEventListener("timeupdate", record);
-      el.removeEventListener("seeked", record);
+      el.removeEventListener("seeking", onSeeking);
+      el.removeEventListener("seeked", onSeeked);
       el.removeEventListener("play", onPlay);
       el.removeEventListener("pause", onPause);
       el.removeEventListener("ended", onEnded);
@@ -192,7 +278,7 @@ export function useMediaProgress({
       record();
       save(true);
     };
-  }, [media, lessonId, startAt, save]);
+  }, [media, lessonId, startAt, save, restrictSeeking]);
 
   return { flush: useCallback(() => save(false), [save]) };
 }

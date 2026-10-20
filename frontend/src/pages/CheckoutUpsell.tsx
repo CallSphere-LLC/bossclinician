@@ -13,6 +13,8 @@ import {
   type CheckoutReceipt,
 } from "@/components/checkout/receipt";
 import { getStripe } from "@/components/checkout/stripeClient";
+import { CheckoutMarkdown } from "@/components/checkout/CheckoutMarkdown";
+import { checkoutPlainText } from "@/components/checkout/checkoutMarkdown";
 import { commerceApi, commerceErrorMessage, type PublicOffer } from "@/lib/commerceApi";
 import { formatCurrency } from "@/lib/format";
 
@@ -268,7 +270,7 @@ export default function CheckoutUpsell() {
     <>
       <Seo
         title={`${upsell.offer.title} - Boss Clinician`}
-        description={upsell.body || upsell.offer.description}
+        description={upsell.body || checkoutPlainText(upsell.offer.description)}
       />
       <UpsellShell>
         <motion.div
@@ -306,10 +308,12 @@ export default function CheckoutUpsell() {
 
                 <GoldRule className="mx-auto mt-7" />
 
-                {(upsell.body || upsell.offer.description) && (
-                  <p className="copy-luxe mx-auto mt-6 max-w-lg text-pretty">
-                    {upsell.body || upsell.offer.description}
-                  </p>
+                {upsell.body ? (
+                  <p className="copy-luxe mx-auto mt-6 max-w-lg text-pretty">{upsell.body}</p>
+                ) : (
+                  upsell.offer.description && (
+                    <CheckoutMarkdown text={upsell.offer.description} className="mx-auto mt-6 max-w-lg text-left text-pretty" />
+                  )
                 )}
 
                 {upsell.offer.thumbnailUrl && (

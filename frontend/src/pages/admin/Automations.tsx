@@ -10,7 +10,6 @@ import {
   Trash2,
   Workflow,
   XCircle,
-  Zap,
 } from "lucide-react";
 import { toast } from "sonner";
 import { adminApi } from "@/lib/api";
@@ -40,6 +39,7 @@ import {
   type BadgeProps,
 } from "@/pages/admin/ui/primitives";
 import { Modal, useConfirm } from "@/pages/admin/ui/Dialog";
+import { AutomationGlyph } from "@/pages/admin/ui/icons";
 import { friendlyError, humanizeKey, pluralize, statusOf } from "@/pages/admin/ui/friendly";
 
 /**
@@ -625,7 +625,7 @@ export default function Automations() {
                   <CardHeader
                     title={active.name}
                     subtitle={active.description || undefined}
-                    icon={<Zap className="size-4" />}
+                    icon={<AutomationGlyph />}
                     action={
                       <div className="flex flex-wrap gap-2">
                         <Button
@@ -908,7 +908,7 @@ export default function Automations() {
                         : "border-hairline hover:border-plum/40",
                     )}
                   >
-                    <Zap
+                    <AutomationGlyph
                       className={cn(
                         "mt-0.5 size-4 shrink-0",
                         autoDraft.triggerType === t.value ? "text-plum" : "text-ink-soft/50",
