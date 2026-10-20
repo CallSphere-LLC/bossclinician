@@ -215,6 +215,22 @@ describe("earnedCeuCredit", () => {
     expect(earnedCeuCredit([textLesson({ hasMedia: false })])).toBe(true);
   });
 
+  it("counts a completed native assessment without imposing a second dwell gate", () => {
+    const instant = AT("2026-03-01T10:00:00Z");
+    expect(earnedCeuCredit([
+      textLesson(),
+      textLesson({
+        contentType: "assessment",
+        durationMinutes: 0,
+        firstViewedAt: instant,
+        completedAt: instant,
+      }),
+    ])).toBe(true);
+    expect(earnedCeuCredit([
+      textLesson({ contentType: "assessment", completedAt: null }),
+    ])).toBe(false);
+  });
+
   it("treats a course with no published lessons as nothing to prove", () => {
     // The rollup cannot reach 100% on an empty course, so this is only ever
     // reached with lessons; vacuously true is the honest answer for the rule.

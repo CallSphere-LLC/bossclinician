@@ -17,6 +17,11 @@ import {
   isFullyWatched,
 } from "./curriculum";
 import { protectedRef, resolveStoredFile, uploadPath } from "./signedUrls";
+import {
+  parseCertificateBackgroundLayout,
+  renderBrandedCertificatePdf,
+  type CertificateBackgroundLayout,
+} from "./certificateArtwork";
 
 /**
  * CEU certificates.
@@ -48,7 +53,8 @@ const CERTIFICATE_DIR = "certificates";
 
 export const CERTIFICATE_COLUMNS = `id, template_id, member_id, product_id, course_id,
        verification_code, recipient_name, course_title, ceu_credit_quarter_hours,
-       ceu_provider_number, completed_at, issued_at, revoked_at, pdf_path`;
+       ceu_provider_number, completed_at, issued_at, revoked_at, pdf_path,
+       background_image, background_layout`;
 
 export interface CertificateRow {
   id: number;
@@ -65,6 +71,8 @@ export interface CertificateRow {
   issued_at: Date;
   revoked_at: Date | null;
   pdf_path: string;
+  background_image: string;
+  background_layout: unknown;
 }
 
 interface TemplateRow {
@@ -79,6 +87,8 @@ interface TemplateRow {
   ceu_credit_quarter_hours: number;
   ceu_provider_number: string;
   ceu_provider_name: string;
+  background_image: string;
+  background_layout: unknown;
 }
 
 /* ------------------------------------------------------- verification codes */
@@ -196,6 +206,8 @@ interface CertificateArtwork {
   signatureImagePath: string | Buffer | null;
   logoPath: string | Buffer | null;
   providerName: string;
+  backgroundImage?: string;
+  backgroundLayout?: CertificateBackgroundLayout;
 }
 
 export interface CertificateContent {
@@ -239,6 +251,22 @@ function pdfToBuffer(doc: PDFKit.PDFDocument): Promise<Buffer> {
  * go missing in a container image.
  */
 export async function renderCertificatePdf(content: CertificateContent): Promise<Buffer> {
+  if (content.artwork.backgroundImage) {
+    if (!content.artwork.backgroundLayout) {
+      throw new Error("Certificate background layout is missing");
+    }
+    return renderBrandedCertificatePdf({
+      image: content.artwork.backgroundImage,
+      layout: content.artwork.backgroundLayout,
+      recipientName: content.recipientName,
+      completedAt: content.completedAt,
+      verificationCode: content.verificationCode,
+      publicSiteUrl: env.publicSiteUrl,
+      creditQuarterHours: content.creditQuarterHours,
+      providerNumber: content.providerNumber,
+      title: `${content.artwork.title} — ${content.courseTitle}`,
+    });
+  }
   const doc = new PDFDocument({
     size: PAPER,
     layout: "landscape",
@@ -439,7 +467,17 @@ async function localImage(value: string): Promise<string | Buffer | null> {
   return resolveStoredFile(reference);
 }
 
-async function artworkFor(template: TemplateRow | null): Promise<CertificateArtwork> {
+async function artworkFor(
+  template: TemplateRow | null,
+  backgroundImage = "",
+  backgroundLayout: unknown = {}
+): Promise<CertificateArtwork> {
+  const background = backgroundImage
+    ? {
+        backgroundImage,
+        backgroundLayout: parseCertificateBackgroundLayout(backgroundLayout),
+      }
+    : {};
   if (!template) {
     return {
       title: "Certificate of Completion",
@@ -449,6 +487,7 @@ async function artworkFor(template: TemplateRow | null): Promise<CertificateArtw
       signatureImagePath: null,
       logoPath: null,
       providerName: "",
+      ...background,
     };
   }
 
@@ -465,6 +504,7 @@ async function artworkFor(template: TemplateRow | null): Promise<CertificateArtw
     signatureImagePath,
     logoPath,
     providerName: template.ceu_provider_name,
+    ...background,
   };
 }
 
@@ -483,7 +523,8 @@ async function loadCompletionTemplate(courseId: number): Promise<TemplateRow | n
   const found = await pool.query<TemplateRow>(
     `SELECT t.id, t.product_id, t.title, t.body, t.signature_image, t.signature_name,
             t.signature_title, t.logo_url, t.ceu_credit_quarter_hours,
-            t.ceu_provider_number, t.ceu_provider_name
+            t.ceu_provider_number, t.ceu_provider_name, t.background_image,
+            t.background_layout
        FROM certificate_templates t
        LEFT JOIN products p ON p.id = t.product_id
       WHERE t.enabled
@@ -499,7 +540,8 @@ async function loadCompletionTemplate(courseId: number): Promise<TemplateRow | n
 async function loadTemplateById(templateId: number): Promise<TemplateRow | null> {
   const found = await pool.query<TemplateRow>(
     `SELECT id, product_id, title, body, signature_image, signature_name, signature_title,
-            logo_url, ceu_credit_quarter_hours, ceu_provider_number, ceu_provider_name
+            logo_url, ceu_credit_quarter_hours, ceu_provider_number, ceu_provider_name,
+            background_image, background_layout
        FROM certificate_templates WHERE id = $1`,
     [templateId]
   );
@@ -529,7 +571,7 @@ async function writeCertificatePdf(row: CertificateRow): Promise<string> {
     // and it has to keep saying what it said on the day it was issued.
     creditQuarterHours: row.ceu_credit_quarter_hours,
     providerNumber: row.ceu_provider_number,
-    artwork: await artworkFor(template),
+    artwork: await artworkFor(template, row.background_image, row.background_layout),
   });
 
   // Named for the verification code rather than the certificate id, so the file
@@ -698,6 +740,10 @@ export function earnedCeuCredit(lessons: CeuLessonRecord[]): boolean {
     ) {
       return lesson.watchedPercent >= AUTO_COMPLETE_PERCENT;
     }
+    // The graded quiz has a pass gate and a native survey has a submitted
+    // response gate. A one-minute dwell check on those assessment screens
+    // would reject an honestly completed form with no way to repair the clock.
+    if (lesson.contentType === "assessment") return lesson.completedAt !== null;
     if (lesson.completedAt === null || lesson.firstViewedAt === null) return false;
     const seconds = (lesson.completedAt.getTime() - lesson.firstViewedAt.getTime()) / 1000;
     return seconds >= requiredDwellSeconds(lesson.durationMinutes);
@@ -1293,11 +1339,29 @@ export async function issueCertificateIfEarned(
   const who = found.rows[0];
   if (!who) return null;
 
+  // An existing learner can have 100% course progress before a required
+  // evaluation is added. The certificate date must reflect the submitted
+  // evaluation, not the older progress rollup date.
+  const latestEvaluation = await pool.query<{ completed_at: Date | null }>(
+    `SELECT max(t.completed_at) AS completed_at
+       FROM assessment_attempts t
+       JOIN assessments a ON a.id = t.assessment_id
+       JOIN course_lessons l ON l.id = a.lesson_id
+       JOIN course_modules m ON m.id = l.module_id
+      WHERE t.member_id = $1 AND m.course_id = $2
+        AND a.kind = 'survey' AND a.published AND t.completed_at IS NOT NULL`,
+    [memberId, courseId]
+  );
+  const completedAt = [earned.completed_at, latestEvaluation.rows[0]?.completed_at]
+    .filter((value): value is Date => value instanceof Date)
+    .reduce((latest, value) => value > latest ? value : latest, new Date(0));
+
   const inserted = await pool.query<CertificateRow>(
     `INSERT INTO certificates
        (template_id, member_id, product_id, course_id, verification_code, recipient_name,
-        course_title, ceu_credit_quarter_hours, ceu_provider_number, completed_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+        course_title, ceu_credit_quarter_hours, ceu_provider_number, completed_at,
+        background_image, background_layout)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
      ON CONFLICT (member_id, course_id) DO NOTHING
      RETURNING ${CERTIFICATE_COLUMNS}`,
     [
@@ -1310,7 +1374,9 @@ export async function issueCertificateIfEarned(
       who.course_title,
       template.ceu_credit_quarter_hours,
       template.ceu_provider_number,
-      earned.completed_at ?? new Date(),
+      completedAt.getTime() > 0 ? completedAt : new Date(),
+      template.background_image,
+      template.background_layout,
     ]
   );
 

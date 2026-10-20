@@ -86,6 +86,9 @@ COPY --from=frontend /app/dist/client/index.html ./frontend-dist/client/index.ht
 # Operational scripts run against the live database from inside this container
 # (regenerating the nginx redirect map, for one), so they have to ship with it.
 COPY backend/scripts ./scripts
+# Versioned certificate designs are bundled, never fetched from external URLs
+# while a member is issued a regulated CE document.
+COPY backend/assets/certificates ./assets/certificates
 # Both storage roots exist in the image so the volumes mounted over them inherit
 # this ownership. A directory Docker creates for a missing mount point belongs to
 # root, and the `node` user below could not write an upload into it.
