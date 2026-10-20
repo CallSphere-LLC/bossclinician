@@ -10,6 +10,11 @@ export default defineConfig({
     // One bcrypt round at cost 12 is ~300ms on this box and the timing tests run
     // several back to back; the 5s default is too tight on slower CI hardware.
     testTimeout: 20_000,
+    // Integration suites build their scratch database in beforeAll by replaying
+    // schema.sql plus every migration (129+ files). That takes ~5s on an idle
+    // box and over the 10s default while a deploy build shares the CPU, which
+    // failed s3MediaUploads with a hook timeout that looked like a real bug.
+    hookTimeout: 60_000,
     // config/env.ts throws at import without JWT_SECRET, and dotenv fills it
     // from backend/.env when one exists. Without this default the suite passed
     // only in checkouts that hold real secrets, and failed 36 files on a clean
