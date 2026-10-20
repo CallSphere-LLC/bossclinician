@@ -3,8 +3,10 @@ import { Link } from "react-router";
 import { Check, ChevronDown, LockKeyhole, Play, ShieldCheck } from "lucide-react";
 import type { CourseDetailResponse } from "@/components/course/CoursePriceLabel";
 import { salesButtons, type SalesOffer } from "@/components/course/salesPage";
+import "./StarterSuiteSalesPage.css";
 
 const imageRoot = "/images/starter-suite";
+const workbookPages = ["lesson-1.png", "lesson-2.png", "lesson-3.png", "workbook-page-4.png", "workbook-page-5.png"];
 
 const questions = [
   "Do you dream of having your own private practice but feel overwhelmed by where to start?",
@@ -22,9 +24,9 @@ const lessons = [
 ];
 
 const testimonials = [
-  { quote: "This course gave me the clarity, tools, and confidence I desperately needed. From setting up my business legally to attracting my first clients—every step was broken down in a way that finally made sense. I’m now seeing clients in my own practice and feel more in control of my future than ever before!", name: "Sharon S, LPC", practice: "Stillwaters Counseling" },
-  { quote: "I had the passion and the license, but the business side of private practice felt overwhelming. The Starter Suite changed everything. Yvette laid it all out—step-by-step, no fluff. I finally understood what I needed to do to build a solid foundation and actually launch. Within weeks, I had my practice name, niche, and systems in place. I’m no longer just dreaming about private practice—I’m living it!", name: "Kristan L, LCSW", practice: "Intentional Focus Health and Wellness" },
-  { quote: "I kept second-guessing myself—worried I’d miss a step or mess something up. The Starter Suite took away all that anxiety. It gave me the structure and support I didn’t even realize I needed. Yvette makes it feel possible, even when it feels scary. Now I have my EIN, my niche is clear, and I’m onboarding my first private clients. This was the push I needed to finally get started!", name: "Deanna H, LCSW", practice: "DH Counseling" },
+  { quote: "This course gave me the clarity, tools, and confidence I desperately needed. From setting up my business legally to attracting my first clients—every step was broken down in a way that finally made sense. I’m now seeing clients in my own practice and feel more in control of my future than ever before!", name: "Sharon S, LPC", practice: "Stillwaters Counseling", image: "testimonial-sharon.png" },
+  { quote: "I had the passion and the license, but the business side of private practice felt overwhelming. The Starter Suite changed everything. Yvette laid it all out—step-by-step, no fluff. I finally understood what I needed to do to build a solid foundation and actually launch. Within weeks, I had my practice name, niche, and systems in place. I’m no longer just dreaming about private practice—I’m living it!", name: "Kristan L, LCSW", practice: "Intentional Focus Health and Wellness", image: "testimonial-kristan.png" },
+  { quote: "I kept second-guessing myself—worried I’d miss a step or mess something up. The Starter Suite took away all that anxiety. It gave me the structure and support I didn’t even realize I needed. Yvette makes it feel possible, even when it feels scary. Now I have my EIN, my niche is clear, and I’m onboarding my first private clients. This was the push I needed to finally get started!", name: "Deanna H, LCSW", practice: "DH Counseling", image: "testimonial-deanna.png" },
 ];
 
 const faqs = [
@@ -62,6 +64,44 @@ function Video({ id, poster, title }: { id: string; poster: string; title: strin
         </button>
       )}
     </div>
+  );
+}
+
+function WorkbookMarquee() {
+  return (
+    <section className="overflow-hidden bg-[#e8e4f5] py-12" aria-label="A preview of the Starter Suite workbook">
+      <h2 className="px-5 text-center font-display text-2xl font-bold sm:text-3xl">A look inside your workbook</h2>
+      <div className="starter-book-viewport mt-8" tabIndex={0} aria-label="Scrolling workbook preview; pause by hovering or focusing">
+        <div className="starter-book-track">
+          {[0, 1].map(copy => (
+            <div key={copy} className="starter-book-group" aria-hidden={copy === 1}>
+              {workbookPages.map((page, index) => (
+                <img key={page} src={imageRoot + "/" + page} alt={copy === 0 ? "Starter Suite workbook preview page " + (index + 1) : ""} loading="lazy" width="1112" height="1440" />
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function StartMarquee({ course }: { course: CourseDetailResponse }) {
+  const button = salesButtons(course.offers as SalesOffer[])[0];
+  const to = course.owned ? "/library" : button?.to;
+  if (!to) return null;
+  return (
+    <Link to={to} className="starter-words-viewport block overflow-hidden bg-[#172e3c] py-4 text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#6d5b8b]" aria-label="Start today with clarity and confidence">
+      <span className="starter-words-track" aria-hidden="true">
+        {[0, 1].map(copy => (
+          <span key={copy} className="starter-words-group">
+            {[0, 1, 2].map(part => (
+              <span key={part} className="contents"><span>Start Today With Clarity &amp; Confidence</span><span className="text-[#c7bcea]">✦</span><span>SUBSCRIBE TODAY</span><span className="text-[#c7bcea]">✦</span></span>
+            ))}
+          </span>
+        ))}
+      </span>
+    </Link>
   );
 }
 
@@ -130,6 +170,8 @@ export default function StarterSuiteSalesPage({ course }: { course: CourseDetail
         <div className="mx-auto max-w-5xl"><p className="font-display text-2xl">Introducing:</p><h2 className="mt-2 font-display text-4xl font-bold text-[#695987] sm:text-5xl">Private Practice Starter Suite</h2><p className="mx-auto mt-5 max-w-3xl text-xl">An affordable, action-packed mini-course to move from feeling stuck toward your first paying client without social media overwhelm.</p><div className="mt-8"><Action course={course}>Start your private practice today</Action></div></div>
       </section>
 
+      <WorkbookMarquee />
+
       <section className="bg-[#f1eef9] px-5 py-16 sm:py-24">
         <div className="mx-auto max-w-6xl"><h2 className="text-center font-display text-3xl font-bold sm:text-4xl">3 power-packed video lessons</h2><p className="mt-3 text-center">Short, digestible, and actionable.</p><div className="mt-10 grid gap-6 md:grid-cols-3">{lessons.map(lesson => <article key={lesson.number} className="overflow-hidden rounded-xl bg-white shadow-lg"><img src={imageRoot + "/" + lesson.image} alt={lesson.title + " lesson preview"} loading="lazy" className="aspect-[4/5] w-full object-contain" /><div className="p-6"><p className="text-xs font-bold uppercase tracking-wider text-[#695987]">Video lesson {lesson.number}</p><h3 className="mt-2 font-display text-xl font-bold">{lesson.title}</h3><p className="mt-3 text-sm leading-relaxed">{lesson.body}</p></div></article>)}</div><div className="mt-10 text-center"><Action course={course}>Get instant access</Action></div></div>
       </section>
@@ -139,12 +181,14 @@ export default function StarterSuiteSalesPage({ course }: { course: CourseDetail
       </section>
 
       <section className="bg-[#e8e4f5] px-5 py-16 sm:py-24">
-        <div className="mx-auto max-w-6xl"><h2 className="text-center font-display text-3xl font-bold sm:text-4xl">What students are saying</h2><div className="mt-10 grid gap-6 lg:grid-cols-3">{testimonials.map(t => <blockquote key={t.name} className="flex flex-col rounded-xl bg-white p-6 shadow-md"><p className="flex-1 leading-relaxed">“{t.quote}”</p><footer className="mt-5 border-t border-[#d7d0e5] pt-4"><strong>{t.name}</strong><span className="block text-sm text-[#685d75]">{t.practice}</span></footer></blockquote>)}</div></div>
+        <div className="mx-auto max-w-6xl"><h2 className="text-center font-display text-3xl font-bold sm:text-4xl">What students are saying</h2><div className="mt-10 grid gap-6 lg:grid-cols-3">{testimonials.map(t => <blockquote key={t.name} className="flex flex-col rounded-xl bg-white p-6 shadow-md"><img src={imageRoot + "/" + t.image} alt={t.name + " testimonial photo"} loading="lazy" className="mx-auto mb-6 aspect-square w-full max-w-[16rem] object-contain" /><p className="flex-1 leading-relaxed">“{t.quote}”</p><footer className="mt-5 border-t border-[#d7d0e5] pt-4"><strong>{t.name}</strong><span className="block text-sm text-[#685d75]">{t.practice}</span></footer></blockquote>)}</div></div>
       </section>
 
       <section className="bg-white px-5 py-16 sm:py-24">
         <div className="mx-auto grid max-w-5xl items-center gap-10 md:grid-cols-[15rem_1fr]"><img src={imageRoot + "/yvette.jpg"} alt="Yvette Howard" loading="lazy" className="mx-auto w-full max-w-[15rem] rounded-xl" /><div><h2 className="font-display text-3xl font-bold">Meet Yvette Howard</h2><p className="mt-5">Hey future Boss Clinician, I’m Yvette, a Licensed Clinical Social Worker, Boss Clinician, and business coach who specializes in helping therapists build profitable private practices.</p><p className="mt-4">I started my journey in 2018 with no roadmap and no idea where to begin. After navigating legal structures, billing, and a growing family, I built my own group practice and transitioned it into an employee-based agency in 2021.</p><p className="mt-4">Now I help therapists take the guesswork out of launching a practice so they can focus on their clients and the life they want to build.</p></div></div>
       </section>
+
+      <StartMarquee course={course} />
 
       <section className="bg-[#cec7ea] px-5 py-16 sm:py-24">
         <div className="mx-auto max-w-3xl rounded-2xl bg-white p-6 text-center shadow-xl sm:p-10"><h2 className="font-display text-3xl font-bold">Here’s everything you get</h2><ul className="mt-7 space-y-3 text-left">{["3-step Private Practice Starter Suite video course", "Private Practice Starter Suite workbook", "Mindset Shift Worksheet", "Niche Clarity & Business Model Worksheet", "Client Attraction Quick-Start Checklist", "Private Practice Starter Checklist", "From Employee to CEO Mindset Affirmations"].map(item => <li key={item} className="flex gap-3 border-b border-[#e8e4f5] pb-3"><Check className="size-5 shrink-0 text-[#695987]" aria-hidden="true" />{item}</li>)}</ul>{price && <p className="mt-8 text-3xl font-black">Get access for {price}</p>}<p className="mt-3">Start building your private practice with clarity and confidence.</p><div className="mt-6"><Action course={course}>I’m ready to learn from Yvette</Action></div><p className="mt-5 flex items-center justify-center gap-2 text-xs"><LockKeyhole className="size-4" aria-hidden="true" /> Secure checkout and access in your library</p></div>
