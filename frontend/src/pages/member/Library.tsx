@@ -29,21 +29,19 @@ import { ProgressRing } from "@/components/player/ProgressRing";
 import { contentTypeLabel } from "@/components/player/lessonMeta";
 import { cn } from "@/lib/cn";
 import { DocumentsPanel } from "./Downloads";
+import { defaultLibraryTab, shelfGroups, type LibraryTab } from "./libraryShelf";
 
 /**
- * The two shelves, as Kajabi's library has them: what you work through, and the
+ * The two shelves, as Kajabi's library has them: everything you own, and the
  * files you keep. `?tab=documents` is the address of the second, so it can be
- * linked to and survives a reload.
+ * linked to and survives a reload. A download product is a card on the first
+ * as well as files on the second (see libraryShelf.ts).
  */
-type LibraryTab = "courses" | "documents";
 
 const TABS: { id: LibraryTab; label: string; icon: typeof BookOpen }[] = [
   { id: "courses", label: "Courses", icon: BookOpen },
   { id: "documents", label: "Documents", icon: FileDown },
 ];
-
-/** Download products are files, so they live on the Documents tab rather than as cards here. */
-const DOCUMENT_KIND = "download";
 
 /**
  * The shelf — everything this member has paid for.
@@ -127,17 +125,12 @@ export default function Library() {
   }, []);
 
   const empty = data !== null && data.total === 0;
-  const courseGroups = data ? data.groups.filter((group) => group.kind !== DOCUMENT_KIND) : [];
-  const ownsDocuments =
-    data !== null && data.groups.some((group) => group.kind === DOCUMENT_KIND);
+  // Every owned product, downloads included: a purchase that is only reachable
+  // by knowing to click "Documents" is a purchase the customer thinks is lost.
+  const courseGroups = data ? shelfGroups(data.groups) : [];
   // An explicit ?tab wins. Without one, somebody who owns only documents lands
-  // on them instead of on an empty Courses tab.
-  const tab: LibraryTab =
-    requestedTab === "documents" || requestedTab === "courses"
-      ? requestedTab
-      : data !== null && courseGroups.length === 0 && ownsDocuments
-        ? "documents"
-        : "courses";
+  // on the file list instead of on the shelf.
+  const tab: LibraryTab = defaultLibraryTab(requestedTab, data ? data.groups : null);
   // The tabs wait for the shelf, except when the address asked for Documents —
   // that tab loads its own list and has no reason to wait.
   const showTabs = (data !== null && !empty) || requestedTab === "documents";
@@ -205,7 +198,7 @@ export default function Library() {
                 {tab === "documents" ? (
                   <DocumentsPanel embedded />
                 ) : data === null ? null : courseGroups.length === 0 ? (
-                  <NoCourses />
+                  <EmptyLibrary />
                 ) : (
                   courseGroups.map((group) => (
                     <section key={group.kind} aria-labelledby={`group-${group.kind}`}>
@@ -312,32 +305,6 @@ function LibraryTabs({
         );
       })}
     </div>
-  );
-}
-
-/** The Courses tab for somebody whose shelf holds only documents. */
-function NoCourses() {
-  return (
-    <GlassCard
-      spotlight={false}
-      interactive={false}
-      className="flex flex-col items-center px-6 py-14 text-center sm:px-10"
-    >
-      <span
-        aria-hidden
-        className="grid size-14 place-items-center rounded-full border border-gold/25 bg-gold/[0.08]"
-      >
-        <BookOpen className="size-6 text-gold" />
-      </span>
-      <h2 className="mt-5 font-display text-[1.5rem] leading-snug text-white">No courses yet</h2>
-      <p className="copy-luxe mt-3 max-w-md text-balance">
-        The courses you join will be here, ready to pick up where you left off. Your files are on
-        the Documents tab.
-      </p>
-      <div className="mt-7 flex flex-wrap justify-center gap-3">
-        <LuxeButton to="/courses">Browse the courses</LuxeButton>
-      </div>
-    </GlassCard>
   );
 }
 
