@@ -663,12 +663,12 @@ export const retreatAgreement: KajabiLegalDoc = {
       label: "Section 04",
       heading: "Investment & Payment Terms",
       blocks: [
-        { type: "p", text: "Two room options are available. All prices are per person." },
+        { type: "p", text: "Shared rooms are open for enrollment. Private rooms are offered by request only, subject to availability. All prices are per person." },
         {
           type: "pricing",
           options: [
             {
-              eyebrow: "Private Room",
+              eyebrow: "Private Room by Request",
               name: "Private King Suite",
               price: "$5,500",
               note: ["$500 deposit · remaining balance", "due in full by June 8, 2027"],
@@ -698,7 +698,7 @@ export const retreatAgreement: KajabiLegalDoc = {
               { text: "$500", bold: true },
               " is required to confirm and reserve your spot. Submitting your deposit constitutes acceptance of these Terms of Service.",
             ],
-            "The remaining balance may be paid in full or through installment payments at your own pace, provided all payments are completed by June 8, 2027.",
+            "New enrollments before February 1, 2027 may choose pay in full or a $500 deposit followed by the monthly payments shown at checkout. From February 1 onward, new enrollments must pay in full. All payment-plan balances must be paid by June 8, 2027.",
             "Monthly payments are processed automatically on the same date each month following your deposit.",
             "Failure to maintain your automatic payment schedule may result in forfeiture of your spot and all payments made to date, without refund.",
             [

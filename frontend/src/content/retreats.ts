@@ -21,11 +21,10 @@
 const DOT = " · ";
 
 /**
- * This site's checkout for the Bali Private Room offer, the offer Kajabi sold
- * as /offers/boofdeo2 ($500 retreat deposit, then 9 monthly payments of $556).
+ * Public shared-room checkout. Private rooms are offered individually on request.
  * Internal on purpose: no button on this site sends a visitor to Kajabi.
  */
-export const RETREAT_RESERVE_ROUTE = "/checkout/bali-private-room";
+export const RETREAT_RESERVE_ROUTE = "/checkout/bali-shared-room";
 
 /** The travel insurance provider the page names, by its own link. */
 export const RETREAT_TRAWICK_URL = "https://trawickinternational.com/";
@@ -184,11 +183,11 @@ const FAQS: readonly RetreatFaq[] = [
   },
   {
     q: "What is my room like?",
-    a: "Every attendee enjoys a Private King Suite, your own private bedroom with a king bed and en suite bathroom, your own quiet space to retreat into each night, inside the shared luxury of the full villa. Attending with a friend and hoping to room together? Email retreats@bossclinician.com and ask about our companion room option.",
+    a: "The Shared Luxury Room is $4,500 per person and includes two single beds and an en suite bathroom, shared with one other retreat participant. Each guest reserves their own spot. For roommate preferences or other room questions, email retreats@bossclinician.com.",
   },
   {
     q: "How does the payment plan work?",
-    a: "Reserve your room with a $500 deposit. The remaining $5,000 is divided into monthly payments based on when you enroll. The earlier you reserve, the lower your monthly payment. All balances must be paid in full by June 8, 2027. Payment plans are available for new enrollments before February 1, 2027 only. From February onward, new enrollments require payment in full. Your checkout shows each payment amount and date.",
+    a: "Reserve your room with a $500 deposit. The remaining $4,000 is divided into monthly payments based on when you enroll. The earlier you reserve, the lower your monthly payment. All balances must be paid in full by June 8, 2027. Payment plans are available for new enrollments before February 1, 2027 only. From February onward, new enrollments require payment in full. Your checkout shows each payment amount and date.",
   },
   {
     q: "When is the final payment due?",
@@ -446,11 +445,11 @@ export const retreat = {
     title: "Stop saying next year.",
     titleAccent: "Next year is now.",
     strip: `BALI${DOT}JUNE 15–20, 2027${DOT}LUXURY RETREAT PACKAGE`,
-    price: "Private King Suite $5,500",
+    price: "Shared Luxury Room $4,500 per person",
     terms: `All payments due by June 8, 2027${DOT}See cancellation and refund policy in the FAQ`,
-    includedLabel: "WHAT'S INCLUDED IN YOUR PRIVATE KING SUITE",
+    includedLabel: "WHAT'S INCLUDED IN YOUR SHARED LUXURY ROOM",
     included: [
-      "Your own private bedroom with a king bed and en suite bathroom",
+      "A room with two single beds and an en suite bathroom, shared with one other retreat participant",
       "Five nights in the private villa, with full run of both infinity pools, the yoga shala, gym, and spa facility",
       "All chef-prepared meals, breakfast, brunch, and dinner, daily",
       "Flower bath, in-villa massages and spa day, and a full cabana day at the pool",
@@ -463,14 +462,14 @@ export const retreat = {
     options: [
       {
         label: "PAY IN FULL",
-        amount: "$5,500",
+        amount: "$4,500",
         body: "One payment, reservation complete.",
         primary: true,
       },
       {
         label: "PAYMENT PLAN",
         amount: "$500 Deposit",
-        body: "Reserve with a $500 deposit, then divide the remaining $5,000 into monthly payments based on your enrollment date. The earlier you reserve, the lower your monthly payment. All balances are due by June 8, 2027.",
+        body: "Reserve with a $500 deposit, then divide the remaining $4,000 into monthly payments based on your enrollment date. The earlier you reserve, the lower your monthly payment. All balances are due by June 8, 2027.",
         primary: false,
       },
     ],
