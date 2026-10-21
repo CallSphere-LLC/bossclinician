@@ -540,3 +540,9 @@
 .source-navigation nav ul a { color: #fff !important; }
 .source-navigation nav ul p { color: #9ca3af !important; }
 .source-navigation #mobile-menu { background: #0f1e3a; }
+/* Keep navigation readable when the page theme remaps white text to dark ink. */
+.source-navigation a:not(.sheen-host) { color: #fff !important; }
+.source-navigation a[href="/"] em { background: none !important; color: #e4c28c !important; -webkit-text-fill-color: currentColor; }
+.source-navigation a[href="/"] > span { color: #e4c28c !important; }
+.source-navigation #mobile-menu p { color: #c6cbd4 !important; }
+.source-navigation button[aria-controls="mobile-menu"] span > span { background: #e4c28c !important; }
