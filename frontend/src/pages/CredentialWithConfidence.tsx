@@ -150,7 +150,9 @@ export default function CredentialWithConfidence() {
     );
   }
 
-  const course = request.data;
+  // This page sells the standalone program; bundles still grant course access
+  // but their prices belong on their own sales pages.
+  const course = { ...request.data, offers: request.data.offers.filter(offer => offer.slug === CWC_COURSE_SLUG) };
   const offer = primaryOffer(course.offers);
 
   const schemaInput = {

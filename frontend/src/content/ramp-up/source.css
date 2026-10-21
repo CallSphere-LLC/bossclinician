@@ -12142,3 +12142,9 @@ top:-80px !important;
 .ramp-up-page a[aria-disabled="true"] { pointer-events:none; opacity:.65; }
 .ramp-up-page [data-ramp-buy]:focus-visible, .ramp-up-page summary:focus-visible { outline:3px solid #222; outline-offset:5px; }
 @media(max-width:767px) { .ramp-up-page .ramp-faq summary { font-size:20px; } }
+
+/* Keep the source backgrounds visible beneath its translucent overlays.
+   The surrounding app also has a .section class with an opaque background. */
+.ramp-up-page section.section { background-color: transparent !important; }
+.ramp-up-page { overflow-x: clip !important; overflow-y: visible !important; }
+@media (min-width: 768px) { .ramp-up-page { font-size: 20px; } }
