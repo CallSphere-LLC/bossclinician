@@ -494,8 +494,8 @@ export const clubCheckout = {
   ],
   nbcc: "The Boss Move is approved by NBCC under the program title \"Profitable Private Practices: Training for Clinically-Aligned Private Practices\" for 4 clock hours. Your certificate of completion will carry the approved program title. Boss Clinician, LLC has been approved by NBCC as an Approved Continuing Education Provider, ACEP No. 7998. Programs that do not qualify for NBCC credit are clearly identified. Boss Clinician, LLC is solely responsible for all aspects of the programs. Continuing education credit applies to this course only; coaching calls, community access, and bonus materials do not carry NBCC credit. CE grievance, refund, and cancellation policies are available by request at support@bossclinician.com.",
   refund: {
-    title: "14 Day Refund Policy",
-    body: "You have to take enough risks in life, this program shouldn’t be one of them. Try the program for 14 days, and if you determine it's not for you - just let us know and we’ll be happy to refund your entire purchase.",
+    title: "14-Day Boss Move Guarantee",
+    body: "Complete onboarding, Start Here, Module 01, the Module 01 worksheets, and attend or watch the first coaching call. If you have completed that work and still do not believe the Club is a powerful investment in your practice, submit your completed work within 14 days of enrollment to request a tuition refund under the Boss Move Guarantee. No refunds are provided after 14 days or for change of mind or non-participation.",
     link: { label: "Click here for full details.", to: "/terms" },
   },
   security: {

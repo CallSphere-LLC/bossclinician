@@ -22,6 +22,7 @@ import {
 } from "@/components/course/CoursePriceLabel";
 import CourseSalesPage from "@/components/course/CourseSalesPage";
 import StarterSuiteSalesPage from "@/components/course/StarterSuiteSalesPage";
+import FullyBookedSalesPage from "@/components/course/FullyBookedSalesPage";
 import { parseSalesPage } from "@/components/course/salesPage";
 
 /**
@@ -130,7 +131,10 @@ export default function CourseDetail() {
     );
   }
 
-  const course = request.data;
+  // Standalone pricing only; bundle offers and entitlements remain intact.
+  const course = request.data.slug === "credential-with-confidence"
+    ? { ...request.data, offers: request.data.offers.filter((offer) => offer.slug === "credential-with-confidence") }
+    : request.data;
   // A course with long-form copy in `sales_page` (migration 128) gets the
   // sales layout; everything else keeps the catalogue layout below.
   const salesPage = parseSalesPage((course as { salesPage?: unknown }).salesPage);
@@ -164,7 +168,9 @@ export default function CourseDetail() {
         ]}
       />
 
-      {course.slug === "private-practice-starter-suite" ? (
+      {course.slug === "fully-booked-toolkit" ? (
+        <FullyBookedSalesPage course={course} />
+      ) : course.slug === "private-practice-starter-suite" ? (
         <StarterSuiteSalesPage course={course} />
       ) : salesPage ? (
         <CourseSalesPage course={course} page={salesPage} />
@@ -191,25 +197,6 @@ export default function CourseDetail() {
 
                   {course.subtitle && (
                     <p className="mt-4 text-lg leading-relaxed text-orchid">{course.subtitle}</p>
-                  )}
-
-                  {course.slug === "fully-booked-toolkit" && (
-                    <div className="mt-8">
-                      <p className="mb-3 text-sm leading-relaxed text-orchid">
-                        Watch Yvette’s three-minute introduction to the toolkit.
-                      </p>
-                      <div className="aspect-video overflow-hidden rounded-2xl border border-hairline bg-black shadow-xl">
-                        <iframe
-                          src="https://fast.wistia.net/embed/iframe/v4rhn1rmdu?videoFoam=true"
-                          title="The Fully Booked Therapist Toolkit introduction"
-                          allow="autoplay; fullscreen; picture-in-picture"
-                          allowFullScreen
-                          loading="lazy"
-                          referrerPolicy="strict-origin-when-cross-origin"
-                          className="size-full"
-                        />
-                      </div>
-                    </div>
                   )}
 
                   <div className="mt-6 flex flex-wrap items-center gap-2.5">
@@ -318,33 +305,6 @@ export default function CourseDetail() {
               </div>
             </Container>
           </Section>
-
-          {course.slug === "fully-booked-toolkit" && (
-            <Section className="pb-24" aria-label="Fully Booked Toolkit preview">
-              <Container className="max-w-4xl">
-                <GoldRule />
-                <h2 className="mt-10 font-display text-3xl text-ink">
-                  Tools included in the toolkit
-                </h2>
-                <div className="mt-10 grid gap-5 sm:grid-cols-2">
-                  <GlassCard spotlight={false} interactive={false} className="p-6">
-                    <h3 className="font-display text-xl text-ink">From Profile to Profit</h3>
-                    <p className="mt-3 leading-relaxed text-orchid">
-                      A directory profile guide with steps to improve visibility,
-                      messaging, and how you present your practice online.
-                    </p>
-                  </GlassCard>
-                  <GlassCard spotlight={false} interactive={false} className="p-6">
-                    <h3 className="font-display text-xl text-ink">Client Consultation Call Script</h3>
-                    <p className="mt-3 leading-relaxed text-orchid">
-                      A guided script for consultation calls, including fit,
-                      expectations, and next steps for prospective clients.
-                    </p>
-                  </GlassCard>
-                </div>
-              </Container>
-            </Section>
-          )}
 
           {hasCurriculum && (
             <Section className="pb-24">

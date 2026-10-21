@@ -1000,8 +1000,10 @@ function CheckoutForm({ offer, pricingOption, mode, onAmountChange }: CheckoutFo
                   {wording.nothingDueToday ? "Start with PayPal" : "Pay with PayPal"}
                 </button>
                 <p className="mt-2 text-center text-xs text-orchid-faint">
-                  {recurring
-                    ? "You'll approve the same schedule in PayPal, and can cancel any time from your account."
+                  {billing.pricingType === "payment_plan"
+                    ? "You'll approve the payment-plan schedule in PayPal. Review the enrollment terms for your full payment commitment."
+                    : recurring
+                      ? "You'll approve the same schedule in PayPal, and can cancel any time from your account."
                     : "You'll confirm the payment in PayPal, then come straight back here."}
                   {paypal.sandbox && " PayPal sandbox: use a sandbox buyer account."}
                 </p>
