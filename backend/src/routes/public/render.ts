@@ -47,6 +47,7 @@ const ROUTES: { path: string; load?: Loader }[] = [
       [keys.courseDetail(req.params.slug)]: await loadCourseDetail(req.params.slug),
     }),
   },
+  { path: "/documentationondemand", load: async (_req, keys) => ({ [keys.courseDetail("dos-and-donts-of-clinical-documentation-replay")]: await loadCourseDetail("dos-and-donts-of-clinical-documentation-replay") }) },
   { path: "/partners" },
   {
     path: "/resources",

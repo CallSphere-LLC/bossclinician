@@ -139,6 +139,23 @@ describeDb("Download products lifecycle (integration)", () => {
     fs.unlinkSync(file);
     await blocked('/api/checkout/offer/zz-empty-offer','POST',{email});
   });
+  it("delivers an approved Google resource only while its signed recipient remains entitled", async () => {
+    const target = "https://docs.google.com/document/d/ZZ-approved-resource/copy";
+    const p = (await db.client.query(`INSERT INTO products(slug,title,kind,status) VALUES('zz-google-resource','ZZ Google resource','download','published') RETURNING id`)).rows[0].id;
+    const f = (await db.client.query(`INSERT INTO product_files(product_id,title,storage_path,filename,mime,size_bytes) VALUES($1,'ZZ Resource',$2,'resource','text/uri-list',0) RETURNING id`, [p,target])).rows[0].id;
+    const { assertProductsDeliverable } = await import("../../services/downloadReadiness");
+    await expect(assertProductsDeliverable([p], db.client)).resolves.toBeUndefined();
+    await db.client.query(`INSERT INTO access_grants(member_id,product_id,status,source) VALUES($1,$2,'active','manual')`, [buyerId,p]);
+    expect((await call(`/api/member/downloads/product/${f}/link`,stranger,"POST")).status).toBe(404);
+    const signed = await (await call(`/api/member/downloads/product/${f}/link`,buyer,"POST")).json() as {url:string};
+    const opened = await fetch(new URL(signed.url,base),{redirect:"manual"});
+    expect(opened.status).toBe(302);
+    expect(opened.headers.get("location")).toBe(target);
+    expect(opened.headers.get("cache-control")).toBe("private, no-store");
+    await db.client.query(`UPDATE access_grants SET status='revoked' WHERE member_id=$1 AND product_id=$2`,[buyerId,p]);
+    expect((await fetch(new URL(signed.url,base),{redirect:"manual"})).status).toBe(404);
+  });
+
   it("keeps empty courses readable but blocks purchase until a published lesson exists", async () => {
     const course = (await db.client.query(`INSERT INTO courses(slug,title,published) VALUES('zz-course-readiness','Readiness Course',true) RETURNING id`)).rows[0].id;
     const product = (await db.client.query(`INSERT INTO products(slug,title,kind,course_id,status) VALUES('zz-course-ready','Readiness Course','course',$1,'published') RETURNING id`, [course])).rows[0].id;

@@ -19,7 +19,7 @@ import { MemberApiError, memberRequest } from "@/lib/memberApi";
  *   the server refuses that write anyway (denyImpersonation).
  */
 
-export type SaveStatus = "loading" | "idle" | "saving" | "saved" | "error" | "offline" | "preview" | "readonly";
+export type SaveStatus = "loading" | "idle" | "saving" | "saved" | "error" | "offline" | "preview" | "readonly" | "conflict";
 
 const SAVE_DELAY_MS = 900;
 

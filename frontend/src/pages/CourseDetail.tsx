@@ -53,8 +53,9 @@ function lessonCount(modules: CurriculumModule[]): number {
   return modules.reduce((sum, m) => sum + m.lessons.length, 0);
 }
 
-export default function CourseDetail() {
-  const { slug = "" } = useParams();
+export default function CourseDetail({ slugOverride }: { slugOverride?: string } = {}) {
+  const { slug: routeSlug = "" } = useParams();
+  const slug = slugOverride || routeSlug;
   const { origin } = useHeadContext();
   const reduceMotion = useEntranceMotion();
 

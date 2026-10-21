@@ -1,3 +1,4 @@
+import { isRichEmail, sanitizeRichEmail, richEmailText } from "./richEmail";
 import crypto from "crypto";
 import { z } from "zod";
 import { env } from "../config/env";
@@ -363,6 +364,7 @@ function deliveryLogName(provider: EmailProvider): string {
  * so an inline `<script>` in a body arrives as text.
  */
 export function renderMarkdown(markdown: string): string {
+  if (isRichEmail(markdown)) return sanitizeRichEmail(markdown);
   const inline = (text: string): string =>
     escapeHtml(text)
       .replace(
@@ -417,7 +419,7 @@ export function renderMarkdown(markdown: string): string {
 
 /** Replaces {{firstName}} style tokens. Unknown tokens become empty, never the raw token. */
 export function renderTokens(template: string, values: Record<string, string>): string {
-  return template.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_match, key: string) => values[key] ?? "");
+  return template.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_match, key: string) => isRichEmail(template) ? escapeHtml(values[key] ?? "") : values[key] ?? "");
 }
 
 /* -------------------------------------------------------------------- send */
@@ -679,7 +681,7 @@ export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult>
   }
 
   const headers: Record<string, string> = {};
-  let text = input.text;
+  let text = isRichEmail(input.text) ? richEmailText(input.text) : input.text;
   let html = input.html ?? renderMarkdown(input.text);
 
   // Open and click figures exist because a configuration set subscribes to

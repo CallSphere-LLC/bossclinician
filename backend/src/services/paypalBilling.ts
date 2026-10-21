@@ -631,6 +631,7 @@ async function ensurePaymentPlan(
     email: order.email,
     installmentCents: spec?.recurringCents ?? pricing.recurringCents,
     firstInstallmentCents: spec?.firstCycleCents ?? pricing.firstCents,
+    finalInstallmentCents: spec?.finalInstallmentCents,
     installmentCount: shape.installment_count,
     // The count is set from PayPal's cycles straight after; nothing is
     // credited here on an assumption.

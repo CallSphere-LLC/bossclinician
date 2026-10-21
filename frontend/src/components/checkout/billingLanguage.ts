@@ -122,6 +122,11 @@ export function describeBilling(input: {
       if (!billing.interval || !count || count < 2) break;
       const installment = formatCurrency(billing.installmentCents ?? amountCents, currency);
       const remaining = count - 1;
+      if (billing.balanceDueBy && billing.paymentSchedule?.length) return {
+        badge:"Deposit + payment plan", totalLabel:"Due today", nothingDueToday:false,
+        commitment:`${formatCurrency(billing.depositCents ?? 0,currency)} deposit today; ${remaining} monthly payments. ${formatCurrency(billing.planTotalCents ?? 0,currency)} total.`,
+        detail:billing.paymentSchedule.slice(1).map(p => `${formatDate(p.dueAt)}: ${formatCurrency(p.amountCents,currency)}`).join("; ") + `. All payments due by ${formatDate(billing.balanceDueBy+"T12:00:00Z")}.` + (hasBumps ? " Add-ons are charged once with the deposit." : ""),
+      };
       const planTotal =
         billing.planTotalCents === null ? null : formatCurrency(billing.planTotalCents, currency);
 

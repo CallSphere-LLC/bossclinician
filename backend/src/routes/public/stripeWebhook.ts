@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import type Stripe from "stripe";
+import { ensureDeadlineStripeSchedule } from "../../services/deadlineStripe";
 import type { PoolClient } from "pg";
 import { pool } from "../../db/pool";
 import { asyncHandler } from "../../utils/asyncHandler";
@@ -1289,7 +1290,7 @@ async function startPaymentPlan(input: {
       WHERE o.id = $1`,
     [offerId, input.order.id]
   );
-  const snapshot = await pool.query<{ billing_snapshot: typeof offerRes.rows[0] | null }>("SELECT billing_snapshot FROM orders WHERE id = $1", [input.order.id]);
+  const snapshot = await pool.query<{ billing_snapshot: (typeof offerRes.rows[0] & {final_installment_cents?:number;balance_due_by?:string}) | null }>("SELECT billing_snapshot FROM orders WHERE id = $1", [input.order.id]);
   const offer = snapshot.rows[0]?.billing_snapshot ?? offerRes.rows[0];
 
   const installmentCount = offer?.installment_count ?? input.meta.installmentCount;
@@ -1302,6 +1303,10 @@ async function startPaymentPlan(input: {
 
   const pricing = await planInstallmentPricing(input.order, listCents);
 
+  const fixed = snapshot.rows[0]?.billing_snapshot;
+  if (fixed?.balance_due_by && fixed.final_installment_cents !== undefined) {
+    await ensureDeadlineStripeSchedule(input.stripeSubscriptionId,input.order.id,{...fixed,installment_count:installmentCount,final_installment_cents:fixed.final_installment_cents,balance_due_by:fixed.balance_due_by});
+  }
   return createPaymentPlan({
     orderId: input.order.id,
     offerId,
@@ -1309,6 +1314,7 @@ async function startPaymentPlan(input: {
     email: input.order.email,
     installmentCents: pricing.recurringCents,
     firstInstallmentCents: pricing.firstCents,
+    finalInstallmentCents: fixed?.final_installment_cents,
     installmentCount,
     firstInstallmentPaid: input.collectedCents > 0,
     firstStripeInvoiceId: input.stripeInvoiceId,

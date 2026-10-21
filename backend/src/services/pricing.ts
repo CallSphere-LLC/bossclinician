@@ -24,6 +24,7 @@ export interface PricedOffer {
   pricingType: PricingType;
   amountCents: number;
   depositCents?: number;
+  finalInstallmentCents?: number;
   minAmountCents: number;
   interval: BillingInterval | null;
   intervalCount: number;
@@ -212,7 +213,10 @@ export function paymentPlanTotalCents(offer: PricedOffer): number {
   if (offer.pricingType !== "payment_plan") return baseAmountCents(offer);
   const count = offer.installmentCount ?? 1;
   const deposit = assertCents(offer.depositCents ?? 0, "deposit");
-  return deposit > 0 ? deposit + assertCents(offer.amountCents, "offer amount") * (count - 1) : assertCents(offer.amountCents, "offer amount") * count;
+  if (count < 2) return deposit || assertCents(offer.amountCents, "offer amount");
+  const regular = assertCents(offer.amountCents, "offer amount");
+  const final = assertCents(offer.finalInstallmentCents ?? regular, "final payment");
+  return deposit > 0 ? deposit + regular * Math.max(0,count - 2) + final : regular * (count - 1) + final;
 }
 
 export interface ScheduledInstallment {

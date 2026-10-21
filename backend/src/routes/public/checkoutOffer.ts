@@ -382,6 +382,9 @@ async function ensureRecurringPrice(offer: OfferRow): Promise<string> {
   const price = await stripe().prices.create(params, { idempotencyKey });
 
   const productId = typeof price.product === "string" ? price.product : price.product.id;
+  // Deadline contracts vary by enrollment date. Never pin one shopper's amount
+  // to the option for later shoppers; Stripe's request hash still deduplicates.
+  if (offer.balance_due_by) return price.id;
   if (offer.pricing_option_id) {
     await pool.query(
       `UPDATE offer_pricing_options
@@ -624,7 +627,7 @@ async function createPendingOrder(input: PendingOrderInput): Promise<PendingOrde
     const orderId = orderRes.rows[0].id;
     if (isRecurring(input.offer)) {
       const o = input.offer;
-      await client.query("UPDATE orders SET billing_snapshot = $2::jsonb WHERE id = $1", [orderId, JSON.stringify({ pricing_type: o.pricing_type, amount_cents: o.amount_cents, deposit_cents: o.deposit_cents ?? 0, currency: o.currency, interval: o.interval, interval_count: o.interval_count, installment_count: o.installment_count, trial_days: o.trial_days })]);
+      await client.query("UPDATE orders SET billing_snapshot = $2::jsonb WHERE id = $1", [orderId, JSON.stringify({ pricing_type: o.pricing_type, amount_cents: o.amount_cents, deposit_cents: o.deposit_cents ?? 0, currency: o.currency, interval: o.interval, interval_count: o.interval_count, installment_count: o.installment_count, trial_days: o.trial_days, final_installment_cents:o.final_installment_cents, balance_due_by:o.balance_due_by, payment_schedule:o.payment_schedule })]);
     }
     if (cart) {
       await client.query(`UPDATE orders SET is_cart=true WHERE id=$1`,[orderId]);
@@ -905,6 +908,7 @@ checkoutOfferRouter.post(
               trialDays: offer.trial_days,
               depositCents: offer.deposit_cents ?? 0,
               recurringAmountCents: offer.amount_cents,
+              finalInstallmentCents:offer.final_installment_cents,
               lines: total.lines,
               subtotalCents: total.subtotalCents,
               discountCents: total.discountCents,

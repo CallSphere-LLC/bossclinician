@@ -1,7 +1,7 @@
 import { publicSiteUrl } from "@/lib/siteOrigins";
 import { useEffect, useRef, useState } from "react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import EmailBodyPreview, { emailHtml } from "./emailMarkup";
+import RichEmailEditor, { type RichEmailHandle } from "./RichEmailEditor";
 import {
   Bold,
   Copy,
@@ -22,7 +22,7 @@ import {
   Trash2,
   type LucideIcon,
 } from "lucide-react";
-import { Button, Textarea, selectStyles } from "@/pages/admin/ui/primitives";
+import { Button, selectStyles } from "@/pages/admin/ui/primitives";
 import MediaPickerDialog from "@/components/admin/MediaPickerDialog";
 import type { MediaAsset, MergeTag, MergeTagSource, SavedEmailTemplate } from "@/types/admin";
 import { adminApi } from "@/lib/api";
@@ -163,19 +163,6 @@ function sortTemplates(rows: SavedEmailTemplate[]): SavedEmailTemplate[] {
   return [...rows].sort((a, b) => a.name.localeCompare(b.name));
 }
 
-function insertAt(value: string, start: number, end: number, body: string): TextEdit {
-  const before = value.slice(0, start);
-  const after = value.slice(end);
-  const prefix = before.length > 0 && !before.endsWith("\n\n") ? (before.endsWith("\n") ? "\n" : "\n\n") : "";
-  const suffix = after.length > 0 && !after.startsWith("\n\n") ? (after.startsWith("\n") ? "\n" : "\n\n") : "";
-  const inserted = `${prefix}${body}${suffix}`;
-  return {
-    value: before + inserted + after,
-    selectionStart: start + prefix.length,
-    selectionEnd: start + prefix.length + body.length,
-  };
-}
-
 export default function EmailComposer({
   value,
   onChange,
@@ -194,8 +181,7 @@ export default function EmailComposer({
    */
   source?: MergeTagSource;
 }) {
-  const ref = useRef<HTMLTextAreaElement>(null);
-  const pendingSelection = useRef<[number, number] | null>(null);
+  const ref = useRef<RichEmailHandle>(null);
   const [preview, setPreview] = useState(false);
   const [choosingImage, setChoosingImage] = useState(false);
   /**
@@ -232,43 +218,13 @@ export default function EmailComposer({
     adminApi.savedTemplates().then(setTemplates).catch(() => setTemplates([]));
   }, []);
 
-  useEffect(() => {
-    const range = pendingSelection.current;
-    const el = ref.current;
-    if (!range || !el) return;
-    pendingSelection.current = null;
-    el.focus();
-    el.setSelectionRange(range[0], range[1]);
-  });
-
-  function commit(edit: TextEdit) {
-    pendingSelection.current = [edit.selectionStart, edit.selectionEnd];
-    onChange(edit.value);
-  }
-
   function addBlock(key: string) {
-    if (key === "image") {
-      setChoosingImage(true);
-      return;
-    }
+    if (key === "image") { setChoosingImage(true); return; }
     const block = BLOCKS[key];
-    const el = ref.current;
-    if (!block || !el) return;
-    commit(insertAt(el.value, el.selectionStart, el.selectionEnd, block.body));
+    if (block) ref.current?.insert(emailHtml(block.body));
   }
 
-  /** Drops a merge tag in at the caret, which is where she is looking. */
-  function addMergeTag(token: string) {
-    const el = ref.current;
-    if (!el) return;
-    const before = el.value.slice(0, el.selectionStart);
-    const after = el.value.slice(el.selectionEnd);
-    commit({
-      value: before + token + after,
-      selectionStart: before.length + token.length,
-      selectionEnd: before.length + token.length,
-    });
-  }
+  function addMergeTag(token: string) { ref.current?.insertText(token); }
 
   /**
    * Puts a template's body into the composer.
@@ -328,13 +284,11 @@ export default function EmailComposer({
   }
 
   function addImage(asset: MediaAsset) {
-    const el = ref.current;
-    if (!el) return;
-    const source = asset.url.startsWith("/") && typeof window !== "undefined"
-      ? publicSiteUrl(asset.url)
-      : asset.url;
-    const alt = (asset.title || asset.originalName || "Image").replace(/[\[\]]/g, "");
-    commit(insertAt(el.value, el.selectionStart, el.selectionEnd, `![${alt}](${source})`));
+    const url = asset.url.startsWith("/") ? publicSiteUrl(asset.url) : asset.url;
+    const image = document.createElement("img");
+    image.src = url;
+    image.alt = asset.title || asset.originalName || "Image";
+    ref.current?.insert(image.outerHTML);
   }
 
   return (
@@ -580,14 +534,13 @@ export default function EmailComposer({
               size="iconSm"
               title={label}
               aria-label={label}
-              onClick={() => {
-                const el = ref.current;
-                if (el) commit(applyEmailFormat(id, el.value, el.selectionStart, el.selectionEnd));
-              }}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => ref.current?.format(id)}
             >
               <Icon />
             </Button>
           ))}
+        {!preview && <Button type="button" variant="secondary" size="sm" onClick={() => setChoosingImage(true)}><Image />Image / GIF</Button>}
         {!preview && (
           <label className="ml-1">
             <span className="sr-only">Add a content block</span>
@@ -698,28 +651,15 @@ export default function EmailComposer({
           </p>
         <div
           className={cn(
-            "prose-boss min-h-[14rem] rounded-xl border border-hairline bg-white/[0.03] p-4",
+            "min-h-[14rem] rounded-xl",
             previewWidthClass(device),
           )}
         >
-          {value.trim() ? (
-            <ReactMarkdown
-              remarkPlugins={[remarkGfm]}
-              components={{
-                a: ({ title, ...props }) => title === "button"
-                  ? <a {...props} className="inline-block rounded-lg bg-plum px-5 py-3 font-semibold text-white no-underline" />
-                  : <a {...props} />,
-              }}
-            >
-              {value}
-            </ReactMarkdown>
-          ) : (
-            <p className="text-sm text-ink-soft">Nothing written yet — switch to Write and start typing.</p>
-          )}
+          <EmailBodyPreview value={value} />
         </div>
         </div>
       ) : (
-        <Textarea ref={ref} rows={rows} value={value} placeholder={placeholder} onChange={(event) => onChange(event.target.value)} />
+        <RichEmailEditor ref={ref} rows={rows} value={value} placeholder={placeholder} onChange={onChange} />
       )}
     </div>
     <MediaPickerDialog open={choosingImage} onOpenChange={setChoosingImage} onSelect={addImage} />

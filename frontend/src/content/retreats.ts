@@ -188,7 +188,7 @@ const FAQS: readonly RetreatFaq[] = [
   },
   {
     q: "How does the payment plan work?",
-    a: "Reserve your room with a $500 deposit. The remaining $5,000 is divided into monthly payments based on when you enroll. The earlier you reserve, the lower your monthly payment. All balances must be paid in full by June 8, 2027. Deposit payment plans are being finalized; pay-in-full reservations are available now.",
+    a: "Reserve your room with a $500 deposit. The remaining $5,000 is divided into monthly payments based on when you enroll. The earlier you reserve, the lower your monthly payment. All balances must be paid in full by June 8, 2027. Payment plans are available for new enrollments before February 1, 2027 only. From February onward, new enrollments require payment in full. Your checkout shows each payment amount and date.",
   },
   {
     q: "When is the final payment due?",
@@ -475,7 +475,7 @@ export const retreat = {
       },
     ],
     cta: "RESERVE YOUR PLACE",
-    ctaNote: "Pay-in-full reservations are available now. Deposit payment plans are being finalized.",
+    ctaNote: "Choose pay in full or a $500 deposit with monthly payments. New payment plans close February 1, 2027; all balances are due by June 8, 2027.",
     scarcity: `RESERVE BEFORE SPOTS CLOSE${DOT}LIMITED TO 12 WOMEN`,
     insurance:
       "Travel insurance is strongly recommended. You are welcome to choose any provider that meets your needs. For convenience, you can view options from Trawick International below.",

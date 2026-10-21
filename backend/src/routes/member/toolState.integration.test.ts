@@ -86,14 +86,14 @@ describeDb("Boardroom dashboard isolation (integration)", () => {
     await db?.drop();
   });
 
-  async function request(path: string, token?: string, state?: object) {
+  async function request(path: string, token?: string, state?: object, revision?: number) {
     const response = await fetch(`${baseUrl}${path}`, {
       method: state ? "PUT" : "GET",
       headers: {
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...(state ? { "Content-Type": "application/json" } : {}),
       },
-      ...(state ? { body: JSON.stringify({ state }) } : {}),
+      ...(state ? { body: JSON.stringify({ state, revision }) } : {}),
     });
     return { status: response.status, body: await response.json() as Record<string, unknown> };
   }
@@ -147,5 +147,24 @@ describeDb("Boardroom dashboard isolation (integration)", () => {
     const token = signToken({ sub: owner.id, email: "admin@test.invalid", impersonatedBy: 1 });
     expect((await request(toolPath, token, { revenue: 1 })).status).toBe(403);
     expect((await request(toolPath, owner.token)).body.state).toEqual({ revenue: 1234, memberId: peer.id });
+  });
+
+  it("saves the full Growth dashboard privately across devices and rejects stale writes", async () => {
+    await client.query("UPDATE course_lessons SET tool_key='practice-elevation-dashboard' WHERE tool_key='boardroom-ceo-dashboard'");
+    const path = "/api/member/tool-state/practice-elevation-dashboard";
+    expect((await request(path, owner.token, {cycle:1})).status).toBe(409);
+    const start = await request(path, owner.token);
+    expect(start.body.revision).toBe(0);
+    const state = {cycle:1, metrics:{collectionsGoal:10000}, goals:["Private goal"], workspaces:{0:{findings:"Owner-only findings"}}, coaching:{question:"My question"}, history:[]};
+    const first = await request(path, owner.token, state, 0);
+    expect(first.status).toBe(200);
+    expect(first.body.revision).toBe(1);
+    expect((await request(path, owner.token)).body.state).toEqual(state);
+    const competing = await Promise.all([request(path, owner.token, {...state,cycle:2},1),request(path,owner.token,{...state,cycle:3},1)]);
+    expect(competing.map(r=>r.status).sort()).toEqual([200,409]);
+    expect((await request(path,owner.token)).body.revision).toBe(2);
+    expect((await request(path,outsider.token)).status).toBe(404);
+    const impersonated = signToken({sub:owner.id,email:"admin@test.invalid",impersonatedBy:1});
+    expect((await request(path,impersonated,{cycle:99},2)).status).toBe(403);
   });
 });

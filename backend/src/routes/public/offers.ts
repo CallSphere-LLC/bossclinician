@@ -10,6 +10,7 @@ import { optionalMember } from "../../middleware/memberAuth";
 import { listMemberProducts } from "../../services/access";
 import { validateCoupon, type ValidatedCoupon } from "../../services/coupons";
 import { formatAmount } from "../../utils/money";
+import { deadlinePlan } from "../../services/deadlinePlan";
 import {
   computeOrderTotal,
   paymentPlanTotalCents,
@@ -69,6 +70,10 @@ export interface OfferRow {
   /** Present when the price was overlaid from an additional checkout option. */
   pricing_option_id?: number | null;
   pricing_label?: string;
+  plan_total_cents?: number | null;
+  balance_due_by?: string | null;
+  final_installment_cents?: number;
+  payment_schedule?: {amountCents:number;dueAt:string}[];
 }
 
 const OFFER_COLUMNS = `id, title, slug, description, checkout_headline, thumbnail_url,
@@ -127,6 +132,7 @@ export function toPricedOffer(offer: OfferRow): PricedOffer {
     pricingType: offer.pricing_type,
     amountCents: offer.amount_cents,
     depositCents: offer.deposit_cents ?? 0,
+    finalInstallmentCents: offer.final_installment_cents,
     minAmountCents: offer.min_amount_cents,
     interval: offer.interval,
     intervalCount: offer.interval_count,
@@ -155,11 +161,15 @@ export interface OfferPricingOptionRow {
   stripe_price_id: string | null;
   stripe_product_id: string | null;
   sort: number;
+  plan_total_cents?: number | null;
+  balance_due_by?: string | null;
+  final_installment_cents?: number;
+  payment_schedule?: {amountCents:number;dueAt:string}[];
 }
 
 const PRICING_OPTION_COLUMNS = `id, offer_id, label, pricing_type, amount_cents, deposit_cents, sales_start_at, sales_end_at,
   min_amount_cents, currency, interval, interval_count, installment_count,
-  trial_days, recommended, active, stripe_price_id, stripe_product_id, sort`;
+  trial_days, recommended, active, stripe_price_id, stripe_product_id, sort, plan_total_cents, balance_due_by::text`;
 
 export async function loadOfferPricingOptions(
   offerId: number,
@@ -174,7 +184,13 @@ export async function loadOfferPricingOptions(
       ORDER BY sort, id`,
     [offerId],
   );
-  return result.rows;
+  return result.rows.map(option => {
+    if (!option.plan_total_cents || !option.balance_due_by) return option;
+    const plan = deadlinePlan(option.plan_total_cents, option.deposit_cents ?? 0, option.balance_due_by, new Date());
+    return {...option, amount_cents:plan.amountCents, installment_count:plan.installmentCount,
+      final_installment_cents:plan.finalInstallmentCents, payment_schedule:plan.schedule,
+      stripe_price_id:null, label:`$${((option.deposit_cents ?? 0)/100).toFixed(2)} deposit + monthly payments (paid by ${option.balance_due_by})`};
+  });
 }
 
 function optionOverlay(offer: OfferRow, option: OfferPricingOptionRow): OfferRow {
@@ -195,6 +211,10 @@ function optionOverlay(offer: OfferRow, option: OfferPricingOptionRow): OfferRow
     stripe_product_id: option.stripe_product_id,
     pricing_option_id: option.id,
     pricing_label: option.label,
+    plan_total_cents: option.plan_total_cents,
+    balance_due_by: option.balance_due_by,
+    final_installment_cents: option.final_installment_cents,
+    payment_schedule: option.payment_schedule,
   };
 }
 
@@ -552,6 +572,9 @@ export function billingToJson(offer: OfferRow, priced: PricedOffer): Record<stri
     installmentCents: offer.pricing_type === "payment_plan" ? offer.amount_cents : null,
     planTotalCents: offer.pricing_type === "payment_plan" ? paymentPlanTotalCents(priced) : null,
     minAmountCents: offer.pricing_type === "pwyw" ? offer.min_amount_cents : null,
+    finalInstallmentCents: offer.final_installment_cents,
+    balanceDueBy: offer.balance_due_by,
+    paymentSchedule: offer.payment_schedule,
   };
 }
 

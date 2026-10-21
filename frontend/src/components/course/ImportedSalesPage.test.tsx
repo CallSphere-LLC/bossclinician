@@ -23,10 +23,11 @@ describe("imported sales page purchase boundaries", () => {
       expect(unavailable).toContain('aria-disabled="true"');
     });
   }
-  it("does not present the unsupported installment plan as purchasable", () => {
+  it("offers Profile to Profit only as one payment", () => {
     const html=render(fixture(slugs[2]));
-    expect(html).toContain("Payment plan currently unavailable");
-    expect(html).toContain("Please use the one-time payment option.");
+    expect(html).not.toContain("2 MONTHLY PAYMENTS");
+    expect(html).not.toContain("$50");
+    expect(html).toContain("ONE TIME PAYMENT");
   });
   it("bundles static local assets with scoped styling and preserved source sections", () => {
     for(const name of ["doctor","protection","profile"]){

@@ -140,6 +140,12 @@ describe('PayPal installments paid', () => {
 });
 
 describe("deposit plans", () => {
+ it("keeps the rounded final payment separate and collects exactly 5500",()=>{
+  const spec=buildPayPalPlanSpec({...input({amountCents:71428,depositCents:50000,installmentCount:8}),finalInstallmentCents:71432});
+  expect(spec.billingCycles.map(c=>[c.tenure_type,c.total_cycles,c.pricing_scheme?.fixed_price.value])).toEqual([["TRIAL",1,"500.00"],["TRIAL",6,"714.28"],["REGULAR",1,"714.32"]]);
+  expect(spec.pricedSequences).toEqual([1,2,3]);
+  expect(spec.finalInstallmentCents).toBe(71432);
+ });
  it("charges 500 now then 5 monthly payments of 1000", () => {
   const spec=buildPayPalPlanSpec(input({amountCents:100000,depositCents:50000,installmentCount:6}));
   expect(spec.billingCycles.map(c=>[c.total_cycles,c.pricing_scheme?.fixed_price.value])).toEqual([[1,"500.00"],[5,"1000.00"]]);

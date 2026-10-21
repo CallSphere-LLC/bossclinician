@@ -97,6 +97,8 @@ type PricingOptionRow = {
   pricing_type: PricingType;
   amount_cents: number;
   deposit_cents: number;
+  plan_total_cents?: number | null;
+  balance_due_by?: string | null;
   sales_start_at?: string | null;
   sales_end_at?: string | null;
   min_amount_cents: number;
@@ -384,6 +386,8 @@ const pricingOptionSchema = z.object({
   depositCents: z.number().int().min(0).max(99_999_999).default(0),
   salesStartAt: z.string().datetime().nullable().default(null),
   salesEndAt: z.string().datetime().nullable().default(null),
+  planTotalCents:z.number().int().min(1).max(99_999_999).nullable().default(null),
+  balanceDueBy:z.iso.date().nullable().default(null),
   minAmountCents: z.number().int().min(0).max(99_999_999).default(0),
   interval: z.enum(["day", "week", "month", "year"]).nullable().default(null),
   intervalCount: z.number().int().min(1).max(365).default(1),
@@ -396,6 +400,10 @@ const pricingOptionSchema = z.object({
 
 function assertPricingOption(input: z.infer<typeof pricingOptionSchema>): void {
   if (input.salesStartAt && input.salesEndAt && new Date(input.salesEndAt).getTime() <= new Date(input.salesStartAt).getTime()) throw badRequest("The closing date must be after the opening date.");
+  if(input.planTotalCents !== null || input.balanceDueBy !== null) {
+    if(!input.planTotalCents || !input.balanceDueBy || input.planTotalCents<=input.depositCents || input.depositCents<=0 || input.pricingType!=="payment_plan" || input.interval!=="month" || input.intervalCount!==1 || input.trialDays!==0) throw badRequest("A deadline plan needs a positive deposit, total above the deposit, payoff date, and monthly billing without a trial.");
+    if(!input.salesEndAt || input.salesEndAt.slice(0,10)>=input.balanceDueBy) throw badRequest("Close new payment-plan enrollment before its payoff date.");
+  }
   const issue = offerPricingIssue(input);
   if (issue) throw issueError(issue);
 }
@@ -431,12 +439,12 @@ adminOffersRouter.post(
       const result = await client.query<PricingOptionRow>(
         `INSERT INTO offer_pricing_options
            (offer_id, label, pricing_type, amount_cents, min_amount_cents, currency,
-            interval, interval_count, installment_count, trial_days, recommended, active, sort, deposit_cents, sales_start_at, sales_end_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *`,
+            interval, interval_count, installment_count, trial_days, recommended, active, sort, deposit_cents, sales_start_at, sales_end_at, plan_total_cents, balance_due_by)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18) RETURNING *`,
         [offerId, parsed.data.label, parsed.data.pricingType, parsed.data.amountCents,
          parsed.data.minAmountCents, offer.currency, parsed.data.interval,
          parsed.data.intervalCount, parsed.data.installmentCount, parsed.data.trialDays,
-         parsed.data.recommended && parsed.data.active, parsed.data.active, parsed.data.sort, parsed.data.depositCents, parsed.data.salesStartAt, parsed.data.salesEndAt],
+         parsed.data.recommended && parsed.data.active, parsed.data.active, parsed.data.sort, parsed.data.depositCents, parsed.data.salesStartAt, parsed.data.salesEndAt, parsed.data.planTotalCents, parsed.data.balanceDueBy],
       );
       await client.query("COMMIT");
       await recordAdminAction({ req, action: "offer.pricing_option_create", entityType: "offer", entityId: offerId, after: rowToCamel(result.rows[0]) });
@@ -465,6 +473,8 @@ adminOffersRouter.put(
       depositCents: patch.data.depositCents ?? before.deposit_cents ?? 0,
       salesStartAt: patch.data.salesStartAt === undefined ? (before.sales_start_at ? new Date(before.sales_start_at).toISOString() : null) : patch.data.salesStartAt,
       salesEndAt: patch.data.salesEndAt === undefined ? (before.sales_end_at ? new Date(before.sales_end_at).toISOString() : null) : patch.data.salesEndAt,
+      planTotalCents:patch.data.planTotalCents===undefined ? before.plan_total_cents ?? null : patch.data.planTotalCents,
+      balanceDueBy:patch.data.balanceDueBy===undefined ? (before.balance_due_by ? new Date(before.balance_due_by).toISOString().slice(0,10) : null) : patch.data.balanceDueBy,
       minAmountCents: patch.data.minAmountCents ?? before.min_amount_cents,
       interval: patch.data.interval === undefined ? before.interval : patch.data.interval,
       intervalCount: patch.data.intervalCount ?? before.interval_count,
@@ -494,13 +504,13 @@ adminOffersRouter.put(
            label = $3, pricing_type = $4, amount_cents = $5, min_amount_cents = $6,
            interval = $7, interval_count = $8, installment_count = $9, trial_days = $10,
            recommended = $11, active = $12, sort = $13,
-           deposit_cents = $15, sales_start_at = $16, sales_end_at = $17,
+           deposit_cents = $15, sales_start_at = $16, sales_end_at = $17, plan_total_cents=$18, balance_due_by=$19,
            stripe_price_id = CASE WHEN $14 THEN NULL ELSE stripe_price_id END,
            updated_at = now()
          WHERE id = $1 AND offer_id = $2 RETURNING *`,
         [optionId, offerId, next.label, next.pricingType, next.amountCents, next.minAmountCents,
          next.interval, next.intervalCount, next.installmentCount, next.trialDays,
-         next.recommended && next.active, next.active, next.sort, repriced, next.depositCents, next.salesStartAt, next.salesEndAt],
+         next.recommended && next.active, next.active, next.sort, repriced, next.depositCents, next.salesStartAt, next.salesEndAt, next.planTotalCents, next.balanceDueBy],
       );
       await client.query("COMMIT");
       await recordAdminAction({ req, action: "offer.pricing_option_update", entityType: "offer", entityId: offerId, before: rowToCamel(before), after: rowToCamel(result.rows[0]) });
@@ -1082,9 +1092,9 @@ adminOffersRouter.post(
       await client.query(
         `INSERT INTO offer_pricing_options
            (offer_id, label, pricing_type, amount_cents, min_amount_cents, currency,
-            interval, interval_count, installment_count, trial_days, recommended, active, sort, deposit_cents, sales_start_at, sales_end_at)
+            interval, interval_count, installment_count, trial_days, recommended, active, sort, deposit_cents, sales_start_at, sales_end_at, plan_total_cents, balance_due_by)
          SELECT $2, label, pricing_type, amount_cents, min_amount_cents, currency,
-                interval, interval_count, installment_count, trial_days, recommended, active, sort, deposit_cents, sales_start_at, sales_end_at
+                interval, interval_count, installment_count, trial_days, recommended, active, sort, deposit_cents, sales_start_at, sales_end_at, plan_total_cents, balance_due_by
            FROM offer_pricing_options WHERE offer_id = $1`,
         [id, created.id],
       );

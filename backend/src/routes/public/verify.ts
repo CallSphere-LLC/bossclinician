@@ -1,3 +1,4 @@
+import { externalResourceUrl } from "../../services/externalResource";
 import { usesS3Media, mediaStore, serveStoredMedia } from "../../services/objectStorage";
 import fs from "fs";
 import { Router } from "express";
@@ -202,6 +203,14 @@ verifyRouter.get(
     }
 
     const file = await loadEntitledFile(payload.memberId, kind, payload.fileId);
+    const external = externalResourceUrl(file.storagePath);
+    if (external) {
+      await recordDownload({kind, fileId:file.id, memberId:payload.memberId, ip:req.ip ?? "", userAgent:typeof req.headers["user-agent"] === "string" ? req.headers["user-agent"] : ""});
+      res.setHeader("Cache-Control", "private, no-store");
+      res.setHeader("Referrer-Policy", "no-referrer");
+      res.redirect(302, external);
+      return;
+    }
 
     if (usesS3Media()) {
       if (!await mediaStore().head(file.storagePath)) throw notFound(FILE_GONE);

@@ -28,6 +28,8 @@ import {
 const describeDb = hasTestDatabase ? describe : describe.skip;
 
 const WEBHOOK_SECRET = "whsec_integration_test_secret";
+const deadlineProvider = vi.hoisted(()=>({configure:vi.fn(async()=>undefined)}));
+vi.mock("../../services/deadlineStripe",()=>({ensureDeadlineStripeSchedule:deadlineProvider.configure}));
 
 describeDb("stripe webhook (integration)", () => {
   let db: Awaited<ReturnType<typeof createTestDatabase>>;
@@ -768,6 +770,20 @@ describeDb("stripe webhook (integration)", () => {
     expect((await deliver(envelope("evt_weekly_refund", "charge.refunded", refund))).status).toBe(200);
     expect((await client.query(`SELECT refunded_cents FROM orders WHERE id=$1`, [fixture.orderId])).rows[0].refunded_cents).toBe(4800);
     paymentLookup.mockRestore();
+  });
+  it("records exact deadline installments and retries a failed provider schedule without double credit", async () => {
+    const fixture = await planFixture("deadlinecontract");
+    await client.query("UPDATE orders SET subtotal_cents=50000,total_cents=50000,amount_cents=50000,billing_snapshot=$2::jsonb WHERE id=$1",[fixture.orderId,JSON.stringify({pricing_type:"payment_plan",amount_cents:71428,deposit_cents:50000,currency:"usd",interval:"month",interval_count:1,installment_count:8,trial_days:0,final_installment_cents:71432,balance_due_by:"2027-06-08"})]);
+    await client.query("INSERT INTO order_items(order_id,title,kind,quantity,unit_cents,amount_cents) VALUES($1,'Deposit','offer',1,50000,50000)",[fixture.orderId]);
+    const invoice={...fixture.openingInvoice,amount_due:50000,amount_paid:50000};
+    deadlineProvider.configure.mockRejectedValueOnce(new Error("Temporary provider error"));
+    expect((await deliver(envelope("evt_deadline_contract","invoice.paid",invoice))).status).toBe(500);
+    expect((await deliver(envelope("evt_deadline_contract","invoice.paid",invoice))).status).toBe(200);
+    const amounts=(await client.query("SELECT i.amount_cents FROM payment_plan_installments i JOIN payment_plans p ON p.id=i.payment_plan_id WHERE p.order_id=$1 ORDER BY i.sequence",[fixture.orderId])).rows.map(r=>r.amount_cents);
+    expect(amounts).toEqual([50000,71428,71428,71428,71428,71428,71428,71432]);
+    expect(amounts.reduce((a,b)=>a+b,0)).toBe(550000);
+    expect((await deliver(envelope("evt_deadline_replay","invoice.paid",invoice))).status).toBe(200);
+    expect((await planState(fixture.orderId))?.installmentsPaid).toBe(1);
   });
   it("keeps the purchased deposit schedule when the offer changes before its webhook", async () => {
     const fixture = await planFixture("depositsnapshot");

@@ -78,6 +78,26 @@ vi.mock("../../stripe/client", () => ({stripe:()=>provider}));
   const detail=await request("/admin/"+r.data.id);
   expect(detail.data.pricingOptions[0]).toMatchObject({depositCents:50000,amountCents:83400,installmentCount:7,salesEndAt:expect.any(String)});
  });
+ it("calculates deadline plans at checkout, freezes exact rounding, and preserves their configuration on copy",async()=>{
+  const year=new Date().getUTCFullYear()+1;
+  const closing=`${year}-02-01T00:00:00Z`, due=`${year}-06-08`;
+  const r=await request("/admin/"+offerId+"/pricing-options",{label:"Deadline plan",pricingType:"payment_plan",amountCents:100000,depositCents:50000,interval:"month",installmentCount:6,planTotalCents:550000,balanceDueBy:due,salesEndAt:closing});
+  expect(r.status,JSON.stringify(r.data)).toBe(201);
+  const id=r.data.id;
+  const view=await request("/api/offers/deposit-test?option="+id);
+  expect(view.status).toBe(200);expect(view.data.billing.planTotalCents).toBe(550000);
+  expect(view.data.billing.paymentSchedule.reduce((s:number,p:{amountCents:number})=>s+p.amountCents,0)).toBe(550000);
+  const checkout=await request("/api/checkout/offer/deposit-test",{email:"deadline@deposit.test",pricingOptionId:id});
+  expect(checkout.status,JSON.stringify(checkout.data)).toBe(201);
+  const snapshot=(await db.client.query("SELECT billing_snapshot FROM orders WHERE email='deadline@deposit.test'")).rows[0].billing_snapshot;
+  expect(snapshot.final_installment_cents).toBe(view.data.billing.finalInstallmentCents);
+  expect(snapshot.balance_due_by).toBe(due);
+  expect((await db.client.query("SELECT stripe_price_id FROM offer_pricing_options WHERE id=$1",[id])).rows[0].stripe_price_id).toBe(null);
+  expect((await request("/admin/"+offerId+"/pricing-options/"+id,{balanceDueBy:due},"PUT")).status).toBe(200);
+  const duplicate=await request("/admin/"+offerId+"/duplicate",{});
+  const copied=(await request("/admin/"+duplicate.data.id)).data.pricingOptions.find((p:{label:string})=>p.label==="Deadline plan");
+  expect(copied.planTotalCents).toBe(550000);expect(copied.balanceDueBy.slice(0,10)).toBe(due);
+ });
  it("supports a base deposit plan and refuses deposits on a one-time price",async()=>{
   expect((await request("/admin/"+offerId,{depositCents:50000},"PUT")).status).toBe(400);
   const r=await request("/admin/"+offerId,{pricingType:"payment_plan",amountCents:100000,depositCents:50000,interval:"month",installmentCount:6},"PUT");

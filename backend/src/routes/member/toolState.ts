@@ -2,7 +2,7 @@ import { Router, type Request } from "express";
 import { ipKeyGenerator, rateLimit } from "express-rate-limit";
 import { z } from "zod";
 import { asyncHandler } from "../../utils/asyncHandler";
-import { badRequest, notFound, unauthorized } from "../../utils/httpError";
+import { badRequest, conflict, notFound, unauthorized } from "../../utils/httpError";
 import { denyImpersonation } from "../../middleware/memberAuth";
 import {
   cleanToolKey,
@@ -63,7 +63,7 @@ memberToolStateRouter.get(
   }),
 );
 
-const saveSchema = z.object({ state: z.unknown() });
+const saveSchema = z.object({ state: z.unknown(), revision: z.number().int().nonnegative().optional() });
 
 memberToolStateRouter.put(
   "/tool-state/:toolKey",
@@ -76,11 +76,13 @@ memberToolStateRouter.put(
     if (problem) throw badRequest(problem);
 
     const toolKey = await allowedToolKey(req);
+    if (toolKey === "practice-elevation-dashboard" && parsed.data.revision === undefined) throw conflict("Please reload this dashboard to update its editor.");
     const saved = await saveToolState(
       currentMemberId(req),
       toolKey,
       parsed.data.state as Record<string, unknown>,
+      parsed.data.revision,
     );
-    res.json({ ok: true, updatedAt: saved.updatedAt });
+    res.json({ ok: true, updatedAt: saved.updatedAt, revision: saved.revision });
   }),
 );

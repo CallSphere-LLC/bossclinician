@@ -405,6 +405,7 @@ export async function createPaymentPlan(input: {
    * therefore differs from the rest of the schedule.
    */
   firstInstallmentCents?: number;
+  finalInstallmentCents?: number;
   installmentCount: number;
   /** Whether the opening invoice actually collected money. */
   firstInstallmentPaid: boolean;
@@ -484,7 +485,7 @@ export async function createPaymentPlan(input: {
       const isFirst = installment.sequence === 1;
       const settled = isFirst && input.firstInstallmentPaid;
       const amountCents =
-        isFirst ? (input.firstInstallmentCents ?? installment.amountCents) : installment.amountCents;
+        isFirst ? (input.firstInstallmentCents ?? installment.amountCents) : installment.sequence === input.installmentCount ? (input.finalInstallmentCents ?? installment.amountCents) : installment.amountCents;
       await client.query(
         `INSERT INTO payment_plan_installments
            (payment_plan_id, sequence, amount_cents, due_at, paid_at, transaction_id,

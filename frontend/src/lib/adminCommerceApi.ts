@@ -368,6 +368,8 @@ export interface OfferPricingOption {
   pricingType: PricingType;
   amountCents: number;
   depositCents?: number;
+  planTotalCents?:number|null;
+  balanceDueBy?:string|null;
   minAmountCents: number;
   currency: string;
   interval: BillingInterval | null;

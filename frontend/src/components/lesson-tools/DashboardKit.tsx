@@ -64,6 +64,7 @@ export function DashboardFrame({
 }
 
 const STATUS_COPY: Record<SaveStatus, string> = {
+  conflict: "Another device saved newer changes. Download your local copy, then reload the saved version.",
   loading: "Loading your saved entries…",
   idle: "Your entries save to your account automatically.",
   saving: "Saving…",

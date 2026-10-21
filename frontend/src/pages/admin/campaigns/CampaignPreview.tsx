@@ -1,5 +1,4 @@
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
+import EmailBodyPreview from "@/components/admin/emailMarkup";
 import { Copy } from "lucide-react";
 import { formatNumber } from "@/lib/format";
 import { Badge, Button } from "@/pages/admin/ui/primitives";
@@ -9,7 +8,6 @@ import {
   campaignKind,
   campaignStatus,
   longDateTime,
-  looksLikeHtml,
   percentOf,
   statusLabelFor,
   type CampaignRecord,
@@ -100,17 +98,8 @@ export default function CampaignPreview({
             <p className="rounded-xl border border-hairline bg-white/[0.03] p-4 text-sm text-ink-soft">
               The message itself didn't come across with this email.
             </p>
-          ) : looksLikeHtml(body) ? (
-            <iframe
-              title={`The message of ${campaign.name || "this email"}`}
-              sandbox=""
-              srcDoc={body}
-              className="h-[32rem] w-full rounded-xl border border-hairline bg-white"
-            />
           ) : (
-            <div className="prose-boss max-h-[32rem] overflow-y-auto rounded-xl border border-hairline bg-white/[0.03] p-4">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{body}</ReactMarkdown>
-            </div>
+            <EmailBodyPreview value={body} title={`The message of ${campaign.name || "this email"}`} />
           )}
         </div>
       )}

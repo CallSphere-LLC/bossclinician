@@ -1317,6 +1317,8 @@ function PriceTab({
 }
 
 interface PricingOptionDraft {
+  planTotal:string;
+  balanceDueBy:string;
   label: string;
   pricingType: PricingType;
   amount: string;
@@ -1341,6 +1343,8 @@ function toLocalDateInput(value?: string | null): string {
 function pricingOptionDraft(option?: OfferPricingOption): PricingOptionDraft {
   return option
     ? {
+        planTotal:option.planTotalCents ? centsToDollars(option.planTotalCents) : "",
+        balanceDueBy:option.balanceDueBy?.slice(0,10) ?? "",
         label: option.label,
         pricingType: option.pricingType,
         amount: centsToDollars(option.amountCents),
@@ -1356,6 +1360,7 @@ function pricingOptionDraft(option?: OfferPricingOption): PricingOptionDraft {
         active: option.active,
       }
     : {
+        planTotal:"",balanceDueBy:"",
         label: "",
         pricingType: "payment_plan",
         amount: "",
@@ -1423,6 +1428,8 @@ function AdditionalPricingOptions({ offer, onChanged, confirm }: {
     const input = {
       label: draft.label.trim(),
       depositCents: dollarsToCents(draft.deposit) ?? 0,
+      planTotalCents:draft.pricingType==="payment_plan" && draft.planTotal ? dollarsToCents(draft.planTotal) : null,
+      balanceDueBy:draft.pricingType==="payment_plan" && draft.balanceDueBy ? draft.balanceDueBy : null,
       salesStartAt: draft.salesStart ? new Date(draft.salesStart).toISOString() : null,
       salesEndAt: draft.salesEnd ? new Date(draft.salesEnd).toISOString() : null,
       pricingType: draft.pricingType,
@@ -1503,7 +1510,7 @@ function AdditionalPricingOptions({ offer, onChanged, confirm }: {
           <div key={option.id} className="flex min-h-12 items-center gap-3 rounded-xl border border-hairline px-4 py-2.5">
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-semibold text-ink">{option.label}</p>
-              <p className="text-xs text-ink-soft">{priceSummary(option)}</p>
+              <p className="text-xs text-ink-soft">{option.balanceDueBy && option.planTotalCents ? `${centsToDollars(option.planTotalCents)} ${option.currency.toUpperCase()} total; monthly payments calculated at enrollment, paid by ${option.balanceDueBy.slice(0,10)}` : priceSummary(option)}</p>
               {(option.salesStartAt || option.salesEndAt) && <p className="text-xs text-ink-soft">Available {option.salesStartAt ? new Date(option.salesStartAt).toLocaleString() : "now"} until {option.salesEndAt ? new Date(option.salesEndAt).toLocaleString() : "no closing date"}</p>}
             </div>
             {option.recommended && <Badge tone="gold">Recommended</Badge>}
@@ -1556,7 +1563,9 @@ function AdditionalPricingOptions({ offer, onChanged, confirm }: {
             <Field label="Deposit today (optional)" hint="Use 0 for equal payments. Regular payments start one billing interval later. No coupons.">
               <MoneyInput value={draft.deposit} onChange={(deposit) => setDraft((current) => ({ ...current, deposit }))} placeholder="500" />
             </Field>
-            <Field label="Number of payments" hint="Include the deposit: a deposit plus 6 regular payments is 7 payments">
+            <Field label="Fixed plan total (optional)" hint="With a payoff date, monthly amounts and payment count are calculated from each enrollment date. The final payment absorbs any rounding."><MoneyInput value={draft.planTotal} onChange={(planTotal)=>setDraft(current=>({...current,planTotal}))} placeholder="5500" /></Field>
+            <Field label="Balance paid by (optional)"><Input type="date" value={draft.balanceDueBy} onChange={e=>setDraft(current=>({...current,balanceDueBy:e.target.value}))} /></Field>
+            <Field label="Number of payments" hint={draft.balanceDueBy ? "Calculated automatically for each enrollment when a fixed total and payoff date are set." : "Include the deposit: a deposit plus 6 regular payments is 7 payments"}>
               <Input type="number" min={2} max={60} value={draft.installmentCount ?? ""} onChange={(e) => setDraft((current) => ({ ...current, installmentCount: installmentInput(e.target.value) }))} />
             </Field>
             </>

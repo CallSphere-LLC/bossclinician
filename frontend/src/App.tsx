@@ -97,6 +97,7 @@ export const PUBLIC_ROUTES: readonly { path: string; Component: RouteComponent }
     Component: lazyRoute(() => import("@/pages/CredentialWithConfidence")),
   },
   // Where 55 of the legacy bossclinician.com product URLs land.
+  { path: "/documentationondemand", Component: lazyRoute(() => import("@/pages/DocumentationOnDemand")) },
   { path: "/courses/:slug", Component: lazyRoute(() => import("@/pages/CourseDetail")) },
   { path: "/partners", Component: lazyRoute(() => import("@/pages/AffiliateSignup")) },
   // The address printed on every certificate and returned as `verifyUrl` by the

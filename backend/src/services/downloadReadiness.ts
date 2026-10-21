@@ -4,6 +4,7 @@ import type { PoolClient } from "pg";
 import { pool } from "../db/pool";
 import { serviceUnavailable } from "../utils/httpError";
 import { resolveStoredFile } from "./signedUrls";
+import { externalResourceUrl } from "./externalResource";
 
 type DB = Pick<PoolClient, "query">;
 
@@ -39,6 +40,9 @@ export async function assertProductsDeliverable(productIds: number[], db: DB = p
   for (const product of rows) {
     let ready = product.paths.length > 0;
     for (const storagePath of product.paths) {
+      // Approved Google copy/view resources are delivered by an entitled redirect,
+      // not an object-store download. The owner verifies their sharing permissions.
+      if (externalResourceUrl(storagePath)) continue;
       if (usesS3Media()) { const object = await mediaStore().head(storagePath); if (!object || object.size <= 0) { ready = false; break; } continue; }
       const file = await resolveStoredFile(storagePath);
       const stat = file ? await fs.stat(file).catch(() => null) : null;

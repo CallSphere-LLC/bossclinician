@@ -1,3 +1,4 @@
+import { conflict } from "../utils/httpError";
 import { pool } from "../db/pool";
 import { hasCourseAccess } from "./access";
 import { loadCourseForMember } from "./curriculum";
@@ -65,31 +66,35 @@ export async function mayUseTool(memberId: number, toolKey: string): Promise<boo
 export interface StoredToolState {
   state: Record<string, unknown> | null;
   updatedAt: string | null;
+  revision: number;
 }
 
 export async function loadToolState(memberId: number, toolKey: string): Promise<StoredToolState> {
-  const result = await pool.query<{ state: Record<string, unknown>; updated_at: Date }>(
-    `SELECT state, updated_at FROM member_tool_state WHERE member_id = $1 AND tool_key = $2`,
+  const result = await pool.query<{ state: Record<string, unknown>; updated_at: Date; revision: number }>(
+    `SELECT state, updated_at, revision FROM member_tool_state WHERE member_id = $1 AND tool_key = $2`,
     [memberId, toolKey],
   );
   const row = result.rows[0];
   return row
-    ? { state: row.state, updatedAt: new Date(row.updated_at).toISOString() }
-    : { state: null, updatedAt: null };
+    ? { state: row.state, updatedAt: new Date(row.updated_at).toISOString(), revision: row.revision }
+    : { state: null, updatedAt: null, revision: 0 };
 }
 
 export async function saveToolState(
   memberId: number,
   toolKey: string,
   state: Record<string, unknown>,
-): Promise<{ updatedAt: string }> {
-  const result = await pool.query<{ updated_at: Date }>(
+  revision?: number,
+): Promise<{ updatedAt: string; revision: number }> {
+  const result = await pool.query<{ updated_at: Date; revision: number }>(
     `INSERT INTO member_tool_state (member_id, tool_key, state)
-     VALUES ($1, $2, $3::jsonb)
+     SELECT $1, $2, $3::jsonb WHERE $4::integer IS NULL OR $4 = 0 OR EXISTS (SELECT 1 FROM member_tool_state WHERE member_id = $1 AND tool_key = $2)
      ON CONFLICT (member_id, tool_key)
-     DO UPDATE SET state = EXCLUDED.state, updated_at = now()
-     RETURNING updated_at`,
-    [memberId, toolKey, JSON.stringify(state)],
+     DO UPDATE SET state = EXCLUDED.state, updated_at = now(), revision = member_tool_state.revision + 1
+     WHERE $4::integer IS NULL OR member_tool_state.revision = $4
+     RETURNING updated_at, revision`,
+    [memberId, toolKey, JSON.stringify(state), revision ?? null],
   );
-  return { updatedAt: new Date(result.rows[0].updated_at).toISOString() };
+  if (!result.rows[0]) throw conflict("This dashboard was updated on another device. Reload the latest saved version before editing.");
+  return { updatedAt: new Date(result.rows[0].updated_at).toISOString(), revision: result.rows[0].revision };
 }

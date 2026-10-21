@@ -939,12 +939,10 @@ export default function Campaigns() {
           const campaign = item.campaign;
           return (
             <RowActions>
-              {item.readOnly ? (
-                <Button size="sm" variant="secondary" onClick={() => setPreviewing(campaign)}>
-                  <Eye />
-                  View
-                </Button>
-              ) : (
+              <Button size="sm" variant="secondary" onClick={() => setPreviewing(campaign)}>
+                <Eye />Preview
+              </Button>
+              {!item.readOnly && (
                 campaign.status !== "sent" &&
                 campaign.status !== "sending" && (
                   <Button size="sm" onClick={() => send(campaign)}>

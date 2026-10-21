@@ -37,6 +37,7 @@ export interface PlanSpecInput {
   trialDays: number;
   depositCents?: number;
   recurringAmountCents?: number;
+  finalInstallmentCents?: number;
   /** The order's priced lines, exactly as computeOrderTotal wrote them. */
   lines: Array<{ kind: string; amountCents: number }>;
   subtotalCents: number;
@@ -55,6 +56,7 @@ export interface PayPalPlanSpec {
   firstCycleCents: number;
   /** Every cycle after that. */
   recurringCents: number;
+  finalInstallmentCents?: number;
   /** What PayPal collects at activation: setup fee plus the first cycle unless there is a free trial. */
   dueAtActivationCents: number;
   /** Cycle sequences that are paid installments (everything but a free trial). */
@@ -140,9 +142,20 @@ export function buildPayPalPlanSpec(input: PlanSpecInput): PayPalPlanSpec {
   });
   pricedSequences.push(regularSequence);
 
+  if (input.finalInstallmentCents !== undefined && input.finalInstallmentCents !== recurringCents) {
+    if (!isPlan || !input.depositCents || input.trialDays || cycles.length !== 2 || input.installmentCount! < 3) throw new PayPalPlanError("Unsupported final installment shape");
+    const regular = cycles[1];
+    regular.tenure_type = "TRIAL";
+    regular.total_cycles -= 1;
+    cycles.push({frequency:frequency(input.interval,intervalCount),tenure_type:"REGULAR",sequence:3,total_cycles:1,pricing_scheme:price(input.finalInstallmentCents)!});
+    pricedSequences.push(3);
+  }
+
   const money = (cents: number) => `$${(cents / 100).toFixed(2)}`;
   const every = `${intervalCount > 1 ? `${intervalCount} ` : ""}${input.interval}${intervalCount > 1 ? "s" : ""}`;
-  const description = ((input.depositCents ?? 0) > 0
+  const description = input.finalInstallmentCents !== undefined && input.finalInstallmentCents !== recurringCents
+    ? `${money(firstCycleCents)} deposit; ${input.installmentCount! - 2} monthly payments of ${money(recurringCents)}; final ${money(input.finalInstallmentCents)}`
+    : ((input.depositCents ?? 0) > 0
     ? money(firstCycleCents) + " deposit, then " + (input.installmentCount! - 1) + " payments of " + money(recurringCents) + " every " + every
     : isPlan
     ? `${input.installmentCount} payments of ${money(recurringCents)} every ${every}`
@@ -166,6 +179,7 @@ export function buildPayPalPlanSpec(input: PlanSpecInput): PayPalPlanSpec {
     setupFeeCents,
     firstCycleCents,
     recurringCents,
+    finalInstallmentCents: input.finalInstallmentCents,
     dueAtActivationCents: setupFeeCents + (input.trialDays > 0 ? 0 : firstCycleCents),
     pricedSequences,
     installmentCount: isPlan ? input.installmentCount : null,

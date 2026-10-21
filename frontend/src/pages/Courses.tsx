@@ -317,7 +317,7 @@ function CourseCard({ course, accent }: { course: Course; accent: Accent }) {
           washed out (QA sheet). The cover is what sells the course, so it now
           ends on a crisp edge: a hairline plus the foil rule. */}
       <Link
-        to={`/courses/${course.slug}`}
+        to={course.slug === "dos-and-donts-of-clinical-documentation-replay" ? "/documentationondemand" : `/courses/${course.slug}`}
         aria-label={`View ${course.title}`}
         className="media-well relative block aspect-[16/10] w-full overflow-hidden border-b border-hairline bg-night-deep"
       >
@@ -336,7 +336,7 @@ function CourseCard({ course, accent }: { course: Course; accent: Accent }) {
 
       <div className="flex flex-1 flex-col px-6 pb-6 pt-5 sm:px-7 sm:pb-7">
         <h3 className="text-balance font-display text-[1.05rem] font-medium leading-[1.32] tracking-[0.04em] text-white sm:text-[1.12rem]">
-          <Link to={`/courses/${course.slug}`} className="hover:text-gold focus-visible:underline">{course.title}</Link>
+          <Link to={course.slug === "dos-and-donts-of-clinical-documentation-replay" ? "/documentationondemand" : `/courses/${course.slug}`} className="hover:text-gold focus-visible:underline">{course.title}</Link>
         </h3>
 
         <p className="mt-2.5 text-pretty text-[0.98rem] font-semibold leading-snug text-lilac">
@@ -379,7 +379,7 @@ function CourseCard({ course, accent }: { course: Course; accent: Accent }) {
           )}
 
           <div className="mt-5">
-            <LuxeButton variant="glass" size="sm" to={`/courses/${course.slug}`} className={CTA_CLASS}>
+            <LuxeButton variant="glass" size="sm" to={course.slug === "dos-and-donts-of-clinical-documentation-replay" ? "/documentationondemand" : `/courses/${course.slug}`} className={CTA_CLASS}>
               View course
             </LuxeButton>
           </div>
