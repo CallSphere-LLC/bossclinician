@@ -1,10 +1,15 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import prototype from "./practice-elevation-v4.html?raw";
+import runtimeUrl from "./practice-elevation-v4-runtime.js?url";
 import { SaveBadge, ActionButton, downloadFile } from "./DashboardKit";
 import { growthDefaults, normaliseGrowth } from "./elevationV4";
 import { useVersionedToolState } from "./useVersionedToolState";
 
 export function PracticeElevationDashboard() {
+  const frameDocument = useMemo(() => {
+    const origin = typeof window === "undefined" ? "https://bossclinician.callsphere.site" : window.location.origin;
+    return prototype.replace("__BC_SCRIPT_ORIGIN__", origin).replace("__BC_RUNTIME__", new URL(runtimeUrl, origin).href);
+  }, []);
   const tool = useVersionedToolState("practice-elevation-dashboard", growthDefaults, normaliseGrowth);
   const frame = useRef<HTMLIFrameElement>(null);
   const lastFromFrame = useRef("");
@@ -36,6 +41,6 @@ export function PracticeElevationDashboard() {
     <SaveBadge status={tool.status} savedAt={tool.savedAt} />
     {tool.status === "conflict" && <div role="alert" className="my-3 flex flex-wrap gap-3 rounded-xl border p-4"><ActionButton onClick={() => downloadFile("practice-elevation-local-copy.json",JSON.stringify(tool.state,null,2),"application/json")}>Download my local copy</ActionButton><ActionButton onClick={() => { if (window.confirm("Load the latest saved version? Download your local copy first if you need to keep these unsaved edits.")) { lastFromFrame.current = ""; void tool.reload(); } }}>Load latest saved version</ActionButton></div>}
     {tool.status === "offline" && <ActionButton onClick={() => void tool.reload()}>Retry loading my dashboard</ActionButton>}
-    {tool.ready && <iframe ref={frame} title="My Practice Elevation Dashboard" sandbox="allow-scripts allow-downloads allow-modals" srcDoc={prototype} onLoad={publish} style={{height}} className="mt-3 w-full rounded-2xl border-0 bg-white" />}
+    {tool.ready && <iframe ref={frame} title="My Practice Elevation Dashboard" sandbox="allow-scripts allow-downloads allow-modals" srcDoc={frameDocument} onLoad={publish} style={{height}} className="mt-3 w-full rounded-2xl border-0 bg-white" />}
   </section>;
 }
