@@ -22,6 +22,7 @@ import {
 } from "@/components/course/CoursePriceLabel";
 import CourseSalesPage from "@/components/course/CourseSalesPage";
 import StarterSuiteSalesPage from "@/components/course/StarterSuiteSalesPage";
+import RampUpSalesPage from "@/components/course/RampUpSalesPage";
 import FullyBookedSalesPage from "@/components/course/FullyBookedSalesPage";
 import { parseSalesPage } from "@/components/course/salesPage";
 
@@ -168,7 +169,9 @@ export default function CourseDetail() {
         ]}
       />
 
-      {course.slug === "fully-booked-toolkit" ? (
+      {course.slug === "ramp-up-rate-formula" ? (
+        <RampUpSalesPage course={course} />
+      ) : course.slug === "fully-booked-toolkit" ? (
         <FullyBookedSalesPage course={course} />
       ) : course.slug === "private-practice-starter-suite" ? (
         <StarterSuiteSalesPage course={course} />
