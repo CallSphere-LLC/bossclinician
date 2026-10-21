@@ -125,3 +125,7 @@ describe("sendOwnerSaleNotification", () => {
     expect(sendMail).not.toHaveBeenCalled();
   });
 });
+
+it("describes a deposit separately from later installments",()=>{
+ expect(planDescription({pricing_type:"payment_plan",amount_cents:100000,deposit_cents:50000,interval:"month",interval_count:1,installment_count:6,trial_days:0},c=>"$"+(c/100))).toBe("Payment plan: $500 deposit, then 5 payments of $1000 every month");
+});

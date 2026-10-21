@@ -30,7 +30,7 @@ adminCommunityPreviewRouter.get("/", asyncHandler(async (req, res) => {
     FROM communities c WHERE c.id=$1`, [communityId])).rows[0];
   if (!community) throw notFound("Community not found");
   const groups = (await pool.query(`SELECT g.*, o.slug AS checkout_slug, o.status AS offer_status,
-    o.pricing_type,o.amount_cents,o.currency,o.interval,o.installment_count,o.trial_days
+    o.pricing_type,o.amount_cents,o.deposit_cents,o.currency,o.interval,o.installment_count,o.trial_days
     FROM community_access_groups g LEFT JOIN offers o ON o.id=g.checkout_offer_id
     WHERE g.community_id=$1 ORDER BY g.sort,g.id`, [communityId])).rows;
   if (typeof group === "number" && !groups.some(g => g.id === group)) throw notFound("Access group not found");
@@ -48,7 +48,7 @@ adminCommunityPreviewRouter.get("/", asyncHandler(async (req, res) => {
   const previewPath = `/admin/community/${communityId}/preview`;
   const href = (slug?: string) => `${previewPath}?group=${group}${slug ? `&channel=${encodeURIComponent(slug)}` : ""}`;
   const groupJson = (g: typeof groups[number]) => ({ id:g.id,name:g.name,description:g.description,
-    checkoutSlug:g.checkout_slug,pricingType:g.pricing_type,amountCents:g.amount_cents,currency:g.currency,
+    checkoutSlug:g.checkout_slug,pricingType:g.pricing_type,amountCents:g.amount_cents,depositCents:g.deposit_cents??0,currency:g.currency,
     interval:g.interval,installmentCount:g.installment_count,trialDays:g.trial_days });
   const overview = {
     community: { id:communityId,slug:community.slug,name:community.name,description:community.description,

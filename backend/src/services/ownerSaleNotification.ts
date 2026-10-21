@@ -68,6 +68,7 @@ export async function saleRecipients(offers: OfferNotifyPrefs[]): Promise<string
 type PricingFacts = {
   pricing_type: string;
   amount_cents: number;
+  deposit_cents?: number;
   interval: string | null;
   interval_count: number;
   installment_count: number | null;
@@ -85,6 +86,7 @@ export function planDescription(p: PricingFacts | null, formatCents: (cents: num
   const trial = p.trial_days > 0 ? ` (${p.trial_days}-day free trial)` : "";
   switch (p.pricing_type) {
     case "payment_plan":
+      if ((p.deposit_cents ?? 0) > 0) return "Payment plan: " + formatCents(p.deposit_cents!) + " deposit, then " + ((p.installment_count ?? 1) - 1) + " payments of " + formatCents(p.amount_cents) + " " + every;
       return `Payment plan: ${p.installment_count ?? "?"} payments of ${formatCents(p.amount_cents)} ${every}`.trim() + trial;
     case "subscription":
       return `Subscription: ${formatCents(p.amount_cents)} ${every}`.trim() + trial;
@@ -108,6 +110,7 @@ type ClaimedOrder = {
   offer_id: number | null;
   course_title: string | null;
   pricing_option_id: number | null;
+  billing_snapshot?: PricingFacts | null;
 };
 
 type OfferFacts = OfferNotifyPrefs & PricingFacts & { id: number; title: string };
@@ -131,14 +134,14 @@ export async function sendOwnerSaleNotification(orderId: number): Promise<{ sent
       `UPDATE orders SET owner_notified_at = now()
         WHERE id = $1 AND owner_notified_at IS NULL
         RETURNING id, email, billing_name, total_cents, currency, coupon_code,
-                  gift_recipient_email, offer_id, course_title, pricing_option_id`,
+                  gift_recipient_email, offer_id, course_title, pricing_option_id, billing_snapshot`,
       [orderId],
     );
     const order = claimed.rows[0];
     if (!order) return { sent: false, to: [], skipped: "already notified" };
 
     const offers = await pool.query<OfferFacts>(
-      `SELECT f.id, f.title, f.pricing_type, f.amount_cents, f.interval, f.interval_count,
+      `SELECT f.id, f.title, f.pricing_type, f.amount_cents, f.deposit_cents, f.interval, f.interval_count,
               f.installment_count, f.trial_days, f.notify_owner_on_sale, f.notify_owner_recipients
          FROM offers f
         WHERE f.id = $2
@@ -156,13 +159,14 @@ export async function sendOwnerSaleNotification(orderId: number): Promise<{ sent
     let pricing: PricingFacts | null = offers.rows[0] ?? null;
     if (order.pricing_option_id !== null) {
       const option = await pool.query<PricingFacts>(
-        `SELECT pricing_type, amount_cents, interval, interval_count, installment_count, trial_days
+        `SELECT pricing_type, amount_cents, deposit_cents, interval, interval_count, installment_count, trial_days
            FROM offer_pricing_options WHERE id = $1`,
         [order.pricing_option_id],
       );
       pricing = option.rows[0] ?? pricing;
     }
 
+    pricing = order.billing_snapshot ?? pricing;
     const titles = offers.rows.map((offer) => offer.title).filter(Boolean);
     const currency = order.currency || "usd";
     const content = ownerSaleNotification({

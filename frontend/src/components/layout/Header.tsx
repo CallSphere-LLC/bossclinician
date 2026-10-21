@@ -1,3 +1,4 @@
+import { scrollToSection } from "@/hooks/useHashScroll";
 import { SiteThemeToggle } from "./SiteThemeToggle";
 import { Fragment, useEffect, useState } from "react";
 import { Link, NavLink, useLocation } from "react-router";
@@ -29,6 +30,10 @@ export function Header({ transparentAtTop = false }: HeaderProps) {
   // live here rather than in the menus themselves.
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const location = useLocation();
+  const findYourPath = () => {
+    setOpen(false);
+    if (location.pathname === "/") scrollToSection("offers", false);
+  };
   const prefersReducedMotion = useReducedMotion();
   const [cartCount, setCartCount] = useState(0);
   // A signed-in member gets their account in place of Log In, on every public
@@ -196,6 +201,7 @@ export function Header({ transparentAtTop = false }: HeaderProps) {
           <div className="hidden xl:block">
             <LuxeButton
               to={headerActions.findYourPath.to}
+              onClick={findYourPath}
               variant="foil"
               size="sm"
               className="whitespace-nowrap"
@@ -288,13 +294,13 @@ export function Header({ transparentAtTop = false }: HeaderProps) {
 
               {/* Work With Me is already the group heading above (it links to
                   the programs page), so the sheet's primary action is the one
-                  the desktop bar carries: Book A Call. */}
+                  the desktop bar carries: Find Your Path. */}
               <LuxeButton
                 to={headerActions.findYourPath.to}
                 variant="foil"
                 size="md"
                 className="mt-6 w-full"
-                onClick={() => setOpen(false)}
+                onClick={findYourPath}
               >
                 {headerActions.findYourPath.label}
               </LuxeButton>

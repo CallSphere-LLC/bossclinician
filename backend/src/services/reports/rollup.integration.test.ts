@@ -273,4 +273,14 @@ describeDb("report rollup (integration)", () => {
       /YYYY-MM-DD/
     );
   });
+  it("totals unequal deposit installments from the ledger", async () => {
+    const plan=(await client.query("INSERT INTO payment_plans(email,installment_cents,installment_count,installments_paid,currency,interval,interval_count,status,created_at,canceled_at) VALUES('deposit@report.test',100000,6,0,'usd','month',1,'canceled',$1,$1) RETURNING id",[morningOf(DAY_ONE)])).rows[0];
+    for(let sequence=1;sequence<=6;sequence++){
+      await client.query("INSERT INTO payment_plan_installments(payment_plan_id,sequence,amount_cents,due_at,status) VALUES($1,$2,$3,$4,'skipped')",[plan.id,sequence,sequence===1?50000:100000,morningOf(DAY_ONE)]);
+    }
+    await rollup.runRollup({from:DAY_ONE,to:DAY_ONE});
+    expect((await cell("new_payment_plans",DAY_ONE))?.cents).toBe(550000);
+    expect((await cell("canceled_payment_plans",DAY_ONE))?.cents).toBe(550000);
+  });
+
 });

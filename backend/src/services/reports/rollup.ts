@@ -417,7 +417,7 @@ const METRICS: MetricSource[] = [
     sql: `
       WITH base AS (
         SELECT ${day("p.created_at")} AS day, p.currency, p.offer_id,
-               (p.installment_cents::bigint * p.installment_count) AS cents
+               COALESCE((SELECT SUM(i.amount_cents)::bigint FROM payment_plan_installments i WHERE i.payment_plan_id=p.id), p.installment_cents::bigint * p.installment_count) AS cents
           FROM payment_plans p
          WHERE ${within("p.created_at")}
       )
@@ -433,7 +433,7 @@ const METRICS: MetricSource[] = [
     sql: `
       WITH base AS (
         SELECT ${day("p.canceled_at")} AS day, p.currency, p.offer_id,
-               (p.installment_cents::bigint *
+               COALESCE((SELECT SUM(i.amount_cents)::bigint FROM payment_plan_installments i WHERE i.payment_plan_id=p.id AND i.status <> 'paid'), p.installment_cents::bigint *
                 GREATEST(p.installment_count - p.installments_paid, 0)) AS cents,
                COALESCE(NULLIF(p.cancel_reason, ''), 'not given') AS reason
           FROM payment_plans p

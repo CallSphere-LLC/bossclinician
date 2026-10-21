@@ -1,3 +1,4 @@
+import { useHashScroll } from "@/hooks/useHashScroll";
 import { Seo } from "@/components/Seo";
 import { useCollection } from "@/hooks/useCollection";
 import { ssrKeys } from "@/ssr/keys";
@@ -28,6 +29,7 @@ import { LuxeFinalCTA } from "@/components/home/luxe/LuxeFinalCTA";
  * what gives a single-hue dark page its rhythm.
  */
 export default function Home() {
+  useHashScroll();
   const { data: testimonials } = useCollection(api.testimonials, fallbackTestimonials, ssrKeys.testimonials());
 
   return (

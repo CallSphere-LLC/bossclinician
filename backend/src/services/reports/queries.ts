@@ -1197,8 +1197,8 @@ export const paymentPlanStatusByOffer: ReportRunner = async () => {
     `SELECT COALESCE(NULLIF(f.title, ''), 'Not linked to an offer') AS label,
             p.status,
             COUNT(*)::int AS count,
-            SUM(p.installment_cents::bigint *
-                GREATEST(p.installment_count - p.installments_paid, 0))::bigint AS cents
+            SUM(COALESCE((SELECT SUM(i.amount_cents)::bigint FROM payment_plan_installments i WHERE i.payment_plan_id=p.id AND i.status <> 'paid'), p.installment_cents::bigint *
+                GREATEST(p.installment_count - p.installments_paid, 0)))::bigint AS cents
        FROM payment_plans p
        LEFT JOIN offers f ON f.id = p.offer_id
       GROUP BY 1, 2
