@@ -326,7 +326,7 @@ export function clearDripSettingsCache(): void {
  *  - drip: N days after access, or a fixed drip date.
  *  - scheduled: Kajabi "Scheduled" — opens at an exact date and time.
  */
-export type LockReason = "previous_incomplete" | "previous_quiz_not_passed" | "drip" | "scheduled";
+export type LockReason = "module_incomplete" | "previous_incomplete" | "previous_quiz_not_passed" | "drip" | "scheduled";
 
 /**
  * The "Require watching the full video" state of one lesson. `required` is false
@@ -409,6 +409,7 @@ interface OutlineRow {
   module_id: number;
   module_title: string;
   module_summary: string;
+  prerequisite_module_ids?: number[];
   module_drip_days: number | null;
   module_drip_date: Date | null;
   lesson_id: number | null;
@@ -459,6 +460,8 @@ const outlineSql = (publishedOnly: boolean): string => `
          m.id       AS module_id,
          m.title    AS module_title,
          m.summary  AS module_summary,
+         ARRAY(SELECT prerequisite_module_id FROM course_module_prerequisites
+               WHERE module_id=m.id ORDER BY prerequisite_module_id) AS prerequisite_module_ids,
          m.drip_days AS module_drip_days,
          m.drip_date AS module_drip_date,
          l.id       AS lesson_id,
@@ -654,6 +657,38 @@ export function buildModules(
         }
       }
       previous = lesson;
+    }
+  }
+
+  // Whole-phase prerequisites apply to every lesson, including previews, and
+  // include ancestors so historical out-of-order completions cannot skip phases.
+  // Use completion facts rather than display order: a later phase may be the
+  // explicit prerequisite of an earlier introduction (PPP Tier 2).
+  const prerequisites = new Map(rows.map(row => [row.module_id, row.prerequisite_module_ids ?? []]));
+  function outstanding(moduleId: number, visiting = new Set<number>()): string | null {
+    if (visiting.has(moduleId)) return "the required course sections";
+    const next = new Set(visiting).add(moduleId);
+    for (const prerequisiteId of prerequisites.get(moduleId) ?? []) {
+      const prerequisite = byId.get(prerequisiteId);
+      if (!prerequisite) return "the required course sections";
+      const ancestor = outstanding(prerequisiteId, next);
+      if (ancestor) return ancestor;
+      if (prerequisite.lessons.some(lesson =>
+        !lesson.completed || (passRequired.has(lesson.id) && !passed.has(lesson.id))
+      )) return prerequisite.title;
+    }
+    return null;
+  }
+  for (const mod of modules) {
+    const missing = outstanding(mod.id);
+    if (!missing) continue;
+    const label = `Complete all lessons in “${missing}” to unlock`;
+    mod.unlocked = false;
+    mod.unlockLabel = mod.unlockLabel ? `${mod.unlockLabel} · ${label}` : label;
+    for (const lesson of mod.lessons) {
+      lesson.unlocked = false;
+      lesson.unlockLabel = lesson.unlockLabel ? `${lesson.unlockLabel} · ${label}` : label;
+      if (!lesson.lockReason) lesson.lockReason = "module_incomplete";
     }
   }
 

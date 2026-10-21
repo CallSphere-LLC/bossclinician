@@ -24,6 +24,8 @@ interface LockedNoticeProps {
 /** The sentence under the headline, for each kind of lock. */
 function explanation(reason: LessonLockReason | null | undefined): string {
   switch (reason) {
+    case "module_incomplete":
+      return "Complete every lesson in the required section, including its assessments, and this section opens automatically.";
     case "previous_incomplete":
       return "This course is taken in order. Finish the lesson before this one and it opens straight away.";
     case "previous_quiz_not_passed":

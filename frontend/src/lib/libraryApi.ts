@@ -95,6 +95,7 @@ export interface LibraryResponse {
  * passed), drip, or a Kajabi-style scheduled publish date and time.
  */
 export type LessonLockReason =
+  | "module_incomplete"
   | "previous_incomplete"
   | "previous_quiz_not_passed"
   | "drip"
