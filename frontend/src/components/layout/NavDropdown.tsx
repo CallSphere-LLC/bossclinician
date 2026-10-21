@@ -198,7 +198,7 @@ export function NavDropdown({ menu, open, onOpenChange, align = "center" }: NavD
         onClick={handleTriggerClick}
         onKeyDown={handleTriggerKeyDown}
         className={cn(
-          "group relative flex items-center gap-[6px] whitespace-nowrap py-1 text-[0.68rem] font-semibold uppercase tracking-[0.18em] transition-colors duration-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold",
+          "group relative flex items-center gap-[6px] whitespace-nowrap py-1 text-[0.75rem] font-medium uppercase tracking-[0.08em] transition-colors duration-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold",
           open || active ? "text-white" : "text-white/55 hover:text-white",
         )}
       >
@@ -243,7 +243,7 @@ export function NavDropdown({ menu, open, onOpenChange, align = "center" }: NavD
               // Theme tokens throughout: `bg-night-raised` turns white on the
               // light theme and `ink`/`orchid-dim` turn dark with it, where
               // `text-white` and a white veil would only be partly remapped.
-              className="relative w-max min-w-[20rem] max-w-[24rem] rounded-2xl border border-white/10 bg-night-raised p-2 shadow-[0_24px_60px_-24px_rgba(0,0,0,0.9)]"
+              className="relative w-[240px] rounded-sm border border-white/10 bg-night-raised p-0 shadow-[0_24px_60px_-24px_rgba(0,0,0,0.9)]"
             >
               <span
                 aria-hidden
@@ -261,20 +261,21 @@ export function NavDropdown({ menu, open, onOpenChange, align = "center" }: NavD
                 {menu.items.map((item) => {
                   const current = pathname === item.to;
                   return (
-                    <li key={item.label}>
+                    <li key={item.label} className="border-b border-white/[0.06] last:border-0">
+                      {item.groupLabel && <p className="px-5 pb-2 pt-4 text-[0.6rem] font-bold uppercase tracking-[0.1em] text-white/45">{item.groupLabel}</p>}
                       <Link
                         to={item.to}
                         aria-current={current ? "page" : undefined}
                         onClick={close}
                         className={cn(
-                          "group flex flex-col gap-0.5 rounded-xl px-4 py-2.5 transition-colors duration-300 ease-luxe hover:bg-ink/[0.05] focus-visible:bg-ink/[0.05] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-gold",
+                          "group flex flex-col gap-0.5 px-5 py-3 transition-colors duration-300 ease-luxe hover:bg-ink/[0.05] focus-visible:bg-ink/[0.05] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-gold",
                           current && "bg-ink/[0.05]",
                         )}
                       >
                         <span className="flex items-center justify-between gap-3">
                           <span
                             className={cn(
-                              "whitespace-nowrap text-[0.86rem] font-semibold tracking-[0.01em] transition-colors duration-300",
+                              "text-[0.75rem] font-medium uppercase tracking-[0.06em] transition-colors duration-300",
                               current ? "text-gold" : "text-ink group-hover:text-gold",
                             )}
                           >
@@ -286,9 +287,7 @@ export function NavDropdown({ menu, open, onOpenChange, align = "center" }: NavD
                             </span>
                           )}
                         </span>
-                        <span className="whitespace-normal text-[0.76rem] leading-snug text-orchid-dim">
-                          {item.description}
-                        </span>
+                        {item.description && <span className="whitespace-normal text-[0.76rem] leading-snug text-orchid-dim">{item.description}</span>}
                       </Link>
                     </li>
                   );

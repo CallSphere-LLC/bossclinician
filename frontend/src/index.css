@@ -531,3 +531,12 @@
 :where(html:not([data-site-theme="light"]) .theme-luxe) :is(.text-white\/35, .text-white\/40, .text-white\/45) {
   color: rgb(255 255 255 / 0.62);
 }
+
+
+/* Source-site navigation stays navy in either page theme. */
+.source-navigation { background: rgba(15, 30, 58, .97) !important; color: #fff; }
+.source-navigation nav[aria-label="Primary"] > a, .source-navigation nav button { color: #fff !important; }
+.source-navigation nav [id] { background: #0f1e3a; }
+.source-navigation nav ul a { color: #fff !important; }
+.source-navigation nav ul p { color: #9ca3af !important; }
+.source-navigation #mobile-menu { background: #0f1e3a; }

@@ -295,6 +295,7 @@ export interface Offer {
   currency: string;
   pricingType: PricingType;
   amountCents: number;
+  depositCents?: number;
   minAmountCents: number;
   interval: BillingInterval | null;
   intervalCount: number;
@@ -311,6 +312,7 @@ export interface Offer {
   accessExpiresAfterDays: number | null;
   sendWelcomeEmail: boolean;
   allowGifting?: boolean;
+  showInCart?: boolean;
   welcomeNextSteps: string;
   createdAt: string;
   updatedAt: string;
@@ -365,6 +367,7 @@ export interface OfferPricingOption {
   label: string;
   pricingType: PricingType;
   amountCents: number;
+  depositCents?: number;
   minAmountCents: number;
   currency: string;
   interval: BillingInterval | null;
@@ -373,6 +376,8 @@ export interface OfferPricingOption {
   trialDays: number;
   recommended: boolean;
   active: boolean;
+  salesStartAt?: string | null;
+  salesEndAt?: string | null;
   sort: number;
 }
 
@@ -388,6 +393,7 @@ export interface OfferInput {
   thumbnailUrl: string;
   pricingType: PricingType;
   amountCents: number;
+  depositCents?: number;
   minAmountCents: number;
   interval: BillingInterval | null;
   intervalCount: number;
@@ -404,6 +410,7 @@ export interface OfferInput {
   accessExpiresAfterDays: number | null;
   sendWelcomeEmail: boolean;
   allowGifting?: boolean;
+  showInCart?: boolean;
   welcomeNextSteps: string;
 }
 
@@ -662,6 +669,7 @@ export type PriceShape = Pick<
   Offer,
   | "pricingType"
   | "amountCents"
+  | "depositCents"
   | "minAmountCents"
   | "interval"
   | "intervalCount"
@@ -699,6 +707,7 @@ export function priceSummary(offer: PriceShape): string {
       const count = offer.installmentCount;
       if (offer.amountCents <= 0 || !offer.interval || !count) return "No price set yet";
       const each = money(offer.amountCents, currency);
+      if ((offer.depositCents ?? 0) > 0) return money(offer.depositCents!, currency) + " deposit, then " + (count - 1) + " payments of " + each + " " + everyPhrase(offer.interval, offer.intervalCount);
       if (offer.intervalCount === 1) {
         return `${count} ${INTERVAL_CADENCE[offer.interval]} payments of ${each}`;
       }
@@ -744,7 +753,9 @@ export function pricePreview(offer: PriceShape): string | null {
       const count = offer.installmentCount;
       if (offer.amountCents <= 0 || !offer.interval || !count) return null;
       const each = money(offer.amountCents, currency);
-      const total = money(offer.amountCents * count, currency);
+      const deposit = offer.depositCents ?? 0;
+      const total = money(deposit > 0 ? deposit + offer.amountCents * (count - 1) : offer.amountCents * count, currency);
+      if (deposit > 0) return "Customers pay a " + money(deposit, currency) + " deposit today, then " + (count - 1) + " payments of " + each + " " + everyPhrase(offer.interval, offer.intervalCount) + ", starting one billing interval from today. Total: " + total + ".";
       const rest = remainingPhrase(offer.interval, offer.intervalCount, count - 1);
       const cadence =
         offer.intervalCount === 1

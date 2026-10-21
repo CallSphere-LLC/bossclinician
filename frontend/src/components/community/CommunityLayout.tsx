@@ -412,6 +412,7 @@ function CommunityNavigation({
               <span className="mt-1 block text-xs text-gold">
                 {group.pricingType === "free"
                   ? "Free access"
+                  : (group.depositCents ?? 0) > 0 ? new Intl.NumberFormat("en-US", {style:"currency",currency:group.currency || "usd"}).format(group.depositCents! / 100) + " deposit, then " + ((group.installmentCount ?? 1) - 1) + " payments of " + new Intl.NumberFormat("en-US", {style:"currency",currency:group.currency || "usd"}).format(group.amountCents / 100) + " / " + group.interval
                   : `${group.pricingType === "payment_plan" && group.installmentCount ? `${group.installmentCount} × ` : ""}${new Intl.NumberFormat("en-US", { style: "currency", currency: group.currency || "usd" }).format(group.amountCents / 100)}${group.pricingType === "subscription" || group.pricingType === "payment_plan" ? ` / ${group.interval}` : ""}${group.pricingType === "subscription" && group.trialDays ? ` · ${group.trialDays}-day free trial` : ""}`}{" "}
                 · View access
               </span>

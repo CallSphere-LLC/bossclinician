@@ -257,8 +257,8 @@ interface OfferShape {
 }
 
 async function loadOrderOfferShape(orderId: number): Promise<OfferShape | null> {
-  const found = await pool.query<OfferShape>(
-    `SELECT COALESCE(p.pricing_type, o.pricing_type) AS pricing_type,
+  const found = await pool.query<OfferShape & { billing_snapshot: OfferShape | null }>(
+    `SELECT r.billing_snapshot, COALESCE(p.pricing_type, o.pricing_type) AS pricing_type,
             COALESCE(p.amount_cents, o.amount_cents) AS amount_cents,
             COALESCE(p.currency, o.currency) AS currency,
             COALESCE(p.interval, o.interval) AS interval,
@@ -271,7 +271,7 @@ async function loadOrderOfferShape(orderId: number): Promise<OfferShape | null> 
       WHERE r.id = $1`,
     [orderId],
   );
-  return found.rows[0] ?? null;
+  return found.rows[0]?.billing_snapshot ?? found.rows[0] ?? null;
 }
 
 /** Records one PayPal subscription payment: ledger row and receipt document. Returns the new transaction id, or null if already recorded. */

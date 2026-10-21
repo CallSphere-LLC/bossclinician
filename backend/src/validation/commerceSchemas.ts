@@ -153,6 +153,7 @@ export function productResourceIssue(kind: ProductKind, resources: ProductResour
 export interface OfferPricingShape {
   pricingType: PricingType;
   amountCents: number;
+  depositCents?: number;
   minAmountCents: number;
   interval: BillingInterval | null;
   installmentCount: number | null;
@@ -167,6 +168,7 @@ export interface OfferPricingShape {
  * right up to the moment a customer takes the free checkout for a $1,997 product.
  */
 export function offerPricingIssue(offer: OfferPricingShape): CommerceIssue | null {
+  if ((offer.depositCents ?? 0) > 0 && offer.pricingType !== "payment_plan") return { field: "depositCents", message: "A deposit is available only with a payment plan." };
   switch (offer.pricingType) {
     case "one_time":
       if (offer.amountCents <= 0) {
@@ -395,6 +397,7 @@ const offerFields = {
 
   pricingType: z.enum(PRICING_TYPES).default("one_time"),
   amountCents: moneyCents.default(0),
+  depositCents: moneyCents.default(0),
   minAmountCents: moneyCents.default(0),
 
   interval: z.enum(BILLING_INTERVALS).nullable().default(null),
@@ -419,6 +422,7 @@ const offerFields = {
   // would push her back to sending it by hand.
   sendWelcomeEmail: z.boolean().default(true),
   allowGifting: z.boolean().default(true),
+  showInCart: z.boolean().default(true),
   welcomeNextSteps: z.string().trim().max(4000).default(""),
 
   stripePriceId: optionalRef(255).default(null),

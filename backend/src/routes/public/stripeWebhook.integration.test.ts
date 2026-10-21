@@ -769,4 +769,18 @@ describeDb("stripe webhook (integration)", () => {
     expect((await client.query(`SELECT refunded_cents FROM orders WHERE id=$1`, [fixture.orderId])).rows[0].refunded_cents).toBe(4800);
     paymentLookup.mockRestore();
   });
+  it("keeps the purchased deposit schedule when the offer changes before its webhook", async () => {
+    const fixture = await planFixture("depositsnapshot");
+    await client.query("UPDATE orders SET subtotal_cents=50000,total_cents=50000,amount_cents=50000,billing_snapshot=$2::jsonb WHERE id=$1", [fixture.orderId, JSON.stringify({pricing_type:"payment_plan",amount_cents:100000,deposit_cents:50000,currency:"usd",interval:"month",interval_count:1,installment_count:6,trial_days:0})]);
+    await client.query("INSERT INTO order_items(order_id,title,kind,quantity,unit_cents,amount_cents) VALUES($1,'Deposit','offer',1,50000,50000)",[fixture.orderId]);
+    await client.query("UPDATE offers SET amount_cents=83400,installment_count=7 WHERE id=(SELECT offer_id FROM orders WHERE id=$1)",[fixture.orderId]);
+    const invoice = {...fixture.openingInvoice,amount_due:50000,amount_paid:50000};
+    expect((await deliver(envelope("evt_deposit_snapshot", "invoice.paid",invoice))).status).toBe(200);
+    const rows=await client.query("SELECT i.amount_cents,i.status FROM payment_plan_installments i JOIN payment_plans p ON p.id=i.payment_plan_id WHERE p.order_id=$1 ORDER BY i.sequence",[fixture.orderId]);
+    expect(rows.rows.map(row=>row.amount_cents)).toEqual([50000,100000,100000,100000,100000,100000]);
+    expect(rows.rows.map(row=>row.status)).toEqual(["paid","scheduled","scheduled","scheduled","scheduled","scheduled"]);
+    expect((await deliver(envelope("evt_deposit_replay", "invoice.paid",invoice))).status).toBe(200);
+    expect((await planState(fixture.orderId))?.installmentsPaid).toBe(1);
+  });
+
 });

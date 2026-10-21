@@ -9,6 +9,7 @@ export interface PublicCoursePricingOption {
   recommended: boolean;
   pricingType: string;
   amountCents: number;
+  depositCents?: number;
   currency: string;
   interval: string | null;
   intervalCount: number;
@@ -27,10 +28,12 @@ async function loadPricingOptions(offerIds: number[]): Promise<Map<number, Publi
   const byOffer = new Map<number, PublicCoursePricingOption[]>();
   if (offerIds.length === 0) return byOffer;
   const result = await pool.query(
-    `SELECT offer_id, id, label, recommended, pricing_type, amount_cents, currency,
+    `SELECT offer_id, id, label, recommended, pricing_type, amount_cents, deposit_cents, currency,
             interval, interval_count, installment_count
        FROM offer_pricing_options
       WHERE offer_id = ANY($1::int[]) AND active = true
+        AND (sales_start_at IS NULL OR sales_start_at <= now())
+        AND (sales_end_at IS NULL OR sales_end_at > now())
       ORDER BY sort, id`,
     [offerIds],
   );
@@ -42,6 +45,7 @@ async function loadPricingOptions(offerIds: number[]): Promise<Map<number, Publi
       recommended: row.recommended,
       pricingType: row.pricing_type,
       amountCents: row.amount_cents,
+      depositCents: row.deposit_cents ?? 0,
       currency: row.currency,
       interval: row.interval,
       intervalCount: row.interval_count,
@@ -55,7 +59,7 @@ async function loadPricingOptions(offerIds: number[]): Promise<Map<number, Publi
 /** One offer/readiness contract for direct SSR loads and client navigation. */
 export async function loadPublicCourseOffers(courseId: number) {
   const offers = await pool.query(
-    `SELECT DISTINCT o.id, o.slug, o.title, o.pricing_type, o.amount_cents, o.currency,
+    `SELECT DISTINCT o.id, o.slug, o.title, o.pricing_type, o.amount_cents, o.deposit_cents, o.currency,
                      o.interval, o.interval_count, o.installment_count, o.checkout_headline
        FROM offers o
        JOIN offer_products op ON op.offer_id = o.id
@@ -84,6 +88,7 @@ export async function loadPublicCourseOffers(courseId: number) {
     title: offer.title,
     pricingType: offer.pricing_type,
     amountCents: offer.amount_cents,
+    depositCents: offer.deposit_cents ?? 0,
     currency: offer.currency,
     interval: offer.interval,
     intervalCount: offer.interval_count,

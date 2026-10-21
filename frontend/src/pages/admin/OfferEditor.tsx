@@ -122,6 +122,7 @@ function blankDraft(): OfferDraft {
     thumbnailUrl: "",
     pricingType: "one_time",
     amountCents: 0,
+    depositCents: 0,
     minAmountCents: 0,
     interval: null,
     intervalCount: 1,
@@ -138,6 +139,7 @@ function blankDraft(): OfferDraft {
     accessExpiresAfterDays: null,
     sendWelcomeEmail: true,
     allowGifting: true,
+    showInCart: true,
     welcomeNextSteps: "",
   };
 }
@@ -151,6 +153,7 @@ function draftFrom(offer: OfferDetail): OfferDraft {
     thumbnailUrl: offer.thumbnailUrl,
     pricingType: offer.pricingType,
     amountCents: offer.amountCents,
+    depositCents: offer.depositCents ?? 0,
     minAmountCents: offer.minAmountCents,
     interval: offer.interval,
     intervalCount: offer.intervalCount,
@@ -167,6 +170,7 @@ function draftFrom(offer: OfferDetail): OfferDraft {
     accessExpiresAfterDays: offer.accessExpiresAfterDays,
     sendWelcomeEmail: offer.sendWelcomeEmail,
     allowGifting: offer.allowGifting !== false,
+    showInCart: offer.showInCart !== false,
     welcomeNextSteps: offer.welcomeNextSteps,
   };
 }
@@ -488,6 +492,7 @@ export default function OfferEditor() {
     if (!draft || pricingType === draft.pricingType) return;
     const base: Partial<OfferDraft> = {
       pricingType,
+      depositCents: 0,
       interval: null,
       intervalCount: 1,
       installmentCount: null,
@@ -1136,6 +1141,8 @@ function PriceTab({
   confirm: Confirm;
 }) {
   const preview = pricePreview({ ...draft, currency });
+  const [depositInput, setDepositInput] = useState(centsToDollars(draft.depositCents ?? 0));
+  useEffect(() => { if ((dollarsToCents(depositInput) ?? 0) !== (draft.depositCents ?? 0)) setDepositInput(centsToDollars(draft.depositCents ?? 0)); }, [draft.depositCents, depositInput]);
 
   return (
     <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_1fr]">
@@ -1193,15 +1200,18 @@ function PriceTab({
             {draft.pricingType === "payment_plan" && (
               <>
                 <Field
-                  label="Each payment"
-                  hint="not the total — for 3 payments of $1,250, type 1250"
+                  label={(draft.depositCents ?? 0) > 0 ? "Each payment after the deposit" : "Each payment"}
+                  hint="Amount of each regular payment"
                   error={errors.amountCents}
                 >
                   <MoneyInput value={amountInput} onChange={onAmountInput} placeholder="1250" />
                 </Field>
+                <Field label="Deposit today (optional)" hint="Use 0 for equal payments. Regular payments start one billing interval later. Coupons are unavailable with a deposit." error={errors.depositCents}>
+                  <MoneyInput value={depositInput} onChange={(raw) => { setDepositInput(raw); update({ depositCents: dollarsToCents(raw) ?? 0 }); }} placeholder="500" />
+                </Field>
                 <Field
                   label="How many payments in total?"
-                  hint="including the one they make today"
+                  hint={(draft.depositCents ?? 0) > 0 ? "Include the deposit: enter 7 for a deposit plus 6 regular payments" : "including the one they make today"}
                   error={errors.installmentCount}
                 >
                   <Input
@@ -1296,6 +1306,10 @@ function PriceTab({
           </Card>
         )}
 
+        <label className="flex items-center gap-3 rounded-xl border border-hairline p-4 text-sm text-ink">
+          <input type="checkbox" checked={draft.showInCart !== false} onChange={(event) => update({ showInCart: event.target.checked })} />
+          Show this offer in the cart catalog (one-time and free offers)
+        </label>
         {offer && <OfferPaymentLinks offer={offer} onChanged={onChanged} confirm={confirm} />}
       </div>
     </div>
@@ -1306,6 +1320,9 @@ interface PricingOptionDraft {
   label: string;
   pricingType: PricingType;
   amount: string;
+  deposit: string;
+  salesStart: string;
+  salesEnd: string;
   minAmount: string;
   interval: BillingInterval | null;
   intervalCount: number;
@@ -1315,12 +1332,21 @@ interface PricingOptionDraft {
   active: boolean;
 }
 
+function toLocalDateInput(value?: string | null): string {
+  if (!value) return "";
+  const date = new Date(value);
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
+}
+
 function pricingOptionDraft(option?: OfferPricingOption): PricingOptionDraft {
   return option
     ? {
         label: option.label,
         pricingType: option.pricingType,
         amount: centsToDollars(option.amountCents),
+        deposit: centsToDollars(option.depositCents ?? 0),
+        salesStart: toLocalDateInput(option.salesStartAt),
+        salesEnd: toLocalDateInput(option.salesEndAt),
         minAmount: centsToDollars(option.minAmountCents),
         interval: option.interval,
         intervalCount: option.intervalCount,
@@ -1333,6 +1359,9 @@ function pricingOptionDraft(option?: OfferPricingOption): PricingOptionDraft {
         label: "",
         pricingType: "payment_plan",
         amount: "",
+        deposit: "",
+        salesStart: "",
+        salesEnd: "",
         minAmount: "",
         interval: "month",
         intervalCount: 1,
@@ -1363,6 +1392,7 @@ function AdditionalPricingOptions({ offer, onChanged, confirm }: {
     setDraft((current) => ({
       ...current,
       pricingType: kind,
+      deposit: kind === "payment_plan" ? current.deposit : "",
       interval: kind === "subscription" || kind === "payment_plan" ? "month" : null,
       intervalCount: 1,
       installmentCount: kind === "payment_plan" ? 3 : null,
@@ -1392,6 +1422,9 @@ function AdditionalPricingOptions({ offer, onChanged, confirm }: {
     }
     const input = {
       label: draft.label.trim(),
+      depositCents: dollarsToCents(draft.deposit) ?? 0,
+      salesStartAt: draft.salesStart ? new Date(draft.salesStart).toISOString() : null,
+      salesEndAt: draft.salesEnd ? new Date(draft.salesEnd).toISOString() : null,
       pricingType: draft.pricingType,
       amountCents,
       minAmountCents,
@@ -1471,6 +1504,7 @@ function AdditionalPricingOptions({ offer, onChanged, confirm }: {
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm font-semibold text-ink">{option.label}</p>
               <p className="text-xs text-ink-soft">{priceSummary(option)}</p>
+              {(option.salesStartAt || option.salesEndAt) && <p className="text-xs text-ink-soft">Available {option.salesStartAt ? new Date(option.salesStartAt).toLocaleString() : "now"} until {option.salesEndAt ? new Date(option.salesEndAt).toLocaleString() : "no closing date"}</p>}
             </div>
             {option.recommended && <Badge tone="gold">Recommended</Badge>}
             {!option.active && <Badge tone="slate">Hidden</Badge>}
@@ -1518,13 +1552,24 @@ function AdditionalPricingOptions({ offer, onChanged, confirm }: {
             />
           )}
           {draft.pricingType === "payment_plan" && (
-            <Field label="Number of payments">
+            <>
+            <Field label="Deposit today (optional)" hint="Use 0 for equal payments. Regular payments start one billing interval later. No coupons.">
+              <MoneyInput value={draft.deposit} onChange={(deposit) => setDraft((current) => ({ ...current, deposit }))} placeholder="500" />
+            </Field>
+            <Field label="Number of payments" hint="Include the deposit: a deposit plus 6 regular payments is 7 payments">
               <Input type="number" min={2} max={60} value={draft.installmentCount ?? ""} onChange={(e) => setDraft((current) => ({ ...current, installmentCount: installmentInput(e.target.value) }))} />
             </Field>
+            </>
           )}
           {draft.pricingType === "subscription" && (
             <Field label="Free trial days"><Input type="number" min={0} max={365} value={draft.trialDays} onChange={(e) => setDraft((current) => ({ ...current, trialDays: Math.min(365, Math.max(0, Number(e.target.value) || 0)) }))} /></Field>
           )}
+          <Field label="Available from (optional)" hint={"Times use your browser timezone: " + Intl.DateTimeFormat().resolvedOptions().timeZone}>
+            <Input type="datetime-local" value={draft.salesStart} onChange={(e) => setDraft((current) => ({ ...current, salesStart: e.target.value }))} />
+          </Field>
+          <Field label="Closes at (optional)" hint="New purchases stop at this time. Existing customers keep their agreed schedule.">
+            <Input type="datetime-local" value={draft.salesEnd} onChange={(e) => setDraft((current) => ({ ...current, salesEnd: e.target.value }))} />
+          </Field>
           <label className="flex min-h-11 cursor-pointer items-center gap-3 rounded-xl border border-hairline px-3 text-sm font-medium text-ink">
             <input type="checkbox" className="size-4 rounded border-hairline text-plum" checked={draft.recommended} onChange={(e) => setDraft((current) => ({ ...current, recommended: e.target.checked }))} />
             Recommend and preselect this option

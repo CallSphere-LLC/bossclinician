@@ -8,6 +8,7 @@ export type NavBadgeTone = "green" | "plum" | "gold";
 /** One row of a header dropdown: a label, and a line saying what is behind it. */
 export interface NavMenuItem extends NavLinkItem {
   description: string;
+  groupLabel?: string;
   /** Optional pill beside the label ("6-Month Program", "Apply"). */
   badge?: string;
   badgeTone?: NavBadgeTone;
@@ -56,6 +57,7 @@ export const bookingLinks = {
 /** The header's account and booking actions, as the source site's header has them. */
 export const headerActions = {
   logIn: { label: "Log In", to: "/login" },
+  findYourPath: { label: "Find Your Path", to: "/#offers" },
   // The chooser rather than one call: it leads with the free Practice
   // Alignment Call and lists every other call she offers beneath it.
   bookACall: {
@@ -72,36 +74,34 @@ export const headerActions = {
 // (pages/Boardroom.tsx) with its application at the foot of it. Until that
 // page existed this row pointed at /work-with-me.
 export const workWithMeMenu: NavMenu = {
-  label: "Work With Me",
-  to: "/work-with-me",
-  description: "Ways to work with Yvette",
+  label: "Learn",
   items: [
     {
       label: "Boss Clinician Club",
       to: "/club",
-      description: "A structured 6-month program designed to help practice owners strengthen operations, leadership, growth, and profitability with ongoing coaching and accountability.",
+      description: "",
+      groupLabel: "Coaching Program",
       badge: "6-Month Program",
       badgeTone: "green",
     },
     {
       label: "Boss Clinician Lounge",
       to: "/lounge",
-      description: "A flexible monthly membership offering ongoing business support, resources, training, and community for clinicians building and growing their practices.",
+      description: "",
+      groupLabel: "Membership",
       badge: "Monthly",
       badgeTone: "plum",
     },
     {
       label: "Boss Clinician Boardroom",
       to: "/boardroom",
-      description: "An advanced mastermind for established practice owners who want higher-level strategy, peer collaboration, accountability, and support with scaling their business.",
+      description: "",
+      groupLabel: "Mastermind",
       badge: "Apply",
       badgeTone: "gold",
     },
   ],
-  footer: [
-    { label: "See all programs", to: "/work-with-me" },
-    { label: headerActions.bookACall.label, to: headerActions.bookACall.to },
-  ],
+
 };
 
 export const exploreMenu: NavMenu = {
@@ -131,7 +131,8 @@ export const exploreMenu: NavMenu = {
 export const nav: NavEntry[] = [
   { label: "About", to: "/about" },
   workWithMeMenu,
-  exploreMenu,
+  { label: "Courses", to: "/courses" },
+  { label: "Resource Hub", to: "/resource-hub" },
   { label: "Retreats", to: "/retreats" },
   { label: "Blog", to: "/blog" },
 ];

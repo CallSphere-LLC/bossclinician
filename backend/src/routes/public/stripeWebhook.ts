@@ -1208,11 +1208,13 @@ export async function planInstallmentPricing(
   order: OrderRow,
   listCents: number
 ): Promise<{ recurringCents: number; firstCents: number }> {
-  const res = await pool.query<{ offer_cents: number; coupon_duration: string | null }>(
+  const res = await pool.query<{ offer_cents: number; coupon_duration: string | null; deposit_cents: number; recurring_cents: number }>(
     `SELECT COALESCE((SELECT SUM(i.amount_cents)::int
                         FROM order_items i
                        WHERE i.order_id = o.id AND i.kind = 'offer'), 0) AS offer_cents,
-            c.duration AS coupon_duration
+            c.duration AS coupon_duration,
+            COALESCE((o.billing_snapshot->>'deposit_cents')::int, 0) AS deposit_cents,
+            COALESCE((o.billing_snapshot->>'amount_cents')::int, 0) AS recurring_cents
        FROM orders o
        LEFT JOIN coupons c ON c.id = o.coupon_id
       WHERE o.id = $1`,
@@ -1234,7 +1236,7 @@ export async function planInstallmentPricing(
 
   return {
     firstCents,
-    recurringCents: row?.coupon_duration === "forever" ? firstCents : offerCents,
+    recurringCents: (row?.deposit_cents ?? 0) > 0 ? row.recurring_cents : row?.coupon_duration === "forever" ? firstCents : offerCents,
   };
 }
 
@@ -1287,7 +1289,8 @@ async function startPaymentPlan(input: {
       WHERE o.id = $1`,
     [offerId, input.order.id]
   );
-  const offer = offerRes.rows[0];
+  const snapshot = await pool.query<{ billing_snapshot: typeof offerRes.rows[0] | null }>("SELECT billing_snapshot FROM orders WHERE id = $1", [input.order.id]);
+  const offer = snapshot.rows[0]?.billing_snapshot ?? offerRes.rows[0];
 
   const installmentCount = offer?.installment_count ?? input.meta.installmentCount;
   const listCents = offer?.amount_cents ?? input.meta.installmentCents;

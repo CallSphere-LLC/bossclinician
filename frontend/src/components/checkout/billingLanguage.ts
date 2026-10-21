@@ -125,6 +125,11 @@ export function describeBilling(input: {
       const planTotal =
         billing.planTotalCents === null ? null : formatCurrency(billing.planTotalCents, currency);
 
+      if ((billing.depositCents ?? 0) > 0) return {
+        badge: "Deposit + payment plan", totalLabel: "Due today", nothingDueToday: false,
+        commitment: formatCurrency(billing.depositCents!, currency) + " deposit today, then " + remaining + " payments of " + installment + " " + describeCadence(billing.interval, billing.intervalCount) + ".",
+        detail: "The first regular payment is due in " + billing.intervalCount + " " + billing.interval + (billing.intervalCount === 1 ? "" : "s") + ". " + (planTotal ? planTotal + " in total. " : "") + (hasBumps ? "Add-ons are charged once, with the deposit." : ""),
+      };
       const detailParts: string[] = [];
       if (planTotal) {
         detailParts.push(

@@ -23,6 +23,7 @@ export interface PricedOffer {
   currency: string;
   pricingType: PricingType;
   amountCents: number;
+  depositCents?: number;
   minAmountCents: number;
   interval: BillingInterval | null;
   intervalCount: number;
@@ -105,9 +106,10 @@ export function baseAmountCents(offer: PricedOffer, pwywAmountCents?: number): n
       // The floor is a floor, not a suggestion.
       return Math.max(chosen, offer.minAmountCents);
     }
+    case "payment_plan":
+      return assertCents(offer.depositCents || offer.amountCents, "first payment");
     case "one_time":
     case "subscription":
-    case "payment_plan":
       return assertCents(offer.amountCents, "offer amount");
     default: {
       // Exhaustiveness: a new pricing_type added to the migration without a
@@ -209,7 +211,8 @@ export function computeOrderTotal(input: ComputeTotalInput): OrderTotal {
 export function paymentPlanTotalCents(offer: PricedOffer): number {
   if (offer.pricingType !== "payment_plan") return baseAmountCents(offer);
   const count = offer.installmentCount ?? 1;
-  return assertCents(offer.amountCents, "offer amount") * count;
+  const deposit = assertCents(offer.depositCents ?? 0, "deposit");
+  return deposit > 0 ? deposit + assertCents(offer.amountCents, "offer amount") * (count - 1) : assertCents(offer.amountCents, "offer amount") * count;
 }
 
 export interface ScheduledInstallment {

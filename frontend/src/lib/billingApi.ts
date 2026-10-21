@@ -452,7 +452,9 @@ export function describeRecurringPrice(
 
 /** "3 payments of $1,250.00, one a month" */
 export function describePlanShape(plan: MemberPaymentPlan): string {
+  const first = plan.installments.find(item => item.sequence === 1);
   const each = formatCurrency(plan.installmentCents, plan.currency);
+  if (first && first.amountCents !== plan.installmentCents) return "First payment " + formatCurrency(first.amountCents, plan.currency) + ", then " + (plan.installmentCount - 1) + " payments of " + each + ", " + describeInterval(plan.interval, plan.intervalCount);
   const cadence =
     plan.intervalCount <= 1
       ? `one ${describeInterval(plan.interval, 1)}`

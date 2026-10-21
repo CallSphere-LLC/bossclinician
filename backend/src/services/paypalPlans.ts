@@ -35,6 +35,8 @@ export interface PlanSpecInput {
   intervalCount: number;
   installmentCount: number | null;
   trialDays: number;
+  depositCents?: number;
+  recurringAmountCents?: number;
   /** The order's priced lines, exactly as computeOrderTotal wrote them. */
   lines: Array<{ kind: string; amountCents: number }>;
   subtotalCents: number;
@@ -109,7 +111,8 @@ export function buildPayPalPlanSpec(input: PlanSpecInput): PayPalPlanSpec {
     ? Math.min(offerCents, Math.round((input.discountCents * offerCents) / input.subtotalCents))
     : 0;
   const firstCycleCents = Math.max(0, offerCents - share);
-  const recurringCents = input.couponDuration === "forever" ? firstCycleCents : offerCents;
+  if ((input.depositCents ?? 0) > 0 && (input.discountCents > 0 || input.trialDays > 0 || !isPlan)) throw new PayPalPlanError("A deposit plan cannot include a coupon or a free trial.");
+  const recurringCents = (input.depositCents ?? 0) > 0 ? (input.recurringAmountCents ?? 0) : input.couponDuration === "forever" ? firstCycleCents : offerCents;
   const setupFeeCents = Math.max(0, bumpCents - Math.max(0, input.discountCents - share));
   if (recurringCents <= 0) throw new PayPalPlanError("This order has nothing to bill each cycle. Please pay by card.");
 
@@ -139,7 +142,9 @@ export function buildPayPalPlanSpec(input: PlanSpecInput): PayPalPlanSpec {
 
   const money = (cents: number) => `$${(cents / 100).toFixed(2)}`;
   const every = `${intervalCount > 1 ? `${intervalCount} ` : ""}${input.interval}${intervalCount > 1 ? "s" : ""}`;
-  const description = (isPlan
+  const description = ((input.depositCents ?? 0) > 0
+    ? money(firstCycleCents) + " deposit, then " + (input.installmentCount! - 1) + " payments of " + money(recurringCents) + " every " + every
+    : isPlan
     ? `${input.installmentCount} payments of ${money(recurringCents)} every ${every}`
     : `${money(recurringCents)} every ${every}`) + (input.trialDays > 0 ? ` after a ${input.trialDays}-day trial` : "");
 

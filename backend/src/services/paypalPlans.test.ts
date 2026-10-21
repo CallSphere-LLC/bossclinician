@@ -30,7 +30,7 @@ function input(offer: Partial<PricedOffer> & { amountCents: number }, extra: {
   return {
     offerId: priced.id, pricingOptionId: 3, title: priced.title, currency: priced.currency,
     pricingType: priced.pricingType, interval: priced.interval, intervalCount: priced.intervalCount,
-    installmentCount: priced.installmentCount, trialDays: priced.trialDays,
+    installmentCount: priced.installmentCount, trialDays: priced.trialDays, depositCents: priced.depositCents, recurringAmountCents: priced.amountCents,
     lines: total.lines, subtotalCents: total.subtotalCents, discountCents: total.discountCents,
     couponDuration: coupon?.duration ?? null,
   };
@@ -137,4 +137,17 @@ describe('PayPal installments paid', () => {
     expect(membershipStatus({ id: 'I', status: 'SUSPENDED' }, spec, true)).toBe('active');
     expect(membershipStatus({ id: 'I', status: 'CANCELLED' }, spec, false)).toBe('canceled');
   });
+});
+
+describe("deposit plans", () => {
+ it("charges 500 now then 5 monthly payments of 1000", () => {
+  const spec=buildPayPalPlanSpec(input({amountCents:100000,depositCents:50000,installmentCount:6}));
+  expect(spec.billingCycles.map(c=>[c.total_cycles,c.pricing_scheme?.fixed_price.value])).toEqual([[1,"500.00"],[5,"1000.00"]]);
+  expect(spec.dueAtActivationCents).toBe(50000);expect(spec.recurringCents).toBe(100000);
+ });
+ it("also supports a deposit larger than each later payment and one-off bumps",()=>{
+  const spec=buildPayPalPlanSpec(input({amountCents:20000,depositCents:50000,installmentCount:4},{bumps:[1000]}));
+  expect(spec.dueAtActivationCents).toBe(51000);expect(spec.recurringCents).toBe(20000);
+  expect(spec.billingCycles.map(c=>c.total_cycles)).toEqual([1,3]);
+ });
 });

@@ -10,7 +10,7 @@ import {addressSchema,totalToJson,billingToJson,toPricedOffer} from "./offers";
 export const cartRouter=Router();
 const limiter=rateLimit({windowMs:60000,max:120,standardHeaders:true,legacyHeaders:false});
 cartRouter.get("/cart/catalog",limiter,asyncHandler(async(req,res)=>{
-  const rows=await pool.query(`SELECT id,slug,title,description,thumbnail_url AS "thumbnailUrl",amount_cents AS "amountCents",currency FROM offers WHERE status='published' AND pricing_type IN ('one_time','free') ORDER BY title LIMIT 200`);
+  const rows=await pool.query(`SELECT id,slug,title,description,thumbnail_url AS "thumbnailUrl",amount_cents AS "amountCents",currency FROM offers WHERE status='published' AND show_in_cart=true AND pricing_type IN ('one_time','free') ORDER BY title LIMIT 200`);
   res.json({offers:rows.rows});
 }));
 cartRouter.post("/cart/quote",limiter,optionalMember,asyncHandler(async(req,res)=>{

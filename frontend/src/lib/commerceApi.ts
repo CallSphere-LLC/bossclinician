@@ -39,6 +39,7 @@ export interface OfferBilling {
   installmentCount: number | null;
   trialDays: number;
   installmentCents: number | null;
+  depositCents?: number;
   planTotalCents: number | null;
   minAmountCents: number | null;
 }

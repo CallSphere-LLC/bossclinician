@@ -34,6 +34,7 @@ export interface CourseOffer {
   title: string;
   pricingType: "one_time" | "subscription" | "payment_plan" | "free" | "pwyw";
   amountCents: number;
+  depositCents?: number;
   currency: string;
   interval: string | null;
   intervalCount: number;
@@ -77,6 +78,7 @@ export function priceLabel(offer: CourseOffer): string {
     }
     case "payment_plan": {
       const count = offer.installmentCount ?? 1;
+      if ((offer.depositCents ?? 0) > 0) return money(offer.depositCents!, offer.currency) + " deposit, then " + (count - 1) + " payments of " + money(offer.amountCents, offer.currency) + " — " + money(offer.depositCents! + offer.amountCents * (count - 1), offer.currency) + " in total";
       const total = money(offer.amountCents * count, offer.currency);
       return `${count} payments of ${money(offer.amountCents, offer.currency)} — ${total} in total`;
     }

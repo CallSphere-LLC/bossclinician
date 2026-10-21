@@ -93,7 +93,7 @@ export function Header({ transparentAtTop = false }: HeaderProps) {
         if (href?.startsWith("/") && !href.startsWith("//")) warmPublicRoute(href.split(/[?#]/)[0]);
       }}
       className={cn(
-        "sticky top-0 z-50 transition-[background-color,box-shadow,backdrop-filter] duration-500 ease-luxe",
+        "source-navigation sticky top-0 z-50 transition-[background-color,box-shadow,backdrop-filter] duration-500 ease-luxe",
         // 0.8 alpha let bright headings ghost through the bar as they scrolled
         // under it. 0.94 keeps the glass read while staying legible on the dark
         // theme; the blur does the rest of the work.
@@ -113,7 +113,7 @@ export function Header({ transparentAtTop = false }: HeaderProps) {
         )}
       />
 
-      <Container className="flex h-20 items-center justify-between gap-3 sm:gap-6">
+      <Container className="flex h-[68px] items-center justify-between gap-3 sm:gap-6">
         <Link
           to="/"
           className="group relative shrink-0 font-display text-[1.32rem] max-[359px]:text-[1.15rem] font-bold leading-[1.05] tracking-[0.03em] text-white"
@@ -154,7 +154,7 @@ export function Header({ transparentAtTop = false }: HeaderProps) {
                 to={item.to}
                 className={({ isActive }) =>
                   cn(
-                    "group relative whitespace-nowrap py-1 text-[0.68rem] font-semibold uppercase tracking-[0.18em] transition-colors duration-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold",
+                    "group relative whitespace-nowrap py-1 text-[0.75rem] font-medium uppercase tracking-[0.08em] transition-colors duration-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold",
                     isActive ? "text-white" : "text-white/55 hover:text-white",
                   )
                 }
@@ -189,18 +189,18 @@ export function Header({ transparentAtTop = false }: HeaderProps) {
               appear twice; the pill used to repeat it. */}
           <Link
             to={accountAction.to}
-            className="hidden whitespace-nowrap py-2 text-[0.68rem] font-semibold uppercase tracking-[0.18em] text-white/55 transition-colors duration-300 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold xl:inline-flex"
+            className="hidden whitespace-nowrap py-2 text-[0.75rem] font-medium uppercase tracking-[0.08em] text-white/55 transition-colors duration-300 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold xl:inline-flex"
           >
             {accountAction.label}
           </Link>
           <div className="hidden xl:block">
             <LuxeButton
-              to={headerActions.bookACall.to}
+              to={headerActions.findYourPath.to}
               variant="foil"
               size="sm"
               className="whitespace-nowrap"
             >
-              {headerActions.bookACall.label}
+              {headerActions.findYourPath.label}
             </LuxeButton>
           </div>
 
@@ -249,7 +249,7 @@ export function Header({ transparentAtTop = false }: HeaderProps) {
             // items: on a near-black surface the eye is dark-adapted, so a 5%
             // leak of near-white text is a ~19/255 ghost against a 6/255 field
             // — obvious, where the same leak on a light theme would vanish.
-            className="absolute inset-x-0 top-full max-h-[calc(100dvh-5rem)] overflow-y-auto border-t border-white/[0.07] bg-night-deep xl:hidden"
+            className="absolute inset-x-0 top-full max-h-[calc(100dvh-68px)] overflow-y-auto border-t border-white/[0.07] bg-night-deep xl:hidden"
           >
             <Container as="nav" aria-label="Mobile" className="flex flex-col py-2">
               {MOBILE_ROWS.map((row, index) => (
@@ -290,13 +290,13 @@ export function Header({ transparentAtTop = false }: HeaderProps) {
                   the programs page), so the sheet's primary action is the one
                   the desktop bar carries: Book A Call. */}
               <LuxeButton
-                to={headerActions.bookACall.to}
+                to={headerActions.findYourPath.to}
                 variant="foil"
                 size="md"
                 className="mt-6 w-full"
                 onClick={() => setOpen(false)}
               >
-                {headerActions.bookACall.label}
+                {headerActions.findYourPath.label}
               </LuxeButton>
               <LuxeButton
                 to={accountAction.to}
@@ -335,12 +335,12 @@ type MobileRow =
 const MOBILE_ROWS: MobileRow[] = nav.flatMap((entry): MobileRow[] =>
   isNavMenu(entry)
     ? [
-        { kind: "heading", key: `group:${entry.label}`, label: entry.label, to: entry.to },
+        { kind: "heading", key: `group:${entry.label}`, label: entry.label === "Learn" ? "Work With Me" : entry.label, to: entry.to },
         ...entry.items.map(
           (item): MobileRow => ({ kind: "link", key: `${entry.label}:${item.to}`, label: item.label, to: item.to }),
         ),
       ]
-    : [{ kind: "link", key: entry.to, label: entry.label, to: entry.to }],
+    : [...(entry.label === "Courses" ? [{kind: "heading" as const, key:"explore",label:"Explore"}] : []), { kind: "link", key: entry.to, label: entry.label, to: entry.to }],
 );
 
 /** Centred, letterspaced caps — the source menu's type, in this site's scale. */

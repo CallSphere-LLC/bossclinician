@@ -59,7 +59,10 @@ export const PAYMENT_LINK_SOURCE = "payment_link";
 export function paymentLinkSupport(price: {
   pricing_type: string;
   amount_cents: number;
+  sales_start_at?: string | null;
+  sales_end_at?: string | null;
 }): { supported: true } | { supported: false; reason: string } {
+  if (price.sales_start_at || price.sales_end_at) return { supported: false, reason: "Scheduled prices use the checkout link so their opening and closing dates are enforced." };
   switch (price.pricing_type) {
     case "one_time":
       return price.amount_cents >= 50

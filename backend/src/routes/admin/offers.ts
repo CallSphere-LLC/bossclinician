@@ -63,6 +63,9 @@ type OfferRow = {
   currency: string;
   pricing_type: PricingType;
   amount_cents: number;
+  deposit_cents: number;
+  sales_start_at?: string | null;
+  sales_end_at?: string | null;
   min_amount_cents: number;
   interval: BillingInterval | null;
   interval_count: number;
@@ -79,6 +82,7 @@ type OfferRow = {
   access_expires_after_days: number | null;
   send_welcome_email: boolean;
   allow_gifting: boolean;
+  show_in_cart: boolean;
   welcome_next_steps: string;
   stripe_price_id: string | null;
   stripe_product_id: string | null;
@@ -92,6 +96,9 @@ type PricingOptionRow = {
   label: string;
   pricing_type: PricingType;
   amount_cents: number;
+  deposit_cents: number;
+  sales_start_at?: string | null;
+  sales_end_at?: string | null;
   min_amount_cents: number;
   currency: string;
   interval: BillingInterval | null;
@@ -108,11 +115,11 @@ type PricingOptionRow = {
 };
 
 const OFFER_COLUMNS = `o.id, o.title, o.internal_title, o.slug, o.status, o.description, o.checkout_headline,
-       o.thumbnail_url, o.currency, o.pricing_type, o.amount_cents, o.min_amount_cents,
+       o.thumbnail_url, o.currency, o.pricing_type, o.amount_cents, o.deposit_cents, o.min_amount_cents,
        o.interval, o.interval_count, o.installment_count, o.trial_days, o.collect_tax,
        o.collect_address, o.collect_phone, o.custom_fields, o.terms_url, o.require_terms,
        o.redirect_url, o.thank_you_page_id, o.access_expires_after_days,
-       o.send_welcome_email, o.welcome_next_steps, o.allow_gifting,
+       o.send_welcome_email, o.welcome_next_steps, o.allow_gifting, o.show_in_cart,
        o.stripe_price_id, o.stripe_product_id, o.created_at, o.updated_at`;
 
 /**
@@ -270,6 +277,7 @@ function pricingShapeOf(row: OfferRow): OfferPricingShape {
   return {
     pricingType: row.pricing_type,
     amountCents: row.amount_cents,
+    depositCents: row.deposit_cents,
     minAmountCents: row.min_amount_cents,
     interval: row.interval,
     installmentCount: row.installment_count,
@@ -373,6 +381,9 @@ const pricingOptionSchema = z.object({
   // The same $999,999.99 cap as the offer itself; the INT column would
   // otherwise answer a larger figure with a 500 instead of a field message.
   amountCents: z.number().int().min(0).max(99_999_999),
+  depositCents: z.number().int().min(0).max(99_999_999).default(0),
+  salesStartAt: z.string().datetime().nullable().default(null),
+  salesEndAt: z.string().datetime().nullable().default(null),
   minAmountCents: z.number().int().min(0).max(99_999_999).default(0),
   interval: z.enum(["day", "week", "month", "year"]).nullable().default(null),
   intervalCount: z.number().int().min(1).max(365).default(1),
@@ -384,6 +395,7 @@ const pricingOptionSchema = z.object({
 });
 
 function assertPricingOption(input: z.infer<typeof pricingOptionSchema>): void {
+  if (input.salesStartAt && input.salesEndAt && new Date(input.salesEndAt).getTime() <= new Date(input.salesStartAt).getTime()) throw badRequest("The closing date must be after the opening date.");
   const issue = offerPricingIssue(input);
   if (issue) throw issueError(issue);
 }
@@ -419,12 +431,12 @@ adminOffersRouter.post(
       const result = await client.query<PricingOptionRow>(
         `INSERT INTO offer_pricing_options
            (offer_id, label, pricing_type, amount_cents, min_amount_cents, currency,
-            interval, interval_count, installment_count, trial_days, recommended, active, sort)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
+            interval, interval_count, installment_count, trial_days, recommended, active, sort, deposit_cents, sales_start_at, sales_end_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *`,
         [offerId, parsed.data.label, parsed.data.pricingType, parsed.data.amountCents,
          parsed.data.minAmountCents, offer.currency, parsed.data.interval,
          parsed.data.intervalCount, parsed.data.installmentCount, parsed.data.trialDays,
-         parsed.data.recommended && parsed.data.active, parsed.data.active, parsed.data.sort],
+         parsed.data.recommended && parsed.data.active, parsed.data.active, parsed.data.sort, parsed.data.depositCents, parsed.data.salesStartAt, parsed.data.salesEndAt],
       );
       await client.query("COMMIT");
       await recordAdminAction({ req, action: "offer.pricing_option_create", entityType: "offer", entityId: offerId, after: rowToCamel(result.rows[0]) });
@@ -450,6 +462,9 @@ adminOffersRouter.put(
       label: patch.data.label ?? before.label,
       pricingType: patch.data.pricingType ?? before.pricing_type,
       amountCents: patch.data.amountCents ?? before.amount_cents,
+      depositCents: patch.data.depositCents ?? before.deposit_cents ?? 0,
+      salesStartAt: patch.data.salesStartAt === undefined ? (before.sales_start_at ? new Date(before.sales_start_at).toISOString() : null) : patch.data.salesStartAt,
+      salesEndAt: patch.data.salesEndAt === undefined ? (before.sales_end_at ? new Date(before.sales_end_at).toISOString() : null) : patch.data.salesEndAt,
       minAmountCents: patch.data.minAmountCents ?? before.min_amount_cents,
       interval: patch.data.interval === undefined ? before.interval : patch.data.interval,
       intervalCount: patch.data.intervalCount ?? before.interval_count,
@@ -461,7 +476,8 @@ adminOffersRouter.put(
     });
     assertPricingOption(next);
     const repriced = next.pricingType !== before.pricing_type || next.amountCents !== before.amount_cents ||
-      next.interval !== before.interval || next.intervalCount !== before.interval_count;
+      next.interval !== before.interval || next.intervalCount !== before.interval_count || next.depositCents !== before.deposit_cents ||
+      next.installmentCount !== before.installment_count || next.salesStartAt !== (before.sales_start_at ? new Date(before.sales_start_at).toISOString() : null) || next.salesEndAt !== (before.sales_end_at ? new Date(before.sales_end_at).toISOString() : null);
 
     const client = await pool.connect();
     try {
@@ -478,12 +494,13 @@ adminOffersRouter.put(
            label = $3, pricing_type = $4, amount_cents = $5, min_amount_cents = $6,
            interval = $7, interval_count = $8, installment_count = $9, trial_days = $10,
            recommended = $11, active = $12, sort = $13,
+           deposit_cents = $15, sales_start_at = $16, sales_end_at = $17,
            stripe_price_id = CASE WHEN $14 THEN NULL ELSE stripe_price_id END,
            updated_at = now()
          WHERE id = $1 AND offer_id = $2 RETURNING *`,
         [optionId, offerId, next.label, next.pricingType, next.amountCents, next.minAmountCents,
          next.interval, next.intervalCount, next.installmentCount, next.trialDays,
-         next.recommended && next.active, next.active, next.sort, repriced],
+         next.recommended && next.active, next.active, next.sort, repriced, next.depositCents, next.salesStartAt, next.salesEndAt],
       );
       await client.query("COMMIT");
       await recordAdminAction({ req, action: "offer.pricing_option_update", entityType: "offer", entityId: offerId, before: rowToCamel(before), after: rowToCamel(result.rows[0]) });
@@ -540,9 +557,9 @@ adminOffersRouter.post(
             installment_count, trial_days, collect_tax, collect_address, collect_phone,
             custom_fields, terms_url, require_terms, redirect_url, thank_you_page_id,
             access_expires_after_days, stripe_price_id, stripe_product_id,
-            send_welcome_email, welcome_next_steps, allow_gifting, internal_title)
+            send_welcome_email, welcome_next_steps, allow_gifting, internal_title, deposit_cents, show_in_cart)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
-                 $17, $18::jsonb, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29)
+                 $17, $18::jsonb, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31)
          RETURNING ${OFFER_COLUMNS}`,
         [
           data.title,
@@ -574,6 +591,8 @@ adminOffersRouter.post(
           data.welcomeNextSteps,
           data.allowGifting,
           data.internalTitle,
+          data.depositCents,
+          data.showInCart,
         ],
       );
       created = result.rows[0];
@@ -618,6 +637,7 @@ adminOffersRouter.put(
     const pricing = {
       pricingType: patched(patch.pricingType, before.pricing_type),
       amountCents: patched(patch.amountCents, before.amount_cents),
+      depositCents: patched(patch.depositCents, before.deposit_cents),
       minAmountCents: patched(patch.minAmountCents, before.min_amount_cents),
       interval: patched(patch.interval, before.interval),
       installmentCount: patched(patch.installmentCount, before.installment_count),
@@ -630,6 +650,7 @@ adminOffersRouter.put(
     const touchesPricing =
       patch.pricingType !== undefined ||
       patch.amountCents !== undefined ||
+      patch.depositCents !== undefined ||
       patch.minAmountCents !== undefined ||
       patch.interval !== undefined ||
       patch.installmentCount !== undefined ||
@@ -663,6 +684,8 @@ adminOffersRouter.put(
     const repriced =
       pricing.pricingType !== before.pricing_type ||
       pricing.amountCents !== before.amount_cents ||
+      pricing.depositCents !== before.deposit_cents ||
+      pricing.installmentCount !== before.installment_count ||
       pricing.interval !== before.interval ||
       intervalCount !== before.interval_count ||
       currency !== before.currency;
@@ -719,6 +742,8 @@ adminOffersRouter.put(
                 welcome_next_steps        = $27,
                 allow_gifting             = $29,
                 internal_title            = $30,
+                deposit_cents             = $31,
+                show_in_cart              = $32,
                 updated_at                = now()
           WHERE o.id = $28
          RETURNING ${OFFER_COLUMNS}`,
@@ -753,6 +778,8 @@ adminOffersRouter.put(
           id,
           patched(patch.allowGifting, before.allow_gifting),
           patched(patch.internalTitle, before.internal_title),
+          pricing.depositCents,
+          patched(patch.showInCart, before.show_in_cart),
         ],
       );
       after = result.rows[0];
@@ -1023,7 +1050,7 @@ adminOffersRouter.post(
             custom_fields, terms_url, require_terms, redirect_url, thank_you_page_id,
             access_expires_after_days, send_welcome_email, welcome_next_steps, allow_gifting,
             internal_title, notify_owner_on_sale, notify_owner_recipients, recovery_enabled,
-            recovery_mode, recovery_overrides)
+            recovery_mode, recovery_overrides, deposit_cents, show_in_cart)
          SELECT left(s.title || ' (copy)', 300), $2, 'draft', s.description, s.checkout_headline,
                 s.thumbnail_url, s.currency, s.pricing_type, s.amount_cents, s.min_amount_cents,
                 s.interval, s.interval_count, s.installment_count, s.trial_days, s.collect_tax,
@@ -1033,7 +1060,7 @@ adminOffersRouter.post(
                 CASE WHEN s.internal_title = '' THEN ''
                      ELSE left(s.internal_title || ' (copy)', 150) END,
                 s.notify_owner_on_sale, s.notify_owner_recipients, s.recovery_enabled,
-                s.recovery_mode, s.recovery_overrides
+                s.recovery_mode, s.recovery_overrides, s.deposit_cents, s.show_in_cart
            FROM offers s WHERE s.id = $1
          RETURNING ${OFFER_COLUMNS}`,
         [id, slug],
@@ -1055,9 +1082,9 @@ adminOffersRouter.post(
       await client.query(
         `INSERT INTO offer_pricing_options
            (offer_id, label, pricing_type, amount_cents, min_amount_cents, currency,
-            interval, interval_count, installment_count, trial_days, recommended, active, sort)
+            interval, interval_count, installment_count, trial_days, recommended, active, sort, deposit_cents, sales_start_at, sales_end_at)
          SELECT $2, label, pricing_type, amount_cents, min_amount_cents, currency,
-                interval, interval_count, installment_count, trial_days, recommended, active, sort
+                interval, interval_count, installment_count, trial_days, recommended, active, sort, deposit_cents, sales_start_at, sales_end_at
            FROM offer_pricing_options WHERE offer_id = $1`,
         [id, created.id],
       );

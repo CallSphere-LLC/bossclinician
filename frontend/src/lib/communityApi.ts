@@ -115,7 +115,7 @@ export interface CommunityMembership {
 
 export interface CommunityOverview {
   accessGroups?: {id:number;name:string;description:string}[];
-  availableAccessGroups?: {id:number;name:string;description:string;checkoutSlug:string;pricingType:string;amountCents:number;currency:string;interval:string|null;installmentCount?:number|null;trialDays?:number}[];
+  availableAccessGroups?: {id:number;name:string;description:string;checkoutSlug:string;pricingType:string;amountCents:number;depositCents?:number;currency:string;interval:string|null;installmentCount?:number|null;trialDays?:number}[];
   community: {
     id: number;
     slug: string;

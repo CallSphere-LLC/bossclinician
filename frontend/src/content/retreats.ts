@@ -188,7 +188,7 @@ const FAQS: readonly RetreatFaq[] = [
   },
   {
     q: "How does the payment plan work?",
-    a: "Pay in full ($5,500), or reserve today with the first of 9 monthly payments of $612. Checkout shows both options. Every balance must be paid in full by June 8, 2027.",
+    a: "Reserve your room with a $500 deposit. The remaining $5,000 is divided into monthly payments based on when you enroll. The earlier you reserve, the lower your monthly payment. All balances must be paid in full by June 8, 2027. Deposit payment plans are being finalized; pay-in-full reservations are available now.",
   },
   {
     q: "When is the final payment due?",
@@ -196,7 +196,7 @@ const FAQS: readonly RetreatFaq[] = [
   },
   {
     q: "What is the cancellation and refund policy?",
-    a: "All retreat payments are non-refundable. If you need to cancel while your payments are current, eligible payments made beyond your first $500 (non-refundable) may be applied as a credit toward a future FlourisHealer retreat within 12 months, subject to availability. Missed payments or failure to pay the balance by the final deadline may result in forfeiture of your reservation and payments made. Please review the full Retreat Terms & Agreement before purchasing.",
+    a: "All retreat payments are non-refundable. If you need to cancel while your payments are current, eligible payments made beyond your $500 non-refundable deposit may be applied as a credit toward a future FlourisHealer retreat within 12 months, subject to availability. Missed payments or failure to pay the balance by the final deadline may result in forfeiture of your reservation and payments made. Please review the full Retreat Terms & Agreement before purchasing.",
     link: { label: "Retreat Terms & Agreement", to: "/retreatagreement" },
   },
   {
@@ -469,13 +469,13 @@ export const retreat = {
       },
       {
         label: "PAYMENT PLAN",
-        amount: "9 × $612",
-        body: "Reserve today with the first of 9 monthly payments of $612 ($5,508 total), or pay in full. All balances must be paid in full by June 8, 2027.",
+        amount: "$500 Deposit",
+        body: "Reserve with a $500 deposit, then divide the remaining $5,000 into monthly payments based on your enrollment date. The earlier you reserve, the lower your monthly payment. All balances are due by June 8, 2027.",
         primary: false,
       },
     ],
     cta: "RESERVE YOUR PLACE",
-    ctaNote: "Choose pay in full or the payment plan at checkout.",
+    ctaNote: "Pay-in-full reservations are available now. Deposit payment plans are being finalized.",
     scarcity: `RESERVE BEFORE SPOTS CLOSE${DOT}LIMITED TO 12 WOMEN`,
     insurance:
       "Travel insurance is strongly recommended. You are welcome to choose any provider that meets your needs. For convenience, you can view options from Trawick International below.",

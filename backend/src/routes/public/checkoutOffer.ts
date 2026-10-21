@@ -550,11 +550,17 @@ async function createPendingOrder(input: PendingOrderInput): Promise<PendingOrde
   const client: PoolClient = await pool.connect();
   try {
     await client.query("BEGIN");
+    const now = Date.now();
+    if ((input.offer.sales_start_at && new Date(input.offer.sales_start_at).getTime() > now) ||
+        (input.offer.sales_end_at && new Date(input.offer.sales_end_at).getTime() <= now)) {
+      throw badRequest("That payment option is no longer available. Refresh checkout to see the current choices.");
+    }
     await assertOfferDeliverable(input.offer.id, input.bumpProductIds, client);
 
     const cart = input.cartItems ? await priceCart({items:input.cartItems,couponCode:input.couponCode,email:input.email,address:input.billingAddress,lock:true,checkout:{phone:input.billingPhone,acceptedTerms:input.acceptedTerms,customFields:input.customFieldData,giftRecipientEmail:input.giftRecipientEmail}},client) : null;
     let coupon: ValidatedCoupon | null = cart?.coupon ?? null;
     if (input.couponCode && !cart) {
+      if ((input.offer.deposit_cents ?? 0) > 0) throw badRequest("Coupon codes cannot be combined with a deposit payment plan.");
       const check = await validateCoupon(input.couponCode, input.offer.id, input.email, {
         client,
         lock: true,
@@ -616,6 +622,10 @@ async function createPendingOrder(input: PendingOrderInput): Promise<PendingOrde
       ]
     );
     const orderId = orderRes.rows[0].id;
+    if (isRecurring(input.offer)) {
+      const o = input.offer;
+      await client.query("UPDATE orders SET billing_snapshot = $2::jsonb WHERE id = $1", [orderId, JSON.stringify({ pricing_type: o.pricing_type, amount_cents: o.amount_cents, deposit_cents: o.deposit_cents ?? 0, currency: o.currency, interval: o.interval, interval_count: o.interval_count, installment_count: o.installment_count, trial_days: o.trial_days })]);
+    }
     if (cart) {
       await client.query(`UPDATE orders SET is_cart=true WHERE id=$1`,[orderId]);
       for (const group of cart.groups) {
@@ -893,6 +903,8 @@ checkoutOfferRouter.post(
               intervalCount: offer.interval_count,
               installmentCount: offer.installment_count,
               trialDays: offer.trial_days,
+              depositCents: offer.deposit_cents ?? 0,
+              recurringAmountCents: offer.amount_cents,
               lines: total.lines,
               subtotalCents: total.subtotalCents,
               discountCents: total.discountCents,
@@ -976,6 +988,14 @@ checkoutOfferRouter.post(
             installmentCents: String(offer.amount_cents),
           },
         };
+        // Adjust only the opening invoice. The subscription Price remains the
+        // regular installment amount, so no later invoice repeats the deposit.
+        // Inline invoice items are created atomically with this subscription.
+        if ((offer.deposit_cents ?? 0) > 0) {
+          const recurringPrice = await stripe().prices.retrieve(priceId);
+          const product = typeof recurringPrice.product === "string" ? recurringPrice.product : recurringPrice.product.id;
+          params.add_invoice_items = [{ price_data: { currency: total.currency, product, unit_amount: offer.deposit_cents! - offer.amount_cents }, quantity: 1 }];
+        }
         if (offer.trial_days > 0) params.trial_period_days = offer.trial_days;
         if (coupon) params.discounts = [{ coupon: await ensureStripeCoupon(coupon) }];
 

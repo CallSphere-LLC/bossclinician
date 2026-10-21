@@ -46,6 +46,9 @@ export interface OfferRow {
   currency: string;
   pricing_type: PricingType;
   amount_cents: number;
+  deposit_cents?: number;
+  sales_start_at?: string | null;
+  sales_end_at?: string | null;
   min_amount_cents: number;
   interval: BillingInterval | null;
   interval_count: number;
@@ -69,7 +72,7 @@ export interface OfferRow {
 }
 
 const OFFER_COLUMNS = `id, title, slug, description, checkout_headline, thumbnail_url,
-                       currency, pricing_type, amount_cents, min_amount_cents, interval,
+                       currency, pricing_type, amount_cents, deposit_cents, min_amount_cents, interval,
                        interval_count, installment_count, trial_days, collect_tax,
                        collect_address, collect_phone, custom_fields, terms_url,
                        require_terms, allow_gifting, redirect_url, thank_you_page_id,
@@ -123,6 +126,7 @@ export function toPricedOffer(offer: OfferRow): PricedOffer {
     currency: offer.currency || "usd",
     pricingType: offer.pricing_type,
     amountCents: offer.amount_cents,
+    depositCents: offer.deposit_cents ?? 0,
     minAmountCents: offer.min_amount_cents,
     interval: offer.interval,
     intervalCount: offer.interval_count,
@@ -137,6 +141,9 @@ export interface OfferPricingOptionRow {
   label: string;
   pricing_type: PricingType;
   amount_cents: number;
+  deposit_cents?: number;
+  sales_start_at?: string | null;
+  sales_end_at?: string | null;
   min_amount_cents: number;
   currency: string;
   interval: BillingInterval | null;
@@ -150,7 +157,7 @@ export interface OfferPricingOptionRow {
   sort: number;
 }
 
-const PRICING_OPTION_COLUMNS = `id, offer_id, label, pricing_type, amount_cents,
+const PRICING_OPTION_COLUMNS = `id, offer_id, label, pricing_type, amount_cents, deposit_cents, sales_start_at, sales_end_at,
   min_amount_cents, currency, interval, interval_count, installment_count,
   trial_days, recommended, active, stripe_price_id, stripe_product_id, sort`;
 
@@ -162,6 +169,8 @@ export async function loadOfferPricingOptions(
     `SELECT ${PRICING_OPTION_COLUMNS}
        FROM offer_pricing_options
       WHERE offer_id = $1 AND active = true
+        AND (sales_start_at IS NULL OR sales_start_at <= now())
+        AND (sales_end_at IS NULL OR sales_end_at > now())
       ORDER BY sort, id`,
     [offerId],
   );
@@ -173,6 +182,9 @@ function optionOverlay(offer: OfferRow, option: OfferPricingOptionRow): OfferRow
     ...offer,
     pricing_type: option.pricing_type,
     amount_cents: option.amount_cents,
+    deposit_cents: option.deposit_cents ?? 0,
+    sales_start_at: option.sales_start_at,
+    sales_end_at: option.sales_end_at,
     min_amount_cents: option.min_amount_cents,
     currency: option.currency,
     interval: option.interval,
@@ -219,7 +231,7 @@ export async function selectOfferPricing(
  * and for recurring prices the cadence, instalments and trial.
  */
 export function optionDuplicatingBasePrice(
-  offer: Pick<OfferRow, "pricing_type" | "amount_cents" | "min_amount_cents" | "currency" | "interval" | "interval_count" | "installment_count" | "trial_days">,
+  offer: Pick<OfferRow, "pricing_type" | "amount_cents" | "deposit_cents" | "min_amount_cents" | "currency" | "interval" | "interval_count" | "installment_count" | "trial_days">,
   options: readonly OfferPricingOptionRow[],
 ): OfferPricingOptionRow | undefined {
   const currency = (value: string | null | undefined) => (value || "usd").toLowerCase();
@@ -228,6 +240,7 @@ export function optionDuplicatingBasePrice(
     (option) =>
       option.pricing_type === offer.pricing_type &&
       option.amount_cents === offer.amount_cents &&
+      (option.deposit_cents ?? 0) === (offer.deposit_cents ?? 0) &&
       currency(option.currency) === currency(offer.currency) &&
       (offer.pricing_type !== "pwyw" || option.min_amount_cents === offer.min_amount_cents) &&
       (!recurring ||
@@ -254,6 +267,7 @@ function pricingOptionJson(offer: OfferRow, id: number | null, label: string, re
     recommended,
     currency: offer.currency || "usd",
     amountCents: offer.amount_cents,
+    depositCents: offer.deposit_cents ?? 0,
     billing: billingToJson(offer, priced),
     quote: totalToJson(computeOrderTotal({ offer: priced })),
   };
@@ -533,6 +547,7 @@ export function billingToJson(offer: OfferRow, priced: PricedOffer): Record<stri
     interval: offer.interval,
     intervalCount: offer.interval_count,
     installmentCount: offer.installment_count,
+    depositCents: offer.deposit_cents ?? 0,
     trialDays: offer.trial_days,
     installmentCents: offer.pricing_type === "payment_plan" ? offer.amount_cents : null,
     planTotalCents: offer.pricing_type === "payment_plan" ? paymentPlanTotalCents(priced) : null,
@@ -762,6 +777,7 @@ export async function buildOfferQuote(
     // Only a signed-in member's own address is used for the once-per-customer
     // check. Honouring one from the body would turn this endpoint into a way
     // to ask whether a given stranger has redeemed a given code.
+    if ((offer.deposit_cents ?? 0) > 0) throw badRequest("Coupon codes cannot be combined with a deposit payment plan.");
     const check = await validateCoupon(body.couponCode, offer.id, memberEmail);
     if (check.ok) coupon = check.coupon;
     else couponError = check.reason;
