@@ -179,6 +179,11 @@ export function Footer() {
                 {link.label}
               </Link>
             ))}
+            {pathname.replace(/\/$/, "") === "/retreats" && (
+              <Link to="/retreatagreement" className="inline-block py-2 text-[0.78rem] text-white/60 transition-colors duration-300 hover:text-gold/80">
+                Retreat Terms &amp; Agreement
+              </Link>
+            )}
             {/* Reopens the cookie panel (components/consent/CookieConsent.tsx). */}
             <button
               type="button"
