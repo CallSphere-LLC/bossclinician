@@ -53,7 +53,18 @@ export interface CreateHostLinkInput {
   adminEmail: string;
   adminName: string;
   communityId: number;
+  /**
+   * Where she lands. The live room by default; `community` opens the feed
+   * instead — the admin's participant preview uses it so the owner can post
+   * and reply as herself (QA row 168), since the preview has no member
+   * identity to write with. The caller checks the channel belongs here.
+   */
+  destination?: HostLinkDestination;
 }
+
+export type HostLinkDestination =
+  | { to: "live" }
+  | { to: "community"; channelSlug?: string; postId?: number };
 
 export interface HostLink {
   url: string;
@@ -80,9 +91,22 @@ export function splitHostName(name: string, email: string): { firstName: string;
  * site, never a URL, so the page redeeming the link has nothing to validate
  * beyond "starts with a slash".
  */
-export function buildHostLinkUrl(siteUrl: string, token: string, slug: string): string {
-  const next = `/community/${slug}/live`;
-  return `${siteUrl}/host-link?token=${encodeURIComponent(token)}&next=${encodeURIComponent(next)}`;
+export function buildHostLinkUrl(
+  siteUrl: string,
+  token: string,
+  slug: string,
+  destination: HostLinkDestination = { to: "live" },
+): string {
+  return `${siteUrl}/host-link?token=${encodeURIComponent(token)}&next=${encodeURIComponent(hostLinkNext(slug, destination))}`;
+}
+
+/** The member-site path for a destination: the room, or a channel (and post). */
+export function hostLinkNext(slug: string, destination: HostLinkDestination): string {
+  if (destination.to === "live") return `/community/${slug}/live`;
+  const channel = destination.channelSlug ? `/${encodeURIComponent(destination.channelSlug)}` : "";
+  // `?post=` opens that post's replies on arrival (ChannelFeed's deep link).
+  const post = destination.channelSlug && destination.postId ? `?post=${destination.postId}` : "";
+  return `/community/${slug}${channel}${post}`;
 }
 
 interface HostCommunityRow {
@@ -137,7 +161,8 @@ async function findOrCreateHostMember(input: CreateHostLinkInput): Promise<numbe
 }
 
 /**
- * Mints the one-time link that takes an admin into a community's live room.
+ * Mints the one-time link that takes an admin into a community's live room —
+ * or, with a `community` destination, into its feed to post and reply.
  *
  * Throws 404 for a community that does not exist and 400 for one whose room
  * cannot be entered, because a link that signs her in and then lands on "this
@@ -150,12 +175,18 @@ export async function createHostLink(input: CreateHostLinkInput): Promise<HostLi
   );
   const community = found.rows[0];
   if (!community) throw notFound("Community not found");
-  if (!community.live_room_enabled) {
+  const destination = input.destination ?? { to: "live" };
+  // Only the room needs the room switched on; posting in the feed does not.
+  if (destination.to === "live" && !community.live_room_enabled) {
     throw badRequest("The live room is switched off for this community. Turn it on first.");
   }
-  // The member-side room is only served for a published community.
+  // The member-side community is only served for a published community.
   if (!community.published) {
-    throw badRequest("This community isn't published yet, so its live room can't be opened.");
+    throw badRequest(
+      destination.to === "live"
+        ? "This community isn't published yet, so its live room can't be opened."
+        : "This community isn't published yet, so members can't see it. Publish it first, then post or reply as yourself.",
+    );
   }
 
   const memberId = await findOrCreateHostMember(input);
@@ -197,7 +228,7 @@ export async function createHostLink(input: CreateHostLinkInput): Promise<HostLi
   );
 
   return {
-    url: buildHostLinkUrl(env.publicSiteUrl, raw, community.slug),
+    url: buildHostLinkUrl(env.publicSiteUrl, raw, community.slug, destination),
     expiresInSeconds: HOST_LINK_TTL_SECONDS,
     memberId,
   };

@@ -11,6 +11,7 @@ import {
   HOST_LINK_TTL_SECONDS,
   buildHostLinkUrl,
   createHostLink,
+  hostLinkNext,
   splitHostName,
 } from "./hostLinks";
 
@@ -79,7 +80,43 @@ describe("buildHostLinkUrl", () => {
   });
 });
 
+/** QA row 168: the participant preview sends the owner to the feed, as herself. */
+describe("hostLinkNext", () => {
+  it("lands in the room by default and in a channel's post when asked", () => {
+    expect(hostLinkNext("the-lounge", { to: "live" })).toBe("/community/the-lounge/live");
+    expect(hostLinkNext("the-lounge", { to: "community" })).toBe("/community/the-lounge");
+    expect(hostLinkNext("the-lounge", { to: "community", channelSlug: "q-and-a" })).toBe(
+      "/community/the-lounge/q-and-a",
+    );
+    expect(hostLinkNext("the-lounge", { to: "community", channelSlug: "q-and-a", postId: 12 })).toBe(
+      "/community/the-lounge/q-and-a?post=12",
+    );
+    // A post without its channel has nowhere to open, so it is dropped.
+    expect(hostLinkNext("the-lounge", { to: "community", postId: 12 })).toBe("/community/the-lounge");
+  });
+
+  it("escapes a channel slug rather than trusting it", () => {
+    expect(hostLinkNext("x", { to: "community", channelSlug: "a/../b" })).toBe("/community/x/a%2F..%2Fb");
+  });
+});
+
 describe("createHostLink", () => {
+  it("opens the feed even when the live room is off", async () => {
+    state.community = { ...state.community, live_room_enabled: false };
+    const link = await createHostLink({
+      ...input,
+      destination: { to: "community", channelSlug: "q-and-a", postId: 5 },
+    });
+    expect(new URL(link.url).searchParams.get("next")).toBe("/community/the-lounge/q-and-a?post=5");
+  });
+
+  it("still refuses the feed of an unpublished community", async () => {
+    state.community = { ...state.community, published: false };
+    await expect(createHostLink({ ...input, destination: { to: "community" } })).rejects.toMatchObject({
+      status: 400,
+    });
+  });
+
   it("refuses a community that does not exist", async () => {
     state.community = null;
     await expect(createHostLink(input)).rejects.toMatchObject({ status: 404 });

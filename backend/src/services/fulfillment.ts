@@ -6,6 +6,7 @@ import { grantAccess, grantOfferAccess } from "./access";
 import { recordActivity, upsertContactWithStatus } from "./contacts";
 import { buildInstallmentSchedule, type BillingInterval } from "./pricing";
 import { dispatchEvent } from "./webhooksOut";
+import { assignOfferContractsSafely, emailContractsAssigned } from "./offerContracts";
 
 /**
  * Turning a successful payment into everything the customer bought.
@@ -298,6 +299,13 @@ export async function fulfillPayment(input: FulfillPaymentInput): Promise<Fulfil
       }
     }
 
+    // Contracts the purchased offers ask the participant to sign (QA row 164,
+    // services/offerContracts.ts). Under its own savepoint: it never throws and
+    // can never roll back the payment or the access granted above.
+    const assignedContracts = accessMemberId
+      ? await assignOfferContractsSafely({ client, memberId: accessMemberId, offerIds: purchasedOffers.rows.map((row) => row.offer_id), orderId: order.id })
+      : [];
+
     // Completing any purchase stops reminders. Only a followed reminder link
     // receives recovered-revenue attribution.
     if (email) {
@@ -339,6 +347,10 @@ export async function fulfillPayment(input: FulfillPaymentInput): Promise<Fulfil
     }
 
     await client.query("COMMIT");
+
+    if (accessMemberId !== null && assignedContracts.length > 0) {
+      void emailContractsAssigned({ memberId: accessMemberId, contracts: assignedContracts, fromPurchase: true });
+    }
 
     if (createdMember && memberId !== null) {
       await dispatchEvent("member.created", {

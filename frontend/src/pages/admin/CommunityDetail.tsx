@@ -398,18 +398,6 @@ function visitIsLive(visit: LiveVisit): boolean {
  * 43, in its own "Live room" tab and a header button, so nobody has to know
  * the alias to find the call.
  */
-const LIVE_ROOM_ACCESS = [
-  {
-    value: "always",
-    label: "Always open",
-    help: "Members can gather in there whenever they like.",
-  },
-  {
-    value: "hosted",
-    label: "Only when you're in",
-    help: "Shut until you or a moderator joins — nobody sits in an empty room all week.",
-  },
-] as const;
 
 /**
  * The room lives on the member site and only lets member sessions in, so an
@@ -454,7 +442,8 @@ function LiveRoomPanel({
 }) {
   const [form, setForm] = useState({
     liveRoomEnabled: community.liveRoomEnabled === true,
-    liveRoomAccess: community.liveRoomAccess ?? "always",
+    // Host-started only (QA row 167); kept in the form so a save writes it.
+    liveRoomAccess: "hosted",
     liveRoomAlias: community.liveRoomAlias ?? "",
     liveRoomCapacity: community.liveRoomCapacity ?? 8,
   });
@@ -491,8 +480,8 @@ function LiveRoomPanel({
         title={label}
         subtitle={
           form.liveRoomEnabled
-            ? "Web video calling for this community. Members get a “Join the call” card at the top of every community page."
-            : "Off — members have no way to start a call here. Switch it on and save to give every member a “Join the call” button."
+            ? "Web video calling for this community. You or a moderator start the call; members get a “Join the call” card at the top of every community page while it's running."
+            : "Off — there is no call in this community. Switch it on and save, then start the call as host whenever you want members to join."
         }
         icon={<Video className="size-4" />}
       />
@@ -555,29 +544,19 @@ function LiveRoomPanel({
           />
         </Field>
 
-        <Field label="When can they get in?">
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            {LIVE_ROOM_ACCESS.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                onClick={() =>
-                  setForm((f) => ({ ...f, liveRoomAccess: option.value }))
-                }
-                className={cn(
-                  "rounded-xl px-3.5 py-3 text-left text-sm transition-colors",
-                  form.liveRoomAccess === option.value
-                    ? "bg-brand-gradient text-white"
-                    : "border border-hairline text-ink-soft hover:border-plum/40",
-                )}
-              >
-                <span className="block font-semibold">{option.label}</span>
-                <span className="mt-0.5 block text-xs opacity-80">
-                  {option.help}
-                </span>
-              </button>
-            ))}
-          </div>
+        {/* QA row 167: members can no longer start the call themselves, so
+            the old "Always open / Only when you're in" choice is gone — every
+            room is host-started, and the server refuses a member who tries. */}
+        <Field label="Who can start the call?">
+          <p className="rounded-xl border border-hairline px-3.5 py-3 text-sm text-ink-soft">
+            <span className="block font-semibold text-ink">
+              Only you or a moderator
+            </span>
+            <span className="mt-0.5 block text-xs">
+              The room stays shut until a host starts the call. Members can
+              join while it's running, but can't start one themselves.
+            </span>
+          </p>
         </Field>
 
         <Field

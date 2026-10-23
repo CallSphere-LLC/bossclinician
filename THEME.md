@@ -46,3 +46,17 @@ roughly 9-14:1. Running text is never lighter than weight 400, and small paragra
 | `--c-lilac` | `190 168 216` (9.5:1) | `84 62 110` (9.2:1) | Card subtitles, accents |
 
 Prices, stats and counts use the body font, bold, `tabular-nums` — never the display serif.
+
+### Surfaces that ignore the page theme
+
+- `data-media-surface`: a block that is dark in both themes (footage, a photo under a veil).
+  Inside it `--c-orchid-faint` takes the secondary value, because a veiled photo is lighter
+  than the night floor.
+- `data-light-surface`: a block that is light in both themes (imported course sales pages).
+  Inside it the body-copy tokens (`--c-ink`, `--c-orchid*`, `--c-plum`, `--c-lilac`) take their
+  light-theme values, so unclassed `h1`-`h4` (base rule: `text-ink`) are not white on lilac in
+  the dark theme. The imported sales-page wrappers (`.ramp-up-page`, `.doctor-sales-page`,
+  `.protection-sales-page`, `.profile-sales-page`, `.starter-sales-page`) are included by class.
+- A whole-token `bg-plum` is the brand plum `#5C457D` in both themes (white on it is 8.1:1);
+  `--c-plum` itself stays lavender on dark because it is mostly used as text.
+- `.text-foil`'s darkest stop is `#b08a48` (5.1:1 on the raised night surfaces).

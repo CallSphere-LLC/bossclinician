@@ -1125,6 +1125,9 @@ export const MERGEABLE_TABLES = [
   // Kajabi-style purchases (migration 076): a purchase is the person's, and
   // must follow them into the survivor like the orders under it do.
   "purchases",
+  // Row 171 (migration 150): lesson-reminder / replay sends from Analytics →
+  // Engagement follow the person, so the survivor's card keeps them.
+  "engagement_sends",
 ] as const;
 
 const mergeSchema = z.object({

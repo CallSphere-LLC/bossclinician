@@ -9295,3 +9295,10 @@ font-size:16px !Important;
 .profile-sales-page a[aria-disabled="true"]{pointer-events:none;opacity:.65;cursor:not-allowed;}
 .profile-sales-page a:focus-visible,.profile-sales-page summary:focus-visible{outline:3px solid #222;outline-offset:5px;}
 @media(prefers-reduced-motion:reduce){.profile-sales-page .marquee__group{animation:none!important;}}
+
+/* Readability (sheet row 163): the source's green price and the white
+   "The Alternative?" heading on the pink gradient fall below WCAG AA. */
+.profile-sales-page span[style*="#24ae60"] { color: #1b7f45 !important; }
+.profile-sales-page .background-dark h1 span[style*="#ecf0f1"] {
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6), 0 0 18px rgba(0, 0, 0, 0.45);
+}

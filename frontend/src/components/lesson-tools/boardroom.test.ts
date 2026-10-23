@@ -49,6 +49,17 @@ describe("Boardroom CEO dashboard", () => {
     expect(capacityScenario(s).modeled).toBeCloseTo(53125);
   });
 
+  it("capacity scenario: typed current utilization and revenue override the derived ones", () => {
+    const s = { ...base(), capTarget: 400, capCompleted: 320, scenarioUtil: 85 };
+    expect(capacityScenario({ ...s, capCurrentUtil: 68 }).modeled).toBeCloseTo(62500);
+    expect(capacityScenario({ ...s, capRevenue: 40000 }).modeled).toBeCloseTo(42500);
+    // No capacity data or snapshot at all: the three typed inputs are enough, as in the mockup.
+    const typed = capacityScenario({ ...boardroomDefaults(), capCurrentUtil: 70, scenarioUtil: 84, capRevenue: 30000 });
+    expect(typed.modeled).toBeCloseTo(36000);
+    expect(typed.derivedCurrent).toBeNull();
+    expect(reportSections({ ...boardroomDefaults(), capCurrentUtil: 70, scenarioUtil: 84, capRevenue: 30000 }).map((r) => r.title)).toEqual(["EHR + Capacity"]);
+  });
+
   it("team pay by structure", () => {
     const hourly = { ...base(), teamCollections: 12000, teamTaxes: 600, teamBenefits: 400, clinRate: 45, clinHours: 100, nonclinRate: 25, nonclinHours: 20 };
     expect(teamFigures(hourly)).toMatchObject({ wages: 5000, total: 6000, contribution: 6000 });
@@ -100,5 +111,10 @@ describe("Boardroom CEO dashboard", () => {
     expect(s.period).toBe("monthly");
     expect(s.compStructure).toBe("split");
     expect("extra" in s).toBe(false);
+  });
+
+  it("an entry saved before the capacity overrides existed still loads, with the new fields blank", () => {
+    const s = normaliseBoardroom({ revenue: 1000, scenarioUtil: 90, capGuardrail: 80 });
+    expect(s).toMatchObject({ revenue: 1000, scenarioUtil: 90, capGuardrail: 80, capCurrentUtil: null, capRevenue: null });
   });
 });

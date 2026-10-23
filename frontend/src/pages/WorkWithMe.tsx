@@ -573,9 +573,11 @@ function PathwaysSection() {
               <span
                 className={cn(
                   "ml-2.5 rounded-full px-2 py-0.5 text-[0.7rem] font-bold uppercase tracking-[0.08em]",
-                  // On the foil pill the badge is a dark cut-out; off it, the
-                  // badge has to supply its own gold or it disappears.
-                  active === i ? "bg-[#06040b]/20" : "bg-gold/20 text-gold",
+                  // On the foil pill the badge is a dark chip with bright-gold
+                  // lettering (13:1) — a 20% dark cut-out left the dark label
+                  // at 3.3:1 over the deep end of the foil. Off it, the badge
+                  // has to supply its own gold or it disappears.
+                  active === i ? "bg-[#06040b]/90 text-[#E8CE9A]" : "bg-gold/20 text-gold",
                 )}
               >
                 {p.badge}

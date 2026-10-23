@@ -223,10 +223,12 @@ function LiveRoom({ slug }: { slug: string }) {
             Live video call
           </p>
           <h1 className="font-display text-2xl text-white">{label}</h1>
+          {/* QA row 167: members never open the room themselves, so there is
+              no "drop in whenever" any more — a host starts, members join. */}
           <p className="copy-luxe mt-1 text-sm">
-            {room.access === "always"
-              ? "Open whenever you want to drop in. Video and audio stay between the people in the room."
-              : "Opens when Yvette is here."}
+            {room.youAreHost
+              ? "You're a host here: start the call and members can join you. Video and audio stay between the people in the room."
+              : "Opens when Yvette or a host starts the call. Video and audio stay between the people in the room."}
           </p>
         </div>
         <p className="text-xs uppercase tracking-[0.14em] text-white/50">
@@ -347,10 +349,15 @@ function LiveRoom({ slug }: { slug: string }) {
                 ))}
               </ul>
             </div>
-          ) : (
+          ) : room.youAreHost ? (
             <p className="copy-luxe text-sm">
               You would be the first one in. Anyone else who joins will see you
               here.
+            </p>
+          ) : (
+            <p className="copy-luxe text-sm">
+              Nobody is in the call yet. It opens when a host starts it, and
+              you can join from here then.
             </p>
           )}
 
@@ -366,7 +373,7 @@ function LiveRoom({ slug }: { slug: string }) {
               ? "Joining…"
               : room.full
                 ? "The room is full"
-                : room.roster.length === 0
+                : room.roster.length === 0 && room.youAreHost
                   ? "Start the video call"
                   : "Join the video call"}
           </LuxeButton>

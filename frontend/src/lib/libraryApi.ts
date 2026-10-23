@@ -158,6 +158,8 @@ export interface CourseOutlineData {
   progress: CourseProgress;
   continueLesson: ContinueLesson | null;
   modules: OutlineModule[];
+  /** The community the course is linked to, when this member may enter it. */
+  community?: { slug: string; name: string } | null;
 }
 
 export interface ProductFile {

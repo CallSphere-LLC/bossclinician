@@ -14,6 +14,7 @@ import { registerCoachingJobs } from "./coachingJobs";
 import { registerBillingJobs } from "./billingJobs";
 import { registerCommunityJobs } from "./communityJobs";
 import { registerNewsletterJobs } from "./newsletterJobs";
+import { registerEngagementJobs } from "./engagementJobs";
 import {
   dispatchDomainEvent,
   publishContactAnniversaries,
@@ -230,4 +231,5 @@ export function registerCoreHandlers(): void {
   registerBillingJobs();
   registerCommunityJobs();
   registerNewsletterJobs();
+  registerEngagementJobs();
 }

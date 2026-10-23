@@ -47,7 +47,7 @@ describe("the sidebar's shape", () => {
     expect(labelsOf("marketing")[0]).toBe("Overview");
     expect(labelsOf("marketing")[1]).toBe("Email Campaigns");
     expect(labelsOf("contacts").slice(0, 3)).toEqual(["All Contacts", "Insights", "Assessments"]);
-    expect(labelsOf("analytics")).toEqual(["Overview", "Reports"]);
+    expect(labelsOf("analytics")).toEqual(["Overview", "Reports", "Engagement"]);
   });
 
   it("still reaches every page the sidebar reached before it was reorganised", () => {
@@ -97,6 +97,8 @@ describe("the sidebar's shape", () => {
       "/admin/subscribers",
       "/admin/analytics",
       "/admin/analytics/reports",
+      // Added since (row 171), not moved: the Engagement report.
+      "/admin/analytics/engagement",
       "/admin/settings",
     ];
     expect([...sidebarTargets()].sort()).toEqual([...before].sort());
@@ -134,6 +136,7 @@ describe("activeNavTarget", () => {
     ["/admin/contacts/insights", "/admin/contacts/insights"],
     ["/admin/analytics/reports", "/admin/analytics/reports"],
     ["/admin/analytics/reports/revenue", "/admin/analytics/reports"],
+    ["/admin/analytics/engagement", "/admin/analytics/engagement"],
     // Whole segments: the old forms screen's address is the start of the new
     // one's, and neither may claim the other.
     ["/admin/marketing/forms-v2", "/admin/marketing/forms-v2"],

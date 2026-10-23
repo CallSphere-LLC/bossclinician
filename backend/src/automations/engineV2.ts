@@ -56,6 +56,11 @@ export const TRIGGER_TYPES = [
   "contact_created",
   "date_anniversary",
   "abandoned_checkout",
+  // Row 171: raised by the engagement sweep (services/engagementSweep.ts), one
+  // automation at a time — see SWEPT_TRIGGERS below.
+  "lesson_not_watched",
+  "live_session_missed",
+  "live_session_replay_ready",
 ] as const;
 
 export type TriggerV2 = (typeof TRIGGER_TYPES)[number];
@@ -115,7 +120,179 @@ export const TRIGGER_DESCRIPTORS: TriggerDescriptor[] = [
   { type: "contact_created", label: "a new person joins your list", subjectKey: "", subjectSource: "", subjectLabel: "" },
   { type: "date_anniversary", label: "it is someone's anniversary", subjectKey: "", subjectSource: "", subjectLabel: "" },
   { type: "abandoned_checkout", label: "someone leaves without paying", subjectKey: "offerId", subjectSource: "offers", subjectLabel: "Which offer" },
+  // Not a moment anybody acts in but a moment nobody did: the sweep notices
+  // that N days have passed since the lesson opened and its video is still not
+  // watched. "Which course" is required (the sweep needs a course to look at);
+  // the rest of the settings live beside it in `trigger_config`.
+  { type: "lesson_not_watched", label: "a lesson video has not been watched", subjectKey: "courseId", subjectSource: "courses", subjectLabel: "Which course" },
+  // Fired once the session is over AND the owner has set its replay link, so
+  // the email always has something to send them to.
+  { type: "live_session_missed", label: "someone misses a live session (once its replay is set)", subjectKey: "communityId", subjectSource: "communities", subjectLabel: "Which community" },
+  { type: "live_session_replay_ready", label: "a live session's replay is ready (everyone invited)", subjectKey: "communityId", subjectSource: "communities", subjectLabel: "Which community" },
 ];
+
+/* ---------------------------------------------------------- swept triggers */
+
+/**
+ * Triggers raised by a sweep rather than by somebody doing something.
+ *
+ * Each automation on one of these carries its own settings — "3 days" on one,
+ * "7 days" on another — so the sweep works out who is due *per automation* and
+ * publishes each occurrence for that automation alone. The automation's id
+ * travels in the facts under `AUTOMATION_SCOPE_FACT` (domain_events has no
+ * column for it), and `fireTrigger` runs only that automation. Without the
+ * scope, the 3-day occurrence would also run the 7-day automation, four days
+ * early.
+ */
+export const SWEPT_TRIGGERS: ReadonlySet<TriggerV2> = new Set<TriggerV2>([
+  "lesson_not_watched",
+  "live_session_missed",
+  "live_session_replay_ready",
+]);
+
+export const AUTOMATION_SCOPE_FACT = "_automationId";
+
+/** Whether an occurrence scoped to one automation may run `automationId`. */
+export function scopeAllows(
+  facts: Record<string, unknown> | undefined,
+  automationId: number
+): boolean {
+  const scoped = Number(facts?.[AUTOMATION_SCOPE_FACT] ?? 0);
+  return !(Number.isFinite(scoped) && scoped > 0) || scoped === automationId;
+}
+
+/** The settings of a "lesson video not watched" automation, with their defaults. */
+export const lessonNotWatchedConfigSchema = z.object({
+  courseId: z.coerce.number().int().positive(),
+  /** 0 / empty: the first open video lesson in the course they have not watched. */
+  lessonId: z.coerce.number().int().min(0).nullable().optional(),
+  days: z.coerce.number().int().min(1).max(365).default(3),
+  /** Count the days from when the lesson opened for them, or from when they got the course. */
+  basis: z.enum(["release", "access"]).default("release"),
+  /** "Not finished" (the default) or "never pressed play". */
+  watch: z.enum(["not_completed", "not_started"]).default("not_completed"),
+});
+
+export type LessonNotWatchedConfig = z.infer<typeof lessonNotWatchedConfigSchema>;
+
+/** The settings of the two live-session triggers. */
+export const liveSessionConfigSchema = z.object({
+  communityId: z.coerce.number().int().min(0).nullable().optional(),
+  /** A site-wide webinar event instead of a community meetup. */
+  eventId: z.coerce.number().int().min(0).nullable().optional(),
+  /** Who was invited: the people who said they were coming, or every member of the room. */
+  audience: z.enum(["registered", "members"]).default("registered"),
+});
+
+export type LiveSessionConfig = z.infer<typeof liveSessionConfigSchema>;
+
+/** Treats "", null and 0 the same — the builder stores "Any" in all three ways. */
+function cleanConfig(config: Record<string, unknown> | null | undefined): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(config ?? {})) {
+    if (value === "" || value === null || value === undefined) continue;
+    out[key] = value;
+  }
+  return out;
+}
+
+export function parseLessonNotWatchedConfig(
+  config: Record<string, unknown> | null | undefined
+): LessonNotWatchedConfig | null {
+  const parsed = lessonNotWatchedConfigSchema.safeParse(cleanConfig(config));
+  return parsed.success ? parsed.data : null;
+}
+
+export function parseLiveSessionConfig(
+  config: Record<string, unknown> | null | undefined
+): LiveSessionConfig {
+  const parsed = liveSessionConfigSchema.safeParse(cleanConfig(config));
+  return parsed.success ? parsed.data : { audience: "registered" };
+}
+
+/**
+ * `null` when a trigger's own settings are complete, otherwise what is missing.
+ *
+ * Only the swept triggers have settings beyond "which one"; for every other
+ * trigger an empty choice means "any" and is complete.
+ */
+export function describeTriggerConfigProblem(
+  triggerType: string,
+  config: Record<string, unknown> | null | undefined
+): string | null {
+  if (triggerType === "lesson_not_watched") {
+    const clean = cleanConfig(config);
+    if (!(Number(clean.courseId) > 0)) return "the trigger has no course chosen";
+    if (!parseLessonNotWatchedConfig(config)) return "the trigger's number of days must be between 1 and 365";
+    return null;
+  }
+  if (triggerType === "live_session_missed" || triggerType === "live_session_replay_ready") {
+    const parsed = liveSessionConfigSchema.safeParse(cleanConfig(config));
+    return parsed.success ? null : "the trigger's settings are not something the builder can read";
+  }
+  return null;
+}
+
+/* ------------------------------------------------------------ merge fields */
+
+/**
+ * The facts an email may quote, beyond {{firstName}}, {{name}} and {{email}}.
+ *
+ * A whitelist rather than every fact: a form submission's facts are its
+ * answers, and an automation written before this existed with a stray
+ * `{{source}}` in it rendered nothing — merging everything would quietly change
+ * what those emails say.
+ */
+export const MERGEABLE_FACTS = [
+  "courseTitle",
+  "lessonTitle",
+  "lessonUrl",
+  "watchedPercent",
+  "sessionTitle",
+  "sessionDate",
+  "replayUrl",
+  "communityName",
+] as const;
+
+/** The values `send_email` fills {{tokens}} from. */
+export function emailMergeValues(context: Pick<RunContext, "name" | "email" | "facts">): Record<string, string> {
+  const values: Record<string, string> = {};
+  for (const key of MERGEABLE_FACTS) {
+    const value = context.facts[key];
+    if (value === null || value === undefined) continue;
+    values[key] = String(value);
+  }
+  values.firstName = context.name.split(" ")[0] || "there";
+  values.name = context.name || context.email;
+  values.email = context.email;
+  return values;
+}
+
+/**
+ * What "Try it out" pretends the trigger said, so a practice run of a reminder
+ * shows a link rather than a blank where the link goes.
+ */
+export function sampleFactsFor(trigger: TriggerV2): Record<string, string> {
+  const site = env.publicSiteUrl;
+  if (trigger === "lesson_not_watched") {
+    return {
+      courseTitle: "Your course",
+      lessonTitle: "Lesson 1",
+      lessonUrl: `${site}/library`,
+      watchedPercent: "0",
+    };
+  }
+  if (trigger === "live_session_missed" || trigger === "live_session_replay_ready") {
+    return {
+      sessionTitle: "Live Q&A",
+      sessionDate: "Friday, October 9",
+      replayUrl: `${site}/library`,
+      communityName: "Your community",
+      attended: trigger === "live_session_missed" ? "no" : "yes",
+    };
+  }
+  return {};
+}
 
 /* ------------------------------------------------------------------ actions */
 
@@ -531,11 +708,9 @@ async function performAction(
         return { log: "Email: blocked — no contact to send to", stop: false, blocked: true };
       }
 
-      const values = {
-        firstName: context.name.split(" ")[0] || "there",
-        name: context.name || context.email,
-        email: context.email,
-      };
+      // {{firstName}}, {{name}}, {{email}}, plus the whitelisted facts a
+      // reminder quotes — {{lessonUrl}}, {{replayUrl}} and the rest.
+      const values = emailMergeValues(context);
       const body = renderTokens(parsed.data.bodyMd, values);
 
       if (isTest) return { log: `Email: would send "${parsed.data.subject}"`, stop: false };
@@ -1242,6 +1417,11 @@ export async function fireTrigger(
     );
 
     for (const automation of automationsRes.rows) {
+      // A swept occurrence belongs to the one automation whose settings made it
+      // due (see SWEPT_TRIGGERS). Checked first: it is not a skip to record,
+      // the occurrence simply is not this automation's.
+      if (!scopeAllows(context.facts, automation.id)) continue;
+
       // Check before conditions and the per-person ceiling: a replay of an
       // already successful occurrence must not create a later, misleading
       // "maximum runs" skip. The insert-side unique key remains the race-safe

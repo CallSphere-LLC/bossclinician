@@ -42,6 +42,7 @@ import {
   Textarea,
   type BadgeProps,
 } from "@/pages/admin/ui/primitives";
+import { PasteOptions, useSmartPaste } from "@/components/admin/smartPaste";
 import { Modal, useConfirm } from "@/pages/admin/ui/Dialog";
 import {
   friendlyError,
@@ -180,6 +181,8 @@ function BodyEditor({
   const ref = useRef<HTMLTextAreaElement>(null);
   const pendingSelection = useRef<[number, number] | null>(null);
   const [preview, setPreview] = useState(false);
+  // Pasting from Google Docs / Word keeps its formatting, with a plain-text option (QA row 169).
+  const paste = useSmartPaste(onChange);
 
   // A controlled textarea puts the caret back at the end after every re-render,
   // which would throw her cursor to the bottom each time she used the toolbar.
@@ -217,6 +220,7 @@ function BodyEditor({
               <Icon />
             </Button>
           ))}
+        {!preview && <PasteOptions {...paste.options} className="px-1" />}
         <div className="ml-auto flex items-center gap-1">
           <Button
             type="button"
@@ -250,6 +254,7 @@ function BodyEditor({
       ) : (
         <Textarea
           ref={ref}
+          {...paste.textareaProps}
           rows={rows}
           value={value}
           placeholder={placeholder}

@@ -137,6 +137,14 @@
   margin: 0 0 20px;
 }
 .br-page .br-eyebrow.br-gold {
+  /* #8b642c was 4.1:1 on the #eae2d6 "Two ways in" band (QA sheet: text too
+     light); the deeper gold her page already uses for strong labels clears
+     5.5:1 on every light surface here. */
+  color: #725224;
+}
+/* Her gold2 accent is drawn for navy. On the cream statement band the same
+   italic line was 1.7:1; the deeper gold keeps it gold at 4.8:1. */
+.br-page .br-section:not(.br-dark) h2 em {
   color: #8b642c;
 }
 .br-page .br-section h2 {
@@ -153,7 +161,9 @@
 .br-page .br-button {
   display: inline-flex;
   background: var(--br-gold);
-  color: #fff;
+  /* Navy on gold, as the site's own gold buttons are dark-lettered: white on
+     #b58a49 was 3.1:1, navy is 5.6:1 (6.8:1 on the hover gold). */
+  color: var(--br-ink);
   text-transform: uppercase;
   letter-spacing: 0.14em;
   font-weight: 700;
@@ -169,6 +179,7 @@
 }
 .br-page .br-button.br-button-dark {
   background: var(--br-navy);
+  color: #fff;
 }
 .br-page .br-button.br-button-dark:hover {
   background: #1d2f45;
@@ -407,6 +418,10 @@
 .br-page .br-path-number {
   color: var(--br-gold);
   font-family: "Italiana", Georgia, serif;
+}
+/* The 16px step numbers are body-size text: #b58a49 on paper is 3.1:1. */
+.br-page .br-focus-grid span {
+  color: #8b642c;
 }
 .br-page .br-focus-grid h3,
 .br-page .br-path-grid h3 {
@@ -1127,6 +1142,6 @@ html[data-site-theme] .theme-luxe .br-page section {
   background: var(--br-bg, transparent);
 }
 html[data-site-theme] .theme-luxe .br-page .br-field::placeholder {
-  color: #948d84;
+  color: #7a736b; /* 4.7:1 on the white field (was #948d84, 3.3:1) */
   opacity: 1;
 }

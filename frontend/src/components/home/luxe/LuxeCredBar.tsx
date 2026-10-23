@@ -22,8 +22,9 @@ const PASSES = 3;
  * Authority strip directly beneath the hero.
  *
  * Deliberately a whisper: one thin band, hairlines top and bottom, ~58px tall.
- * The credentials scroll rather than wrap, which keeps the band a fixed height
- * at 390px instead of stacking into a four-line block.
+ * From sm up the credentials scroll as a ticker; on phones (and under Reduce
+ * Motion) they sit still and wrap instead, because a phone-width ticker only
+ * ever shows words cut off at the screen edge (QA row 165).
  */
 export function LuxeCredBar({ className }: { className?: string }) {
   const reduce = useEntranceMotion();
@@ -55,7 +56,29 @@ export function LuxeCredBar({ className }: { className?: string }) {
         }}
       />
 
-      <Marquee duration={42} className="relative z-[1] py-[1.15rem] sm:py-5">
+      {/* Phones (and Reduce Motion anywhere): the four credentials as a still,
+          centred, wrapping list. On a 320–430px screen the ticker only ever
+          showed one credential sliced at both edges, and with iOS Reduce
+          Motion on it froze that way for good — QA row 165, "words cut off on
+          my phone". The ticker below is unchanged from sm up. Visibility is
+          switched in CSS (index.css, .cred-static / .cred-ticker) so server
+          and client markup agree. */}
+      <ul className="cred-static relative z-[1] flex flex-wrap items-center justify-center gap-x-4 gap-y-2 px-5 py-4 text-center">
+        {CREDENTIALS.map((credential, i) => (
+          <li key={credential} className="flex min-w-0 items-center gap-4">
+            {i > 0 && (
+              <span aria-hidden className="text-[0.55rem] leading-none text-gold/60">
+                ◆
+              </span>
+            )}
+            <span className="text-[0.72rem] font-semibold uppercase leading-[1.5] tracking-[0.14em] text-orchid-dim sm:text-[0.68rem] sm:tracking-[0.24em]">
+              {credential}
+            </span>
+          </li>
+        ))}
+      </ul>
+
+      <Marquee duration={42} className="cred-ticker relative z-[1] py-[1.15rem] sm:py-5">
         {Array.from({ length: PASSES }, (_, pass) => (
           <ul
             key={pass}

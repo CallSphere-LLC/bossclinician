@@ -1,5 +1,5 @@
 /**
- * Boardroom CEO Dashboard (QA sheet row 95): data and arithmetic.
+ * Boardroom CEO Dashboard (QA sheet rows 95, 161): data and arithmetic.
  *
  * Built from Yvette's "Boardroom CEO Dashboard — Blank Interactive Mockup"
  * (spec captured 2026-10-17). A blank, member-ready version: every input
@@ -29,7 +29,11 @@ export interface BoardroomState {
   capScheduled: Num;
   capCompleted: Num;
   capGuardrail: Num;
+  /** "Use Existing Capacity Before Hiring": blank = completed utilization above. */
+  capCurrentUtil: Num;
   scenarioUtil: Num;
+  /** Blank = monthly revenue from the CEO Snapshot. */
+  capRevenue: Num;
   // Team + Pay
   teamCollections: Num;
   teamTaxes: Num;
@@ -94,7 +98,9 @@ export const boardroomDefaults = (): BoardroomState => ({
   capScheduled: null,
   capCompleted: null,
   capGuardrail: 85,
+  capCurrentUtil: null,
   scenarioUtil: null,
+  capRevenue: null,
   teamCollections: null,
   teamTaxes: null,
   teamBenefits: null,
@@ -117,7 +123,7 @@ export const boardroomDefaults = (): BoardroomState => ({
   hireM2: null,
   hireM3: null,
   hireSteady: null,
-  payMethod: "w2salary",
+  payMethod: "w2hourly",
   ownerRate: null,
   ownerHours: null,
   ownerDesired: null,
@@ -232,13 +238,25 @@ export function versusGuardrail(util: Num, guard: Num): string {
   return `${diff > 0 ? "Above" : "Below"} by ${Math.abs(diff).toFixed(1)} pts`;
 }
 
-/** Use existing capacity before hiring: revenue × scenario / current utilization. */
+/**
+ * Use existing capacity before hiring: revenue × scenario / current utilization.
+ * As in the mockup, the member can type the current utilization and revenue;
+ * left blank they come from the capacity results and the CEO Snapshot.
+ */
 export function capacityScenario(s: BoardroomState) {
-  const { completed } = capacityFigures(s);
+  const derived = capacityFigures(s).completed;
+  const current = has(s.capCurrentUtil) ? s.capCurrentUtil / 100 : derived;
   const scenario = has(s.scenarioUtil) ? s.scenarioUtil / 100 : null;
-  const revenue = has(s.revenue) ? s.revenue : null;
-  const modeled = revenue !== null && completed && scenario !== null ? (revenue * scenario) / completed : null;
-  return { current: completed, scenario, revenue, modeled };
+  const revenue = has(s.capRevenue) ? s.capRevenue : has(s.revenue) ? s.revenue : null;
+  const modeled = revenue !== null && current && scenario !== null ? (revenue * scenario) / current : null;
+  return {
+    current,
+    scenario,
+    revenue,
+    modeled,
+    derivedCurrent: derived,
+    snapshotRevenue: has(s.revenue) ? s.revenue : null,
+  };
 }
 
 /* ---------------------------------------------------------- Team + Pay */
@@ -385,13 +403,16 @@ export function reportSections(s: BoardroomState): { title: string; lines: strin
     });
   }
   const cap = capacityFigures(s);
-  if (cap.booked !== null || cap.completed !== null) {
-    const lines = [
-      `Booked utilization ${pct(cap.booked)} (${versusGuardrail(cap.booked, cap.guard).toLowerCase()}); completed utilization ${pct(cap.completed)} (${versusGuardrail(cap.completed, cap.guard).toLowerCase()}) against a ${count(s.capGuardrail)}% guardrail, ${s.period} period.`,
-    ];
+  const scen = capacityScenario(s);
+  if (cap.booked !== null || cap.completed !== null || scen.modeled !== null) {
+    const lines: string[] = [];
+    if (cap.booked !== null || cap.completed !== null) {
+      lines.push(
+        `Booked utilization ${pct(cap.booked)} (${versusGuardrail(cap.booked, cap.guard).toLowerCase()}); completed utilization ${pct(cap.completed)} (${versusGuardrail(cap.completed, cap.guard).toLowerCase()}) against a ${count(s.capGuardrail)}% guardrail, ${s.period} period.`,
+      );
+    }
     if (cap.perClinician !== null) lines.push(`Average completed per clinician: ${count(cap.perClinician)} ${s.method}.`);
-    const scen = capacityScenario(s);
-    if (scen.modeled !== null) lines.push(`At ${pct(scen.scenario)} utilization, modeled monthly revenue is ${money(scen.modeled)} (from ${money(scen.revenue)}).`);
+    if (scen.modeled !== null) lines.push(`Moving from ${pct(scen.current)} to ${pct(scen.scenario)} utilization models monthly revenue of ${money(scen.modeled)} (from ${money(scen.revenue)}).`);
     out.push({ title: "EHR + Capacity", lines });
   }
   const team = teamFigures(s);

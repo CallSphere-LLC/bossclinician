@@ -290,7 +290,10 @@ html[data-site-theme="light"] .theme-luxe [data-media-surface] {
   --c-night-veil: 23 16 38;
   --c-orchid: 222 210 238;
   --c-orchid-dim: 196 182 218;
-  --c-orchid-faint: 160 145 184;
+  /* Tertiary copy over footage reads at the secondary value: a photograph
+     under a veil is lighter than the night floor (index.css, same rule for
+     the dark theme). */
+  --c-orchid-faint: 196 182 218;
   --c-ink: 255 255 255;
   --c-ink-soft: 196 182 218;
   --c-hairline: 56 46 78;
@@ -309,6 +312,33 @@ html[data-site-theme="light"] .theme-luxe [data-media-surface] [class*="border-w
    or a veiled photograph is ~1.6:1. Foil, as it is on the dark theme. */
 html[data-site-theme="light"] .theme-luxe [data-media-surface] .eyebrow-luxe {
   color: #c9a46a;
+}
+/* Foil lettering stays foil over footage. The page-wide rule above turns
+   `.text-foil` to the deep #76501b for white pages, which on a dark media
+   band is 1.6:1 (the course pages' closing "Protect Your Peace." line). */
+html[data-site-theme="light"] .theme-luxe [data-media-surface] .text-foil {
+  background-image: linear-gradient(100deg, #b58f50 0%, #c9a46a 20%, #f2e0ba 46%, #d9b881 62%, #ba9455 82%, #b08a48 100%);
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+}
+/* Glass on a dark band stays dark glass. The page-wide rules above make
+   `.glass`/`.glass-soft` a white or ivory panel, and the white lettering on
+   them is restored to white just above, so a secondary button on a course
+   page's closing band was a blank white pill. */
+html[data-site-theme="light"] .theme-luxe [data-media-surface] :is(.glass, .glass-soft) {
+  background: rgba(255, 255, 255, 0.035);
+  border-color: rgba(255, 255, 255, 0.1);
+  box-shadow: none;
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  --c-night: 10 7 19;
+  --c-night-deep: 6 4 11;
+  --c-night-raised: 16 11 28;
+  --c-night-veil: 23 16 38;
+  --c-cream: 10 7 19;
+  --c-sand: 16 11 28;
+  --c-surface: 16 11 28;
+  --c-surface-raised: 23 16 38;
 }
 /* A dark frame keeps its bevelled edge (hidden on light cards above). */
 html[data-site-theme="light"] .theme-luxe [data-media-surface] .glass-edge::before {

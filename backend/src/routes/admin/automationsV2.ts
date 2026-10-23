@@ -8,10 +8,12 @@ import {
   conditionsSchema,
   describeActionProblem,
   describeConditionProblem,
+  describeTriggerConfigProblem,
   evaluateConditions,
   isTriggerV2,
   recordSkip,
   runAutomation,
+  sampleFactsFor,
   type RunContext,
 } from "../../automations/engineV2";
 import { pool } from "../../db/pool";
@@ -96,8 +98,16 @@ function stepProblem(action: StoredAction): string | null {
   );
 }
 
-function readinessProblems(conditions: unknown, actions: StoredAction[]): string[] {
+function readinessProblems(
+  conditions: unknown,
+  actions: StoredAction[],
+  trigger?: { type: string; config: Record<string, unknown> | null }
+): string[] {
   const problems: string[] = [];
+
+  // A reminder trigger with no course chosen would sweep nothing and look on.
+  const triggerProblem = trigger ? describeTriggerConfigProblem(trigger.type, trigger.config) : null;
+  if (triggerProblem) problems.push(triggerProblem);
 
   const conditionProblem = describeConditionProblem(conditions ?? {});
   if (conditionProblem) problems.push(conditionProblem);
@@ -225,6 +235,17 @@ function triggerSentence(
 
   if (!descriptor.subjectKey) return `When ${descriptor.label}`;
   const subject = nameOf(lookup, descriptor.subjectSource, triggerConfig?.[descriptor.subjectKey]);
+  if (triggerType === "lesson_not_watched") {
+    const days = Number(triggerConfig?.days) > 0 ? Number(triggerConfig?.days) : 3;
+    const from = triggerConfig?.basis === "access" ? "they got the course" : "it opened";
+    return `When a lesson video has not been watched ${days} day${days === 1 ? "" : "s"} after ${from}${
+      subject ? ` — ${subject}` : " (no course chosen yet)"
+    }`;
+  }
+  if (triggerType === "live_session_missed" || triggerType === "live_session_replay_ready") {
+    const event = nameOf(lookup, "events", triggerConfig?.eventId);
+    if (event) return `When ${descriptor.label} — ${event}`;
+  }
   return subject ? `When ${descriptor.label} — ${subject}` : `When ${descriptor.label} (any)`;
 }
 
@@ -353,7 +374,10 @@ adminAutomationsV2Router.get(
         // The list is where she decides which automation to trust, so an
         // unfinished one has to say so here rather than only once she opens it.
         needsAttention:
-          readinessProblems(row.conditions, stepsOf.get(row.id) ?? []).length > 0,
+          readinessProblems(row.conditions, stepsOf.get(row.id) ?? [], {
+            type: row.trigger_type,
+            config: row.trigger_config,
+          }).length > 0,
       }))
     );
   })
@@ -405,7 +429,10 @@ adminAutomationsV2Router.get(
 
     const lookup = await buildLookup();
     const row = automation.rows[0];
-    const problems = readinessProblems(row.conditions, actions.rows);
+    const problems = readinessProblems(row.conditions, actions.rows, {
+      type: row.trigger_type,
+      config: row.trigger_config,
+    });
 
     res.json({
       ...rowToCamel(row),
@@ -442,8 +469,12 @@ adminAutomationsV2Router.patch(
     const input = automationSchema.partial().parse(req.body);
 
     if (input.status === "active") {
-      const current = await pool.query<{ conditions: Record<string, unknown> }>(
-        `SELECT conditions FROM automations WHERE id = $1`,
+      const current = await pool.query<{
+        conditions: Record<string, unknown>;
+        trigger_type: string;
+        trigger_config: Record<string, unknown>;
+      }>(
+        `SELECT conditions, trigger_type, trigger_config FROM automations WHERE id = $1`,
         [req.params.id]
       );
       if (current.rowCount === 0) throw notFound("Automation not found");
@@ -458,7 +489,11 @@ adminAutomationsV2Router.patch(
       // problem and turning it on in one go.
       const problems = readinessProblems(
         input.conditions ?? current.rows[0].conditions,
-        steps.rows
+        steps.rows,
+        {
+          type: input.triggerType ?? current.rows[0].trigger_type,
+          config: input.triggerConfig ?? current.rows[0].trigger_config,
+        }
       );
       if (problems.length > 0) throw badRequest(notReadyMessage(problems));
     }
@@ -686,7 +721,9 @@ adminAutomationsV2Router.post(
       email: input.email.toLowerCase(),
       name: input.name ?? "",
       subjectId: null,
-      facts: { email: input.email.toLowerCase(), name: input.name ?? "" },
+      // A reminder's practice email shows a sample link where {{lessonUrl}}
+      // or {{replayUrl}} goes, rather than a blank.
+      facts: { ...sampleFactsFor(triggerType), email: input.email.toLowerCase(), name: input.name ?? "" },
     };
 
     const automationId = Number(req.params.id);

@@ -72,6 +72,7 @@ import MarketingOverview from "@/pages/admin/MarketingOverview";
 import Contracts from "@/pages/admin/Contracts";
 
 import EmailLog from "@/pages/admin/EmailLog";
+import VideoEngagement from "@/pages/admin/VideoEngagement";
 import AdminNotFound, { AliasFirst } from "@/pages/admin/AdminNotFound";
 import { loginPathFor } from "@/pages/admin/adminReturnTo";
 
@@ -179,6 +180,7 @@ function ProtectedRoutes() {
         {/* Analytics */}
         <Route path="/analytics" element={<Analytics />} />
         <Route path="/analytics/reports" element={<ReportsHub />} />
+        <Route path="/analytics/engagement" element={<VideoEngagement />} />
         <Route path="/analytics/reports/:reportId" element={<ReportView />} />
         {/* The previous four-report screen, kept reachable rather than deleted:
             it still works, and nothing is lost if the new hub has a gap. */}

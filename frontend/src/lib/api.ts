@@ -696,6 +696,17 @@ export const adminApi = {
       { method: "POST" },
     ),
 
+  /**
+   * The same one-time host link, landing in the community feed (a channel, and
+   * optionally one post's replies) so the admin can post and reply as herself.
+   * Used by the participant preview, which is read-only (QA row 168).
+   */
+  communityHostLink: (communityId: number, target: { channel?: string; post?: number } = {}) =>
+    request<{ url: string; expiresInSeconds: number }>(
+      `/admin/community/${communityId}/host-link`,
+      { method: "POST", body: JSON.stringify(target) },
+    ),
+
   communityGuidelinesSave: (communityId: number, guidelinesMd: string) =>
     request<{ reAccceptanceRequired: boolean }>(
       `/admin/community/${communityId}/guidelines`,

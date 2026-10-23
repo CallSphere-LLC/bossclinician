@@ -10,6 +10,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import MediaPickerDialog from "@/components/admin/MediaPickerDialog";
+import { PasteOptions, useSmartPaste } from "@/components/admin/smartPaste";
 import { Button, Field, Textarea, selectStyles } from "@/pages/admin/ui/primitives";
 import { applyDescriptionFormat, type DescriptionFormat } from "@/components/community/descriptionFormat";
 import { cn } from "@/lib/cn";
@@ -64,6 +65,8 @@ export function CheckoutDescriptionEditor({
   const [preview, setPreview] = useState(false);
   const [picking, setPicking] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
+  // Pasting from Google Docs / Word keeps its formatting, with a plain-text option (QA row 169).
+  const paste = useSmartPaste(onChange);
 
   useLayoutEffect(() => {
     const el = ref.current;
@@ -148,6 +151,7 @@ export function CheckoutDescriptionEditor({
               ))}
             </div>
           )}
+          {!preview && <PasteOptions {...paste.options} className="px-1.5 pb-0.5" />}
         </div>
 
         {preview ? (
@@ -161,6 +165,7 @@ export function CheckoutDescriptionEditor({
         ) : (
           <Textarea
             ref={ref}
+            {...paste.textareaProps}
             id="offer-description"
             rows={10}
             value={value}

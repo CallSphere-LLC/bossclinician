@@ -92,6 +92,40 @@ describeDb("community, member side (integration)", () => {
     expect((await call("GET", `/api/member/community/${room.slug}/live/history`, me.token)).status).toBe(403);
   });
 
+  it("QA row 167: only a host can start the live call — a member is refused a ticket into an empty room", async () => {
+    const room = await newCommunity();
+    // 'always' is the old "members may open it themselves" setting. It must no
+    // longer let a member start the call.
+    await client.query(
+      "UPDATE communities SET live_room_enabled=true, live_room_access='always' WHERE id=$1",
+      [room.id],
+    );
+    const member = await newMember("Plain member");
+    const host = await newMember("Room host");
+    await join(room.id, member.id);
+    await join(room.id, host.id, { role: "moderator" });
+
+    const memberStatus = await call("GET", `/api/member/community/${room.slug}/live`, member.token);
+    expect(memberStatus.status).toBe(200);
+    expect(memberStatus.body).toMatchObject({ open: false, youAreHost: false, access: "hosted" });
+    expect(memberStatus.body.closedReason).toMatch(/isn't open/);
+
+    const refused = await call("POST", `/api/member/community/${room.slug}/live/ticket`, member.token, {
+      peerId: "member-tab",
+    });
+    expect(refused.status).toBe(403);
+    expect(refused.body.error).toMatch(/isn't open/);
+
+    const hostStatus = await call("GET", `/api/member/community/${room.slug}/live`, host.token);
+    expect(hostStatus.body).toMatchObject({ open: true, youAreHost: true });
+    const started = await call("POST", `/api/member/community/${room.slug}/live/ticket`, host.token, {
+      peerId: "host-tab",
+    });
+    expect(started.status).toBe(200);
+    expect(started.body.ticket).toBeTruthy();
+    expect(started.body.role).toBe("moderator");
+  });
+
   /* ------------------------------------------------------------- fixtures */
 
   let seq = 0;

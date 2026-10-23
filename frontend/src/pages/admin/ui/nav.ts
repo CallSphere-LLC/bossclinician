@@ -189,6 +189,8 @@ export const NAV_GROUPS: NavGroup[] = [
     children: [
       { to: "/admin/analytics", label: "Overview", ready: true },
       { to: "/admin/analytics/reports", label: "Reports", ready: true },
+      // Row 171: who watched which lesson video, who came to which live session.
+      { to: "/admin/analytics/engagement", label: "Engagement", ready: true },
     ],
   },
   {

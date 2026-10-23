@@ -61,6 +61,7 @@ import {
   Skeleton,
   Textarea,
 } from "@/pages/admin/ui/primitives";
+import { PasteOptions, useSmartPaste } from "@/components/admin/smartPaste";
 import { DataTable, RowActions } from "@/pages/admin/ui/DataTable";
 import { Modal, useConfirm } from "@/pages/admin/ui/Dialog";
 import { friendlyError, pluralize, webAddress } from "@/pages/admin/ui/friendly";
@@ -988,6 +989,8 @@ export default function EventsAdmin() {
   const [openId, setOpenId] = useState<number | null>(null);
   const [detail, setDetail] = useState<EventDetail | null>(null);
   const [form, setForm] = useState<EventForm | null>(null);
+  // Pasting from Google Docs / Word keeps its formatting, with a plain-text option (QA row 169).
+  const descriptionPaste = useSmartPaste((value) => setForm((current) => current && { ...current, descriptionMd: value }));
   const [problems, setProblems] = useState<{
     title?: string;
     startsAt?: string;
@@ -1918,8 +1921,10 @@ export default function EventsAdmin() {
               </Field>
 
               <Field label="What is it about?" hint="what people read before they sign up">
+                <PasteOptions {...descriptionPaste.options} className="pb-1" />
                 <Textarea
                   rows={4}
+                  {...descriptionPaste.textareaProps}
                   aria-label="What this event is about"
                   value={form.descriptionMd}
                   onChange={(event) =>

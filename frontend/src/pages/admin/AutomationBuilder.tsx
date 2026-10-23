@@ -68,6 +68,7 @@ import {
   AutomationFiltersPanel,
   type FilterLabels,
 } from "@/pages/admin/automations/AutomationListFilters";
+import { SweptTriggerSettings } from "@/pages/admin/automations/SweptTriggerSettings";
 
 // The list's filtering is pure and lives in ./automations; re-exported so the
 // page's tests (and anything else) can reach it from here.
@@ -929,7 +930,9 @@ function AutomationDetail({
                 value={String(automation.triggerConfig?.[trigger.subjectKey] ?? "")}
                 onChange={(event) =>
                   void patch({
+                    // Merged, so re-picking the course keeps the trigger's other settings.
                     triggerConfig: {
+                      ...((automation.triggerConfig ?? {}) as Record<string, string | number | boolean | null>),
                       [trigger.subjectKey]: event.target.value ? Number(event.target.value) : null,
                     },
                   })
@@ -944,6 +947,12 @@ function AutomationDetail({
               </select>
             </Field>
           )}
+          <SweptTriggerSettings
+            triggerType={automation.triggerType}
+            triggerConfig={automation.triggerConfig}
+            events={options.lists.events ?? []}
+            onChange={(triggerConfig) => void patch({ triggerConfig })}
+          />
         </div>
       </Card>
 
@@ -1375,13 +1384,28 @@ function ActionModal({
                 required
               />
             </Field>
-            <Field label="What the email says" hint="Use {{firstName}} to greet them by name">
+            <Field
+              label="What the email says"
+              hint="Use {{firstName}} to greet them by name — reminders can also use {{lessonTitle}}, {{lessonUrl}}, {{sessionTitle}}, {{sessionDate}} and {{replayUrl}}"
+            >
               <Textarea
                 rows={10}
                 value={String(config.bodyMd ?? "")}
                 onChange={(event) => set("bodyMd", event.target.value)}
                 required
               />
+            </Field>
+            <Field label="Which email switch it obeys" hint="People who turned this kind of email off are skipped">
+              <select
+                className={selectStyles}
+                value={String(config.topic ?? "marketing")}
+                onChange={(event) => set("topic", event.target.value)}
+              >
+                <option value="marketing">News, offers and launches</option>
+                <option value="product">Course and product updates</option>
+                <option value="community">Community digests</option>
+                <option value="events">Event invitations and reminders</option>
+              </select>
             </Field>
           </>
         )}

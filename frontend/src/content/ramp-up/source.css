@@ -12148,3 +12148,9 @@ top:-80px !important;
 .ramp-up-page section.section { background-color: transparent !important; }
 .ramp-up-page { overflow-x: clip !important; overflow-y: visible !important; }
 @media (min-width: 768px) { .ramp-up-page { font-size: 20px; } }
+
+/* Readability (sheet row 163): the source's bright green buttons and gold
+   strike-through price fall below WCAG AA; darken them on this page only. */
+.ramp-up-page a.btn--solid { background: #2e7d32 !important; border-color: #2e7d32 !important; }
+.ramp-up-page #section-1726551663515 span[style*="#cca145"] { color: #8a6516 !important; }
+.ramp-up-page #section-1742483216830 span[style*="#cca145"] { color: #e9c983 !important; }

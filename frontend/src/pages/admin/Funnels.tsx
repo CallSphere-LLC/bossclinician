@@ -52,6 +52,7 @@ import {
   Skeleton,
   Textarea,
 } from "@/pages/admin/ui/primitives";
+import { PasteOptions, useSmartPaste } from "@/components/admin/smartPaste";
 import { Modal, useConfirm } from "@/pages/admin/ui/Dialog";
 import { friendlyError, shareLink, slugify, uniqueKey } from "@/pages/admin/ui/friendly";
 
@@ -579,6 +580,8 @@ export default function Funnels() {
   const [reordering, setReordering] = useState(false);
   const [savingFunnel, setSavingFunnel] = useState(false);
   const bodyRef = useRef<HTMLTextAreaElement>(null);
+  // Pasting from Google Docs / Word keeps its formatting, with a plain-text option (QA row 169).
+  const bodyPaste = useSmartPaste((value) => setStepDraft((d) => ({ ...d, bodyMd: value })));
   const [confirm, confirmDialog] = useConfirm();
   const [searchParams, setSearchParams] = useSearchParams();
   /* Read once, on mount only. `?funnel=` is an opening instruction, not a
@@ -1381,8 +1384,10 @@ export default function Funnels() {
                 textareaRef={bodyRef}
                 onChange={(value) => setStepDraft((d) => ({ ...d, bodyMd: value }))}
               />
+              <PasteOptions {...bodyPaste.options} className="py-1" />
               <Textarea
                 ref={bodyRef}
+                {...bodyPaste.textareaProps}
                 rows={6}
                 value={stepDraft.bodyMd ?? ""}
                 onChange={(e) => setStepDraft((d) => ({ ...d, bodyMd: e.target.value }))}

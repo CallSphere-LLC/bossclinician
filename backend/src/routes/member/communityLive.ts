@@ -97,7 +97,16 @@ async function resolveRoom(
   return row;
 }
 
-/** Whether a host is already inside, which is what 'hosted' access turns on. */
+/**
+ * Whether a host is already inside, which is what lets a member in.
+ *
+ * QA row 167 (2026-10-23): "participants can start a live video … please
+ * remove that capability". Only a host — the admin through her host link, or a
+ * moderator — starts the call. A plain member joins one that is already
+ * running and is refused a ticket into an empty room, whatever the room's
+ * stored `live_room_access` says ('always' used to mean "members may open it
+ * themselves"; migration 151 moves every room to 'hosted').
+ */
 function hostPresent(communityId: number): boolean {
   return liveRoster(communityId).some(
     (peer) => peer.role === "host" || peer.role === "owner" || peer.role === "moderator"
@@ -128,12 +137,14 @@ memberCommunityLiveRouter.get(
     const member = req.member as AuthedMember;
     const room = await resolveRoom(member, req.params.slug);
     const roster = liveRoster(room.id);
-    const open = room.live_room_access === "always" || hostPresent(room.id) || isHost(room.role);
+    // Open to a member only while a host is inside; a host can always start it.
+    const open = hostPresent(room.id) || isHost(room.role);
 
     res.json({
       label: roomLabel(room),
       communityName: room.name,
-      access: room.live_room_access,
+      // Always 'hosted' now: members never open the room themselves (row 167).
+      access: "hosted",
       open,
       // Said plainly, because "the room is closed" with no reason reads as a bug.
       closedReason: open ? "" : ROOM_SHUT,
@@ -270,7 +281,9 @@ memberCommunityLiveRouter.post(
     const parsedPeer = peerIdSchema.safeParse((req.body ?? {}).peerId ?? "");
     if (!parsedPeer.success) throw badRequest("A peerId is required.");
 
-    if (room.live_room_access === "hosted" && !isHost(room.role) && !hostPresent(room.id)) {
+    // Members join; only a host starts. Enforced here, not just by hiding the
+    // button: without a ticket there is no signalling stream and no call.
+    if (!isHost(room.role) && !hostPresent(room.id)) {
       throw forbidden(ROOM_SHUT);
     }
 

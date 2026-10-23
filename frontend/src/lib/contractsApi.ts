@@ -2,9 +2,12 @@ import { sessionFetch } from '@/lib/adminTransport';
 import { adminApi, API_BASE } from '@/lib/api';
 import { memberRequest, memberFetch } from '@/lib/memberApi';
 
-export interface Contract { id: number; title: string; pdf_sha256: string; created_at: string; assigned_count: number; signed_count: number }
-export interface ContractAssignment { id: number; contract_id: number; status: 'pending' | 'signed'; assigned_at: string; signed_at: string | null; member_email: string; member_name: string; signed_name: string | null; evidence_sha256: string | null }
-export interface MemberContract { id: number; status: 'pending' | 'signed'; title: string; assigned_at: string; signed_at: string | null; signed_name: string | null; pdf_sha256: string; evidence_sha256: string | null }
+/** An offer that assigns this contract automatically to whoever buys it. */
+export interface ContractOfferLink { id: number; title: string; status: string }
+export interface Contract { id: number; title: string; pdf_sha256: string; created_at: string; assigned_count: number; signed_count: number; offers?: ContractOfferLink[] }
+export interface ContractAssignment { id: number; contract_id: number; status: 'pending' | 'signed'; assigned_at: string; signed_at: string | null; member_email: string; member_name: string; signed_name: string | null; evidence_sha256: string | null; source_order_id?: number | null; source_offer_title?: string | null }
+export interface MemberContract { id: number; status: 'pending' | 'signed'; title: string; assigned_at: string; signed_at: string | null; signed_name: string | null; pdf_sha256: string; evidence_sha256: string | null; source_offer_title?: string | null }
+export interface OfferContracts { offerId: number; linked: Array<{ id: number; title: string }>; contracts: Array<{ id: number; title: string }> }
 
 async function adminRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
   const response = await sessionFetch(`${API_BASE}${path}`, { ...init, headers: { 'Content-Type':'application/json', ...(init.headers ?? {}) } });
@@ -22,6 +25,9 @@ export const adminContractsApi = {
   assign: (contractId: number, email: string) => adminRequest<ContractAssignment>(`/admin/contracts/${contractId}/assign`, {method:'POST',body:JSON.stringify({email})}),
   events: (assignmentId: number) => adminRequest<{events: Array<Record<string, unknown>>; verification: {valid:boolean;checked:number;firstInvalidIndex:number|null}}>(`/admin/contracts/assignments/${assignmentId}/events`),
   fileUrl: (contractId: number) => `${API_BASE}/admin/contracts/${contractId}/file`,
+  /** The contracts an offer assigns on purchase, and every contract that could be picked. */
+  forOffer: (offerId: number) => adminRequest<OfferContracts>(`/admin/contracts/offers/${offerId}`),
+  setForOffer: (offerId: number, contractIds: number[]) => adminRequest<Pick<OfferContracts, 'offerId' | 'linked'>>(`/admin/contracts/offers/${offerId}`, {method:'PUT',body:JSON.stringify({contractIds})}),
 };
 
 export const memberContractsApi = {

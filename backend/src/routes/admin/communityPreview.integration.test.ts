@@ -65,6 +65,24 @@ describeDb("community participant preview (integration)", () => {
     expect((await read("?page=0")).status).toBe(400);
     expect((await fetch(`${base}/${id}/preview`,{method:"POST",headers:{"Content-Type":"application/json"},body:'{}'})).status).toBe(404);
   });
+  // QA row 168: the preview stays read-only; "Post or reply as yourself" mints a
+  // host link to the member feed instead, and only for this community's own
+  // channel and visible posts. (This harness has no admin identity, so a valid
+  // request stops at the identity check — after the channel/post checks pass.)
+  it("host link to the feed only names this community's channel and visible posts",async()=>{
+    const hostLink=(body:unknown)=>fetch(`${base}/${id}/host-link`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
+    const posts=(await db.client.query(`SELECT p.id,p.status FROM community_posts p JOIN community_channels c ON c.id=p.channel_id
+      WHERE c.community_id=$1 AND c.slug='general'`,[id])).rows;
+    const visible=posts.find((p:any)=>p.status==="visible").id;
+    const hidden=posts.find((p:any)=>p.status==="hidden").id;
+    expect((await hostLink({channel:"not-a-channel"})).status).toBe(404);
+    expect((await hostLink({channel:"general",post:hidden})).status).toBe(404);
+    expect((await hostLink({post:"x"})).status).toBe(400);
+    expect((await hostLink({channel:"general",post:visible})).status).toBe(403);
+    expect((await hostLink({})).status).toBe(403);
+    // No member identity and no membership is created by any of that.
+    expect((await db.client.query("SELECT * FROM community_memberships WHERE community_id=$1",[id])).rows).toEqual([]);
+  });
   it("saves and rereads a multiline description without changing publication or access",async()=>{
     const r=await fetch(`${base}/${id}`,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:"Updated community",description:"First paragraph\n\nSecond paragraph"})});
     expect(r.status).toBe(200);

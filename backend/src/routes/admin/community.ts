@@ -1,6 +1,6 @@
 import { adminCommunityPreviewRouter } from "./communityPreview";
 import { liveRoster } from "../../services/liveRoomBus";
-import { Router } from "express";
+import { Router, type Request } from "express";
 import { GROUP_PRICE_COLUMNS, saveAccessGroup, deleteAccessGroup } from "../../services/communityGroupPricing";
 import { pool } from "../../db/pool";
 import { rowToCamel, rowsToCamel, toSnake } from "../../utils/case";
@@ -12,7 +12,7 @@ import { partialUpdate } from "../../validation/partialUpdate";
 import { POINT_ACTIONS, notify } from "../../services/communityNotifications";
 import { enqueue, PRIORITY } from "../../jobs/queue";
 import { recordAdminActionStrict } from "../../services/adminAudit";
-import { HOST_LINK_TTL_SECONDS, createHostLink } from "../../services/hostLinks";
+import { HOST_LINK_TTL_SECONDS, createHostLink, type HostLinkDestination } from "../../services/hostLinks";
 import { communityEventLocation } from "../../services/communityEventLocation";
 import {
   instantOf,
@@ -306,6 +306,10 @@ function assertLiveRoomValues(body: Record<string, unknown>): void {
     if (body.liveRoomAccess !== "always" && body.liveRoomAccess !== "hosted") {
       throw badRequest("Live room access is either always open or open when you're there.");
     }
+    // QA row 167: members never start the call, so 'always' is no longer a
+    // setting anyone can choose. Still accepted from an admin tab opened before
+    // the change, and stored as what it now means.
+    body.liveRoomAccess = "hosted";
   }
   if (body.liveRoomCapacity !== undefined) {
     const capacity = Number(body.liveRoomCapacity);
@@ -452,41 +456,103 @@ adminCommunityRouter.get(
 adminCommunityRouter.post(
   "/:id/live/host-link",
   asyncHandler(async (req, res) => {
-    const communityId = Number(req.params.id);
-    if (!Number.isInteger(communityId) || communityId < 1) throw notFound("Community not found");
-    const adminId = req.user?.sub;
-    if (adminId === undefined) throw forbidden("Admin identity missing");
-
-    // Email and name come from the table rather than the JWT: the token carries
-    // no name, and its email is whatever it was when she signed in.
-    const admin = await pool.query<{ email: string; name: string }>(
-      `SELECT email, name FROM admin_users WHERE id = $1`,
-      [adminId],
-    );
-    const me = admin.rows[0];
-    if (!me) throw forbidden("Admin identity missing");
-
-    // So a mistyped id is a 404 and not an audit row about a link nobody got.
-    const exists = await pool.query(`SELECT 1 FROM communities WHERE id = $1`, [communityId]);
-    if (exists.rowCount === 0) throw notFound("Community not found");
-
-    await recordAdminActionStrict({
-      req,
-      action: "community.live.host_link",
-      entityType: "community",
-      entityId: communityId,
-      after: { memberEmail: me.email, expiresInSeconds: HOST_LINK_TTL_SECONDS },
-    });
-
-    const link = await createHostLink({
-      adminId,
-      adminEmail: me.email,
-      adminName: me.name,
-      communityId,
-    });
-    res.json({ url: link.url, expiresInSeconds: link.expiresInSeconds });
+    res.json(await mintHostLink(req, { to: "live" }));
   }),
 );
+
+const hostLinkBody = z.object({
+  channel: z.string().trim().min(1).max(200).optional(),
+  post: z.coerce.number().int().positive().max(2147483647).optional(),
+});
+
+/**
+ * POST /:id/host-link — "Post or reply as yourself" from the participant preview.
+ *
+ * QA row 168: the preview is a read-only snapshot with no member identity (see
+ * communityPreview.ts), so a reply typed there had nobody to be written as.
+ * Rather than a second, admin-shaped write path into posts and comments, this
+ * is the live room's host link pointed at the feed: the owner lands on the
+ * member site as her own account, a host of this community, in the channel she
+ * was previewing (and on the post she pressed Reply on), and writes through
+ * the ordinary member routes — notifications, points, moderation and all.
+ *
+ * Same permission, audit and lifetime as the live-room link.
+ */
+adminCommunityRouter.post(
+  "/:id/host-link",
+  asyncHandler(async (req, res) => {
+    const parsed = hostLinkBody.safeParse(req.body ?? {});
+    if (!parsed.success) throw badRequest("Invalid link options");
+    const communityId = Number(req.params.id);
+    let channelSlug: string | undefined;
+    let postId: number | undefined;
+    if (parsed.data.channel && Number.isInteger(communityId)) {
+      // The slug has to name a channel of this community, and the post a
+      // visible post in it — a link should never land on somebody else's room.
+      const channel = await pool.query<{ id: number; slug: string }>(
+        `SELECT id, slug FROM community_channels WHERE community_id = $1 AND slug = $2`,
+        [communityId, parsed.data.channel],
+      );
+      if (!channel.rows[0]) throw notFound("Channel not found");
+      channelSlug = channel.rows[0].slug;
+      if (parsed.data.post) {
+        const post = await pool.query(
+          `SELECT 1 FROM community_posts WHERE id = $1 AND channel_id = $2 AND status = 'visible'`,
+          [parsed.data.post, channel.rows[0].id],
+        );
+        if (post.rowCount === 0) throw notFound("Post not found");
+        postId = parsed.data.post;
+      }
+    }
+    res.json(await mintHostLink(req, { to: "community", channelSlug, postId }));
+  }),
+);
+
+async function mintHostLink(
+  req: Request,
+  destination: HostLinkDestination,
+): Promise<{ url: string; expiresInSeconds: number }> {
+  const communityId = Number(req.params.id);
+  if (!Number.isInteger(communityId) || communityId < 1) throw notFound("Community not found");
+  const adminId = req.user?.sub;
+  if (adminId === undefined) throw forbidden("Admin identity missing");
+
+  // Email and name come from the table rather than the JWT: the token carries
+  // no name, and its email is whatever it was when she signed in.
+  const admin = await pool.query<{ email: string; name: string }>(
+    `SELECT email, name FROM admin_users WHERE id = $1`,
+    [adminId],
+  );
+  const me = admin.rows[0];
+  if (!me) throw forbidden("Admin identity missing");
+
+  // So a mistyped id is a 404 and not an audit row about a link nobody got.
+  const exists = await pool.query(`SELECT 1 FROM communities WHERE id = $1`, [communityId]);
+  if (exists.rowCount === 0) throw notFound("Community not found");
+
+  await recordAdminActionStrict({
+    req,
+    action: destination.to === "live" ? "community.live.host_link" : "community.host_link",
+    entityType: "community",
+    entityId: communityId,
+    after: {
+      memberEmail: me.email,
+      expiresInSeconds: HOST_LINK_TTL_SECONDS,
+      ...(destination.to === "community"
+        ? { channel: destination.channelSlug ?? null, post: destination.postId ?? null }
+        : {}),
+    },
+  });
+
+  const link = await createHostLink({
+    adminId,
+    adminEmail: me.email,
+    adminName: me.name,
+    communityId,
+    destination,
+  });
+  return { url: link.url, expiresInSeconds: link.expiresInSeconds };
+}
 
 /**
  * PUT /:id/guidelines

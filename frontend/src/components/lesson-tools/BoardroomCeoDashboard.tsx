@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import {
   ActionButton,
   Callout,
@@ -39,14 +39,22 @@ import {
   type BoardroomState,
   type Num,
 } from "./boardroom";
-import { useToolState } from "./useToolState";
+import { useVersionedToolState } from "./useVersionedToolState";
 
 /**
- * Boardroom CEO Dashboard (QA sheet row 95), the first lesson of The Boss
- * Boardroom. Nine tabs from Yvette's blank member-ready mockup — CEO Snapshot,
- * EHR + Capacity, Team + Pay, Hiring, Owner Pay, Cash Strategy, Benefits,
- * Scenario Lab, CEO Report — with every figure computed in boardroom.ts and
- * the member's entries saved to their account.
+ * Boardroom CEO Dashboard (QA sheet rows 95, 161), the first lesson of the
+ * owner's course "The Board Room" (moved there from the Boss Boardroom coaching
+ * programme by migration 147). Nine tabs from Yvette's blank member-ready
+ * mockup — CEO Snapshot, EHR + Capacity, Team + Pay, Hiring, Owner Pay, Cash
+ * Strategy, Benefits, Scenario Lab, CEO Report — with every figure computed in
+ * boardroom.ts. Fields shared between tabs (revenue, costs, cash, utilization)
+ * are one value in one saved document.
+ *
+ * Saving: the member's private, revision-checked tool state
+ * (useVersionedToolState, as the Practice Elevation dashboard uses). Every edit
+ * autosaves to their account; another device picks it up on focus or within
+ * 15 seconds, and a stale device can never silently overwrite newer work — it
+ * stops, offers a download of its copy, and reloads the saved version.
  */
 
 type Tab = "snapshot" | "capacity" | "team" | "hiring" | "owner" | "cash" | "benefits" | "scenario" | "report";
@@ -79,12 +87,20 @@ function Line({ label, value }: { label: string; value: ReactNode }) {
 }
 
 export function BoardroomCeoDashboard() {
-  const { state, setState, status, ready, savedAt } = useToolState(BOARDROOM_KEY, boardroomDefaults, normaliseBoardroom);
+  const tool = useVersionedToolState(BOARDROOM_KEY, boardroomDefaults, normaliseBoardroom);
+  const { state, setState, status, ready, savedAt } = tool;
   const [tab, setTab] = useState<Tab>("snapshot");
   const current = TABS.find((t) => t.id === tab) ?? TABS[0];
 
-  const set = <K extends keyof BoardroomState>(key: K, value: BoardroomState[K]) =>
-    setState((prev) => ({ ...prev, [key]: value }));
+  // Several fields can change between renders (a select then a number); each
+  // edit builds on the newest entries, not on the render it came from.
+  const latest = useRef(state);
+  latest.current = state;
+  const set = <K extends keyof BoardroomState>(key: K, value: BoardroomState[K]) => {
+    const next = { ...latest.current, [key]: value };
+    latest.current = next;
+    setState(next);
+  };
   const num = (key: { [K in keyof BoardroomState]: BoardroomState[K] extends Num ? K : never }[keyof BoardroomState]) => ({
     value: state[key] as Num,
     onChange: (value: number | null) => set(key, value as BoardroomState[typeof key]),
@@ -103,7 +119,7 @@ export function BoardroomCeoDashboard() {
   const unit = state.method === "hours" ? "hours" : "sessions";
 
   const reportHtml = () =>
-    `<small>THE BOSS BOARDROOM</small><h1>CEO Summary Report</h1><p class="muted">A decision-prep summary based only on the information entered. Prepared ${escapeHtml(
+    `<small>THE BOARD ROOM</small><h1>CEO Summary Report</h1><p class="muted">A decision-prep summary based only on the information entered. Prepared ${escapeHtml(
       new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }),
     )}.</p>${report
       .map((sec) => `<section><h2>${escapeHtml(sec.title)}</h2><ul>${sec.lines.map((l) => `<li>${escapeHtml(l)}</li>`).join("")}</ul></section>`)
@@ -122,21 +138,63 @@ export function BoardroomCeoDashboard() {
       window.alert("This does not appear to be a valid Boardroom CEO Dashboard backup.");
       return;
     }
+    if (status === "readonly" || status === "conflict" || status === "offline") {
+      window.alert("Your saved dashboard is not editable right now, so the backup cannot be restored. Reload the page and try again.");
+      return;
+    }
     if (!window.confirm("Restore the backup and replace your current dashboard entries?")) return;
     setState(normaliseBoardroom(candidate));
   };
 
+  const saveProblem =
+    status === "conflict" ? (
+      <div role="alert" className="flex flex-col gap-3 rounded-xl border border-gold/40 bg-gold/[0.06] p-4">
+        <p className="text-sm text-orchid">
+          This dashboard was updated on another device. Your edits here are paused so nothing is overwritten.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <ActionButton
+            icon="download"
+            onClick={() =>
+              downloadFile(
+                "Boardroom_CEO_Dashboard_Local_Copy.json",
+                JSON.stringify({ version: 1, createdAt: new Date().toISOString(), data: state }, null, 2),
+                "application/json",
+              )
+            }
+          >
+            Download my local copy
+          </ActionButton>
+          <ActionButton
+            primary
+            onClick={() => {
+              if (window.confirm("Load the latest saved version? Download your local copy first if you need to keep these unsaved edits.")) {
+                void tool.reload();
+              }
+            }}
+          >
+            Load latest saved version
+          </ActionButton>
+        </div>
+      </div>
+    ) : status === "offline" ? (
+      <div role="alert" className="flex flex-wrap items-center gap-3 rounded-xl border border-gold/40 bg-gold/[0.06] p-4">
+        <p className="text-sm text-orchid">Your saved dashboard could not be loaded, so nothing here is being saved.</p>
+        <ActionButton onClick={() => void tool.reload()}>Retry loading my dashboard</ActionButton>
+      </div>
+    ) : null;
+
   if (!ready) {
     return (
-      <DashboardFrame eyebrow="The Boss Boardroom" title="Boardroom CEO Dashboard" status={status}>
-        <p className="text-sm text-orchid-dim">Loading your dashboard…</p>
+      <DashboardFrame eyebrow="The Board Room" title="Boardroom CEO Dashboard" status={status}>
+        {saveProblem ?? <p className="text-sm text-orchid-dim">Loading your dashboard…</p>}
       </DashboardFrame>
     );
   }
 
   return (
     <DashboardFrame
-      eyebrow="The Boss Boardroom · CEO Dashboard"
+      eyebrow="The Board Room · CEO Dashboard"
       title={current.title}
       subtitle={current.sub}
       status={status}
@@ -149,6 +207,7 @@ export function BoardroomCeoDashboard() {
       }
       footer={BOARDROOM_DISCLAIMER}
     >
+      {saveProblem}
       <TabBar label="Boardroom dashboard tabs" tabs={TABS} active={tab} onChange={setTab} />
 
       {tab === "snapshot" && (
@@ -181,11 +240,11 @@ export function BoardroomCeoDashboard() {
               <SelectField label="Data source" value={state.dataSource} onChange={(v) => set("dataSource", v)} options={[{ value: "ehr", label: "EHR Report" }, { value: "manual", label: "Manual estimate" }] as const} />
               <SelectField label="Reporting period" value={state.period} onChange={(v) => set("period", v)} options={[{ value: "weekly", label: "Weekly" }, { value: "monthly", label: "Monthly" }, { value: "quarterly", label: "Quarterly" }] as const} />
               <SelectField label="Capacity level" value={state.level} onChange={(v) => set("level", v)} options={[{ value: "practice", label: "Entire Practice" }, { value: "single", label: "Single Clinician" }, { value: "group", label: "Clinician group" }] as const} />
-              <NumField label="Number of clinicians included" placeholder="Enter clinicians" {...num("clinicians")} />
+              <NumField label="Number of clinicians included" placeholder="Enter clinician count" {...num("clinicians")} />
               <SelectField label="Capacity method" value={state.method} onChange={(v) => set("method", v)} options={[{ value: "sessions", label: "Sessions" }, { value: "hours", label: "Hours" }] as const} />
-              <NumField label={`Target ${unit} for selected period`} placeholder="Enter target" {...num("capTarget")} />
-              <NumField label={`Scheduled ${unit} for selected period`} placeholder="Enter scheduled" {...num("capScheduled")} />
-              <NumField label={`Completed ${unit} for selected period`} placeholder="Enter completed" {...num("capCompleted")} />
+              <NumField label={`Target ${unit} for selected period`} placeholder={`Enter target ${unit}`} {...num("capTarget")} />
+              <NumField label={`Scheduled ${unit} for selected period`} placeholder={`Enter scheduled ${unit}`} {...num("capScheduled")} />
+              <NumField label={`Completed ${unit} for selected period`} placeholder={`Enter completed ${unit}`} {...num("capCompleted")} />
             </Panel>
             <Panel title="Capacity Results">
               <NumField label="Clinical Capacity Guardrail %" suffix="%" max={100} {...num("capGuardrail")} />
@@ -200,12 +259,25 @@ export function BoardroomCeoDashboard() {
             </Panel>
           </Grid>
           <Panel title="Use Existing Capacity Before Hiring">
-            <Grid>
-              <Tile label="Current completed utilization %" value={pct(capScenario.current)} hint="From your capacity results" />
-              <NumField label="Scenario utilization %" suffix="%" max={100} placeholder="Enter %" {...num("scenarioUtil")} />
-              <Tile label="Monthly revenue at current utilization" value={money(capScenario.revenue)} hint="From CEO Snapshot" />
-              <Tile label="Modeled revenue at scenario utilization" value={money(capScenario.modeled)} emphasis />
+            <Grid cols={3}>
+              <NumField
+                label="Current completed utilization %"
+                suffix="%"
+                max={100}
+                placeholder={capScenario.derivedCurrent !== null ? `Using ${pct(capScenario.derivedCurrent)} from results` : "Current %"}
+                hint="Leave blank to use completed utilization from Capacity Results."
+                {...num("capCurrentUtil")}
+              />
+              <NumField label="Scenario utilization %" suffix="%" max={100} placeholder="Scenario %" {...num("scenarioUtil")} />
+              <NumField
+                label="Monthly revenue at current utilization"
+                prefix="$"
+                placeholder={capScenario.snapshotRevenue !== null ? `Using ${money(capScenario.snapshotRevenue)} from CEO Snapshot` : "Enter revenue"}
+                hint="Leave blank to use monthly revenue from CEO Snapshot."
+                {...num("capRevenue")}
+              />
             </Grid>
+            <Line label="Modeled revenue at scenario utilization" value={money(capScenario.modeled)} />
             <p className="text-xs text-orchid-dim">Simple proportional planning estimate only; not a revenue guarantee.</p>
           </Panel>
         </>
@@ -337,9 +409,9 @@ export function BoardroomCeoDashboard() {
                   { value: "distributions", label: "Distributions" },
                 ] as const}
               />
-              <NumField label="Current hourly rate" prefix="$" placeholder="Enter rate" {...num("ownerRate")} />
-              <NumField label="Average hours / week" placeholder="Enter hours" {...num("ownerHours")} />
-              <NumField label="Desired monthly owner compensation" prefix="$" placeholder="Enter desired compensation" {...num("ownerDesired")} />
+              <NumField label="Current hourly rate" prefix="$" placeholder="Enter hourly rate" {...num("ownerRate")} />
+              <NumField label="Average hours / week" placeholder="Enter weekly hours" {...num("ownerHours")} />
+              <NumField label="Desired monthly owner compensation" prefix="$" placeholder="Enter desired amount" {...num("ownerDesired")} />
             </Panel>
             <Panel title="Pay Increase Calculator">
               <div>
@@ -404,7 +476,7 @@ export function BoardroomCeoDashboard() {
       {tab === "benefits" && (
         <Grid>
           <Panel>
-            <NumField label="Eligible clinicians" placeholder="Enter clinicians" {...num("benClinicians")} />
+            <NumField label="Eligible clinicians" placeholder="Enter clinician count" {...num("benClinicians")} />
             <NumField label="Health contribution / clinician / month" prefix="$" placeholder="Optional" {...num("benHealth")} />
             <NumField label="Retirement contribution / clinician / month" prefix="$" placeholder="Optional" {...num("benRetirement")} />
             <NumField label="PTO cost / clinician / month" prefix="$" placeholder="Optional" {...num("benPto")} />

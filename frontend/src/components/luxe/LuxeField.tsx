@@ -14,7 +14,10 @@ import { cn } from "@/lib/cn";
  */
 const CONTROL = cn(
   "min-h-[2.75rem] w-full rounded-xl border border-white/12 bg-white/[0.04] px-4 py-3",
-  "text-[0.95rem] text-white placeholder:text-white/30",
+  // 16px below sm: iOS Safari zooms the page in on focus for any control set
+  // under 16px and leaves it zoomed, cropping the right edge of every line —
+  // QA row 165 "words cut off on my phone". Desktop keeps 0.95rem.
+  "text-base sm:text-[0.95rem] text-white placeholder:text-white/30",
   "outline-none transition-colors duration-300",
   "hover:border-white/20",
   "focus-visible:border-gold/60 focus-visible:bg-white/[0.07]",

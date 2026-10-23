@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { useMember } from "@/hooks/useMember";
 import { TimezonePrompt } from "@/components/member/TimezonePrompt";
+import { PendingContractsBanner } from "@/components/member/PendingContractsBanner";
 import { FloatingCall } from "@/components/community/FloatingCall";
 import { rememberCommunityReturn } from "@/components/community/communityReturn";
 import { PlayerPreviewBanner } from "@/components/player/playerSource";
@@ -291,6 +292,7 @@ export function MemberShell({
         <main id="member-content" className="min-w-0 flex-1">
           {/* Renders nothing unless the device and the saved time zone disagree. */}
           {!preview && <TimezonePrompt className="mb-8" />}
+          {!preview && <PendingContractsBanner className="mb-8" />}
 
           {hero}
 

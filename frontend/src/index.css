@@ -72,6 +72,17 @@
     scroll-behavior: smooth;
   }
 
+  /* QA row 165 (phone text cut off): a word with no break opportunity — an
+     email address, a URL — ran past the screen edge and was clipped by its
+     section on 320–430px phones (e.g. support@profitableprivatepractices.com
+     on the course pages). `break-word` only splits a word that cannot fit on
+     a line by itself, so wide screens where everything fits are unchanged.
+     Inherited, so it covers imported Kajabi HTML too; nowrap labels and
+     elements that set their own overflow-wrap keep theirs. */
+  body {
+    overflow-wrap: break-word;
+  }
+
   @media (prefers-reduced-motion: reduce) {
     html {
       scroll-behavior: auto;
@@ -343,16 +354,20 @@
 
 /* ── Gold foil text ───────────────────────────────────────────────────────
    Flat #C9A46A on near-black reads mustard. A multi-stop foil gradient with a
-   specular band near the middle reads as metal. */
+   specular band near the middle reads as metal. The two dark ends were
+   #a07840 / #8c6b34, which put the start and end of a short foil line at
+   3.3-4.1:1 on the raised night surfaces (QA sheet: text too light in dark
+   mode). Lifted so the darkest stop, #b08a48, holds 5.1:1 on rgb(36 30 45) and
+   6.4:1 on the #06040B floor; the bright band in the middle is unchanged. */
 .text-foil {
   background-image: linear-gradient(
     100deg,
-    #a07840 0%,
+    #b58f50 0%,
     #c9a46a 20%,
     #f2e0ba 46%,
     #d9b881 62%,
-    #b08a48 82%,
-    #8c6b34 100%
+    #ba9455 82%,
+    #b08a48 100%
   );
   -webkit-background-clip: text;
   background-clip: text;
@@ -452,6 +467,31 @@
   mask-image: linear-gradient(90deg, transparent, #000 9%, #000 91%, transparent);
 }
 
+/* Credentials strip (LuxeCredBar): a still, wrapping list on phones and under
+   Reduce Motion, the ticker from 640px up. A frozen or phone-width ticker
+   only ever shows words sliced at the screen edge (QA row 165). Plain CSS
+   rather than Tailwind variants so the motion-reduce + breakpoint pair has an
+   explicit order. */
+.cred-ticker {
+  display: none;
+}
+@media (min-width: 640px) {
+  .cred-static {
+    display: none;
+  }
+  .cred-ticker {
+    display: block;
+  }
+}
+@media (min-width: 640px) and (prefers-reduced-motion: reduce) {
+  .cred-static {
+    display: flex;
+  }
+  .cred-ticker {
+    display: none;
+  }
+}
+
 /* ── Dark chrome ──────────────────────────────────────────────────────── */
 .theme-luxe {
   color-scheme: dark;
@@ -530,6 +570,55 @@
    wins. The light theme maps every `text-white/*` to ink already. */
 :where(html:not([data-site-theme="light"]) .theme-luxe) :is(.text-white\/35, .text-white\/40, .text-white\/45) {
   color: rgb(255 255 255 / 0.62);
+}
+/* The same floor for placeholder text: white at 30-40% is 2.6-3.9:1 on the
+   glass fields. 55% is ~5.9:1 on `bg-white/[0.05]` over night-raised and
+   still reads as a hint next to the typed value at /100. */
+:where(html:not([data-site-theme="light"]) .theme-luxe) :is(.placeholder\:text-white\/30, .placeholder\:text-white\/35, .placeholder\:text-white\/40)::placeholder {
+  color: rgb(255 255 255 / 0.55);
+}
+
+/* `--c-plum` is lifted to lavender on the dark theme because it is mostly
+   used as *text*. Used as a *fill* under white lettering (the Fully Booked
+   flash-sale bar, the "Play video" badge) the same lavender is 2.3:1. A
+   whole-token `bg-plum` is the brand plum on either theme: white on #5C457D
+   is 8.1:1. `bg-plum/10`-style tints and `bg-plum-bright` are other tokens
+   and are not caught. */
+.theme-luxe [class~="bg-plum"] {
+  background-color: rgb(92 69 125);
+}
+
+/* Tertiary copy over footage. `orchid-faint` is measured against the night
+   floor (7.0:1); over a photograph under a veil the field is lighter, and the
+   course pages' "Secure checkout" line fell to ~4:1. On a media surface it
+   takes the secondary value (6.2:1 on the same field). site-theme.css sets the
+   same value in its light-theme media-surface block. */
+.theme-luxe [data-media-surface] {
+  --c-orchid-faint: 196 182 218;
+}
+
+/* Light islands: the opposite of `data-media-surface` — a block that is light
+   in BOTH themes (an imported course sales page on lilac and white bands).
+   The base rule above gives every h1-h4 `text-ink`, and the dark theme makes
+   ink white, so any heading without a colour of its own was white on lilac
+   (QA sheet: course-page text too light in dark mode). Inside an island the
+   body-copy tokens take their light-theme values (site-theme.css), so the
+   dark theme renders it exactly as the light theme does. `:where()` keeps
+   this at zero specificity: a page stylesheet that sets its own palette on
+   its root still wins, and custom properties set on the island itself beat
+   the ones it would inherit from `.theme-luxe` either way. New light blocks
+   should carry `data-light-surface` rather than join the class list. */
+:where(.theme-luxe) :where([data-light-surface], .ramp-up-page, .doctor-sales-page, .protection-sales-page, .profile-sales-page, .starter-sales-page) {
+  color-scheme: light;
+  --c-ink: 30 24 40;
+  --c-ink-soft: 62 54 74;
+  --c-orchid: 48 40 60;
+  --c-orchid-dim: 62 54 74;
+  --c-orchid-faint: 78 69 90;
+  --c-plum: 92 69 125;
+  --c-plum-deep: 61 45 92;
+  --c-lilac: 84 62 110;
+  --c-hairline: 216 211 223;
 }
 
 

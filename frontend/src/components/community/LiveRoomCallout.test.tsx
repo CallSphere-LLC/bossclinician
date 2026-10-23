@@ -21,11 +21,25 @@ describe("LiveRoomCallout", () => {
     expect(html).toContain("Live video call");
     expect(html).toContain("Office Hours");
     expect(html).toContain('href="/community/the-boss/live"');
-    expect(html).toContain("Start a call");
+    // Before the status arrives (and always in the admin's participant
+    // preview) a member is never invited to start the call — QA row 167.
+    expect(html).not.toContain("Start");
+    expect(html).toContain("See the room");
   });
 
-  it("offers to start an empty room and to join a busy one", () => {
-    expect(liveCallCopy(OPEN, false)).toMatchObject({ action: "Start a call", busy: false });
+  it("lets only a host start an empty room; members join a busy one", () => {
+    expect(liveCallCopy({ ...OPEN, youAreHost: true }, false)).toMatchObject({
+      action: "Start the call",
+      busy: false,
+      shut: false,
+    });
+    // QA row 167: a member facing an empty room is told it opens when a host
+    // starts it, not offered a button that would start it.
+    const empty = liveCallCopy(OPEN, false);
+    expect(empty).toMatchObject({ action: "See the room", shut: true, busy: false });
+    expect(empty.status).toBe("Opens when a host starts the call.");
+    expect(liveCallCopy(null, false)).toMatchObject({ action: "See the room", shut: true });
+    expect(liveCallCopy(null, false).status).toMatch(/opens when a host starts the call/);
     const busy = liveCallCopy({ ...OPEN, occupancy: 2 }, false);
     expect(busy.action).toBe("Join the call");
     expect(busy.status).toBe("2 people are in the call now.");

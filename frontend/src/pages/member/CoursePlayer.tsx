@@ -541,6 +541,12 @@ function CourseHome({ course, productSlug }: { course: CourseOutlineData; produc
                 <LuxePill accent="green">Every open lesson is finished</LuxePill>
               )
             )}
+            {course.community && (
+              <LuxeButton to={`/community/${course.community.slug}`} variant="outline">
+                <Users aria-hidden className="size-4" />
+                Open the {course.community.name} community
+              </LuxeButton>
+            )}
           </div>
         </div>
       </GlassCard>

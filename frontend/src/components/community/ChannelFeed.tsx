@@ -4,6 +4,7 @@ import { useSearchParams } from "react-router";
 import { Loader2, MessagesSquare } from "lucide-react";
 import { toast } from "sonner";
 import { GlassCard } from "@/components/luxe/GlassCard";
+import { LuxeButton } from "@/components/luxe/LuxeButton";
 import { PostCard } from "@/components/community/PostCard";
 import {
   ForumView,
@@ -315,11 +316,28 @@ export function ChannelFeed({ communitySlug, channelSlug, role }: ChannelFeedPro
       )}
 
       {preview ? (
-        <fieldset disabled>
-          <PostComposer communitySlug={communitySlug} channelName={channel?.name ?? "the community"}
-            authorName="Participant" authorEmail="" authorAvatarUrl="" onSubmit={async () => false} canSchedule={false} />
-          <p className="mt-2 text-xs text-orchid-dim">Posting is disabled in preview.</p>
-        </fieldset>
+        <div className="flex flex-col gap-3">
+          <fieldset disabled>
+            <PostComposer communitySlug={communitySlug} channelName={channel?.name ?? "the community"}
+              authorName="Participant" authorEmail="" authorAvatarUrl="" onSubmit={async () => false} canSchedule={false} />
+          </fieldset>
+          {/* QA row 168: the composer above is only a picture of what members
+              see — the preview has no member identity to write as, and a dimmed
+              box on a phone just looked broken. Said plainly, with the way to
+              actually post: the real community, signed in as the owner. */}
+          <GlassCard spotlight={false} interactive={false} className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center">
+            <p className="min-w-0 flex-1 text-sm leading-relaxed text-orchid">
+              This is the participant preview, so posting and replying are switched off here and nothing is saved.
+              To post or reply, open the community as yourself.
+            </p>
+            {preview.writeAsYourself && (
+              <LuxeButton type="button" variant="foil" size="sm" className="min-h-11 shrink-0"
+                onClick={() => preview.writeAsYourself?.()}>
+                Post or reply as yourself
+              </LuxeButton>
+            )}
+          </GlassCard>
+        </div>
       ) : impersonated ? (
         <GlassCard spotlight={false} interactive={false} className="p-5">
           <p className="text-sm leading-relaxed text-orchid">

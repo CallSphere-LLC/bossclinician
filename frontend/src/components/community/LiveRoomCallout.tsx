@@ -118,23 +118,33 @@ export function liveCallCopy(
   inThisCall: boolean,
 ): { status: string; action: string; shut: boolean; busy: boolean } {
   const occupancy = room?.occupancy ?? 0;
-  const shut = !inThisCall && room !== null && !room.open && !room.youAreHost;
+  // QA row 167: only a host starts the call. A member is offered to join one
+  // that is already running, and otherwise told it opens when a host starts
+  // it — never "Start a call". The admin's participant preview has no status at
+  // all (room === null) and used to fall through to that member-facing
+  // "Start a call", which is what the owner saw.
+  const host = room?.youAreHost === true;
+  const waiting =
+    !inThisCall && !host && (room === null || !room.open || occupancy === 0);
 
   let status: string;
   if (inThisCall) status = "You're in the call now.";
-  else if (room === null) status = "Video and audio with the people in this community.";
-  else if (shut) status = room.closedReason || "Opens when a host joins.";
-  else if (room.full) status = "The call is full right now. Try again in a few minutes.";
-  else if (occupancy === 0) status = "Nobody's in yet. Start the call and others can join you.";
+  else if (waiting)
+    status =
+      room === null
+        ? "Video and audio with the people in this community. It opens when a host starts the call."
+        : room.closedReason || "Opens when a host starts the call.";
+  else if (room?.full) status = "The call is full right now. Try again in a few minutes.";
+  else if (occupancy === 0) status = "Nobody's in yet. Start the call and members can join you.";
   else status = `${occupancy} ${occupancy === 1 ? "person is" : "people are"} in the call now.`;
 
   const action = inThisCall
     ? "Back to your call"
-    : shut
+    : waiting
       ? "See the room"
       : occupancy === 0
-        ? "Start a call"
+        ? "Start the call"
         : "Join the call";
 
-  return { status, action, shut, busy: inThisCall || occupancy > 0 };
+  return { status, action, shut: waiting, busy: inThisCall || occupancy > 0 };
 }

@@ -76,7 +76,7 @@ export function DocumentationThankYou({ tier }: { tier: Tier }) {
             <GoldRule className="mt-5" width="w-12" />
             <dl className="mt-5 divide-y divide-white/10">
               {rows.map(([label, value]) => (
-                <div key={label} className="flex justify-between gap-4 py-2.5">
+                <div key={label} className="flex flex-wrap justify-between gap-x-4 gap-y-1 py-2.5">
                   <dt className="text-[0.72rem] font-semibold uppercase tracking-[0.16em] text-gold">{label}</dt>
                   <dd className="copy-luxe text-right text-sm tabular-nums">{value}</dd>
                 </div>

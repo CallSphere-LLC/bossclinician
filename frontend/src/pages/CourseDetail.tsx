@@ -21,7 +21,6 @@ import {
   type CurriculumModule,
 } from "@/components/course/CoursePriceLabel";
 import CourseSalesPage from "@/components/course/CourseSalesPage";
-import StarterSuiteSalesPage from "@/components/course/StarterSuiteSalesPage";
 import ImportedSalesPage, { hasImportedSalesPage } from "@/components/course/ImportedSalesPage";
 import RampUpSalesPage from "@/components/course/RampUpSalesPage";
 import FullyBookedSalesPage from "@/components/course/FullyBookedSalesPage";
@@ -177,8 +176,6 @@ export default function CourseDetail({ slugOverride }: { slugOverride?: string }
         <RampUpSalesPage course={course} />
       ) : course.slug === "fully-booked-toolkit" ? (
         <FullyBookedSalesPage course={course} />
-      ) : course.slug === "private-practice-starter-suite" ? (
-        <StarterSuiteSalesPage course={course} />
       ) : salesPage ? (
         <CourseSalesPage course={course} page={salesPage} />
       ) : (
@@ -198,7 +195,7 @@ export default function CourseDetail({ slugOverride }: { slugOverride?: string }
                     ← The training library
                   </Link>
 
-                  <h1 className="mt-5 font-display text-4xl leading-tight text-ink sm:text-5xl">
+                  <h1 className="mt-5 font-display text-[length:min(2.25rem,11vw)] leading-tight text-ink sm:text-5xl">
                     {course.title}
                   </h1>
 
@@ -348,7 +345,7 @@ export default function CourseDetail({ slugOverride }: { slugOverride?: string }
                                 ) : (
                                   <Lock className="size-4 shrink-0 text-orchid-faint" aria-hidden />
                                 )}
-                                <span className="min-w-0 flex-1 truncate text-[0.95rem] text-orchid">
+                                <span className="min-w-0 flex-1 text-[0.95rem] text-orchid">
                                   {lesson.title}
                                 </span>
                                 {lesson.preview && (

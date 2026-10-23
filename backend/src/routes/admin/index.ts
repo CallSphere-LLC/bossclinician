@@ -53,6 +53,7 @@ import { adminContactAccessRouter } from "./contactAccess";
 import { adminPurchasesRouter } from "./purchases";
 import { adminOfferPreviewRouter } from "./offerPreview";
 import { adminVoiceSessionsRouter, adminVoiceRecordingRouter } from "./voiceSessions";
+import { adminEngagementRouter } from "./engagement";
 
 export const adminRouter = Router();
 adminRouter.use(adminCsrf);
@@ -184,6 +185,8 @@ adminRouter.use("/settings", requireAuth, moduleGate("settings"), adminSettingsR
 adminRouter.use("/ai", requireAuth, moduleGate("website"), adminAiRouter);
 adminRouter.use("/media", requireAuth, moduleGate("website"), adminMediaRouter);
 adminRouter.use("/curriculum", requireAuth, moduleGate("products"), adminCurriculumRouter);
+// Row 171: who watched which lesson video / came to which live session, and the follow-up emails.
+adminRouter.use("/engagement", requireAuth, moduleGate("products"), adminEngagementRouter);
 adminRouter.use("/coaching", requireAuth, moduleGate("coaching"), adminCoachingSessionFilesRouter);
 adminRouter.use("/coaching", requireAuth, moduleGate("coaching"), adminCoachingProgramsRouter);
 adminRouter.use("/contracts", requireAuth, moduleGate("coaching"), adminContractsRouter);

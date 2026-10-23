@@ -3,8 +3,10 @@ import { LessonForm } from "@/components/player/LessonForm";
 import { BoardroomCeoDashboard } from "./BoardroomCeoDashboard";
 import { BossMoveExitPlanner } from "./BossMoveExitPlanner";
 import { CustomCalculator, isCalculatorConfig } from "./CustomCalculator";
+import { LivingBusinessPlan } from "./LivingBusinessPlan";
 import { PracticeElevationDashboard } from "./PracticeElevationDashboard";
 import { PracticeResetSnapshotTool } from "./PracticeResetSnapshot";
+import { PracticeResetSnapshotV2 } from "./PracticeResetSnapshotV2";
 import { PtoSetAsideCalculator } from "./PtoSetAsideCalculator";
 import { RampUpRateCalculator } from "./RampUpRateCalculator";
 import { RampUpRateComparison } from "./RampUpRateComparison";
@@ -27,6 +29,9 @@ export const LESSON_TOOLS: Record<string, ComponentType> = {
   "practice-reset-snapshot": PracticeResetSnapshotTool, // row 101 — Practice Elevation orientation
   "practice-elevation-dashboard": PracticeElevationDashboard, // row 103 — Practice Elevation orientation
   "boardroom-ceo-dashboard": BoardroomCeoDashboard, // row 95 — The Boss Boardroom
+  // QA sheet 2026-10-23 (migration 152)
+  "practice-reset-snapshot-v2": PracticeResetSnapshotV2, // rows 158 + 170 — orientation, above the dashboard
+  "living-business-plan": LivingBusinessPlan, // row 159 — orientation, below the dashboard
 };
 
 /**

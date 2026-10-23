@@ -234,9 +234,17 @@ export function PostCard({
 
           <button
             type="button"
-            onClick={() => setShowComments((open) => !open)}
-            disabled={!!preview}
-            aria-expanded={showComments}
+            // QA row 168: in the admin's participant preview a disabled Reply
+            // gave no feedback at all ("it's not allowing me"). The preview
+            // has no member to write as, so Reply opens this post in the real
+            // community, signed in as the owner, with its replies open.
+            onClick={() =>
+              preview
+                ? preview.writeAsYourself?.({ postId: post.id })
+                : setShowComments((open) => !open)
+            }
+            title={preview ? "Opens this post in the community, signed in as you" : undefined}
+            aria-expanded={preview ? undefined : showComments}
             className={cn(
               "inline-flex min-h-[2.75rem] items-center gap-2 rounded-full px-3",
               "text-xs font-semibold uppercase tracking-[0.12em] transition-colors duration-300",

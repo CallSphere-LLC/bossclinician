@@ -44,6 +44,7 @@ import {
 import { Modal, useConfirm } from "@/pages/admin/ui/Dialog";
 import { DraftGlyph } from "@/pages/admin/ui/icons";
 import { UploadDropzone } from "@/pages/admin/ui/Uploader";
+import { PasteOptions, useSmartPaste } from "@/components/admin/smartPaste";
 import {
   friendlyError,
   pluralize,
@@ -263,6 +264,8 @@ export default function BlogEditor() {
   const updateField = useCallback(<K extends keyof EditablePost>(key: K, value: EditablePost[K]) => {
     setForm((prev) => ({ ...prev, [key]: value }));
   }, []);
+  // Pasting from Google Docs / Word keeps its formatting, with a plain-text option (QA row 169).
+  const bodyPaste = useSmartPaste((value) => updateField("bodyMd", value));
 
   const body = form.bodyMd ?? "";
   const words = useMemo(() => countWords(body), [body]);
@@ -598,9 +601,11 @@ export default function BlogEditor() {
                         <Icon />
                       </Button>
                     ))}
+                    <PasteOptions {...bodyPaste.options} className="ml-auto pr-1" />
                   </div>
                   <Textarea
                     ref={bodyRef}
+                    {...bodyPaste.textareaProps}
                     id="post-body"
                     rows={20}
                     value={body}

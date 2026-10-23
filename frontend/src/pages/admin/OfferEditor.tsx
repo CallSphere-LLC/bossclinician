@@ -19,6 +19,7 @@ import {
   ClipboardList,
   Eye,
   EyeOff,
+  FileSignature,
   Flag,
   Gift,
   Image as ImageIcon,
@@ -92,6 +93,7 @@ import { openCheckoutPreview } from "@/components/checkout/checkoutPreview";
 import { CheckoutDescriptionEditor } from "@/components/checkout/CheckoutDescriptionEditor";
 import OfferNotificationsTab from "@/pages/admin/OfferNotificationsTab";
 import OfferPaymentLinks from "@/pages/admin/OfferPaymentLinks";
+import OfferContractsTab from "@/pages/admin/OfferContractsTab";
 
 /**
  * The offer editor — one screen, six questions, in the order she'd ask them:
@@ -207,7 +209,7 @@ export function installmentInput(raw: string): number | null {
 
 /* ── Tabs ───────────────────────────────────────────────────────────────── */
 
-type TabKey = "selling" | "price" | "form" | "bumps" | "upsells" | "gifting" | "after" | "notifications";
+type TabKey = "selling" | "price" | "form" | "bumps" | "upsells" | "gifting" | "after" | "contract" | "notifications";
 
 const TABS: { value: TabKey; label: string; icon: LucideIcon }[] = [
   { value: "selling", label: "What you're selling", icon: Package },
@@ -217,6 +219,7 @@ const TABS: { value: TabKey; label: string; icon: LucideIcon }[] = [
   { value: "upsells", label: "Upsells", icon: ArrowUpRight },
   { value: "gifting", label: "Send as a gift", icon: Gift },
   { value: "after", label: "After purchase", icon: Flag },
+  { value: "contract", label: "Contract", icon: FileSignature },
   { value: "notifications", label: "Notifications", icon: BellRing },
 ];
 
@@ -889,6 +892,10 @@ export default function OfferEditor() {
 
           <Tabs.Content value="after">
             <AfterTab draft={draft} errors={errors} update={update} pages={pages} />
+          </Tabs.Content>
+
+          <Tabs.Content value="contract">
+            {offer ? <OfferContractsTab offerId={offer.id} /> : <SaveFirst what="a contract for buyers to sign" />}
           </Tabs.Content>
 
           <Tabs.Content value="notifications">

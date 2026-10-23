@@ -60,7 +60,9 @@ export function SubscribeForm({
         onChange={(e) => setEmail(e.target.value)}
         placeholder={placeholder}
         className={cn(
-          "min-h-[44px] w-full rounded-full border px-5 py-3 text-sm outline-none transition-colors duration-300",
+          // text-base below sm: under 16px iOS zooms the page on focus and
+          // leaves it zoomed (QA row 165). Desktop keeps text-sm.
+          "min-h-[44px] w-full rounded-full border px-5 py-3 text-base outline-none transition-colors duration-300 sm:text-sm",
           dark
             ? "border-white/12 bg-white/[0.05] text-white placeholder:text-white/30 focus-visible:border-gold/60 focus-visible:bg-white/[0.08]"
             : "border-lilac bg-white text-ink placeholder:text-ink-soft/60 focus-visible:border-plum",

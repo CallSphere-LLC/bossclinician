@@ -2,7 +2,7 @@ import { useNewProductRequest } from "./ui/useNewProductRequest";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router";
 import { motion } from "motion/react";
-import { Eye, GraduationCap, Image as ImageIcon, Layers, Pencil, Plus, Trash2 } from "lucide-react";
+import { Eye, GraduationCap, Image as ImageIcon, Layers, Pencil, Plus, Sparkles, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { adminApi } from "@/lib/api";
 import type { Course } from "@/types";
@@ -23,6 +23,7 @@ import {
 import { Modal, useConfirm } from "@/pages/admin/ui/Dialog";
 import { PicturePickerModal } from "@/pages/admin/CrudManager";
 import { PUBLISH_LABEL, friendlyError, slugify, uniqueKey } from "@/pages/admin/ui/friendly";
+import CourseAiGenerator from "@/pages/admin/CourseAiGenerator";
 
 const EMPTY: Partial<Course> = {
   title: "",
@@ -88,6 +89,16 @@ export default function CoursesAdmin() {
   const [picking, setPicking] = useState(false);
   const [saving, setSaving] = useState(false);
   const [confirm, confirmDialog] = useConfirm();
+  // "Build with AI": Kajabi's outline generator. The title carries over when she
+  // starts in "Add a course" and switches part-way through.
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiTitle, setAiTitle] = useState("");
+
+  function startAi(title = "") {
+    setEditing(null);
+    setAiTitle(title);
+    setAiOpen(true);
+  }
 
   const load = useCallback(() => {
     adminApi
@@ -183,10 +194,16 @@ export default function CoursesAdmin() {
         title="Courses"
         description="Everything you teach. Open a course to add its sections, lessons and videos."
         actions={
-          <Button size="sm" onClick={startNew}>
-            <Plus />
-            Add a course
-          </Button>
+          <>
+            <Button variant="secondary" size="sm" onClick={() => startAi()}>
+              <Sparkles />
+              Build with AI
+            </Button>
+            <Button size="sm" onClick={startNew}>
+              <Plus />
+              Add a course
+            </Button>
+          </>
         }
       />
 
@@ -205,9 +222,15 @@ export default function CoursesAdmin() {
             title="No courses yet"
             description="Add your first course, then fill it with sections and lessons."
             action={
-              <Button size="sm" onClick={startNew}>
-                Add a course
-              </Button>
+              <div className="flex flex-wrap justify-center gap-2">
+                <Button size="sm" onClick={startNew}>
+                  Add a course
+                </Button>
+                <Button variant="secondary" size="sm" onClick={() => startAi()}>
+                  <Sparkles />
+                  Build with AI
+                </Button>
+              </div>
             }
           />
         </Card>
@@ -316,6 +339,17 @@ export default function CoursesAdmin() {
       >
         {editing && (
           <form id="course-form" onSubmit={save} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {!editing.id && (
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-hairline bg-white/[0.03] p-3 sm:col-span-2">
+                <p className="text-sm text-ink-soft">
+                  Want a head start? Type the name and let AI draft the sections and lessons.
+                </p>
+                <Button type="button" variant="secondary" size="sm" onClick={() => startAi(editing.title ?? "")}>
+                  <Sparkles />
+                  Build with AI
+                </Button>
+              </div>
+            )}
             <Field label="Course name" className="sm:col-span-2">
               <Input
                 value={editing.title ?? ""}
@@ -446,6 +480,8 @@ export default function CoursesAdmin() {
           setPicking(false);
         }}
       />
+
+      <CourseAiGenerator open={aiOpen} onOpenChange={setAiOpen} initialTitle={aiTitle} />
 
       {confirmDialog}
     </div>

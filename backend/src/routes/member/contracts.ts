@@ -13,9 +13,9 @@ const memberIdOf = (req: Request): number => { if (!req.member) throw unauthoriz
 const idOf = (raw: string): number => { const id = Number(raw); if (!Number.isSafeInteger(id) || id <= 0) throw badRequest('Invalid contract ID'); return id; };
 const signSchema = z.object({ typedName: z.string().trim().min(3).max(200), electronicConsent: z.literal(true), signingIntent: z.literal(true) });
 const SELECT = `SELECT a.id,a.status,a.assigned_at,a.signed_at,a.signed_name,a.signed_email,a.signer_ip,a.signer_user_agent,a.evidence_sha256,a.disclosure_version,
- c.title,c.storage_ref,c.pdf_sha256,c.created_at,m.email::text AS member_email
+ c.title,c.storage_ref,c.pdf_sha256,c.created_at,m.email::text AS member_email,so.title AS source_offer_title
  FROM participant_contract_assignments a JOIN participant_contracts c ON c.id=a.contract_id
- JOIN members m ON m.id=a.member_id`;
+ JOIN members m ON m.id=a.member_id LEFT JOIN offers so ON so.id=a.source_offer_id`;
 
 memberContractsRouter.get('/contracts', asyncHandler(async (req,res) => {
   const rows = await pool.query(`${SELECT} WHERE a.member_id=$1 ORDER BY a.id DESC`, [memberIdOf(req)]);

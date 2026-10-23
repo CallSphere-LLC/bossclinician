@@ -387,7 +387,7 @@ export default function CredentialingSuccessFormula() {
       {/* ── What's included, as a table ────────────────────────────────── */}
       <Section surface="raised" space="lg">
         <SectionTitle align="center" title={csf.table.title} />
-        <div className="mx-auto mt-10 max-w-3xl overflow-hidden rounded-2xl border border-hairline">
+        <div className="mx-auto mt-10 max-w-3xl overflow-x-auto rounded-2xl border border-hairline">
           <table className="w-full border-collapse text-left">
             <caption className="sr-only">{csf.table.title}</caption>
             <thead>

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
-import { Link, useNavigate, useParams } from "react-router";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import { AnimatePresence, motion } from "motion/react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import {
@@ -30,6 +30,7 @@ import { assessmentToCreate, attachableAssessments, type NewAssessmentKind } fro
 import type { CourseLesson, CourseModule, LessonFile, MediaAsset } from "@/types/admin";
 import type { Course } from "@/types";
 import { cn } from "@/lib/cn";
+import { PasteOptions, useSmartPaste } from "@/components/admin/smartPaste";
 import { formatBytes } from "@/lib/format";
 import { embeddableUrl } from "@/lib/videoEmbed";
 import { coursePreviewPath } from "@/lib/coursePreviewApi";
@@ -57,6 +58,20 @@ import {
   scheduledSummary,
   type LessonStatus,
 } from "@/pages/admin/courseRelease";
+import { CourseTabs } from "@/pages/admin/course/CourseTabs";
+import { CourseOffersTab } from "@/pages/admin/course/CourseOffersTab";
+import { CourseCustomersTab } from "@/pages/admin/course/CourseCustomersTab";
+import { CourseSettingsTab } from "@/pages/admin/course/CourseSettingsTab";
+import { courseHubApi } from "@/pages/admin/course/courseHubApi";
+import { courseTabOf, type CourseTab } from "@/pages/admin/course/courseHub";
+
+/** What the header says under the course name, per tab. */
+const TAB_DESCRIPTION: Record<CourseTab, string> = {
+  outline: "Break your course into sections, then add the lessons that go inside each one.",
+  offers: "The offers that sell this course, and the price and checkout each one has.",
+  customers: "Everybody who has this course, how they got it, and how far through they are.",
+  settings: "Visibility, the community this course belongs to, its paywall and its live room.",
+};
 
 /*
  * A stored "module" is called a **section** everywhere she can see it — that's
@@ -231,6 +246,10 @@ export default function CourseBuilder() {
   const { id } = useParams();
   const courseId = Number(id);
   const navigate = useNavigate();
+  // The tab lives in the address, so a refresh, a shared link or the back
+  // button from the offer editor lands on the same tab.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tab = courseTabOf(searchParams.get("tab"));
 
   const [course, setCourse] = useState<Course | null>(null);
   const [modules, setModules] = useState<BuilderModule[] | null>(null);
@@ -279,6 +298,7 @@ export default function CourseBuilder() {
      quickly must not leave the second one listing the first one's files. */
   const filesRequest = useRef(0);
   const notesRef = useRef<HTMLTextAreaElement>(null);
+  const notesPaste = useSmartPaste((value) => updateLesson({ bodyMd: value }));
   const [confirm, confirmDialog] = useConfirm();
 
   const load = useCallback(() => {
@@ -296,12 +316,42 @@ export default function CourseBuilder() {
 
   useEffect(load, [load]);
 
-  useEffect(() => {
-    adminApi
-      .coursesList()
-      .then((list) => setCourse(list.find((c) => Number(c.id) === courseId) ?? null))
+  /* By id rather than picked out of the course list: the list leaves out a
+     coaching programme's workbook course, whose lessons are edited here too,
+     and the Offers tab needs the course's own price. */
+  const loadCourse = useCallback(() => {
+    if (!courseId) return;
+    courseHubApi
+      .course(courseId)
+      .then(setCourse)
       .catch(() => undefined);
   }, [courseId]);
+
+  useEffect(loadCourse, [loadCourse]);
+
+  function selectTab(next: CourseTab) {
+    setSearchParams(
+      (params) => {
+        const updated = new URLSearchParams(params);
+        if (next === "outline") updated.delete("tab");
+        else updated.set("tab", next);
+        return updated;
+      },
+      { replace: true },
+    );
+  }
+
+  /** Opens the lesson editor on one lesson — the Settings tab's "Add the recording". */
+  function openLessonById(lessonId: number) {
+    const mod = (modules ?? []).find((m) => m.lessons.some((l) => l.id === lessonId));
+    const lesson = mod?.lessons.find((l) => l.id === lessonId);
+    if (!mod || !lesson) {
+      toast.error("That lesson isn't in the outline any more.");
+      load();
+      return;
+    }
+    openLesson(mod.id, lesson);
+  }
 
   /* Reloaded after every lesson save as well as on arrival: the picker hides
      assessments another lesson already holds by reading `lessonId` off this
@@ -709,217 +759,254 @@ export default function CourseBuilder() {
       <PageHeader
         eyebrow="Courses"
         title={course?.title ?? "Course content"}
-        description="Break your course into sections, then add the lessons that go inside each one."
+        description={TAB_DESCRIPTION[tab]}
         actions={
           <>
             <Badge tone="neutral">
-              {pluralize(modules?.length ?? 0, "section")} · {pluralize(lessonCount, "lesson")}
+              <span className="font-bold tabular-nums">{modules?.length ?? 0}</span>
+              {(modules?.length ?? 0) === 1 ? " section" : " sections"} ·{" "}
+              <span className="font-bold tabular-nums">{lessonCount}</span>
+              {lessonCount === 1 ? " lesson" : " lessons"}
             </Badge>
             {totalMinutes > 0 && (
               <Badge tone="plum">
                 <Clock className="size-3" />
-                {courseLength(totalMinutes)} in total
+                <span className="font-bold tabular-nums">{courseLength(totalMinutes)}</span> in total
               </Badge>
             )}
-            {/* A new tab: the preview is the student's page rather than a console
-                screen, and the editor stays here to come back to. It shows
-                drafts too, and saves nothing. */}
+            {/* Kajabi's "Student view", on every tab. A new tab: the preview is
+                the student's page rather than a console screen, and the editor
+                stays here to come back to. It shows drafts too, and saves
+                nothing. */}
             {courseId > 0 && (
-              <Button asChild variant="secondary" size="sm">
+              <Button asChild variant={tab === "outline" ? "secondary" : "primary"} size="sm">
                 <a href={coursePreviewPath(courseId)} target="_blank" rel="noopener noreferrer">
                   <Eye />
-                  Preview as student
+                  Student view
                 </a>
               </Button>
             )}
-            <Button size="sm" onClick={() => setAddingModule(true)}>
-              <Plus />
-              Add a section
-            </Button>
-          </>
-        }
-      />
-
-      {error && <ErrorNotice message={error} />}
-
-      {modules !== null && courseId > 0 && (
-        <CourseReleasePanel
-          courseId={courseId}
-          lessonCount={flatLessons.length}
-          lockedCount={lockedCount}
-          onChanged={load}
-        />
-      )}
-
-      {modules === null ? (
-        <div className="space-y-4">
-          {Array.from({ length: 3 }, (_, i) => (
-            <Skeleton key={i} className="h-24 w-full" />
-          ))}
-        </div>
-      ) : modules.length === 0 ? (
-        <Card>
-          <EmptyState
-            icon={<Layers />}
-            title="Nothing in this course yet"
-            description="Start with your first section — something like “Getting started” — then fill it with lessons."
-            action={
+            {tab === "outline" && (
               <Button size="sm" onClick={() => setAddingModule(true)}>
                 <Plus />
                 Add a section
               </Button>
-            }
+            )}
+          </>
+        }
+      />
+
+      <CourseTabs tab={tab} onSelect={selectTab} />
+
+      {error && tab === "outline" && <ErrorNotice message={error} />}
+
+      {tab === "offers" && courseId > 0 && (
+        <div role="tabpanel" id="course-panel-offers" aria-labelledby="course-tab-offers">
+          <CourseOffersTab courseId={courseId} course={course} />
+        </div>
+      )}
+
+      {tab === "customers" && courseId > 0 && (
+        <div role="tabpanel" id="course-panel-customers" aria-labelledby="course-tab-customers">
+          <CourseCustomersTab courseId={courseId} />
+        </div>
+      )}
+
+      {tab === "settings" && courseId > 0 && (
+        <div role="tabpanel" id="course-panel-settings" aria-labelledby="course-tab-settings">
+          <CourseSettingsTab
+            courseId={courseId}
+            course={course}
+            sections={(modules ?? []).map((m) => ({ id: Number(m.id), title: m.title }))}
+            onCourseChanged={loadCourse}
+            onOutlineChanged={load}
+            onEditLesson={openLessonById}
           />
-        </Card>
-      ) : (
-        <div className="space-y-4">
-          {modules.map((mod, index) => {
-            const open = openModules.has(mod.id);
-            return (
-              <Card key={mod.id} className="overflow-hidden">
-                <div className="flex items-center gap-3 border-b border-hairline/60 px-4 py-3.5">
-                  <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-lilac-tint text-xs font-bold text-plum-deep">
-                    {index + 1}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => toggleModule(mod.id)}
-                    aria-expanded={open}
-                    className="flex min-w-0 flex-1 items-center gap-2 text-left"
-                  >
-                    <span className="min-w-0">
-                      <span className="block truncate font-display text-base text-ink">
-                        {mod.title}
-                      </span>
-                      <span className="block text-xs text-ink-soft">
-                        {mod.lessons.length === 0
-                          ? "No lessons yet"
-                          : pluralize(mod.lessons.length, "lesson")}
-                        {dripSummary(mod) ? ` · ${dripSummary(mod)}` : ""}
-                      </span>
-                    </span>
-                    <motion.span animate={{ rotate: open ? 180 : 0 }} className="ml-auto shrink-0">
-                      <ChevronDown className="size-4 text-ink-soft" />
-                    </motion.span>
-                  </button>
-                  <CourseOrderMenu title={mod.title} first={index === 0} last={index === modules.length - 1}
-                    onMove={(direction) => void moveModule(index, direction)} onDelete={() => void removeModule(mod)} />
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    aria-label={`Edit ${mod.title} and its release schedule`}
-                    onClick={() =>
-                      setModuleDraft({
-                        id: Number(mod.id),
-                        title: mod.title,
-                        drip: dripChoice(mod),
-                      })
-                    }
-                  >
-                    <Pencil />
-                    <span className="hidden sm:inline">Edit section</span>
+        </div>
+      )}
+
+      {tab === "outline" && (
+        <div role="tabpanel" id="course-panel-outline" aria-labelledby="course-tab-outline" className="space-y-6">
+          {modules !== null && courseId > 0 && (
+            <CourseReleasePanel
+              courseId={courseId}
+              lessonCount={flatLessons.length}
+              lockedCount={lockedCount}
+              onChanged={load}
+            />
+          )}
+
+          {modules === null ? (
+            <div className="space-y-4">
+              {Array.from({ length: 3 }, (_, i) => (
+                <Skeleton key={i} className="h-24 w-full" />
+              ))}
+            </div>
+          ) : modules.length === 0 ? (
+            <Card>
+              <EmptyState
+                icon={<Layers />}
+                title="Nothing in this course yet"
+                description="Start with your first section — something like “Getting started” — then fill it with lessons."
+                action={
+                  <Button size="sm" onClick={() => setAddingModule(true)}>
+                    <Plus />
+                    Add a section
                   </Button>
-                </div>
+                }
+              />
+            </Card>
+          ) : (
+            <div className="space-y-4">
+              {modules.map((mod, index) => {
+                const open = openModules.has(mod.id);
+                return (
+                  <Card key={mod.id} className="overflow-hidden">
+                    <div className="flex items-center gap-3 border-b border-hairline/60 px-4 py-3.5">
+                      <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-lilac-tint text-xs font-bold text-plum-deep">
+                        {index + 1}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => toggleModule(mod.id)}
+                        aria-expanded={open}
+                        className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                      >
+                        <span className="min-w-0">
+                          <span className="block truncate font-display text-base text-ink">
+                            {mod.title}
+                          </span>
+                          <span className="block text-xs text-ink-soft">
+                            {mod.lessons.length === 0
+                              ? "No lessons yet"
+                              : pluralize(mod.lessons.length, "lesson")}
+                            {dripSummary(mod) ? ` · ${dripSummary(mod)}` : ""}
+                          </span>
+                        </span>
+                        <motion.span animate={{ rotate: open ? 180 : 0 }} className="ml-auto shrink-0">
+                          <ChevronDown className="size-4 text-ink-soft" />
+                        </motion.span>
+                      </button>
+                      <CourseOrderMenu title={mod.title} first={index === 0} last={index === modules.length - 1}
+                        onMove={(direction) => void moveModule(index, direction)} onDelete={() => void removeModule(mod)} />
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        aria-label={`Edit ${mod.title} and its release schedule`}
+                        onClick={() =>
+                          setModuleDraft({
+                            id: Number(mod.id),
+                            title: mod.title,
+                            drip: dripChoice(mod),
+                          })
+                        }
+                      >
+                        <Pencil />
+                        <span className="hidden sm:inline">Edit section</span>
+                      </Button>
+                    </div>
 
-                <AnimatePresence initial={false}>
-                  {open && (
-                    <motion.div
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: "auto", opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
-                      transition={{ duration: 0.15, ease: [0.22, 1, 0.36, 1] }}
-                      className="overflow-hidden"
-                    >
-                      {mod.lessons.length === 0 ? (
-                        <p className="px-5 py-6 text-center text-sm text-ink-soft">
-                          Nothing in this section yet — add your first lesson below.
-                        </p>
-                      ) : (
-                        <ul className="divide-y divide-hairline/60">
-                          {mod.lessons.map((lesson, lessonIndex) => (
-                            <li
-                              key={lesson.id}
-                              className="flex flex-wrap items-center gap-3 px-5 py-3 transition-colors hover:bg-lilac-tint/25 sm:flex-nowrap"
-                            >
-                              <span
-                                className={cn(
-                                  "grid size-8 shrink-0 place-items-center rounded-lg",
-                                  lesson.videoUrl
-                                    ? "bg-plum/10 text-plum"
-                                    : "bg-cream text-ink-soft",
-                                )}
-                              >
-                                {lesson.videoUrl ? (
-                                  <Play className="size-3.5 fill-current" />
-                                ) : (
-                                  <Film className="size-3.5" />
-                                )}
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => openLesson(mod.id, lesson)}
-                                className="min-w-0 flex-1 basis-[calc(100%-3rem)] text-left sm:basis-auto"
-                              >
-                                <span className="block truncate text-sm font-medium text-ink">
-                                  {lesson.title}
-                                </span>
-                                <span className="block text-xs text-ink-soft">
-                                  {lesson.durationMinutes
-                                    ? `${lesson.durationMinutes} min`
-                                    : "Length not set"}
-                                  {lesson.videoUrl ? " · has a video" : " · no video yet"}
-                                  {dripSummary(lesson) ? ` · ${dripSummary(lesson)}` : ""}
-                                  {scheduledSummary(lesson.publishAtLocal) ? ` · ${scheduledSummary(lesson.publishAtLocal)}` : ""}
-                                </span>
-                              </button>
-                              {lesson.preview && <Badge tone="gold">Free taster</Badge>}
-                              {lesson.publishAtLocal && lesson.published && <Badge tone="blue">Scheduled</Badge>}
-                              {lesson.requiresPreviousLesson && flatLessons[0]?.id !== lesson.id && (
-                                <Badge tone="plum" title="Opens once the previous lesson is complete">
-                                  <Lock className="size-3" />
-                                  Locked
-                                </Badge>
-                              )}
-                              {!lesson.published && <Badge tone="slate">{PUBLISH_LABEL.draft}</Badge>}
-                              <CourseOrderMenu title={lesson.title} first={lessonIndex === 0} last={lessonIndex === mod.lessons.length - 1}
-                                onMove={(direction) => void moveLesson(mod.id, lessonIndex, direction)} onDelete={() => void removeLesson(lesson)} />
-                              <Button variant="secondary" size="sm" className="group shrink-0"
-                                aria-label={`Edit ${lesson.title} and its release schedule`}
-                                onClick={() => openLesson(mod.id, lesson)}>
-                                <span className="hidden sm:inline">Edit &amp; schedule</span>
-                                <ChevronRight aria-hidden className="motion-safe:transition-transform motion-safe:duration-150 motion-safe:group-hover:translate-x-0.5 motion-safe:group-focus-visible:translate-x-0.5" />
-                              </Button>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-
-                      <div className="flex flex-wrap gap-2 border-t border-hairline/60 p-3">
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          className="flex-1"
-                          onClick={() =>
-                            openLesson(mod.id, {
-                              title: "",
-                              published: true,
-                              durationMinutes: 0,
-                              requiresPreviousLesson: sequenceLocked,
-                            })
-                          }
+                    <AnimatePresence initial={false}>
+                      {open && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: "auto", opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          transition={{ duration: 0.15, ease: [0.22, 1, 0.36, 1] }}
+                          className="overflow-hidden"
                         >
-                          <Plus />
-                          Add a lesson
-                        </Button>
-                        <Button variant="secondary" size="sm" onClick={() => openAssessment(mod.id, "graded")}><Plus />Add quiz</Button>
-                        <Button variant="secondary" size="sm" onClick={() => openAssessment(mod.id, "survey")}><Plus />Add survey</Button>
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </Card>
-            );
-          })}
+                          {mod.lessons.length === 0 ? (
+                            <p className="px-5 py-6 text-center text-sm text-ink-soft">
+                              Nothing in this section yet — add your first lesson below.
+                            </p>
+                          ) : (
+                            <ul className="divide-y divide-hairline/60">
+                              {mod.lessons.map((lesson, lessonIndex) => (
+                                <li
+                                  key={lesson.id}
+                                  className="flex flex-wrap items-center gap-3 px-5 py-3 transition-colors hover:bg-lilac-tint/25 sm:flex-nowrap"
+                                >
+                                  <span
+                                    className={cn(
+                                      "grid size-8 shrink-0 place-items-center rounded-lg",
+                                      lesson.videoUrl
+                                        ? "bg-plum/10 text-plum"
+                                        : "bg-cream text-ink-soft",
+                                    )}
+                                  >
+                                    {lesson.videoUrl ? (
+                                      <Play className="size-3.5 fill-current" />
+                                    ) : (
+                                      <Film className="size-3.5" />
+                                    )}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    onClick={() => openLesson(mod.id, lesson)}
+                                    className="min-w-0 flex-1 basis-[calc(100%-3rem)] text-left sm:basis-auto"
+                                  >
+                                    <span className="block truncate text-sm font-medium text-ink">
+                                      {lesson.title}
+                                    </span>
+                                    <span className="block text-xs text-ink-soft">
+                                      {lesson.durationMinutes
+                                        ? `${lesson.durationMinutes} min`
+                                        : "Length not set"}
+                                      {lesson.videoUrl ? " · has a video" : " · no video yet"}
+                                      {dripSummary(lesson) ? ` · ${dripSummary(lesson)}` : ""}
+                                      {scheduledSummary(lesson.publishAtLocal) ? ` · ${scheduledSummary(lesson.publishAtLocal)}` : ""}
+                                    </span>
+                                  </button>
+                                  {lesson.preview && <Badge tone="gold">Free taster</Badge>}
+                                  {lesson.publishAtLocal && lesson.published && <Badge tone="blue">Scheduled</Badge>}
+                                  {lesson.requiresPreviousLesson && flatLessons[0]?.id !== lesson.id && (
+                                    <Badge tone="plum" title="Opens once the previous lesson is complete">
+                                      <Lock className="size-3" />
+                                      Locked
+                                    </Badge>
+                                  )}
+                                  {!lesson.published && <Badge tone="slate">{PUBLISH_LABEL.draft}</Badge>}
+                                  <CourseOrderMenu title={lesson.title} first={lessonIndex === 0} last={lessonIndex === mod.lessons.length - 1}
+                                    onMove={(direction) => void moveLesson(mod.id, lessonIndex, direction)} onDelete={() => void removeLesson(lesson)} />
+                                  <Button variant="secondary" size="sm" className="group shrink-0"
+                                    aria-label={`Edit ${lesson.title} and its release schedule`}
+                                    onClick={() => openLesson(mod.id, lesson)}>
+                                    <span className="hidden sm:inline">Edit &amp; schedule</span>
+                                    <ChevronRight aria-hidden className="motion-safe:transition-transform motion-safe:duration-150 motion-safe:group-hover:translate-x-0.5 motion-safe:group-focus-visible:translate-x-0.5" />
+                                  </Button>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+
+                          <div className="flex flex-wrap gap-2 border-t border-hairline/60 p-3">
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              className="flex-1"
+                              onClick={() =>
+                                openLesson(mod.id, {
+                                  title: "",
+                                  published: true,
+                                  durationMinutes: 0,
+                                  requiresPreviousLesson: sequenceLocked,
+                                })
+                              }
+                            >
+                              <Plus />
+                              Add a lesson
+                            </Button>
+                            <Button variant="secondary" size="sm" onClick={() => openAssessment(mod.id, "graded")}><Plus />Add quiz</Button>
+                            <Button variant="secondary" size="sm" onClick={() => openAssessment(mod.id, "survey")}><Plus />Add survey</Button>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 
@@ -1057,6 +1144,8 @@ export default function CourseBuilder() {
                 <option value="practice-reset-snapshot">Practice Reset Snapshot (saved quiz)</option>
                 <option value="practice-elevation-dashboard">Practice Elevation Dashboard</option>
                 <option value="boardroom-ceo-dashboard">Boardroom CEO Dashboard</option>
+                <option value="practice-reset-snapshot-v2">Practice Reset Snapshot (membership edition)</option>
+                <option value="living-business-plan">Living Business Plan (annual)</option>
                 <option value="custom-calculator">Build my own calculator</option>
               </select>
             </Field>
@@ -1283,8 +1372,10 @@ export default function CourseBuilder() {
                   if (el) applyFormat(el, kind, (value) => updateLesson({ bodyMd: value }));
                 }}
               />
+              <PasteOptions {...notesPaste.options} className="py-1" />
               <Textarea
                 ref={notesRef}
+                {...notesPaste.textareaProps}
                 rows={6}
                 className="rounded-t-none"
                 value={lessonDraft.lesson.bodyMd ?? ""}

@@ -92,7 +92,10 @@ export function LuxePageHero({
       >
         <div
           className={cn(
-            aside && "grid items-center gap-12 lg:grid-cols-[1.15fr_0.85fr] lg:gap-16",
+            // grid-cols-1 (minmax(0,1fr)) below lg: the implicit `auto` column
+            // grew to the aside card's min-content on a narrow phone and pushed
+            // the lede past the screen edge, where the band clipped it.
+            aside && "grid grid-cols-1 items-center gap-12 lg:grid-cols-[1.15fr_0.85fr] lg:gap-16",
           )}
         >
           <motion.div
@@ -103,7 +106,12 @@ export function LuxePageHero({
           >
             {eyebrow && <span className="eyebrow-luxe">{eyebrow}</span>}
 
-            <h1 className="text-balance font-display text-[2.4rem] font-normal leading-[1.06] tracking-[-0.015em] text-white sm:text-[3.2rem] lg:text-[3.9rem]">
+            {/* min(2.4rem, 12vw): identical from 320px up, but on a narrower
+                layout viewport (a 375px phone with Safari text zoom at 125%+
+                lays out at ~300px) a long word such as "Documentation" no
+                longer outgrows the line and gets clipped by the band — each
+                word sits in its own unbreakable KineticText mask (QA row 165). */}
+            <h1 className="text-balance font-display text-[length:min(2.4rem,12vw)] font-normal leading-[1.06] tracking-[-0.015em] text-white sm:text-[3.2rem] lg:text-[3.9rem]">
               <KineticText text={title} immediate delay={0.12} />
               {titleAccent && (
                 <span className="text-foil mt-1.5 block font-display italic">

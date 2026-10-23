@@ -1,5 +1,6 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { emailHtml, RICH_EMAIL, safeEmailHtml } from "./emailMarkup";
+import { isPlainPasteShortcut, PasteOptions, readClipboardText, usePastePreference } from "./smartPaste";
 export interface RichEmailHandle {
   format: (id: string) => void;
   insert: (html: string) => void;
@@ -12,6 +13,9 @@ export default forwardRef<RichEmailHandle, {value: string; onChange: (value: str
   const [linkOpen, setLinkOpen] = useState(false);
   const [linkUrl, setLinkUrl] = useState("https://");
   const [linkError, setLinkError] = useState("");
+  // QA row 169: pasted formatting is kept (sanitised) unless she switches it off or uses Ctrl+Shift+V.
+  const { keepFormatting, setKeepFormatting } = usePastePreference();
+  const plainShortcutAt = useRef(0);
   useEffect(() => { if (root.current && value !== emitted.current) root.current.innerHTML = emailHtml(value); }, [value]);
   const remember = () => {
     const s = window.getSelection();
@@ -34,6 +38,8 @@ export default forwardRef<RichEmailHandle, {value: string; onChange: (value: str
     onChange(emitted.current); remember();
   };
   const insert = (html: string) => { restore(); document.execCommand("insertHTML", false, safeEmailHtml(html)); change(); };
+  const insertPlain = (text: string) => { restore(); document.execCommand("insertText", false, text); change(); };
+  const pastePlain = () => { remember(); void readClipboardText().then(text => { if (text) insertPlain(text); }); };
   const applyLink = () => {
     const url = linkUrl.trim();
     if (!/^(https?:\/\/[^\s]+|mailto:[^\s]+)$/i.test(url)) { setLinkError("Enter a complete web or email address."); return; }
@@ -64,12 +70,17 @@ export default forwardRef<RichEmailHandle, {value: string; onChange: (value: str
       <div className="mt-3 flex gap-3"><button type="button" className="rounded bg-[#58234e] px-4 py-2 text-white" onClick={applyLink}>Insert link</button><button type="button" className="rounded border px-4 py-2" onClick={() => {setLinkOpen(false);restore();}}>Cancel</button></div>
     </div>}
     <style>{`.bc-email-editor{background:#fff;color:#24222a;font:16px/1.6 Arial,sans-serif;overflow-wrap:anywhere}.bc-email-editor strong,.bc-email-editor b{color:inherit;font-weight:700}.bc-email-editor a{color:#58234e;text-decoration:underline}.bc-email-editor img{max-width:100%;height:auto}.bc-email-editor p{margin:0 0 16px}.bc-email-editor ul{list-style:disc;padding-left:24px}.bc-email-editor ol{list-style:decimal;padding-left:24px}.bc-email-editor h2{font-size:24px;font-weight:700}.bc-email-editor:empty:before{content:attr(data-placeholder);color:#737078;pointer-events:none}`}</style>
-    <div ref={root} role="textbox" aria-label="Email message" aria-multiline="true" contentEditable suppressContentEditableWarning data-placeholder={placeholder || "Write or paste your formatted email here…"} className="bc-email-editor rounded-xl border border-hairline p-4 focus:outline-plum" style={{minHeight:Math.max(rows * 24, 240)}} onInput={change} onKeyUp={remember} onMouseUp={remember} onBlur={remember} onPaste={event => {
+    <div ref={root} role="textbox" aria-label="Email message" aria-multiline="true" contentEditable suppressContentEditableWarning data-placeholder={placeholder || "Write or paste your formatted email here…"} className="bc-email-editor rounded-xl border border-hairline p-4 focus:outline-plum" style={{minHeight:Math.max(rows * 24, 240)}} onInput={change} onKeyDown={event => { if (isPlainPasteShortcut(event)) plainShortcutAt.current = Date.now(); }} onKeyUp={remember} onMouseUp={remember} onBlur={remember} onPaste={event => {
       event.preventDefault(); remember();
+      const plain = !keepFormatting || Date.now() - plainShortcutAt.current < 1500;
+      plainShortcutAt.current = 0;
       const html = event.clipboardData.getData("text/html");
-      if (html) insert(html);
-      else { restore(); document.execCommand("insertText", false, event.clipboardData.getData("text/plain")); change(); }
+      if (html && !plain) insert(html);
+      else insertPlain(event.clipboardData.getData("text/plain"));
     }} />
-    <p className="text-xs text-ink-soft">Paste formatted text, select words to format or link them, and use Image / GIF to insert media.</p>
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <p className="text-xs text-ink-soft">Paste formatted text, select words to format or link them, and use Image / GIF to insert media.</p>
+      <PasteOptions keepFormatting={keepFormatting} setKeepFormatting={setKeepFormatting} onPastePlain={pastePlain} />
+    </div>
   </>;
 });

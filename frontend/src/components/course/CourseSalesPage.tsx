@@ -229,7 +229,7 @@ function Hero({ course, page }: { course: CourseDetailResponse; page: SalesPageD
               ← The training library
             </Link>
 
-            <h1 className="mt-5 text-balance font-display text-[2.3rem] font-normal leading-[1.08] tracking-[-0.015em] text-white sm:text-[3rem] lg:text-[3.5rem]">
+            <h1 className="mt-5 text-balance font-display text-[length:min(2.3rem,11.5vw)] font-normal leading-[1.08] tracking-[-0.015em] text-white sm:text-[3rem] lg:text-[3.5rem]">
               {hero.title}
               {hero.titleAccent && (
                 <span className="text-foil mt-1 block italic">{hero.titleAccent}</span>

@@ -16,6 +16,7 @@ import {
   Skeleton,
   Textarea,
 } from "@/pages/admin/ui/primitives";
+import { PasteOptions, useSmartPaste } from "@/components/admin/smartPaste";
 import { Modal } from "@/pages/admin/ui/Dialog";
 import { friendlyError } from "@/pages/admin/ui/friendly";
 
@@ -41,6 +42,8 @@ export default function EmailTemplates() {
   const [templates, setTemplates] = useState<EmailTemplate[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<Draft | null>(null);
+  // Pasting from Google Docs / Word keeps its formatting, with a plain-text option (QA row 169).
+  const bodyPaste = useSmartPaste((value) => setEditing((draft) => draft && { ...draft, bodyMd: value }));
   const [saving, setSaving] = useState(false);
 
   const load = useCallback(() => {
@@ -179,8 +182,10 @@ export default function EmailTemplates() {
             </Field>
 
             <Field label="What the email says" hint="Use {{firstName}} to greet them by name">
+              <PasteOptions {...bodyPaste.options} className="pb-1" />
               <Textarea
                 rows={14}
+                {...bodyPaste.textareaProps}
                 value={editing.bodyMd}
                 onChange={(event) =>
                   setEditing((draft) => draft && { ...draft, bodyMd: event.target.value })

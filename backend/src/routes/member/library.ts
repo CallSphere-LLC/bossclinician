@@ -5,7 +5,12 @@ import { pool } from "../../db/pool";
 import { asyncHandler } from "../../utils/asyncHandler";
 import { notFound, unauthorized } from "../../utils/httpError";
 import type { AuthedMember } from "../../middleware/memberAuth";
-import { PRODUCT_CONTENT_COURSE_ID, hasProductAccess, listMemberProducts } from "../../services/access";
+import {
+  PRODUCT_CONTENT_COURSE_ID,
+  hasProductAccess,
+  listMemberProducts,
+  mayEnterCommunity,
+} from "../../services/access";
 import {
   flattenLessons,
   loadCourseForMember,
@@ -481,6 +486,26 @@ export function toOutlineJson(course: MemberCourseView, productSlug: string) {
 }
 
 /**
+ * The published community an admin linked this course to (courses.community_id),
+ * but only when the member may actually enter it — otherwise the course page
+ * would offer a button that ends on a "not found".
+ */
+async function linkedCommunityFor(
+  memberId: number,
+  courseId: number,
+): Promise<{ slug: string; name: string } | null> {
+  const { rows } = await pool.query<{ id: number; slug: string; name: string }>(
+    `SELECT cm.id, cm.slug, cm.name
+       FROM courses c JOIN communities cm ON cm.id = c.community_id
+      WHERE c.id = $1 AND cm.published`,
+    [courseId],
+  );
+  const community = rows[0];
+  if (!community || !(await mayEnterCommunity(memberId, community.id))) return null;
+  return { slug: community.slug, name: community.name };
+}
+
+/**
  * GET /api/member/library/:productSlug
  *
  * The product, plus whatever kind of thing it is. For a course that means the
@@ -512,7 +537,8 @@ memberLibraryRouter.get(
       // null here is a product configured against a course that has since been
       // deleted — nothing the member can be shown.
       if (!course) throw notFound(PRODUCT_MISSING);
-      res.json({ ...base, course: toOutlineJson(course, product.slug) });
+      const community = await linkedCommunityFor(member.id, product.course_id);
+      res.json({ ...base, course: { ...toOutlineJson(course, product.slug), community } });
       return;
     }
 

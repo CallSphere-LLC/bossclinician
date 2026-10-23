@@ -156,7 +156,13 @@ function PlannerCover({ titleLines, subLines, className }: CoverProps) {
         }}
       />
 
-      <div className="relative overflow-hidden rounded-2xl border border-gold/25 bg-night-deep shadow-[0_44px_100px_-36px_rgba(0,0,0,0.95)]">
+      {/* A printed jacket is dark in both themes: without `data-media-surface`
+          the light theme turned the night fill white under a plum wash and the
+          gold and ink lettering on it fell to 2.7:1. */}
+      <div
+        data-media-surface
+        className="relative overflow-hidden rounded-2xl border border-gold/25 bg-night-deep shadow-[0_44px_100px_-36px_rgba(0,0,0,0.95)]"
+      >
         <div
           aria-hidden
           className="absolute inset-0"

@@ -109,7 +109,7 @@ export function LuxeHero() {
                 block. The h1 itself no longer carries a rise — stacking a block
                 fade under a per-word reveal reads as two competing animations.
                 KineticText collapses to plain text under reduced motion. */}
-            <h1 className="mt-6 text-balance font-display text-[3rem] font-normal leading-[1.03] tracking-[-0.02em] text-white sm:mt-7 sm:text-[3.6rem] md:text-[4.2rem] lg:text-[3.1rem] xl:text-[3.7rem] 2xl:text-[4.5rem]">
+            <h1 className="mt-6 text-balance font-display text-[length:min(3rem,15vw)] font-normal leading-[1.03] tracking-[-0.02em] text-white sm:mt-7 sm:text-[3.6rem] md:text-[4.2rem] lg:text-[3.1rem] xl:text-[3.7rem] 2xl:text-[4.5rem]">
               <span className="block">
                 <KineticText text="Build a private practice" immediate delay={0.16} />
               </span>
