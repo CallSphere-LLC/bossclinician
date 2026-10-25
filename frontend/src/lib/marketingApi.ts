@@ -130,6 +130,8 @@ export interface SequenceEmailDraft {
   bodyMd?: string;
   waitDays?: number;
   waitHours?: number;
+  waitWeeks?: number;
+  waitMinutes?: number;
   fromName?: string;
   fromEmail?: string;
   enabled?: boolean;
@@ -320,10 +322,10 @@ export const marketingApi = {
       method: "POST",
       body: body({ order }),
     }),
-  testSequenceEmail: (id: number, emailId: number, email: string) =>
+  testSequenceEmail: (id: number, emailId: number | "draft", email: string, draft?: Pick<SequenceEmailDraft, "subject" | "bodyMd">) =>
     request<{ ok: true; sentTo: string }>(`/admin/sequences/${id}/emails/${emailId}/test`, {
       method: "POST",
-      body: body({ email }),
+      body: body({ email, draft }),
     }),
 
   sequenceSubscribers: (id: number, status?: string) =>
@@ -396,13 +398,11 @@ export const marketingApi = {
 /** Minutes → "3 days" / "6 hours" / "straight away". Never a raw number. */
 export function describeWait(minutes: number): string {
   if (minutes <= 0) return "straight away";
-  if (minutes < 60) return `${minutes} minute${minutes === 1 ? "" : "s"}`;
-  if (minutes < 1440) {
-    const hours = Math.round(minutes / 60);
-    return `${hours} hour${hours === 1 ? "" : "s"} later`;
-  }
-  const days = Math.round(minutes / 1440);
-  return `${days} day${days === 1 ? "" : "s"} later`;
+  const { weeks, days, hours, minutes: remainder } = splitWait(minutes);
+  const parts = [
+    [weeks, "week"], [days, "day"], [hours, "hour"], [remainder, "minute"],
+  ].filter(([count]) => Number(count) > 0).map(([count, unit]) => `${count} ${unit}${count === 1 ? "" : "s"}`);
+  return parts.join(" ");
 }
 
 /** Minutes past midnight → "9:00am". The owner never sees a minute count. */
@@ -427,6 +427,12 @@ export function timeInputToMinutes(value: string): number | null {
   return Number(match[1]) * 60 + Number(match[2]);
 }
 
-export function splitWait(minutes: number): { days: number; hours: number } {
-  return { days: Math.floor(minutes / 1440), hours: Math.floor((minutes % 1440) / 60) };
+export function splitWait(totalMinutes: number): { weeks: number; days: number; hours: number; minutes: number } {
+  const safe = Math.max(0, Math.floor(totalMinutes));
+  return {
+    weeks: Math.floor(safe / 10080),
+    days: Math.floor((safe % 10080) / 1440),
+    hours: Math.floor((safe % 1440) / 60),
+    minutes: safe % 60,
+  };
 }

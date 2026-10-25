@@ -158,6 +158,21 @@ export function previewWidthClass(device: PreviewDevice): string {
   return device === "mobile" ? "mx-auto w-[390px] max-w-full" : "";
 }
 
+/** Browser preview uses example contact data; the sender resolves real contact data. */
+export function previewEmailTokens(value: string): string {
+  const samples: Record<string, string> = {
+    firstName: "Yvette", lastName: "Howard", name: "Yvette Howard",
+    email: "yvette@example.com", date: "October 25",
+    loginUrl: "https://www.bossclinician.com/login",
+    startUrl: "https://www.bossclinician.com/library",
+    unsubscribeUrl: "https://www.bossclinician.com/email-preferences",
+  };
+  return value.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_token, rawKey: string) => {
+    const key = /^(firstname|first_name)$/i.test(rawKey) ? "firstName" : rawKey;
+    return samples[key] ?? "";
+  });
+}
+
 /** The library's order: by name, as the server lists it. */
 function sortTemplates(rows: SavedEmailTemplate[]): SavedEmailTemplate[] {
   return [...rows].sort((a, b) => a.name.localeCompare(b.name));
@@ -169,6 +184,8 @@ export default function EmailComposer({
   rows = 12,
   placeholder,
   source,
+  subject,
+  previewText,
 }: {
   value: string;
   onChange: (next: string) => void;
@@ -180,6 +197,8 @@ export default function EmailComposer({
    * would go out as a blank.
    */
   source?: MergeTagSource;
+  subject?: string;
+  previewText?: string;
 }) {
   const ref = useRef<RichEmailHandle>(null);
   const [preview, setPreview] = useState(false);
@@ -644,6 +663,11 @@ export default function EmailComposer({
 
       {preview ? (
         <div>
+          <div className="mb-3 rounded-lg border border-hairline bg-white/[0.04] p-3 text-sm">
+            <p className="font-semibold text-ink">{previewEmailTokens(subject || "(No subject yet)")}</p>
+            {previewText && <p className="text-ink-soft">{previewEmailTokens(previewText)}</p>}
+            <p className="mt-2 text-xs text-ink-soft">Example recipient: Yvette Howard. Real sends use each contact’s first name; missing names become “there”.</p>
+          </div>
           <p className="mb-2 text-xs text-ink-soft">
             {device === "mobile"
               ? "Phone width — 390px, about an iPhone."
@@ -655,7 +679,7 @@ export default function EmailComposer({
             previewWidthClass(device),
           )}
         >
-          <EmailBodyPreview value={value} />
+          <EmailBodyPreview value={previewEmailTokens(value)} />
         </div>
         </div>
       ) : (

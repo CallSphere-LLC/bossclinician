@@ -1,4 +1,5 @@
 import EmailBodyPreview from "@/components/admin/emailMarkup";
+import { previewEmailTokens } from "@/components/admin/EmailComposer";
 import { Copy } from "lucide-react";
 import { formatNumber } from "@/lib/format";
 import { Badge, Button } from "@/pages/admin/ui/primitives";
@@ -26,10 +27,12 @@ export default function CampaignPreview({
   campaign,
   onOpenChange,
   onDuplicate,
+  onTest,
 }: {
   campaign: CampaignRecord | null;
   onOpenChange: (open: boolean) => void;
   onDuplicate: (campaign: CampaignRecord) => void;
+  onTest: (campaign: CampaignRecord) => void;
 }) {
   const kind = campaign ? campaignKind(campaign) : "broadcast";
   const status = campaign ? campaignStatus(campaign) : "draft";
@@ -49,6 +52,11 @@ export default function CampaignPreview({
       size="xl"
       footer={
         <>
+          {campaign && (
+            <Button variant="secondary" size="sm" onClick={() => onTest(campaign)} disabled={!campaign.subject?.trim()}>
+              Send me a test
+            </Button>
+          )}
           {campaign && (
             <Button variant="secondary" size="sm" onClick={() => onDuplicate(campaign)}>
               <Copy />
@@ -84,12 +92,12 @@ export default function CampaignPreview({
           <div className="space-y-1 text-sm">
             <p>
               <span className="text-ink-soft">Subject: </span>
-              <strong className="text-ink">{campaign.subject || "No subject line"}</strong>
+              <strong className="text-ink">{previewEmailTokens(campaign.subject || "No subject line")}</strong>
             </p>
             {campaign.previewText && (
               <p>
                 <span className="text-ink-soft">Preview line: </span>
-                <span className="text-ink">{campaign.previewText}</span>
+                <span className="text-ink">{previewEmailTokens(campaign.previewText)}</span>
               </p>
             )}
           </div>
@@ -99,8 +107,9 @@ export default function CampaignPreview({
               The message itself didn't come across with this email.
             </p>
           ) : (
-            <EmailBodyPreview value={body} title={`The message of ${campaign.name || "this email"}`} />
+            <EmailBodyPreview value={previewEmailTokens(body)} title={`The message of ${campaign.name || "this email"}`} />
           )}
+          <p className="text-xs text-ink-soft">Preview uses Yvette as an example first name. Test sends use the admin address; live sends use each contact’s first name.</p>
         </div>
       )}
     </Modal>

@@ -119,13 +119,15 @@ export function validateCampaignDraft(
 
 /* ------------------------------------------------------ sequence emails */
 
-export const SEQUENCE_EMAIL_FIELDS = ["subject", "waitDays", "waitHours"] as const;
+export const SEQUENCE_EMAIL_FIELDS = ["subject", "waitWeeks", "waitDays", "waitHours", "waitMinutes"] as const;
 export type SequenceEmailField = (typeof SEQUENCE_EMAIL_FIELDS)[number];
 
 export const SEQUENCE_EMAIL_FIELD_IDS: Record<SequenceEmailField, string> = {
   subject: "sequence-email-subject",
+  waitWeeks: "sequence-email-wait-weeks",
   waitDays: "sequence-email-wait-days",
   waitHours: "sequence-email-wait-hours",
+  waitMinutes: "sequence-email-wait-minutes",
 };
 
 /**
@@ -135,16 +137,24 @@ export const SEQUENCE_EMAIL_FIELD_IDS: Record<SequenceEmailField, string> = {
  */
 export function validateSequenceEmailDraft(draft: {
   subject: string;
+  waitWeeks?: number;
   waitDays: number;
   waitHours: number;
+  waitMinutes?: number;
 }): FieldErrors<SequenceEmailField> {
   const errors: FieldErrors<SequenceEmailField> = {};
   if (blank(draft.subject)) errors.subject = "Give this email a subject line.";
+  if (!Number.isInteger(draft.waitWeeks ?? 0) || (draft.waitWeeks ?? 0) < 0 || (draft.waitWeeks ?? 0) > 52) {
+    errors.waitWeeks = "Use a whole number of weeks from 0 to 52.";
+  }
   if (!Number.isInteger(draft.waitDays) || draft.waitDays < 0 || draft.waitDays > 365) {
     errors.waitDays = "Use a whole number of days from 0 to 365.";
   }
   if (!Number.isInteger(draft.waitHours) || draft.waitHours < 0 || draft.waitHours > 23) {
     errors.waitHours = "Use 0 to 23 hours — anything longer belongs in the days box.";
+  }
+  if (!Number.isInteger(draft.waitMinutes ?? 0) || (draft.waitMinutes ?? 0) < 0 || (draft.waitMinutes ?? 0) > 59) {
+    errors.waitMinutes = "Use 0 to 59 minutes — anything longer belongs in the hours box.";
   }
   return errors;
 }

@@ -419,7 +419,12 @@ export function renderMarkdown(markdown: string): string {
 
 /** Replaces {{firstName}} style tokens. Unknown tokens become empty, never the raw token. */
 export function renderTokens(template: string, values: Record<string, string>): string {
-  return template.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_match, key: string) => isRichEmail(template) ? escapeHtml(values[key] ?? "") : values[key] ?? "");
+  return template.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_match, key: string) => {
+    // Older imported emails and owners often spell this {{firstname}}.
+    const resolved = /^(firstname|first_name)$/i.test(key) ? "firstName" : key;
+    const value = values[resolved] ?? "";
+    return isRichEmail(template) ? escapeHtml(value) : value;
+  });
 }
 
 /* -------------------------------------------------------------------- send */

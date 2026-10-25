@@ -7,6 +7,8 @@ import { asyncHandler } from "../../utils/asyncHandler";
 import { HttpError, badRequest, notFound } from "../../utils/httpError";
 import { buildAdminCrudRouter } from "./crudFactory";
 import { renderMarkdown, sendEmail } from "../../email/provider";
+import { mergeLinks, renderTokens } from "../../email/provider";
+import { buildMergeValues } from "../../email/mergeValues";
 import { BroadcastRefusal, audienceSize, startBroadcast } from "../../services/broadcasts";
 import { sendIssueNow } from "../../services/newsletters";
 import { isValidTimeZone } from "../../services/availability";
@@ -544,11 +546,24 @@ adminGrowthRouter.post(
     if (!parsed.success) throw badRequest("Add a subject before sending a test.");
     const to = req.user?.email ?? "";
     if (!to) throw badRequest("Your admin account needs an email address for the test.");
+    const contact = await pool.query<{
+      id: number; name: string; first_name: string; last_name: string;
+      timezone: string; custom_fields: unknown;
+    }>(`SELECT id, name, first_name, last_name, timezone, custom_fields
+         FROM contacts WHERE lower(email) = lower($1) ORDER BY id LIMIT 1`, [to]);
+    const recipient = contact.rows[0];
+    const values = buildMergeValues({
+      email: to, name: recipient?.name ?? "", firstName: recipient?.first_name,
+      lastName: recipient?.last_name, timezone: recipient?.timezone,
+      customFields: recipient?.custom_fields,
+    }, mergeLinks(recipient?.id ?? null, { preview: true }));
+    const subject = renderTokens(parsed.data.subject, values);
+    const body = renderTokens(parsed.data.bodyMd, values);
     await sendEmail({
       to,
-      subject: `[Test] ${parsed.data.subject}`,
-      text: parsed.data.bodyMd,
-      html: renderMarkdown(parsed.data.bodyMd),
+      subject: `[Test] ${subject}`,
+      text: body,
+      html: renderMarkdown(body),
       sourceType: "transactional",
     });
     await recordAdminAction({

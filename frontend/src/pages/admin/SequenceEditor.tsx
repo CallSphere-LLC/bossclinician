@@ -82,6 +82,8 @@ interface EmailDraft {
   bodyMd: string;
   waitDays: number;
   waitHours: number;
+  waitWeeks: number;
+  waitMinutes: number;
   enabled: boolean;
 }
 
@@ -91,6 +93,8 @@ const BLANK_EMAIL: EmailDraft = {
   bodyMd: "",
   waitDays: 1,
   waitHours: 0,
+  waitWeeks: 0,
+  waitMinutes: 0,
   enabled: true,
 };
 
@@ -297,6 +301,8 @@ export default function SequenceEditor() {
       bodyMd: editing.bodyMd,
       waitDays: editing.waitDays,
       waitHours: editing.waitHours,
+      waitWeeks: editing.waitWeeks,
+      waitMinutes: editing.waitMinutes,
       enabled: editing.enabled,
     };
 
@@ -367,7 +373,10 @@ export default function SequenceEditor() {
     setTestAddressError(null);
     setSendingTest(true);
     try {
-      await marketingApi.testSequenceEmail(sequence.id, testingId, testAddress.trim());
+      await marketingApi.testSequenceEmail(
+        sequence.id, testingId === 0 ? "draft" : testingId, testAddress.trim(),
+        editing ? { subject: editing.subject, bodyMd: editing.bodyMd } : undefined,
+      );
       toast.success(`Test sent to ${testAddress.trim()}`);
       setTestingId(null);
       setTestAddress("");
@@ -503,7 +512,9 @@ export default function SequenceEditor() {
                         ? email.delayMinutes === 0
                           ? "Goes out as soon as somebody joins"
                           : `Goes out ${describeWait(email.delayMinutes)} after somebody joins`
-                        : `Goes out ${describeWait(email.delayMinutes)} than the one above`}
+                        : email.delayMinutes === 0
+                          ? "Goes out immediately after the one above"
+                          : `Goes out ${describeWait(email.delayMinutes)} after the one above`}
                     </p>
                     {measured && measured.sent > 0 && (
                       <p className="mt-1 text-xs text-ink-soft/80">
@@ -533,6 +544,8 @@ export default function SequenceEditor() {
                           bodyMd: email.bodyMd,
                           waitDays: wait.days,
                           waitHours: wait.hours,
+                          waitWeeks: wait.weeks,
+                          waitMinutes: wait.minutes,
                           enabled: email.enabled,
                         })
                       }
@@ -850,12 +863,15 @@ export default function SequenceEditor() {
       {/* ------------------------------------------------------------ modals */}
 
       <Modal
-        open={editing !== null}
-        onOpenChange={(open) => !open && setEditing(null)}
+        open={editing !== null && testingId === null}
+        onOpenChange={(open) => !open && testingId === null && setEditing(null)}
         title={editing?.id ? "Edit this email" : "Add an email"}
         size="lg"
         footer={
           <>
+            <Button variant="secondary" size="sm" onClick={() => setTestingId(editing?.id ?? 0)}>
+              <Send /> Send a test
+            </Button>
             <Button variant="secondary" size="sm" onClick={() => setEditing(null)}>
               Cancel
             </Button>
@@ -884,8 +900,15 @@ export default function SequenceEditor() {
               />
             </Field>
 
+            <Field label="Wait this many weeks" error={emailErrors.waitWeeks}>
+              <Input
+                id={SEQUENCE_EMAIL_FIELD_IDS.waitWeeks}
+                type="number" min={0} max={52} value={editing.waitWeeks}
+                onChange={(event) => setEditing((draft) => draft && { ...draft, waitWeeks: Number(event.target.value) || 0 })}
+              />
+            </Field>
             <Field
-              label="Wait this many days"
+              label="…and this many days"
               hint="Counted from the email before it"
               error={emailErrors.waitDays}
             >
@@ -918,6 +941,14 @@ export default function SequenceEditor() {
               />
             </Field>
 
+            <Field label="…and this many minutes" error={emailErrors.waitMinutes}>
+              <Input
+                id={SEQUENCE_EMAIL_FIELD_IDS.waitMinutes}
+                type="number" min={0} max={59} value={editing.waitMinutes}
+                onChange={(event) => setEditing((draft) => draft && { ...draft, waitMinutes: Number(event.target.value) || 0 })}
+              />
+            </Field>
+
             <Field
               label="Preview text"
               hint="The line shown after the subject in the inbox"
@@ -938,6 +969,8 @@ export default function SequenceEditor() {
             >
               <EmailComposer
                 source="sequence"
+                subject={editing.subject}
+                previewText={editing.previewText}
                 rows={12}
                 value={editing.bodyMd}
                 onChange={(bodyMd) =>
@@ -966,7 +999,7 @@ export default function SequenceEditor() {
         open={testingId !== null}
         onOpenChange={(open) => !open && setTestingId(null)}
         title="Send yourself a test"
-        description="It goes out exactly as written, addressed to you."
+        description="This sends only to the address below, using that contact’s saved first name when available. Unsaved edits are included."
         size="sm"
         footer={
           <>

@@ -681,6 +681,16 @@ export default function Campaigns() {
     }
   }
 
+  async function testExisting(campaign: CampaignRecord) {
+    if (!campaign.subject?.trim()) return;
+    try {
+      const result = await adminApi.campaignTest({ subject: campaign.subject, bodyMd: campaign.bodyMd ?? "" });
+      toast.success(`Test sent to ${result.to}`);
+    } catch (err) {
+      toast.error(friendlyError(err, "test email"));
+    }
+  }
+
   const send = useCallback(
     async (campaign: Campaign) => {
       // A failed lookup used to read as zero, which put "Send to 0 people" on
@@ -1432,6 +1442,8 @@ export default function Campaigns() {
             <Field label="Your message">
               <EmailComposer
                 source="broadcast"
+                subject={draft.subject ?? ""}
+                previewText={draft.previewText ?? ""}
                 value={draft.bodyMd ?? ""}
                 onChange={(next) => setDraft((d) => ({ ...d, bodyMd: next }))}
                 placeholder={"Hi there,\n\nI wanted to tell you about…"}
@@ -1678,6 +1690,7 @@ export default function Campaigns() {
         campaign={previewing}
         onOpenChange={(open) => !open && setPreviewing(null)}
         onDuplicate={(campaign) => void duplicate(campaign)}
+        onTest={(campaign) => void testExisting(campaign)}
       />
 
       <ManageTemplatesDialog open={managingTemplates} onOpenChange={setManagingTemplates} />

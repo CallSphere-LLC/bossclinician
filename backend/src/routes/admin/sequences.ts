@@ -17,6 +17,7 @@ import { upsertContact } from "../../services/contacts";
 import { asyncHandler } from "../../utils/asyncHandler";
 import { rowToCamel, rowsToCamel } from "../../utils/case";
 import { badRequest, notFound } from "../../utils/httpError";
+import { adminTestEmailLimiter } from "../../middleware/rateLimit";
 
 /**
  * Sequence administration — mounted at /api/admin/sequences.
@@ -72,16 +73,18 @@ const emailSchema = z.object({
   // scheduler wants, and doing the arithmetic here keeps it out of the UI.
   waitDays: z.number().int().min(0).max(365).optional(),
   waitHours: z.number().int().min(0).max(23).optional(),
+  waitWeeks: z.number().int().min(0).max(52).optional(),
+  waitMinutes: z.number().int().min(0).max(59).optional(),
   delayMinutes: z.number().int().min(0).optional(),
   fromName: z.string().max(200).optional(),
   fromEmail: z.string().max(200).optional(),
   enabled: z.boolean().optional(),
 });
 
-function delayFrom(input: z.infer<typeof emailSchema>): number | undefined {
+export function delayFrom(input: z.infer<typeof emailSchema>): number | undefined {
   if (input.delayMinutes !== undefined) return input.delayMinutes;
-  if (input.waitDays === undefined && input.waitHours === undefined) return undefined;
-  return (input.waitDays ?? 0) * 1440 + (input.waitHours ?? 0) * 60;
+  if (input.waitWeeks === undefined && input.waitDays === undefined && input.waitHours === undefined && input.waitMinutes === undefined) return undefined;
+  return (input.waitWeeks ?? 0) * 10080 + (input.waitDays ?? 0) * 1440 + (input.waitHours ?? 0) * 60 + (input.waitMinutes ?? 0);
 }
 
 function slugify(value: string): string {
@@ -473,21 +476,35 @@ adminSequencesRouter.post(
 /** Sends one email to a chosen address so it can be read before anybody else gets it. */
 adminSequencesRouter.post(
   "/:id/emails/:emailId/test",
+  adminTestEmailLimiter,
   asyncHandler(async (req, res) => {
-    const { email } = z.object({ email: z.string().email() }).parse(req.body);
+    const { email, draft } = z.object({
+      email: z.string().email(),
+      draft: z.object({ subject: z.string().trim().min(1).max(500), bodyMd: z.string().max(200_000) }).optional(),
+    }).parse(req.body);
 
-    const result = await pool.query<{
+    const saved = req.params.emailId === "draft" ? undefined : (await pool.query<{
       subject: string;
       body_md: string;
       from_name: string;
       from_email: string;
     }>(
-      `SELECT subject, body_md, from_name, from_email FROM sequence_emails
-        WHERE id = $2 AND sequence_id = $1`,
+      `SELECT e.subject, e.body_md, e.from_name, e.from_email FROM sequence_emails e
+        WHERE e.id = $2 AND e.sequence_id = $1`,
       [req.params.id, req.params.emailId]
-    );
-    const row = result.rows[0];
-    if (!row) throw notFound("Email not found");
+    )).rows[0];
+    if (!saved && req.params.emailId !== "draft") throw notFound("Email not found");
+    if (req.params.emailId === "draft") {
+      if (!draft) throw badRequest("Write a subject and message before sending a test.");
+      const sequence = await pool.query(`SELECT id FROM email_sequences WHERE id = $1`, [req.params.id]);
+      if (!sequence.rowCount) throw notFound("Sequence not found");
+    }
+    const row = {
+      subject: draft?.subject ?? saved?.subject ?? "",
+      body_md: draft?.bodyMd ?? saved?.body_md ?? "",
+      from_name: saved?.from_name ?? "",
+      from_email: saved?.from_email ?? "",
+    };
 
     // The same values a real send builds, so a test shows every token filled
     // in. When the address belongs to a contact it reads as it would for them.
@@ -500,15 +517,15 @@ adminSequencesRouter.post(
       custom_fields: unknown;
     }>(
       `SELECT id, name, first_name, last_name, timezone, custom_fields
-         FROM contacts WHERE email = $1`,
+         FROM contacts WHERE lower(email) = lower($1) ORDER BY id LIMIT 1`,
       [email]
     );
     const contact = known.rows[0];
     const values = buildMergeValues(
       {
         email,
-        name: contact?.name || "Test reader",
-        firstName: contact ? contact.first_name : "there",
+        name: contact?.name || "",
+        firstName: contact?.first_name,
         lastName: contact?.last_name,
         timezone: contact?.timezone,
         customFields: contact?.custom_fields,
