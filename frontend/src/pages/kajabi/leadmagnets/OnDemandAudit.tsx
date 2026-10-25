@@ -17,7 +17,7 @@ export default function OnDemandAudit() {
 
       <Section surface="base" space="lg" aurora="violet" auroraIntensity={0.7} aria-label="Watch the training" containerClassName="max-w-5xl" className="pt-28 sm:pt-32">
         <Rise className="text-center">
-          <h1 className="text-balance font-display text-[1.7rem] font-medium leading-[1.2] text-white sm:text-[2.2rem]">{c.step1.title.replace("what your learning", "what you're learning")}</h1>
+          <h1 className="text-balance font-display text-[1.7rem] font-medium leading-[1.2] text-white sm:text-[2.2rem]">{c.step1.title}</h1>
           <LuxeButton variant="foil" size="lg" href={c.step1.href} target="_blank" className="mt-7">
             {c.step1.cta}
           </LuxeButton>

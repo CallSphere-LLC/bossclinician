@@ -415,7 +415,7 @@ export const onDemandAudit = {
     description: "Watch Audit Proof Your Practice on demand with Yvette Howard, LCSW.",
   },
   step1: {
-    title: "Step 1: Grab your note template here to take notes on what your learning",
+    title: "Step 1: Grab your note template here to take notes on what you're learning",
     cta: "CLICK HERE TO TAKE NOTES",
     href: "/downloads/audit-proof-note-template.pdf",
   },
