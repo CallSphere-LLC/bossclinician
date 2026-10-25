@@ -102,7 +102,7 @@ export interface BrandShellInput {
 export function brandEmailHtml(input: BrandShellInput): string {
   if (isAlreadyLaidOut(input.html)) return input.html;
 
-  const site = (input.siteUrl || "https://bossclinician.callsphere.site").replace(/\/+$/, "");
+  const site = (input.siteUrl || "https://www.bossclinician.com").replace(/\/+$/, "");
   const host = site.replace(/^https?:\/\//i, "");
   const body = styleBody(promoteLoneLinks(input.html));
   const preheader = escapeText(preheaderFrom(input.text ?? ""));

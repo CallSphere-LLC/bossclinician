@@ -64,7 +64,7 @@ const LEGAL_SHARE_IMAGE = "/images/kajabi-pages/legal/legal-share.jpg";
    /coaching-terms
    ══════════════════════════════════════════════════════════════════════════ */
 
-const WORK_WITH_ME_URL = "bossclinician.callsphere.site/work-with-me";
+const WORK_WITH_ME_URL = "www.bossclinician.com/work-with-me";
 
 export const coachingTerms: KajabiLegalDoc = {
   seo: {
@@ -951,7 +951,7 @@ export const retreatAgreement: KajabiLegalDoc = {
           type: "p",
           text: [
             "The most current version of these Terms of Service will always be available at ",
-            { text: "bossclinician.callsphere.site/retreatagreement", href: "/retreatagreement" },
+            { text: "www.bossclinician.com/retreatagreement", href: "/retreatagreement" },
             ".",
           ],
         },

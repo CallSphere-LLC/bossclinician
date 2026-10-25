@@ -125,7 +125,7 @@ export const OFFER_QUIZ_RESULTS: Record<OfferKey, OfferQuizResult> = {
     ],
     ctaText: "Join the Boss Clinician Club",
     ctaLink: "/club",
-    ctaUrl: "/club",
+    ctaUrl: "www.bossclinician.com/club",
     formSlug: "offer-quiz-club",
   },
   lounge: {
@@ -144,7 +144,7 @@ export const OFFER_QUIZ_RESULTS: Record<OfferKey, OfferQuizResult> = {
     ],
     ctaText: "Join the Boss Clinician Lounge",
     ctaLink: "/lounge",
-    ctaUrl: "bossclinician.callsphere.site/lounge",
+    ctaUrl: "www.bossclinician.com/lounge",
     formSlug: "offer-quiz-lounge",
   },
   boardroom: {
@@ -164,7 +164,7 @@ export const OFFER_QUIZ_RESULTS: Record<OfferKey, OfferQuizResult> = {
     ],
     ctaText: "Apply for the Boss Clinician Boardroom",
     ctaLink: "/boardroom",
-    ctaUrl: "bossclinician.callsphere.site/boardroom",
+    ctaUrl: "www.bossclinician.com/boardroom",
     formSlug: "offer-quiz-boardroom",
   },
 };

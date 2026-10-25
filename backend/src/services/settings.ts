@@ -474,7 +474,7 @@ export const SETTING_DEFINITIONS: SettingDefinition[] = [
         label: "Sent from",
         help: "Has to be an address on a domain this site is verified to send from — anything else is refused when you save.",
         type: "email",
-        placeholder: "yvette@bossclinician.callsphere.site",
+        placeholder: "yvette@bossclinician.com",
       },
       {
         name: "replyTo",
@@ -487,7 +487,7 @@ export const SETTING_DEFINITIONS: SettingDefinition[] = [
         label: "Logo at the top of marketing emails",
         help: "A URL to an image. Leave blank for text only — a broken logo looks worse than none.",
         type: "text",
-        placeholder: "https://bossclinician.callsphere.site/uploads/logo.png",
+        placeholder: "https://www.bossclinician.com/uploads/logo.png",
       },
       {
         name: "defaultSendHour",
