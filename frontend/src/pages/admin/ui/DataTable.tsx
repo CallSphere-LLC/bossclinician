@@ -113,7 +113,10 @@ export function DataTable<TData>({
   return (
     <div className="overflow-hidden rounded-2xl border border-hairline bg-surface shadow-[0_1px_0_rgba(255,255,255,0.04)_inset,0_18px_40px_-24px_rgba(0,0,0,0.8)]">
       {(searchPlaceholder || toolbar || sortableColumns.length > 0) && (
-        <div className="flex flex-wrap items-center gap-3 border-b border-hairline/60 px-4 py-3.5">
+        <div className={cn(
+          "flex flex-wrap items-center gap-3 border-b border-hairline/60 px-4 py-3.5",
+          !searchPlaceholder && !toolbar && "sm:hidden",
+        )}>
           {searchPlaceholder && (
             <div className="relative min-w-0 basis-full sm:basis-auto sm:flex-1 sm:max-w-xs">
               <Search
