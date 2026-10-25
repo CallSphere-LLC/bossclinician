@@ -84,31 +84,33 @@ function Banner({
   return (
     <section
       aria-labelledby={headingId}
-      className="fixed inset-x-3 bottom-3 z-[90] sm:inset-x-auto sm:bottom-5 sm:left-5 sm:max-w-[34rem]"
+      className="fixed inset-x-3 bottom-[max(0.75rem,env(safe-area-inset-bottom))] z-[90] mx-auto max-w-[68rem] sm:inset-x-5 sm:bottom-5"
     >
-      <div className="rounded-2xl border border-gold/25 bg-night-deep/[0.97] p-5 shadow-[0_30px_80px_-24px_rgba(0,0,0,0.95)] backdrop-blur-xl sm:p-6">
-        <h2 id={headingId} className="font-display text-[1.15rem] font-medium text-white">
-          Your privacy, your choice
-        </h2>
-        <p className="copy-luxe mt-2 text-pretty text-sm">
-          We use essential cookies to run this site: sign-in, your cart and checkout. With your
-          permission we would also load content from other companies, like our Instagram feed,
-          which may set their own cookies. Nothing optional runs until you choose.{" "}
-          <Link
-            to="/cookie-policy"
-            className="text-gold underline decoration-gold/40 underline-offset-4 hover:text-gold-bright"
-          >
-            Cookie Policy
-          </Link>
-        </p>
-        <div className="mt-5 flex flex-col gap-2.5 sm:flex-row sm:flex-wrap">
-          <LuxeButton type="button" variant="foil" size="sm" onClick={onAccept} className="min-h-[44px]">
+      <div className="rounded-xl border border-gold/25 bg-night-deep/[0.98] p-4 shadow-[0_20px_55px_-20px_rgba(0,0,0,0.8)] backdrop-blur-xl sm:p-5 lg:flex lg:items-center lg:gap-6">
+        <div className="min-w-0 flex-1">
+          <h2 id={headingId} className="font-display text-base font-medium text-white">
+            Your privacy, your choice
+          </h2>
+          <p className="copy-luxe mt-1 text-pretty text-[0.82rem] leading-relaxed">
+            Essential cookies keep sign-in, cart and checkout working. With your permission, we
+            also load content such as Instagram that may set cookies. Optional content stays off
+            until you allow it.{" "}
+            <Link
+              to="/cookie-policy"
+              className="whitespace-nowrap text-gold underline decoration-gold/40 underline-offset-4 hover:text-gold-bright"
+            >
+              Cookie Policy
+            </Link>
+          </p>
+        </div>
+        <div className="mt-4 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap lg:mt-0 lg:shrink-0 lg:flex-nowrap">
+          <LuxeButton type="button" variant="foil" size="sm" onClick={onAccept} className="min-h-[44px] px-4 py-2 text-[0.66rem] tracking-[0.08em]">
             Accept all
           </LuxeButton>
-          <LuxeButton type="button" variant="outline" size="sm" onClick={onReject} className="min-h-[44px]">
+          <LuxeButton type="button" variant="outline" size="sm" onClick={onReject} className="min-h-[44px] px-4 py-2 text-[0.66rem] tracking-[0.08em]">
             Reject non-essential
           </LuxeButton>
-          <LuxeButton type="button" variant="glass" size="sm" onClick={onPreferences} className="min-h-[44px]">
+          <LuxeButton type="button" variant="glass" size="sm" onClick={onPreferences} className="col-span-2 min-h-[44px] px-4 py-2 text-[0.66rem] tracking-[0.08em]">
             Preferences
           </LuxeButton>
         </div>
