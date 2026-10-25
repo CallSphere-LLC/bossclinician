@@ -11,7 +11,7 @@ export const coursesRouter = Router();
 coursesRouter.get(
   "/courses",
   asyncHandler(async (_req, res) => {
-    const items = await coursesRepo.list({ where: "published = true" });
+    const items = await coursesRepo.list({ where: "published = true AND slug NOT IN ('rate-negotiation-letter-template', 'directory-makeover-audit')" });
     res.json(items);
   })
 );

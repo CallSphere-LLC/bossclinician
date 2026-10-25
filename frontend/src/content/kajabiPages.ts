@@ -329,7 +329,7 @@ export const thankYouRateRenegotiate: SimpleThankYou = {
     "A link has also been sent to your email address.",
   ],
   signoff: "To much success!",
-  cta: { label: "DOWNLOAD NOW!", href: "/library/rate-negotiation-letter-template" },
+  cta: { label: "DOWNLOAD NOW!", href: "/downloads/rate-negotiation-letter-template" },
 };
 
 /**

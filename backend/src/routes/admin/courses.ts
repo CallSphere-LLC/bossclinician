@@ -5,7 +5,7 @@ import { adminCoursePreviewRouter } from "./coursePreview";
 import { adminCourseHubRouter } from "./courseHub";
 import { ensureCourseProduct } from "../../services/courseProduct";
 
-// A course row that a download (051) or a one-to-one coaching programme (120)
+// A course row that a download (051), service audit, or a one-to-one coaching programme (120)
 // has taken over is not a course to the owner, so the list leaves it out. The
 // row is kept and still opens by id: a coaching programme's lessons are edited
 // at /admin/courses/:id/curriculum from its card on the Coaching page.
@@ -18,7 +18,7 @@ import { ensureCourseProduct } from "../../services/courseProduct";
 export const adminCoursesRouter = buildAdminCrudRouter(
   {
     ...coursesRepo,
-    list: (opts) => coursesRepo.list({ ...opts, where: "NOT EXISTS (SELECT 1 FROM products p WHERE p.legacy_course_id=courses.id AND p.kind IN ('download','coaching'))" }),
+    list: (opts) => coursesRepo.list({ ...opts, where: "NOT EXISTS (SELECT 1 FROM products p WHERE p.legacy_course_id=courses.id AND p.kind IN ('download','coaching','access_group'))" }),
     create: async (data) => {
       const course = await coursesRepo.create(data);
       try {

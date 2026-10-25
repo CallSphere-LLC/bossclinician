@@ -12,25 +12,6 @@ import type { Course } from "@/types";
  */
 export const courses: Course[] = [
   {
-    id: "directory-makeover-audit",
-    slug: "directory-makeover-audit",
-    title: "DIRECTORY MAKEOVER AUDIT",
-    subtitle: "Make Your Profile Irresistible — Get Seen. Get Chosen. Get Booked.",
-    description:
-      "A personalized audit that shows you exactly how to transform your Psychology Today or TherapyDen profile into a client-attracting powerhouse.",
-    priceText: "",
-    image: "/images/87e2e475b3ec.webp",
-    url: "/courses/directory-makeover-audit",
-    features: [
-      "Clear, personalized feedback so you will know exactly what’s holding your profile back.",
-      "A high-converting improvement plan so you will make changes with confidence.",
-      "SEO and visibility insights so you will rank higher and get noticed.",
-      "Actionable steps so you will increase bookings quickly without rewriting everything.",
-    ],
-    sort: 1,
-    published: true,
-  },
-  {
     id: "fully-booked-toolkit",
     slug: "fully-booked-toolkit",
     title: "FULLY BOOKED TOOLKIT",
@@ -187,24 +168,6 @@ export const courses: Course[] = [
       "Messaging prompts so you will stop sounding generic and start sounding clear.",
     ],
     sort: 10,
-    published: true,
-  },
-  {
-    id: "rate-negotiation-letter-template",
-    slug: "rate-negotiation-letter-template",
-    title: "RATE NEGOTIATION LETTER TEMPLATE",
-    subtitle: "Ask for Higher Rates With Ease",
-    description:
-      "A plug-and-play, therapist-friendly template that helps you request (and often secure) better reimbursement rates.",
-    priceText: "",
-    image: "/images/fb13cb030751.webp",
-    url: "/courses/rate-negotiation-letter-template",
-    features: [
-      "A professional, therapist-friendly letter so you will advocate for better reimbursement confidently.",
-      "Easy customization so you will send it quickly without overthinking.",
-      "A clear negotiation structure so you will increase your chances of approval.",
-    ],
-    sort: 11,
     published: true,
   },
   {

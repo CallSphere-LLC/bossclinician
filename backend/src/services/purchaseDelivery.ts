@@ -9,6 +9,7 @@ import { issueSetPasswordLink } from "./setPasswordLink";
 import { exitContactOnPurchase } from "./sequences";
 import { readSetting } from "./settings";
 import { sendOwnerSaleNotification } from "./ownerSaleNotification";
+import { sendDirectoryAuditIntake } from "./directoryAuditIntake";
 
 /**
  * Everything a customer is owed the moment a purchase completes.
@@ -325,6 +326,10 @@ export async function deliverPurchase(
       const { sendSetPasswordLink } = await import("./setPasswordLink");
       void sendSetPasswordLink(input.memberId as number);
     }
+
+    // A service purchase needs its intake instructions after access is granted.
+    // The helper checks the real published form and claims each order once.
+    if (!sandbox) await sendDirectoryAuditIntake(order);
 
     /* --------------------------------------------------- list housekeeping */
 

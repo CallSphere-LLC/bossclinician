@@ -40,6 +40,8 @@ const ROUTES: { path: string; load?: Loader }[] = [
     path: "/courses",
     load: async (_req, keys) => ({ [keys.courses()]: await loadCourses() }),
   },
+  { path: "/services/:slug", load: async (req, keys) => ({ [keys.courseDetail(req.params.slug)]: await loadCourseDetail(req.params.slug) }) },
+  { path: "/downloads/:slug", load: async (req, keys) => ({ [keys.courseDetail(req.params.slug)]: await loadCourseDetail(req.params.slug) }) },
   // Where 55 of the legacy bossclinician.com product URLs land.
   {
     path: "/courses/:slug",

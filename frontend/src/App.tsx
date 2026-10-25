@@ -84,6 +84,8 @@ export const PUBLIC_ROUTES: readonly { path: string; Component: RouteComponent }
   { path: "/about", Component: lazyRoute(() => import("@/pages/About")) },
   { path: "/work-with-me", Component: lazyRoute(() => import("@/pages/WorkWithMe")) },
   { path: "/courses", Component: lazyRoute(() => import("@/pages/Courses")) },
+  { path: "/services/:slug", Component: lazyRoute(() => import("@/pages/NonCourseProduct")) },
+  { path: "/downloads/:slug", Component: lazyRoute(() => import("@/pages/NonCourseProduct")) },
   // Two products argue for themselves at length, so they get a page rather than
   // the catalogue layout. Declared before `/courses/:slug` because the preload
   // map (ssr/preload.ts) resolves a URL by walking this list in order, and the
@@ -96,6 +98,8 @@ export const PUBLIC_ROUTES: readonly { path: string; Component: RouteComponent }
     path: "/courses/credential-with-confidence",
     Component: lazyRoute(() => import("@/pages/CredentialWithConfidence")),
   },
+  { path: "/courses/directory-makeover-audit", Component: lazyRoute(() => import("@/pages/LegacyProductRedirect")) },
+  { path: "/courses/rate-negotiation-letter-template", Component: lazyRoute(() => import("@/pages/LegacyProductRedirect")) },
   // Where 55 of the legacy bossclinician.com product URLs land.
   { path: "/documentationondemand", Component: lazyRoute(() => import("@/pages/DocumentationOnDemand")) },
   { path: "/courses/:slug", Component: lazyRoute(() => import("@/pages/CourseDetail")) },

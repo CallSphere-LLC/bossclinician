@@ -9,25 +9,7 @@ import { ORGANIZATION_ID, absoluteUrl } from "@/seo/schema";
 import type { JsonLdNode } from "@/seo/types";
 import { useHeadContext } from "@/ssr/context";
 
-/**
- * Store — the Obsidian Luxe rebuild of the .com's consulting storefront.
- *
- * The live page is deliberately short: a banner label, one promise, one
- * all-caps section heading, and three priced services. It is rebuilt at that
- * length rather than padded out — a storefront's job is to put the three
- * decisions on screen, and anything inserted between the promise and the grid
- * is scroll the buyer did not ask for.
- *
- * Every string below is reproduced verbatim from bossclinician.com/store,
- * prices included down to the "USD" suffix.
- *
- * The three actions are internal. They used to leave for the Kajabi offer pages
- * (bossclinician.com/offers/<token>), which after the domain cutover are this
- * app — and the redirect map sends those tokens back to /store, so each button
- * was a loop. None of the three services has an offer row here yet, so each
- * button goes to the application form; once an offer is published in the admin,
- * set the card's `to` to `/checkout/<offer-slug>`.
- */
+/** The store presents the audit as a service and the letter as a download. */
 
 /* ── Copy, verbatim from the live page ───────────────────────────────────── */
 
@@ -35,7 +17,7 @@ const EYEBROW = "The Boss Clinician Store";
 
 const HEADLINE = "Build a smoother, more profitable practice with support!";
 
-const SERVICES_HEADING = "THE BOSS BOARDROOM";
+const SERVICES_HEADING = "SERVICES";
 
 /**
  * Break the headline at its natural clause so the second half can be set in
@@ -76,20 +58,18 @@ const SERVICES: readonly Service[] = [
       "/images/migrated-840e01072ac7.png",
     accent: "gold",
   },
+  {
+    name: "Directory Makeover Audit",
+    price: "",
+    to: "/services/directory-makeover-audit",
+    image: "/images/87e2e475b3ec.webp",
+    accent: "plum",
+  },
 ];
 
 /* ── Structured data ─────────────────────────────────────────────────────── */
 
-/**
- * The three services as priced products.
- *
- * A storefront that shows a price and a way to pay is a shopping result waiting
- * to happen, so each card is declared as a Product with the offer it carries.
- * The price is read out of the same string the card prints rather than restated
- * beside it, which is what stops the page and the markup quoting different
- * money; a line that does not parse contributes no Offer at all, because an
- * offer without a price is worse to a crawler than no offer.
- */
+/** Price markup for the two service cards. */
 function offerNode(origin: string, service: Service): JsonLdNode | null {
   const match = /([\d,]+(?:\.\d{2})?)\s*([A-Z]{3})/.exec(service.price);
   if (!match) return null;
@@ -109,12 +89,11 @@ function serviceNodes(origin: string): JsonLdNode[] {
     const offer = offerNode(origin, service);
 
     return {
-      "@type": "Product",
+      "@type": "Service",
       name: service.name,
-      // The storefront is where these three live until each has a checkout.
-      url: absoluteUrl(origin, "/store"),
+      url: absoluteUrl(origin, service.to),
       image: absoluteUrl(origin, service.image),
-      brand: { "@id": `${origin}/${ORGANIZATION_ID}` },
+      provider: { "@id": `${origin}/${ORGANIZATION_ID}` },
       ...(offer ? { offers: offer } : {}),
     };
   });
@@ -125,9 +104,7 @@ export default function Store() {
 
   return (
     <>
-      {/* No `image`: the hero is set in type, and the three covers below it are
-          deliberately equal siblings, so promoting one of them to the share
-          card would rank a set the page refuses to rank. */}
+      {/* Product images remain on their own cards. */}
       <Seo
         title="Start Your Journey to a Profitable Private Practice"
         description="Discover how to launch and grow your profitable private therapy practice with expert guidance from Yvette. Get started today!"
@@ -147,7 +124,7 @@ export default function Store() {
         space="md"
         aurora="mixed"
         auroraIntensity={0.55}
-        aria-label="The Boss Boardroom"
+        aria-label="Services"
       >
         {/* The live heading is a single all-caps line. Caps at the default
             SectionTitle scale would run to three lines on a phone, so the size
@@ -157,16 +134,14 @@ export default function Store() {
           titleClassName="text-[1.5rem] tracking-[0.06em] sm:text-[2rem] sm:tracking-[0.08em] lg:text-[2.4rem]"
         />
 
-        {/* Straight from one column to three: at 640px a half-width card is
-            still a comfortable measure, but a 2-up grid of three items leaves
-            an orphan, which reads as a missing fourth service. */}
+        {/* Service cards share one responsive grid. */}
         <div className="mt-8 flex flex-wrap justify-center gap-4">
           <LuxeButton to="/courses" variant="outline">Explore Courses</LuxeButton>
           <LuxeButton to="/resources" variant="outline">Browse Free Resources</LuxeButton>
         </div>
         <RevealGroup
           as="ul"
-          className="mx-auto mt-10 grid max-w-md list-none grid-cols-1 items-stretch gap-6 sm:max-w-xl sm:gap-7 lg:max-w-xl"
+          className="mx-auto mt-10 grid max-w-md list-none grid-cols-1 items-stretch gap-6 sm:max-w-xl sm:gap-7 lg:max-w-4xl lg:grid-cols-2"
         >
           {SERVICES.map((service) => (
             <RevealItem key={service.name} as="li" className="h-full">
@@ -174,6 +149,18 @@ export default function Store() {
             </RevealItem>
           ))}
         </RevealGroup>
+      </Section>
+      <Section surface="raised" space="md" aria-label="Downloads">
+        <SectionTitle title="Downloads" body="Templates and tools to keep and use in your practice." />
+        <div className="mx-auto mt-10 max-w-md">
+          <ServiceCard service={{
+            name: "Rate Negotiation Letter Template",
+            price: "",
+            to: "/downloads/rate-negotiation-letter-template",
+            image: "/images/fb13cb030751.webp",
+            accent: "green",
+          }} />
+        </div>
       </Section>
     </>
   );
@@ -224,20 +211,16 @@ function ServiceCard({ service }: { service: Service }) {
         <div className="mt-auto pt-6">
           <div aria-hidden className="rule-faint w-full" />
 
-          {/* The price is this section's one foil accent, so it gets a bloom
-              behind it: flat foil reads dull at display size. */}
-          <p className="relative mt-5">
-            <span
-              aria-hidden
-              className="pointer-events-none absolute -left-6 -top-7 h-24 w-40 rounded-full blur-2xl"
-              style={{
-                background: "radial-gradient(circle, rgba(201,164,106,0.18) 0%, transparent 70%)",
-              }}
-            />
-            <span className="text-foil relative font-display text-[1.6rem] font-medium leading-none tracking-tight sm:text-[1.75rem]">
-              {service.price}
-            </span>
-          </p>
+          {/* Offer prices are read on the detail page, so new cards cannot quote stale amounts. */}
+          {service.price ? (
+            <p className="relative mt-5">
+              <span className="text-foil font-display text-[1.6rem] font-medium leading-none tracking-tight sm:text-[1.75rem]">
+                {service.price}
+              </span>
+            </p>
+          ) : (
+            <p className="mt-5 text-sm text-orchid">See current options and prices</p>
+          )}
 
           <LuxeButton
             variant="glass"

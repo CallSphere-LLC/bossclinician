@@ -205,6 +205,11 @@ export default function FormPage() {
     // A hidden question is "filled in for them" by the link that brought them
     // here: /f/<slug>?<key>=<value>, the way a campaign link carries its source.
     if (field.type === "hidden" && typeof window !== "undefined") {
+      // The audit purchase token travels in the fragment, so it never reaches
+      // web server logs or a cross-origin Referer header on the GET request.
+      if (field.key === "audit_order_token") {
+        return new URLSearchParams(window.location.hash.slice(1)).get(field.key) ?? "";
+      }
       return new URLSearchParams(window.location.search).get(field.key) ?? "";
     }
     return "";
@@ -367,7 +372,7 @@ export default function FormPage() {
       // because "email us instead" is no help when the fix is on this page.
       if (
         err instanceof ApiError &&
-        (err.status === 400 || err.status === 413 || err.status === 429) &&
+        (err.status === 400 || err.status === 403 || err.status === 413 || err.status === 429) &&
         err.message &&
         err.message !== "Invalid submission"
       ) {

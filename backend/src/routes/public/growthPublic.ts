@@ -8,6 +8,7 @@ import { rowsToCamel } from "../../utils/case";
 import { asyncHandler } from "../../utils/asyncHandler";
 import { badRequest, forbidden, notFound } from "../../utils/httpError";
 import { env } from "../../config/env";
+import { authorizeDirectoryAuditSubmission } from "../../services/directoryAuditIntake";
 import { leadsLimiter } from "../../middleware/rateLimit";
 import { fireTriggerAsync } from "../../automations/engine";
 // The v2 engine is where the automation builder writes its rules; the legacy
@@ -895,6 +896,14 @@ growthPublicRouter.post(
     // "No name given" even though the visitor was told their send succeeded.
     if (!email) throw badRequest("Please enter a valid email address.");
     if (!name) throw badRequest("Please enter your name.");
+
+    // Only the buyer holding the signed link can submit the service intake.
+    // The proof never goes into form_submissions or a contact's custom fields.
+    if (form.slug === "directory-makeover-audit-intake") {
+      const authorized = await authorizeDirectoryAuditSubmission(data.audit_order_token, email);
+      if (!authorized) throw forbidden("Use the intake link from your purchase email and the email address used at checkout.");
+      delete data.audit_order_token;
+    }
 
     // First, and on its own. Whatever else goes wrong below, the answers a
     // stranger just typed are on disk.

@@ -77,7 +77,7 @@ export async function loadTestimonials(): Promise<unknown[]> {
 }
 
 export async function loadCourses(): Promise<unknown[]> {
-  return coursesRepo.list({ where: "published = true" });
+  return coursesRepo.list({ where: "published = true AND slug NOT IN ('rate-negotiation-letter-template', 'directory-makeover-audit')" });
 }
 
 export async function loadResources(): Promise<unknown[]> {

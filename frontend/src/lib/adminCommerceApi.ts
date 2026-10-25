@@ -567,7 +567,7 @@ export const PRODUCT_KIND: Record<
   coaching: { one: "Coaching", many: "Coaching", blurb: "Time with you, booked in sessions." },
   podcast: { one: "Podcast", many: "Podcasts", blurb: "A private show people subscribe to." },
   newsletter: { one: "Newsletter", many: "Newsletters", blurb: "Issues that arrive by email." },
-  access_group: { one: "Something else", many: "Anything else", blurb: "Access you hand out yourself." },
+  access_group: { one: "Service or other access", many: "Services and other access", blurb: "A service delivered outside the course library, or access you hand out yourself." },
   bundle: { one: "Bundle", many: "Bundles", blurb: "Several of the above, sold together." },
 };
 

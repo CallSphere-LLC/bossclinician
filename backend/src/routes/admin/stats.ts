@@ -21,7 +21,7 @@ statsRouter.get(
 
     const [newLeads, courses, testimonials, resources] = await Promise.all([
       pool.query("SELECT COUNT(*)::int AS count FROM leads WHERE status = 'new'"),
-      pool.query("SELECT COUNT(*)::int AS count FROM courses WHERE published = true"),
+      pool.query("SELECT COUNT(*)::int AS count FROM courses c WHERE published = true AND NOT EXISTS (SELECT 1 FROM products p WHERE p.legacy_course_id=c.id AND p.kind IN ('download','coaching','access_group'))"),
       pool.query("SELECT COUNT(*)::int AS count FROM testimonials WHERE published = true"),
       pool.query("SELECT COUNT(*)::int AS count FROM resources WHERE published = true"),
     ]);
@@ -57,7 +57,7 @@ statsRouter.get(
            ${MAILABLE_CONTACT_COUNT_SQL}                                 AS subscribers,
            (SELECT COUNT(*)::int FROM blog_posts WHERE published = true) AS posts,
            (SELECT COUNT(*)::int FROM chat_sessions)                     AS chats,
-           (SELECT COUNT(*)::int FROM courses WHERE published = true)    AS courses,
+           (SELECT COUNT(*)::int FROM courses c WHERE published = true AND NOT EXISTS (SELECT 1 FROM products p WHERE p.legacy_course_id=c.id AND p.kind IN ('download','coaching','access_group')))    AS courses,
            (SELECT COUNT(*)::int FROM members)                           AS members,
            (SELECT COUNT(*)::int FROM enrollments)                       AS enrollments,
            (SELECT COUNT(*)::int FROM course_lessons)                    AS lessons,

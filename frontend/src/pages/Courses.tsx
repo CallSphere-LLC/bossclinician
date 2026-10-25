@@ -84,7 +84,7 @@ const CTA_CLASS = "min-h-[44px] w-full px-5 py-3.5 text-center leading-[1.45] tr
 
 export default function Courses() {
   const { data: courses, loading } = useCollection(api.courses, fallbackCourses, ssrKeys.courses());
-  const published = courses.filter((c) => c.published).sort((a, b) => a.sort - b.sort);
+  const published = courses.filter((c) => c.published && c.slug !== "rate-negotiation-letter-template" && c.slug !== "directory-makeover-audit").sort((a, b) => a.sort - b.sort);
 
   return (
     <>
