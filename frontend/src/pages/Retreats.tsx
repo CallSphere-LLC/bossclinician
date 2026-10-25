@@ -150,7 +150,7 @@ export default function Retreats() {
             maximumAttendeeCapacity: 12,
             offers: {
               "@type": "Offer",
-              price: "4500",
+              price: "5500",
               priceCurrency: "USD",
               url: `${origin}${RETREAT_RESERVE_ROUTE}`,
             },
