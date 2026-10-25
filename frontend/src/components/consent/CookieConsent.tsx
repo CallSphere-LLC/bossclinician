@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
+import { createPortal } from "react-dom";
 import { Link } from "react-router";
 import { LuxeButton } from "@/components/luxe/LuxeButton";
 import { useConsent } from "@/hooks/useConsent";
@@ -49,8 +50,11 @@ export function CookieConsent() {
     setPanelOpen(false);
   };
 
-  return (
-    <>
+  // The page shell isolates its decorative grain layer. Render the fixed
+  // consent UI at the document level so chat and other floating controls
+  // cannot cover its actions on narrow screens.
+  return createPortal(
+    <div className="theme-luxe">
       {!consent && !panelOpen && (
         <Banner
           onAccept={() => decide({ media: true, analytics: true })}
@@ -67,7 +71,8 @@ export function CookieConsent() {
           onClose={() => setPanelOpen(false)}
         />
       )}
-    </>
+    </div>,
+    document.body,
   );
 }
 
