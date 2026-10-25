@@ -32,7 +32,8 @@ describe("Directory Makeover Audit intake", () => {
     expect(message.to).toBe(order.email);
     expect(message.text).toContain("Hey Jane,");
     expect(message.text).toContain("https://www.bossclinician.com/f/directory-makeover-audit-intake#audit_order_token=");
-    expect(message.text).toContain("3?5 business days");
+    expect(message.text).toContain("3-5 business days");
+    expect(message.text).not.toContain("I?m");
     expect(message.html).toContain('href="https://www.bossclinician.com/f/directory-makeover-audit-intake#audit_order_token=');
     expect(vi.mocked(pool.query).mock.calls.some(([sql]) => String(sql).includes("SET sent_at"))).toBe(true);
   });

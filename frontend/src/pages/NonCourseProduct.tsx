@@ -21,19 +21,19 @@ export default function NonCourseProduct() {
     { revalidateForMembers: true },
   );
   if (slug !== expected || page.status === "missing") {
-    return <><Seo title="Product not found ? Boss Clinician" noindex httpStatus={404} />
+    return <><Seo title="Product not found | Boss Clinician" noindex httpStatus={404} />
       <Section><Container>We couldn't find that product.</Container></Section></>;
   }
   if (page.status !== "ready") {
-    return <><Seo title="Loading ? Boss Clinician" noindex httpStatus={503} />
-      <Section><Container>Loading product details?</Container></Section></>;
+    return <><Seo title="Loading | Boss Clinician" noindex httpStatus={503} />
+      <Section><Container>Loading product details...</Container></Section></>;
   }
   const product = page.data;
   const salesPage = parseSalesPage((product as { salesPage?: unknown }).salesPage);
   const buttons = salesButtons(product.offers);
   const highlights = salesPage?.hero.highlights ?? product.features;
   return <>
-    <Seo title={`${product.title} ? Boss Clinician`} description={product.description} />
+    <Seo title={`${product.title} | Boss Clinician`} description={product.description} />
     <LuxePageHero
       eyebrow={service ? "Service" : "Download"}
       title={product.title}

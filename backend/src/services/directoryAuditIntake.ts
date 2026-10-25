@@ -62,43 +62,43 @@ export function directoryAuditIntakeEmail(name: string, formUrl: string) {
   const text = [
     `Hey ${firstName(name)},`,
     "",
-    "Thank you so much for booking the Directory Makeover Audit ? I?m excited to help you transform your therapist directory profile so it reflects your expertise and attracts the clients you truly want to work with.",
+    "Thank you so much for booking the Directory Makeover Audit. I'm excited to help you transform your therapist directory profile so it reflects your expertise and attracts the clients you truly want to work with.",
     "",
     "Before I begin your audit, I need one quick thing from you:",
     "",
-    "? Step 1: Complete Your Intake Form",
+    "Step 1: Complete Your Intake Form",
     "",
     "Please click the link below to submit your profile link(s) and audit preferences:",
     "",
-    "?? Complete Questionnaire Here",
+    "Complete Questionnaire Here",
     formUrl,
     "",
     "This form helps me understand what platforms you want audited and what you're hoping to improve. It takes just a few minutes and ensures your audit is accurate and tailored.",
     "",
-    "? Step 2: I?ll Begin Your Audit",
+    "Step 2: I'll Begin Your Audit",
     "",
-    "Once your intake form is submitted, I?ll get to work.",
+    "Once your intake form is submitted, I'll get to work.",
     "",
-    "Your personalized audit video will arrive in 3?5 business days and will include:",
+    "Your personalized audit video will arrive in 3-5 business days and will include:",
     "",
-    "? What?s working",
-    "? What?s confusing or unclear to potential clients",
-    "? What?s missing",
-    "? Which parts of your profile may be hurting your visibility or connection",
-    "? Exact recommendations to improve clarity, visibility, and client alignment",
+    "- What's working",
+    "- What's confusing or unclear to potential clients",
+    "- What's missing",
+    "- Which parts of your profile may be hurting your visibility or connection",
+    "- Exact recommendations to improve clarity, visibility, and client alignment",
     "",
     "After You Receive Your Audit",
     "",
-    "You?ll be able to implement the recommendations right away ? no guessing, no wondering what?s wrong, and no rewriting from scratch.",
+    "You'll be able to implement the recommendations right away - no guessing, no wondering what's wrong, and no rewriting from scratch.",
     "",
     "Just clear direction and small changes that make a meaningful difference.",
     "",
     "If you have any questions",
     "",
     "You can reply directly to this email or contact me at:",
-    "?? yvette@bossclinician.com",
+    "yvette@bossclinician.com",
     "",
-    "I can?t wait for your profile to finally reflect the incredible therapist you are.",
+    "I can't wait for your profile to finally reflect the incredible therapist you are.",
     "",
     "To much success!",
     "",
@@ -106,10 +106,10 @@ export function directoryAuditIntakeEmail(name: string, formUrl: string) {
   ].join("\n");
   const link = `<a href="${escapeHtml(formUrl)}">Complete Questionnaire Here</a>`;
   const html = text.split("\n").map((line) =>
-    line === "?? Complete Questionnaire Here" ? `?? ${link}` :
+    line === "Complete Questionnaire Here" ? `?? ${link}` :
     line === formUrl ? "" : escapeHtml(line)
   ).join("<br>");
-  return { subject: "Your Directory Makeover Audit ? Intake Form + Next Steps", text, html };
+  return { subject: "Your Directory Makeover Audit - Intake Form + Next Steps", text, html };
 }
 
 /**
@@ -120,7 +120,7 @@ export async function sendDirectoryAuditIntake(order: AuditIntakeOrder): Promise
   if (order.offer_slug !== OFFER_SLUG || !order.email || order.gift_recipient_email) return false;
   try {
     const form = await pool.query<{ slug: string }>(
-      "SELECT slug FROM forms WHERE slug = $1 AND name = 'Directory Makeover Audit ? Intake' AND published = true",
+      "SELECT slug FROM forms WHERE slug = $1 AND name = 'Directory Makeover Audit - Intake' AND published = true",
       [FORM_SLUG],
     );
     if (!form.rows[0]) return false;
