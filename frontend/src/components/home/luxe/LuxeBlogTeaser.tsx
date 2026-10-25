@@ -50,19 +50,12 @@ interface Teaser {
 const TEASERS: readonly Teaser[] = [
   {
     category: "Private Practice Strategy",
-    title: "Is Talkspace Right for Your Long-Term Practice Goals? A Therapist's Honest Take",
+    title: "Why Your Private Practice Marketing Isn’t Working (And What to Do Instead)",
     excerpt:
-      "After a year seeing 80 to 100 clients on the platform, here's what I learned, and why I built my own practice instead.",
+      "The marketing I tried when I opened my practice looked productive. Here is how I learned what actually brought the right clients.",
+    localSlug: "why-your-private-practice-marketing-isn-t-working-and-what-to-do-instead",
     fallbackTo: "/blog",
     accent: "green",
-  },
-  {
-    category: "Group Practice",
-    title: "Alma vs Private Pay: What the Numbers Actually Look Like for Group Practices",
-    excerpt:
-      "I joined Alma expecting higher rates and cash pay referrals. Here's what I actually got, and what group practice owners need to know first.",
-    fallbackTo: "/blog",
-    accent: "plum",
   },
   {
     category: "Income Strategy",
@@ -70,7 +63,16 @@ const TEASERS: readonly Teaser[] = [
     excerpt:
       "The math behind caseload, income, and capacity, and how to build a model that does not require your maximum clinical output.",
     localSlug: "how-to-stop-seeing-25-clients-a-week-and-still-hit-your-income-goals",
-    fallbackTo: "/blog/how-to-stop-seeing-25-clients-a-week-and-still-hit-your-income-goals",
+    fallbackTo: "/blog",
+    accent: "plum",
+  },
+  {
+    category: "Sustainable Practice",
+    title: "Afraid to Charge? Ditching the Money Guilt as a Therapist",
+    excerpt:
+      "Many therapists struggle with money guilt when charging for services. Learn how to price your work sustainably without compromising ethics or care.",
+    localSlug: "money-guilt-therapists-charging-fees",
+    fallbackTo: "/blog",
     accent: "gold",
   },
 ];

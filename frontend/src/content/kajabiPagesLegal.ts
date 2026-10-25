@@ -663,12 +663,12 @@ export const retreatAgreement: KajabiLegalDoc = {
       label: "Section 04",
       heading: "Investment & Payment Terms",
       blocks: [
-        { type: "p", text: "Shared rooms are open for enrollment. Private rooms are offered by request only, subject to availability. All prices are per person." },
+        { type: "p", text: "Private rooms are open for enrollment. Shared rooms may be available separately, subject to availability. All prices are per person." },
         {
           type: "pricing",
           options: [
             {
-              eyebrow: "Private Room by Request",
+              eyebrow: "Private Room",
               name: "Private King Suite",
               price: "$5,500",
               note: ["$500 deposit · remaining balance", "due in full by June 8, 2027"],

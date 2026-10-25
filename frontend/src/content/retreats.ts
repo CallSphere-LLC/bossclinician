@@ -8,9 +8,9 @@
  * your host → why Bali → what is and is not included → the burnout quiz → the
  * fourteen questions.
  *
- * Nothing here is paraphrased, rounded or invented. The price, the payment
- * plan, the final payment date and the cancellation policy are financial terms
- * and are the published wording exactly. The separators in the uppercase strips
+ * The 25 October owner update makes the private $5,500 room the public
+ * reservation option. The checkout offer and legal terms use the same amount.
+ * The final payment date and cancellation policy retain the published terms. The separators in the uppercase strips
  * are non-breaking space + middle dot, written as escapes so a later edit
  * cannot silently turn them into ordinary spaces.
  *
@@ -21,10 +21,10 @@
 const DOT = " · ";
 
 /**
- * Public shared-room checkout. Private rooms are offered individually on request.
+ * Public private-room checkout. Shared-room bookings use their separate offer.
  * Internal on purpose: no button on this site sends a visitor to Kajabi.
  */
-export const RETREAT_RESERVE_ROUTE = "/checkout/bali-shared-room";
+export const RETREAT_RESERVE_ROUTE = "/checkout/bali-private-room";
 
 /** The travel insurance provider the page names, by its own link. */
 export const RETREAT_TRAWICK_URL = "https://trawickinternational.com/";
@@ -183,11 +183,11 @@ const FAQS: readonly RetreatFaq[] = [
   },
   {
     q: "What is my room like?",
-    a: "The Shared Luxury Room is $4,500 per person and includes two single beds and an en suite bathroom, shared with one other retreat participant. Each guest reserves their own spot. For roommate preferences or other room questions, email retreats@bossclinician.com.",
+    a: "The Private King Suite is $5,500 per person. You have the room to yourself. For room questions, email retreats@bossclinician.com.",
   },
   {
     q: "How does the payment plan work?",
-    a: "Reserve your room with a $500 deposit. The remaining $4,000 is divided into monthly payments based on when you enroll. The earlier you reserve, the lower your monthly payment. All balances must be paid in full by June 8, 2027. Payment plans are available for new enrollments before February 1, 2027 only. From February onward, new enrollments require payment in full. Your checkout shows each payment amount and date.",
+    a: "Reserve your room with a $500 deposit. The remaining $5,000 is divided into monthly payments based on when you enroll. The earlier you reserve, the lower your monthly payment. All balances must be paid in full by June 8, 2027. Payment plans are available for new enrollments before February 1, 2027 only. From February onward, new enrollments require payment in full. Your checkout shows each payment amount and date.",
   },
   {
     q: "When is the final payment due?",
@@ -445,11 +445,11 @@ export const retreat = {
     title: "Stop saying next year.",
     titleAccent: "Next year is now.",
     strip: `BALI${DOT}JUNE 15–20, 2027${DOT}LUXURY RETREAT PACKAGE`,
-    price: "Shared Luxury Room $4,500 per person",
+    price: "Private King Suite $5,500 per person",
     terms: `All payments due by June 8, 2027${DOT}See cancellation and refund policy in the FAQ`,
-    includedLabel: "WHAT'S INCLUDED IN YOUR SHARED LUXURY ROOM",
+    includedLabel: "WHAT'S INCLUDED IN YOUR PRIVATE KING SUITE",
     included: [
-      "A room with two single beds and an en suite bathroom, shared with one other retreat participant",
+      "A private king suite with a king bed and private en suite bathroom for all five nights",
       "Five nights in the private villa, with full run of both infinity pools, the yoga shala, gym, and spa facility",
       "All chef-prepared meals, breakfast, brunch, and dinner, daily",
       "Flower bath, in-villa massages and spa day, and a full cabana day at the pool",
@@ -462,14 +462,14 @@ export const retreat = {
     options: [
       {
         label: "PAY IN FULL",
-        amount: "$4,500",
+        amount: "$5,500",
         body: "One payment, reservation complete.",
         primary: true,
       },
       {
         label: "PAYMENT PLAN",
         amount: "$500 Deposit",
-        body: "Reserve with a $500 deposit, then divide the remaining $4,000 into monthly payments based on your enrollment date. The earlier you reserve, the lower your monthly payment. All balances are due by June 8, 2027.",
+        body: "Reserve with a $500 deposit, then divide the remaining $5,000 into monthly payments based on your enrollment date. The earlier you reserve, the lower your monthly payment. All balances are due by June 8, 2027.",
         primary: false,
       },
     ],
