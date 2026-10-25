@@ -1,6 +1,5 @@
-# Adds www.bossclinician.com alongside the staging ingress. Namecheap keeps
-# the apex URL redirect to www, including its existing HTTPS forwarding.
-# Apply after www points to this server (currently 192.99.63.81).
+# Adds the apex and www hosts alongside the staging ingress. Nginx redirects
+# the apex to www after TLS terminates here. Apply after DNS points to this server.
 #
 #   kubectl apply -f k8s/ingress-bossclinician-com.yaml
 #   kubectl -n bossclinician get certificate boss-web-com-tls -w
@@ -16,6 +15,16 @@ metadata:
 spec:
   ingressClassName: traefik
   rules:
+    - host: bossclinician.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: boss-web
+                port:
+                  number: 80
     - host: www.bossclinician.com
       http:
         paths:
@@ -39,6 +48,16 @@ metadata:
 spec:
   ingressClassName: traefik
   rules:
+    - host: bossclinician.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: boss-web
+                port:
+                  number: 80
     - host: www.bossclinician.com
       http:
         paths:
@@ -51,5 +70,6 @@ spec:
                   number: 80
   tls:
     - hosts:
+        - bossclinician.com
         - www.bossclinician.com
       secretName: boss-web-com-tls
