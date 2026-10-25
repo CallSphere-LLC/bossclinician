@@ -97,6 +97,11 @@ export function DataTable<TData>({
     initialState: { pagination: { pageSize: initialPageSize } },
   });
 
+  const sortableColumns = table.getVisibleLeafColumns().filter((column) => column.getCanSort());
+  const mobileSortValue = sorting[0]
+    ? JSON.stringify([sorting[0].id, sorting[0].desc])
+    : "";
+
   const loading = data === null;
   const rows = table.getRowModel().rows;
   const totalRows = table.getFilteredRowModel().rows.length;
@@ -107,10 +112,10 @@ export function DataTable<TData>({
 
   return (
     <div className="overflow-hidden rounded-2xl border border-hairline bg-surface shadow-[0_1px_0_rgba(255,255,255,0.04)_inset,0_18px_40px_-24px_rgba(0,0,0,0.8)]">
-      {(searchPlaceholder || toolbar) && (
+      {(searchPlaceholder || toolbar || sortableColumns.length > 0) && (
         <div className="flex flex-wrap items-center gap-3 border-b border-hairline/60 px-4 py-3.5">
           {searchPlaceholder && (
-            <div className="relative min-w-0 flex-1 sm:max-w-xs">
+            <div className="relative min-w-0 basis-full sm:basis-auto sm:flex-1 sm:max-w-xs">
               <Search
                 className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-ink-soft/60"
                 aria-hidden="true"
@@ -123,6 +128,37 @@ export function DataTable<TData>({
                 className="h-11 w-full rounded-xl border border-hairline bg-white/[0.04] pl-10 pr-3 text-sm text-ink outline-none transition-all placeholder:text-ink-soft/55 focus-visible:border-gold/60 focus-visible:bg-white/[0.07] focus-visible:ring-4 focus-visible:ring-gold/15"
               />
             </div>
+          )}
+          {sortableColumns.length > 0 && (
+            <label className="flex min-w-0 basis-full items-center gap-2 text-xs font-medium text-ink-soft sm:hidden">
+              <span className="shrink-0">Sort by</span>
+              <select
+                value={mobileSortValue}
+                onChange={(event) => {
+                  if (!event.target.value) {
+                    setSorting([]);
+                    return;
+                  }
+                  const [id, desc] = JSON.parse(event.target.value) as [string, boolean];
+                  setSorting([{ id, desc }]);
+                }}
+                className="h-11 min-w-0 flex-1 rounded-xl border border-hairline bg-surface-raised px-3 text-sm text-ink focus-visible:border-gold/60 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-gold/15"
+              >
+                <option value="">Default order</option>
+                {sortableColumns.flatMap((column) => {
+                  const header = column.columnDef.header;
+                  const label = typeof header === "string" ? header : column.id;
+                  return [
+                    <option key={column.id + "-asc"} value={JSON.stringify([column.id, false])}>
+                      {label} (ascending)
+                    </option>,
+                    <option key={column.id + "-desc"} value={JSON.stringify([column.id, true])}>
+                      {label} (descending)
+                    </option>,
+                  ];
+                })}
+              </select>
+            </label>
           )}
           {toolbar}
           {!loading && countLabel === undefined && (

@@ -221,7 +221,7 @@
   }
   .admin-data-table tbody td:first-child:not([colspan]) > * { justify-self: auto; }
   .admin-data-table tbody td:first-child::before { content: none; }
-  .admin-data-table tbody td[data-label]::before {
+  .admin-data-table tbody td[data-label]:not(:first-child)::before {
     content: attr(data-label);
     grid-column: 1; grid-row: 1 / span 6; align-self: center; text-align: left;
     font-size: 0.68rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
