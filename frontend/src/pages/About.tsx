@@ -34,10 +34,11 @@ const ACCENTS = ["green", "plum", "gold"] as const satisfies readonly Accent[];
    bossclinician.com link: after the domain cutover that URL is this app, and
    the redirect map (migration 004) already sends /offer-quiz to
    /practice-quiz — so the link goes there directly, in the same tab. The
-   Club and Lounge CTAs resolve to /work-with-me; the Boardroom's goes to the
-   application on its own page. */
+   Club and Lounge CTAs open their own programme pages; the Boardroom's goes
+   to the application on its own page. */
 const QUIZ_URL = "/practice-quiz";
-const WORK_WITH_ME = "/work-with-me";
+const CLUB = "/club";
+const LOUNGE = "/lounge";
 const BOARDROOM_APPLICATION = "/boardroom#apply";
 const BRIGHTER_TOMORROW = "https://brightertomorrowtherapy.com/";
 const EXTERNAL = { target: "_blank", rel: "noopener noreferrer" } as const;
@@ -813,10 +814,10 @@ function ClosingCta() {
         {...rise(reduce, 0.18)}
         className="mx-auto mt-10 flex max-w-sm flex-col items-stretch gap-4 sm:max-w-none sm:flex-row sm:flex-wrap sm:items-center sm:justify-center"
       >
-        <LuxeButton variant="gild" size="md" to={WORK_WITH_ME} className="w-full sm:w-auto">
+        <LuxeButton variant="gild" size="md" to={CLUB} className="w-full sm:w-auto">
           JOIN THE CLUB
         </LuxeButton>
-        <LuxeButton variant="gild" size="md" to={WORK_WITH_ME} className="w-full sm:w-auto">
+        <LuxeButton variant="gild" size="md" to={LOUNGE} className="w-full sm:w-auto">
           JOIN THE LOUNGE
         </LuxeButton>
         <LuxeButton
