@@ -124,7 +124,34 @@ export function ChatWidget() {
   const [voiceActive, setVoiceActive] = useState(false);
   const [mode, setMode] = useState<"text" | "voice">("text");
   const scrollRef = useRef<HTMLDivElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const launcherRef = useRef<HTMLButtonElement>(null);
+  const openedRef = useRef(false);
   const prefersReducedMotion = useReducedMotion();
+
+  // Put focus inside the panel when it opens and return it to the launcher
+  // when it closes, including after Escape. The panel is non-modal so the rest
+  // of the page remains available while somebody chats.
+  useEffect(() => {
+    if (open) {
+      openedRef.current = true;
+      closeButtonRef.current?.focus();
+    } else if (openedRef.current) {
+      launcherRef.current?.focus();
+    }
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && (event.target as Element).closest(".chat-widget-panel")) {
+        event.preventDefault();
+        setOpen(false);
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [open]);
 
   // The client is two functions over the app's own fetch and holds no state, so
   // building one per call costs nothing and keeps it out of the render.
@@ -278,10 +305,11 @@ export function ChatWidget() {
                   </p>
                 </div>
                 <button
+                  ref={closeButtonRef}
                   type="button"
                   onClick={() => setOpen(false)}
                   aria-label="Close chat"
-                  className="rounded-full p-1.5 text-white/60 transition-colors hover:bg-ink/10 hover:text-white"
+                  className="flex size-11 shrink-0 items-center justify-center rounded-full text-white/60 transition-colors hover:bg-ink/10 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold"
                 >
                   <CloseIcon />
                 </button>
@@ -409,6 +437,7 @@ export function ChatWidget() {
               transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
             />
             <motion.button
+              ref={launcherRef}
               type="button"
               onClick={() => setOpen(true)}
               whileHover={{ scale: 1.05 }}
@@ -418,7 +447,7 @@ export function ChatWidget() {
               className={cn(
                 "chat-launcher flex h-14 w-14 items-center justify-center rounded-full bg-gold-foil text-night-deep",
                 "shadow-[0_14px_36px_-12px_rgba(201,164,106,0.75)] ring-[6px] ring-gold/15",
-                "transition-shadow duration-300",
+                "transition-shadow duration-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-8 focus-visible:outline-gold",
               )}
             >
               <ChatIcon />

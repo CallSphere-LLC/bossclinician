@@ -1,6 +1,6 @@
 import { scrollToSection } from "@/hooks/useHashScroll";
 import { SiteThemeToggle } from "./SiteThemeToggle";
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import { Link, NavLink, useLocation } from "react-router";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Container } from "@/components/ui/Container";
@@ -26,6 +26,9 @@ interface HeaderProps {
 export function Header({ transparentAtTop = false }: HeaderProps) {
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
+  const mobileMenuRef = useRef<HTMLDivElement>(null);
+  const mobileMenuButtonRef = useRef<HTMLButtonElement>(null);
+  const homeLinkRef = useRef<HTMLAnchorElement>(null);
   // One desktop dropdown, and one mobile section, open at a time, so both
   // live here rather than in the menus themselves.
   const [openMenu, setOpenMenu] = useState<string | null>(null);
@@ -85,6 +88,50 @@ export function Header({ transparentAtTop = false }: HeaderProps) {
     };
   }, [open]);
 
+  // The sheet locks page scrolling, so keyboard focus must stay in it until
+  // it closes. Escape returns focus to the control that opened it.
+  useEffect(() => {
+    if (!open) return;
+    const sheet = mobileMenuRef.current;
+    const links = () => Array.from(
+      sheet?.querySelectorAll<HTMLElement>('a[href], button:not([disabled])') ?? [],
+    );
+    links()[0]?.focus();
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setOpen(false);
+        mobileMenuButtonRef.current?.focus();
+      } else if (event.key === "Tab") {
+        const items = links();
+        if (!items.length) return;
+        const first = items[0];
+        const last = items[items.length - 1];
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first.focus();
+        }
+      }
+    };
+    const desktop = window.matchMedia("(min-width: 1280px)");
+    const closeOnDesktop = () => {
+      if (desktop.matches) {
+        setOpen(false);
+        homeLinkRef.current?.focus();
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    desktop.addEventListener("change", closeOnDesktop);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      desktop.removeEventListener("change", closeOnDesktop);
+    };
+  }, [open]);
+
   const solid = scrolled || !transparentAtTop || open;
 
   return (
@@ -120,8 +167,9 @@ export function Header({ transparentAtTop = false }: HeaderProps) {
 
       <Container className="flex h-[68px] items-center justify-between gap-3 sm:gap-6">
         <Link
+          ref={homeLinkRef}
           to="/"
-          className="group relative shrink-0 font-display text-[1.32rem] max-[359px]:text-[1.15rem] font-bold leading-[1.05] tracking-[0.03em] text-white"
+          className="group relative shrink-0 focus-visible:rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold font-display text-[1.32rem] max-[359px]:text-[1.15rem] font-bold leading-[1.05] tracking-[0.03em] text-white"
           onClick={() => setOpen(false)}
         >
           Boss <em className="text-foil italic">Clinician</em>
@@ -182,7 +230,7 @@ export function Header({ transparentAtTop = false }: HeaderProps) {
         </nav>
 
         <div className="flex items-center gap-1 sm:gap-4">
-          <Link to="/cart" aria-label={`Cart (${cartCount} items)`} className="relative inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-gold hover:bg-white/[0.06]">
+          <Link to="/cart" aria-label={`Cart (${cartCount} items)`} className="relative inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-gold hover:bg-white/[0.06] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold">
             <ShoppingCart className="size-5" />
             {cartCount > 0 && <span className="absolute right-0 top-0 rounded-full bg-gold px-1.5 text-xs font-bold text-night-deep">{cartCount}</span>}
           </Link>
@@ -211,8 +259,9 @@ export function Header({ transparentAtTop = false }: HeaderProps) {
           </div>
 
           <button
+            ref={mobileMenuButtonRef}
             type="button"
-            className="-mr-2 inline-flex h-11 w-11 items-center justify-center rounded-full text-white transition-colors hover:bg-white/[0.06] xl:hidden"
+            className="-mr-2 inline-flex h-11 w-11 items-center justify-center rounded-full text-white transition-colors hover:bg-white/[0.06] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold xl:hidden"
             aria-label={open ? "Close menu" : "Open menu"}
             aria-expanded={open}
             aria-controls="mobile-menu"
@@ -245,7 +294,11 @@ export function Header({ transparentAtTop = false }: HeaderProps) {
       <AnimatePresence>
         {open && (
           <motion.div
+            ref={mobileMenuRef}
             id="mobile-menu"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Mobile navigation"
             initial={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: -12 }}
             animate={{ opacity: 1, y: 0 }}
             exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: -12 }}

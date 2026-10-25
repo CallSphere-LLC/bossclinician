@@ -22,7 +22,7 @@ const columnHeading =
  * a clean 4px gutter between them.
  */
 const columnLink =
-  "block py-2.5 text-sm text-white/70 transition-colors duration-300 hover:text-gold";
+  "block py-2.5 text-sm text-white/70 transition-colors duration-300 hover:text-gold focus-visible:rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold";
 
 export function Footer() {
   const { pathname } = useLocation();
@@ -174,13 +174,13 @@ export function Footer() {
               <Link
                 key={link.to}
                 to={link.to}
-                className="inline-block py-2 text-[0.78rem] text-white/60 transition-colors duration-300 hover:text-gold/80"
+                className="inline-block py-2 text-[0.78rem] text-white/60 transition-colors duration-300 hover:text-gold/80 focus-visible:rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold"
               >
                 {link.label}
               </Link>
             ))}
             {pathname.replace(/\/$/, "") === "/retreats" && (
-              <Link to="/retreatagreement" className="inline-block py-2 text-[0.78rem] text-white/60 transition-colors duration-300 hover:text-gold/80">
+              <Link to="/retreatagreement" className="inline-block py-2 text-[0.78rem] text-white/60 transition-colors duration-300 hover:text-gold/80 focus-visible:rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold">
                 Retreat Terms &amp; Agreement
               </Link>
             )}
@@ -188,7 +188,7 @@ export function Footer() {
             <button
               type="button"
               onClick={openCookiePreferences}
-              className="inline-block py-2 text-[0.78rem] text-white/60 transition-colors duration-300 hover:text-gold/80"
+              className="inline-block py-2 text-[0.78rem] text-white/60 transition-colors duration-300 hover:text-gold/80 focus-visible:rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold"
             >
               Cookie preferences
             </button>
