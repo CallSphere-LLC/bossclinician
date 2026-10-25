@@ -58,29 +58,22 @@ export function LuxeTestimonials({ testimonials }: LuxeTestimonialsProps) {
         title="Hear from the clinicians who chose to build differently."
       />
 
-      {/*
-        items-start, deliberately. One of the featured quotes runs roughly five
-        times longer than the other two; stretching all three to a common height
-        would leave the short cards with a canyon of dead space under the
-        attribution. Ragged bottoms read as an editorial column set, which is
-        the reference here anyway.
-      */}
       <RevealGroup
         as="ul"
-        className="mx-auto mt-10 grid max-w-md list-none grid-cols-1 items-start gap-6 sm:mt-10 sm:max-w-xl lg:mt-12 lg:max-w-none lg:grid-cols-3"
+        className="mx-auto mt-10 grid max-w-md list-none grid-cols-1 gap-6 sm:mt-10 sm:max-w-xl lg:mt-12 lg:max-w-none lg:grid-cols-3 lg:items-stretch"
       >
         {featured.map((t, i) => {
           const tone = ACCENT[ACCENT_CYCLE[i % ACCENT_CYCLE.length]];
           const attribution = [t.name, t.credential].filter(Boolean).join(", ");
 
           return (
-            <RevealItem key={t.id} as="li">
+            <RevealItem key={t.id} as="li" className="h-full">
               {/* overflow-hidden clips the quote-mark bloom to the rounded
                   corner; the card's ambient shadow is unaffected. */}
               <GlassCard
                 as="figure"
                 accent={ACCENT_CYCLE[i % ACCENT_CYCLE.length]}
-                className="overflow-hidden p-8"
+                className="flex h-full flex-col overflow-hidden p-8"
               >
                 <div
                   aria-hidden
@@ -103,9 +96,9 @@ export function LuxeTestimonials({ testimonials }: LuxeTestimonialsProps) {
                   <p className="text-pretty">&ldquo;{t.quote}&rdquo;</p>
                 </blockquote>
 
-                <div aria-hidden className="rule-faint mt-7 w-full" />
-
-                <figcaption className="mt-6 flex items-center gap-4">
+                <div className="mt-auto pt-7">
+                  <div aria-hidden className="rule-faint w-full" />
+                  <figcaption className="mt-6 flex items-center gap-4">
                   {t.photo ? (
                     <img
                       src={t.photo}
@@ -144,7 +137,8 @@ export function LuxeTestimonials({ testimonials }: LuxeTestimonialsProps) {
                       </p>
                     )}
                   </div>
-                </figcaption>
+                  </figcaption>
+                </div>
               </GlassCard>
             </RevealItem>
           );
