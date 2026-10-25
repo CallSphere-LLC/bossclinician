@@ -52,7 +52,7 @@ export function SubscribeForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex w-full max-w-sm flex-col gap-2 sm:flex-row">
+    <form onSubmit={handleSubmit} className="flex w-full max-w-sm flex-col gap-2 sm:flex-row sm:flex-wrap">
       <label htmlFor={`subscribe-${source}`} className="sr-only">
         Email address
       </label>
@@ -66,7 +66,7 @@ export function SubscribeForm({
         className={cn(
           // text-base below sm: under 16px iOS zooms the page on focus and
           // leaves it zoomed (QA row 165). Desktop keeps text-sm.
-          "min-h-[44px] w-full rounded-full border px-5 py-3 text-base outline-none transition-colors duration-300 sm:text-sm",
+          "min-h-[44px] w-full rounded-full border px-5 py-3 text-base outline-none transition-colors duration-300 sm:min-w-0 sm:flex-1 sm:text-sm sm:w-auto",
           dark
             ? "border-white/12 bg-white/[0.05] text-white placeholder:text-white/30 focus-visible:border-gold/60 focus-visible:bg-white/[0.08]"
             : "border-lilac bg-white text-ink placeholder:text-ink-soft/60 focus-visible:border-plum",
@@ -87,7 +87,7 @@ export function SubscribeForm({
         {status === "loading" ? "Sending…" : "Get Access"}
       </button>
       {status === "error" && (
-        <p role="alert" className="w-full text-xs text-red-400 sm:absolute sm:mt-9">
+        <p role="alert" className="w-full basis-full text-xs text-red-400">
           {error}
         </p>
       )}
