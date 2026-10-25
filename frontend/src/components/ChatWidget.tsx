@@ -285,7 +285,7 @@ export function ChatWidget() {
 
       <div className={cn(
         "fixed z-[60] sm:bottom-8 sm:right-8",
-        compactAuthLauncher ? "bottom-3 right-2" : "bottom-5 right-5",
+        compactAuthLauncher ? "bottom-auto right-3 top-3 sm:top-auto" : "bottom-5 right-5",
       )}>
         <AnimatePresence>
           {open && (
