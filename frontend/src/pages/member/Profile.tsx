@@ -223,7 +223,10 @@ export default function Profile() {
                 {saving ? "Saving" : "Save changes"}
               </LuxeButton>
               <p className="text-xs text-orchid-faint">
-                Your email address is changed from the Password &amp; devices page.
+                Need to change your sign-in email? Contact{" "}
+                <a className="underline underline-offset-2 hover:text-gold" href="mailto:support@bossclinician.com">
+                  support@bossclinician.com
+                </a>.
               </p>
             </div>
           </form>

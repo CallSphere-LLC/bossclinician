@@ -115,6 +115,7 @@ export default function Downloads() {
 export function DocumentsPanel({ embedded = false }: { embedded?: boolean }) {
   const [data, setData] = useState<DownloadsResponse | null>(null);
   const [error, setError] = useState("");
+  const [reloadToken, setReloadToken] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -150,7 +151,7 @@ export function DocumentsPanel({ embedded = false }: { embedded?: boolean }) {
       window.removeEventListener("pageshow", refreshVisible);
       document.removeEventListener("visibilitychange", refreshVisible);
     };
-  }, []);
+  }, [reloadToken]);
 
   const groups = useMemo(() => (data ? groupFiles(data.files) : []), [data]);
   // `?product=<slug>`, from a purchase notice: scroll to that product's files.
@@ -164,9 +165,21 @@ export function DocumentsPanel({ embedded = false }: { embedded?: boolean }) {
     <>
       <div aria-live="polite">
         {error && (
-          <p role="alert" className="text-sm font-medium text-red-400">
-            {error}
-          </p>
+          <div className="flex flex-wrap items-center gap-4">
+            <p role="alert" className="text-sm font-medium text-red-400">{error}</p>
+            <LuxeButton
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setError("");
+                setData(null);
+                setReloadToken((token) => token + 1);
+              }}
+            >
+              Try again
+            </LuxeButton>
+          </div>
         )}
         {!error && data === null && (
           <p className="flex items-center gap-2.5 text-sm text-orchid-dim">

@@ -67,6 +67,7 @@ export default function Library() {
   const requestedTab = searchParams.get("tab");
   const [data, setData] = useState<LibraryResponse | null>(null);
   const [error, setError] = useState("");
+  const [reloadToken, setReloadToken] = useState(0);
   // Course ids with a live certificate. Loaded beside the shelf, never before
   // it: the badge is a nicety, and a slow or failed read must not hold up — or
   // break — the page somebody opened to get back to a lesson.
@@ -128,7 +129,7 @@ export default function Library() {
       window.removeEventListener("pageshow", refreshVisible);
       document.removeEventListener("visibilitychange", refreshVisible);
     };
-  }, []);
+  }, [reloadToken]);
 
   const empty = data !== null && data.total === 0;
   // Every owned product, downloads included: a purchase that is only reachable
@@ -172,9 +173,21 @@ export default function Library() {
 
       <div aria-live="polite">
         {error && tab === "courses" && (
-          <p role="alert" className="text-sm font-medium text-red-400">
-            {error}
-          </p>
+          <div className="flex flex-wrap items-center gap-4">
+            <p role="alert" className="text-sm font-medium text-red-400">{error}</p>
+            <LuxeButton
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setError("");
+                setData(null);
+                setReloadToken((token) => token + 1);
+              }}
+            >
+              Try again
+            </LuxeButton>
+          </div>
         )}
         {!error && data === null && tab === "courses" && (
           <p className="flex items-center gap-2.5 text-sm text-orchid-dim">
