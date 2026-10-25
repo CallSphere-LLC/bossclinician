@@ -134,7 +134,7 @@ export const env = {
   },
 
   frontendOrigin: process.env.FRONTEND_ORIGIN ?? "*",
-  adminOrigin: process.env.ADMIN_ORIGIN ?? (process.env.NODE_ENV === "production" ? "https://admin.bossclinician.callsphere.site" : ""),
+  adminOrigin: process.env.ADMIN_ORIGIN ?? (process.env.NODE_ENV === "production" ? "https://admin.bossclinician.com" : ""),
 
   smtp: {
     host: process.env.SMTP_HOST ?? "",
@@ -233,7 +233,7 @@ export const env = {
 
   // Absolute origin used to build Stripe success/cancel return URLs, email
   // links and every absolute URL in the sitemap.
-  publicSiteUrl: (process.env.PUBLIC_SITE_URL ?? "https://bossclinician.callsphere.site").replace(
+  publicSiteUrl: (process.env.PUBLIC_SITE_URL ?? "https://www.bossclinician.com").replace(
     /\/+$/,
     ""
   ),

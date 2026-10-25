@@ -125,7 +125,7 @@ export const OFFER_QUIZ_RESULTS: Record<OfferKey, OfferQuizResult> = {
     ],
     ctaText: "Join the Boss Clinician Club",
     ctaLink: "/club",
-    ctaUrl: "bossclinician.callsphere.site/club",
+    ctaUrl: "/club",
     formSlug: "offer-quiz-club",
   },
   lounge: {

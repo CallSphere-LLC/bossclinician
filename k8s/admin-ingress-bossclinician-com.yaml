@@ -1,0 +1,49 @@
+# Dedicated admin origin with its own TLS certificate and backend host gate.
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: boss-admin-com-http
+  namespace: bossclinician
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: web
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: admin.bossclinician.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: boss-web
+                port:
+                  number: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: boss-admin-com-https
+  namespace: bossclinician
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: admin.bossclinician.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: boss-web
+                port:
+                  number: 80
+  tls:
+    - hosts:
+        - admin.bossclinician.com
+      secretName: boss-admin-com-tls

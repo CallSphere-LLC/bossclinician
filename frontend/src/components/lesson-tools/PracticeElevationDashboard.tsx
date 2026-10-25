@@ -30,7 +30,7 @@ import { useVersionedToolState } from "./useVersionedToolState";
  */
 export function PracticeElevationDashboard() {
   const frameDocument = useMemo(() => {
-    const origin = typeof window === "undefined" ? "https://bossclinician.callsphere.site" : window.location.origin;
+    const origin = typeof window === "undefined" ? "https://www.bossclinician.com" : window.location.origin;
     return prototype.replace("__BC_SCRIPT_ORIGIN__", origin).replace("__BC_RUNTIME__", new URL(runtimeUrl, origin).href);
   }, []);
   const tool = useVersionedToolState("practice-elevation-dashboard", growthDefaults, normaliseGrowth);

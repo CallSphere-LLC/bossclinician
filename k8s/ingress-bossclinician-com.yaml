@@ -1,10 +1,6 @@
-# Adds bossclinician.com + www.bossclinician.com alongside the existing
-# bossclinician.callsphere.site ingress (which stays working as a fallback).
-#
-# DO NOT APPLY until the Namecheap A records for @ and www point at this
-# server's public IP (2.24.200.155). cert-manager uses an HTTP-01 challenge,
-# which resolves the hostname over the public internet — issuance fails and
-# backs off if DNS still points at Kajabi.
+# Adds www.bossclinician.com alongside the staging ingress. Namecheap keeps
+# the apex URL redirect to www, including its existing HTTPS forwarding.
+# Apply after www points to this server (currently 192.99.63.81).
 #
 #   kubectl apply -f k8s/ingress-bossclinician-com.yaml
 #   kubectl -n bossclinician get certificate boss-web-com-tls -w
@@ -20,16 +16,6 @@ metadata:
 spec:
   ingressClassName: traefik
   rules:
-    - host: bossclinician.com
-      http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: boss-web
-                port:
-                  number: 80
     - host: www.bossclinician.com
       http:
         paths:
@@ -53,16 +39,6 @@ metadata:
 spec:
   ingressClassName: traefik
   rules:
-    - host: bossclinician.com
-      http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: boss-web
-                port:
-                  number: 80
     - host: www.bossclinician.com
       http:
         paths:
@@ -75,6 +51,5 @@ spec:
                   number: 80
   tls:
     - hosts:
-        - bossclinician.com
         - www.bossclinician.com
       secretName: boss-web-com-tls
