@@ -76,6 +76,7 @@ const eventSchema = z.object({
       click: z.object({ link: z.string().optional() }).partial().optional(),
       bounce: z.object({ type: z.string().optional() }).partial().optional(),
       bounce_type: z.string().optional(),
+      bounce_sub_type: z.string().optional(),
       user_agent: z.string().optional(),
       ip_address: z.string().optional(),
     })
@@ -220,9 +221,10 @@ async function applyEvent(
 
   const email = (message?.to_email ?? recipient ?? "").toLowerCase();
 
+  const validationSuppressed = kind === "bounced" && event.data.bounce_sub_type === "EmailValidationSuppressed";
   if (message) {
-    await updateMessageCounters(Number(message.id), kind);
-    if (message.source_type === "broadcast" && message.source_id !== null) {
+    await updateMessageCounters(Number(message.id), kind, validationSuppressed);
+    if (!validationSuppressed && message.source_type === "broadcast" && message.source_id !== null) {
       await updateCampaignCounters(message.source_id, email, kind);
     }
   }
@@ -230,8 +232,8 @@ async function applyEvent(
   if (kind === "bounced" && email && isPermanentBounce(event.data)) {
     await suppress({
       email,
-      reason: "bounce",
-      detail: event.type,
+      reason: validationSuppressed ? "invalid" : "bounce",
+      detail: validationSuppressed ? "SES Auto Validation suppressed recipient" : event.type,
       contactStatus: "bounced",
     });
   }
@@ -250,7 +252,7 @@ async function applyEvent(
   return message ? "applied" : "unmatched";
 }
 
-async function updateMessageCounters(messageId: number, kind: EventKind): Promise<void> {
+async function updateMessageCounters(messageId: number, kind: EventKind, validationSuppressed = false): Promise<void> {
   switch (kind) {
     case "delivered":
       await pool.query(
@@ -281,7 +283,7 @@ async function updateMessageCounters(messageId: number, kind: EventKind): Promis
       );
       return;
     case "bounced":
-      await pool.query(`UPDATE email_messages SET status = 'bounced' WHERE id = $1`, [messageId]);
+      await pool.query(`UPDATE email_messages SET status = $2 WHERE id = $1`, [messageId, validationSuppressed ? "suppressed" : "bounced"]);
       return;
     case "complained":
       await pool.query(`UPDATE email_messages SET status = 'complained' WHERE id = $1`, [messageId]);
@@ -614,6 +616,7 @@ interface SesNotification {
   mail?: { messageId?: string; destination?: string[]; timestamp?: string };
   bounce?: {
     bounceType?: string;
+    bounceSubType?: string;
     bouncedRecipients?: { emailAddress?: string }[];
     timestamp?: string;
   };
@@ -665,6 +668,7 @@ function fromSesNotification(
       message_id: notification.mail?.messageId ?? "",
       to: recipient,
       bounce_type: notification.bounce?.bounceType ?? "",
+      bounce_sub_type: notification.bounce?.bounceSubType ?? "",
       click: { link: notification.click?.link ?? "" },
       user_agent: notification.open?.userAgent ?? notification.click?.userAgent ?? "",
       ip_address: notification.open?.ipAddress ?? notification.click?.ipAddress ?? "",

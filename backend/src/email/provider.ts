@@ -6,6 +6,7 @@ import { pool } from "../db/pool";
 import { sendMailStrict } from "./mailer";
 import type { MergeLinks } from "./mergeValues";
 import { assertRecipientAllowed } from "./recipientGuard";
+import { assertDeliverableRecipient, InvalidEmailRecipientError } from "./sesValidation";
 import { escapeHtml } from "./templates";
 import {
   SendingIdentityError,
@@ -750,6 +751,7 @@ export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult>
   };
 
   try {
+    await assertDeliverableRecipient(to);
     const { providerMessageId } = await provider.send(message);
     await pool.query(
       `UPDATE email_messages
@@ -760,6 +762,10 @@ export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult>
     return { messageId, outcome: "sent", providerMessageId, suppressedReason: "" };
   } catch (err) {
     const detail = (err instanceof Error ? err.message : String(err)).slice(0, 1000);
+    if (err instanceof InvalidEmailRecipientError) {
+      await pool.query(`UPDATE email_messages SET status = 'suppressed', error = $2 WHERE id = $1`, [messageId, detail]);
+      return { messageId, outcome: "suppressed", providerMessageId: "", suppressedReason: detail };
+    }
     await pool.query(`UPDATE email_messages SET status = 'failed', error = $2 WHERE id = $1`, [
       messageId,
       detail,

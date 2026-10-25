@@ -1,3 +1,4 @@
+import { validateCollectedEmail } from "../../email/sesValidation";
 import { Router } from "express";
 import { z } from "zod";
 import { env } from "../../config/env";
@@ -252,6 +253,8 @@ eventsPublicRouter.post(
     const sessionAt = sessionTimeFor(schedule, now);
     const replayExpiresAt = replayExpiryFor(schedule, sessionAt);
     const email = input.email.trim().toLowerCase();
+    const validation = await validateCollectedEmail(email);
+    if (!validation.accepted) throw badRequest(validation.reason || "Please check your email address.");
 
     const registration = await pool.query<{ id: string; session_at: Date }>(
       `INSERT INTO event_registrations

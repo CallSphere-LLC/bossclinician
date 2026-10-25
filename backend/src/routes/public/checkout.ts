@@ -1,3 +1,4 @@
+import { validateCollectedEmail } from "../../email/sesValidation";
 import { Router } from "express";
 import { z } from "zod";
 import { pool } from "../../db/pool";
@@ -43,6 +44,10 @@ checkoutRouter.post(
     const parsed = checkoutSchema.safeParse(req.body);
     if (!parsed.success) throw badRequest("Invalid checkout payload", parsed.error.flatten());
     const { slug, email } = parsed.data;
+    if (email) {
+      const validation = await validateCollectedEmail(email);
+      if (!validation.accepted) throw badRequest(validation.reason || "Please check your email address.");
+    }
 
     const result = await pool.query(
       `SELECT id, slug, title, price_cents, currency, stripe_price_id
@@ -144,6 +149,10 @@ checkoutRouter.post(
     const parsed = subscriptionSchema.safeParse(req.body);
     if (!parsed.success) throw badRequest("Invalid subscription payload", parsed.error.flatten());
     const { planSlug, email, couponCode } = parsed.data;
+    if (email) {
+      const validation = await validateCollectedEmail(email);
+      if (!validation.accepted) throw badRequest(validation.reason || "Please check your email address.");
+    }
 
     const result = await pool.query(
       `SELECT id, slug, name, price_cents, currency, interval, stripe_price_id, trial_days

@@ -4,6 +4,7 @@ import { brandEmailHtml } from "./brandShell";
 import { pool } from "../db/pool";
 import { transportKeyForHost } from "../services/sendingIdentity";
 import { assertRecipientAllowed } from "./recipientGuard";
+import { assertDeliverableRecipient } from "./sesValidation";
 
 let transporter: Transporter;
 
@@ -114,6 +115,7 @@ export async function sendMailStrict(input: SendMailInput): Promise<{ messageId:
   // Outside production, only allow-listed recipients (see recipientGuard.ts).
   // Thrown before the transport, so every caller records it as not sent.
   assertRecipientAllowed(input.to);
+  await assertDeliverableRecipient(input.to);
 
   // In production the console fallback below is a lie waiting to be told:
   // jsonTransport "succeeds", so a receipt that never left the box was written

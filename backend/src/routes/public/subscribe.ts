@@ -4,6 +4,7 @@ import { asyncHandler } from "../../utils/asyncHandler";
 import { subscribeSchema } from "../../validation/schemas";
 import { badRequest } from "../../utils/httpError";
 import { sendMail } from "../../email/mailer";
+import { validateCollectedEmail } from "../../email/sesValidation";
 import { subscriberWelcome } from "../../email/templates";
 import { subscribeLimiter } from "../../middleware/rateLimit";
 import { fireTriggerAsync } from "../../automations/engine";
@@ -73,6 +74,8 @@ subscribeRouter.post(
     const parsed = subscribeSchema.safeParse(req.body);
     if (!parsed.success) throw badRequest("Invalid subscribe payload", parsed.error.flatten());
     const { email, source } = parsed.data;
+    const validation = await validateCollectedEmail(email);
+    if (!validation.accepted) throw badRequest(validation.reason || "Please check your email address.");
 
     const subscriber = await pool.query<{ id: number }>(
       `INSERT INTO subscribers (email, source) VALUES ($1, $2)

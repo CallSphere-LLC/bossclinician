@@ -4,6 +4,7 @@ import { asyncHandler } from "../../utils/asyncHandler";
 import { leadSchema } from "../../validation/schemas";
 import { badRequest } from "../../utils/httpError";
 import { sendMail } from "../../email/mailer";
+import { validateCollectedEmail } from "../../email/sesValidation";
 import { incomeProjection, newLeadNotification } from "../../email/templates";
 import { env } from "../../config/env";
 import { leadsLimiter } from "../../middleware/rateLimit";
@@ -60,6 +61,9 @@ leadsRouter.post(
       res.status(201).json({ ok: true });
       return;
     }
+
+    const validation = await validateCollectedEmail(email);
+    if (!validation.accepted) throw badRequest(validation.reason || "Please check your email address.");
 
     const result = await pool.query(
       `INSERT INTO leads (name, email, phone, message, source, meta)

@@ -19,18 +19,22 @@ export function SubscribeForm({
 }: SubscribeFormProps) {
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
+  const [error, setError] = useState("");
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     if (!email.trim()) return;
     setStatus("loading");
+    setError("");
     try {
       await api.subscribe(email.trim(), source);
       setStatus("success");
       setEmail("");
       onSuccess?.();
-    } catch {
+    } catch (err) {
       setStatus("error");
+      const failure = err as { status?: number; message?: string };
+      setError(failure.status === 400 && failure.message ? failure.message : "Something went wrong. Please try again.");
     }
   }
 
@@ -84,7 +88,7 @@ export function SubscribeForm({
       </button>
       {status === "error" && (
         <p role="alert" className="w-full text-xs text-red-400 sm:absolute sm:mt-9">
-          Something went wrong. Please try again.
+          {error}
         </p>
       )}
     </form>

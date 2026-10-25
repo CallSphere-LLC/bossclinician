@@ -1,3 +1,4 @@
+import { validateCollectedEmail } from "../../email/sesValidation";
 import { cartItemsSchema, priceCart, type CartItem } from "../../services/cart";
 import { followRecoveryLink } from "../../services/checkoutRecovery";
 import crypto from "crypto";
@@ -808,6 +809,14 @@ checkoutOfferRouter.post(
     // purchase can never be attached to somebody else's account.
     const memberId = req.member?.id ?? null;
     const email = (req.member?.email ?? body.email).trim().toLowerCase();
+    if (!req.member) {
+      const validation = await validateCollectedEmail(email);
+      if (!validation.accepted) throw badRequest(validation.reason || "Please check your email address.");
+    }
+    if (body.giftRecipientEmail) {
+      const giftValidation = await validateCollectedEmail(body.giftRecipientEmail);
+      if (!giftValidation.accepted) throw badRequest(giftValidation.reason || "Please check the gift recipient email address.");
+    }
     const billingName = body.name ?? "";
     const billingAddress = body.address ?? {};
 

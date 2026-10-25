@@ -1,3 +1,4 @@
+import { validateCollectedEmail } from "../../email/sesValidation";
 import { assertLessonAssessmentAccess } from "../../services/lessonAssessments";
 import { recomputeCourseProgress } from "../../services/curriculum";
 import { issueCertificateIfEarned } from "../../services/certificates";
@@ -142,6 +143,10 @@ assessmentsPublicRouter.post(
     const email = (req.member?.email ?? input.email ?? "").trim().toLowerCase();
     if (assessment.require_email && !email) {
       throw badRequest("An email address is needed to show your result");
+    }
+    if (email && !req.member) {
+      const validation = await validateCollectedEmail(email);
+      if (!validation.accepted) throw badRequest(validation.reason || "Please check your email address.");
     }
 
     const result = scored.resultId === null ? null : await loadResult(scored.resultId);

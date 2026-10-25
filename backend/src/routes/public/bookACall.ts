@@ -6,6 +6,7 @@ import { z } from "zod";
 import { env } from "../../config/env";
 import { pool } from "../../db/pool";
 import { sendMail } from "../../email/mailer";
+import { validateCollectedEmail } from "../../email/sesValidation";
 import { escapeHtml } from "../../email/templates";
 import { leadsLimiter } from "../../middleware/rateLimit";
 import {
@@ -767,6 +768,9 @@ bookACallRouter.post(
       res.status(201).json({ booking: null, message: "You're booked." });
       return;
     }
+
+    const validation = await validateCollectedEmail(input.email);
+    if (!validation.accepted) throw badRequest(validation.reason || "Please check your email address.");
 
     const now = new Date();
     const end = new Date(startsAt.getTime() + row.duration_minutes * MINUTE_MS);

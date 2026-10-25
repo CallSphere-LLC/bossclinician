@@ -29,6 +29,7 @@ import {
   memberTokenLimiter,
 } from "../../middleware/rateLimit";
 import { sendMail } from "../../email/mailer";
+import { validateCollectedEmail } from "../../email/sesValidation";
 import * as emails from "../../email/memberTemplates";
 import { linkContact, recordActivity, upsertContactWithStatus } from "../../services/contacts";
 import { dispatchEvent } from "../../services/webhooksOut";
@@ -522,6 +523,9 @@ memberAuthRoutes.post(
       res.status(200).json(REGISTRATION_PENDING);
       return;
     }
+
+    const validation = await validateCollectedEmail(email);
+    if (!validation.accepted) throw badRequest(validation.reason || "Please check your email address.");
 
     const passwordHash = await hashPassword(password);
     const displayName = `${firstName} ${lastName}`.trim();

@@ -1,3 +1,4 @@
+import { validateCollectedEmail } from "../../email/sesValidation";
 import { NextFunction, Request, Response, Router } from "express";
 import { rateLimit } from "express-rate-limit";
 import { z } from "zod";
@@ -284,6 +285,8 @@ apiV1Router.post(
     if (!parsed.success) throw badRequest("Please check the details.", parsed.error.flatten());
 
     const { email, firstName, lastName, phone, source } = parsed.data;
+    const validation = await validateCollectedEmail(email);
+    if (!validation.accepted) throw badRequest(validation.reason || "Please check the email address.");
     const name = [firstName, lastName].filter(Boolean).join(" ").trim();
 
     // An upsert rather than a create: every integration that posts a contact

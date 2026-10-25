@@ -35,6 +35,7 @@ import { keepStagedFile, receiveFormFiles, type StagedFile } from "../../service
 import { kindFromMime } from "../../services/mediaStorage";
 import { adminRepliesUrl, replyRecipients, wantsReplyEmail } from "../../services/formNotifications";
 import { sendMail } from "../../email/mailer";
+import { validateCollectedEmail } from "../../email/sesValidation";
 import { formConfirmationEmail } from "../../email/formConfirmation";
 import { generateToken, hashToken } from "../../auth/tokens";
 import { renderMarkdown } from "../../email/provider";
@@ -896,6 +897,8 @@ growthPublicRouter.post(
     // "No name given" even though the visitor was told their send succeeded.
     if (!email) throw badRequest("Please enter a valid email address.");
     if (!name) throw badRequest("Please enter your name.");
+    const validation = await validateCollectedEmail(email);
+    if (!validation.accepted) throw badRequest(validation.reason || "Please check your email address.");
 
     // Only the buyer holding the signed link can submit the service intake.
     // The proof never goes into form_submissions or a contact's custom fields.

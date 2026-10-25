@@ -1,3 +1,4 @@
+import { validateCollectedEmail } from "../../email/sesValidation";
 import { Router } from "express";
 import { rateLimit } from "express-rate-limit";
 import { z } from "zod";
@@ -98,6 +99,8 @@ affiliateSignupRouter.post(
 
     const settings = await affiliateSettings();
     const email = body.email.toLowerCase();
+    const validation = await validateCollectedEmail(email);
+    if (!validation.accepted) throw badRequest(validation.reason || "Please check your email address.");
 
     const contact = await upsertContactWithStatus({
       email,

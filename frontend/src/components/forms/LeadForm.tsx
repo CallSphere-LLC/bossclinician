@@ -88,9 +88,12 @@ export function LeadForm({
         ...honeypot(),
       });
       setStatus("success");
-    } catch {
+    } catch (err) {
       setStatus("error");
-      setError("Something went wrong submitting your form. Please email bossclinician@gmail.com directly.");
+      const failure = err as { status?: number; message?: string };
+      setError(failure.status === 400 && failure.message
+        ? failure.message
+        : "Something went wrong submitting your form. Please email bossclinician@gmail.com directly.");
     }
   }
 

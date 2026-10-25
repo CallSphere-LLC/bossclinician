@@ -330,6 +330,20 @@ describe("POST /api/email/webhook/ses", () => {
     expect(fetchedUrls().map((url) => url.href)).toEqual([message.SigningCertURL]);
   });
 
+  it("records SES Auto Validation suppression as an invalid recipient", async () => {
+    const event = notification({ Message: JSON.stringify({
+      eventType: "Bounce",
+      mail: { messageId: "ses-validation-1", destination: ["invalid@example.com"] },
+      bounce: { bounceType: "Permanent", bounceSubType: "EmailValidationSuppressed",
+        bouncedRecipients: [{ emailAddress: "invalid@example.com" }] },
+    }) });
+    const response = await post("/api/email/webhook/ses", signed(event));
+    expect(response.status).toBe(200);
+    expect(suppress).toHaveBeenCalledWith(expect.objectContaining({
+      email: "invalid@example.com", reason: "invalid", contactStatus: "bounced",
+    }));
+  });
+
   it("applies a genuine notification, signature version 2 included", async () => {
     const response = await post("/api/email/webhook/ses", signed(notification(), { version: "2" }));
     expect(response.status).toBe(200);
