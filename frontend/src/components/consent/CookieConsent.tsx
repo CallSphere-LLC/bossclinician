@@ -191,14 +191,24 @@ function PreferencesPanel({
         onKeyDown={onKeyDown}
         className="relative max-h-[calc(100dvh-1.5rem)] w-full max-w-lg overflow-y-auto rounded-2xl border border-gold/25 bg-night-deep p-6 shadow-[0_40px_100px_-30px_rgba(0,0,0,0.95)] sm:p-8"
       >
-        <h2
-          id={headingId}
-          ref={headingRef}
-          tabIndex={-1}
-          className="font-display text-[1.4rem] font-medium text-white focus:outline-none"
-        >
-          Cookie preferences
-        </h2>
+        <div className="flex items-start justify-between gap-4">
+          <h2
+            id={headingId}
+            ref={headingRef}
+            tabIndex={-1}
+            className="font-display text-[1.4rem] font-medium text-white focus:outline-none"
+          >
+            Cookie preferences
+          </h2>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close cookie preferences"
+            className="-mr-2 -mt-2 flex min-h-[44px] min-w-[44px] items-center justify-center rounded-full text-xl text-white/70 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-gold"
+          >
+            &times;
+          </button>
+        </div>
         <p className="copy-luxe mt-2 text-pretty text-sm">
           Choose what this site may load in this browser. You can change this at any time from
           “Cookie preferences” at the foot of every page.{" "}
@@ -213,7 +223,7 @@ function PreferencesPanel({
 
         <ul className="mt-6 space-y-3">
           <li className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
-            <div className="flex items-start justify-between gap-4">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
               <div className="min-w-0">
                 <p className="text-sm font-semibold text-white">Essential</p>
                 <p className="copy-luxe mt-1 text-pretty text-[0.82rem]">
@@ -221,7 +231,7 @@ function PreferencesPanel({
                   this choice. The site cannot work without them, so they are always on.
                 </p>
               </div>
-              <span className="shrink-0 rounded-full border border-gold/30 px-3 py-1 text-[0.62rem] font-bold uppercase tracking-[0.16em] text-gold">
+              <span className="w-fit shrink-0 rounded-full border border-gold/30 px-3 py-1 text-[0.62rem] font-bold uppercase tracking-[0.16em] text-gold">
                 Always on
               </span>
             </div>
