@@ -53,17 +53,20 @@ export function OrderSummary({ offer, state, wording }: OrderSummaryProps) {
           "focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-gold",
         )}
       >
-        <span className="flex items-center gap-2 text-[0.7rem] font-semibold uppercase tracking-[0.18em] text-orchid">
-          Order summary
-          <ChevronDown
-            aria-hidden
-            className={cn(
-              "h-4 w-4 text-gold transition-transform duration-300 ease-luxe",
-              open && "rotate-180",
-            )}
-          />
+        <span className="min-w-0 flex flex-col gap-1">
+          <span className="flex items-center gap-2 text-[0.7rem] font-semibold uppercase tracking-[0.18em] text-orchid">
+            Order summary
+            <ChevronDown
+              aria-hidden
+              className={cn(
+                "h-4 w-4 text-gold transition-transform duration-300 ease-luxe",
+                open && "rotate-180",
+              )}
+            />
+          </span>
+          <span className="text-sm leading-snug text-orchid-dim [overflow-wrap:anywhere]">{offer.title}</span>
         </span>
-        <span className="font-display text-lg text-white">{dueToday}</span>
+        <span className="shrink-0 font-display text-lg text-white">{dueToday}</span>
       </button>
 
       <div

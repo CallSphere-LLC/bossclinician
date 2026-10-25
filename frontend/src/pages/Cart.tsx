@@ -42,7 +42,17 @@ export default function Cart(){
     return()=>{cancelled=true;};
   },[key]);
   function update(next:CartSelection[]){writeCart(next);setItems(next);setCode("");setCheckout(false);}
-  async function apply(){if(!items.length)return;setPending(true);setError("");try{setQuote(await commerceApi.quote(items[0].slug,{cartItems:items,couponCode:code}));}catch(err){setError(err instanceof Error?err.message:"This code could not be applied.");}finally{setPending(false);}}
+  async function apply(){
+    if(!items.length)return;
+    setPending(true);setError("");
+    try{
+      const result=await commerceApi.quote(items[0].slug,{cartItems:items,couponCode:code.trim()});
+      setQuote(result);
+      if(result.couponError)setError(result.couponError);
+    }catch(err){
+      setError(err instanceof Error?err.message:"This code could not be applied.");
+    }finally{setPending(false);}
+  }
   const first=offers[0];
   let combined:PublicOffer|null=null;
   if(first&&quote&&offers.length===items.length){
