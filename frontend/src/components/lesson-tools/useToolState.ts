@@ -104,7 +104,7 @@ export function useToolState<T extends object>(
       try {
         const saved = await memberRequest<{ ok: true; updatedAt: string }>(path(toolKey), {
           method: "PUT",
-          body: JSON.stringify({ state: next }),
+          body: JSON.stringify({ state: next, expectedMemberId: member?.id }),
           keepalive,
         });
         if (keepalive) return;
@@ -123,7 +123,7 @@ export function useToolState<T extends object>(
         setStatus("error");
       }
     },
-    [toolKey],
+    [toolKey, member?.id],
   );
 
   const schedule = useCallback(

@@ -9,6 +9,7 @@ import type { SaveStatus } from "./useToolState";
 export function useVersionedToolState<T extends object>(key: string, defaults: () => T, normalise: (value: unknown) => T) {
   const {preview} = usePlayerSource();
   const {member} = useMember();
+  const memberId = member?.id ?? null;
   const readonly = member?.impersonatedBy != null;
   const [state, local] = useState<T>(defaults);
   const [status, setStatus] = useState<SaveStatus>(preview ? "preview" : "loading");
@@ -40,7 +41,7 @@ export function useVersionedToolState<T extends object>(key: string, defaults: (
     pending.current = null; busy.current = true;
     setStatus("saving");
     try {
-      const result = await memberRequest<{updatedAt: string; revision: number}>(path, {method:"PUT", body:JSON.stringify({state:next, revision:version.current}), keepalive});
+      const result = await memberRequest<{updatedAt: string; revision: number}>(path, {method:"PUT", body:JSON.stringify({state:next, revision:version.current, expectedMemberId:memberId}), keepalive});
       if (generation !== epoch.current) return;
       version.current = result.revision; setSavedAt(result.updatedAt); setStatus(pending.current ? "saving" : "saved");
     } catch (error) {
@@ -55,7 +56,7 @@ export function useVersionedToolState<T extends object>(key: string, defaults: (
         if (pending.current && !blocked.current) timer.current = setTimeout(() => void flush(), 2000);
       }
     }
-  }, [path, preview, readonly]);
+  }, [path, preview, readonly, memberId]);
   useEffect(() => {
     epoch.current++; loaded.current = false; blocked.current = false; pending.current = null; busy.current = false; version.current = 0;
     local(init.current()); setReady(!!preview); setStatus(preview ? "preview" : "loading");

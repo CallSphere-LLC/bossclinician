@@ -7,6 +7,7 @@ import { LivingBusinessPlan } from "./LivingBusinessPlan";
 import { PracticeElevationDashboard } from "./PracticeElevationDashboard";
 import { PracticeResetSnapshotTool } from "./PracticeResetSnapshot";
 import { PracticeResetSnapshotV2 } from "./PracticeResetSnapshotV2";
+import { VipPracticeHealth } from "./VipPracticeHealth";
 import { PtoSetAsideCalculator } from "./PtoSetAsideCalculator";
 import { RampUpRateCalculator } from "./RampUpRateCalculator";
 import { RampUpRateComparison } from "./RampUpRateComparison";
@@ -32,6 +33,7 @@ export const LESSON_TOOLS: Record<string, ComponentType> = {
   // QA sheet 2026-10-23 (migration 152)
   "practice-reset-snapshot-v2": PracticeResetSnapshotV2, // rows 158 + 170 — orientation, above the dashboard
   "living-business-plan": LivingBusinessPlan, // row 159 — orientation, below the dashboard
+  "vip-practice-health": VipPracticeHealth, // row 182 — Lounge VIP, directly after welcome
 };
 
 /**

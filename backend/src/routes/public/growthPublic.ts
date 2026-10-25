@@ -709,20 +709,23 @@ export function multipartPayload(body: unknown): unknown {
  */
 export async function storeSubmission(input: {
   formId: number;
+  /** Set by the authenticated lesson-form route; public forms leave it null. */
+  memberId?: number;
   data: Record<string, unknown>;
   email: string;
   ip: string;
   userAgent: string;
   files: StagedFile[];
 }): Promise<{ submissionId: number; answers: Record<string, unknown> }> {
-  const insertSql = `INSERT INTO form_submissions (form_id, data, email, ip, user_agent)
-                     VALUES ($1, $2, $3, $4, $5) RETURNING id`;
+  const insertSql = `INSERT INTO form_submissions (form_id, data, email, ip, user_agent, member_id)
+                     VALUES ($1, $2, $3, $4, $5, $6) RETURNING id`;
   const values = (answers: Record<string, unknown>) => [
     input.formId,
     JSON.stringify(answers),
     input.email,
     input.ip,
     input.userAgent,
+    input.memberId ?? null,
   ];
 
   if (input.files.length === 0) {

@@ -63,7 +63,12 @@ memberToolStateRouter.get(
   }),
 );
 
-const saveSchema = z.object({ state: z.unknown(), revision: z.number().int().nonnegative().optional() });
+const saveSchema = z.object({
+  state: z.unknown(),
+  revision: z.number().int().nonnegative().optional(),
+  // A pending browser autosave must not follow a different member's new token.
+  expectedMemberId: z.number().int().positive().optional(),
+});
 
 memberToolStateRouter.put(
   "/tool-state/:toolKey",
@@ -72,6 +77,9 @@ memberToolStateRouter.put(
   asyncHandler(async (req, res) => {
     const parsed = saveSchema.safeParse(req.body);
     if (!parsed.success) throw badRequest("Nothing to save.");
+    if (parsed.data.expectedMemberId !== undefined && parsed.data.expectedMemberId !== currentMemberId(req)) {
+      throw conflict("The signed-in account changed. Reload this page before saving.");
+    }
     const problem = toolStateProblem(parsed.data.state);
     if (problem) throw badRequest(problem);
 

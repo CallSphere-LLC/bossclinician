@@ -6,6 +6,7 @@ import { LuxeButton } from "@/components/luxe/LuxeButton";
 import { LuxeInput, LuxeSelect, LuxeTextarea, luxeControlClass } from "@/components/luxe/LuxeField";
 import { usePlayerSource } from "@/components/player/playerSource";
 import { memberRequest } from "@/lib/memberApi";
+import { useMember } from "@/hooks/useMember";
 import { formsApi } from "@/lib/formsApi";
 import { cn } from "@/lib/cn";
 import { formatBytes, formatDate } from "@/lib/format";
@@ -104,9 +105,12 @@ async function loadForPreview(slug: string): Promise<LessonFormResponse> {
 
 export function LessonForm({ slug }: { slug: string }) {
   const { preview } = usePlayerSource();
+  const { member: signedInMember } = useMember();
+  const currentIdentity = preview ? "preview" : signedInMember?.id ?? null;
   const errorId = useId();
   const fieldIds = useId();
   const [loaded, setLoaded] = useState<LessonFormResponse | null>(null);
+  const [loadedFor, setLoadedFor] = useState<string | number | null>(null);
   const [loadError, setLoadError] = useState("");
   const [values, setValues] = useState<Values>({});
   const [files, setFiles] = useState<Record<string, File | null>>({});
@@ -122,6 +126,7 @@ export function LessonForm({ slug }: { slug: string }) {
   useEffect(() => {
     let active = true;
     setLoaded(null);
+    setLoadedFor(null);
     setLoadError("");
     setValues({});
     setFiles({});
@@ -129,7 +134,7 @@ export function LessonForm({ slug }: { slug: string }) {
     const load = preview ? loadForPreview(slug) : memberRequest<LessonFormResponse>(path(slug));
     load
       .then((result) => {
-        if (active) setLoaded(result);
+        if (active) { setLoaded(result); setLoadedFor(currentIdentity); }
       })
       .catch((err: unknown) => {
         if (active) setLoadError(err instanceof Error && err.message ? err.message : "This form couldn't be loaded.");
@@ -137,7 +142,7 @@ export function LessonForm({ slug }: { slug: string }) {
     return () => {
       active = false;
     };
-  }, [slug, preview]);
+  }, [slug, preview, currentIdentity]);
 
   if (loadError) {
     return (
@@ -146,7 +151,7 @@ export function LessonForm({ slug }: { slug: string }) {
       </p>
     );
   }
-  if (!loaded) {
+  if (!loaded || loadedFor !== currentIdentity) {
     return (
       <p role="status" className="rounded-2xl border border-white/10 bg-white/[0.03] px-5 py-6 text-sm text-orchid-dim">
         Loading the form…

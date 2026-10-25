@@ -1146,6 +1146,7 @@ export default function CourseBuilder() {
                 <option value="boardroom-ceo-dashboard">Boardroom CEO Dashboard</option>
                 <option value="practice-reset-snapshot-v2">Practice Reset Snapshot (membership edition)</option>
                 <option value="living-business-plan">Living Business Plan (annual)</option>
+                <option value="vip-practice-health">VIP Practice Health Check</option>
                 <option value="custom-calculator">Build my own calculator</option>
               </select>
             </Field>

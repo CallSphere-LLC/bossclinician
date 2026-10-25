@@ -74,15 +74,14 @@ async function loadIdentity(memberId: number): Promise<MemberIdentity> {
   return { name, email, contactId: row.contact_id };
 }
 
-/** This member's earlier replies to the form, newest first. */
-async function earlierReplies(formId: number, who: MemberIdentity): Promise<{ id: number; createdAt: string }[]> {
+/** Only replies submitted by this authenticated member, never by a shared contact. */
+async function earlierReplies(formId: number, memberId: number): Promise<{ id: number; createdAt: string }[]> {
   const result = await pool.query<{ id: number; created_at: Date }>(
     `SELECT id, created_at FROM form_submissions
-      WHERE form_id = $1
-        AND (lower(email) = $2 OR ($3::int IS NOT NULL AND contact_id = $3))
+      WHERE form_id = $1 AND member_id = $2
       ORDER BY created_at DESC
       LIMIT 12`,
-    [formId, who.email, who.contactId],
+    [formId, memberId],
   );
   return result.rows.map((row) => ({ id: row.id, createdAt: new Date(row.created_at).toISOString() }));
 }
@@ -122,7 +121,7 @@ memberLessonFormsRouter.get(
         successMessage: form.success_message,
       },
       member: { name: who.name, email: who.email },
-      replies: await earlierReplies(form.id, who),
+      replies: await earlierReplies(form.id, memberId),
     });
   }),
 );
@@ -186,6 +185,7 @@ memberLessonFormsRouter.post(
 
     const { submissionId, answers } = await storeSubmission({
       formId: form.id,
+      memberId: currentMemberId(req),
       data,
       email: who.email,
       ip: (req.ip ?? "").slice(0, 64),
