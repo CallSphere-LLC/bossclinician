@@ -97,6 +97,8 @@ export function ChatWidget() {
    * route change.
    */
   const policy = policyForPath(location.pathname);
+  const compactAuthLauncher = policy.surface === "public" &&
+    /^\/(login|signup|forgot-password|reset-password|verify-email)(\/|$)/.test(location.pathname);
 
   const [initialMessages] = useState<ChatMessage[]>(() => {
     const history = loadHistory(policy.surface);
@@ -281,7 +283,10 @@ export function ChatWidget() {
         </Suspense>
       )}
 
-      <div className="fixed bottom-5 right-5 z-[60] sm:bottom-8 sm:right-8">
+      <div className={cn(
+        "fixed z-[60] sm:bottom-8 sm:right-8",
+        compactAuthLauncher ? "bottom-3 right-2" : "bottom-5 right-5",
+      )}>
         <AnimatePresence>
           {open && (
             <motion.div
@@ -432,7 +437,10 @@ export function ChatWidget() {
           <div className="relative">
             <motion.span
               aria-hidden="true"
-              className="chat-launcher-pulse absolute inset-0 -z-10 rounded-full bg-gold motion-reduce:hidden"
+              className={cn(
+                "chat-launcher-pulse absolute inset-0 -z-10 rounded-full bg-gold motion-reduce:hidden",
+                compactAuthLauncher && "hidden sm:block",
+              )}
               animate={prefersReducedMotion ? undefined : { scale: [1, 1.4, 1], opacity: [0.35, 0, 0.35] }}
               transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
             />
@@ -445,8 +453,9 @@ export function ChatWidget() {
               aria-expanded={false}
               aria-label="Open chat assistant"
               className={cn(
-                "chat-launcher flex h-14 w-14 items-center justify-center rounded-full bg-gold-foil text-night-deep",
-                "shadow-[0_14px_36px_-12px_rgba(201,164,106,0.75)] ring-[6px] ring-gold/15",
+                "chat-launcher flex items-center justify-center rounded-full bg-gold-foil text-night-deep",
+                "shadow-[0_14px_36px_-12px_rgba(201,164,106,0.75)] ring-gold/15",
+                compactAuthLauncher ? "h-11 w-11 ring-[3px] sm:h-14 sm:w-14 sm:ring-[6px]" : "h-14 w-14 ring-[6px]",
                 "transition-shadow duration-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-8 focus-visible:outline-gold",
               )}
             >
