@@ -390,9 +390,9 @@ export function IncomeCalculator() {
       >
         For example — a therapist seeing{" "}
         <strong className="font-semibold text-white">15 clients per week</strong> at{" "}
-        <strong className="font-semibold text-white">$175 per session</strong> generates over{" "}
+        <strong className="font-semibold text-white">$175 per session</strong> generates{" "}
         <strong className="font-semibold text-gold">$126,000 annually</strong>. That's a full-time
-        income seeing fewer than 3 clients per day. Strategy matters more than hours.
+        income seeing about 3 clients per day. Strategy matters more than hours.
       </motion.p>
 
       <motion.div
