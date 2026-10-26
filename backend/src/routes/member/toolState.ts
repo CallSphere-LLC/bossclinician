@@ -85,6 +85,12 @@ memberToolStateRouter.put(
 
     const toolKey = await allowedToolKey(req);
     if (toolKey === "practice-elevation-dashboard" && parsed.data.revision === undefined) throw conflict("Please reload this dashboard to update its editor.");
+    if (toolKey === "boardroom-ceo-assessment") {
+      if (parsed.data.revision === undefined || parsed.data.expectedMemberId === undefined) {
+        throw conflict("Please reload this assessment to update its editor before saving.");
+      }
+      if (!saveSchema.strict().safeParse(req.body).success) throw badRequest("Nothing to save.");
+    }
     const saved = await saveToolState(
       currentMemberId(req),
       toolKey,

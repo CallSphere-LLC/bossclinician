@@ -154,6 +154,29 @@ const CHOICES: Partial<Record<keyof BoardroomState, readonly string[]>> = {
   ownerClinical: ["no", "yes"],
 };
 
+export type BoardroomNumberKey = {
+  [K in keyof BoardroomState]: BoardroomState[K] extends Num ? K : never;
+}[keyof BoardroomState];
+
+// Match only the explicit max={100} fields in BoardroomCeoDashboard.
+// Hiring utilization fields have no upper bound in the existing UI.
+const PERCENT_CAPPED_FIELDS = new Set<BoardroomNumberKey>([
+  "guardrailPct", "capGuardrail", "capCurrentUtil", "scenarioUtil", "splitPct",
+]);
+
+/** Shared input rules for restore/server normalization and field feedback.
+ * All current NumFields use min=0, including Scenario Lab's "Additional" /
+ * "Extra" amounts. These rules apply to inputs, never signed computed results.
+ * Null is an intentional blank; missing/invalid values retain their defaults.
+ */
+export function boardroomNumberProblem(key: BoardroomNumberKey, value: unknown): string | null {
+  if (value === null) return null;
+  if (typeof value !== "number" || !Number.isFinite(value)) return "Enter a finite number.";
+  if (value < 0) return "Enter 0 or greater.";
+  if (PERCENT_CAPPED_FIELDS.has(key) && value > 100) return "Enter 100 or less.";
+  return null;
+}
+
 export function normaliseBoardroom(raw: unknown): BoardroomState {
   const base = boardroomDefaults();
   if (!raw || typeof raw !== "object") return base;
@@ -167,7 +190,7 @@ export function normaliseBoardroom(raw: unknown): BoardroomState {
       if (typeof value === "string" && choices.includes(value)) out[key] = value;
     } else if (value === null) {
       out[key] = null;
-    } else if (typeof value === "number" && Number.isFinite(value)) {
+    } else if (boardroomNumberProblem(key as BoardroomNumberKey, value) === null) {
       out[key] = value;
     }
   }

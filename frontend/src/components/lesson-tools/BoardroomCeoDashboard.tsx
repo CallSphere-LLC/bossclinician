@@ -1,10 +1,12 @@
-import { useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ComponentProps, type ReactNode } from "react";
+import { Link, useParams } from "react-router";
+import { usePlayerSource } from "@/components/player/playerSource";
 import {
   ActionButton,
   Callout,
   DashboardFrame,
   Grid,
-  NumField,
+  NumField as DashboardNumField,
   Panel,
   RestoreButton,
   SelectField,
@@ -20,6 +22,7 @@ import {
   BOARDROOM_KEY,
   benefitsFigures,
   boardroomDefaults,
+  boardroomNumberProblem,
   capacityFigures,
   capacityScenario,
   cashFigures,
@@ -37,6 +40,7 @@ import {
   teamFigures,
   versusGuardrail,
   type BoardroomState,
+  type BoardroomNumberKey,
   type Num,
 } from "./boardroom";
 import { useVersionedToolState } from "./useVersionedToolState";
@@ -86,7 +90,20 @@ function Line({ label, value }: { label: string; value: ReactNode }) {
   );
 }
 
+/** Invalid magnitude inputs cannot flow into financial results or autosave. */
+function NumField({ numberKey, ...props }: ComponentProps<typeof DashboardNumField> & { numberKey: BoardroomNumberKey }) {
+  const [problem, setProblem] = useState<string | null>(null);
+  useEffect(() => { if (props.value != null) setProblem(null); }, [props.value]);
+  return <div><DashboardNumField {...props} onChange={value => {
+    const error = boardroomNumberProblem(numberKey, value);
+    setProblem(error);
+    props.onChange(error ? null : value);
+  }} />{problem && <p role="alert" className="mt-1.5 text-xs text-rose-300">{props.label}: {problem}</p>}</div>;
+}
+
 export function BoardroomCeoDashboard() {
+  const { productSlug } = useParams();
+  const source = usePlayerSource();
   const tool = useVersionedToolState(BOARDROOM_KEY, boardroomDefaults, normaliseBoardroom);
   const { state, setState, status, ready, savedAt } = tool;
   const [tab, setTab] = useState<Tab>("snapshot");
@@ -97,11 +114,12 @@ export function BoardroomCeoDashboard() {
   const latest = useRef(state);
   latest.current = state;
   const set = <K extends keyof BoardroomState>(key: K, value: BoardroomState[K]) => {
-    const next = { ...latest.current, [key]: value };
+    const next = normaliseBoardroom({ ...latest.current, [key]: value });
     latest.current = next;
     setState(next);
   };
   const num = (key: { [K in keyof BoardroomState]: BoardroomState[K] extends Num ? K : never }[keyof BoardroomState]) => ({
+    numberKey: key,
     value: state[key] as Num,
     onChange: (value: number | null) => set(key, value as BoardroomState[typeof key]),
   });
@@ -208,6 +226,7 @@ export function BoardroomCeoDashboard() {
       footer={BOARDROOM_DISCLAIMER}
     >
       {saveProblem}
+      <Link to={source.lessonPath(productSlug ?? "", "boardroom-ceo-assessment")} className="text-sm font-semibold text-gold underline underline-offset-4">Open your CEO assessment and saved baselines</Link>
       <TabBar label="Boardroom dashboard tabs" tabs={TABS} active={tab} onChange={setTab} />
 
       {tab === "snapshot" && (

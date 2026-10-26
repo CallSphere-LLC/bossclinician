@@ -1,6 +1,7 @@
 import type { ComponentType } from "react";
 import { LessonForm } from "@/components/player/LessonForm";
 import { BoardroomCeoDashboard } from "./BoardroomCeoDashboard";
+import { BoardroomCeoAssessment } from "./BoardroomCeoAssessment";
 import { BossMoveExitPlanner } from "./BossMoveExitPlanner";
 import { CustomCalculator, isCalculatorConfig } from "./CustomCalculator";
 import { LivingBusinessPlan } from "./LivingBusinessPlan";
@@ -29,6 +30,7 @@ export const LESSON_TOOLS: Record<string, ComponentType> = {
   "boss-move-exit-planner": BossMoveExitPlanner, // row 102 — The Boss Move, Lesson 0
   "practice-reset-snapshot": PracticeResetSnapshotTool, // row 101 — Practice Elevation orientation
   "practice-elevation-dashboard": PracticeElevationDashboard, // row 103 — Practice Elevation orientation
+  "boardroom-ceo-assessment": BoardroomCeoAssessment,
   "boardroom-ceo-dashboard": BoardroomCeoDashboard, // row 95 — The Boss Boardroom
   // QA sheet 2026-10-23 (migration 152)
   "practice-reset-snapshot-v2": PracticeResetSnapshotV2, // rows 158 + 170 — orientation, above the dashboard
