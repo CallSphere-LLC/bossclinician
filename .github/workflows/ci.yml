@@ -215,9 +215,13 @@ jobs:
         run: scripts/smoke-test.sh http://localhost:8088
       - name: Admin origin serves the admin app
         run: |
-          status=$(curl -s -o /dev/null -w '%{http_code}' -H 'Host: admin.bossclinician.callsphere.site' http://localhost:8088/admin)
+          status=$(curl -s -o /dev/null -w '%{http_code}' -H 'Host: admin.bossclinician.com' http://localhost:8088/admin)
           echo "admin origin /admin -> $status"
           test "$status" = 200
+      - name: Old public UI stays retired
+        run: |
+          status=$(curl -s -o /dev/null -w '%{http_code}' -H 'Host: bossclinician.callsphere.site' http://localhost:8088/)
+          test "$status" = 410
       - name: /api/health reports this commit
         run: |
           release=$(curl -fsS http://localhost:8088/api/health | jq -r .release)
