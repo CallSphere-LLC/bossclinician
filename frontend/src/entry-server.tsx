@@ -35,7 +35,7 @@ export interface RenderResult {
 
 export async function render(url: string, payload: SsrPayload): Promise<RenderResult> {
   const [pathname = "/"] = url.split("?");
-  const unavailable = isUnavailableUi(payload.origin, pathname, import.meta.env.DEV);
+  const unavailable = isUnavailableUi(payload.origin);
   // A retired request never preloads a page or exposes its loader payload.
   const renderPayload = unavailable ? { ...payload, indexable: false, data: {} } : payload;
   if (!unavailable) await preloadPublicRoute(pathname);

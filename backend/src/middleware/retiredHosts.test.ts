@@ -26,14 +26,14 @@ function fetch(url: string, options: { method?: string; headers: Record<string, 
   });
 }
 describe("retired hosts", () => {
-  it.each(["bossclinician.callsphere.site", "admin.bossclinician.com", "admin.bossclinician.callsphere.site", "ADMIN.BOSSCLINICIAN.COM:443", "admin.bossclinician.com."])("refuses all requests for %s", async host => {
+  it.each(["bossclinician.callsphere.site", "BOSSCLINICIAN.CALLSPHERE.SITE:443", "bossclinician.callsphere.site."])("refuses all requests for %s", async host => {
     for (const path of ["/", "/admin/login", "/api/admin/login", "/api/member/library"]) {
       const res = await fetch(origin + path, {method: "POST", headers: { Host: host }});
       expect(res.status).toBe(410);
       expect(res.headers.get("cache-control")).toBe("no-store");
     }
   });
-  it.each(["www.bossclinician.com", "bossclinician.com", "localhost:4000"])("preserves %s", async host => {
+  it.each(["www.bossclinician.com", "bossclinician.com", "localhost:4000", "admin.bossclinician.com", "admin.bossclinician.callsphere.site"])("preserves %s", async host => {
     expect((await fetch(origin + "/api/health", { headers: { Host: host } })).status).toBe(200);
   });
   it("retains only exact legacy POST callback paths", async () => {
@@ -41,10 +41,10 @@ describe("retired hosts", () => {
       expect((await fetch(origin + path, { method: "POST", headers: { Host: "bossclinician.callsphere.site" } })).status).toBe(200);
       expect((await fetch(origin + path, { headers: { Host: "bossclinician.callsphere.site" } })).status).toBe(410);
       expect((await fetch(origin + path + "/extra", { method: "POST", headers: { Host: "bossclinician.callsphere.site" } })).status).toBe(410);
-      expect((await fetch(origin + path, { method: "POST", headers: { Host: "admin.bossclinician.com" } })).status).toBe(410);
+      expect((await fetch(origin + path, { method: "POST", headers: { Host: "admin.bossclinician.com" } })).status).toBe(200);
     }
   });
   it("does not let forwarded Host bypass retirement", async () => {
-    expect((await fetch(origin + "/", { headers: { Host: "admin.bossclinician.com", "X-Forwarded-Host": "www.bossclinician.com" } })).status).toBe(410);
+    expect((await fetch(origin + "/", { headers: { Host: "bossclinician.callsphere.site", "X-Forwarded-Host": "www.bossclinician.com" } })).status).toBe(410);
   });
 });

@@ -33,9 +33,8 @@ async function boot(origin:string,pathname:string,stalePayload=true) {
 describe("cached client document retirement",()=>{
   it.each([
     ["https://bossclinician.callsphere.site","/"],
-    ["https://admin.bossclinician.com","/admin/login"],
-    ["https://admin.bossclinician.com","/login"],
-    ["https://www.bossclinician.com","/admin/login"],
+    ["https://bossclinician.callsphere.site","/admin/login"],
+    ["https://bossclinician.callsphere.site","/login"],
   ])("replaces stale SSR content at %s%s without preloading or redirecting",async(origin,path)=>{
     const result=await boot(origin,path);
     expect(calls.createRoot).toHaveBeenCalledWith(result.root);
@@ -46,8 +45,8 @@ describe("cached client document retirement",()=>{
     expect(result.replace).not.toHaveBeenCalled();
     expect(result.fetch).not.toHaveBeenCalled();
   });
-  it("keeps canonical member login on its client boot path",async()=>{
-    await boot("https://www.bossclinician.com","/login",false);
+  it.each([["https://www.bossclinician.com","/login"],["https://admin.bossclinician.com","/admin/login"],["https://admin.bossclinician.callsphere.site","/admin/login"]])("keeps active client boot on %s%s",async(origin,path)=>{
+    await boot(origin,path,false);
     expect(calls.createRoot).toHaveBeenCalledOnce();
     expect(calls.render).toHaveBeenCalledOnce();
     expect(calls.entrances).toHaveBeenCalledOnce();

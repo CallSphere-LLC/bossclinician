@@ -1,17 +1,20 @@
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
 import { useLocation } from "react-router";
+import { ADMIN_ORIGIN, PUBLIC_ORIGIN } from "@/lib/siteOrigins";
+import { adminNavigationOrigin, isUnavailableUi } from "@/lib/hostAccess";
 import { UnavailableSite } from "@/components/UnavailableSite";
-import { isUnavailableUi } from "@/lib/hostAccess";
 import { useHeadContext } from "@/ssr/context";
 
-/** Runs before member/admin auth and preview providers, including SPA navigation.
- * Retired hosts never redirect; the admin application has not been relocated. */
+/** Preserve the original admin redirects; only the old public host is retired. */
 export function AdminOriginBoundary({ children }: { children: ReactNode }) {
   const location = useLocation();
   const context = useHeadContext();
-  // A cached bootstrap cannot disguise the actual browser host.
-  const origin = typeof window === "undefined" ? context.origin : window.location.origin;
-  return isUnavailableUi(origin, location.pathname, import.meta.env.DEV)
-    ? <UnavailableSite />
-    : children;
+  const currentOrigin = typeof window === "undefined" ? context.origin : window.location.origin;
+  const unavailable = isUnavailableUi(currentOrigin);
+  const destination = adminNavigationOrigin(currentOrigin, location.pathname, ADMIN_ORIGIN, PUBLIC_ORIGIN);
+  useEffect(() => {
+    if (destination) window.location.replace(`${destination}${location.pathname}${location.search}${location.hash}`);
+  }, [destination, location.pathname, location.search, location.hash]);
+  if (unavailable) return <UnavailableSite />;
+  return destination ? <p role="status">Opening the site…</p> : children;
 }

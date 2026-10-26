@@ -2,8 +2,6 @@ import type { RequestHandler } from "express";
 
 const retiredHosts = new Set([
   "bossclinician.callsphere.site",
-  "admin.bossclinician.com",
-  "admin.bossclinician.callsphere.site",
 ]);
 
 /** Match the Host routing boundary, never a client-provided forwarded host. */

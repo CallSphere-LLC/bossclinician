@@ -1,41 +1,25 @@
 import { describe, expect, it } from "vitest";
-import { configuredAdminOrigin, isAdminUiPath, isRetiredOrigin, isUnavailableUi } from "./hostAccess";
-
-describe("retired UI host policy", () => {
-  it.each([
-    "https://bossclinician.callsphere.site",
-    "https://admin.bossclinician.com",
-    "https://admin.bossclinician.callsphere.site",
-    "https://ADMIN.BOSSCLINICIAN.COM.:443",
-    "http://bossclinician.callsphere.site:8080",
-  ])("blocks every UI path on %s even in development", (origin) => {
+import { adminNavigationOrigin, isRetiredOrigin, isUnavailableUi } from "./hostAccess";
+const admin="https://admin.bossclinician.com",publicSite="https://www.bossclinician.com";
+describe("old public host retirement and restored admin",()=>{
+  it.each(["https://bossclinician.callsphere.site","https://BOSSCLINICIAN.CALLSPHERE.SITE.:443","http://bossclinician.callsphere.site:8080"])("retires only old public origin %s",origin=>{
     expect(isRetiredOrigin(origin)).toBe(true);
-    for (const path of ["/","/login","/library","/admin","/admin/login","/api/auth/google/callback"]) {
-      expect(isUnavailableUi(origin,path)).toBe(true);
-      expect(isUnavailableUi(origin,path,true)).toBe(true);
-    }
+    expect(isUnavailableUi(origin)).toBe(true);
+    for(const path of ["/","/login","/admin/login"]) expect(adminNavigationOrigin(origin,path,admin,publicSite)).toBe("");
   });
-  it.each(["/admin","/admin/","/admin/login","/ADMIN/login","/%61dmin/login","/admin%2flogin","//admin/login"])("does not relocate %s to www", path => {
-    expect(isAdminUiPath(path)).toBe(true);
-    expect(isUnavailableUi("https://www.bossclinician.com",path,true)).toBe(true);
+  it.each([admin,"https://admin.bossclinician.callsphere.site",publicSite,"http://localhost:5173"])("keeps %s active",origin=>{
+    expect(isUnavailableUi(origin)).toBe(false);
   });
-  it.each(["/","/login","/signup","/forgot-password","/library","/account","/administrator"])("preserves public/member route %s", path => {
-    expect(isUnavailableUi("https://www.bossclinician.com",path)).toBe(false);
+  it.each(["/admin","/admin/login","/ADMIN/login","/%61dmin/login"])("restores www%s redirect to admin",path=>{
+    expect(adminNavigationOrigin(publicSite,path,admin,publicSite)).toBe(admin);
+    expect(adminNavigationOrigin(admin,path,admin,publicSite)).toBe("");
   });
-  it.each(["http://localhost:5173","http://127.0.0.1:5173","http://[::1]:5173"])("allows local admin development only at %s", origin => {
-    expect(isUnavailableUi(origin,"/admin/login",true)).toBe(false);
-    expect(isUnavailableUi(origin,"/admin/login",false)).toBe(true);
+  it.each(["/","/login","/admin/login"])("canonicalizes the legacy admin alias for %s",path=>{
+    expect(adminNavigationOrigin("https://admin.bossclinician.callsphere.site",path,admin,publicSite)).toBe(admin);
   });
-  it("does not match unrelated or misleading host names as retired", () => {
-    for (const origin of ["https://www.bossclinician.com","https://admin.bossclinician.com.example.invalid","not an origin"]) {
-      expect(isRetiredOrigin(origin)).toBe(false);
-    }
-  });
-  it("ignores production admin-origin settings and retired development settings", () => {
-    expect(configuredAdminOrigin("https://admin.bossclinician.com",false)).toBe("");
-    expect(configuredAdminOrigin("https://another-admin.example.invalid",false)).toBe("");
-    expect(configuredAdminOrigin("https://admin.bossclinician.com",true)).toBe("");
-    expect(configuredAdminOrigin("http://localhost:5173/",true)).toBe("http://localhost:5173");
-    expect(configuredAdminOrigin("javascript:alert(1)",true)).toBe("");
+  it("preserves www member login and routes public pages off the admin host",()=>{
+    expect(adminNavigationOrigin(publicSite,"/login",admin,publicSite)).toBe("");
+    expect(adminNavigationOrigin(admin,"/login",admin,publicSite)).toBe(publicSite);
+    expect(adminNavigationOrigin("http://localhost:5173","/admin/login","","")).toBe("");
   });
 });

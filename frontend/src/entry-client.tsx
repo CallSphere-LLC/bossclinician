@@ -55,7 +55,7 @@ function tree(runtime: SsrRuntime): ReactNode {
 
 const payload = serverPayload();
 
-if (isUnavailableUi(window.location.origin, window.location.pathname, import.meta.env.DEV)) {
+if (isUnavailableUi(window.location.origin)) {
   // Replace any stale SSR document instead of hydrating its retired page.
   // No page preload, preview handshake, or authentication provider is mounted.
   createRoot(container).render(tree({

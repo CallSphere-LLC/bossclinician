@@ -79,7 +79,7 @@ echo
 echo "Admin origin — admin APIs answer only on their own host"
 check "/api/admin/ closed on the public origin" 401 "$(code "$BASE/api/admin/members")"
 if [ -n "$ADMIN_BASE" ]; then
-  check "retired admin origin is unavailable" 410 "$(code "$ADMIN_BASE/admin")"
+  check "admin app loads on the admin origin" 200 "$(code "$ADMIN_BASE/admin")"
 fi
 
 echo

@@ -213,13 +213,11 @@ jobs:
           SMOKE_REDIRECT_ORIGIN: https://localhost
           SMOKE_ADMIN_BASE: ''
         run: scripts/smoke-test.sh http://localhost:8088
-      - name: Retired origins do not serve the app
+      - name: Admin origin serves the admin app
         run: |
-          for host in admin.bossclinician.com admin.bossclinician.callsphere.site bossclinician.callsphere.site; do
-            status=$(curl -s -o /dev/null -w '%{http_code}' -H "Host: $host" http://localhost:8088/admin/login)
-            echo "$host /admin/login -> $status"
-            test "$status" = 410
-          done
+          status=$(curl -s -o /dev/null -w '%{http_code}' -H 'Host: admin.bossclinician.callsphere.site' http://localhost:8088/admin)
+          echo "admin origin /admin -> $status"
+          test "$status" = 200
       - name: /api/health reports this commit
         run: |
           release=$(curl -fsS http://localhost:8088/api/health | jq -r .release)

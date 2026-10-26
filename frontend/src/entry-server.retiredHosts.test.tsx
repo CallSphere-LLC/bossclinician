@@ -8,7 +8,7 @@ import { render } from "./entry-server";
 beforeEach(()=>vi.clearAllMocks());
 
 describe("SSR host retirement",()=>{
-  for (const origin of ["https://bossclinician.callsphere.site","https://admin.bossclinician.com","https://admin.bossclinician.callsphere.site"]) {
+  for (const origin of ["https://bossclinician.callsphere.site"]) {
     it.each(["/","/login","/admin/login","/api/auth/google/callback"])("returns 410 before route loading for "+origin+"%s",async path=>{
       const result=await render(path,{origin,indexable:true,data:{private:"must-not-serialize"}});
       expect(result.status).toBe(410);
@@ -19,10 +19,10 @@ describe("SSR host retirement",()=>{
       expect(calls.app).not.toHaveBeenCalled();
     });
   }
-  it("does not expose admin UI on www",async()=>{
-    const result=await render("/admin/login",{origin:"https://www.bossclinician.com",indexable:true,data:{}});
-    expect(result.status).toBe(410);
-    expect(calls.app).not.toHaveBeenCalled();
+  it.each(["https://www.bossclinician.com","https://admin.bossclinician.com","https://admin.bossclinician.callsphere.site"])("keeps admin routing active for %s",async(origin)=>{
+    const result=await render("/admin/login",{origin,indexable:true,data:{}});
+    expect(result.status).toBe(200);
+    expect(calls.app).toHaveBeenCalledOnce();
   });
   it("preserves the canonical member login and its normal renderer",async()=>{
     const result=await render("/login",{origin:"https://www.bossclinician.com",indexable:true,data:{}});
