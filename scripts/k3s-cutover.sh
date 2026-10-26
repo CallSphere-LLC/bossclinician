@@ -9,16 +9,18 @@ work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 preview=$(sudo -n kubectl -n bossclinician get svc boss-web-preview -o jsonpath='{.spec.clusterIP}')
 verify() {
-  curl -fsS --retry 3 --retry-delay 1 --retry-all-errors --max-time 10 -H 'Host: bossclinician.callsphere.site' "$1/api/health" | python3 -c 'import json,sys; assert json.load(sys.stdin).get("release") == sys.argv[1], "release mismatch"' "$release"
+  curl -fsS --retry 3 --retry-delay 1 --retry-all-errors --max-time 10 -H 'Host: www.bossclinician.com' "$1/api/health" | python3 -c 'import json,sys; assert json.load(sys.stdin).get("release") == sys.argv[1], "release mismatch"' "$release"
 }
 verify "http://$preview"
-curl -fsS --retry 3 --retry-delay 1 --retry-all-errors --max-time 10 -H 'Host: admin.bossclinician.callsphere.site' "http://$preview/admin" >/dev/null
+for retired in bossclinician.callsphere.site admin.bossclinician.com; do
+  [[ "$(curl -sS --max-time 10 -o /dev/null -w '%{http_code}' -H "Host: $retired" "http://$preview/admin/login")" == 410 ]] || { echo "Retired host is still active: $retired" >&2; exit 1; }
+done
 sudo -n kubectl -n bossclinician get svc boss-web -o json > "$work/service.json"
 sudo -n kubectl -n bossclinician get endpoints boss-web -o json > "$work/endpoints.json" 2>/dev/null || true
 sudo -n kubectl -n bossclinician patch service boss-web --type merge -p '{"spec":{"selector":{"app":"boss-app"},"ports":[{"name":"http","port":80,"targetPort":8080,"protocol":"TCP"}]}}'
 healthy=0
 for _attempt in $(seq 1 15); do
-  if verify 'https://bossclinician.callsphere.site' && curl -fsS --max-time 30 'https://admin.bossclinician.callsphere.site/admin' >/dev/null; then healthy=1; break; fi
+  if verify 'https://www.bossclinician.com'; then healthy=1; break; fi
   sleep 2
 done
 if [[ "$healthy" != 1 ]]; then

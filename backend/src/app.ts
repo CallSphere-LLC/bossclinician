@@ -17,10 +17,13 @@ import { apiV1Router } from "./routes/public/apiV1";
 import { notFoundHandler, errorHandler } from "./middleware/errorHandler";
 import { apiLimiter } from "./middleware/rateLimit";
 
+import { rejectRetiredHosts } from "./middleware/retiredHosts";
+
 export function createApp(): Express {
   const app = express();
 
   app.disable("x-powered-by");
+  app.use(rejectRetiredHosts);
   // Behind nginx/Traefik: trust exactly one hop. This value is COUPLED to
   // nginx/site.conf, which forwards X-Forwarded-For verbatim rather than
   // appending to it (see the comment there). If nginx ever goes back to

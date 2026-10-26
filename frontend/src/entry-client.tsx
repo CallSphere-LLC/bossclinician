@@ -1,3 +1,4 @@
+import { isUnavailableUi } from "./lib/hostAccess";
 import { initializeSiteTheme } from "./lib/siteTheme";
 import { clearLegacyAdminToken } from "./lib/adminTransport";
 import { StrictMode, type ReactNode } from "react";
@@ -54,7 +55,14 @@ function tree(runtime: SsrRuntime): ReactNode {
 
 const payload = serverPayload();
 
-if (payload) {
+if (isUnavailableUi(window.location.origin, window.location.pathname, import.meta.env.DEV)) {
+  // Replace any stale SSR document instead of hydrating its retired page.
+  // No page preload, preview handshake, or authentication provider is mounted.
+  createRoot(container).render(tree({
+    payload: { origin: window.location.origin, indexable: false, data: {} },
+    headSink: null,
+  }));
+} else if (payload) {
   // The page component has to be resolved before React starts, or hydration
   // begins against the route's loading placeholder and React throws away the
   // server's markup — the article the crawler read would be rebuilt from

@@ -20,9 +20,9 @@
 #                           migrations (default: the one this script lives in)
 set -uo pipefail
 
-BASE="${1:-https://bossclinician.callsphere.site}"
+BASE="${1:-https://www.bossclinician.com}"
 REDIRECT_ORIGIN="${SMOKE_REDIRECT_ORIGIN:-$BASE}"
-ADMIN_BASE="${SMOKE_ADMIN_BASE-https://admin.bossclinician.callsphere.site}"
+ADMIN_BASE="${SMOKE_ADMIN_BASE-https://admin.bossclinician.com}"
 ROOT="${DEPLOY_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 cd "$ROOT" || exit 1
 PASS=0
@@ -79,7 +79,7 @@ echo
 echo "Admin origin — admin APIs answer only on their own host"
 check "/api/admin/ closed on the public origin" 401 "$(code "$BASE/api/admin/members")"
 if [ -n "$ADMIN_BASE" ]; then
-  check "admin app loads on the admin origin" 200 "$(code "$ADMIN_BASE/admin")"
+  check "retired admin origin is unavailable" 410 "$(code "$ADMIN_BASE/admin")"
 fi
 
 echo

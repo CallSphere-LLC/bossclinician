@@ -6,7 +6,7 @@ import fs from 'node:fs';
 const require = createRequire(import.meta.url);
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const browser = await chromium.launch({ headless: true, ...(process.env.CHROMIUM_PATH ? {executablePath:process.env.CHROMIUM_PATH} : {}), args:['--no-sandbox'] });
-const base = process.env.QUIZ_BASE || 'https://bossclinician.callsphere.site';
+const base = process.env.QUIZ_BASE || 'https://www.bossclinician.com';
 const evidence = [];
 try {
 for (const reducedMotion of ['no-preference', 'reduce']) {

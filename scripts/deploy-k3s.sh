@@ -101,7 +101,7 @@ if ! sudo -n kubectl -n bossclinician rollout status deployment/boss-ai --timeou
   exit 1
 fi
 preview=$(sudo -n kubectl -n bossclinician get service boss-web-preview -o jsonpath='{.spec.clusterIP}')
-actual=$(curl -fsS --retry 15 --retry-delay 2 --retry-all-errors --max-time 15 -H 'Host: bossclinician.callsphere.site' "http://$preview/api/health" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("release", ""))')
+actual=$(curl -fsS --retry 15 --retry-delay 2 --retry-all-errors --max-time 15 -H 'Host: www.bossclinician.com' "http://$preview/api/health" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("release", ""))')
 [[ "$actual" == "$release" ]] || { echo 'Release health mismatch' >&2; restore; exit 1; }
 if [[ "$mode" == stage ]]; then
   trap - ERR

@@ -2,6 +2,8 @@ import { StrictMode } from "react";
 import { renderToString } from "react-dom/server";
 import { StaticRouter } from "react-router";
 import App from "./App";
+import { UnavailableSite } from "./components/UnavailableSite";
+import { isUnavailableUi } from "./lib/hostAccess";
 import { renderHead, resolveHead } from "./seo/head";
 import type { HeadDescriptor } from "./seo/types";
 import { SSR_PAYLOAD_ID, SsrProvider, type SsrPayload } from "./ssr/context";
@@ -33,7 +35,10 @@ export interface RenderResult {
 
 export async function render(url: string, payload: SsrPayload): Promise<RenderResult> {
   const [pathname = "/"] = url.split("?");
-  await preloadPublicRoute(pathname);
+  const unavailable = isUnavailableUi(payload.origin, pathname, import.meta.env.DEV);
+  // A retired request never preloads a page or exposes its loader payload.
+  const renderPayload = unavailable ? { ...payload, indexable: false, data: {} } : payload;
+  if (!unavailable) await preloadPublicRoute(pathname);
 
   // Per request, never module-level: two concurrent renders must not be able to
   // read each other's head tags.
@@ -41,9 +46,9 @@ export async function render(url: string, payload: SsrPayload): Promise<RenderRe
 
   const html = renderToString(
     <StrictMode>
-      <SsrProvider runtime={{ payload, headSink }}>
+      <SsrProvider runtime={{ payload: renderPayload, headSink }}>
         <StaticRouter location={url}>
-          <App />
+          {unavailable ? <UnavailableSite /> : <App />}
         </StaticRouter>
       </SsrProvider>
     </StrictMode>,
@@ -55,12 +60,12 @@ export async function render(url: string, payload: SsrPayload): Promise<RenderRe
   const descriptor = headSink[headSink.length - 1];
 
   const head = renderHead(
-    resolveHead(descriptor, { origin: payload.origin, url, indexable: payload.indexable }),
+    resolveHead(descriptor, { origin: renderPayload.origin, url, indexable: renderPayload.indexable }),
   );
 
   return {
     head,
-    bootstrap: `<script type="application/json" id="${SSR_PAYLOAD_ID}">${serialize(payload)}</script>`,
+    bootstrap: `<script type="application/json" id="${SSR_PAYLOAD_ID}">${serialize(renderPayload)}</script>`,
     html,
     status: descriptor?.httpStatus ?? 200,
   };
