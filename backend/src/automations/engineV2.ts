@@ -162,6 +162,18 @@ export function scopeAllows(
   return !(Number.isFinite(scoped) && scoped > 0) || scoped === automationId;
 }
 
+/** Opt-in assessment rollout boundary: never turn old queued attempts into mail. */
+export function assessmentAttemptIsInScope(
+  trigger: TriggerV2,
+  config: Record<string, unknown>,
+  facts: Record<string, unknown>,
+): boolean {
+  if (!['assessment_passed', 'assessment_completed'].includes(trigger) || config.minimumAttemptId === undefined) return true;
+  const minimum = Number(config.minimumAttemptId);
+  const attempt = Number(facts.attemptId);
+  return Number.isSafeInteger(minimum) && minimum > 0 && Number.isSafeInteger(attempt) && attempt >= minimum;
+}
+
 /** The settings of a "lesson video not watched" automation, with their defaults. */
 export const lessonNotWatchedConfigSchema = z.object({
   courseId: z.coerce.number().int().positive(),
@@ -1422,6 +1434,7 @@ export async function fireTrigger(
       // due (see SWEPT_TRIGGERS). Checked first: it is not a skip to record,
       // the occurrence simply is not this automation's.
       if (!scopeAllows(context.facts, automation.id)) continue;
+      if (!assessmentAttemptIsInScope(trigger, automation.trigger_config, context.facts)) continue;
 
       // Check before conditions and the per-person ceiling: a replay of an
       // already successful occurrence must not create a later, misleading
