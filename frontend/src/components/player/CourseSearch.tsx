@@ -5,7 +5,7 @@ import { memberRequest } from "@/lib/memberApi";
 import { useMember } from "@/hooks/useMember";
 import type { OutlineModule } from "@/lib/libraryApi";
 import { usePlayerSource } from "./playerSource";
-import { searchPreviewOutline, type CourseSearchResponse } from "./courseSearch";
+import { courseSearchAccessKey, searchPreviewOutline, type CourseSearchResponse } from "./courseSearch";
 
 type CourseSearchProps = { productSlug: string; modules: OutlineModule[] };
 
@@ -21,10 +21,11 @@ function CourseSearchForm({ productSlug, modules }: CourseSearchProps) {
   const input = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState("");
   const [retry, setRetry] = useState(0);
-  const [found, setFound] = useState<{ query: string; data: CourseSearchResponse } | null>(null);
+  const [found, setFound] = useState<{ query: string; accessKey: string; data: CourseSearchResponse } | null>(null);
   const [error, setError] = useState("");
   const term = query.trim();
   const previewModules = preview ? modules : null;
+  const accessKey = courseSearchAccessKey(modules);
   useEffect(() => {
     setFound(null);
     setError("");
@@ -34,13 +35,13 @@ function CourseSearchForm({ productSlug, modules }: CourseSearchProps) {
     const timer = window.setTimeout(() => {
       const result = previewModules ? Promise.resolve(searchPreviewOutline(previewModules, term))
         : memberRequest<CourseSearchResponse>(`/member/library/${encodeURIComponent(productSlug)}/search?q=${encodeURIComponent(term)}`, { signal: controller.signal });
-      void result.then((data) => { if (!cancelled) setFound({ query: term, data }); })
+      void result.then((data) => { if (!cancelled) setFound({ query: term, accessKey, data }); })
         .catch(() => { if (!cancelled) setError("Search could not load. Try again."); });
     }, 300);
     return () => { cancelled = true; clearTimeout(timer); controller.abort(); };
-  }, [term, productSlug, previewModules, retry]);
+  }, [term, productSlug, previewModules, accessKey, retry]);
   // Never show the previous query's results while the next request is pending.
-  const data = found?.query === term ? found.data : null;
+  const data = found?.query === term && found.accessKey === accessKey ? found.data : null;
   const clear = () => { setQuery(""); input.current?.focus(); };
   return (
     <section aria-label="Search this course" className="mb-6">

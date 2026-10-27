@@ -1,6 +1,6 @@
 import PDFDocument from "pdfkit";
 import { z } from "zod";
-import { badRequest } from "../utils/httpError";
+import { planTextRuns, writePlanText } from "./livingPlanFonts";
 
 /** Text only: no HTML, remote images, filesystem paths, or PDF instructions.
  * The client supplies the current editor snapshot, including unsaved entries.
@@ -19,14 +19,10 @@ export type LivingPlanReport = z.infer<typeof livingPlanReportSchema>;
 
 export const PLAN_PDF_NOTE = "A typed name is an acknowledgment only, not a verified digital signature. Financial values are user supplied and not independently verified; this is not a lender-ready certified statement.";
 
-// PDFKit's built-in fonts cover WinAnsi. Never silently lose characters outside
-// that set: the browser print option preserves the user's full Unicode text.
-const WIN_ANSI = /^[\t\n\r\u0020-\u007e\u00a0-\u00ff\u0152\u0153\u0160\u0161\u0178\u017d\u017e\u0192\u02c6\u02dc\u2013-\u2014\u2018-\u201a\u201c-\u201e\u2020-\u2022\u2026\u2030\u2039\u203a\u20ac]*$/;
-
 export async function createLivingPlanPdf(report: LivingPlanReport): Promise<Buffer> {
   for (const section of report.sections) {
     for (const text of [section.title, section.description, ...section.fields.flatMap((field) => [field.label, field.value])]) {
-      if (!WIN_ANSI.test(text)) throw badRequest("Some characters need browser printing. Use Print / Save as PDF to preserve all of your text.");
+      planTextRuns(text);
     }
   }
   const doc = new PDFDocument({ size: "LETTER", margins: { top: 48, bottom: 48, left: 50, right: 50 },
@@ -45,16 +41,18 @@ export async function createLivingPlanPdf(report: LivingPlanReport): Promise<Buf
     .text(`Boss Clinician${report.archived ? " · Archived plan" : ""} · ${report.sections.filter((section) => section.reviewed).length} of 11 sections reviewed`, { width });
   for (const section of report.sections) {
     room(110);
-    doc.moveDown(1).font("Helvetica-Bold").fontSize(15).fillColor("#30233e").text(section.title, { width });
-    doc.moveDown(0.3).font("Helvetica").fontSize(9).fillColor("#55505c")
-      .text(`${section.reviewed ? "Reviewed" : "Not yet reviewed"} · ${section.description}`, { width });
+    doc.moveDown(1).fontSize(15).fillColor("#30233e");
+    writePlanText(doc, section.title, { width }, "Helvetica-Bold");
+    doc.moveDown(0.3).fontSize(9).fillColor("#55505c");
+    writePlanText(doc, `${section.reviewed ? "Reviewed" : "Not yet reviewed"} · ${section.description}`, { width });
     for (const field of section.fields) {
       doc.font("Helvetica-Bold").fontSize(10);
       room(doc.heightOfString(field.label, { width }) + 35);
-      doc.moveDown(0.65).fillColor("#30233e").text(field.label, { width });
+      doc.moveDown(0.65).fillColor("#30233e");
+      writePlanText(doc, field.label, { width }, "Helvetica-Bold");
       // PDFKit wraps and paginates long values; fixed-height cells would cut them off.
-      doc.moveDown(0.25).font("Helvetica").fontSize(11).fillColor("#20202a")
-        .text(field.value || "Not entered", { width, lineGap: 3 });
+      doc.moveDown(0.25).fontSize(11).fillColor("#20202a");
+      writePlanText(doc, field.value || "Not entered", { width, lineGap: 3 });
     }
   }
   room(80);

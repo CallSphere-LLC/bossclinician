@@ -53,4 +53,21 @@ describe("Living Business Plan PDF", () => {
     input.sections[0].fields[0].value = 'José’s practice — “Care” • £250 €300 ¥400 $500…';
     expect((await createLivingPlanPdf(input)).subarray(0, 5).toString()).toBe("%PDF-");
   });
+  it("embeds licensed Unicode fonts and text mappings for Greek, Cyrillic and emoji", async () => {
+    const input = report();
+    input.sections[0].fields[0].value = "Δημήτρης • Елена • 😀 👩🏽‍⚕️";
+    const pdf = await createLivingPlanPdf(input);
+    const raw = pdf.toString("latin1");
+    expect(raw).toContain("NotoSans");
+    expect(raw).toContain("NotoEmoji");
+    let mappings = "";
+    for (const match of raw.matchAll(/stream\r?\n/g)) {
+      const start = match.index! + match[0].length;
+      try {
+        const stream = inflateSync(Buffer.from(raw.slice(start, raw.indexOf("endstream", start)), "latin1")).toString("latin1");
+        if (stream.includes("begincmap")) mappings += stream.toLowerCase();
+      } catch { /* Not every stream is compressed text. */ }
+    }
+    for (const glyph of ["Δ", "Е", "😀", "👩🏽‍⚕️"]) expect(mappings.replace(/\s+/g, "")).toContain(Buffer.from(glyph, "utf16le").swap16().toString("hex"));
+  });
 });

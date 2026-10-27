@@ -28,5 +28,6 @@ function copyDir(rel, filter = () => true) {
 copyFile(path.join("db", "schema.sql"));
 copyDir(path.join("db", "migrations"), (f) => f.endsWith(".sql"));
 copyFile(path.join("seed", "data", "content.json"));
+copyDir(path.join("assets", "fonts"));
 
 console.log("[build] copied sql + seed assets into dist/");

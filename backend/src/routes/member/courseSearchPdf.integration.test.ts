@@ -104,13 +104,16 @@ describeDb("course search and plan PDF access boundaries", () => {
     expect((await searchBody(await request(`${searchPath}?q=%20%20`, owner.token))).results).toEqual([]);
   });
   it("downloads PDF from current submitted data without creating or changing saved state", async () => {
+    await db.client.query("INSERT INTO member_tool_state(member_id,tool_key,state,revision) VALUES($1,'living-business-plan',$2::jsonb,5)", [owner.id, JSON.stringify({ annual: { values: { legalName: "Previously saved synthetic plan" } }, reviews: [{ notes: "Keep review history" }], archives: [] })]);
+    const before = (await db.client.query("SELECT state,revision,updated_at FROM member_tool_state WHERE member_id=$1 AND tool_key='living-business-plan'", [owner.id])).rows[0];
     const response = await request(pdfPath, owner.token, { expectedMemberId: owner.id, report });
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toBe("application/pdf");
     expect(response.headers.get("content-disposition")).toContain("annual-business-plan-2026.pdf");
     expect(response.headers.get("cache-control")).toBe("private, no-store");
     expect(Buffer.from(await response.arrayBuffer()).subarray(0, 5).toString()).toBe("%PDF-");
-    expect((await db.client.query("SELECT count(*)::int n FROM member_tool_state WHERE member_id=$1", [owner.id])).rows[0].n).toBe(0);
+    const after = (await db.client.query("SELECT state,revision,updated_at FROM member_tool_state WHERE member_id=$1 AND tool_key='living-business-plan'", [owner.id])).rows[0];
+    expect(after).toEqual(before);
   });
   it("rejects outsiders, identity swaps, and unbounded PDF payloads", async () => {
     const body = { expectedMemberId: owner.id, report };

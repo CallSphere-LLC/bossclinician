@@ -12,6 +12,14 @@ export interface CourseSearchResult {
 
 export interface CourseSearchResponse { results: CourseSearchResult[]; total: number }
 
+/** Completion can release a prerequisite before the local outline's unlocked
+ * flag refreshes. Ignore playback position so heartbeats do not repeat searches.
+ */
+export function courseSearchAccessKey(modules: OutlineModule[]): string {
+  return JSON.stringify(modules.map((module) => [module.id, module.unlocked,
+    module.lessons.map((lesson) => [lesson.id, lesson.unlocked, lesson.completed]) ]));
+}
+
 /** Admin preview has its own auth boundary. Search its already-loaded outline
  * locally instead of accidentally calling a member endpoint with an admin token.
  */
