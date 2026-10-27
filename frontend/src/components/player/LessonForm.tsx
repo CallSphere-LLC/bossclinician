@@ -26,7 +26,7 @@ import {
  *
  * The lesson carries it as `toolKey = "form-<slug>"`; the questions are an
  * ordinary form built in Admin → Forms. A signed-in member answers as
- * themselves — no name or email boxes: the server fills both from the account
+ * themselves: name and email questions are read-only and the server fills both from the account
  * and files the reply against their contact, so the owner sees each student's
  * replies in Forms. They can send it again whenever they need to (the Lounge
  * forms are monthly), and the page says when they last did.
@@ -57,6 +57,7 @@ interface LessonFormDefinition {
   name: string;
   descriptionMd: string;
   fields: LessonFormField[];
+  identityFields?: { key: "name" | "email"; label: string; required: boolean }[];
   submitLabel: string;
   successMessage: string;
 }
@@ -95,6 +96,9 @@ async function loadForPreview(slug: string): Promise<LessonFormResponse> {
       fields: (detail.fields as unknown as LessonFormField[]).filter(
         (field) => field.key !== "name" && field.key !== "email",
       ),
+      identityFields: (detail.fields as unknown as LessonFormField[])
+        .filter((field) => field.key === "name" || field.key === "email")
+        .map((field) => ({ key: field.key as "name" | "email", label: field.label, required: field.required === true })),
       submitLabel: detail.submitLabel,
       successMessage: detail.successMessage,
     },
@@ -160,6 +164,7 @@ export function LessonForm({ slug }: { slug: string }) {
   }
 
   const { form, member, replies } = loaded;
+  const missingIdentity = form.identityFields?.some(field => field.required && !member[field.key].trim()) ?? false;
 
   const text = (key: string) => (typeof values[key] === "string" ? (values[key] as string) : "");
   const list = (key: string) => (Array.isArray(values[key]) ? (values[key] as string[]) : []);
@@ -485,6 +490,7 @@ export function LessonForm({ slug }: { slug: string }) {
   return (
     <div
       ref={rootRef}
+      id={`lesson-form-${slug}`}
       className="scroll-mt-24 rounded-2xl border border-white/10 bg-white/[0.03] p-5 shadow-glass sm:p-7"
     >
       <div className="mb-6 flex flex-col gap-1.5">
@@ -509,6 +515,7 @@ export function LessonForm({ slug }: { slug: string }) {
       )}
 
       <form onSubmit={submit} noValidate aria-busy={busy} className="space-y-5">
+        <LessonFormIdentity fields={form.identityFields} member={member} />
         {shown.map(renderField)}
 
         {error && (
@@ -526,7 +533,7 @@ export function LessonForm({ slug }: { slug: string }) {
             variant="foil"
             size="md"
             type="submit"
-            disabled={busy || Boolean(preview)}
+            disabled={busy || Boolean(preview) || missingIdentity}
             className="min-h-[44px] w-full sm:w-auto"
           >
             {busy ? "Sending…" : form.submitLabel || "Submit"}
@@ -535,4 +542,32 @@ export function LessonForm({ slug }: { slug: string }) {
       </form>
     </div>
   );
+}
+
+/** Survey identity questions retain their source labels and use the signed-in account. */
+export function LessonFormIdentity({
+  fields = [], member,
+}: {
+  fields?: { key: "name" | "email"; label: string; required: boolean }[];
+  member: { name: string; email: string };
+}) {
+  const missingIdentity = fields.some(field => field.required && !member[field.key].trim());
+  return <>{missingIdentity && (
+    <p role="alert" className="rounded-xl border border-gold/30 bg-gold/5 p-4 text-sm text-orchid">
+      Please complete your account name and email before sending this survey.{" "}
+      <a href="/account/profile" className="font-semibold text-gold underline">Edit your profile</a>
+      , then return to this welcome lesson.
+    </p>
+  )}{fields.map(field => (
+    <LuxeInput
+      key={field.key}
+      label={field.label + (field.required ? " *" : "")}
+      name={field.key}
+      type={field.key === "email" ? "email" : "text"}
+      value={member[field.key]}
+      readOnly
+      required={field.required}
+      hint="From your signed-in account."
+    />
+  ))}</>;
 }

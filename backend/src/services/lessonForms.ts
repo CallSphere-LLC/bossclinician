@@ -1,3 +1,4 @@
+import { asFields } from "./formLogic";
 import { pool } from "../db/pool";
 import { notFound } from "../utils/httpError";
 import { hasCourseAccess } from "./access";
@@ -113,4 +114,44 @@ export async function lessonsUsingForm(
     courseTitle: row.course_title,
     published: row.published,
   }));
+}
+
+/** Original identity labels remain visible; account identity is never editable. */
+export function lessonFormIdentityFields(fields: unknown): { key: "name" | "email"; label: string; required: boolean }[] {
+  return asFields(fields)
+    .filter((field) => field.key === "name" || field.key === "email")
+    .map((field) => ({
+      key: field.key as "name" | "email",
+      label: field.label || (field.key === "email" ? "Email" : "Name"),
+      required: field.required === true,
+    }));
+}
+
+/** Enforce the actual choices/types shown by native lesson forms, not just nonempty values. */
+export function lessonFormAnswerProblem(
+  fields: unknown,
+  data: Record<string, unknown>,
+  visible: Set<string>,
+): string | null {
+  for (const field of asFields(fields)) {
+    if (!visible.has(field.key) || field.key === "name" || field.key === "email") continue;
+    const value = data[field.key];
+    if (value === undefined || value === null || value === "") continue;
+    const label = field.label || field.key;
+    const options = Array.isArray(field.options) ? field.options : [];
+    if (field.type === "checkboxes") {
+      if (!Array.isArray(value) || value.some(v => typeof v !== "string" || !options.includes(v))
+          || new Set(value).size !== value.length) return `Please choose the listed options for “${label}”.`;
+    } else if (field.type === "radio" || field.type === "select") {
+      if (typeof value !== "string" || !options.includes(value)) return `Please choose a listed option for “${label}”.`;
+    } else if (["text", "textarea", "email", "phone", "date"].includes(field.type ?? "")) {
+      if (typeof value !== "string") return `Please enter text for “${label}”.`;
+    }
+  }
+  return null;
+}
+
+export function lessonFormIdentityProblem(fields: unknown, member: {name:string;email:string}): string | null {
+  const missing = lessonFormIdentityFields(fields).find(field => field.required && !member[field.key].trim());
+  return missing ? `Please add your ${missing.key === "name" ? "name" : "email"} in your profile before sending this survey.` : null;
 }

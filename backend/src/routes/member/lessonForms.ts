@@ -16,7 +16,7 @@ import { receiveFormFiles, type StagedFile } from "../../services/formUploads";
 import { recordActivity, upsertContactWithStatus } from "../../services/contacts";
 import { publishDomainEvent } from "../../services/domainEvents";
 import { wantsReplyEmail } from "../../services/formNotifications";
-import { cleanFormSlug, loadLessonFormForMember } from "../../services/lessonForms";
+import { cleanFormSlug, lessonFormIdentityFields, lessonFormIdentityProblem, lessonFormAnswerProblem, loadLessonFormForMember } from "../../services/lessonForms";
 import {
   afterSubmission,
   formUploadFormLimiter,
@@ -70,7 +70,7 @@ async function loadIdentity(memberId: number): Promise<MemberIdentity> {
   if (!row) throw notFound("Form not found");
   const email = row.email.trim().toLowerCase();
   const name =
-    row.name.trim() || `${row.first_name} ${row.last_name}`.trim() || email.split("@")[0] || email;
+    row.name.trim() || `${row.first_name} ${row.last_name}`.trim();
   return { name, email, contactId: row.contact_id };
 }
 
@@ -86,7 +86,7 @@ async function earlierReplies(formId: number, memberId: number): Promise<{ id: n
   return result.rows.map((row) => ({ id: row.id, createdAt: new Date(row.created_at).toISOString() }));
 }
 
-/** The questions the member answers. Name and email come from the account, so they are not asked. */
+/** The questions the member answers. Name and email come from the account, so only their original labels are shown as read-only identity fields. */
 function memberFields(fields: unknown): unknown[] {
   return (Array.isArray(fields) ? fields : []).filter((field) => {
     const key = (field as { key?: unknown } | null)?.key;
@@ -117,6 +117,7 @@ memberLessonFormsRouter.get(
         name: form.name,
         descriptionMd: form.description_md || form.description || "",
         fields: memberFields(form.fields),
+        identityFields: lessonFormIdentityFields(form.fields),
         submitLabel: form.submit_label,
         successMessage: form.success_message,
       },
@@ -174,10 +175,13 @@ memberLessonFormsRouter.post(
     for (const key of filesPresent) withFiles[key] = { file: true };
 
     const visible = visibleQuestionKeys(fields, withFiles);
-    const problem = answerProblem(fields, withFiles, visible, filesPresent);
+    const problem = answerProblem(fields, withFiles, visible, filesPresent)
+      ?? lessonFormAnswerProblem(fields, withFiles, visible);
     if (problem) throw badRequest(problem);
 
     const who = await loadIdentity(currentMemberId(req));
+    const identityProblem = lessonFormIdentityProblem(form.fields, who);
+    if (identityProblem) throw badRequest(identityProblem, { profileHref: "/account/profile" });
     // Stored like a public reply's identity, so the reply list, the CSV and the
     // owner's email all name the student without knowing where it came from.
     const data = { ...keptAnswers(fields, typed, visible), name: who.name, email: who.email };
