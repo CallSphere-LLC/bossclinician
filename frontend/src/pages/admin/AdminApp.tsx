@@ -3,6 +3,7 @@ import { Navigate, Route, Routes, useLocation } from "react-router";
 import { useAuth } from "@/hooks/useAuth";
 import { AdminLayout } from "@/pages/admin/AdminLayout";
 import Login from "@/pages/admin/Login";
+import PasswordRecovery from "@/pages/admin/PasswordRecovery";
 import Dashboard from "@/pages/admin/Dashboard";
 import Products from "@/pages/admin/Products";
 import ProductsCatalog from "@/pages/admin/ProductsCatalog";
@@ -234,6 +235,9 @@ export default function AdminApp() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/forgot-password" element={<PasswordRecovery />} />
+      <Route path="/reset-password" element={<PasswordRecovery reset />} />
+      <Route path="/reset-password/:token" element={<PasswordRecovery reset />} />
       {/* The invitee has no account yet — a guard here would bounce them to a
           sign-in they cannot pass. The token in the link is the credential. */}
       <Route path="/invite/:token" element={<AcceptInvite />} />

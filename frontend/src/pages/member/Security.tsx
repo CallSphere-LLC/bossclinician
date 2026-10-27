@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { toast } from "sonner";
+import { AuthLink } from "@/components/member/AuthCard";
 import { Loader2, Monitor, Smartphone, Tablet, type LucideIcon } from "lucide-react";
 import { Seo } from "@/components/Seo";
 import { MemberShell } from "@/components/member/MemberShell";
@@ -104,6 +105,7 @@ function ChangePasswordCard({ onPasswordChanged }: { onPasswordChanged: () => vo
             error={errors.currentPassword}
             onChange={(event) => setCurrent(event.target.value)}
           />
+          <AuthLink to="/forgot-password?next=%2Faccount%2Fsecurity">Forgot your password?</AuthLink>
           <LuxeInput
             label="New password"
             type="password"

@@ -65,7 +65,7 @@ export function safeReturnPath(raw: string | null | undefined): string {
   // Sending someone who has just signed in back to the sign-in page would look
   // like the sign-in failed; an invitation link is for someone with no account.
   const lower = pathname.toLowerCase().replace(/\/+$/, "");
-  if (lower === LOGIN_PATH || lower.startsWith("/admin/invite/") || lower === "/admin/invite") {
+  if (/^\/admin\/(forgot-password|reset-password)(\/|$)/.test(lower) || lower === LOGIN_PATH || lower.startsWith("/admin/invite/") || lower === "/admin/invite") {
     return ADMIN_HOME;
   }
 

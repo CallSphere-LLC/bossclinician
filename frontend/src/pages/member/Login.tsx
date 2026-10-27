@@ -14,24 +14,9 @@ import { LuxeButton } from "@/components/luxe/LuxeButton";
 import { LuxeInput } from "@/components/luxe/LuxeField";
 import { api } from "@/lib/api";
 import { MemberApiError, memberApi } from "@/lib/memberApi";
+import { recoveryDestination, withRecoveryNext } from "@/lib/passwordRecovery";
 import { useMember } from "@/hooks/useMember";
 import { clearSignOutReason, signOutReasonMessage } from "@/lib/memberSessionPolicy";
-
-const DEFAULT_DESTINATION = "/library";
-
-/**
- * `?next=` is attacker-supplied by definition — it arrives on a link someone
- * else can write. Anything other than a plain same-site path is discarded:
- * `//example.com` and `/\example.com` are both read as protocol-relative URLs
- * by browsers, which would turn our own sign-in page into a redirect to a
- * lookalike site at the exact moment the member has just typed their password.
- */
-function safeDestination(raw: string | null): string {
-  if (!raw) return DEFAULT_DESTINATION;
-  if (!raw.startsWith("/")) return DEFAULT_DESTINATION;
-  if (raw.startsWith("//") || raw.startsWith("/\\")) return DEFAULT_DESTINATION;
-  return raw;
-}
 
 type MagicLinkState = "checking" | "offered" | "sending" | "sent" | "unavailable";
 
@@ -39,7 +24,7 @@ export default function Login() {
   const { member, loading, signIn } = useMember();
   const navigate = useNavigate();
   const [params] = useSearchParams();
-  const destination = safeDestination(params.get("next"));
+  const destination = recoveryDestination("member", params.get("next"));
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -172,7 +157,7 @@ export default function Login() {
         />
 
         <div className="-mt-1 text-right">
-          <AuthLink to="/forgot-password">Forgot your password?</AuthLink>
+          <AuthLink to={withRecoveryNext("/forgot-password", "member", destination)}>Forgot your password?</AuthLink>
         </div>
 
         <AuthFormError message={error} />

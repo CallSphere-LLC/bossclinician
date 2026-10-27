@@ -44,10 +44,15 @@ async function loadMember(payload: MemberJwtPayload): Promise<AuthedMember | nul
     email: string;
     status: string;
     email_verified_at: string | null;
-  }>(`SELECT id, email, status, email_verified_at FROM members WHERE id = $1`, [payload.sub]);
+    password_reset_at?: Date | null;
+  }>(`SELECT id, email, status, email_verified_at, password_reset_at FROM members WHERE id = $1`, [payload.sub]);
 
   const row = res.rows[0];
   if (!row) return null;
+  // Legacy tokens have only second-resolution iat. Missing issuance time is
+  // refused after a reset, never treated as newer than the reset cutoff.
+  const issuedAt = payload.issuedAtMs ?? (payload.iat ?? 0) * 1000;
+  if (row.password_reset_at && issuedAt <= new Date(row.password_reset_at).getTime()) return null;
 
   return {
     id: row.id,

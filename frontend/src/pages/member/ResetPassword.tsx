@@ -1,5 +1,6 @@
+import { recoveryDestination, withRecoveryNext } from "@/lib/passwordRecovery";
 import { useState, type FormEvent } from "react";
-import { useParams } from "react-router";
+import { useParams, useSearchParams } from "react-router";
 import { CheckCircle2 } from "lucide-react";
 import {
   AuthCard,
@@ -15,6 +16,8 @@ import { memberApi } from "@/lib/memberApi";
 
 export default function ResetPassword() {
   const { token } = useParams<{ token: string }>();
+  const [params] = useSearchParams();
+  const destination = recoveryDestination("member", params.get("next"));
 
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -24,6 +27,7 @@ export default function ResetPassword() {
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
+    if (submitting) return;
     setError(null);
 
     if (password.length < MIN_PASSWORD_LENGTH) {
@@ -38,6 +42,8 @@ export default function ResetPassword() {
     setSubmitting(true);
     try {
       await memberApi.resetPassword(token ?? "", password);
+      setPassword("");
+      setConfirm("");
       setDone(true);
     } catch (err) {
       setError(authErrorMessage(err));
@@ -49,17 +55,18 @@ export default function ResetPassword() {
   if (!token) {
     return (
       <AuthCard
+        noindex
         documentTitle="Link not valid · Boss Clinician"
         eyebrow="Something's missing"
         title="That link looks incomplete"
         subtitle="Reset links sometimes get cut in half by email apps. Ask for a fresh one and it'll only take a moment."
         footer={
           <>
-            Remembered it? <AuthLink to="/login">Back to sign in</AuthLink>
+            Remembered it? <AuthLink to={withRecoveryNext("/login", "member", destination)}>Back to sign in</AuthLink>
           </>
         }
       >
-        <LuxeButton to="/forgot-password" size="lg" className="w-full">
+        <LuxeButton to={withRecoveryNext("/forgot-password", "member", destination)} size="lg" className="w-full">
           Send me a new link
         </LuxeButton>
       </AuthCard>
@@ -69,23 +76,25 @@ export default function ResetPassword() {
   if (done) {
     return (
       <AuthCard
+        noindex
         documentTitle="Password updated · Boss Clinician"
         eyebrow="All done"
         title="Your new password is set"
         subtitle="For safety, anywhere you were already signed in has been signed out. Use your new password from here."
         footer={
           <>
-            Trouble getting in? <AuthLink to="/forgot-password">Start again</AuthLink>
+            Trouble getting in? <AuthLink to={withRecoveryNext("/forgot-password", "member", destination)}>Start again</AuthLink>
           </>
         }
       >
+        <meta name="referrer" content="no-referrer" />
         <div className="space-y-5">
           <p className="flex items-start gap-3 rounded-xl border border-green-bright/25 bg-green-bright/[0.08] px-4 py-3.5 text-sm leading-relaxed text-orchid">
             <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-green-bright" aria-hidden />
             <span>Password changed. Nothing else about your account has moved.</span>
           </p>
 
-          <LuxeButton to="/login" size="lg" className="w-full">
+          <LuxeButton href={withRecoveryNext("/login", "member", destination)} size="lg" className="w-full">
             Sign in
           </LuxeButton>
         </div>
@@ -95,15 +104,17 @@ export default function ResetPassword() {
 
   return (
     <AuthCard
+      noindex
       documentTitle="Choose a new password · Boss Clinician"
       title="Choose a new password"
       subtitle="Pick something you'll remember. You'll use it to sign in from now on."
       footer={
         <>
-          Changed your mind? <AuthLink to="/login">Back to sign in</AuthLink>
+          Changed your mind? <AuthLink to={withRecoveryNext("/login", "member", destination)}>Back to sign in</AuthLink>
         </>
       }
     >
+      <meta name="referrer" content="no-referrer" />
       <form onSubmit={handleSubmit} className="space-y-5" noValidate>
         <AuthPasswordField
           label="New password"
@@ -126,6 +137,7 @@ export default function ResetPassword() {
         />
 
         <AuthFormError message={error} />
+        {error && <AuthLink to={withRecoveryNext("/forgot-password", "member", destination)}>Request a new reset link</AuthLink>}
 
         <AuthSubmit pending={submitting} pendingLabel="Saving…">
           Save new password

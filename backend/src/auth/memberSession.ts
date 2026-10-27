@@ -67,10 +67,13 @@ export interface MemberJwtPayload {
   email: string;
   /** Set when an admin is viewing the site as this member. Audit-logged at issue time. */
   impersonatedBy?: number;
+  /** Millisecond precision avoids rejecting a fresh login in the reset second. */
+  issuedAtMs?: number;
+  iat?: number;
 }
 
 export function signMemberAccessToken(payload: MemberJwtPayload, sessionExpiresAt?: string | Date): string {
-  return jwt.sign(payload, memberTokenSecret(), {
+  return jwt.sign({ ...payload, issuedAtMs: Date.now() }, memberTokenSecret(), {
     algorithm: "HS256",
     audience: MEMBER_AUDIENCE,
     expiresIn: sessionExpiresAt

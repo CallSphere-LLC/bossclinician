@@ -1,5 +1,6 @@
 import { Request, Response, Router } from "express";
 import { pool } from "../../db/pool";
+import { issuePasswordReset, consumePasswordReset, RESET_TTL_MINUTES } from "../../services/passwordRecovery";
 import { asyncHandler } from "../../utils/asyncHandler";
 import { HttpError, badRequest, notFound, unauthorized } from "../../utils/httpError";
 import { generateToken, hashToken, expiresIn } from "../../auth/tokens";
@@ -24,6 +25,7 @@ import { setDocumentCookie } from "../../auth/memberDocumentCookie";
 import { optionalMember } from "../../middleware/memberAuth";
 import {
   memberEmailLinkLimiter,
+  memberRecoveryRequestLimiter,
   memberLoginLimiter,
   memberRegisterLimiter,
   memberTokenLimiter,
@@ -77,7 +79,9 @@ const GENERIC_LINK = "That link has expired or has already been used. Please req
 /** Suspended and deleted accounts are refused everywhere a session can be created. */
 export const SIGN_IN_BLOCKED = new Set(["suspended", "deleted"]);
 
-const PASSWORD_RESET_TTL_MINUTES = 60;
+const PASSWORD_RESET_TTL_MINUTES = RESET_TTL_MINUTES;
+const RESET_WINDOW_MINUTES = 15;
+const RESET_MAX_PER_WINDOW = 5;
 const MAGIC_LINK_TTL_MINUTES = 15;
 
 /**
@@ -118,10 +122,6 @@ const LOGIN_DISTRIBUTED_MAX_FAILURES = 40;
  */
 const LOGIN_BACKOFF_BASE_SECONDS = 5;
 const LOGIN_BACKOFF_MAX_SECONDS = 60;
-
-/** A member can ask for this many password-reset emails per window before we stop sending. */
-const RESET_WINDOW_MINUTES = 15;
-const RESET_MAX_PER_WINDOW = 5;
 
 export interface ClientMeta {
   ip: string;
@@ -725,6 +725,7 @@ memberAuthRoutes.post(
  */
 memberAuthRoutes.post(
   "/forgot-password",
+  memberRecoveryRequestLimiter,
   memberEmailLinkLimiter,
   asyncHandler(async (req, res) => {
     const parsed = forgotPasswordSchema.safeParse(req.body);
@@ -733,39 +734,12 @@ memberAuthRoutes.post(
     }
     const { email } = parsed.data;
 
-    const member = await findByEmail(email);
-    if (member && member.status === "active") {
-      // A second durable cap on top of the IP+email limiter: an attacker who
-      // rotates IPs still cannot use the reset endpoint to bury a real member's
-      // inbox, because the ceiling is counted per account.
-      const recent = await pool.query<{ count: string }>(
-        `SELECT count(*) AS count
-           FROM member_password_resets
-          WHERE member_id = $1
-            AND created_at > now() - make_interval(mins => $2)`,
-        [member.id, RESET_WINDOW_MINUTES]
-      );
-      if (Number(recent.rows[0]?.count ?? 0) < RESET_MAX_PER_WINDOW) {
-        const raw = generateToken();
-        await pool.query(
-          `INSERT INTO member_password_resets (member_id, token_hash, expires_at)
-           VALUES ($1, $2, $3)`,
-          [member.id, hashToken(raw), expiresIn(PASSWORD_RESET_TTL_MINUTES * 60)]
-        );
-        void sendMail({
-          topic: "password_reset",
-          memberId: member.id,
-          to: member.email,
-          ...emails.passwordReset({
-            firstName: member.first_name,
-            token: raw,
-            expiresInMinutes: PASSWORD_RESET_TTL_MINUTES,
-          }),
-        });
-      }
-    }
-
+    const reset = await issuePasswordReset("member", email, req.ip);
     res.json({ ok: true });
+    if (reset) void sendMail({
+      topic: "password_reset", memberId: reset.id, to: reset.email,
+      ...emails.passwordReset({ firstName: reset.name, token: reset.token, next: parsed.data.next, expiresInMinutes: RESET_TTL_MINUTES }),
+    }).catch(() => { console.error("[password-recovery] Unexpected member mail failure"); });
   })
 );
 
@@ -778,7 +752,7 @@ memberAuthRoutes.post(
  */
 memberAuthRoutes.post(
   "/reset-password",
-  memberEmailLinkLimiter,
+  memberTokenLimiter,
   asyncHandler(async (req, res) => {
     const parsed = resetPasswordSchema.safeParse(req.body);
     if (!parsed.success) throw badRequest(GENERIC_LINK, parsed.error.flatten());
@@ -789,62 +763,12 @@ memberAuthRoutes.post(
 
     const passwordHash = await hashPassword(password);
 
-    const client = await pool.connect();
-    let member: { id: number; email: string; first_name: string };
-    try {
-      await client.query("BEGIN");
-
-      // The UPDATE is the claim, not the SELECT: two tabs submitting the same
-      // link at once must not both succeed, and `used_at IS NULL` in the WHERE
-      // makes the row itself the lock.
-      const claimed = await client.query<{ member_id: number }>(
-        `UPDATE member_password_resets
-            SET used_at = now()
-          WHERE token_hash = $1
-            AND used_at IS NULL
-            AND expires_at > now()
-          RETURNING member_id`,
-        [hashToken(token)]
-      );
-      const reset = claimed.rows[0];
-      if (!reset) throw badRequest(GENERIC_LINK);
-
-      const updated = await client.query<{ id: number; email: string; first_name: string }>(
-        `UPDATE members
-            SET password_hash    = $2,
-                -- Clicking a link that only arrived at that address proves the
-                -- address, so an unverified account is verified on the way past.
-                email_verified_at = COALESCE(email_verified_at, now()),
-                -- An invited or guest-checkout row becomes a real account here.
-                -- This is the ONLY path that sets a first password, because it
-                -- is the only one that proves who owns the inbox.
-                status            = CASE WHEN status = 'invited' THEN 'active' ELSE status END,
-                updated_at        = now()
-          WHERE id = $1
-            -- An erased account stays erased. Reset tokens outlive the
-            -- anonymisation that voided them, and one clicked afterwards would
-            -- otherwise put a password back on a row that no longer represents
-            -- anybody.
-            AND status <> 'deleted'
-          RETURNING id, email, first_name`,
-        [reset.member_id, passwordHash]
-      );
-      member = updated.rows[0];
-      if (!member) throw badRequest(GENERIC_LINK);
-
-      await client.query("COMMIT");
-    } catch (err) {
-      await client.query("ROLLBACK").catch(() => undefined);
-      throw err;
-    } finally {
-      client.release();
-    }
+    const member = await consumePasswordReset("member", token, passwordHash, req.ip);
 
     // Same proof, same consequence: the reset link only arrived at that address,
     // and the UPDATE above set `email_verified_at` on the way past.
     await reflectConfirmationOnContact(member.id);
 
-    await revokeAllMemberSessions(member.id, "password_change");
     clearRefreshCookie(res);
 
     // Resetting the password is the other thing a locked-out person will try,
@@ -857,7 +781,7 @@ memberAuthRoutes.post(
       memberId: member.id,
       to: member.email,
       ...emails.passwordChanged({ firstName: member.first_name }),
-    });
+    }).catch(() => { console.error("[password-recovery] Unexpected password-change mail failure"); });
 
     res.json({ ok: true });
   })

@@ -1,4 +1,6 @@
 import { env } from "../config/env";
+import { publicEmailUrl } from "./canonicalLinks";
+import { withRecoveryNext } from "../auth/passwordRecoveryLinks";
 import { escapeHtml } from "./templates";
 
 /**
@@ -95,9 +97,9 @@ export function verifyEmail(input: TokenEmailInput): EmailContent {
   return { subject: "Confirm your email address", text, html };
 }
 
-export function passwordReset(input: TokenEmailInput): EmailContent {
+export function passwordReset(input: TokenEmailInput & { next?: string }): EmailContent {
   const name = greeting(input.firstName);
-  const url = link("/reset-password", input.token);
+  const url = publicEmailUrl(withRecoveryNext(`/reset-password/${encodeURIComponent(input.token)}`, "member", input.next));
   const window = validFor(input.expiresInMinutes);
 
   const text = [

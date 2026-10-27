@@ -299,10 +299,10 @@ export const memberApi = {
    * Always resolves, whether or not the address has an account — the response
    * must not tell a stranger which emails are registered here.
    */
-  forgotPassword: (email: string) =>
+  forgotPassword: (email: string, next?: string) =>
     request<{ ok: true }>("/auth/forgot-password", {
       method: "POST",
-      body: JSON.stringify({ email }),
+      body: JSON.stringify({ email, next }),
       skipRefresh: true,
     }),
 

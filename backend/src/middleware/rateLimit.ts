@@ -307,3 +307,19 @@ export function apiLimiterOptions(limit: number): Partial<Options> {
 }
 
 export const apiLimiter = rateLimit(apiLimiterOptions(API_REQUESTS_PER_MINUTE));
+
+/** Password recovery has separate budgets from login, so failed sign-in cannot
+ * prevent recovery. Token consumption is IP-only; an arbitrary email in the
+ * payload must never provide a fresh guessing budget. */
+export const adminRecoveryRequestLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, max: 20, standardHeaders: true, legacyHeaders: false,
+  message: GENERIC_RATE_LIMIT_MESSAGE,
+});
+export const adminRecoveryTokenLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, max: 20, standardHeaders: true, legacyHeaders: false,
+  message: GENERIC_RATE_LIMIT_MESSAGE,
+});
+export const memberRecoveryRequestLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, max: 30, standardHeaders: true, legacyHeaders: false,
+  message: GENERIC_RATE_LIMIT_MESSAGE,
+});

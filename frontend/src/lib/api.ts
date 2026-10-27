@@ -256,6 +256,10 @@ function withSplitName<T extends { name?: string; firstName?: string; lastName?:
 }
 
 export const adminApi = {
+  forgotPassword: (email: string, next?: string) =>
+    request<{ ok: true }>("/admin/forgot-password", { method: "POST", body: JSON.stringify({ email, next }) }),
+  resetPassword: (token: string, password: string) =>
+    request<{ ok: true }>("/admin/reset-password", { method: "POST", body: JSON.stringify({ token, password }) }),
   login: (email: string, password: string, code?: string) =>
     request<{ user: AdminUser }>("/admin/login", {
       method: "POST",

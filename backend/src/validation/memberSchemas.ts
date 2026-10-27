@@ -65,6 +65,7 @@ export const loginSchema = z.object({
 
 export const forgotPasswordSchema = z.object({
   email,
+  next: z.string().max(2048).optional(),
 });
 
 export const resetPasswordSchema = z.object({

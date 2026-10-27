@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { Link, Navigate, useLocation, useSearchParams } from "react-router";
 import { motion } from "motion/react";
 import { ArrowLeft, ArrowRight, Eye, EyeOff, Loader2, ShieldCheck } from "lucide-react";
+import { withRecoveryNext } from "@/lib/passwordRecovery";
 import { useAuth } from "@/hooks/useAuth";
 import { ApiError, isMfaRequiredError } from "@/lib/api";
 import { Button, ErrorNotice, Field, Input } from "@/pages/admin/ui/primitives";
@@ -195,6 +196,10 @@ export default function Login() {
                 </button>
               </div>
             </Field>}
+
+            {!mfaRequired && <Link to={withRecoveryNext("/admin/forgot-password", "admin", returnTo)} className="inline-flex min-h-11 items-center text-sm font-medium text-ink underline decoration-gold underline-offset-4 hover:text-gold">
+              Forgot your password?
+            </Link>}
 
             {mfaRequired && (
               <Field label="Authentication or backup code" htmlFor="admin-code">

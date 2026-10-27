@@ -1,7 +1,11 @@
+import { useSearchParams } from "react-router";
+import { recoveryDestination, withRecoveryNext } from "@/lib/passwordRecovery";
 import { useState, type FormEvent } from "react";
 import { MailCheck, Send } from "lucide-react";
 import {
   AuthCard,
+  AuthFormError,
+  authErrorMessage,
   AuthLink,
   AuthSubmit,
 } from "@/components/member/AuthCard";
@@ -10,24 +14,26 @@ import { LuxeInput } from "@/components/luxe/LuxeField";
 import { memberApi } from "@/lib/memberApi";
 
 export default function ForgotPassword() {
+  const [params] = useSearchParams();
+  const destination = recoveryDestination("member", params.get("next"));
   const [email, setEmail] = useState("");
   const [sent, setSent] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
+    if (submitting) return;
+    setError(null);
     setSubmitting(true);
     try {
-      await memberApi.forgotPassword(email.trim());
-    } catch {
-      // Swallowed on purpose. The endpoint answers identically for a registered
-      // address and a stranger's, and a visible failure here would undo that:
-      // anyone could learn which of Yvette's members exist by watching which
-      // addresses produce an error. The member is told to check their inbox
-      // either way, and the link back to sign in is right there if nothing
-      // arrives.
-    } finally {
+      await memberApi.forgotPassword(email.trim(), destination);
       setSent(true);
+    } catch (err) {
+      // Validation, rate limits and transport failures are independent of
+      // account existence. Keep these actionable; only a 200 means accepted.
+      setError(authErrorMessage(err));
+    } finally {
       setSubmitting(false);
     }
   }
@@ -37,16 +43,15 @@ export default function ForgotPassword() {
       <AuthCard
         documentTitle="Check your email · Boss Clinician"
         eyebrow="Check your email"
-        title="The reset link is on its way"
+        title="Check for your reset link"
         subtitle={
           <>
-            If <span className="text-orchid">{email.trim()}</span> has an account, the
-            link is in that inbox now. It works once, and only for the next hour.
+            If <span className="text-orchid">{email.trim()}</span> has an eligible account, we?ll send a reset link. It works once and expires in one hour.
           </>
         }
         footer={
           <>
-            Remembered it? <AuthLink to="/login">Back to sign in</AuthLink>
+            Remembered it? <AuthLink to={withRecoveryNext("/login", "member", destination)}>Back to sign in</AuthLink>
           </>
         }
       >
@@ -81,14 +86,15 @@ export default function ForgotPassword() {
       subtitle="Tell us your email address and we'll send you a link to set a new one."
       footer={
         <>
-          Remembered it? <AuthLink to="/login">Back to sign in</AuthLink>
+          Remembered it? <AuthLink to={withRecoveryNext("/login", "member", destination)}>Back to sign in</AuthLink>
         </>
       }
     >
-      <form onSubmit={handleSubmit} className="space-y-5" noValidate>
+      <form onSubmit={handleSubmit} className="space-y-5">
         <LuxeInput
           label="Email"
           type="email"
+          maxLength={320}
           required
           autoComplete="email"
           autoFocus
@@ -96,6 +102,8 @@ export default function ForgotPassword() {
           value={email}
           onChange={(e) => setEmail(e.target.value)}
         />
+
+        <AuthFormError message={error} />
 
         <AuthSubmit pending={submitting} pendingLabel="Sending…">
           <Send className="size-4" aria-hidden />
