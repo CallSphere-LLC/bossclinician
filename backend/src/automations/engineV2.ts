@@ -4,6 +4,7 @@ import { env } from "../config/env";
 import { pool } from "../db/pool";
 import { sendMail } from "../email/mailer";
 import { renderMarkdown, renderTokens, sendEmail } from "../email/provider";
+import { canonicalizeEmailLinks } from "../email/canonicalLinks";
 import { PRIORITY, enqueue } from "../jobs/queue";
 import { grantOfferAccess, revokeOfferAccess } from "../services/access";
 import { applyTags, recordActivity, removeTags, upsertContact } from "../services/contacts";
@@ -711,7 +712,7 @@ async function performAction(
       // {{firstName}}, {{name}}, {{email}}, plus the whitelisted facts a
       // reminder quotes — {{lessonUrl}}, {{replayUrl}} and the rest.
       const values = emailMergeValues(context);
-      const body = renderTokens(parsed.data.bodyMd, values);
+      const body = canonicalizeEmailLinks(renderTokens(parsed.data.bodyMd, values));
 
       if (isTest) return { log: `Email: would send "${parsed.data.subject}"`, stop: false };
 

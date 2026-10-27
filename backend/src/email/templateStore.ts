@@ -1,6 +1,7 @@
 import { pool } from "../db/pool";
 import type { EmailContent } from "./memberTemplates";
 import { renderMarkdown, renderTokens } from "./provider";
+import { canonicalizeEmailLinks } from "./canonicalLinks";
 
 /**
  * The owner's own wording for an automatic email, when she has written one.
@@ -43,7 +44,7 @@ export async function storedTemplate(
     if (!row || !row.enabled) return null;
 
     const subject = renderTokens(row.subject ?? "", tokens).trim();
-    const body = renderTokens(row.body_md ?? "", tokens).trim();
+    const body = canonicalizeEmailLinks(renderTokens(row.body_md ?? "", tokens)).trim();
     if (subject === "" || body === "") return null;
 
     return { subject, text: body, html: renderMarkdown(body) };

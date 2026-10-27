@@ -7,6 +7,7 @@ import { pool } from "../db/pool";
 import { env } from "../config/env";
 import { sendMail } from "../email/mailer";
 import { escapeHtml } from "../email/templates";
+import { publicEmailUrl } from "../email/canonicalLinks";
 import type { EmailContent } from "../email/memberTemplates";
 import { PRODUCT_CONTENT_COURSE_ID, hasCourseAccess } from "./access";
 import { automationIdentity, publishDomainEvent } from "./domainEvents";
@@ -630,15 +631,15 @@ function recipientName(member: MemberRow): string {
   return full || member.name.trim() || member.email.split("@")[0] || "Member";
 }
 
-function certificateEmail(input: {
+export function certificateEmail(input: {
   firstName: string;
   courseTitle: string;
   creditLabel: string;
   verificationCode: string;
 }): EmailContent {
   const name = input.firstName.trim() || "there";
-  const certificatesUrl = `${env.publicSiteUrl}/account/certificates`;
-  const verifyUrl = `${env.publicSiteUrl}/verify/${input.verificationCode}`;
+  const certificatesUrl = publicEmailUrl("/account/certificates");
+  const verifyUrl = publicEmailUrl(`/verify/${encodeURIComponent(input.verificationCode)}`);
   const credit = input.creditLabel === "" ? "" : ` It's worth ${input.creditLabel}.`;
 
   const text = [
