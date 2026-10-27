@@ -469,6 +469,7 @@ export interface CertificateClaimResult {
 
 /** Mirrors `CertificateStatus` in services/certificates.ts. */
 export interface CertificateStatus {
+  nextRequiredLesson?: { id: number; slug: string; title: string } | null;
   /** The course issues a certificate on completion at all. */
   offered: boolean;
   issued: boolean;

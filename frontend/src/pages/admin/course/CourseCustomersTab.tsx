@@ -44,6 +44,21 @@ export function CourseCustomersTab({ courseId }: { courseId: number }) {
   const [grantOfferId, setGrantOfferId] = useState("");
   const [grantEmail, setGrantEmail] = useState("");
   const [busy, setBusy] = useState(false);
+  const [exemptionCustomer, setExemptionCustomer] = useState<CourseCustomer | null>(null);
+  const [exemptionReason, setExemptionReason] = useState("");
+  const [savingExemption, setSavingExemption] = useState(false);
+  async function saveExemption(event: FormEvent) {
+    event.preventDefault();
+    if (!exemptionCustomer || savingExemption) return;
+    setSavingExemption(true);
+    try {
+      await courseHubApi.setWatchExemption(courseId, exemptionCustomer.memberId, !exemptionCustomer.watchExempt, exemptionReason.trim());
+      toast.success(exemptionCustomer.watchExempt ? "Viewing exemption revoked" : "Prior viewing exemption recorded");
+      setExemptionCustomer(null);
+      load();
+    } catch (err) { toast.error(friendlyError(err, "viewing exemption")); }
+    finally { setSavingExemption(false); }
+  }
   const [confirm, confirmDialog] = useConfirm();
 
   const load = useCallback(() => {
@@ -240,6 +255,13 @@ export function CourseCustomersTab({ courseId }: { courseId: number }) {
                       )}
                     </td>
                     <td className="px-3 py-3 text-right">
+                      {(customer.status === "active" || customer.watchExempt) && (
+                        <Button variant="ghost" size="sm" onClick={() => {
+                          setExemptionCustomer(customer); setExemptionReason("");
+                        }}>
+                          {customer.watchExempt ? "Revoke viewing exemption" : "Recognize prior Kajabi viewing"}
+                        </Button>
+                      )}
                       {customer.status === "active" && customer.offerId && (
                         <Button variant="ghost" size="sm" onClick={() => void revoke(customer)}>
                           Remove
@@ -253,6 +275,23 @@ export function CourseCustomersTab({ courseId }: { courseId: number }) {
           </table>
         </Card>
       )}
+
+      <Modal
+        open={exemptionCustomer !== null}
+        onOpenChange={(open) => { if (!open && !savingExemption) setExemptionCustomer(null); }}
+        title={exemptionCustomer?.watchExempt ? "Revoke viewing exemption" : "Recognize prior Kajabi viewing"}
+        description={`${exemptionCustomer?.name ?? ""} (${exemptionCustomer?.email ?? ""}) — this course only. This changes viewing requirements only. Lessons, quizzes and evaluations still need completion. It does not create progress, issue a certificate or send email.`}
+        footer={<Button type="submit" form="watch-exemption" disabled={savingExemption || exemptionReason.trim().length < 10}>
+          {savingExemption ? "Saving…" : exemptionCustomer?.watchExempt ? "Revoke exemption" : "Record exemption for this student"}
+        </Button>}
+      >
+        <form id="watch-exemption" onSubmit={(event) => void saveExemption(event)}>
+          <label className="block text-sm font-medium" htmlFor="watch-exemption-reason">Reason and evidence of prior viewing</label>
+          <Input id="watch-exemption-reason" value={exemptionReason} maxLength={2000}
+            onChange={(event) => setExemptionReason(event.target.value)} required minLength={10} />
+          <p className="mt-2 text-xs text-ink-soft">Your identity, this reason and the change are recorded in the audit log.</p>
+        </form>
+      </Modal>
 
       <Modal
         open={granting}

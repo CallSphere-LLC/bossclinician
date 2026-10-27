@@ -70,6 +70,7 @@ export interface CourseCustomer {
   status: "active" | "revoked" | "expired";
   lessonsCompleted: number;
   lastActiveAt: string | null;
+  watchExempt?: boolean;
 }
 
 export interface CourseCommunityOption {
@@ -129,6 +130,10 @@ export interface CourseLiveSession {
 const hub = (courseId: number, path: string) => `/${courseId}/hub${path}`;
 
 export const courseHubApi = {
+  setWatchExemption: (courseId: number, memberId: number, exempt: boolean, reason: string) =>
+    call<{ exempt: boolean }>(`/${courseId}/watch-exemptions/${memberId}`, {
+      method: "PUT", body: JSON.stringify({ exempt, reason }),
+    }),
   /** The course row itself — unlike the list, this finds a coaching workbook too. */
   course: (courseId: number) => call<Course>(`/${courseId}`),
   offers: (courseId: number) =>

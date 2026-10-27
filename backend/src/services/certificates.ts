@@ -1,3 +1,4 @@
+import { watchRequirementSql, watchExemptionSql, mediaWatchSatisfied } from "./courseWatchPolicy";
 import { usesS3Media, mediaStore, readStoredMedia, writeStoredMedia } from "./objectStorage";
 import crypto from "crypto";
 import fs from "fs";
@@ -16,6 +17,8 @@ import {
   formatRemaining,
   fullWatchRequiredSeconds,
   isFullyWatched,
+  loadCourseForMember,
+  flattenLessons,
 } from "./curriculum";
 import { protectedRef, resolveStoredFile, uploadPath } from "./signedUrls";
 import {
@@ -704,6 +707,9 @@ export interface CeuLessonRecord {
    * be played, whatever the row says it is.
    */
   hasMedia?: boolean;
+  watchExempt?: boolean;
+  videoDurationSeconds?: number;
+  playedToSeconds?: number;
   /** The credited watch figure. 0 for a lesson with nothing to play. */
   watchedPercent: number;
   /** When the lesson was first opened, or null if it never was. */
@@ -739,7 +745,9 @@ export function earnedCeuCredit(lessons: CeuLessonRecord[]): boolean {
       lesson.contentType === "video" ||
       lesson.contentType === "audio"
     ) {
-      return lesson.watchedPercent >= AUTO_COMPLETE_PERCENT;
+      return lesson.watchExempt === true
+        ? lesson.completedAt !== null
+        : mediaWatchSatisfied(lesson.videoDurationSeconds ?? 0, lesson.playedToSeconds ?? 0, lesson.watchedPercent);
     }
     // The graded quiz has a pass gate and a native survey has a submitted
     // response gate. A one-minute dwell check on those assessment screens
@@ -759,15 +767,20 @@ async function loadCeuLessonRecords(
     content_type: string | null;
     duration_minutes: number | null;
     has_media: boolean;
+    watch_exempt: boolean;
+    video_duration_seconds: number;
+    max_position_seconds: number;
     watched_percent: number | null;
     first_viewed_at: Date | null;
     completed_at: Date | null;
   }>(
-    `SELECT l.content_type, l.duration_minutes,
+    `SELECT l.content_type, l.duration_minutes, l.video_duration_seconds, lp.max_position_seconds,
+            ${watchExemptionSql("c", "$1")} AS watch_exempt,
             (COALESCE(l.video_url, '') <> '' OR COALESCE(l.audio_url, '') <> '') AS has_media,
             lp.watched_percent, lp.first_viewed_at, lp.completed_at
        FROM course_lessons l
        JOIN course_modules m ON m.id = l.module_id
+       JOIN courses c ON c.id=m.course_id
        LEFT JOIN lesson_progress lp ON lp.lesson_id = l.id AND lp.member_id = $1
       WHERE m.course_id = $2 AND l.published`,
     [memberId, courseId]
@@ -777,6 +790,9 @@ async function loadCeuLessonRecords(
     contentType: row.content_type ?? "text",
     durationMinutes: row.duration_minutes ?? 0,
     hasMedia: row.has_media === true,
+    watchExempt: row.watch_exempt,
+    videoDurationSeconds: row.video_duration_seconds,
+    playedToSeconds: row.max_position_seconds ?? 0,
     watchedPercent: row.watched_percent ?? 0,
     firstViewedAt: row.first_viewed_at,
     completedAt: row.completed_at,
@@ -1009,8 +1025,8 @@ async function loadCertificateLessons(
 ): Promise<{ requireFullVideo: boolean; lessons: CertificateLessonRow[] }> {
   const [course, found] = await Promise.all([
     pool.query<{ require_full_video: boolean }>(
-      `SELECT require_full_video FROM courses WHERE id = $1`,
-      [courseId]
+      `SELECT ${watchRequirementSql("c", "$2")} AS require_full_video FROM courses c WHERE id = $1`,
+      [courseId, memberId]
     ),
     pool.query<{
       title: string;
@@ -1024,8 +1040,7 @@ async function loadCertificateLessons(
     }>(
       `SELECT l.title, l.video_duration_seconds,
               (lp.completed_at IS NOT NULL) AS completed,
-              ((l.content_type = 'video' AND COALESCE(l.video_url, '') <> '')
-            OR (l.content_type = 'audio' AND COALESCE(l.audio_url, '') <> '')) AS has_media,
+              (COALESCE(l.video_url, '') <> '' OR COALESCE(l.audio_url, '') <> '') AS has_media,
               COALESCE(lp.max_position_seconds, 0) AS played_to,
               COALESCE(lp.watched_percent, 0) AS watched_percent,
               EXISTS (SELECT 1 FROM assessments a
@@ -1058,6 +1073,7 @@ async function loadCertificateLessons(
 }
 
 export interface CertificateStatus {
+  nextRequiredLesson?: { id: number; slug: string; title: string } | null;
   /** The course issues a certificate on completion at all (to this member). */
   offered: boolean;
   issued: boolean;
@@ -1091,6 +1107,7 @@ function quizSentence(gaps: CertificateQuizGap[]): string {
 }
 
 function videoSentence(gaps: CertificateVideoGap[]): string {
+  if (gaps.length > 3) return `finish watching ${gaps.length} videos`;
   return gaps
     .map((gap) =>
       gap.remainingSeconds > 0
@@ -1140,19 +1157,27 @@ export async function certificateStatus(
     quizzesToPass.length === 0 &&
     !earnedCeuCredit(await loadCeuLessonRecords(memberId, courseId));
 
-  return summarizeCertificateStatus({
-    issued,
-    hasTemplate: template !== null,
-    requiresPassingQuizzes: requiresPass,
-    totalLessons: gaps.totalLessons,
-    lessonsRemaining: gaps.lessonsRemaining,
-    otherLessonsRemaining: gaps.otherLessonsRemaining,
-    quizzesToPass,
-    videosToFinish: gaps.videosToFinish,
-    evaluationsToSubmit: gaps.evaluationsToSubmit,
-    excludedByPurchase: !allowed,
-    ceuPending,
-  });
+  const course = !issued && allowed && template ? await loadCourseForMember(memberId, courseId) : null;
+  const next = course ? flattenLessons(course.modules).find(lesson => lesson.unlocked && (
+    !lesson.completed || quizzesToPass.some(quiz => quiz.lessonTitle === lesson.title) ||
+    gaps.evaluationsToSubmit.includes(lesson.title)
+  )) : undefined;
+  return {
+    nextRequiredLesson: next ? { id: next.id, slug: next.slug, title: next.title } : null,
+    ...summarizeCertificateStatus({
+      issued,
+      hasTemplate: template !== null,
+      requiresPassingQuizzes: requiresPass,
+      totalLessons: gaps.totalLessons,
+      lessonsRemaining: gaps.lessonsRemaining,
+      otherLessonsRemaining: gaps.otherLessonsRemaining,
+      quizzesToPass,
+      videosToFinish: gaps.videosToFinish,
+      evaluationsToSubmit: gaps.evaluationsToSubmit,
+      excludedByPurchase: !allowed,
+      ceuPending,
+    }),
+  };
 }
 
 /** The facts `certificateStatus` reads from the database, and nothing else. */

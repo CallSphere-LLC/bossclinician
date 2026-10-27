@@ -7,6 +7,7 @@ import { MemberApiError } from "@/lib/memberApi";
 import {
   downloadCertificate,
   libraryApi,
+  lessonPath,
   type CertificateStatus,
   type MemberCertificate,
 } from "@/lib/libraryApi";
@@ -34,9 +35,11 @@ import { formatDate } from "@/lib/format";
  */
 export function CertificateCard({
   courseId,
+  productSlug,
   finished = true,
 }: {
   courseId: number;
+  productSlug?: string;
   /** Every lesson done — the only time the card shows when status is unknown. */
   finished?: boolean;
 }) {
@@ -169,6 +172,27 @@ export function CertificateCard({
                 This course comes with a certificate of completion.{" "}
                 <span className="text-white/85">{status.message}</span>
               </p>
+              <p className="mt-2 text-sm text-orchid">
+                Your certificate requires all course lessons and any required exams or evaluations.
+              </p>
+              {(status.videosToFinish?.length ?? 0) > 0 && (
+                <details className="mt-3 text-sm text-orchid">
+                  <summary className="cursor-pointer">Videos to finish ({status.videosToFinish!.length})</summary>
+                  <ul className="mt-2 list-disc space-y-1 pl-5">
+                    {status.videosToFinish!.map((video, index) => <li key={index}>{video.lessonTitle}</li>)}
+                  </ul>
+                </details>
+              )}
+              {(status.evaluationsToSubmit?.length ?? 0) > 0 && (
+                <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-orchid">
+                  {status.evaluationsToSubmit!.map((title, index) => <li key={index}>Submit: {title}</li>)}
+                </ul>
+              )}
+              {productSlug && status.nextRequiredLesson && (
+                <LuxeButton className="mt-4" size="sm" to={lessonPath(productSlug, status.nextRequiredLesson.slug)}>
+                  Continue: {status.nextRequiredLesson.title}
+                </LuxeButton>
+              )}
               {status.quizzesToPass.length > 1 && (
                 <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-orchid">
                   {status.quizzesToPass.map((quiz) => (

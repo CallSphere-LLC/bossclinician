@@ -270,20 +270,21 @@ export function CourseReleasePanel({
                 <span className="mt-0.5 block text-xs text-ink-soft">
                   A video lesson only completes once the student has played it through (95%).
                   Skipping ahead doesn’t count, the lesson after it stays locked until then, and
-                  “Mark complete” can’t be used to get round it. Use it where CE rules require
-                  full viewing.
+                  “Mark complete” can’t be used to get round it. Courses with an enabled completion
+                  certificate always require viewing. For verified prior Kajabi viewing, use
+                  the named student's exemption in the Customers tab.
                 </span>
               </span>
               <input
                 type="checkbox"
                 className="mt-1 size-4 shrink-0 rounded border-hairline text-plum"
-                checked={certificate?.requireFullVideo === true}
-                disabled={certificate === null || savingCertificate}
+                checked={certificate?.enabled === true || certificate?.requireFullVideo === true}
+                disabled={certificate === null || savingCertificate || certificate.enabled}
                 onChange={(e) => void saveCertificate({ requireFullVideo: e.target.checked })}
                 aria-label="Require watching the full video before the next lesson"
               />
             </label>
-            {certificate?.requireFullVideo && certificate.mediaLessonsWithoutLength > 0 && (
+            {certificate && (certificate.enabled || certificate.requireFullVideo) && certificate.mediaLessonsWithoutLength > 0 && (
               <p className="mt-2 text-xs font-semibold text-amber-800">
                 {certificate.mediaLessonsWithoutLength} of {certificate.mediaLessons} video lessons
                 have no length recorded, so they complete at 90% watched instead. Re-attach the

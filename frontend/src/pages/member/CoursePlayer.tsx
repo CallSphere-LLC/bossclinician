@@ -558,7 +558,7 @@ function CourseHome({ course, productSlug }: { course: CourseOutlineData; produc
           certificate, and there is no member here. Shown before the course is
           finished too when it carries a certificate, so the member knows what
           is left — lessons, or a quiz to pass. */}
-      {!preview && <CertificateCard courseId={course.courseId} finished={finished} />}
+      {!preview && <CertificateCard courseId={course.courseId} productSlug={productSlug} finished={finished} />}
 
       {/* On the course home the outline is the page, not a sidebar — so it is
           rendered here too rather than only in the `xl` rail, which does not
@@ -908,7 +908,7 @@ function CompleteBar({
 }) {
   // The server refuses an early tick on a full-watch lesson; the button says so
   // first rather than inviting a press that can only fail.
-  const tickBlocked = fullWatchRequired && !completed && watchLeftSeconds > 0;
+  const tickBlocked = fullWatchRequired && !completed;
   const [busy, setBusy] = useState(false);
   const { api, preview } = usePlayerSource();
 

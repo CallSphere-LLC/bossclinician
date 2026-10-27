@@ -1,3 +1,4 @@
+import { watchRequirementSql, mediaWatchSatisfied } from "../../services/courseWatchPolicy";
 import { assertAssessmentCompleted } from "../../services/lessonAssessments";
 import { Request, Router } from "express";
 import { ipKeyGenerator, rateLimit } from "express-rate-limit";
@@ -180,9 +181,8 @@ const LESSON_GATE_SQL = `
          gr.granted_at,
          lp.watched_percent, lp.watched_seconds, lp.last_viewed_at,
          lp.max_position_seconds,
-         c.require_full_video,
-         ((l.content_type = 'video' AND COALESCE(l.video_url, '') <> '')
-            OR (l.content_type = 'audio' AND COALESCE(l.audio_url, '') <> '')) AS has_media
+         ${watchRequirementSql("c", "$1")} AS require_full_video,
+         (COALESCE(l.video_url, '') <> '' OR COALESCE(l.audio_url, '') <> '') AS has_media
     FROM course_lessons l
     JOIN course_modules m ON m.id = l.module_id
     JOIN courses c ON c.id = m.course_id
@@ -264,7 +264,7 @@ async function loadOwnedLesson(memberId: number, lessonId: number): Promise<Owne
 function fullWatchShortfall(lesson: OwnedLesson): number {
   if (!lesson.fullWatchRequired) return 0;
   const required = fullWatchRequiredSeconds(lesson.videoDurationSeconds);
-  if (required === 0) return 0;
+  if (required === 0) return lesson.watch.watchedPercent >= AUTO_COMPLETE_PERCENT ? 0 : 1;
   return Math.max(0, required - lesson.playedToSeconds);
 }
 
@@ -461,7 +461,7 @@ function progressJson(lesson: OwnedLesson, row: ProgressRow | null, rollup: Cour
     lessonId: lesson.id,
     lastPositionSeconds: row?.last_position_seconds ?? 0,
     watchedPercent: row?.watched_percent ?? 0,
-    completed: (row?.completed_at ?? null) !== null,
+    completed: (row?.completed_at ?? null) !== null && (!lesson.fullWatchRequired || mediaWatchSatisfied(lesson.videoDurationSeconds, row?.max_position_seconds ?? lesson.playedToSeconds, row?.watched_percent ?? 0)),
     completedAt: iso(row?.completed_at ?? null),
     courseProgress: rollup,
     // The full-watch rule, so the player can say "12:40 left" without asking.
@@ -612,22 +612,13 @@ memberProgressRouter.post(
     assertUnlocked(lesson);
     await assertAssessmentCompleted(member.id, lesson.id);
 
-    // "Require watching the full video before the next lesson": the tick is not
-    // a way round it. A lesson already complete is let through — re-ticking is
-    // a no-op and must not error.
     const shortfall = fullWatchShortfall(lesson);
     if (shortfall > 0) {
-      const done = await pool.query(
-        `SELECT 1 FROM lesson_progress
-          WHERE member_id = $1 AND lesson_id = $2 AND completed_at IS NOT NULL`,
-        [member.id, lesson.id]
+      throw forbidden(
+        "Finish watching this lesson before marking it complete" +
+        (lesson.videoDurationSeconds > 0 ? ` — ${formatRemaining(shortfall)} left.` : ".") +
+        " It completes itself once sufficient viewing has been recorded."
       );
-      if (done.rows.length === 0) {
-        throw forbidden(
-          `Finish the video to complete this lesson — ${formatRemaining(shortfall)} left. ` +
-            "It completes itself once you have watched it through."
-        );
-      }
     }
 
     const { progress, rollup } = await writeProgress(

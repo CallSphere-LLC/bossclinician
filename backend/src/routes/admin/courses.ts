@@ -1,3 +1,4 @@
+import { courseWatchExemptionsRouter } from "./courseWatchExemptions";
 import { coursesRepo } from "../../db/repos";
 import { courseSchema, courseUpdateSchema } from "../../validation/schemas";
 import { buildAdminCrudRouter } from "./crudFactory";
@@ -39,3 +40,5 @@ adminCoursesRouter.use("/:courseId/preview", adminCoursePreviewRouter);
 
 // The course's Offers, Customers and Settings tabs (routes/admin/courseHub.ts).
 adminCoursesRouter.use("/:courseId/hub", adminCourseHubRouter);
+
+adminCoursesRouter.use("/:courseId/watch-exemptions", courseWatchExemptionsRouter);

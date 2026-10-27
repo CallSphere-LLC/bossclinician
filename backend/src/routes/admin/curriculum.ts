@@ -795,8 +795,7 @@ async function loadCertificateSettings(courseId: number) {
          FROM course_lessons l
          JOIN course_modules m ON m.id = l.module_id
         WHERE m.course_id = $1 AND l.published
-          AND ((l.content_type = 'video' AND COALESCE(l.video_url, '') <> '')
-               OR (l.content_type = 'audio' AND COALESCE(l.audio_url, '') <> ''))`,
+          AND (COALESCE(l.video_url, '') <> '' OR COALESCE(l.audio_url, '') <> '')`,
       [courseId],
     ),
   ]);

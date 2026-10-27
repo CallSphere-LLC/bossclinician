@@ -179,6 +179,7 @@ adminCourseHubRouter.get(
                           g.granted_at ASC
               )
          SELECT m.id AS member_id, m.contact_id, m.email::text AS email,
+                EXISTS(SELECT 1 FROM course_watch_exemptions we WHERE we.member_id=m.id AND we.course_id=$1 AND we.revoked_at IS NULL) AS watch_exempt,
                 COALESCE(NULLIF(TRIM(COALESCE(m.first_name, '') || ' ' || COALESCE(m.last_name, '')), ''),
                          NULLIF(m.name, ''), m.email::text) AS name,
                 bg.source, bg.offer_id, bg.offer_title, bg.granted_at, bg.expires_at, bg.revoked_at, bg.status,

@@ -1,3 +1,4 @@
+import { watchRequirementSql, mediaWatchSatisfied } from "./courseWatchPolicy";
 import type { PoolClient } from "pg";
 import { pool } from "../db/pool";
 import { PRODUCT_CONTENT_COURSE_ID, hasCourseAccess } from "./access";
@@ -474,9 +475,8 @@ const outlineSql = (publishedOnly: boolean): string => `
                  WHERE a.lesson_id=l.id AND a.kind='graded' AND a.published
                    AND t.member_id = $1 AND t.completed_at IS NOT NULL
                    AND (t.passed OR (a.pass_mark IS NOT NULL AND t.percent >= a.pass_mark))) AS assessment_passed,
-         c.require_full_video,
-         ((l.content_type = 'video' AND COALESCE(l.video_url, '') <> '')
-            OR (l.content_type = 'audio' AND COALESCE(l.audio_url, '') <> '')) AS has_media,
+         ${watchRequirementSql("c", "$1")} AS require_full_video,
+         (COALESCE(l.video_url, '') <> '' OR COALESCE(l.audio_url, '') <> '') AS has_media,
          l.drip_days AS lesson_drip_days,
          l.drip_date AS lesson_drip_date,
          lp.last_position_seconds, lp.watched_percent, lp.completed_at, lp.last_viewed_at,
@@ -548,7 +548,8 @@ function toLessonView(
     unlocksAt: iso(unlocksAt),
     unlockLabel,
     lockReason: state.reason,
-    completed: row.completed_at !== null,
+    completed: row.completed_at !== null && (!fullWatchFor(row).required ||
+      mediaWatchSatisfied(row.video_duration_seconds ?? 0, row.max_position_seconds ?? 0, row.watched_percent ?? 0)),
     completedAt: iso(row.completed_at),
     lastPositionSeconds: row.last_position_seconds ?? 0,
     watchedPercent: row.watched_percent ?? 0,
@@ -613,6 +614,22 @@ export function buildModules(
     if (row.lesson_id !== null) {
       mod.lessons.push(toLessonView(row, mod.title, grantedAt, now, settings));
     }
+  }
+
+  // Slugs are unique within a module, but player URLs are course-scoped.
+  // Keep the first URL/bookmarks, and qualify every subsequent collision.
+  const reservedSlugs = new Set(modules.flatMap(mod => mod.lessons.map(lesson => lesson.slug)));
+  const seenSlugs = new Set<string>();
+  for (const mod of modules) for (const lesson of mod.lessons) {
+    if (seenSlugs.has(lesson.slug)) {
+      const prefix = `${lesson.slug.slice(0, 160)}--lesson-${lesson.id}`;
+      let unique = prefix;
+      let collision = 0;
+      while (reservedSlugs.has(unique)) unique = `${prefix}-${++collision}`;
+      lesson.slug = unique;
+      reservedSlugs.add(unique);
+    }
+    seenSlugs.add(lesson.slug);
   }
 
   // Kajabi "Lock": completion prerequisites follow the actual course order,
@@ -1067,10 +1084,16 @@ export async function recomputeCourseProgress(
   }>(
     `WITH counted AS (
        SELECT COUNT(l.id)::int             AS lessons_total,
-              COUNT(lp.completed_at)::int  AS lessons_completed,
+              COUNT(lp.completed_at) FILTER (WHERE
+                NOT ${watchRequirementSql("c", "$1")} OR
+                (COALESCE(l.video_url, '') = '' AND COALESCE(l.audio_url, '') = '') OR
+                CASE WHEN l.video_duration_seconds > 0
+                  THEN COALESCE(lp.max_position_seconds,0) >= ceil(l.video_duration_seconds * 0.95)
+                  ELSE COALESCE(lp.watched_percent,0) >= 90 END)::int AS lessons_completed,
               MAX(lp.completed_at)         AS newest_completion
          FROM course_lessons l
          JOIN course_modules m ON m.id = l.module_id
+         JOIN courses c ON c.id=m.course_id
          LEFT JOIN lesson_progress lp ON lp.lesson_id = l.id AND lp.member_id = $1
         WHERE m.course_id = $2 AND l.published
      ), latest AS (
