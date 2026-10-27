@@ -4,6 +4,7 @@ import { z } from "zod";
 import { asyncHandler } from "../../utils/asyncHandler";
 import { badRequest, conflict, notFound, unauthorized } from "../../utils/httpError";
 import { denyImpersonation } from "../../middleware/memberAuth";
+import { createLivingPlanPdf, livingPlanReportSchema } from "../../services/livingPlanPdf";
 import {
   cleanToolKey,
   loadToolState,
@@ -69,6 +70,30 @@ const saveSchema = z.object({
   // A pending browser autosave must not follow a different member's new token.
   expectedMemberId: z.number().int().positive().optional(),
 });
+
+const pdfLimiter = rateLimit({
+  windowMs: 60 * 1000, max: 10, standardHeaders: true, legacyHeaders: false,
+  message: { error: "Please wait a minute before downloading another PDF." },
+  keyGenerator: (req: Request) => req.member ? `member:${req.member.id}` : ipKeyGenerator(req.ip ?? ""),
+});
+
+memberToolStateRouter.post(
+  "/tool-state/living-business-plan/pdf",
+  pdfLimiter,
+  asyncHandler(async (req, res) => {
+    const memberId = currentMemberId(req);
+    if (!(await mayUseTool(memberId, "living-business-plan"))) throw notFound(TOOL_MISSING);
+    const problem = toolStateProblem(req.body);
+    if (problem) throw badRequest(problem);
+    const parsed = z.object({ expectedMemberId: z.number().int().positive(), report: livingPlanReportSchema }).strict().safeParse(req.body);
+    if (!parsed.success) throw badRequest("That plan could not be exported. Reload the plan and try again.");
+    if (parsed.data.expectedMemberId !== memberId) throw conflict("The signed-in account changed. Reload this page before exporting.");
+    const pdf = await createLivingPlanPdf(parsed.data.report);
+    res.setHeader("Cache-Control", "private, no-store");
+    res.attachment(`annual-business-plan-${parsed.data.report.year}.pdf`);
+    res.type("application/pdf").send(pdf);
+  }),
+);
 
 memberToolStateRouter.put(
   "/tool-state/:toolKey",

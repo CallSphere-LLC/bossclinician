@@ -26,6 +26,7 @@ import {
 } from "@/lib/libraryApi";
 import { CertificateCard } from "@/components/player/CertificateCard";
 import { CourseOutline } from "@/components/player/CourseOutline";
+import { CourseSearch } from "@/components/player/CourseSearch";
 import { OutlineSheet } from "@/components/player/OutlineSheet";
 import { LessonBody } from "@/components/player/LessonBody";
 import { LessonNotes } from "@/components/player/LessonNotes";
@@ -326,6 +327,8 @@ export default function CoursePlayer(props: { productSlug?: string; lessonSlug?:
       </div>
 
       {product && product.kind !== "course" && <NonCourseProduct product={product} />}
+
+      {course && <CourseSearch key={productSlug} productSlug={productSlug} modules={course.modules} />}
 
       {course && (
         <div className="flex flex-col gap-8 xl:flex-row xl:gap-10">

@@ -2,6 +2,9 @@ import { useState } from "react";
 import { Link, useParams } from "react-router";
 import { ArrowRight } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { memberFetch } from "@/lib/memberApi";
+import { useMember } from "@/hooks/useMember";
+import { livingPlanHtml, livingPlanReport } from "./livingPlanReport";
 import { usePlayerSource } from "@/components/player/playerSource";
 import {
   ActionButton,
@@ -19,7 +22,6 @@ import {
   TextField,
   Tile,
   downloadFile,
-  escapeHtml,
   printReport,
 } from "./DashboardKit";
 import {
@@ -80,26 +82,6 @@ const TOO_LARGE = "This would exceed what one account can save. Download a backu
 const today = () => new Date().toISOString().slice(0, 10);
 const money = (v: string | undefined) =>
   v && v.trim() !== "" && Number.isFinite(Number(v)) ? Number(v).toLocaleString("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }) : "—";
-
-/* ---------------------------------------------------------------- report */
-
-function fieldText(field: PlanField, value: string | undefined): string {
-  if (!value || !value.trim()) return "—";
-  return field.type === "number" && field.label.includes("($)") ? money(value) : value;
-}
-
-function planHtml(plan: AnnualPlan, heading: string): string {
-  return `<small>BOSS CLINICIAN LOUNGE · THE PRACTICE ELEVATION</small><h1>${escapeHtml(heading)}</h1><p class="muted">Plan year ${escapeHtml(
-    plan.values.planYear,
-  )} · ${reviewedCount(plan)} of ${PLAN_GROUPS.length} sections reviewed</p>${PLAN_GROUPS.map(
-    (g) =>
-      `<section><h2>${escapeHtml(g.title)}${plan.reviewed[g.id] ? " ✓" : ""}</h2><p class="muted">${escapeHtml(g.desc)}</p><table><tbody>${g.fields
-        .map((field) => `<tr><th style="width:38%">${escapeHtml(field.label)}</th><td style="white-space:pre-wrap">${escapeHtml(fieldText(field, plan.values[field.key]))}</td></tr>`)
-        .join("")}</tbody></table></section>`,
-  ).join(
-    "",
-  )}<p class="note">A typed name is an acknowledgment only, not a verified digital signature. Financial values are user supplied and not independently verified; this is not a lender-ready certified statement.</p>`;
-}
 
 /* ----------------------------------------------------------------- pages */
 
@@ -266,11 +248,11 @@ function Archives({ state, locked, onChange }: { state: LivingPlanState; locked:
                 <span className="font-body text-base font-bold tabular-nums text-white">{a.year}</span>
                 <span className="text-sm text-orchid-dim">archived {a.archivedAt.slice(0, 10)}</span>
                 <span className="flex flex-wrap gap-2">
-                  <ActionButton icon="print" onClick={() => printReport(`My ${a.year} Business Plan`, planHtml(a.plan, `My ${a.year} Annual Business Plan (archived)`))}>
-                    Print / PDF
+                  <ActionButton icon="print" onClick={() => printReport(`My ${a.year} Business Plan`, livingPlanHtml(a.plan, true))}>
+                    Print / Save as PDF
                   </ActionButton>
                   <ActionButton icon="download" onClick={() => exportArchive(a)}>
-                    Download archive
+                    Download archive (JSON)
                   </ActionButton>
                 </span>
               </li>
@@ -287,20 +269,46 @@ function Archives({ state, locked, onChange }: { state: LivingPlanState; locked:
 /* ------------------------------------------------------------------ tool */
 
 export function LivingBusinessPlan() {
+  const { member } = useMember();
   const tool = useVersionedToolState(LIVING_PLAN_KEY, livingPlanDefaults, normaliseLivingPlan);
   const { state, status, savedAt, ready } = tool;
   const locked = LOCKED.includes(status);
   const [page, setPage] = useState<Page>("overview");
   const [notice, setNotice] = useState("");
+  const [pdfBusy, setPdfBusy] = useState(false);
+  const [pdfError, setPdfError] = useState("");
   const [groupId, setGroupId] = useState(PLAN_GROUPS[0].id);
   const params = useParams();
   const source = usePlayerSource();
+  const boardroom = params.productSlug === "the-board-room";
+  const dashboardTitle = boardroom ? "Boardroom CEO Dashboard" : "Practice Elevation Dashboard";
+  const dashboardSlug = boardroom ? "boardroom-ceo-dashboard" : DASHBOARD_LESSON.slug;
   // Every write keeps what was already archived or reviewed.
   const update = (next: LivingPlanState) => tool.setState(keepHistory(state, next));
   const reviewed = reviewedCount(state.annual);
   const bytes = planBytes(state);
   const exportBackup = () => downloadFile("boss-clinician-annual-plan-backup.json", JSON.stringify(backupDocument(state), null, 2), "application/json");
-  const printPlan = () => printReport("My Living Business Plan", planHtml(state.annual, `My ${planYear(state.annual)} Annual Business Plan`));
+  const printPlan = () => printReport("My Living Business Plan", livingPlanHtml(state.annual));
+  const downloadPdf = async () => {
+    if (!member || !ready || pdfBusy) return;
+    setPdfBusy(true);
+    setPdfError("");
+    try {
+      const response = await memberFetch("/member/tool-state/living-business-plan/pdf", {
+        method: "POST", body: JSON.stringify({ expectedMemberId: member.id, report: livingPlanReport(state.annual) }),
+      });
+      const blob = await response.blob();
+      if (!blob.type.includes("application/pdf")) throw new Error("The PDF could not be created. Please try again or use Print / Save as PDF.");
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `annual-business-plan-${planYear(state.annual)}.pdf`;
+      document.body.append(link); link.click(); link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (error) {
+      setPdfError(error instanceof Error ? error.message : "The PDF could not be downloaded. Try again or use Print / Save as PDF.");
+    } finally { setPdfBusy(false); }
+  };
   const restore = (file: unknown) => {
     const next = restoreFromBackup(state, file);
     if (!next) {
@@ -319,14 +327,14 @@ export function LivingBusinessPlan() {
 
   return (
     <DashboardFrame
-      eyebrow="Boss Clinician Lounge · The Practice Elevation"
+      eyebrow={boardroom ? "Boss Clinician · The Boardroom" : "Boss Clinician Lounge · The Practice Elevation"}
       title="My Living Business Plan"
       subtitle="Your annual vision, financial strategy, and CEO-level business foundation."
       status={status}
       savedAt={savedAt}
       actions={
-        <ActionButton icon="download" onClick={exportBackup}>
-          Download backup
+        <ActionButton primary icon="download" onClick={() => void downloadPdf()} disabled={!ready || pdfBusy || !!source.preview}>
+          {pdfBusy ? "Preparing PDF…" : "Download PDF"}
         </ActionButton>
       }
       footer={
@@ -335,10 +343,12 @@ export function LivingBusinessPlan() {
         </>
       }
     >
+      {pdfError && <div role="alert" className="flex flex-wrap items-center gap-3 text-sm text-orchid"><p>{pdfError}</p><ActionButton icon="print" onClick={printPlan}>Print / Save as PDF</ActionButton></div>}
+      {source.preview && <p className="text-sm text-orchid">In preview, use Print / Save as PDF from Export & backup.</p>}
       {status === "conflict" && (
         <div role="alert" className="flex flex-wrap gap-3">
           <ActionButton icon="download" onClick={() => downloadFile("living-business-plan-local-copy.json", JSON.stringify(backupDocument(state), null, 2), "application/json")}>
-            Download my local copy
+            Download my local copy (JSON)
           </ActionButton>
           <ActionButton
             onClick={() => {
@@ -365,7 +375,7 @@ export function LivingBusinessPlan() {
               <div>
                 <Pill>Annual business plan</Pill>
                 <h3 className="mt-3 font-display text-xl text-white">Your Annual Business Strategy</h3>
-                <p className="mt-1 text-sm text-orchid">Your 12-month strategy is a separate workspace from your 30-Day Growth Dashboard.</p>
+                <p className="mt-1 text-sm text-orchid">Your 12-month strategy is a separate workspace from your {boardroom ? "Boardroom CEO Dashboard" : "30-Day Growth Dashboard"}.</p>
               </div>
               <Grid cols={3}>
                 <Tile label="Plan year" value={state.annual.values.planYear || "—"} />
@@ -387,18 +397,18 @@ export function LivingBusinessPlan() {
                 </div>
               </Panel>
               <Panel
-                title="Connected to your separate 30-Day Growth Plan"
-                intro="Use your annual business plan for strategy and yearly goals. Use your Practice Elevation Dashboard for the Practice Reset Snapshot results, monthly implementation, and progress tracking."
+                title={boardroom ? "Connected to your Boardroom CEO Dashboard" : "Connected to your separate 30-Day Growth Plan"}
+                intro={boardroom ? "Use your annual business plan for strategy and yearly goals. Use your Boardroom CEO Dashboard to review your practice finances and business scenarios." : "Use your annual business plan for strategy and yearly goals. Use your Practice Elevation Dashboard for the Practice Reset Snapshot results, monthly implementation, and progress tracking."}
               >
                 <div>
                   <Link
-                    to={source.lessonPath(params.productSlug ?? "", DASHBOARD_LESSON.slug)}
+                    to={source.lessonPath(params.productSlug ?? "", dashboardSlug)}
                     className={cn(
                       "inline-flex min-h-[2.5rem] items-center gap-2 rounded-full border border-white/20 bg-white/[0.03] px-4 text-[0.8rem] font-semibold text-white/90 transition-colors duration-300 hover:border-gold/50 hover:text-white",
                       "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold print:hidden",
                     )}
                   >
-                    Open my Practice Elevation Dashboard
+                    Open my {dashboardTitle}
                     <ArrowRight aria-hidden className="size-4" />
                   </Link>
                 </div>
@@ -414,15 +424,18 @@ export function LivingBusinessPlan() {
           {page === "exports" && (
             <div className="flex flex-col gap-4">
               <h3 className="font-display text-xl text-white">Export Your Business Plan</h3>
-              <Panel intro="Use Print / Save as PDF to create a readable business-plan document. Download the JSON backup to preserve editable data, and restore it here at any time. Your plan also stays saved in your member account.">
+              <Panel intro="Download PDF creates a readable copy of all eleven annual-plan sections, including your latest edits. Use the separate JSON backup for restoring editable data, strategic reviews, and archived years. Your plan also stays saved in your member account.">
                 <div className="flex flex-wrap gap-2">
-                  <ActionButton primary icon="print" onClick={printPlan}>
-                    Print full annual plan / Save as PDF
+                  <ActionButton primary icon="download" onClick={() => void downloadPdf()} disabled={!ready || pdfBusy || !!source.preview}>
+                    {pdfBusy ? "Preparing PDF…" : "Download PDF"}
+                  </ActionButton>
+                  <ActionButton icon="print" onClick={printPlan}>
+                    Print / Save as PDF
                   </ActionButton>
                   <ActionButton icon="download" onClick={exportBackup}>
-                    Download editable data backup
+                    Download backup (JSON)
                   </ActionButton>
-                  {!locked && <RestoreButton onFile={restore}>Restore my backup</RestoreButton>}
+                  {!locked && <RestoreButton onFile={restore}>Restore backup (JSON)</RestoreButton>}
                 </div>
                 {notice && (
                   <p role="status" className="text-sm text-orchid">

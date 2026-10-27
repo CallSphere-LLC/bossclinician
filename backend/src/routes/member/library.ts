@@ -3,7 +3,8 @@ import { ipKeyGenerator, rateLimit } from "express-rate-limit";
 import { z } from "zod";
 import { pool } from "../../db/pool";
 import { asyncHandler } from "../../utils/asyncHandler";
-import { notFound, unauthorized } from "../../utils/httpError";
+import { badRequest, notFound, unauthorized } from "../../utils/httpError";
+import { searchMemberCourse } from "../../services/courseSearch";
 import type { AuthedMember } from "../../middleware/memberAuth";
 import {
   PRODUCT_CONTENT_COURSE_ID,
@@ -579,6 +580,25 @@ memberLibraryRouter.get(
       coachingOfferId: product.coaching_offer_id,
     });
   })
+);
+
+/** Read-only search: do not call the lesson endpoint, which records views. */
+memberLibraryRouter.get(
+  "/:productSlug/search",
+  lessonReadLimiter,
+  asyncHandler(async (req, res) => {
+    const member = currentMember(req);
+    const product = await loadOwnedProduct(member.id, readProductSlug(req));
+    const courseId = product.kind === "course" ? product.course_id
+      : product.kind === "coaching" ? product.content_course_id : null;
+    if (courseId === null) throw notFound(PRODUCT_MISSING);
+    const course = await loadCourseForMember(member.id, courseId);
+    if (!course) throw notFound(PRODUCT_MISSING);
+    const parsed = z.string().trim().max(160).safeParse(req.query.q ?? "");
+    if (!parsed.success) throw badRequest("Use a search of 160 characters or fewer.");
+    res.setHeader("Cache-Control", "private, no-store");
+    res.json(await searchMemberCourse(course, parsed.data));
+  }),
 );
 
 /* ---------------------------------------------------------------- one lesson */
