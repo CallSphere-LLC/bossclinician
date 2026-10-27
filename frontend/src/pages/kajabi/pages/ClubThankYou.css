@@ -1,0 +1,76 @@
+
+.club-welcome{
+    --navy:#313D5A; --deep:#232C42; --green:#547376;
+    --lav:#CBC5EA; --wash:#F1F5F4; --gold:#C9A84C;
+    --paper:#FDFCFA; --ink:#2E2B36;
+  }
+.club-welcome *{box-sizing:border-box;}
+.club-welcome{margin:0;font-family:'Montserrat',Arial,sans-serif;color:var(--ink);background:var(--paper);}
+.club-welcome .wrap{width:100%;max-width:760px;margin:0 auto;}
+.club-welcome h1,.club-welcome h2,.club-welcome h3{font-family:'Playfair Display',Georgia,serif;margin:0;}
+.club-welcome a{color:inherit;text-underline-offset:3px;overflow-wrap:anywhere;}
+.club-welcome a:focus-visible,.club-welcome iframe:focus-visible{outline:3px solid var(--green);outline-offset:5px;}
+.club-welcome .hero a:focus-visible,.club-welcome .closing a:focus-visible{outline-color:var(--gold);}
+.club-welcome .hero{background:linear-gradient(160deg,var(--navy),var(--deep));padding:64px 28px 56px;text-align:center;color:var(--paper);position:relative;overflow:hidden;}
+.club-welcome .hero::before{content:"";position:absolute;top:-40%;right:-10%;width:520px;height:520px;background:radial-gradient(circle,rgba(201,168,76,.14),transparent 70%);pointer-events:none;}
+.club-welcome .hero .wrap{position:relative;}
+.club-welcome .eyebrow{font-size:13px;font-weight:700;letter-spacing:.22em;text-transform:uppercase;color:var(--gold);margin-bottom:20px;line-height:1.7;}
+.club-welcome .hero h1{font-size:54px;font-weight:700;line-height:1.14;margin-bottom:20px;}
+.club-welcome .hero h1 em{font-style:italic;color:var(--gold);}
+.club-welcome .hero .sub{font-size:21px;color:var(--lav);max-width:580px;margin:0 auto 24px;line-height:1.6;font-family:'Playfair Display',Georgia,serif;font-style:italic;}
+.club-welcome .hero .welcome{font-size:15px;line-height:1.8;max-width:570px;margin:0 auto 30px;}
+.club-welcome .giphy-frame{display:inline-block;max-width:100%;border-radius:16px;overflow:hidden;box-shadow:0 18px 46px rgba(0,0,0,.4);border:3px solid var(--gold);background:#000;}
+.club-welcome .giphy-frame img{display:block;width:280px;height:280px;max-width:100%;border:0;}
+.club-welcome .giphy-credit{font-size:11px;color:var(--lav);margin-top:10px;}
+.club-welcome .steps{padding:56px 28px 20px;}
+.club-welcome .steps-head{text-align:center;margin-bottom:30px;}
+.club-welcome .steps-head .eyebrow{color:var(--green);}
+.club-welcome .steps-head h2{font-size:30px;color:var(--navy);}
+.club-welcome .step-list{list-style:none;margin:0;padding:0;counter-reset:step;}
+.club-welcome .step{display:flex;gap:22px;align-items:flex-start;padding:26px 0;border-bottom:1px solid #DDE4E3;counter-increment:step;}
+.club-welcome .step:last-child{border-bottom:none;}
+.club-welcome .step::before{content:counter(step);flex:none;width:44px;height:44px;border-radius:50%;background:var(--wash);border:2px solid var(--gold);color:var(--navy);font-family:'Playfair Display',Georgia,serif;font-weight:700;font-size:19px;display:flex;align-items:center;justify-content:center;}
+.club-welcome .step-body{min-width:0;}
+.club-welcome .step-body h3{font-size:21px;color:var(--navy);margin-bottom:10px;}
+.club-welcome .step-body p{font-size:15px;line-height:1.8;margin:0 0 12px;}
+.club-welcome .step-btn{display:inline-block;background:var(--gold);color:var(--deep);font-weight:700;font-size:12px;letter-spacing:.04em;text-transform:uppercase;padding:14px 22px;border-radius:40px;text-decoration:none;line-height:1.5;text-align:center;}
+.club-welcome .step-btn:hover{background:#DFC477;}
+.club-welcome .resources{background:var(--wash);padding:48px 28px;margin:30px 0 44px;}
+.club-welcome .resources h2{font-size:27px;color:var(--navy);text-align:center;margin-bottom:12px;}
+.club-welcome .section-intro{font-size:15px;line-height:1.8;text-align:center;margin:0 auto 24px;max-width:570px;}
+.club-welcome .resource-list{list-style:none;padding:0;margin:0;display:grid;gap:14px;}
+.club-welcome .resource-item{background:#fff;border:1px solid #D7E1DF;border-radius:12px;padding:20px 22px;}
+.club-welcome .resource-item h3{font-family:'Montserrat',Arial,sans-serif;font-size:15px;line-height:1.6;color:var(--navy);margin-bottom:6px;}
+.club-welcome .resource-item p{margin:0;font-size:14px;line-height:1.8;}
+.club-welcome .bonus-label{display:block;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--green);margin-bottom:6px;}
+.club-welcome .pace{padding:0 28px 48px;}
+.club-welcome .pace-box{background:#fff;border-left:5px solid var(--gold);border-radius:0 14px 14px 0;padding:26px 28px;}
+.club-welcome .pace-box h2{font-size:23px;color:var(--navy);margin-bottom:12px;}
+.club-welcome .pace-box p{font-size:15px;line-height:1.8;margin:0 0 12px;}
+.club-welcome .pace-box p:last-child{margin-bottom:0;}
+.club-welcome .support{text-align:center;padding:0 28px 48px;}
+.club-welcome .support h2{font-size:24px;color:var(--navy);margin-bottom:12px;}
+.club-welcome .support p{font-size:14px;line-height:1.8;margin:0;}
+.club-welcome .closing{background:linear-gradient(160deg,var(--navy),var(--deep));padding:56px 28px;text-align:center;color:var(--paper);}
+.club-welcome .closing p{font-size:16px;line-height:1.8;color:var(--lav);max-width:550px;margin:0 auto 16px;}
+.club-welcome .closing h2{font-size:28px;line-height:1.4;margin-bottom:20px;}
+.club-welcome .closing .sign{font-family:'Playfair Display',Georgia,serif;font-style:italic;font-size:26px;color:var(--gold);margin-top:24px;}
+.club-welcome footer{padding:32px 28px 40px;text-align:center;}
+.club-welcome footer p{font-size:12px;line-height:1.8;color:#5D5869;max-width:760px;margin:0 auto 18px;}
+.club-welcome footer .social a{font-size:13px;color:var(--green);font-weight:700;}
+  @media(max-width:600px){
+.club-welcome .hero{padding:44px 22px;}
+.club-welcome .hero h1{font-size:38px;}
+.club-welcome .hero .sub{font-size:20px;}
+.club-welcome .eyebrow{letter-spacing:.14em;}
+.club-welcome .giphy-frame img{width:220px;height:220px;}
+.club-welcome .step{gap:14px;}
+.club-welcome .step::before{width:36px;height:36px;font-size:17px;}
+.club-welcome .steps,.club-welcome .resources{padding-left:22px;padding-right:22px;}
+.club-welcome .pace-box{padding:22px;}
+  }
+  @media(max-width:360px){
+.club-welcome .step{flex-direction:column;}}
+
+.club-welcome p{margin-top:0}.club-welcome .step-body a:not(.step-btn),.club-welcome footer a{text-decoration:underline}
+.club-welcome ::selection{background:#CBC5EA;color:#232C42}

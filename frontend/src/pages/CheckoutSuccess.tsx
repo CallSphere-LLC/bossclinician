@@ -1,3 +1,4 @@
+import { membershipThankYouDestination } from "@/lib/membershipThankYou";
 import { stripeTestMode } from "@/lib/paymentMode";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router";
@@ -27,6 +28,7 @@ const EASE_LUXE: [number, number, number, number] = [0.22, 1, 0.36, 1];
  */
 interface Confirmation {
   status: string;
+  membershipDestination?: string | null;
   title: string;
   email: string;
   amountCents: number;
@@ -64,6 +66,7 @@ function fromSession(order: CheckoutOrder): Confirmation {
 
 function fromReceipt(receipt: OrderReceiptWithEmails): Confirmation {
   return {
+    membershipDestination: membershipThankYouDestination(receipt),
     receiptEmail: receipt.receiptEmail,
     accessEmail: receipt.accessEmail,
     status: receipt.status,
@@ -239,6 +242,10 @@ export default function CheckoutSuccess() {
         // still holds the previous card decline. Keep checking within the same
         // bounded window; only the server's paid status confirms the purchase.
         if (result.status === "paid") {
+          if (result.membershipDestination) {
+            window.location.replace(result.membershipDestination);
+            return;
+          }
           setSettling(false);
           // The emails go out just after the order turns paid, so the first
           // 'paid' read can be a moment early. Keep reading, quietly, until both

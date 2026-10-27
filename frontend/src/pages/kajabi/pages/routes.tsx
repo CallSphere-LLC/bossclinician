@@ -67,6 +67,7 @@ export const kajabiPublicRoutes: readonly { path: string; Component: RouteCompon
   { path: "/thank-you-audit-proof", Component: page(purchases, "ThankYouAuditProof") },
   { path: "/thank-you-fullybooked", Component: page(purchases, "ThankYouFullyBooked") },
   { path: "/thank-you-rate-renegotiate", Component: page(purchases, "ThankYouRateRenegotiate") },
+  { path: "/lounge-confirmed", Component: page(() => import("./LoungeConfirmed")) },
   { path: "/the-club-ty", Component: page(() => import("./ClubThankYou")) },
 ];
 
