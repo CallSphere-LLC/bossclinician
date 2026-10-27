@@ -40,7 +40,7 @@ describeDb("189–191: certificate viewing, scoped exceptions and phase routes",
     base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   });
   afterAll(async () => {
-    await new Promise<void>(resolve => server?.close(() => resolve()));
+    if (server) await new Promise<void>(resolve => server.close(() => resolve()));
     await (await import("../db/pool")).pool.end();
     await db?.drop();
   });
