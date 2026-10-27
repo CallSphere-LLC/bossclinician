@@ -3,8 +3,8 @@ import type { AddressInfo } from "net";
 import { beforeAll, afterAll, describe, expect, it } from "vitest";
 import { createTestDatabase, hasTestDatabase } from "../testing/db";
 const describeDb = hasTestDatabase ? describe : describe.skip;
-const adminOrigin = "https://admin.bossclinician.callsphere.site";
-const publicOrigin = "https://bossclinician.callsphere.site";
+const adminOrigin = "https://admin.bossclinician.com";
+const publicOrigin = "https://www.bossclinician.com";
 describeDb("Dedicated admin origin (integration)", () => {
   let db: Awaited<ReturnType<typeof createTestDatabase>>;
   let server: Server; let base: string; let cookie: string;
@@ -22,7 +22,7 @@ describeDb("Dedicated admin origin (integration)", () => {
     server = createApp().listen(0); await new Promise((resolve) => server.once("listening", resolve));
     base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   }, 60000);
-  afterAll(async () => { await new Promise<void>((resolve) => server?.close(() => resolve())); const { pool } = await import("../db/pool"); await pool.end(); await db?.drop(); });
+  afterAll(async () => { if (server) await new Promise<void>((resolve) => server.close(() => resolve())); const { pool } = await import("../db/pool"); await pool.end(); await db?.drop(); });
   function call(host: string, path: string, method = "GET", extra: Record<string,string> = {}) {
     return new Promise<Response>((resolve, reject) => {
       const request = httpRequest(`${base}/api/admin${path}`, { method, headers: { Host: new URL(host).host, Origin: host, Cookie: cookie, ...extra } }, (response) => {
@@ -41,6 +41,10 @@ describeDb("Dedicated admin origin (integration)", () => {
     for (const path of ["/contacts", "/settings", "/offers", "/me"]) expect((await call(publicOrigin, path)).status).toBe(401);
     for (const path of ["/login", "/refresh", "/logout"]) expect((await call(publicOrigin, path, "POST")).status).toBe(401);
     expect((await call(publicOrigin, "/contacts", "GET", { "X-Forwarded-Host": new URL(adminOrigin).host })).status).toBe(401);
+  });
+  it("retired public host stays unavailable even with valid admin cookies", async () => {
+    for (const path of ["/contacts", "/me"]) expect((await call("https://bossclinician.callsphere.site", path)).status).toBe(410);
+    expect((await call("https://bossclinician.callsphere.site", "/login", "POST")).status).toBe(410);
   });
   it("admin origin preserves authenticated reads and refresh, with exact admin-only CORS/CSRF", async () => {
     for (const path of ["/contacts", "/settings", "/offers", "/me"]) expect((await call(adminOrigin, path)).status).toBe(200);
