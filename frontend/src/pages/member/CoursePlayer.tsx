@@ -36,6 +36,7 @@ import { TranscriptPanel } from "@/components/player/TranscriptPanel";
 import { Attachments } from "@/components/player/Attachments";
 import { ProgressRing } from "@/components/player/ProgressRing";
 import { usePlayerSource } from "@/components/player/playerSource";
+import { refreshCourseNavigation } from "@/components/player/refreshCourseNavigation";
 import { contentTypeLabel, lessonLengthLabel } from "@/components/player/lessonMeta";
 import { cn } from "@/lib/cn";
 
@@ -195,32 +196,17 @@ export default function CoursePlayer(props: { productSlug?: string; lessonSlug?:
   }, [api, productSlug, lessonSlug, lessonId, mediaExpiresAt]);
 
   /*
-   * When the open lesson completes while the next one is shut behind it ("Lock"
-   * or "Require watching the full video"), re-read only the neighbours so the
-   * Next card opens without a reload. The lesson itself is left alone: replacing
-   * it would restart the media hook mid-playback.
+   * Completion can unlock any part of the outline, even when Next was already
+   * open. Re-read the server's gates for both desktop/mobile outlines and the
+   * neighbours. Keep the active lesson intact so playback does not restart.
+   * Only completion changes trigger this effect, never position heartbeats.
    */
   const lessonCompleted =
     currentLesson && !currentLesson.locked ? currentLesson.progress.completed : false;
-  const nextShut = lessonData?.next ? !lessonData.next.unlocked : false;
   useEffect(() => {
-    if (!lessonSlug || !lessonCompleted || !nextShut) return;
-    let cancelled = false;
-    void api
-      .getLesson(productSlug, lessonSlug)
-      .then((fresh) => {
-        if (cancelled) return;
-        setLessonData((current) =>
-          current && current.lesson.id === fresh.lesson.id
-            ? { ...current, prev: fresh.prev, next: fresh.next }
-            : current,
-        );
-      })
-      .catch(() => undefined);
-    return () => {
-      cancelled = true;
-    };
-  }, [api, productSlug, lessonSlug, lessonCompleted, nextShut]);
+    if (!lessonSlug || !lessonCompleted) return;
+    return refreshCourseNavigation(api, productSlug, lessonSlug, setProduct, setLessonData);
+  }, [api, productSlug, lessonSlug, lessonCompleted]);
 
   // The graded-test player runs in a same-origin frame. Once it records a pass,
   // re-read both views so the tick and the newly-unlocked next lesson appear
