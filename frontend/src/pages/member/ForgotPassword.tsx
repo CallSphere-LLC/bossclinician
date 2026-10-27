@@ -46,7 +46,7 @@ export default function ForgotPassword() {
         title="Check for your reset link"
         subtitle={
           <>
-            If <span className="text-orchid">{email.trim()}</span> has an eligible account, we?ll send a reset link. It works once and expires in one hour.
+            If <span className="text-orchid">{email.trim()}</span> has an eligible account, {"we\u2019ll"} send a reset link. It works once and expires in one hour.
           </>
         }
         footer={

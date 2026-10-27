@@ -57,7 +57,7 @@ export default function PasswordRecovery({ reset = false }: { reset?: boolean })
               <Field label="Confirm new password" htmlFor="admin-confirm-password"><Input id="admin-confirm-password" type="password" autoComplete="new-password" required value={confirm} onChange={e => setConfirm(e.target.value)} /></Field>
             </> : <Field label="Email" htmlFor="admin-recovery-email"><Input id="admin-recovery-email" type="email" autoComplete="email" maxLength={320} required value={email} onChange={e => setEmail(e.target.value)} /></Field>}
             {error && <ErrorNotice message={error} />}
-            <Button type="submit" size="lg" className="w-full" disabled={pending}>{pending ? "Please wait?" : reset ? "Save new password" : "Send reset link"}</Button>
+            <Button type="submit" size="lg" className="w-full" disabled={pending}>{pending ? "Please wait\u2026" : reset ? "Save new password" : "Send reset link"}</Button>
           </form>
         </>}
         {reset && !done && <Link to={withRecoveryNext("/admin/forgot-password", "admin", destination)} className="mt-4 flex min-h-11 items-center text-sm text-ink underline underline-offset-4">Request a new reset link</Link>}
