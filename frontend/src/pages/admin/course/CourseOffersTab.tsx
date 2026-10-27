@@ -15,6 +15,7 @@ import {
   Skeleton,
   selectStyles,
 } from "@/pages/admin/ui/primitives";
+import { CourseAddonsPanel } from "./CourseAddonsPanel";
 import { Modal, useConfirm } from "@/pages/admin/ui/Dialog";
 import { pluralize, slugify, uniqueKey } from "@/pages/admin/ui/friendly";
 import { courseHubApi, type CourseOffer, type CourseProduct } from "./courseHubApi";
@@ -257,6 +258,8 @@ export function CourseOffersTab({ courseId, course }: { courseId: number; course
           {data.products.map((product) => product.title).join(", ")}.
         </p>
       )}
+
+      <CourseAddonsPanel key={courseId} courseId={courseId} />
 
       <Modal
         open={connecting}

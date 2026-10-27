@@ -1,4 +1,5 @@
 import { Router, type Request } from "express";
+import { adminCourseAddonsRouter } from "./courseAddons";
 import { z } from "zod";
 import { pool } from "../../db/pool";
 import { rowsToCamel } from "../../utils/case";
@@ -23,6 +24,7 @@ import { ensureCourseProduct } from "../../services/courseProduct";
  * link and its list of live sessions.
  */
 export const adminCourseHubRouter = Router({ mergeParams: true });
+adminCourseHubRouter.use("/add-ons", adminCourseAddonsRouter);
 
 /** Read off a `Request` rather than the route's own params: `:courseId` is the
  * parent router's, and the typed params of "/offers" don't know about it. */

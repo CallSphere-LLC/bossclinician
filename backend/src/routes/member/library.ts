@@ -1,3 +1,4 @@
+import { safeCourseAddons } from "../../services/courseAddons";
 import { Request, Router } from "express";
 import { ipKeyGenerator, rateLimit } from "express-rate-limit";
 import { z } from "zod";
@@ -539,7 +540,7 @@ memberLibraryRouter.get(
       // deleted — nothing the member can be shown.
       if (!course) throw notFound(PRODUCT_MISSING);
       const community = await linkedCommunityFor(member.id, product.course_id);
-      res.json({ ...base, course: { ...toOutlineJson(course, product.slug), community } });
+      res.json({ ...base, course: { ...toOutlineJson(course, product.slug), community, addOns: await safeCourseAddons(product.course_id) } });
       return;
     }
 
@@ -554,7 +555,7 @@ memberLibraryRouter.get(
           ...base,
           kind: "course",
           coachingOfferId: product.coaching_offer_id,
-          course: toOutlineJson(course, product.slug),
+          course: { ...toOutlineJson(course, product.slug), addOns: await safeCourseAddons(product.content_course_id) },
         });
         return;
       }

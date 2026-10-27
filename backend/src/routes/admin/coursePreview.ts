@@ -1,4 +1,5 @@
 import fs from "fs";
+import { safeCourseAddons } from "../../services/courseAddons";
 import { Request, Router } from "express";
 import { z } from "zod";
 import { pool } from "../../db/pool";
@@ -212,7 +213,7 @@ adminCoursePreviewRouter.get(
       kindLabel: "Courses",
       // Preview-only: the banner says so when the course itself is unpublished.
       courseDraft: publishedRes.rows[0]?.published === false,
-      course: toPreviewOutline(course),
+      course: { ...toPreviewOutline(course), addOns: await safeCourseAddons(course.courseId) },
     });
   })
 );

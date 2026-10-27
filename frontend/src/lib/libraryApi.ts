@@ -145,7 +145,12 @@ export interface OutlineModule {
   lessons: OutlineLesson[];
 }
 
+export interface CourseAddon {
+  offerId: number; title: string; description: string; href: string | null; available: boolean;
+}
+
 export interface CourseOutlineData {
+  addOns?: CourseAddon[];
   courseId: number;
   slug: string;
   title: string;

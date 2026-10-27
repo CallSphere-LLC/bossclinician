@@ -24,6 +24,7 @@ import {
   type OutlineModule,
   type ProgressResult,
 } from "@/lib/libraryApi";
+import { CourseAddons } from "@/components/player/CourseAddons";
 import { CertificateCard } from "@/components/player/CertificateCard";
 import { CourseOutline } from "@/components/player/CourseOutline";
 import { CourseSearch } from "@/components/player/CourseSearch";
@@ -372,6 +373,7 @@ export default function CoursePlayer(props: { productSlug?: string; lessonSlug?:
             ) : (
               <CourseHome course={course} productSlug={productSlug} />
             )}
+            <CourseAddons items={course.addOns} />
           </div>
         </div>
       )}

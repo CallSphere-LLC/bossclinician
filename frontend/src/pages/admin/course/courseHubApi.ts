@@ -127,9 +127,17 @@ export interface CourseLiveSession {
   lessonHasRecording: boolean | null;
 }
 
+export interface CourseAddonConfig { offerId: number; title: string; description: string; sort: number; status: string }
+export interface CourseAddonsData { configured: CourseAddonConfig[]; offers: { id: number; title: string }[] }
+
 const hub = (courseId: number, path: string) => `/${courseId}/hub${path}`;
 
 export const courseHubApi = {
+  addOns: (courseId: number) => call<CourseAddonsData>(hub(courseId, "/add-ons")),
+  saveAddon: (courseId: number, data: { offerId: number; description: string; sort: number }) =>
+    call(hub(courseId, "/add-ons"), { method: "PUT", body: JSON.stringify(data) }),
+  removeAddon: (courseId: number, offerId: number) =>
+    call<void>(hub(courseId, `/add-ons/${offerId}`), { method: "DELETE" }),
   setWatchExemption: (courseId: number, memberId: number, exempt: boolean, reason: string) =>
     call<{ exempt: boolean }>(`/${courseId}/watch-exemptions/${memberId}`, {
       method: "PUT", body: JSON.stringify({ exempt, reason }),
