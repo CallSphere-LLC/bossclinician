@@ -45,14 +45,25 @@ async function loadMember(payload: MemberJwtPayload): Promise<AuthedMember | nul
     status: string;
     email_verified_at: string | null;
     password_reset_at?: Date | null;
-  }>(`SELECT id, email, status, email_verified_at, password_reset_at FROM members WHERE id = $1`, [payload.sub]);
+  }>(`SELECT id, email, status, email_verified_at, password_reset_at FROM members WHERE id = $1
+    AND ($2::bigint IS NULL OR EXISTS (
+      WITH RECURSIVE chain AS (
+        SELECT id, revoked_at, revoked_reason, expires_at FROM member_sessions WHERE id=$2 AND member_id=$1
+        UNION ALL
+        SELECT s.id,s.revoked_at,s.revoked_reason,s.expires_at FROM member_sessions s
+          JOIN chain p ON s.previous_id=p.id WHERE p.revoked_reason='rotated' AND s.member_id=$1
+      ) SELECT 1 FROM chain WHERE revoked_at IS NULL AND expires_at > now()
+    ))`, [payload.sub, payload.sessionId ?? null]);
 
   const row = res.rows[0];
   if (!row) return null;
+  // Session-bound tokens follow only legitimate rotations to a live successor;
+  // reset/logout cannot be undone by delayed JWT signing. The cutoff remains
+  // for pre-rollout JWTs and separately issued admin impersonation tokens.
   // Legacy tokens have only second-resolution iat. Missing issuance time is
   // refused after a reset, never treated as newer than the reset cutoff.
   const issuedAt = payload.issuedAtMs ?? (payload.iat ?? 0) * 1000;
-  if (row.password_reset_at && issuedAt <= new Date(row.password_reset_at).getTime()) return null;
+  if (!payload.sessionId && row.password_reset_at && issuedAt <= new Date(row.password_reset_at).getTime()) return null;
 
   return {
     id: row.id,

@@ -82,6 +82,7 @@ authRouter.post(
     // admin_sessions exists.
     const session = await issueAdminCookieSession({
       adminUserId: row.id,
+      verifiedPasswordHash: row.password_hash,
       email: row.email,
       role: row.role,
       userAgent: String(req.headers["user-agent"] ?? ""),

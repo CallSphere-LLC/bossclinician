@@ -1,5 +1,6 @@
 import type { Response } from "express";
 import jwt from "jsonwebtoken";
+import { unauthorized } from "../utils/httpError";
 import { pool } from "../db/pool";
 import { env } from "../config/env";
 import { generateToken, hashToken, expiresIn } from "./tokens";
@@ -69,6 +70,8 @@ export interface MemberJwtPayload {
   impersonatedBy?: number;
   /** Millisecond precision avoids rejecting a fresh login in the reset second. */
   issuedAtMs?: number;
+  /** Revocable session proof, retained even when signing is delayed. */
+  sessionId?: string;
   iat?: number;
 }
 
@@ -80,6 +83,16 @@ export function signMemberAccessToken(payload: MemberJwtPayload, sessionExpiresA
       ? Math.max(1, Math.min(ACCESS_TOKEN_TTL_SECONDS, Math.floor((new Date(sessionExpiresAt).getTime() - Date.now()) / 1000)))
       : ACCESS_TOKEN_TTL_SECONDS,
   });
+}
+
+/** Bind the JWT to the refresh row that proved this request. If reset wins
+ * after this read, requireMember still rejects the revoked row/chain. */
+export async function signMemberSessionAccessToken(raw: string, payload: MemberJwtPayload, sessionExpiresAt?: string | Date): Promise<string> {
+  const result = await pool.query<{ id: string }>(
+    `SELECT id FROM member_sessions WHERE token_hash = $1 AND member_id = $2
+      AND revoked_at IS NULL AND expires_at > now()`, [hashToken(raw), payload.sub]);
+  if (!result.rows[0]) throw unauthorized("Please sign in to continue");
+  return signMemberAccessToken({ ...payload, sessionId: String(result.rows[0].id) }, sessionExpiresAt);
 }
 
 export function verifyMemberAccessToken(token: string): MemberJwtPayload {
@@ -137,24 +150,34 @@ export interface IssueSessionInput {
   ip?: string;
   /** Set when this session replaces a rotated one. */
   previousId?: number | null;
+  /** Exact hash already verified by password login, never a client field. */
+  verifiedPasswordHash?: string | null;
 }
 
 /** Creates a session row and returns the raw refresh token (the only time it exists). */
 export async function issueRefreshToken(input: IssueSessionInput): Promise<string> {
   const raw = generateToken();
-  await pool.query(
-    `INSERT INTO member_sessions (member_id, token_hash, previous_id, user_agent, ip, expires_at, last_active_at)
-     VALUES ($1, $2, $3, $4, $5, $6, now())`,
-    [
-      input.memberId,
-      hashToken(raw),
-      input.previousId ?? null,
-      (input.userAgent ?? "").slice(0, 500),
-      (input.ip ?? "").slice(0, 64),
-      expiresIn(REFRESH_TOKEN_TTL_SECONDS),
-    ]
-  );
-  return raw;
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    // Reset takes this same account lock before revoking session rows. Password
+    // verification is expensive and happens outside; recheck its exact proof here.
+    const owner = await client.query<{ password_hash: string | null; status: string }>(
+      "SELECT password_hash, status FROM members WHERE id = $1 FOR UPDATE", [input.memberId]);
+    const row = owner.rows[0];
+    if (!row || ["suspended", "deleted"].includes(row.status) ||
+        (input.verifiedPasswordHash !== undefined && row.password_hash !== input.verifiedPasswordHash)) {
+      throw unauthorized("Please sign in to continue");
+    }
+    await client.query(
+      `INSERT INTO member_sessions (member_id, token_hash, previous_id, user_agent, ip, expires_at, last_active_at)
+       VALUES ($1, $2, $3, $4, $5, $6, now())`,
+      [input.memberId, hashToken(raw), input.previousId ?? null,
+       (input.userAgent ?? "").slice(0, 500), (input.ip ?? "").slice(0, 64), expiresIn(REFRESH_TOKEN_TTL_SECONDS)]);
+    await client.query("COMMIT");
+    return raw;
+  } catch (error) { await client.query("ROLLBACK"); throw error; }
+  finally { client.release(); }
 }
 
 interface SessionRow {
@@ -239,6 +262,13 @@ export async function rotateRefreshToken(
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
+
+    // Always lock account -> session, matching reset and new session creation.
+    // Without this, reset can miss a successor inserted by an earlier rotation.
+    const owner = await client.query<{ member_id: number }>(
+      "SELECT member_id FROM member_sessions WHERE token_hash = $1", [hashToken(rawToken)]);
+    if (!owner.rows[0]) { await client.query("ROLLBACK"); return { status: "invalid" }; }
+    await client.query("SELECT id FROM members WHERE id = $1 FOR UPDATE", [owner.rows[0].member_id]);
 
     const found = await client.query<SessionRow>(
       `SELECT id, member_id, revoked_at, revoked_reason, expires_at, created_at, last_active_at

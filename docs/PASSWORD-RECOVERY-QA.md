@@ -96,3 +96,45 @@ Chrome QA and real transport delivery were not performed in this no-deploy task.
 - `frontend/src/pages/member/ResetPassword.tsx`
 - `frontend/src/pages/member/Security.tsx`
 - `docs/PASSWORD-RECOVERY-QA.md`
+
+## Security review follow-up to c127d61
+
+P1 stale-proof races and P2 encoded return paths were raised by independent review.
+The follow-up is limited to authentication/session handling, return-path validation,
+regression tests and this note; no new migration or deployment.
+
+- Member/admin password login rechecks the exact verified hash under the account
+  row lock before inserting a session. Reset takes the same lock. A proof that
+  completed before reset cannot create a session after its revocation sweep.
+- Member refresh takes account -> session locks, matching reset. Login/refresh
+  JWTs reference their actual session row. Authentication follows only normal
+  rotated descendants to a live session, preserving normal multi-tab/refresh
+  behavior while rejecting late-signed tokens after reset. Existing indexed
+  `member_sessions.previous_id` supports the chain lookup. Legacy JWTs retain
+  the reset-cutoff check.
+- Magic and host links capture the member password hash in the same SQL snapshot
+  as the one-time claim, then carry that proof to account-locked session creation.
+  An explicit null hash is preserved for passwordless members. Reset changes the
+  hash even when the same password is selected, so any pre-reset claimed link is
+  refused; fresh links after reset still work.
+- Backend/frontend recovery helpers and admin return-path handling validate a
+  decoded pathname, as React Router does, while retaining the query/hash. Cases
+  such as `/%61dmin/offers`, `/%6cogin`, `/admin/%6cogin` and
+  `/admin/%72eset-password/token` are rejected.
+- Both typechecks pass. Focused backend: **105 passed**, including **26 isolated
+  HTTP/Postgres integration tests** and 30 existing admin Google tests. Frontend:
+  **45 passed**. New deterministic tests pause after old-password verification,
+  after successful refresh rotation, and after magic/host claim; reset then wins
+  before the paused operation resumes. They also assert delayed JWT rejection,
+  no surviving new session, successful fresh authentication, and ordinary
+  multi-rotation access compatibility.
+- Additional `adminOrigin.integration.test.ts` run: the admin-origin read/refresh
+  case passes; its retired public-host case expects 401 but gets 410. This is the
+  separately owned retired-host response expectation and was not changed here.
+  The identical failure was reproduced in a detached c127d61 baseline worktree.
+- Pauli reviewed the final diff and closed P1/P2, including the claimed magic/host
+  link case; no further blocker found. The 26 DB/HTTP tests above passed afterward
+  with all claimed-link and passwordless-host regressions present.
+
+The focused backend command above can additionally include
+`src/routes/admin/googleAuth.test.ts` to reproduce the 105-test selection.

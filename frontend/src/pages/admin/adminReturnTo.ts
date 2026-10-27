@@ -60,11 +60,14 @@ export function safeReturnPath(raw: string | null | undefined): string {
   if (url.origin !== BASE) return ADMIN_HOME;
 
   const { pathname } = url;
-  if (pathname !== ADMIN_HOME && !pathname.startsWith(`${ADMIN_HOME}/`)) return ADMIN_HOME;
+  let decodedPath: string;
+  try { decodedPath = decodeURIComponent(pathname); } catch { return ADMIN_HOME; }
+  if (/[\\\x00-\x1f\x7f]/.test(decodedPath) || /%2f|%5c/i.test(pathname)) return ADMIN_HOME;
+  if (decodedPath !== ADMIN_HOME && !decodedPath.startsWith(`${ADMIN_HOME}/`)) return ADMIN_HOME;
 
   // Sending someone who has just signed in back to the sign-in page would look
   // like the sign-in failed; an invitation link is for someone with no account.
-  const lower = pathname.toLowerCase().replace(/\/+$/, "");
+  const lower = decodedPath.toLowerCase().replace(/\/+$/, "");
   if (/^\/admin\/(forgot-password|reset-password)(\/|$)/.test(lower) || lower === LOGIN_PATH || lower.startsWith("/admin/invite/") || lower === "/admin/invite") {
     return ADMIN_HOME;
   }

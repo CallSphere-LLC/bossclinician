@@ -9,7 +9,9 @@ export function recoveryDestination(kind: RecoveryRealm, raw: unknown): string {
   try {
     const url = new URL(raw, "https://recovery.invalid");
     if (url.origin !== "https://recovery.invalid" || /%2f|%5c/i.test(url.pathname)) return fallback;
-    const path = url.pathname.toLowerCase();
+    // React Router decodes percent-encoded letters before matching routes.
+    const path = decodeURIComponent(url.pathname).toLowerCase();
+    if (/[\\\x00-\x1f\x7f]/.test(path)) return fallback;
     if (kind === "admin") {
       if (path !== "/admin" && !path.startsWith("/admin/")) return fallback;
       if (/^\/admin\/(login|invite|forgot-password|reset-password)(\/|$)/.test(path)) return fallback;

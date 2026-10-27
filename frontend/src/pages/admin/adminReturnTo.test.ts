@@ -66,5 +66,9 @@ describe("safeReturnPath", () => {
     expect(safeReturnPath("/admin/login/")).toBe("/admin");
     expect(safeReturnPath("/admin/LOGIN?next=/admin/offers")).toBe("/admin");
     expect(safeReturnPath("/admin/invite/abc123")).toBe("/admin");
+    for (const path of ["/admin/%6cogin", "/admin/%72eset-password/token", "/admin/%66orgot-password", "/admin/%69nvite/abc", "/admin/bad%ZZ"]) {
+      expect(safeReturnPath(path)).toBe("/admin");
+    }
+    expect(safeReturnPath("/admin/%6fffers?tab=pricing#form")).toBe("/admin/%6fffers?tab=pricing#form");
   });
 });

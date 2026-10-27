@@ -19,7 +19,7 @@ import {
   rotateRefreshToken,
   setRefreshCookie,
   touchSessionActivity,
-  signMemberAccessToken,
+  signMemberSessionAccessToken,
 } from "../../auth/memberSession";
 import { setDocumentCookie } from "../../auth/memberDocumentCookie";
 import { optionalMember } from "../../middleware/memberAuth";
@@ -155,10 +155,12 @@ export interface AuthSuccess {
 export async function startSession(
   res: Response,
   member: MemberProfile,
-  meta: ClientMeta
+  meta: ClientMeta,
+  verifiedPasswordHash?: string | null
 ): Promise<AuthSuccess> {
   const raw = await issueRefreshToken({
     memberId: member.id,
+    verifiedPasswordHash,
     userAgent: meta.userAgent,
     ip: meta.ip,
   });
@@ -167,7 +169,7 @@ export async function startSession(
   await setDocumentCookie(res, raw);
   return {
     member,
-    accessToken: signMemberAccessToken({ sub: member.id, email: member.email }),
+    accessToken: await signMemberSessionAccessToken(raw, { sub: member.id, email: member.email }),
     session: sessionPolicy(),
   };
 }
@@ -623,7 +625,7 @@ memberAuthRoutes.post(
     void trimLoginAttempts();
     await pool.query(`UPDATE members SET last_login_at = now() WHERE id = $1`, [member.id]);
 
-    const session = await startSession(res, toMemberProfile(member), meta);
+    const session = await startSession(res, toMemberProfile(member), meta, member.password_hash!);
     res.json(session);
   })
 );
@@ -712,7 +714,7 @@ memberAuthRoutes.post(
     await setDocumentCookie(res, outcome.refreshToken);
     res.json({
       member: profile,
-      accessToken: signMemberAccessToken({ sub: profile.id, email: profile.email }, outcome.expiresAt),
+      accessToken: await signMemberSessionAccessToken(outcome.refreshToken, { sub: profile.id, email: profile.email }, outcome.expiresAt),
       session: sessionPolicy(outcome.expiresAt),
     });
   })
@@ -1018,8 +1020,8 @@ memberAuthRoutes.post(
     const parsed = magicLinkConsumeSchema.safeParse(req.body);
     if (!parsed.success) throw badRequest(GENERIC_LINK, parsed.error.flatten());
 
-    const memberId = await claimLink(parsed.data.token, "signin");
-    await completeLinkSignIn(req, res, memberId);
+    const proof = await claimLink(parsed.data.token, "signin");
+    await completeLinkSignIn(req, res, proof);
   })
 );
 
@@ -1043,8 +1045,8 @@ memberAuthRoutes.post(
     const parsed = magicLinkConsumeSchema.safeParse(req.body);
     if (!parsed.success) throw badRequest(GENERIC_LINK, parsed.error.flatten());
 
-    const memberId = await claimLink(parsed.data.token, "host");
-    await completeLinkSignIn(req, res, memberId);
+    const proof = await claimLink(parsed.data.token, "host");
+    await completeLinkSignIn(req, res, proof);
   })
 );
 
@@ -1056,24 +1058,29 @@ memberAuthRoutes.post(
  * check made afterwards, so presenting a link at the wrong endpoint does not
  * burn it either.
  */
-async function claimLink(token: string, purpose: "signin" | "host"): Promise<number> {
-  const claimed = await pool.query<{ member_id: number }>(
-    `UPDATE member_magic_links
+interface LinkProof { memberId: number; verifiedPasswordHash: string | null }
+async function claimLink(token: string, purpose: "signin" | "host"): Promise<LinkProof> {
+  const claimed = await pool.query<{ member_id: number; verified_password_hash: string | null }>(
+    `UPDATE member_magic_links AS link
         SET used_at = now()
       WHERE token_hash = $1
         AND purpose = $2
         AND used_at IS NULL
         AND expires_at > now()
-      RETURNING member_id`,
+      RETURNING member_id,
+        (SELECT password_hash FROM members WHERE id = link.member_id) AS verified_password_hash`,
     [hashToken(token), purpose]
   );
   const link = claimed.rows[0];
   if (!link) throw badRequest(GENERIC_LINK);
-  return link.member_id;
+  // Capture the credential state in the claim statement's snapshot. Reading it
+  // later could adopt a reset that happened after this one-time proof was used.
+  return { memberId: link.member_id, verifiedPasswordHash: link.verified_password_hash };
 }
 
 /** What follows a claimed link, whichever kind it was: the session. */
-async function completeLinkSignIn(req: Request, res: Response, memberId: number): Promise<void> {
+async function completeLinkSignIn(req: Request, res: Response, proof: LinkProof): Promise<void> {
+  const { memberId } = proof;
   const updated = await pool.query<MemberProfileRow>(
     `UPDATE members
         SET email_verified_at = COALESCE(email_verified_at, now()),
@@ -1090,6 +1097,6 @@ async function completeLinkSignIn(req: Request, res: Response, memberId: number)
   // the mailing list's own confirmation state is brought with it.
   await reflectConfirmationOnContact(memberId);
 
-  const session = await startSession(res, toMemberProfile(row), clientMeta(req));
+  const session = await startSession(res, toMemberProfile(row), clientMeta(req), proof.verifiedPasswordHash);
   res.json(session);
 }

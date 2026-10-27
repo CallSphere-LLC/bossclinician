@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import bcrypt from "bcrypt";
 import express, { type NextFunction, type Request, type Response } from "express";
 import cookieParser from "cookie-parser";
 import { request as httpRequest, type Server } from "node:http";
@@ -246,6 +247,116 @@ describeDb("password recovery HTTP + Postgres (synthetic accounts only)", () => 
       expect(log).toHaveBeenCalledTimes(3);
       expect(JSON.stringify(log.mock.calls)).not.toContain("synthetic secret");
     } finally { log.mockRestore(); }
+  });
+
+  it.each(["member", "admin"] as const)("%s: reset wins against an already-verified old password login", async kind => {
+    const user = await account(kind);
+    const link = (await service.issuePasswordReset(kind, user.email))!;
+    let arrived!: () => void;
+    let resume!: () => void;
+    const reached = new Promise<void>(resolve => { arrived = resolve; });
+    const gate = new Promise<void>(resolve => { resume = resolve; });
+    const compare = bcrypt.compare.bind(bcrypt);
+    const spy = vi.spyOn(bcrypt, "compare").mockImplementation((async (plain: string | Buffer, hash: string) => {
+      const result = await compare(plain, hash);
+      if (plain === oldPassword && hash === oldHash) { arrived(); await gate; }
+      return result;
+    }) as typeof bcrypt.compare);
+    const login = post(`${prefix(kind)}/login`, { email: user.email, password: oldPassword });
+    try {
+      await reached; // Password proof is valid, but has not yet created a session.
+      expect((await post(`${prefix(kind)}/reset-password`, { token: link.token, password: newPassword })).status).toBe(200);
+    } finally { resume(); }
+    try {
+      expect((await login).status).toBe(401);
+      const table = kind === "admin" ? "admin_sessions" : "member_sessions";
+      const owner = kind === "admin" ? "admin_user_id" : "member_id";
+      expect((await db.client.query(`SELECT count(*)::int AS count FROM ${table} WHERE ${owner}=$1 AND revoked_at IS NULL`, [user.id])).rows[0].count).toBe(0);
+    } finally { spy.mockRestore(); }
+    expect((await post(`${prefix(kind)}/login`, { email: user.email, password: newPassword })).status).toBe(200);
+  });
+
+  it("member: a completed rotation paused before signing cannot survive reset", async () => {
+    const user = await account("member");
+    const initial = await post("/api/auth/login", { email: user.email, password: oldPassword });
+    const cookies = initial.headers.getSetCookie().map(v => v.split(";")[0]).join("; ");
+    const link = (await service.issuePasswordReset("member", user.email))!;
+    const sessions = await import("../auth/memberSession");
+    const rotate = sessions.rotateRefreshToken;
+    let arrived!: () => void;
+    let resume!: () => void;
+    const reached = new Promise<void>(resolve => { arrived = resolve; });
+    const gate = new Promise<void>(resolve => { resume = resolve; });
+    let successor = "";
+    const spy = vi.spyOn(sessions, "rotateRefreshToken").mockImplementation(async (...args) => {
+      const result = await rotate(...args);
+      if (result.status === "ok") { successor = result.refreshToken; arrived(); await gate; }
+      return result;
+    });
+    const refresh = post("/api/auth/refresh", {}, { Cookie: cookies });
+    try {
+      await reached; // Successor committed, but the HTTP route has not signed its JWT.
+      expect((await post("/api/auth/reset-password", { token: link.token, password: newPassword })).status).toBe(200);
+    } finally { resume(); }
+    try {
+      expect((await refresh).status).toBe(401);
+      const row = (await db.client.query("SELECT id FROM member_sessions WHERE token_hash=$1", [tokens.hashToken(successor)])).rows[0];
+      // Even a JWT signed AFTER the reset from a pre-reset SELECT remains dead.
+      const delayed = sessions.signMemberAccessToken({ sub: user.id, email: user.email, sessionId: String(row.id) });
+      expect((await fetch(`${base}/member-probe`, { headers: { Authorization: `Bearer ${delayed}` } })).status).toBe(401);
+    } finally { spy.mockRestore(); }
+  });
+
+  it("member: normal refresh keeps earlier access JWTs usable, but reset kills the whole chain", async () => {
+    const user = await account("member");
+    const initial = await post("/api/auth/login", { email: user.email, password: oldPassword });
+    const body = await initial.json() as { accessToken: string };
+    let cookies = initial.headers.getSetCookie().map(v => v.split(";")[0]).join("; ");
+    for (let i = 0; i < 2; i++) {
+      const refresh = await post("/api/auth/refresh", {}, { Cookie: cookies });
+      expect(refresh.status).toBe(200);
+      cookies = refresh.headers.getSetCookie().map(v => v.split(";")[0]).join("; ");
+    }
+    const headers = { Authorization: `Bearer ${body.accessToken}` };
+    expect((await fetch(`${base}/member-probe`, { headers })).status).toBe(200);
+    const link = (await service.issuePasswordReset("member", user.email))!;
+    expect((await post("/api/auth/reset-password", { token: link.token, password: newPassword })).status).toBe(200);
+    expect((await fetch(`${base}/member-probe`, { headers })).status).toBe(401);
+  });
+
+  it.each(["signin", "host"] as const)("%s link: already-claimed proof cannot create a session after reset", async purpose => {
+    const user = await account("member");
+    // Include passwordless accounts: null is a real credential-state proof.
+    if (purpose === "host") await db.client.query("UPDATE members SET password_hash=NULL WHERE id=$1", [user.id]);
+    await db.client.query(`UPDATE settings SET value='{"magicLinkEnabled":true}'::jsonb WHERE key='member_signin'`);
+    const raw = tokens.generateToken();
+    await db.client.query("INSERT INTO member_magic_links (member_id,token_hash,expires_at,purpose) VALUES ($1,$2,now()+interval '15 minutes',$3)", [user.id, tokens.hashToken(raw), purpose]);
+    const reset = (await service.issuePasswordReset("member", user.email))!;
+    const { pool } = await import("../db/pool");
+    const query = pool.query.bind(pool);
+    let arrived!: () => void;
+    let resume!: () => void;
+    const reached = new Promise<void>(resolve => { arrived = resolve; });
+    const gate = new Promise<void>(resolve => { resume = resolve; });
+    const spy = vi.spyOn(pool, "query").mockImplementation((async (...args: unknown[]) => {
+      const result = await (query as (...args: unknown[]) => Promise<unknown>)(...args);
+      if (typeof args[0] === "string" && args[0].includes("UPDATE member_magic_links AS link")) { arrived(); await gate; }
+      return result;
+    }) as typeof pool.query);
+    const endpoint = purpose === "signin" ? "magic-link" : "host-link";
+    const consume = post(`/api/auth/${endpoint}/consume`, { token: raw });
+    try {
+      await reached; // Claim committed, next session has not yet been created.
+      expect((await post("/api/auth/reset-password", { token: reset.token, password: newPassword })).status).toBe(200);
+    } finally { resume(); }
+    try {
+      expect((await consume).status).toBe(401);
+      expect((await db.client.query("SELECT count(*)::int AS count FROM member_sessions WHERE member_id=$1 AND revoked_at IS NULL", [user.id])).rows[0].count).toBe(0);
+    } finally { spy.mockRestore(); }
+    // A new link proved after reset remains usable; no blanket disablement.
+    const fresh = tokens.generateToken();
+    await db.client.query("INSERT INTO member_magic_links (member_id,token_hash,expires_at,purpose) VALUES ($1,$2,now()+interval '15 minutes',$3)", [user.id, tokens.hashToken(fresh), purpose]);
+    expect((await post(`/api/auth/${endpoint}/consume`, { token: fresh })).status).toBe(200);
   });
 
   it("does not permit cross-origin recovery writes or host-header poisoning", async () => {

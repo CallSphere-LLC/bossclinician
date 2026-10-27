@@ -60,6 +60,7 @@ export function setAdminCookies(res: Response, session: { accessToken: string; r
 
 export interface AdminSessionInput {
   adminUserId: number; email: string; role: string; userAgent: string; ip: string; ttlSeconds: number;
+  verifiedPasswordHash?: string;
 }
 
 /** Revocable short-lived bearer sessions for internal API clients and tests. */
@@ -82,6 +83,13 @@ async function createSession(input: AdminSessionInput, refreshable: boolean) {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
+    if (input.verifiedPasswordHash !== undefined) {
+      const current = await client.query<{ password_hash: string; status: string }>(
+        "SELECT password_hash, status FROM admin_users WHERE id = $1 FOR UPDATE", [input.adminUserId]);
+      if (current.rows[0]?.status !== "active" || current.rows[0].password_hash !== input.verifiedPasswordHash) {
+        throw unauthorized("Invalid email or password");
+      }
+    }
     if (interactive) await client.query(
       `UPDATE admin_sessions SET revoked_at = now() WHERE admin_user_id = $1 AND user_agent = $2 AND ip = $3 AND interactive = true AND revoked_at IS NULL`,
       [input.adminUserId, userAgent, ip],
