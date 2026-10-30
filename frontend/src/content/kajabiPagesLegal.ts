@@ -985,12 +985,15 @@ export const retreatAgreement: KajabiLegalDoc = {
 };
 
 /* ══════════════════════════════════════════════════════════════════════════
-   /terms-of-use — the April 2026 Terms of Use
+   /terms and /terms-of-use: the Terms of Use effective 10/26/2026
    ══════════════════════════════════════════════════════════════════════════
 
    Not the same document as pages/legal/Terms.tsx (which carries the older
-   5/19/2025 site terms). Kajabi's /terms-of-use was replaced on 04/01/2026 with
-   this 18-section membership agreement. */
+   5/19/2025 site terms). This is the owner's 10/26/2026 document, word for word
+   and in its order (QA sheet row 201); it replaced the 04/01/2026 edition. The
+   clause ids are the previous edition's, so saved #anchor links keep landing on
+   the same numbered section even where a heading changed. Links change the
+   address only, never the visible text. */
 
 const SUPPORT_BC = "support@bossclinician.com";
 const SUPPORT_BC_MAILTO: LegalSpan = { text: SUPPORT_BC, href: `mailto:${SUPPORT_BC}` };
@@ -1005,315 +1008,278 @@ export const termsOfUse: KajabiLegalDoc = {
   eyebrow: "BOSS CLINICIAN",
   title: "Terms of Use",
   lede: "Boss Clinician, LLC  |  Yvette Howard, LCSW  |  bossclinician.com",
-  dateLine: "Effective Date: 04/01/2026",
+  dateLine: "Effective Date: 10/26/2026",
   clauses: [
+    {
+      id: "preamble",
+      heading: null,
+      blocks: [
+        { type: "p", text: "These Terms of Use (“Terms”) govern access to and use of the Boss Clinician website, educational programs, memberships, coaching services, executive advisory services, digital resources, and related content provided by Boss Clinician, LLC (“Boss Clinician,” “Company,” “we,” “us,” or “our”)." },
+        { type: "p", text: "Please read these Terms carefully before purchasing or participating in our services." },
+      ],
+    },
     {
       id: "acceptance-of-terms",
       heading: "1. Acceptance of Terms",
       blocks: [
-        {
-          type: "p",
-          text: 'These Terms of Use ("Terms") govern your access to and use of bossclinician.com and all programs, memberships, courses, workbooks, community spaces, live sessions, and related content offered by Boss Clinician, LLC ("Boss Clinician," "we," "us," or "our"), including the Boss Clinician Club, the Boss Clinician Lounge, and the Boss Clinician Boardroom (collectively, the "Services").',
-        },
-        {
-          type: "p",
-          text: "By enrolling in any Service, creating an account, or otherwise accessing our content, you agree to be bound by these Terms. If you do not agree to these Terms, do not enroll in or use the Services.",
-        },
+        { type: "p", text: "By accessing our website, purchasing a product, enrolling in a membership or program, creating an account, or using our services, you agree to these Terms and any applicable program-specific agreement." },
+        { type: "p", text: "Where affirmative acceptance is required, your agreement will be recorded during the checkout or enrollment process." },
+        { type: "p", text: "If you do not agree to these Terms, please do not purchase or use our services." },
+        { type: "subhead", text: "Relationship to Program-Specific Agreements" },
+        { type: "p", text: "Certain Boss Clinician offerings have additional membership, coaching, or executive advisory agreements." },
+        { type: "p", text: "If an express conflict exists between these Terms and an applicable program-specific agreement accepted by the participant, the program-specific agreement controls the relevant program's fees, payment obligations, services, cancellation, and refund conditions, except where prohibited by applicable law." },
+        { type: "p", text: "All other provisions of these Terms remain applicable unless expressly superseded." },
       ],
     },
     {
       id: "description-of-services",
       heading: "2. Description of Services",
       blocks: [
-        {
-          type: "p",
-          text: "Boss Clinician provides business education, strategy, coaching, and community support for licensed mental health clinicians building and growing private practices. Our current offerings include:",
-        },
-        {
-          type: "list",
-          items: [
-            "The Boss Clinician Club, a 6-month coaching program built around The Boss Move curriculum for clinicians starting or rebuilding a private practice.",
-            "The Boss Clinician Lounge, a membership built around The Practice Elevation curriculum, monthly strategy sessions, and community support for clinicians who are fully booked and ready to restructure their practice.",
-            "The Boss Clinician Boardroom, an annual mastermind for group practice owners, including full library access to Boss Clinician content and Boardroom Playbooks.",
-          ],
-        },
-        {
-          type: "p",
-          text: "Boss Clinician reserves the right to modify, add, retire, or restructure any Service, course, or membership tier at any time. Where a change materially affects an active member's access or pricing, we will provide reasonable notice.",
-        },
+        { type: "p", text: "Boss Clinician provides business education, coaching, strategic advisory, digital tools, and professional community experiences for mental health clinicians and practice owners." },
+        { type: "p", text: "Our offerings may include:" },
+        { type: "subhead", text: "The Boss Clinician Lounge" },
+        { type: "p", text: "A recurring membership designed to help established private practice owners strengthen client growth, profitability, practice systems, and long-term sustainability." },
+        { type: "p", text: "Membership benefits may include the Practice Elevation Course, Practice Reset Snapshot, Practice Elevation Dashboard, Living Business Plan, Lounge Strategy Sessions, educational resources, and community access." },
+        { type: "subhead", text: "Lounge VIP" },
+        { type: "p", text: "An enhanced membership tier offering additional personalized business support." },
+        { type: "p", text: "VIP benefits may include the Practice Health Check, individualized strategy sessions, feedback opportunities, and additional services specified on the VIP enrollment page." },
+        { type: "subhead", text: "The Boss Clinician Club" },
+        { type: "p", text: "A business education and coaching program designed to help clinicians establish, launch, or rebuild a private practice." },
+        { type: "p", text: "The Club includes The Boss Move curriculum and the coaching, planning tools, resources, and support specified in its enrollment agreement." },
+        { type: "subhead", text: "The Boss Clinician Boardroom" },
+        { type: "p", text: "A premium executive advisory experience for established practice owners focused on profitability, leadership, organizational performance, business strategy, and sustainable growth." },
+        { type: "p", text: "Services may include executive assessments, the Boardroom CEO Dashboard, Living Business Plan, advisory sessions, leadership resources, and peer community access." },
+        { type: "subhead", text: "Additional Educational Products and Trainings" },
+        { type: "p", text: "Boss Clinician may offer standalone courses, workshops, continuing education programs, templates, guides, retreats, and other products subject to their applicable terms." },
+        { type: "p", text: "Actual services, access periods, deliverables, and participation requirements are determined by the specific offer purchased." },
+        { type: "p", text: "We may update or improve our services, subject to applicable agreements and legal requirements. Material changes affecting an active member's purchased benefits will be handled with appropriate notice and in accordance with the applicable agreement." },
       ],
     },
     {
       id: "eligibility",
-      heading: "3. Eligibility",
+      heading: "3. Eligibility and Professional Responsibility",
       blocks: [
-        {
-          type: "p",
-          text: "The Services are intended for licensed or license-track mental health clinicians and related business professionals. You must be at least 18 years old and capable of entering into a binding agreement to use the Services. You are responsible for ensuring your own compliance with the licensing, continuing education, supervision, and ethical requirements of your profession and jurisdiction.",
-        },
+        { type: "p", text: "Participants must be at least 18 years old and legally capable of entering into an agreement." },
+        { type: "p", text: "Our programs are intended for eligible mental health clinicians, practice owners, and related professionals as described on each enrollment page." },
+        { type: "p", text: "Participants are responsible for maintaining applicable professional licenses, registrations, credentials, business licenses, insurance coverage, and compliance with professional and regulatory requirements." },
+        { type: "p", text: "Participation in a Boss Clinician program does not establish or verify professional licensure, credentialing, or eligibility to provide clinical services." },
       ],
     },
     {
       id: "membership-enrollment-billing-and-renewal",
-      heading: "4. Membership Enrollment, Billing, and Renewal",
+      heading: "4. Enrollment, Payment, Billing, and Renewals",
       blocks: [
-        {
-          type: "p",
-          text: "Membership tiers may be billed monthly, on a fixed-term commitment (for example, a six-month term), annually, or as a one-time payment, as described on the applicable sales or checkout page at the time of your enrollment.",
-        },
-        {
-          type: "list",
-          items: [
-            "Your payment method on file will be charged automatically on each billing date until your membership is cancelled in accordance with Section 5.",
-            "If a fixed-term commitment is in place (such as a six-month Lounge term), your membership will automatically convert to month-to-month billing at the end of that term unless you cancel or upgrade before the renewal date.",
-            "Prices are subject to change. If we change the price of your membership, we will provide notice before the change applies to your next billing cycle. Continued use of the Services after that notice constitutes acceptance of the new price.",
-            "You are responsible for keeping your payment information current. A failed payment may result in a pause or loss of access until payment is resolved.",
-          ],
-        },
-        {
-          type: "p",
-          tone: "note",
-          text: "Founding or promotional rates apply only while the membership remains continuously active. If a membership is cancelled or lapses, re-enrollment is at the then-current published rate.",
-        },
-        {
-          type: "p",
-          tone: "note",
-          text: "Where a program is sold as a payment plan (for example, six monthly payments), the payment plan is not a subscription: all scheduled payments are owed upon enrollment, and cancellation does not cancel remaining scheduled payments except as provided under an applicable guarantee.",
-        },
+        { type: "p", text: "Pricing, billing frequency, program duration, installment obligations, and membership benefits will be disclosed during enrollment." },
+        { type: "p", text: "Depending on the program, payment arrangements may include one-time purchases, monthly or annual subscriptions, or fixed-term installment plans." },
+        { type: "subhead", text: "Recurring Memberships" },
+        { type: "p", text: "Where recurring billing applies, the member authorizes the disclosed recurring charges according to the accepted payment terms." },
+        { type: "p", text: "Recurring memberships continue until canceled in accordance with the applicable membership agreement." },
+        { type: "p", text: "Members will receive required billing and renewal disclosures before enrollment." },
+        { type: "subhead", text: "Fixed-Term Programs and Installment Plans" },
+        { type: "p", text: "A fixed-term program purchased through installments may create a payment obligation for the full program price, rather than a cancelable monthly subscription." },
+        { type: "p", text: "Any such obligation must be expressly disclosed and accepted in the applicable program enrollment agreement." },
+        { type: "p", text: "Stopping participation does not automatically eliminate a valid outstanding installment obligation, subject to the agreement and applicable law." },
+        { type: "subhead", text: "Pricing Changes" },
+        { type: "p", text: "Price changes affecting existing recurring memberships will be communicated in advance as required by applicable law and the member's agreement." },
+        { type: "p", text: "Founding or promotional pricing applies according to the specific terms of the offer. If a member cancels and later reenrolls, then-current pricing may apply unless otherwise promised." },
+        { type: "subhead", text: "Failed Payments" },
+        { type: "p", text: "If a payment fails, Boss Clinician may contact the member to update payment information and may suspend access when permitted by the applicable agreement and law." },
       ],
     },
     {
       id: "cancellation",
-      heading: "5. Cancellation",
+      heading: "5. Membership Cancellation",
       blocks: [
-        {
-          type: "p",
-          text: [
-            "You may cancel your membership at any time by submitting a cancellation request to ",
-            SUPPORT_BC_MAILTO,
-            " or through the cancellation option in your member portal, if available.",
-          ],
-        },
-        {
-          type: "list",
-          items: [
-            "Cancellation stops future billing. It does not entitle you to a refund of any payment already made, except as described in Section 6.",
-            "If you are within a fixed-term commitment, cancellation will take effect at the end of that term unless otherwise stated on your enrollment page.",
-            "Upon cancellation, your access to member content, community spaces, and live sessions ends at the close of your final paid billing period.",
-          ],
-        },
+        { type: "p", text: "Members may request cancellation of recurring memberships through their account cancellation feature, where available, or by contacting:" },
+        { type: "p", text: [SUPPORT_BC_MAILTO] },
+        { type: "p", text: "Cancellation prevents future recurring charges once effective under the applicable membership terms." },
+        { type: "p", text: "Cancellation does not automatically result in a refund of payments already made." },
+        { type: "p", text: "Unless an applicable agreement or law states otherwise, members who cancel outside an eligible refund period may retain access through the end of their paid billing period." },
+        { type: "p", text: "Cancellation of a recurring membership is different from withdrawal from a fixed-term coaching or advisory program. Fixed-term participants must refer to their signed enrollment agreements for applicable obligations." },
+        { type: "p", text: "Members should export or download their personal planning materials and available reports before their access ends." },
       ],
     },
     {
       id: "refund-policy",
       heading: "6. Refund Policy",
       blocks: [
-        {
-          type: "p",
-          text: "Due to the digital nature of our Services and the instant access provided to course content, workbooks, and community spaces upon enrollment, all sales are final and non-refundable, except where a specific Service page states an alternative refund or guarantee policy at the time of your enrollment.",
-        },
-        {
-          type: "p",
-          text: "Where a specific guarantee is offered for a given program (for example, an action-based guarantee tied to completed onboarding steps), the terms of that guarantee, including any eligibility requirements and request deadline, will be stated on the applicable sales page and control over this general policy for that program.",
-        },
-        {
-          type: "p",
-          text: [
-            "For programs offering an action-based guarantee, refund eligibility requires completion of all stated onboarding and coursework criteria and submission of completed work to ",
-            SUPPORT_BC_MAILTO,
-            " within the stated window. No refunds are provided after the guarantee window, or for change of mind or non-participation.",
-          ],
-        },
+        { type: "subhead", text: "The Lounge and Lounge VIP — 7-Day Money-Back Guarantee" },
+        { type: "p", text: "New members purchasing The Boss Clinician Lounge or Lounge VIP may request a full refund within seven calendar days of their initial membership purchase." },
+        { type: "p", text: "The refund window begins when the initial payment is processed." },
+        { type: "p", text: ["To request a refund, email ", SUPPORT_BC_MAILTO, " within the seven-day period."] },
+        { type: "p", text: "This is a paid membership with an initial purchase refund guarantee, not a free trial." },
+        { type: "p", text: "Eligible members do not automatically forfeit the initial refund guarantee solely because they accessed the membership portal, viewed course lessons, downloaded materials, completed assessments, or participated in an included VIP service." },
+        { type: "p", text: "When an eligible full refund is processed, corresponding membership access will be terminated." },
+        { type: "p", text: "The initial refund period does not restart with recurring membership renewals." },
+        { type: "p", text: "After the seven-day period, membership charges are generally nonrefundable except where required by applicable law." },
+        { type: "subhead", text: "The Club" },
+        { type: "p", text: "Refunds, withdrawal, payment obligations, and any program-specific guarantees for The Club are governed by the accepted Club Enrollment Agreement and the offer terms disclosed at purchase." },
+        { type: "p", text: "No Lounge refund guarantee automatically applies to The Club." },
+        { type: "subhead", text: "The Boardroom" },
+        { type: "p", text: "Refunds, early termination, installment obligations, and other financial provisions for The Boardroom are governed by the accepted Boardroom Executive Advisory Agreement." },
+        { type: "p", text: "No Lounge refund guarantee automatically applies to The Boardroom." },
+        { type: "subhead", text: "Standalone Courses and Products" },
+        { type: "p", text: "Standalone courses, digital products, continuing education programs, and other purchases are subject to the refund policy disclosed for the specific product at checkout." },
+        { type: "p", text: "Applicable legal rights remain unaffected by any policy provision that cannot lawfully exclude them." },
       ],
     },
     {
       id: "intellectual-property",
-      heading: "7. Intellectual Property",
+      heading: "7. Intellectual Property and Use of Materials",
       blocks: [
-        {
-          type: "p",
-          text: 'All content provided through the Services, including but not limited to workbooks, curriculum, videos, templates, scripts, trackers, the BOSS Blueprint framework, and all other original materials (collectively, "Materials"), is the intellectual property of Boss Clinician, LLC and is protected by copyright and other applicable law.',
-        },
+        { type: "p", text: "All original Boss Clinician educational materials, including courses, frameworks, videos, workbooks, assessments, dashboards, scripts, templates, guides, and downloadable resources, remain the intellectual property of Boss Clinician, LLC or their respective rights holders." },
+        { type: "p", text: "Purchasing a membership or product grants a limited, nonexclusive, nontransferable right to access and use the included materials according to the purchased offer." },
+        { type: "subhead", text: "Permitted Use of Customizable Templates" },
+        { type: "p", text: "Where a resource is expressly identified as a customizable business template, members may adapt it for use within their own private practice or organization." },
+        { type: "p", text: "This may include adapting designated SOP templates, job descriptions, interview forms, onboarding documents, and business planning resources for internal operational purposes." },
+        { type: "p", text: "This permission does not authorize resale, public redistribution, publication of the original templates, or incorporation of Boss Clinician materials into a competing educational or commercial product." },
+        { type: "subhead", text: "Prohibited Uses" },
+        { type: "p", text: "Members may not:" },
         {
           type: "list",
           items: [
-            "Your enrollment grants you a limited, non-transferable, non-exclusive license to access and use the Materials for your own individual professional development and practice.",
-            "You may not copy, share, resell, distribute, publicly post, or create derivative works from the Materials, in whole or in part, without our prior written consent.",
-            "You may not use the Materials to create a competing product, course, or membership.",
-            "Violation of this section may result in immediate termination of your access without refund, in addition to any other remedies available to us.",
+            "Resell, redistribute, or publicly upload Boss Clinician materials.",
+            "Share account access or distribute purchased resources to unauthorized individuals.",
+            "Repackage the materials for sale, licensing, or inclusion in competing courses or memberships.",
+            "Remove proprietary notices from materials being distributed without authorization.",
+            "Record, reproduce, or commercially exploit private coaching sessions without permission.",
           ],
         },
+        { type: "p", text: "Members are responsible for ensuring any customized employment, clinical, financial, or operational materials comply with applicable requirements before implementation." },
+        { type: "p", text: "Suspected intellectual property violations may result in appropriate account restrictions or other remedies, subject to applicable agreements and law." },
       ],
     },
     {
       id: "community-conduct",
       heading: "8. Community Conduct",
       blocks: [
-        {
-          type: "p",
-          text: "Our community spaces, including any private group, forum, or hot seat session, exist to support clinicians in a respectful, professional environment. By participating, you agree to:",
-        },
+        { type: "p", text: "Boss Clinician communities are intended to support respectful professional discussion, business learning, and collaboration." },
+        { type: "p", text: "Members agree to:" },
         {
           type: "list",
           items: [
-            "Engage respectfully with other members and with Boss Clinician staff.",
-            "Refrain from harassment, discrimination, solicitation of other members for outside products or services, or sharing of Materials outside the community.",
-            "Understand that Boss Clinician may, at its sole discretion, remove any member from a community space for conduct that violates this section, without refund, if the conduct is severe or repeated after a warning.",
+            "Communicate respectfully with other members and program representatives.",
+            "Avoid harassment, discrimination, threats, or abusive conduct.",
+            "Respect the privacy and confidentiality of other participants.",
+            "Avoid unauthorized solicitation, advertising, or selling to other members.",
+            "Refrain from sharing copyrighted membership resources outside authorized channels.",
+            "Avoid uploading client-identifying information or protected health information.",
           ],
         },
+        { type: "p", text: "Boss Clinician may moderate community spaces and address conduct violations." },
+        { type: "p", text: "Depending on the severity of the conduct, actions may include warnings, restricted participation, removal from community spaces, or membership termination, consistent with applicable agreements and law." },
       ],
     },
     {
       id: "confidentiality",
-      heading: "9. Confidentiality",
+      heading: "9. Confidentiality and Privacy",
       blocks: [
-        {
-          type: "p",
-          text: "Live coaching calls, hot seats, and community discussions may involve members sharing details about their own practice, clients (in de-identified form), finances, or business challenges. By participating, you agree to keep confidential any identifying or sensitive information shared by another member during a coaching call, hot seat, or community discussion, and not to disclose it outside that space.",
-        },
-        {
-          type: "p",
-          text: "This confidentiality obligation applies to fellow members and does not create a clinical or supervisory relationship between you and Boss Clinician, nor between you and any other member.",
-        },
+        { type: "p", text: "Participants may discuss business challenges, finances, staffing, leadership decisions, and practice operations during coaching sessions or community activities." },
+        { type: "p", text: "Members agree not to disclose another participant's confidential business information outside the relevant group or session without permission." },
+        { type: "p", text: "However, peer coaching and group discussions cannot guarantee absolute confidentiality because other participants are independent individuals." },
+        { type: "p", text: "Boss Clinician cannot guarantee that another participant will comply with confidentiality expectations." },
+        { type: "subhead", text: "Client Information" },
+        { type: "p", text: "Participants must not upload, post, or disclose client-identifying information or protected health information through Boss Clinician courses, dashboards, assessments, community discussions, or business coaching activities." },
+        { type: "p", text: "Clinical examples should be sufficiently de-identified and used only when appropriate." },
+        { type: "subhead", text: "Member Business Information" },
+        { type: "p", text: "Assessments and dashboards may collect business information, including financial or operational metrics." },
+        { type: "p", text: "Access to member-specific information will be subject to applicable account permissions, privacy practices, and platform capabilities." },
+        { type: "p", text: ["Additional information concerning collection, use, storage, and protection of personal information is provided in our separate ", { text: "Privacy Policy", href: "/privacy-policy" }, "."] },
       ],
     },
     {
       id: "vip-submission-terms",
-      heading: "10. VIP Submission Terms",
+      heading: "10. VIP Services and Submissions",
       blocks: [
-        {
-          type: "p",
-          text: "Where a membership tier includes VIP support (such as direct submission access for feedback or review), the following terms apply unless a specific Service page states otherwise:",
-        },
-        {
-          type: "list",
-          items: [
-            "VIP members may submit one item per eligible category per month.",
-            "Submissions follow the posted weekly rhythm (for example, submission by Monday with feedback returned by the following business day).",
-            "VIP access does not include unlimited or on-demand 1:1 coaching, and does not create an ongoing consulting relationship beyond the scope described on the applicable Service page.",
-          ],
-        },
-        {
-          type: "p",
-          text: "VIP monthly benefits do not roll over; an unused submission in any month is forfeited. Materials review submissions receive one complete recorded review per submission; revision cycles are not included. Where a tier includes a structured call series (such as scheduled strategy calls at defined intervals), those calls are limited to the number and timing described on the applicable Service page and do not renew or repeat beyond that series.",
-        },
+        { type: "p", text: "Lounge VIP and other enhanced membership tiers may include individualized business coaching, assessments, feedback opportunities, or additional support." },
+        { type: "p", text: "The exact number, frequency, timing, and format of these benefits are determined by the member's applicable offer and enrollment agreement." },
+        { type: "p", text: "VIP services do not include unlimited one-on-one coaching, unlimited document review, legal representation, HR consulting, accounting services, or done-for-you business implementation unless expressly included in writing." },
+        { type: "p", text: "Where submission or review limits apply, those limits will be disclosed in the applicable VIP offer." },
+        { type: "p", text: "Unused benefits, scheduling restrictions, rescheduling procedures, and expiration rules will follow the accepted VIP terms." },
       ],
     },
     {
       id: "continuing-education-credits",
       heading: "11. Continuing Education Credits",
       blocks: [
-        {
-          type: "p",
-          text: "Boss Clinician, LLC is an NBCC Approved Continuing Education Provider (ACEP). Select trainings within our curriculum carry NBCC-approved continuing education hours, and these trainings are clearly marked within the applicable membership.",
-        },
-        {
-          type: "list",
-          items: [
-            "Continuing education hours are available only for the specific trainings designated as CEU-bearing at the time of your participation, not for the membership as a whole.",
-            "You are solely responsible for confirming that any CEU hours earned through our Services satisfy the specific requirements of your licensing board, including any restrictions on repeated content, subject matter minimums, or provider approval in your jurisdiction.",
-            "Boss Clinician makes no guarantee that CEU hours earned through our Services will be accepted by every licensing board, and we are not responsible for a licensing board's determination regarding your continuing education compliance.",
-            "Certificates of completion, where applicable, will be issued according to the process described within the relevant course.",
-          ],
-        },
-        {
-          type: "p",
-          text: [
-            "Boss Clinician, LLC is approved by NBCC as an Approved Continuing Education Provider, ACEP No. 7998. Certificates of completion display the NBCC-approved program title, which may differ from the program's brand name used in marketing. Continuing education grievance, refund, and cancellation policies are available at ",
-            // Kajabi printed a literal "[link]" placeholder here; the owner asked
-            // for it to go (sheet row 115). The NBCC policies stay one click away.
-            { text: "our Continuing Education page", href: "/continuing-education-boss-clinician" },
-            " or by request at ",
-            SUPPORT_BC_MAILTO,
-            ".",
-          ],
-        },
+        { type: "p", text: "Boss Clinician, LLC is approved by the National Board for Certified Counselors as an Approved Continuing Education Provider (NBCC ACEP No. 7998)." },
+        { type: "p", text: "Only specific trainings designated as eligible for continuing education credit carry those credits." },
+        { type: "p", text: "Purchasing a Boss Clinician membership does not automatically entitle a participant to continuing education credit for all membership activities." },
+        { type: "p", text: "Participants are responsible for verifying whether a specific training meets their applicable licensing board's continuing education requirements." },
+        { type: "p", text: "Where applicable, credit eligibility may depend on completion of designated learning activities, attendance requirements, evaluations, or other program-specific criteria." },
+        { type: "p", text: "Certificates are issued according to the published requirements of each eligible training." },
+        { type: "p", text: ["Continuing education-related accommodations, grievances, refunds, cancellations, and certificate policies are addressed in our separate ", { text: "Continuing Education Program Policies", href: "/continuing-education-boss-clinician" }, "."] },
       ],
     },
     {
       id: "no-clinical-legal-tax-or-financial-advice",
-      heading: "12. No Clinical, Legal, Tax, or Financial Advice",
+      heading: "12. No Clinical, Legal, Tax, Accounting, or Financial Advice",
       blocks: [
-        {
-          type: "p",
-          text: "The Services provide business education, strategy, and coaching for private practice owners. They do not constitute clinical supervision, legal advice, tax advice, financial advice, or any other licensed professional service, and no professional relationship of that kind is created by your participation.",
-        },
-        {
-          type: "p",
-          text: "You should consult a qualified attorney, accountant, or other licensed professional before making legal, tax, financial, or licensure-related decisions for your practice.",
-        },
+        { type: "p", text: "Boss Clinician provides business education, coaching, and strategic advisory services." },
+        { type: "p", text: "Participation does not establish a psychotherapy, clinical supervision, legal, accounting, tax advisory, investment advisory, or other licensed professional relationship." },
+        { type: "p", text: "Business tools, financial calculations, hiring scenarios, compensation examples, and educational templates are provided for planning and informational purposes." },
+        { type: "p", text: "Participants are responsible for reviewing business decisions with qualified professionals when appropriate." },
+        { type: "p", text: "This includes consulting employment counsel, licensed accountants, tax professionals, healthcare attorneys, clinical compliance specialists, and other appropriate advisors." },
       ],
     },
     {
       id: "earnings-disclaimer",
-      heading: "13. Earnings Disclaimer",
+      heading: "13. Earnings and Business Results Disclaimer",
       blocks: [
-        {
-          type: "p",
-          text: "Boss Clinician provides education, strategy, and support designed to help you build a more profitable and sustainable private practice. We do not promise or guarantee any specific income result, growth outcome, or timeline.",
-        },
-        {
-          type: "list",
-          items: [
-            "Any income examples, testimonials, or results referenced on our website or in our marketing reflect the experiences of specific individuals and are not typical or guaranteed outcomes.",
-            "Your results depend on a number of factors outside our control, including your market, your effort, your implementation of the strategies taught, your existing practice conditions, and general economic conditions.",
-            "Nothing in our marketing, curriculum, or coaching should be interpreted as a promise of a specific financial result.",
-          ],
-        },
+        { type: "p", text: "Boss Clinician does not guarantee specific income, client volume, profit margins, reimbursement increases, staffing outcomes, business valuations, or financial results." },
+        { type: "p", text: "Examples, testimonials, projections, and case studies are illustrative and do not guarantee a particular outcome." },
+        { type: "p", text: "Business results depend on numerous factors, including implementation, market conditions, operational expenses, staffing, payer arrangements, individual business decisions, and circumstances outside Boss Clinician's control." },
+        { type: "p", text: "Dashboard calculations and scenario models are decision-support tools based on information entered or supplied by the user." },
+        { type: "p", text: "Participants should independently verify data and assumptions before acting on financial or operational recommendations." },
       ],
     },
     {
       id: "limitation-of-liability",
       heading: "14. Limitation of Liability",
       blocks: [
-        {
-          type: "p",
-          text: "To the fullest extent permitted by law, Boss Clinician, LLC, its owner, employees, and contractors will not be liable for any indirect, incidental, special, consequential, or punitive damages, or any loss of income, profits, goodwill, or data, arising out of or related to your use of the Services, even if we have been advised of the possibility of such damages.",
-        },
-        {
-          type: "p",
-          text: "Our total liability to you for any claim arising from the Services is limited to the amount you paid to Boss Clinician in the twelve months preceding the claim.",
-        },
+        { type: "p", text: "To the fullest extent permitted by applicable law, Boss Clinician, LLC and its owners, employees, contractors, and representatives shall not be liable for indirect, incidental, special, consequential, or punitive damages arising from the use of the Services." },
+        { type: "p", text: "This includes, where legally permitted, losses associated with business interruption, lost income, lost profits, or lost business opportunities." },
+        { type: "p", text: "To the extent permitted by law, Boss Clinician's aggregate liability arising from a claim related to the Services shall not exceed the amounts paid by the claimant to Boss Clinician during the 12 months preceding the event giving rise to the claim." },
+        { type: "p", text: "Nothing in these Terms excludes liability or limits rights where doing so is prohibited by applicable law." },
       ],
     },
     {
       id: "indemnification",
       heading: "15. Indemnification",
       blocks: [
-        {
-          type: "p",
-          text: "You agree to indemnify and hold harmless Boss Clinician, LLC and its owner, employees, and contractors from any claim, demand, loss, or damage, including reasonable attorney fees, arising out of your use of the Services, your violation of these Terms, or your violation of any right of another person or entity, including another member.",
-        },
+        { type: "p", text: "To the extent permitted by applicable law, participants agree to indemnify and hold harmless Boss Clinician, LLC and its owners, employees, and contractors from third-party claims arising from the participant's unlawful conduct, infringement of another party's rights, unauthorized redistribution of materials, or material violation of these Terms." },
+        { type: "p", text: "This provision does not apply to the extent a claim results from Boss Clinician's own conduct for which indemnification would be prohibited by law." },
       ],
     },
     {
       id: "modifications-to-these-terms",
-      heading: "16. Modifications to These Terms",
+      heading: "16. Modifications to Terms and Services",
       blocks: [
-        {
-          type: "p",
-          text: "We may update these Terms from time to time. Where a change is material, we will provide reasonable notice, such as an email to your address on file or a notice within the member portal. Your continued use of the Services after a change takes effect constitutes your acceptance of the updated Terms.",
-        },
+        { type: "p", text: "Boss Clinician may update these Terms to reflect operational, business, technology, or legal changes." },
+        { type: "p", text: "Where required, material changes will be communicated through email, member account notifications, or other appropriate methods." },
+        { type: "p", text: "Updated Terms will identify their effective date." },
+        { type: "p", text: "Changes will not retroactively eliminate applicable contractual rights or refund obligations without appropriate legal basis." },
+        { type: "p", text: "Where affirmative consent is required for a change, Boss Clinician will obtain it before enforcing the change." },
       ],
     },
     {
       id: "governing-law",
       heading: "17. Governing Law",
       blocks: [
-        {
-          type: "p",
-          text: "These Terms are governed by the laws of the State of Nevada, without regard to its conflict of law principles, unless otherwise required by applicable consumer protection law in your state of residence.",
-        },
+        { type: "p", text: "These Terms are governed by the laws of the State of Nevada, without regard to conflict-of-law principles, except where applicable law requires otherwise." },
+        { type: "p", text: "Nothing in this provision eliminates nonwaivable consumer protections or other mandatory legal rights that apply to a participant." },
+        { type: "p", text: "Additional dispute-resolution provisions, if any, will be specified in an applicable program agreement." },
       ],
     },
     {
       id: "contact",
-      heading: "18. Contact",
+      heading: "18. Contact Information",
       blocks: [
-        {
-          type: "p",
-          text: ["Questions about these Terms can be directed to ", SUPPORT_BC_MAILTO, "."],
-        },
+        { type: "p", text: "For questions regarding these Terms, membership access, billing, refunds, or cancellation requests, contact:" },
+        { type: "p", text: "Boss Clinician, LLC" },
+        { type: "p", text: ["Email: ", SUPPORT_BC_MAILTO] },
+        { type: "p", text: ["Website: ", { text: "www.bossclinician.com", href: "/" }] },
+        { type: "p", text: "Additional business contact information may be provided through the website or applicable enrollment documents." },
       ],
     },
   ],

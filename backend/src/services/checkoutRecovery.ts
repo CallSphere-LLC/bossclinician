@@ -22,6 +22,26 @@ export interface OfferRecoveryColumns {
 }
 const OVERRIDE_KEY = /^(enabled|hours|subject|body)[0-3]$/;
 
+/** At most one reminder per person in this many hours, across every offer. */
+const PERSON_GAP_HOURS = 24;
+/**
+ * A reminder this many hours past its time is dropped, not sent. Reminders being
+ * off for a month, or the recipient list being cleared, must not release a backlog
+ * when they come back on. New checkout activity restarts the clock. Longer than
+ * the person gap, so a second offer's reminder that had to wait still goes out.
+ */
+const MAX_LATE_HOURS = 48;
+/** The longest delay an offer or the site can set (settings and offers both cap at 720). */
+const MAX_DELAY_HOURS = 720;
+
+function reminderDue(settings: Record<string, unknown>, step: number, ageHours: unknown): boolean {
+  const hours = Number(settings[`hours${step}`]), age = Number(ageHours);
+  return age >= hours && age < hours + MAX_LATE_HOURS;
+}
+/** Sent in the last PERSON_GAP_HOURS to this address; citext, so case never splits a person. */
+const REMINDED_RECENTLY = `SELECT 1 FROM checkout_reminders r JOIN abandoned_checkouts p ON p.id = r.abandoned_checkout_id
+  WHERE r.sent_at > now() - interval '${PERSON_GAP_HOURS} hours'`;
+
 /**
  * The reminder sequence one offer's abandoned checkouts follow, or null for none.
  *
@@ -67,18 +87,27 @@ export async function sweepAbandonedCheckouts(): Promise<{ queued: number }> {
   const global = await readSetting("cart_recovery");
   if (!global.enabled) return { queued: 0 };
   const recipients = recipientList(global.recipients);
-  const due = await pool.query<{id: number; emails_sent: number; age_hours: number; email: string} & OfferRecoveryColumns>(
+  // Newest first: carts whose sequence has finished stay open, and must not fill
+  // the limit ahead of someone who just left.
+  const due = await pool.query<{id: number; emails_sent: number; age_hours: number; email: string; reminded_recently: boolean} & OfferRecoveryColumns>(
     `SELECT a.id, a.emails_sent, a.email::text, EXTRACT(EPOCH FROM (now() - a.updated_at))/3600 AS age_hours,
-            o.recovery_enabled, o.recovery_mode, o.recovery_overrides
+            o.recovery_enabled, o.recovery_mode, o.recovery_overrides,
+            EXISTS (${REMINDED_RECENTLY} AND p.email = a.email) AS reminded_recently
        FROM abandoned_checkouts a JOIN offers o ON o.id = a.offer_id
       WHERE a.recovered_at IS NULL AND a.stopped_at IS NULL AND a.emails_sent < 4 AND o.recovery_enabled
-      ORDER BY a.updated_at LIMIT 500`);
+        AND a.updated_at > now() - interval '${MAX_DELAY_HOURS + MAX_LATE_HOURS} hours'
+      ORDER BY a.updated_at DESC LIMIT 500`);
   let queued = 0;
+  const queuedPeople = new Set<string>();
   for (const cart of due.rows) {
     const settings = effectiveRecoverySettings(global, cart);
     if (!settings) continue;
     const step = nextStep(settings, cart.emails_sent);
-    if (step === undefined || Number(cart.age_hours) < Number(settings[`hours${step}`]) || (recipients.length && !recipients.includes(cart.email.toLowerCase()))) continue;
+    const person = cart.email.toLowerCase();
+    if (step === undefined || !reminderDue(settings, step, cart.age_hours) || (recipients.length && !recipients.includes(person))) continue;
+    // Waiting, not consumed: a later sweep picks it up once the gap has passed.
+    if (cart.reminded_recently || queuedPeople.has(person)) continue;
+    queuedPeople.add(person);
     if (await enqueue({kind: "checkout.recoveryEmail", payload: {abandonedCheckoutId: cart.id, step}, priority: PRIORITY.bulk, dedupeKey: `cart-recovery:${cart.id}:${step}`})) queued++;
   }
   return { queued };
@@ -104,6 +133,10 @@ export async function checkoutRecoveryEmail(payload: Record<string, unknown>): P
   let sent = false;
   try {
     await client.query("BEGIN");
+    // Two carts of one person lock different rows, so the once-in-24-hours check
+    // below needs a lock on the person. Fulfillment never takes it, so it cannot
+    // form a cycle with the cart lock.
+    await client.query(`SELECT pg_advisory_xact_lock(hashtext('checkout-recovery'), hashtext(lower($1::text)))`, [initial.rows[0].email]);
     const rows = await client.query(`SELECT a.*, o.title AS offer_title, o.status AS offer_status,
       o.recovery_enabled, o.recovery_mode, o.recovery_overrides,
       EXTRACT(EPOCH FROM (now() - a.updated_at))/3600 AS age_hours
@@ -111,7 +144,7 @@ export async function checkoutRecoveryEmail(payload: Record<string, unknown>): P
     const cart = rows.rows[0];
     // Re-resolved under the lock: the offer's setup may have changed since the sweep queued this.
     const settings = cart ? effectiveRecoverySettings(global, cart) : null;
-    if (!cart || !settings || cart.recovered_at || cart.stopped_at || cart.offer_status !== "published" || nextStep(settings, cart.emails_sent) !== step || Number(cart.age_hours) < Number(settings[`hours${step}`])) {
+    if (!cart || !settings || cart.recovered_at || cart.stopped_at || cart.offer_status !== "published" || nextStep(settings, cart.emails_sent) !== step || !reminderDue(settings, step, cart.age_hours)) {
       await client.query("COMMIT"); return {skipped: "not due or already bought"};
     }
     // A day of slack before the cart: a buyer whose email was captured a moment
@@ -121,6 +154,11 @@ export async function checkoutRecoveryEmail(payload: Record<string, unknown>): P
     if (paid.rowCount) {
       await stopCheckoutRecovery(client, {orderId: paid.rows[0].id, offerId: cart.offer_id, email: cart.email});
       await client.query("COMMIT"); return {skipped: "already bought"};
+    }
+    // No step is used up and the cart stays open, so a later sweep can still send it.
+    const recent = await client.query(`${REMINDED_RECENTLY} AND p.email = $1 LIMIT 1`, [cart.email]);
+    if (recent.rowCount) {
+      await client.query("COMMIT"); return {skipped: "reminded this person in the last 24 hours"};
     }
     const subject = String(settings[`subject${step}`]).replaceAll("{offer}", cart.offer_title).replaceAll("{name}", cart.first_name || "there");
     const reminder = await client.query<{id: number}>(`INSERT INTO checkout_reminders(abandoned_checkout_id,step,subject) VALUES($1,$2,$3) ON CONFLICT(abandoned_checkout_id,step) DO UPDATE SET subject=EXCLUDED.subject RETURNING id`, [id, step, subject]);

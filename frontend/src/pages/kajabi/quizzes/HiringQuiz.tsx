@@ -1,13 +1,15 @@
-import { useEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
+import { Link } from "react-router";
 import { motion, useReducedMotion } from "motion/react";
 import { Seo } from "@/components/Seo";
 import { useHoneypot } from "@/components/forms/useHoneypot";
 import { GlassCard, type Accent } from "@/components/luxe/GlassCard";
 import { LuxeButton } from "@/components/luxe/LuxeButton";
-import { GoldRule, Section } from "@/components/luxe/Section";
+import { Section } from "@/components/luxe/Section";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import {
+  HIRE_FORM,
   HIRING_CONTACT_STORAGE_KEY,
   HIRING_QUIZ_EMAIL,
   HIRING_QUIZ_MAX_SCORE,
@@ -21,7 +23,6 @@ import {
 import {
   AnswerButton,
   Arrow,
-  BackLink,
   QuizProgress,
   ResultEmailForm,
   answersAsData,
@@ -30,6 +31,7 @@ import {
   useFocusOnChange,
   useSwap,
 } from "./shared";
+import { LeadFormCard, type LeadContact } from "./LeadFormCard";
 
 /**
  * /hiring-quiz — "Are You Ready to Hire Your First Clinician?"
@@ -40,21 +42,44 @@ import {
  * the share of questions behind you and the counter reads "Complete!" at the
  * result. The result is the total against the 70% / 40% thresholds.
  *
- * A visitor who came through /hire-form has already given their name and
- * email (kept in sessionStorage by that page). Their result is filed under the
- * matching result form as soon as it is shown, which tags them and emails them
- * the result — what /hire-form's "Enter your name and email to get your
- * results!" promises. Anyone else gets an optional form under the result.
+ * The page opens on the opt-in: the same `hire-form` builder form /hire-form
+ * has always filed (tag "Hiring Quiz", the two practice questions on the
+ * contact). Submitting it swaps the quiz in, on this same address. Someone who
+ * opted in earlier in this browser tab goes straight to the quiz. /hire-form is
+ * this page too, so old links still work.
+ *
+ * Their result is filed under the matching result form as soon as it is shown,
+ * which tags them and emails them the result — what "Enter your name and email
+ * to get your results!" promises. If that filing fails, an optional form under
+ * the result offers it again.
  */
 
 const TOTAL = HIRING_QUIZ_QUESTIONS.length;
 
-const ACCENT: Record<HiringResultKey, Accent> = { ready: "green", almost: "gold", notYet: "plum" };
-const GLOW: Record<HiringResultKey, string> = {
-  ready: "rgba(74,124,107,0.38)",
-  almost: "rgba(201,164,106,0.32)",
-  notYet: "rgba(123,94,167,0.38)",
-};
+const ACCENT: Record<HiringResultKey, Accent> = { ready: "green", almost: "plum", notYet: "neutral" };
+
+/**
+ * The doc's navy into purple, for its hero and "Not Yet" result. Fixed colours,
+ * not tokens: `plum` and `plum-deep` turn pale lilac on the dark theme, and this
+ * band stays dark in both. Needs `data-media-surface`.
+ */
+const NIGHT_BAND = "bg-gradient-to-br from-[#0F1E3A] to-[#2a1060]";
+
+/** The result header's band: green, purple or navy, as in the doc, in both themes. */
+const RESULT_BAND: Record<HiringResultKey, string> = { ready: "bg-green", almost: "bg-plum-bright", notYet: NIGHT_BAND };
+
+/** Figures inside a serif question ("60–90", "W2", "1099") in the body font. */
+function plainNumbers(text: string) {
+  return text.split(/(W?\d+(?:–\d+)?)/).map((part, i) =>
+    i % 2 === 1 ? (
+      <span key={i} className="font-body font-bold tabular-nums">
+        {part}
+      </span>
+    ) : (
+      part
+    ),
+  );
+}
 
 function emptyPicks(): (number | null)[] {
   return new Array<number | null>(TOTAL).fill(null);
@@ -93,9 +118,20 @@ export default function HiringQuiz() {
   const [filing, setFiling] = useState<FilingState>("idle");
   const swap = useSwap(direction);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     setContact(readContact());
   }, []);
+
+  function handleOptIn(person: LeadContact) {
+    try {
+      window.sessionStorage.setItem(HIRING_CONTACT_STORAGE_KEY, JSON.stringify(person));
+    } catch {
+      // Private browsing: the quiz still runs for this visit, from state.
+    }
+    arm();
+    setContact(person);
+    scrollToEl(progressRef.current, reduce);
+  }
 
   const question = HIRING_QUIZ_QUESTIONS[index];
   const picked = picks[index];
@@ -170,45 +206,67 @@ export default function HiringQuiz() {
   const pct = result ? 100 : Math.round((index / TOTAL) * 100);
   const counter = result ? HIRING_QUIZ_PAGE.complete : `Question ${index + 1} of ${TOTAL}`;
   const total = result ? scoreHiringQuiz(picks).total : 0;
-  const showOptionalForm = result && (!contact || filing === "failed");
+  const showOptionalForm = result && filing === "failed";
 
   return (
     <>
       <Seo
         title="Are You Ready to Hire Your First Clinician? | Free Quiz"
-        description="7 questions. 5 minutes. A clear, personalized answer — and an action plan no matter where you land."
+        description="Take this free 5-minute quiz to find out if your group practice is ready to hire — and exactly what to do next based on where you are."
         canonicalPath="/hiring-quiz"
       />
 
       <Section
         surface="deep"
-        space="md"
-        aurora="violet"
-        auroraIntensity={0.6}
+        space="lg"
         seam={false}
+        data-media-surface
+        backdrop={<div aria-hidden className={cn("absolute inset-0", NIGHT_BAND)} />}
         aria-label="Are You Ready to Hire Your First Clinician?"
         containerClassName="max-w-2xl"
       >
-        <BackLink to={HIRING_QUIZ_PAGE.backHref}>{HIRING_QUIZ_PAGE.backLabel}</BackLink>
+        <Link
+          to={HIRING_QUIZ_PAGE.backHref}
+          className="inline-flex min-h-[44px] items-center text-[0.7rem] font-semibold uppercase tracking-[0.18em] text-white/70 transition-colors duration-300 hover:text-white"
+        >
+          {HIRING_QUIZ_PAGE.backLabel}
+        </Link>
 
-        <header className="mt-6 text-center">
-          <p className="text-[0.7rem] font-semibold uppercase tracking-[0.2em] text-gold/90">{HIRING_QUIZ_PAGE.eyebrow}</p>
+        {/* A div, not a <header>: the light theme paints every header white. */}
+        <div className="mt-4 text-center">
+          <p className="text-[0.7rem] font-semibold uppercase tracking-[0.2em] text-orchid">{HIRING_QUIZ_PAGE.eyebrow}</p>
           <h1 className="mt-4 text-balance font-display text-[2rem] font-medium leading-[1.12] text-white sm:text-[2.6rem]">
             {HIRING_QUIZ_PAGE.title} <em className="block italic text-gold">{HIRING_QUIZ_PAGE.titleAccent}</em>
           </h1>
-          <p className="copy-luxe mx-auto mt-4 max-w-[52ch] text-pretty">{HIRING_QUIZ_PAGE.sub}</p>
-          <p className="mt-4 text-xs font-semibold uppercase tracking-[0.16em] text-orchid-faint">{HIRING_QUIZ_PAGE.meta}</p>
-        </header>
+          <p className="mx-auto mt-4 max-w-[52ch] text-pretty text-[1.03rem] leading-[1.75] text-white/80">{HIRING_QUIZ_PAGE.sub}</p>
+          <p className="mt-4 text-xs font-semibold uppercase tracking-[0.16em] text-white/60">{HIRING_QUIZ_PAGE.meta}</p>
+        </div>
+      </Section>
 
-        <div ref={progressRef} className="mt-9">
-          <QuizProgress label={HIRING_QUIZ_PAGE.progressLabel} right={counter} pct={pct} />
+      <Section surface="deep" space="md" seam={false} containerClassName="max-w-2xl">
+        <div ref={progressRef}>
+          {!contact ? (
+            <LeadFormCard
+              formSlug={HIRE_FORM.formSlug}
+              selects={[
+                { key: "years_in_practice", ...HIRE_FORM.practiceYears },
+                { key: "years_group_owner", ...HIRE_FORM.groupOwnerYears },
+              ]}
+              submitLabel={HIRE_FORM.submit}
+              disclaimer={HIRE_FORM.disclaimer}
+              intro={<p className="mb-6 text-center font-semibold text-white">{HIRE_FORM.lead}</p>}
+              onSuccess={handleOptIn}
+            />
+          ) : (
+            <QuizProgress label={HIRING_QUIZ_PAGE.progressLabel} right={counter} pct={pct} />
+          )}
         </div>
 
-        <div className="mt-7">
+        {contact && <div className="mt-7">
           <motion.div key={result ? `result-${round}` : `q${index}-${round}`} {...swap}>
             {!result && question && (
               <GlassCard accent="gold" interactive={false} spotlight={false} className="p-6 sm:p-9">
-                <p className="text-[0.7rem] font-semibold uppercase tracking-[0.18em] text-orchid">
+                <p className="text-[0.7rem] font-bold uppercase tabular-nums tracking-[0.18em] text-orchid">
                   Question {index + 1} of {TOTAL}
                 </p>
                 <h2
@@ -217,7 +275,7 @@ export default function HiringQuiz() {
                   tabIndex={-1}
                   className="mt-3 text-balance font-display text-[1.35rem] font-medium leading-[1.25] text-white outline-none sm:text-[1.7rem]"
                 >
-                  {question.text}
+                  {plainNumbers(question.text)}
                 </h2>
                 <div role="group" aria-labelledby="hiring-quiz-question" className="mt-7 flex flex-col gap-2.5">
                   {question.answers.map((answer, ai) => (
@@ -270,7 +328,7 @@ export default function HiringQuiz() {
               </>
             )}
           </motion.div>
-        </div>
+        </div>}
       </Section>
     </>
   );
@@ -288,11 +346,8 @@ function HiringResultCard({
   const r = HIRING_QUIZ_RESULTS[type];
   return (
     <GlassCard accent={ACCENT[type]} interactive={false} spotlight={false} className="overflow-hidden">
-      <div
-        className="border-b border-white/10 px-6 py-9 text-center sm:px-10 sm:py-11"
-        style={{ background: `radial-gradient(ellipse at top, ${GLOW[type]} 0%, transparent 72%)` }}
-      >
-        <p className="text-[0.7rem] font-semibold uppercase tracking-[0.2em] text-gold/90">{r.eyebrow}</p>
+      <div data-media-surface className={cn("px-6 py-9 text-center sm:px-10 sm:py-11", RESULT_BAND[type])}>
+        <p className="text-[0.7rem] font-semibold uppercase tracking-[0.2em] text-white/95">{r.eyebrow}</p>
         <h2
           ref={focusRef}
           tabIndex={-1}
@@ -300,36 +355,30 @@ function HiringResultCard({
         >
           {r.headline}
         </h2>
-        <p className="copy-luxe mx-auto mt-3 max-w-[46ch] text-pretty italic">{r.sub}</p>
+        <p className="mx-auto mt-3 max-w-[46ch] text-pretty text-[0.95rem] italic leading-relaxed text-white/95">{r.sub}</p>
       </div>
 
       <div className="px-6 py-8 sm:px-10 sm:py-10">
         <p className="copy-luxe text-pretty">{r.p1}</p>
         <p className="copy-luxe mt-4 text-pretty">{r.p2}</p>
-        <GoldRule width="w-11" className="mt-7" />
-        <h3 className="mt-6 text-[0.75rem] font-semibold uppercase tracking-[0.18em] text-orchid">
-          {HIRING_QUIZ_PAGE.stepsLabel}
-        </h3>
-        <ol className="mt-4 flex list-none flex-col gap-2.5">
-          {r.steps.map((step, i) => (
-            <li
-              key={step}
-              className="flex items-start gap-3.5 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3.5"
-            >
-              <span
-                aria-hidden
-                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-gold-foil text-[0.8rem] font-bold tabular-nums text-night-deep"
-              >
-                {i + 1}
-              </span>
-              <p className="min-w-0 text-[0.95rem] leading-relaxed text-white/85">{step}</p>
-            </li>
-          ))}
-        </ol>
 
-        <div className="mt-8 rounded-2xl border border-gold/30 bg-gold/[0.07] p-6 text-center sm:p-8">
+        <div className="mt-7 rounded-xl border border-white/10 bg-white/[0.04] p-5 sm:p-6">
+          <h3 className="text-[0.75rem] font-bold uppercase tracking-[0.12em] text-white">{HIRING_QUIZ_PAGE.stepsLabel}</h3>
+          <ul className="mt-3.5 flex list-none flex-col gap-2.5">
+            {r.steps.map((step) => (
+              <li key={step} className="flex items-start gap-2.5">
+                <span aria-hidden className="shrink-0 font-bold leading-relaxed text-lilac">
+                  →
+                </span>
+                <p className="min-w-0 text-[0.95rem] leading-relaxed text-white/85">{step}</p>
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <div className="mt-8 text-center">
           <p className="copy-luxe mx-auto max-w-[52ch] text-pretty text-[0.95rem]">{r.ctaCopy}</p>
-          <LuxeButton variant="foil" size="md" to={r.ctaLink} className="mt-6 min-h-[44px] max-w-full text-center leading-[1.4]">
+          <LuxeButton variant="foil" size="md" to={r.ctaLink} className="mt-6 min-h-[44px] w-full text-center leading-[1.4]">
             {r.ctaBtn}
           </LuxeButton>
           <p className="mt-2.5 text-xs tracking-[0.06em] text-orchid-faint">{r.ctaUrl}</p>

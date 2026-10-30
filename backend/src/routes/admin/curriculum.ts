@@ -91,7 +91,11 @@ export const LESSON_FIELDS = [
   "drip_days",
   "drip_date",
   "publish_at",
+  "watch_rule",
 ] as const;
+
+/** `course_lessons_watch_rule_check`: follow the course, must watch, or can skip. */
+export const LESSON_WATCH_RULES = ["inherit", "required", "skippable"] as const;
 
 /**
  * The lesson kinds `course_lessons_content_type_check` will accept.
@@ -169,6 +173,17 @@ export function assertContentType(body: Record<string, unknown>): void {
       continue;
     }
     throw badRequest(`A lesson has to be one of: ${LESSON_CONTENT_TYPES.join(", ")}.`);
+  }
+}
+
+/** Same reasoning as `assertContentType`: a sentence, not a constraint's 500. */
+export function assertWatchRule(body: Record<string, unknown>): void {
+  for (const [key, value] of Object.entries(body)) {
+    if (toSnake(key) !== "watch_rule" || value === undefined) continue;
+    if (typeof value === "string" && (LESSON_WATCH_RULES as readonly string[]).includes(value)) {
+      continue;
+    }
+    throw badRequest(`A lesson's viewing rule has to be one of: ${LESSON_WATCH_RULES.join(", ")}.`);
   }
 }
 
@@ -560,6 +575,7 @@ adminCurriculumRouter.post(
     if (!title) throw badRequest("Lesson title is required");
     assertPaidMedia(body);
     assertContentType(body);
+    assertWatchRule(body);
     assertEmbedHtml(body);
     assertLessonTool(body);
 
@@ -582,9 +598,9 @@ adminCurriculumRouter.post(
       `INSERT INTO course_lessons
          (module_id, slug, title, body_md, video_url, audio_url, attachment_url, thumbnail_url,
           duration_minutes, preview, published, content_type, comments_enabled,
-          requires_previous_lesson, drip_days, drip_date, embed_html, publish_at, tool_key, tool_config, sort)
+          requires_previous_lesson, drip_days, drip_date, embed_html, publish_at, tool_key, tool_config, watch_rule, sort)
        SELECT $1, $11::text,
-              $2, $3, $4, $5, $6, $7, $8, $9, $10, $12, $13, $14, $15, $16, $17, $18, $19, $20::jsonb,
+              $2, $3, $4, $5, $6, $7, $8, $9, $10, $12, $13, $14, $15, $16, $17, $18, $19, $20::jsonb, $21::text,
               (SELECT COALESCE(MAX(sort), -1) + 1 FROM course_lessons WHERE module_id = $1)
        RETURNING *`,
       [
@@ -608,6 +624,7 @@ adminCurriculumRouter.post(
         schedule.publish_at ?? null,
         body.toolKey ?? null,
         JSON.stringify(body.toolConfig ?? {}),
+        body.watchRule ?? "inherit",
       ],
     );
     res.status(201).json(rowToCamel<CourseLesson>(result.rows[0]));
@@ -619,6 +636,7 @@ adminCurriculumRouter.put(
   asyncHandler(async (req, res) => {
     assertPaidMedia(req.body as Record<string, unknown>);
     assertContentType(req.body as Record<string, unknown>);
+    assertWatchRule(req.body as Record<string, unknown>);
     assertEmbedHtml(req.body as Record<string, unknown>);
     assertLessonTool(req.body as Record<string, unknown>);
 

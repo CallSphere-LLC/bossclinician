@@ -1017,6 +1017,8 @@ adminContactsRouter.post(
          RETURNING id`,
         [contact.rows[0].email, contact.rows[0].name, contactId],
       );
+      // Access only. Handing an offer to a selection of people deliberately does
+      // not start its emails; only a single grant does (QA row 211).
       const products = await grantOfferAccess({
         memberId: member.rows[0].id,
         offerId: parsed.data.offerId,

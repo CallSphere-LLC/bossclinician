@@ -1,11 +1,12 @@
 import { env, stripeTestMode } from "../config/env";
 import { pool } from "../db/pool";
-import { publishDomainEvent } from "./domainEvents";
+import { automationIdentity, publishDomainEvent } from "./domainEvents";
 import { purchaseReceipt, purchaseWelcome, type ReceiptLine } from "../email/commerceTemplates";
 import { sendMail, type MailAttachment } from "../email/mailer";
 import { withStoredTemplate } from "../email/templateStore";
 import { ensureOrderReceipt, loadReceiptDocument, renderReceiptPdf } from "./receiptDocument";
 import { issueSetPasswordLink } from "./setPasswordLink";
+import { upsertContactWithStatus } from "./contacts";
 import { exitContactOnPurchase } from "./sequences";
 import { readSetting } from "./settings";
 import { sendOwnerSaleNotification } from "./ownerSaleNotification";
@@ -352,24 +353,78 @@ export async function deliverPurchase(
     // It has been listed there, narrowable to a specific offer, since Phase 5 —
     // and nothing has ever fired it, so every automation built on it has sat
     // idle since the day it was saved.
-    if (order.offer_id !== null) {
-      await publishDomainEvent("offer_purchased", {
-        eventKey: `offer-purchased:order:${order.id}`,
-        contactId: order.contact_id,
-        email: order.email,
-        name: order.billing_name,
-        subjectId: order.offer_id,
+    //
+    // QA row 211: this is what starts the emails that come with a course, and it
+    // is reached from a real purchase only: card and PayPal payments, free offers
+    // and 100% coupons. A renewal or a later installment never calls
+    // deliverPurchase (they extend access directly), and imports, migrations and
+    // backfills write access_grants without coming near this file. A redelivered
+    // webhook collapses on the event key, and `enrollContact` refuses to start
+    // anybody on a sequence they are already in or have been through.
+    //
+    // The emails belong to whoever received the course, which on a gift is not
+    // the person who paid.
+    const recipient =
+      order.gift_recipient_email && order.gift_member_id !== null
+        ? await automationIdentity(order.gift_member_id, order.gift_recipient_email)
+        : { contactId: order.contact_id, email: order.email, name: order.billing_name };
+
+    const publishPurchased = (
+      offerId: number,
+      offerSlug: string,
+      offerTitle: string,
+      eventKey: string,
+      additionalOffer: boolean,
+    ) =>
+      publishDomainEvent("offer_purchased", {
+        eventKey,
+        contactId: recipient.contactId,
+        email: recipient.email,
+        name: recipient.name,
+        subjectId: offerId,
         source: "purchase",
         facts: {
-          offerId: order.offer_id,
-          offerSlug: order.offer_slug ?? "",
-          offerTitle: order.offer_title ?? "",
+          source: "purchase",
+          offerId,
+          offerSlug,
+          offerTitle,
           orderId: order.id,
           amountCents: order.total_cents,
           currency: order.currency,
           couponCode: order.coupon_code,
+          additionalOffer,
         },
       });
+
+    if (order.offer_id !== null) {
+      await publishPurchased(
+        order.offer_id,
+        order.offer_slug ?? "",
+        order.offer_title ?? "",
+        `offer-purchased:order:${order.id}`,
+        false,
+      );
+    }
+
+    // An upsell or a cart line is an offer bought too, and fulfilment already
+    // grants it (the same two kinds), so it owes the same emails. The order's own
+    // offer keeps its original key, so nothing published before this can repeat.
+    const otherOffers = await pool.query<{ offer_id: number; title: string; slug: string }>(
+      `SELECT DISTINCT i.offer_id, f.title, f.slug
+         FROM order_items i
+         JOIN offers f ON f.id = i.offer_id
+        WHERE i.order_id = $1 AND i.kind IN ('offer', 'upsell')
+          AND i.offer_id IS DISTINCT FROM $2::int`,
+      [order.id, order.offer_id],
+    );
+    for (const other of otherOffers.rows) {
+      await publishPurchased(
+        other.offer_id,
+        other.slug,
+        other.title,
+        `offer-purchased:order:${order.id}:offer:${other.offer_id}`,
+        true,
+      );
     }
 
     return outcome;
@@ -411,6 +466,119 @@ export function notifyOwnerOfSale(input: { orderId: number }): void {
  * so the most common manual grant produced a customer who could not sign in.
  */
 export async function deliverManualGrant(input: {
+  memberId: number;
+  offerId: number;
+  createdMember: boolean;
+  /** The admin's "send the course emails" box. Only ever true on a single grant. */
+  sendCourseEmails?: boolean;
+  /** Everything the offer covers, and the part of it this grant newly opened. */
+  productIds?: number[];
+  activatedProductIds?: number[];
+}): Promise<{ welcomeSent: boolean; setPasswordLinkIncluded: boolean }> {
+  const delivered = await sendManualGrantWelcome(input);
+  if (input.sendCourseEmails === true) {
+    await startCourseEmailsForGrant({
+      memberId: input.memberId,
+      offerId: input.offerId,
+      productIds: input.productIds ?? [],
+      activatedProductIds: input.activatedProductIds ?? [],
+    });
+  }
+  return delivered;
+}
+
+/**
+ * QA row 211: one explicit admin grant starts the emails that come with the offer.
+ *
+ * The same `offer_purchased` trigger a sale raises, because that is where the
+ * offer's sequences are attached. `source: "manual_grant"` is in the facts, so an
+ * automation that must only run on a sale can say so with an "only if".
+ *
+ * This is deliberately NOT in `grantAccess` or `grantOfferAccess`. Those are also
+ * how renewals, plan grants, the automation engine and the bulk "Grant an offer"
+ * bar give access, and migrations and the Kajabi import write the table directly.
+ * None of them may email anybody from here, so the only caller is the single
+ * grant route, and only with the box ticked.
+ *
+ * Somebody who already holds this through an import is left alone: "source=import"
+ * people bought long ago elsewhere and must never be emailed by this. Otherwise a
+ * repeat grant is allowed through, because the key below and `enrollContact` make
+ * it harmless: one event per person and offer, ever. Never throws.
+ */
+async function startCourseEmailsForGrant(input: {
+  memberId: number;
+  offerId: number;
+  productIds: number[];
+  activatedProductIds: number[];
+}): Promise<void> {
+  try {
+    if (input.activatedProductIds.length === 0) {
+      const imported = await pool.query(
+        `SELECT 1 FROM access_grants
+          WHERE member_id = $1 AND product_id = ANY($2::int[])
+            AND source = 'import' AND status = 'active'
+          LIMIT 1`,
+        [input.memberId, input.productIds],
+      );
+      if ((imported.rowCount ?? 0) > 0) return;
+    }
+
+    const identity = await automationIdentity(input.memberId);
+    if (!identity.email) return;
+
+    // An account made by a grant has no contact yet, and a sequence needs one.
+    let contactId = identity.contactId;
+    if (contactId === null) {
+      const contact = await upsertContactWithStatus({
+        email: identity.email,
+        name: identity.name,
+        source: "customer",
+      });
+      contactId = contact.id;
+      await pool.query(`UPDATE members SET contact_id = $2 WHERE id = $1 AND contact_id IS NULL`, [
+        input.memberId,
+        contactId,
+      ]);
+      if (contact.created) {
+        await publishDomainEvent("contact_created", {
+          eventKey: `contact-created:${contactId}`,
+          contactId,
+          email: identity.email,
+          name: identity.name,
+          source: "customer",
+        });
+      }
+    }
+
+    const offerRes = await pool.query<{ title: string; slug: string }>(
+      `SELECT title, slug FROM offers WHERE id = $1`,
+      [input.offerId],
+    );
+
+    await publishDomainEvent("offer_purchased", {
+      eventKey: `offer-granted:member:${input.memberId}:offer:${input.offerId}`,
+      contactId,
+      email: identity.email,
+      name: identity.name,
+      subjectId: input.offerId,
+      source: "manual_grant",
+      facts: {
+        source: "manual_grant",
+        offerId: input.offerId,
+        offerSlug: offerRes.rows[0]?.slug ?? "",
+        offerTitle: offerRes.rows[0]?.title ?? "",
+      },
+    });
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error(
+      `[purchaseDelivery] course emails for member ${input.memberId}, offer ${input.offerId} failed:`,
+      (err as Error).message,
+    );
+  }
+}
+
+async function sendManualGrantWelcome(input: {
   memberId: number;
   offerId: number;
   createdMember: boolean;

@@ -90,7 +90,7 @@ export interface TriggerDescriptor {
 
 export const TRIGGER_DESCRIPTORS: TriggerDescriptor[] = [
   { type: "form_submitted", label: "someone submits a form", subjectKey: "formId", subjectSource: "forms", subjectLabel: "Which form" },
-  { type: "offer_purchased", label: "someone buys an offer", subjectKey: "offerId", subjectSource: "offers", subjectLabel: "Which offer" },
+  { type: "offer_purchased", label: "someone buys an offer or you give it to them", subjectKey: "offerId", subjectSource: "offers", subjectLabel: "Which offer" },
   { type: "sequence_completed", label: "someone finishes an email sequence", subjectKey: "sequenceId", subjectSource: "sequences", subjectLabel: "Which sequence" },
   // Joining and leaving, as distinct from finishing: "left" is a run cut short —
   // taken off by hand, by an automation, by an exit tag, or by buying the thing
@@ -808,6 +808,8 @@ async function performAction(
       }
       if (isTest) return { log: "Offer: would give them access", stop: false };
 
+      // Does not raise `offer_purchased`: only a sale or a single admin grant
+      // starts an offer's emails (services/purchaseDelivery.ts).
       const products = await grantOfferAccess({
         memberId,
         offerId: parsed.data.offerId,

@@ -105,7 +105,7 @@ describe("sendOwnerSaleNotification", () => {
     expect(query.mock.calls[0][0]).toContain("owner_notified_at IS NULL");
     const mail = vi.mocked(sendMail).mock.calls[0][0];
     expect(mail.to).toBe("owner@example.test");
-    expect(mail.subject).toContain("ZZ Toolkit");
+    expect(mail.subject).toMatch(/^New purchase: .*ZZ Toolkit.* - ZZ Buyer$/);
     expect(mail.text).toContain("ZZ Buyer <zz-buyer@example.test>");
     expect(mail.text).toContain("Payment plan: 3 payments of");
     expect(mail.text).toContain("Coupon: ZZHALF");

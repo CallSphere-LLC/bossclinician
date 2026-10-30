@@ -88,6 +88,7 @@ describe.skipIf(!hasTestDatabase)("Boss Move intake: migration and native member
   let a: number, b: number, stranger: number, courseId: number, moduleId: number, lessonId: number, formId: number;
   let tokenA: string, tokenB: string, tokenStranger: string, tokenViewAs: string;
   let originalLesson: Record<string, unknown>;
+  let sequenceEmailId: number;
   let pool: (typeof import("../../db/pool"))["pool"] | undefined;
 
   async function call(method: string, token?: string, data?: unknown) {
@@ -116,6 +117,8 @@ describe.skipIf(!hasTestDatabase)("Boss Move intake: migration and native member
     stranger = await insertMember(db.client, "row200-stranger@example.invalid");
     for (const id of [a,b]) await db.client.query("INSERT INTO access_grants(member_id,product_id,source,status) VALUES($1,$2,'manual','active')", [id,course.productId]);
     await db.client.query("INSERT INTO lesson_progress(member_id,lesson_id,completed_at) VALUES($1,$2,now())", [a,lessonId]);
+    sequenceEmailId = (await db.client.query(`WITH s AS (INSERT INTO email_sequences(name,slug) VALUES('Row 200','row-200-qa') RETURNING id)
+      INSERT INTO sequence_emails(sequence_id,position,subject,body_md) SELECT id,1,'Welcome','Fill out [your onboarding survey](https://forms.gle/BvNoceZw3Bn66ufRA) and [another](https://forms.gle/keep) today.' FROM s RETURNING id`)).rows[0].id;
     await db.client.query(migration);
     formId = (await db.client.query("SELECT id FROM forms WHERE slug=$1", [slug])).rows[0].id;
     const { signMemberAccessToken } = await import("../../auth/memberSession");
@@ -150,6 +153,11 @@ describe.skipIf(!hasTestDatabase)("Boss Move intake: migration and native member
     expect(lesson.body_md).toBe(originalBody.replace("](https://forms.gle/BvNoceZw3Bn66ufRA)", "](#lesson-form-"+slug+")").replace("\nhttps://forms.gle/BvNoceZw3Bn66ufRA\n", "\n"));
     expect((await db.client.query("SELECT id FROM course_lessons WHERE module_id=$1", [moduleId])).rowCount).toBe(1);
     expect((await db.client.query("SELECT completed_at FROM lesson_progress WHERE member_id=$1 AND lesson_id=$2", [a,lessonId])).rows[0].completed_at).toBeTruthy();
+  });
+
+  it("points welcome emails at the lesson instead of the retired form, leaving other links alone", async () => {
+    const email = (await db.client.query("SELECT body_md FROM sequence_emails WHERE id=$1", [sequenceEmailId])).rows[0];
+    expect(email.body_md).toBe("Fill out [your onboarding survey](https://www.bossclinician.com/library/the-boss-move/lessons/" + welcomeSlug + ") and [another](https://forms.gle/keep) today.");
   });
 
   it("requires an entitled authenticated member and shows original readonly identity labels", async () => {

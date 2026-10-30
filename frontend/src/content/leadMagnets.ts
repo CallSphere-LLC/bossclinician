@@ -28,9 +28,10 @@ export const LEAD_MAGNET_FORMS = {
 } as const;
 
 /**
- * Where each free guide lives on this site. The 5-Step Marketing Plan is the
- * fillable PDF from her media library; the other three are referenced at the
- * address they will be uploaded to (see the migration's header).
+ * Where each free guide lives on this site, in public/downloads. The emails link
+ * these same addresses (migrations 097 and 162), so renaming one breaks every
+ * email already sent. The business plan guide has no file yet: until it is there
+ * the link opens public/download-not-found.html.
  */
 export const FREEBIE_FILES = {
   marketingPlan: "/downloads/5-step-marketing-plan.pdf",

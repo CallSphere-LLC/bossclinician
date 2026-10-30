@@ -21,8 +21,21 @@ export default function NonCourseProduct() {
     { revalidateForMembers: true },
   );
   if (slug !== expected || page.status === "missing") {
-    return <><Seo title="Product not found | Boss Clinician" noindex httpStatus={404} />
-      <Section><Container>We couldn't find that product.</Container></Section></>;
+    // Also reached by an old download link. Same words as public/download-not-found.html.
+    return <><Seo title="Download not available | Boss Clinician" noindex httpStatus={404} />
+      <Section surface="base" space="md">
+        <Container className="max-w-2xl text-center">
+          <SectionTitle
+            align="center"
+            title="This download isn't available right now"
+            body="What you asked for isn't on our site at the moment. Write to us and we'll send it to you by email, or browse the other free resources in the meantime."
+          />
+          <div className="mt-8 flex flex-wrap justify-center gap-3">
+            <LuxeButton to="/contact" variant="foil">Ask us for it</LuxeButton>
+            <LuxeButton to="/resource-hub" variant="glass">Free resources</LuxeButton>
+          </div>
+        </Container>
+      </Section></>;
   }
   if (page.status !== "ready") {
     return <><Seo title="Loading | Boss Clinician" noindex httpStatus={503} />

@@ -9,8 +9,10 @@ import { writeStoredMedia, removeStoredMedia } from '../../services/objectStorag
 import { verifyContractEvents } from '../../services/contractAudit';
 import { readContractSource, serveContractPdf } from '../../services/contractStorage';
 import { assignContract, contractsForOffer, emailContractsAssigned, setOfferContracts } from '../../services/offerContracts';
+import { adminCheckoutRequirementsRouter } from './checkoutRequirements';
 
 export const adminContractsRouter = Router();
+adminContractsRouter.use(adminCheckoutRequirementsRouter);
 const MAX_PDF_BYTES = 10 * 1024 * 1024;
 const idOf = (raw: string): number => { const id = Number(raw); if (!Number.isSafeInteger(id) || id <= 0) throw badRequest('Invalid contract ID'); return id; };
 const createSchema = z.object({ title: z.string().trim().min(3).max(200), mediaId: z.number().int().positive() });

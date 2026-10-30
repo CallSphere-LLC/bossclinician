@@ -9,6 +9,13 @@ import type Stripe from "stripe";
 import type { PoolClient } from "pg";
 import { pool } from "../../db/pool";
 import { assertOfferDeliverable } from "../../services/downloadReadiness";
+import {
+  checkoutRequirementFields,
+  enforceCheckoutRequirements,
+  offerHasRequirements,
+  recordAcceptedRequirements,
+  refuseRequirementsInCart,
+} from "../../services/checkoutRequirements";
 import { asyncHandler } from "../../utils/asyncHandler";
 import { badRequest, forbidden, notFound, serviceUnavailable } from "../../utils/httpError";
 import { stripe } from "../../stripe/client";
@@ -753,6 +760,7 @@ const checkoutOfferSchema = z.object({
   giftRecipientEmail: z.string().trim().email().max(320).optional(),
   giftMessage: z.string().trim().max(2000).optional(),
   paymentProvider: z.enum(["stripe", "paypal"]).optional(),
+  ...checkoutRequirementFields,
 });
 
 /**
@@ -817,6 +825,23 @@ checkoutOfferRouter.post(
       const giftValidation = await validateCollectedEmail(body.giftRecipientEmail);
       if (!giftValidation.accepted) throw badRequest(giftValidation.reason || "Please check the gift recipient email address.");
     }
+    // QA rows 202-203: boxes, agreements and invitations the owner switched on.
+    // Checked before any order or charge exists; null when none are on.
+    if (body.cartItems) await refuseRequirementsInCart(body.cartItems.map((item) => item.slug));
+    const acceptedRequirements = body.cartItems
+      ? null
+      : await enforceCheckoutRequirements({
+          offer,
+          email,
+          memberId,
+          giftRecipientEmail: body.giftRecipientEmail,
+          acceptedTerms: body.acceptedTerms,
+          acknowledgments: body.checkoutAcknowledgments,
+          signatures: body.agreementSignatures,
+          invitationToken: body.invitationToken,
+          ip: req.ip,
+          userAgent: req.get("user-agent"),
+        });
     const billingName = body.name ?? "";
     const billingAddress = body.address ?? {};
 
@@ -841,6 +866,15 @@ checkoutOfferRouter.post(
       source: "checkout",
       visitorToken: visitorToken(req),
     });
+
+    if (acceptedRequirements) {
+      try {
+        await recordAcceptedRequirements({ orderId, accepted: acceptedRequirements, total, couponCode: coupon?.code });
+      } catch (err) {
+        await markOrderFailed(orderId);
+        throw err;
+      }
+    }
 
     const receipt = {
       orderId,
@@ -1410,7 +1444,7 @@ checkoutOfferRouter.post(
     const upsellOffer = await loadPublishedOfferById(upsellOfferId);
     if (!upsellOffer) throw notFound("Upsell not found");
     await assertOfferDeliverable(upsellOffer.id);
-    if (isRecurring(upsellOffer)) {
+    if (isRecurring(upsellOffer) || (await offerHasRequirements(upsellOffer.id))) {
       throw badRequest("This offer has to be bought from its own checkout page");
     }
 
@@ -1496,6 +1530,7 @@ checkoutOfferRouter.post(
       const result = await fulfillPayment({ orderId, amountCents: 0, currency: total.currency, email: parent.email });
       if (result.fulfilled) {
         await deliverPurchase({ orderId, memberId: result.memberId, createdMember: result.createdMember });
+        notifyOwnerOfSale({ orderId });
       }
       res.json({ status: "paid", orderId, orderToken: issueOrderToken(orderId), clientSecret: null, clientSecretType: null });
       return;

@@ -42,6 +42,7 @@ import { api } from "@/lib/api";
 import { checkoutButtonStyle } from "@/components/checkout/checkoutStyle";
 import { CheckoutMarkdown } from "@/components/checkout/CheckoutMarkdown";
 import { checkoutPlainText } from "@/components/checkout/checkoutMarkdown";
+import { CheckoutRequirementsPanel, InvitationRequiredNotice, useCheckoutRequirements, usesInvitationGate } from "@/components/checkout/CheckoutRequirements";
 
 const EASE_LUXE: [number, number, number, number] = [0.22, 1, 0.36, 1];
 
@@ -267,6 +268,8 @@ export function CheckoutExperience({ offer }: { offer: PublicOffer }) {
     };
   }, [mode, amountCents, selectedPricing.currency, siteTheme]);
 
+  if (usesInvitationGate(offer, Boolean(preview))) return <InvitationRequiredNotice />;
+
   return (
     <div className="space-y-5">
       {offer.pricingOptions.length > 1 && (
@@ -375,6 +378,11 @@ function CheckoutForm({ offer, pricingOption, mode, onAmountChange }: CheckoutFo
   const [paymentError, setPaymentError] = useState<string | null>(null);
   const [formNotice, setFormNotice] = useState<string | null>(null);
   const [previewNotice, setPreviewNotice] = useState<string | null>(null);
+  const requirements = useCheckoutRequirements({ offer, pricingOptionId: pricingOption.id, preview: Boolean(preview) });
+  const invitedEmail = requirements.invitedEmail;
+  useEffect(() => {
+    if (invitedEmail) setEmail(invitedEmail);
+  }, [invitedEmail]);
 
   // A signed-in buyer's own address is what the server will bill against
   // whatever the form says, so the field shows it rather than pretending to
@@ -500,7 +508,8 @@ function CheckoutForm({ offer, pricingOption, mode, onAmountChange }: CheckoutFo
 
     setErrors(next);
     setCustomErrors(nextCustom);
-    return Object.keys(next).length === 0 && Object.keys(nextCustom).length === 0;
+    const requirementsMet = requirements.validate();
+    return requirementsMet && Object.keys(next).length === 0 && Object.keys(nextCustom).length === 0;
   }
 
   /* ---- submission ---- */
@@ -529,6 +538,7 @@ function CheckoutForm({ offer, pricingOption, mode, onAmountChange }: CheckoutFo
     ...(selectedBumps.length > 0 ? { bumpProductIds: selectedBumps } : {}),
     ...(pwywAmountCents !== undefined ? { pwywAmountCents } : {}),
     ...(orderForm.requireTerms ? { acceptedTerms } : {}),
+    ...requirements.payload,
   };
 
   /**
@@ -754,7 +764,7 @@ function CheckoutForm({ offer, pricingOption, mode, onAmountChange }: CheckoutFo
         {offer.description && <CheckoutMarkdown text={offer.description} className="mt-4 max-w-xl text-pretty" />}
         {/* Shown in the preview as buyers see them, but inert there: the cart
             lives on the public site and the preview may not write to it. */}
-        {!offer.cartItems && ["one_time","free"].includes(billing.pricingType) && <div className="mt-4 flex flex-wrap gap-4 text-sm text-gold">
+        {!offer.cartItems && !offer.checkoutRequirements && ["one_time","free"].includes(billing.pricingType) && <div className="mt-4 flex flex-wrap gap-4 text-sm text-gold">
           <button type="button" className="underline underline-offset-4" onClick={()=>{if(preview){setPreviewNotice(PREVIEW_CART_NOTICE);return;}addToCart({slug:offer.slug,pricingOptionId:pricingOption.id,bumpProductIds:selectedBumps});navigate('/cart');}}>Add to cart</button>
           <Link to="/cart" onClick={(e)=>{if(preview){e.preventDefault();setPreviewNotice(PREVIEW_CART_NOTICE);}}} className="underline underline-offset-4">View cart</Link>
         </div>}
@@ -793,7 +803,7 @@ function CheckoutForm({ offer, pricingOption, mode, onAmountChange }: CheckoutFo
                 wrapperClassName="sm:col-span-2"
                 value={email}
                 error={errors.email}
-                disabled={locked || signedInEmail !== ""}
+                disabled={locked || signedInEmail !== "" || Boolean(invitedEmail)}
                 hint={
                   signedInEmail !== ""
                     ? "You're signed in, so your order goes to this address."
@@ -843,7 +853,7 @@ function CheckoutForm({ offer, pricingOption, mode, onAmountChange }: CheckoutFo
             )}
           </Fieldset>
 
-          {orderForm.allowGifting !== false && !recurring && <Fieldset legend="Send as a gift">
+          {orderForm.allowGifting !== false && !recurring && !requirements.blocksGift && <Fieldset legend="Send as a gift">
             <label className="flex items-center gap-3 text-sm text-orchid"><input type="checkbox" checked={isGift} disabled={locked} onChange={e => setIsGift(e.target.checked)} />Buy this for someone else</label>
             {isGift && <div className="mt-4 space-y-4">
               <LuxeInput label="Recipient's email" type="email" required value={giftRecipientEmail} error={errors.giftRecipientEmail} disabled={locked} onChange={e => setGiftRecipientEmail(e.target.value)} hint="They receive access after payment. Your receipt stays with you." />
@@ -871,6 +881,12 @@ function CheckoutForm({ offer, pricingOption, mode, onAmountChange }: CheckoutFo
                 disabled={locked}
                 onToggle={toggleBump}
               />
+            </Fieldset>
+          )}
+
+          {requirements.active && (
+            <Fieldset legend="Before you pay">
+              <CheckoutRequirementsPanel state={requirements} offerSlug={offer.slug} disabled={locked} />
             </Fieldset>
           )}
 

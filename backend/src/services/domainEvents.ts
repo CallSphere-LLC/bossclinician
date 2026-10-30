@@ -53,6 +53,20 @@ export function webhookEventsFor(trigger: TriggerV2): string[] {
 }
 
 /**
+ * `offer_purchased` is also raised for an admin grant and for each further offer
+ * on one order (QA row 211). Neither is a new `order.paid`: a grant is not an
+ * order, and one order is paid once however many offers it holds.
+ */
+export function publishesWebhooks(event: {
+  event_type: string;
+  source: string;
+  facts: Record<string, unknown> | null;
+}): boolean {
+  if (event.event_type !== "offer_purchased") return true;
+  return event.source !== "manual_grant" && event.facts?.additionalOffer !== true;
+}
+
+/**
  * Who an automation should treat a member as.
  *
  * Every domain event needs a contact to run conditions and tags against, and a
@@ -187,7 +201,7 @@ export async function dispatchDomainEvent(payload: Record<string, unknown>): Pro
       occurredAt: event.created_at.toISOString(),
     };
     let webhooks = 0;
-    for (const webhookType of webhookEventsFor(event.event_type)) {
+    for (const webhookType of publishesWebhooks(event) ? webhookEventsFor(event.event_type) : []) {
       webhooks += await dispatchEvent(
         webhookType,
         { ...payloadBody, type: webhookType },

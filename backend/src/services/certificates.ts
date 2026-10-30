@@ -1,4 +1,4 @@
-import { watchRequirementSql, watchExemptionSql, mediaWatchSatisfied } from "./courseWatchPolicy";
+import { watchRequirementSql, watchExemptionSql, lessonSkippableSql, mediaWatchSatisfied } from "./courseWatchPolicy";
 import { usesS3Media, mediaStore, readStoredMedia, writeStoredMedia } from "./objectStorage";
 import crypto from "crypto";
 import fs from "fs";
@@ -708,6 +708,8 @@ export interface CeuLessonRecord {
    */
   hasMedia?: boolean;
   watchExempt?: boolean;
+  /** The owner marked this video "Can be skipped" (course_lessons.watch_rule). */
+  skippable?: boolean;
   videoDurationSeconds?: number;
   playedToSeconds?: number;
   /** The credited watch figure. 0 for a lesson with nothing to play. */
@@ -740,6 +742,8 @@ export interface CeuLessonRecord {
  */
 export function earnedCeuCredit(lessons: CeuLessonRecord[]): boolean {
   return lessons.every((lesson) => {
+    // The owner has said this video is not part of what the document attests.
+    if (lesson.skippable === true) return true;
     if (
       lesson.hasMedia === true ||
       lesson.contentType === "video" ||
@@ -768,6 +772,7 @@ async function loadCeuLessonRecords(
     duration_minutes: number | null;
     has_media: boolean;
     watch_exempt: boolean;
+    skippable: boolean;
     video_duration_seconds: number;
     max_position_seconds: number;
     watched_percent: number | null;
@@ -776,6 +781,7 @@ async function loadCeuLessonRecords(
   }>(
     `SELECT l.content_type, l.duration_minutes, l.video_duration_seconds, lp.max_position_seconds,
             ${watchExemptionSql("c", "$1")} AS watch_exempt,
+            ${lessonSkippableSql("l")} AS skippable,
             (COALESCE(l.video_url, '') <> '' OR COALESCE(l.audio_url, '') <> '') AS has_media,
             lp.watched_percent, lp.first_viewed_at, lp.completed_at
        FROM course_lessons l
@@ -791,6 +797,7 @@ async function loadCeuLessonRecords(
     durationMinutes: row.duration_minutes ?? 0,
     hasMedia: row.has_media === true,
     watchExempt: row.watch_exempt,
+    skippable: row.skippable,
     videoDurationSeconds: row.video_duration_seconds,
     playedToSeconds: row.max_position_seconds ?? 0,
     watchedPercent: row.watched_percent ?? 0,
@@ -944,6 +951,10 @@ export interface CertificateLessonRow {
   /** The lesson carries a published survey (the course evaluation). */
   hasSurvey: boolean;
   surveySubmitted: boolean;
+  /** This lesson's own answer (watch_rule, then the course); the course's when absent. */
+  fullWatchRequired?: boolean;
+  /** Marked "Can be skipped": an unfinished one is not owed. */
+  skippable?: boolean;
 }
 
 /** A video that has to be watched through before the certificate. */
@@ -982,9 +993,10 @@ export function certificateGaps(
   let lessonsRemaining = 0;
 
   for (const lesson of lessons) {
-    if (!lesson.completed) lessonsRemaining += 1;
+    const owed = !lesson.completed && lesson.skippable !== true;
+    if (owed) lessonsRemaining += 1;
 
-    if (options.requireFullVideo && lesson.hasMedia) {
+    if ((lesson.fullWatchRequired ?? options.requireFullVideo) && lesson.hasMedia) {
       const watched =
         lesson.videoDurationSeconds > 0
           ? isFullyWatched(lesson.playedToSeconds, lesson.videoDurationSeconds)
@@ -1007,7 +1019,7 @@ export function certificateGaps(
       evaluationsToSubmit.push(lesson.title);
       continue;
     }
-    if (!lesson.completed) otherLessonsRemaining += 1;
+    if (owed) otherLessonsRemaining += 1;
   }
 
   return {
@@ -1037,8 +1049,12 @@ async function loadCertificateLessons(
       watched_percent: number;
       has_survey: boolean;
       survey_submitted: boolean;
+      full_watch_required: boolean;
+      skippable: boolean;
     }>(
       `SELECT l.title, l.video_duration_seconds,
+              ${watchRequirementSql("c", "$1", "l")} AS full_watch_required,
+              ${lessonSkippableSql("l")} AS skippable,
               (lp.completed_at IS NOT NULL) AS completed,
               (COALESCE(l.video_url, '') <> '' OR COALESCE(l.audio_url, '') <> '') AS has_media,
               COALESCE(lp.max_position_seconds, 0) AS played_to,
@@ -1051,6 +1067,7 @@ async function loadCertificateLessons(
                          AND t.member_id = $1 AND t.completed_at IS NOT NULL) AS survey_submitted
          FROM course_lessons l
          JOIN course_modules m ON m.id = l.module_id
+         JOIN courses c ON c.id = m.course_id
          LEFT JOIN lesson_progress lp ON lp.lesson_id = l.id AND lp.member_id = $1
         WHERE m.course_id = $2 AND l.published
         ORDER BY m.sort, m.id, l.sort, l.id`,
@@ -1068,6 +1085,8 @@ async function loadCertificateLessons(
       watchedPercent: row.watched_percent ?? 0,
       hasSurvey: row.has_survey,
       surveySubmitted: row.survey_submitted,
+      fullWatchRequired: row.full_watch_required,
+      skippable: row.skippable,
     })),
   };
 }
@@ -1159,7 +1178,7 @@ export async function certificateStatus(
 
   const course = !issued && allowed && template ? await loadCourseForMember(memberId, courseId) : null;
   const next = course ? flattenLessons(course.modules).find(lesson => lesson.unlocked && (
-    !lesson.completed || quizzesToPass.some(quiz => quiz.lessonTitle === lesson.title) ||
+    (!lesson.completed && !lesson.skippable) || quizzesToPass.some(quiz => quiz.lessonTitle === lesson.title) ||
     gaps.evaluationsToSubmit.includes(lesson.title)
   )) : undefined;
   return {

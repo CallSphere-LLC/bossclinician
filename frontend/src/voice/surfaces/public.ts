@@ -331,7 +331,7 @@ const DESTINATIONS: readonly VoiceDestination[] = [
     label: "Terms",
     aliases: ["terms", "terms and conditions", "the small print", "the contract"],
     narration:
-      "The terms of use — a binding agreement, in eleven clauses with an index down the side, covering copyright, trademarks, access restrictions, warranties and governing law.",
+      "The terms of use — in eighteen numbered sections with an index down the side, covering enrollment and billing, cancellation, refunds, use of materials, community conduct, continuing education and governing law.",
     surfaces: PUBLIC,
   },
   {

@@ -77,10 +77,10 @@ export interface RevokeOutcome {
 
 export const contactAccessApi = {
   get: (contactId: number) => request<ContactAccess>(`/admin/contact-access/${contactId}`),
-  grant: (offerId: number, who: MemberRef) =>
+  grant: (offerId: number, who: MemberRef, options: { sendCourseEmails?: boolean } = {}) =>
     request<GrantOutcome>(`/admin/offers/${offerId}/grant`, {
       method: "POST",
-      body: JSON.stringify(who),
+      body: JSON.stringify({ ...who, ...options }),
     }),
   revoke: (offerId: number, who: MemberRef, reason = "") =>
     request<RevokeOutcome>(`/admin/offers/${offerId}/revoke`, {

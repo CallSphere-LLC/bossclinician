@@ -7,6 +7,7 @@ import { badRequest, notFound, unauthorized } from '../../utils/httpError';
 import { serveContractPdf } from '../../services/contractStorage';
 import { appendContractEvent, DISCLOSURE_VERSION, ELECTRONIC_CONSENT, SIGNING_INTENT } from '../../services/contractAudit';
 import { denyImpersonation } from '../../middleware/memberAuth';
+import { enrollmentTermLines } from '../../services/checkoutAgreementRecords';
 
 export const memberContractsRouter = Router();
 const memberIdOf = (req: Request): number => { if (!req.member) throw unauthorized('Sign in to view contracts'); return req.member.id; };
@@ -86,6 +87,7 @@ memberContractsRouter.get('/contracts/:id/evidence', asyncHandler(async (req,res
     .text(`Signer IP: ${row.signer_ip || 'Unavailable'}`)
     .text(`Browser: ${row.signer_user_agent || 'Unavailable'}`).moveDown();
   pdf.text(signedData.disclosureText || ELECTRONIC_CONSENT).moveDown().text(signedData.intentText || SIGNING_INTENT).moveDown();
+  if (signedData.enrollmentTerms) { pdf.fontSize(12).text('Enrollment record').moveDown(0.5); for (const [label,value] of enrollmentTermLines(signedData.enrollmentTerms)) pdf.fontSize(10).text(`${label}: ${value}`); pdf.moveDown(); }
   pdf.text(`Final audit hash: ${row.evidence_sha256}`).moveDown();
   pdf.fontSize(12).text('Audit events').moveDown(0.5);
   for (const event of events.rows) pdf.fontSize(9).text(`${event.event_type} | ${new Date(event.occurred_at).toISOString()} | ${event.event_hash}`);

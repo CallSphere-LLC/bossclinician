@@ -3,7 +3,7 @@ import { Link } from "react-router";
 import { FileSignature } from "lucide-react";
 import { toast } from "sonner";
 import { adminContractsApi } from "@/lib/contractsApi";
-import { Button, Card, CardHeader, EmptyState, ErrorNotice, Skeleton } from "@/pages/admin/ui/primitives";
+import { Button, Card, CardHeader, EmptyState, ErrorNotice, Skeleton, legibleDisabledStyles } from "@/pages/admin/ui/primitives";
 
 /**
  * The offer's Contract tab (QA row 164): pick the participant contracts a buyer
@@ -72,7 +72,7 @@ export default function OfferContractsTab({ offerId }: { offerId: number }) {
         subtitle="Assigned automatically to everyone who buys this offer"
         action={
           contracts && contracts.length > 0 ? (
-            <Button size="sm" onClick={() => void save()} disabled={saving || !dirty}>
+            <Button size="sm" className={legibleDisabledStyles} onClick={() => void save()} disabled={saving || !dirty}>
               {saving ? "Saving…" : dirty ? "Save contracts" : "Saved"}
             </Button>
           ) : undefined
@@ -110,7 +110,7 @@ export default function OfferContractsTab({ offerId }: { offerId: number }) {
                   <span className="min-w-0">
                     <span className="block text-sm font-semibold text-ink">{contract.title}</span>
                     <a
-                      className="mt-0.5 inline-block text-xs text-plum underline"
+                      className="mt-0.5 inline-block text-xs text-plum-deep underline"
                       href={adminContractsApi.fileUrl(contract.id)}
                       target="_blank"
                       rel="noreferrer"
@@ -131,7 +131,7 @@ export default function OfferContractsTab({ offerId }: { offerId: number }) {
             </ul>
             <p className="text-sm text-ink-soft">
               Track who has signed in{" "}
-              <Link className="text-plum underline" to="/admin/contracts">
+              <Link className="text-plum-deep underline" to="/admin/contracts">
                 Products → Contracts
               </Link>
               .

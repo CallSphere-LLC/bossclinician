@@ -21,14 +21,28 @@ describe("formSubmissionNotification", () => {
 
   it("names the form and the person in the subject, on one line", () => {
     const { subject } = formSubmissionNotification({ ...reply, name: "Jane\r\nBcc: x@evil.test" });
-    expect(subject).toBe("New Boardroom Application: Jane Bcc: x@evil.test");
+    expect(subject).toBe("New form reply: Boardroom Application - Jane Bcc: x@evil.test");
     expect(subject).not.toMatch(/[\r\n]/);
   });
 
   it("falls back to the address when no name was given", () => {
     expect(formSubmissionNotification({ ...reply, name: "" }).subject).toBe(
-      "New Boardroom Application: jane@example.com",
+      "New form reply: Boardroom Application - jane@example.com",
     );
+  });
+
+  it("says opt-in for a public sign-up, drops the Forms screen's labels, and names the person", () => {
+    const { subject, text } = formSubmissionNotification({
+      ...reply,
+      name: "Jane",
+      formName: "Insurance vs Superbills Guide — opt-in",
+      optIn: true,
+    });
+    expect(subject).toBe("New opt-in: Insurance vs Superbills Guide - Jane");
+    expect(text).toContain('Jane (jane@example.com) opted in to "Insurance vs Superbills Guide".');
+    expect(
+      formSubmissionNotification({ ...reply, name: "Jane", formName: "Hiring Quiz — Sign-up (/hire-form)", optIn: true }).subject,
+    ).toBe("New opt-in: Hiring Quiz - Jane");
   });
 
   it("lists every answer as label: value in the plain-text part", () => {

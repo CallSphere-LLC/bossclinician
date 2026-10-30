@@ -185,6 +185,7 @@ function LessonRow({ lesson, productSlug, active, onNavigate }: LessonRowProps) 
             <>
               {contentTypeLabel(lesson.contentType)}
               {length && ` · ${length}`}
+              {lesson.skippable && " · Optional"}
               {lesson.completed && " · Finished"}
             </>
           ) : (

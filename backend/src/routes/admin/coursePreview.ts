@@ -343,6 +343,7 @@ adminCoursePreviewRouter.get(
         mediaExpiresAt: mediaExpiresAt === null ? null : mediaExpiresAt.toISOString(),
         commentsEnabled: lesson.commentsEnabled,
         notesEnabled: lesson.notesEnabled,
+        skippable: lesson.skippable,
         files: files.rows.map((f) => ({
           id: f.id,
           title: f.title || f.filename,

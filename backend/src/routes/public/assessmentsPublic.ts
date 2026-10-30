@@ -19,6 +19,7 @@ import { asyncHandler } from "../../utils/asyncHandler";
 import { badRequest, notFound } from "../../utils/httpError";
 import { plainText } from "../../utils/plainText";
 import { publishDomainEvent } from "../../services/domainEvents";
+import { notifyOwnerOfOptIn } from "../../services/ownerOptInNotification";
 import { optionalMember } from "../../middleware/memberAuth";
 import { forbidden } from "../../utils/httpError";
 
@@ -259,6 +260,14 @@ assessmentsPublicRouter.post(
           source: `quiz:${req.params.slug}`,
         });
       }
+      // Only this branch: a lesson's test is coursework, and an anonymous attempt
+      // gave no address to tell her about.
+      notifyOwnerOfOptIn({
+        what: assessment.title,
+        name: input.name ?? "",
+        email,
+        details: result ? [{ label: "Result", value: result.title }] : [],
+      });
     } else {
       // An anonymous quiz still records the attempt: the completion rate and
       // the archetype split are the numbers that say whether it is working.

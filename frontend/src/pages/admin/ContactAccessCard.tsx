@@ -90,6 +90,7 @@ export default function ContactAccessCard({
   const [offers, setOffers] = useState<{ id: number; title: string }[]>([]);
   const [granting, setGranting] = useState(false);
   const [offerId, setOfferId] = useState("");
+  const [sendCourseEmails, setSendCourseEmails] = useState(true);
   const [busy, setBusy] = useState(false);
   const [confirm, confirmDialog] = useConfirm();
   // Giving and taking away are changes to offers, which only the owner and a
@@ -137,6 +138,7 @@ export default function ContactAccessCard({
 
   function openGrant() {
     setOfferId("");
+    setSendCourseEmails(true);
     setGranting(true);
   }
 
@@ -145,7 +147,7 @@ export default function ContactAccessCard({
     if (!offerId || !who) return;
     setBusy(true);
     try {
-      const outcome = await contactAccessApi.grant(Number(offerId), who);
+      const outcome = await contactAccessApi.grant(Number(offerId), who, { sendCourseEmails });
       toast.success(
         outcome.welcomeSent
           ? "Access given — we've emailed them how to get in"
@@ -294,7 +296,7 @@ export default function ContactAccessCard({
           </>
         }
       >
-        <form id="contact-grant-form" onSubmit={grant}>
+        <form id="contact-grant-form" onSubmit={grant} className="space-y-3">
           <Field label="Which offer?">
             <select
               className={selectStyles}
@@ -311,6 +313,15 @@ export default function ContactAccessCard({
               ))}
             </select>
           </Field>
+          <label className="flex min-h-11 cursor-pointer items-center gap-2 text-sm text-ink-soft">
+            <input
+              type="checkbox"
+              checked={sendCourseEmails}
+              onChange={(e) => setSendCourseEmails(e.target.checked)}
+              className="size-4 rounded border-hairline text-plum"
+            />
+            Send the course emails attached to this offer
+          </label>
         </form>
       </Modal>
 

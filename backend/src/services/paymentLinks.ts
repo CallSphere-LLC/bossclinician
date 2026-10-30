@@ -3,6 +3,7 @@ import type Stripe from "stripe";
 import { pool } from "../db/pool";
 import { stripe } from "../stripe/client";
 import { badRequest, notFound } from "../utils/httpError";
+import { offerHasRequirements } from "./checkoutRequirements";
 import { readSetting } from "./settings";
 import { cleanStatementDescriptor } from "./paymentRules";
 import { assertOfferDeliverable } from "./downloadReadiness";
@@ -210,6 +211,10 @@ export async function createOfferPaymentLink(input: {
   if (!support.supported) throw badRequest(support.reason);
   // The same check our checkout makes: a download with no file is not sold.
   await assertOfferDeliverable(offer.id);
+  // Stripe's hosted page has no way to collect a required tick or signature (QA row 202).
+  if (await offerHasRequirements(offer.id)) {
+    throw badRequest("This offer asks buyers to accept terms or sign before paying, which a payment link can't do. Send them to its checkout page instead.");
+  }
 
   const live = await pool.query(
     `SELECT 1 FROM offer_payment_links

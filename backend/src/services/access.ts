@@ -149,6 +149,11 @@ export async function grantAccess(input: GrantAccessInput): Promise<AccessGrant>
  * rather than a feature, and the migration's `bundle_not_self` check only stops
  * the trivial cycle. Expanding once keeps this terminating no matter how the
  * data is shaped.
+ *
+ * Grants access and nothing else. It must never start an offer's emails, because
+ * renewals, plan grants, automations and bulk grants all come through here: that
+ * is done by `deliverPurchase` and `deliverManualGrant`, for a sale or a single
+ * admin grant only (QA row 211).
  */
 export async function grantOfferAccess(input: {
   memberId: number;

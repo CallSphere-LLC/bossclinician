@@ -1,3 +1,5 @@
+import { readFileSync } from "fs";
+import { join } from "path";
 import { beforeAll, afterAll, describe, it, expect, vi } from "vitest";
 import { createTestDatabase, hasTestDatabase } from "../testing/db";
 
@@ -38,7 +40,7 @@ describeDb("checkout recovery (integration)", () => {
 
   it("sends an editable reminder, attributes a followed link, fulfills and cancels every later reminder", async () => {
     const c = await cart();
-    await settings.writeSetting("cart_recovery", {subject0:"ZZ Reminder for {offer}",body0:"Hi {name}, your download is waiting."});
+    await settings.writeSetting("cart_recovery", {hours0:1,subject0:"ZZ Reminder for {offer}",body0:"Hi {name}, your download is waiting."});
     expect(await recovery.sweepAbandonedCheckouts()).toEqual({queued:1});
     const r:any = await recovery.checkoutRecoveryEmail({abandonedCheckoutId:c.id,step:0});
     expect(r.outcome).toBe("sent");
@@ -124,7 +126,77 @@ describeDb("checkout recovery (integration)", () => {
 
   it("validates recipient addresses, ordered delays and blank copy", async () => {
     await expect(settings.writeSetting("cart_recovery",{recipients:"not-an-email"})).rejects.toThrow();
-    await expect(settings.writeSetting("cart_recovery",{hours1:0.5})).rejects.toThrow();
+    await expect(settings.writeSetting("cart_recovery",{enabled1:true,hours1:0.5})).rejects.toThrow();
     await expect(settings.writeSetting("cart_recovery",{body0:""})).rejects.toThrow();
+  });
+
+  it("defaults to exactly one reminder, 6 hours after abandonment", async () => {
+    const {recoveryDefinition: {defaults}} = await import("./checkoutRecoverySettings");
+    expect([defaults.enabled0, defaults.enabled1, defaults.enabled2, defaults.enabled3]).toEqual([true, false, false, false]);
+    expect(defaults.hours0).toBe(6);
+  });
+
+  it("sends one reminder per person in 24 hours across offers, and the waiting one afterwards", async () => {
+    const email = "sagar+zz-recovery-person@callsphere.ai";
+    await settings.writeSetting("cart_recovery", {recipients: email, hours0: 1});
+    n++; const first = await cart(email);
+    n++; const second = await cart(email);
+    const r: any = await recovery.checkoutRecoveryEmail({abandonedCheckoutId: first.id, step: 0});
+    expect(r.outcome).toBe("sent");
+    const before = sent.messages.length;
+    expect((await recovery.checkoutRecoveryEmail({abandonedCheckoutId: second.id, step: 0}) as any).skipped).toContain("24 hours");
+    expect(sent.messages).toHaveLength(before);
+    expect((await db.client.query(`SELECT emails_sent,stopped_at FROM abandoned_checkouts WHERE id=$1`, [second.id])).rows[0]).toEqual({emails_sent: 0, stopped_at: null});
+    expect(await recovery.sweepAbandonedCheckouts()).toEqual({queued: 0});
+    await db.client.query(`UPDATE checkout_reminders SET sent_at=now()-interval '25 hours' WHERE id=$1`, [r.reminderId]);
+    expect(await recovery.sweepAbandonedCheckouts()).toEqual({queued: 1});
+    expect((await recovery.checkoutRecoveryEmail({abandonedCheckoutId: second.id, step: 0}) as any).outcome).toBe("sent");
+    await settings.writeSetting("cart_recovery", {recipients: ""});
+  });
+
+  it("lets only one of a person's carts through when both send at once", async () => {
+    const email = "sagar+zz-recovery-together@callsphere.ai";
+    n++; const first = await cart(email);
+    n++; const second = await cart(email);
+    const results: any[] = await Promise.all([first, second].map((c) => recovery.checkoutRecoveryEmail({abandonedCheckoutId: c.id, step: 0})));
+    expect(results.filter((r) => r.outcome === "sent")).toHaveLength(1);
+  });
+
+  it("drops a reminder long past its time, until there is new checkout activity", async () => {
+    const c = await cart();
+    await settings.writeSetting("cart_recovery", {recipients: c.email, hours0: 1});
+    await db.client.query(`UPDATE abandoned_checkouts SET updated_at=now()-interval '60 hours' WHERE id=$1`, [c.id]);
+    expect(await recovery.sweepAbandonedCheckouts()).toEqual({queued: 0});
+    expect((await recovery.checkoutRecoveryEmail({abandonedCheckoutId: c.id, step: 0}) as any).skipped).toBeTruthy();
+    await db.client.query(`UPDATE abandoned_checkouts SET updated_at=now()-interval '2 hours' WHERE id=$1`, [c.id]);
+    expect((await recovery.checkoutRecoveryEmail({abandonedCheckoutId: c.id, step: 0}) as any).outcome).toBe("sent");
+    await settings.writeSetting("cart_recovery", {recipients: ""});
+  });
+
+  it("migration 173 moves only the old timing, and closes unsent carts already past 6 hours", async () => {
+    const sql = readFileSync(join(__dirname, "../db/migrations/173_checkout_reminder_one_at_6h.sql"), "utf8");
+    const old = {enabled: true, recipients: "", enabled0: true, enabled1: true, enabled2: true, enabled3: true, hours0: 1, hours1: 6, hours2: 10, hours3: 24, subject0: "ZZ Kept"};
+    const write = (value: unknown) => db.client.query(`INSERT INTO settings(key,value) VALUES('cart_recovery',$1) ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value`, [JSON.stringify(value)]);
+    const read = async () => (await db.client.query(`SELECT value FROM settings WHERE key='cart_recovery'`)).rows[0].value;
+
+    const age = (id: number, hours: number, sentCount = 0) => db.client.query(`UPDATE abandoned_checkouts SET updated_at=now()-make_interval(hours => $2::int), emails_sent=$3 WHERE id=$1`, [id, hours, sentCount]);
+    const pastDue = await cart(); await age(pastDue.id, 7);
+    const young = await cart(); await age(young.id, 2);
+    const midSequence = await cart(); await age(midSequence.id, 7, 1);
+    const custom = await cart(); await age(custom.id, 7);
+    await db.client.query(`UPDATE offers SET recovery_mode='custom' WHERE id=$1`, [custom.offerId]);
+
+    await write(old);
+    await db.client.query(sql);
+    expect(await read()).toMatchObject({hours0: 6, enabled0: true, enabled1: false, enabled2: false, enabled3: false, subject0: "ZZ Kept"});
+    const stopped = async (id: number) => (await db.client.query(`SELECT stop_reason FROM abandoned_checkouts WHERE id=$1`, [id])).rows[0].stop_reason;
+    expect(await stopped(pastDue.id)).toBe("reminder_schedule_change");
+    for (const c of [young, midSequence, custom]) expect(await stopped(c.id)).toBe("");
+
+    const hers = {...old, hours0: 2};
+    await write(hers);
+    await db.client.query(sql);
+    expect(await read()).toEqual(hers);
+    settings.clearSettingsCache();
   });
 });

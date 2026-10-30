@@ -181,7 +181,7 @@ const LESSON_GATE_SQL = `
          gr.granted_at,
          lp.watched_percent, lp.watched_seconds, lp.last_viewed_at,
          lp.max_position_seconds,
-         ${watchRequirementSql("c", "$1")} AS require_full_video,
+         ${watchRequirementSql("c", "$1", "l")} AS require_full_video,
          (COALESCE(l.video_url, '') <> '' OR COALESCE(l.audio_url, '') <> '') AS has_media
     FROM course_lessons l
     JOIN course_modules m ON m.id = l.module_id

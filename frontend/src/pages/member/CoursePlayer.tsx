@@ -707,6 +707,7 @@ function LessonView({ data, productSlug, courseImage, modules, onProgress }: Les
         completed={lesson.progress.completed}
         playsMedia={lesson.contentType === "video" || lesson.contentType === "audio"}
         fullWatchRequired={liveWatch?.required === true}
+        skippable={lesson.skippable === true}
         watchLeftSeconds={watchLeft}
         onSaved={handleProgress}
       />
@@ -881,6 +882,7 @@ function CompleteBar({
   completed,
   playsMedia,
   fullWatchRequired = false,
+  skippable = false,
   watchLeftSeconds = 0,
   onSaved,
 }: {
@@ -890,6 +892,8 @@ function CompleteBar({
   playsMedia: boolean;
   /** "Require watching the full video": the tick waits for the video. */
   fullWatchRequired?: boolean;
+  /** The owner marked this video "Can be skipped". */
+  skippable?: boolean;
   /** Seconds still to watch through; 0 once done or when the length is unknown. */
   watchLeftSeconds?: number;
   onSaved: (result: ProgressResult) => void;
@@ -952,6 +956,8 @@ function CompleteBar({
             ? watchLeftSeconds > 0
               ? `Watch the whole video to complete this lesson — ${formatClock(watchLeftSeconds)} left. It ticks itself when you reach the end.`
               : "This ticks itself once you have watched the whole video."
+            : skippable
+              ? "This one is optional. Watch as much as you like, or move on to the next lesson."
             : playsMedia
               ? "This ticks itself once you have watched 90%."
               : "Press when you have finished this lesson."}

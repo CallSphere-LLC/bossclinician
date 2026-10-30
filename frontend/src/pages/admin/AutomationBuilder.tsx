@@ -978,6 +978,26 @@ function AutomationDetail({
         ) : (
           <ul className="divide-y divide-hairline/60">
             {rules.map((rule, index) => {
+              // A rule on a form answer (a quiz's `result`, migration 176) has no
+              // choice in the picker. Shown as what it is: the picker would call
+              // it a tag rule, and choosing from it would overwrite the rule.
+              if (!CONDITION_CHOICES.some((row) => row.field === rule.field)) {
+                return (
+                  <li key={index} className="flex flex-wrap items-center gap-3 px-5 py-4">
+                    <p className="min-w-[16rem] flex-1 text-sm text-ink-soft">
+                      Only if their answer to &ldquo;{rule.field}&rdquo; is &ldquo;{String(rule.value ?? "")}&rdquo;
+                    </p>
+                    <Button
+                      size="iconSm"
+                      variant="dangerGhost"
+                      aria-label="Remove this condition"
+                      onClick={() => setRules(rules.filter((_, position) => position !== index))}
+                    >
+                      <Trash2 />
+                    </Button>
+                  </li>
+                );
+              }
               const choice = CONDITION_CHOICES.find((row) => row.id === choiceFor(rule));
               const list = choice?.list ? (options.lists[choice.list] ?? []) : [];
               return (

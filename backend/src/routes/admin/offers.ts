@@ -1940,10 +1940,12 @@ adminOffersRouter.post(
     }
 
     const member = await resolveMember(parsed.data, { createIfMissing: true });
+    const activatedProductIds: number[] = [];
     const productIds = await grantOfferAccess({
       memberId: member.id,
       offerId: id,
       source: "manual",
+      activatedProductIds,
     });
 
     await recordAdminAction({
@@ -1957,6 +1959,7 @@ adminOffersRouter.post(
         memberCreated: member.created,
         productIds,
         source: "manual",
+        sendCourseEmails: parsed.data.sendCourseEmails,
       },
     });
 
@@ -1968,6 +1971,9 @@ adminOffersRouter.post(
       memberId: member.id,
       offerId: id,
       createdMember: member.created,
+      sendCourseEmails: parsed.data.sendCourseEmails,
+      productIds,
+      activatedProductIds,
     });
 
     res.status(201).json({

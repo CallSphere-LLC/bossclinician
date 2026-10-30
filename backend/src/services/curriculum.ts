@@ -1,4 +1,4 @@
-import { watchRequirementSql, mediaWatchSatisfied } from "./courseWatchPolicy";
+import { watchRequirementSql, lessonSkippableSql, mediaWatchSatisfied } from "./courseWatchPolicy";
 import type { PoolClient } from "pg";
 import { pool } from "../db/pool";
 import { PRODUCT_CONTENT_COURSE_ID, hasCourseAccess } from "./access";
@@ -369,6 +369,8 @@ export interface MemberLessonView {
   watchedPercent: number;
   lastViewedAt: string | null;
   fullWatch: FullWatchView;
+  /** The owner marked this video "Can be skipped": nothing waits for it. */
+  skippable: boolean;
 }
 
 export interface MemberModuleView {
@@ -436,8 +438,10 @@ interface OutlineRow {
   watched_percent: number | null;
   completed_at: Date | null;
   last_viewed_at: Date | null;
-  /** The course has "Require watching the full video before the next lesson" on. */
+  /** Full viewing applies to this lesson: its own setting, else the course's rule. */
   require_full_video?: boolean | null;
+  /** course_lessons.watch_rule: 'inherit', 'required' or 'skippable'. */
+  watch_rule?: string | null;
   /** The lesson holds a video or audio file (never the URL itself). */
   has_media?: boolean | null;
   max_position_seconds?: number | null;
@@ -475,7 +479,8 @@ const outlineSql = (publishedOnly: boolean): string => `
                  WHERE a.lesson_id=l.id AND a.kind='graded' AND a.published
                    AND t.member_id = $1 AND t.completed_at IS NOT NULL
                    AND (t.passed OR (a.pass_mark IS NOT NULL AND t.percent >= a.pass_mark))) AS assessment_passed,
-         ${watchRequirementSql("c", "$1")} AS require_full_video,
+         ${watchRequirementSql("c", "$1", "l")} AS require_full_video,
+         l.watch_rule,
          (COALESCE(l.video_url, '') <> '' OR COALESCE(l.audio_url, '') <> '') AS has_media,
          l.drip_days AS lesson_drip_days,
          l.drip_date AS lesson_drip_date,
@@ -555,6 +560,7 @@ function toLessonView(
     watchedPercent: row.watched_percent ?? 0,
     lastViewedAt: iso(row.last_viewed_at),
     fullWatch: fullWatchFor(row),
+    skippable: row.watch_rule === "skippable" && row.has_media === true,
   };
 }
 
@@ -654,7 +660,7 @@ export function buildModules(
         previous !== null && (lesson.requiresPreviousLesson || passRequired.has(previous.id) || videoGate);
       if (previous && sequenced && !lesson.preview) {
         const quizOutstanding = passRequired.has(previous.id) && !passed.has(previous.id);
-        if (quizOutstanding || !previous.completed) {
+        if (quizOutstanding || (!previous.completed && !previous.skippable)) {
           const reason: LockReason = quizOutstanding ? "previous_quiz_not_passed" : "previous_incomplete";
           const sentence = quizOutstanding
             ? `Pass the quiz in “${previous.title}” to unlock`
@@ -673,7 +679,10 @@ export function buildModules(
           }
         }
       }
-      previous = lesson;
+      // A "Can be skipped" video holds nothing up, so the next lesson's gate looks
+      // through it to the last lesson that does count. Otherwise a skippable video
+      // placed after a must-watch one would be a way around the must-watch one.
+      if (!lesson.skippable || passRequired.has(lesson.id)) previous = lesson;
     }
   }
 
@@ -691,7 +700,7 @@ export function buildModules(
       const ancestor = outstanding(prerequisiteId, next);
       if (ancestor) return ancestor;
       if (prerequisite.lessons.some(lesson =>
-        !lesson.completed || (passRequired.has(lesson.id) && !passed.has(lesson.id))
+        (!lesson.completed && !lesson.skippable) || (passRequired.has(lesson.id) && !passed.has(lesson.id))
       )) return prerequisite.title;
     }
     return null;
@@ -731,6 +740,9 @@ function percentOf(completed: number, total: number): number {
 
 export function summariseProgress(lessons: MemberLessonView[]): CourseRollup {
   const completed = lessons.filter((l) => l.completed);
+  // An unfinished "Can be skipped" video is not owed, so it is not in the total
+  // (recomputeCourseProgress counts the same way).
+  const total = lessons.filter((l) => l.completed || !l.skippable).length;
   const completedAt = completed
     .map((l) => l.completedAt)
     .filter((value): value is string => value !== null)
@@ -738,12 +750,12 @@ export function summariseProgress(lessons: MemberLessonView[]): CourseRollup {
     .pop();
 
   return {
-    lessonsTotal: lessons.length,
+    lessonsTotal: total,
     lessonsCompleted: completed.length,
-    percent: percentOf(completed.length, lessons.length),
+    percent: percentOf(completed.length, total),
     // Only a finished course has a completion date; the latest lesson's is it.
     completedAt:
-      lessons.length > 0 && completed.length === lessons.length ? (completedAt ?? null) : null,
+      total > 0 && completed.length === total ? (completedAt ?? null) : null,
   };
 }
 
@@ -758,7 +770,8 @@ export function summariseProgress(lessons: MemberLessonView[]): CourseRollup {
  */
 export function pickContinueLesson(lessons: MemberLessonView[]): MemberLessonView | null {
   const unfinished = lessons.filter((l) => l.unlocked && !l.completed);
-  if (unfinished.length === 0) return null;
+  // Nothing left but optional videos is a finished course, not one to continue.
+  if (unfinished.every((l) => l.skippable)) return null;
 
   const started = unfinished
     .filter((l) => l.lastViewedAt !== null)
@@ -1083,9 +1096,10 @@ export async function recomputeCourseProgress(
     completed_at: Date | null;
   }>(
     `WITH counted AS (
-       SELECT COUNT(l.id)::int             AS lessons_total,
+       SELECT COUNT(l.id) FILTER (WHERE NOT ${lessonSkippableSql("l")} OR lp.completed_at IS NOT NULL)::int
+                                           AS lessons_total,
               COUNT(lp.completed_at) FILTER (WHERE
-                NOT ${watchRequirementSql("c", "$1")} OR
+                NOT ${watchRequirementSql("c", "$1", "l")} OR
                 (COALESCE(l.video_url, '') = '' AND COALESCE(l.audio_url, '') = '') OR
                 CASE WHEN l.video_duration_seconds > 0
                   THEN COALESCE(lp.max_position_seconds,0) >= ceil(l.video_duration_seconds * 0.95)

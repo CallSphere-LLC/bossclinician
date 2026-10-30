@@ -128,7 +128,7 @@ describeDb("video gating and the evaluation-gated certificate (integration)", ()
     // The tick is no way round it.
     const early = await call(`/api/member/lessons/${c.video}/complete`, "POST", {});
     expect(early.status).toBe(403);
-    expect(early.body.error ?? early.body.message).toMatch(/Finish the video to complete this lesson — \d+:\d\d left/);
+    expect(early.body.error ?? early.body.message).toMatch(/Finish watching this lesson before marking it complete — \d+:\d\d left/);
 
     const outline = await curriculum.loadCourseForMember(memberId, c.courseId);
     const reading = outline!.modules[0].lessons[1];

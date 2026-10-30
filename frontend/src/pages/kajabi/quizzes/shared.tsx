@@ -92,7 +92,7 @@ export function QuizProgress({ label, right, pct }: { label: string; right: stri
     <div>
       <div className="flex items-center justify-between gap-4">
         <p className="text-[0.7rem] font-semibold uppercase tracking-[0.2em] text-gold/85">{label}</p>
-        <span className="text-xs font-semibold tabular-nums text-orchid-faint">{right}</span>
+        <span className="text-xs font-bold tabular-nums text-orchid-faint">{right}</span>
       </div>
       <div
         role="progressbar"
@@ -100,7 +100,7 @@ export function QuizProgress({ label, right, pct }: { label: string; right: stri
         aria-valuemax={100}
         aria-valuenow={pct}
         aria-label="Quiz progress"
-        className="mt-3 h-1 w-full overflow-hidden rounded-full bg-white/10"
+        className="mt-3 h-1 w-full overflow-hidden rounded-full bg-hairline"
       >
         <motion.div
           className="h-full w-full rounded-full bg-gold-foil"

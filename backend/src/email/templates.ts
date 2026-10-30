@@ -9,6 +9,19 @@ export function escapeHtml(value: string): string {
     .replace(/'/g, "&#39;");
 }
 
+/** One line, for a subject: whatever a visitor typed can carry a line break. */
+function subjectPart(value: string): string {
+  return value.replace(/\s+/g, " ").trim().slice(0, 120);
+}
+
+/** The lead form's sources, as the owner would say them. */
+const LEAD_SUBJECTS: Record<string, string> = {
+  "income-calculator": "New opt-in: Income calculator",
+  apply: "New application: Apply page",
+  contact: "New enquiry: Contact form",
+  "work-with-me": "New enquiry: Work With Me",
+};
+
 export function newLeadNotification(lead: {
   name: string;
   email: string;
@@ -36,10 +49,54 @@ export function newLeadNotification(lead: {
   ].join("\n");
 
   return {
-    subject: `New lead (${lead.source}): ${lead.name}`,
+    subject: `${LEAD_SUBJECTS[lead.source] ?? `New enquiry: ${subjectPart(lead.source)}`} - ${subjectPart(lead.name)}`,
     text,
     html,
   };
+}
+
+/**
+ * The owner's note about an opt-in that is not a form reply: the mailing list,
+ * a quiz, an event. `what` is the thing they opted into, in the owner's words.
+ */
+export function ownerOptInNotification(optIn: {
+  what: string;
+  name: string;
+  email: string;
+  /** Anything else worth a line, such as the quiz result or the session. */
+  details?: FormAnswerRow[];
+}): { subject: string; text: string; html: string } {
+  const what = subjectPart(optIn.what);
+  const who = subjectPart(optIn.name || optIn.email);
+  const rows: FormAnswerRow[] = [
+    { label: "Opted in to", value: what },
+    { label: "Name", value: optIn.name || "(not given)" },
+    { label: "Email", value: optIn.email },
+    ...(optIn.details ?? []),
+  ];
+  return {
+    subject: `New opt-in: ${what} - ${who}`,
+    text: [`${who} opted in to "${what}".`, ``, ...rows.map((row) => `${row.label}: ${row.value}`)].join("\n"),
+    html: [
+      `<p>${escapeHtml(who)} opted in to "${escapeHtml(what)}".</p>`,
+      `<p>`,
+      rows.map((row) => `<strong>${escapeHtml(row.label)}:</strong> ${escapeHtml(row.value)}`).join("<br>\n"),
+      `</p>`,
+    ].join("\n"),
+  };
+}
+
+/**
+ * A form's name as the owner would say it. The Forms screen tells rows apart
+ * with " — opt-in" and "(/hire-form)", which mean nothing in a subject line.
+ */
+function plainFormName(name: string): string {
+  const flat = name.replace(/\s+/g, " ").trim();
+  const plain = flat
+    .replace(/\s*\(\/[^)]*\)$/, "")
+    .replace(/\s+[—–-]\s+(?:opt-?in|sign-?up)$/i, "")
+    .trim();
+  return plain || flat;
 }
 
 /** One line of a form reply as the owner reads it: the question, then the answer. */
@@ -69,12 +126,16 @@ export function formSubmissionNotification(reply: {
   answers: FormAnswerRow[];
   /** The reply in the admin's Forms screen (migration 112). Optional so older callers still build. */
   adminUrl?: string;
+  /** A public sign-up rather than a member's in-lesson form: says so in the subject. */
+  optIn?: boolean;
 }): { subject: string; text: string; html: string } {
   const who = (reply.name || reply.email).replace(/\s+/g, " ").trim().slice(0, 120);
-  const formName = reply.formName.replace(/\s+/g, " ").trim();
+  const formName = plainFormName(reply.formName);
+  const person = reply.name && reply.email ? `${who} (${reply.email})` : who;
+  const did = reply.optIn ? "opted in to" : "filled in";
 
   const text = [
-    `${who} filled in "${formName}".`,
+    `${person} ${did} "${formName}".`,
     ``,
     ...reply.answers.map((row) => `${row.label}: ${row.value}`),
     ``,
@@ -83,7 +144,7 @@ export function formSubmissionNotification(reply: {
   ].join("\n");
 
   const html = [
-    `<p>${escapeHtml(who)} filled in "${escapeHtml(formName)}".</p>`,
+    `<p>${escapeHtml(person)} ${did} "${escapeHtml(formName)}".</p>`,
     ...reply.answers.map(
       (row) =>
         `<p><strong>${escapeHtml(row.label)}:</strong> ${escapeHtml(row.value).replace(/\r?\n/g, "<br>")}</p>`,
@@ -94,7 +155,7 @@ export function formSubmissionNotification(reply: {
     `<p>Reply to this email to write back to them.</p>`,
   ].join("\n");
 
-  return { subject: `New ${formName}: ${who}`, text, html };
+  return { subject: `${reply.optIn ? "New opt-in" : "New form reply"}: ${formName} - ${who}`, text, html };
 }
 
 export function subscriberWelcome(email: string): { subject: string; text: string; html: string } {
@@ -276,5 +337,9 @@ export function ownerSaleNotification(sale: {
     `<p style="color:#888;font-size:12px">You can turn these emails off, or send them somewhere else, per offer: Offers &rarr; the offer &rarr; Notifications.</p>`,
   ].join("\n");
 
-  return { subject: `New sale: ${sale.offerTitle} (${amount})`, text, html };
+  return {
+    subject: `New purchase: ${subjectPart(sale.offerTitle)} - ${subjectPart(sale.buyerName || sale.buyerEmail || "no email captured")}`,
+    text,
+    html,
+  };
 }

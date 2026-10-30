@@ -114,5 +114,13 @@ BEGIN
            E'(^|\\n)https://forms\\.gle/BvNoceZw3Bn66ufRA[ \\t]*(\\r?\\n|$)',
            E'\\1', 'g')
    WHERE id = target_id;
+
+  -- The welcome emails still sent new buyers to the retired form. Same wording,
+  -- only the exact link changes; nothing is sent, enrolled or rescheduled here.
+  UPDATE sequence_emails
+     SET body_md = replace(body_md, 'https://forms.gle/BvNoceZw3Bn66ufRA',
+           'https://www.bossclinician.com/library/the-boss-move/lessons/start-here-welcome-to-the-boss-clinician-club-program'),
+         updated_at = now()
+   WHERE body_md LIKE '%https://forms.gle/BvNoceZw3Bn66ufRA%';
 END
 $migration$;

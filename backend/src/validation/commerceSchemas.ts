@@ -568,7 +568,11 @@ const memberRefFields = {
 const HAS_MEMBER_REF = "Name the member by id or by email address.";
 
 export const offerGrantSchema = z
-  .object(memberRefFields)
+  .object({
+    ...memberRefFields,
+    /** Start the sequences attached to this offer. On unless the admin unticks it. */
+    sendCourseEmails: z.boolean().default(true),
+  })
   .refine((value) => value.memberId !== undefined || value.email !== undefined, { message: HAS_MEMBER_REF });
 
 export const offerRevokeSchema = z

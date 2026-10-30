@@ -68,6 +68,13 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
 );
 Button.displayName = "Button";
 
+/**
+ * For a primary button whose disabled label still has to be read ("Saved"): a
+ * neutral fill at full opacity, because `disabled:opacity-55` leaves the label at
+ * 3.6:1 on Dark and 2.1:1 on White. `!` beats `.theme-console .bg-gold-foil`.
+ */
+export const legibleDisabledStyles = "disabled:opacity-100 disabled:!bg-sand disabled:!text-ink-soft";
+
 /* -------------------------------------------------------------------- Card */
 
 export const Card = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(

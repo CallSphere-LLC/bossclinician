@@ -94,6 +94,7 @@ import { CheckoutDescriptionEditor } from "@/components/checkout/CheckoutDescrip
 import OfferNotificationsTab from "@/pages/admin/OfferNotificationsTab";
 import OfferPaymentLinks from "@/pages/admin/OfferPaymentLinks";
 import OfferContractsTab from "@/pages/admin/OfferContractsTab";
+import OfferCheckoutRequirements from "@/pages/admin/OfferCheckoutRequirements";
 
 /**
  * The offer editor — one screen, six questions, in the order she'd ask them:
@@ -895,7 +896,7 @@ export default function OfferEditor() {
           </Tabs.Content>
 
           <Tabs.Content value="contract">
-            {offer ? <OfferContractsTab offerId={offer.id} /> : <SaveFirst what="a contract for buyers to sign" />}
+            {offer ? <div className="space-y-6"><OfferContractsTab offerId={offer.id} /><OfferCheckoutRequirements offerId={offer.id} /></div> : <SaveFirst what="a contract for buyers to sign" />}
           </Tabs.Content>
 
           <Tabs.Content value="notifications">

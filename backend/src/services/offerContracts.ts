@@ -264,7 +264,7 @@ export async function emailContractsAssigned(input: {
 export async function contractsForOffer(offerId: number, db: Queryable = pool): Promise<Array<{ id: number; title: string }>> {
   const res = await db.query<{ id: string | number; title: string }>(
     `SELECT c.id, c.title FROM offer_contracts oc JOIN participant_contracts c ON c.id = oc.contract_id
-      WHERE oc.offer_id = $1 ORDER BY c.title, c.id`,
+      WHERE oc.offer_id = $1 AND NOT oc.required_before_payment ORDER BY c.title, c.id`,
     [offerId]
   );
   return res.rows.map((row) => ({ id: Number(row.id), title: row.title }));
@@ -276,7 +276,8 @@ export async function setOfferContracts(input: { offerId: number; contractIds: n
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    await client.query(`DELETE FROM offer_contracts WHERE offer_id = $1 AND NOT (contract_id = ANY($2::bigint[]))`, [input.offerId, ids]);
+    // Agreements required before payment (QA row 202) have their own settings.
+    await client.query(`DELETE FROM offer_contracts WHERE offer_id = $1 AND NOT required_before_payment AND NOT (contract_id = ANY($2::bigint[]))`, [input.offerId, ids]);
     if (ids.length) {
       await client.query(
         `INSERT INTO offer_contracts (offer_id, contract_id, created_by)

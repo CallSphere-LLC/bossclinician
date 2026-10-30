@@ -7,6 +7,7 @@ import { recordActivity, upsertContactWithStatus } from "./contacts";
 import { buildInstallmentSchedule, type BillingInterval } from "./pricing";
 import { dispatchEvent } from "./webhooksOut";
 import { assignOfferContractsSafely, emailContractsAssigned } from "./offerContracts";
+import { emailSignedAgreementCopies, settleCheckoutAgreementsSafely } from "./checkoutAgreementRecords";
 
 /**
  * Turning a successful payment into everything the customer bought.
@@ -299,6 +300,10 @@ export async function fulfillPayment(input: FulfillPaymentInput): Promise<Fulfil
       }
     }
 
+    // An agreement signed before payment (QA row 202) becomes a signed assignment
+    // first, so the step below does not ask for it again. Never throws.
+    const signedAtCheckout = await settleCheckoutAgreementsSafely({ client, orderId: order.id, memberId: accessMemberId });
+
     // Contracts the purchased offers ask the participant to sign (QA row 164,
     // services/offerContracts.ts). Under its own savepoint: it never throws and
     // can never roll back the payment or the access granted above.
@@ -351,6 +356,7 @@ export async function fulfillPayment(input: FulfillPaymentInput): Promise<Fulfil
     if (accessMemberId !== null && assignedContracts.length > 0) {
       void emailContractsAssigned({ memberId: accessMemberId, contracts: assignedContracts, fromPurchase: true });
     }
+    if (signedAtCheckout > 0) void emailSignedAgreementCopies(order.id);
 
     if (createdMember && memberId !== null) {
       await dispatchEvent("member.created", {

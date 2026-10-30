@@ -43,6 +43,7 @@ export function CourseCustomersTab({ courseId }: { courseId: number }) {
   const [granting, setGranting] = useState(false);
   const [grantOfferId, setGrantOfferId] = useState("");
   const [grantEmail, setGrantEmail] = useState("");
+  const [sendCourseEmails, setSendCourseEmails] = useState(true);
   const [busy, setBusy] = useState(false);
   const [exemptionCustomer, setExemptionCustomer] = useState<CourseCustomer | null>(null);
   const [exemptionReason, setExemptionReason] = useState("");
@@ -75,6 +76,7 @@ export function CourseCustomersTab({ courseId }: { courseId: number }) {
 
   function startGrant() {
     setGrantEmail("");
+    setSendCourseEmails(true);
     setGranting(true);
     courseHubApi
       .offers(courseId)
@@ -95,7 +97,7 @@ export function CourseCustomersTab({ courseId }: { courseId: number }) {
     if (!email || !offerId || busy) return;
     setBusy(true);
     try {
-      const outcome = await contactAccessApi.grant(offerId, { email });
+      const outcome = await contactAccessApi.grant(offerId, { email }, { sendCourseEmails });
       toast.success(
         outcome.welcomeSent
           ? `${outcome.email} has the course — we've emailed them how to get in.`
@@ -349,6 +351,15 @@ export function CourseCustomersTab({ courseId }: { courseId: number }) {
                 ))}
               </select>
             </Field>
+            <label className="flex min-h-11 cursor-pointer items-center gap-2 text-sm text-ink-soft">
+              <input
+                type="checkbox"
+                checked={sendCourseEmails}
+                onChange={(e) => setSendCourseEmails(e.target.checked)}
+                className="size-4 rounded border-hairline text-plum"
+              />
+              Send the course emails attached to this offer
+            </label>
           </form>
         )}
       </Modal>

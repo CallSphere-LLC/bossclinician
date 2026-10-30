@@ -11,6 +11,7 @@ import { listMemberProducts } from "../../services/access";
 import { validateCoupon, type ValidatedCoupon } from "../../services/coupons";
 import { formatAmount } from "../../utils/money";
 import { deadlinePlan } from "../../services/deadlinePlan";
+import { publicCheckoutRequirements } from "../../services/checkoutRequirements";
 import {
   computeOrderTotal,
   paymentPlanTotalCents,
@@ -640,6 +641,11 @@ export async function buildOfferView(
   }
   const priced = toPricedOffer(selectedOffer);
   const additionalRecommended = additionalPricing.some((option) => option.recommended);
+  // QA rows 202-203: null unless the owner has switched something on for this offer.
+  const checkoutRequirements = await publicCheckoutRequirements(offer.id, [
+    { ...offer, pricing_option_id: null },
+    ...additionalPricing.map((option) => optionOverlay(offer, option)),
+  ]);
 
   let alreadyOwned = false;
   if (memberId !== null && productIds.length > 0) {
@@ -723,6 +729,7 @@ export async function buildOfferView(
     })),
     quote: totalToJson(computeOrderTotal({ offer: priced })),
     alreadyOwned,
+    checkoutRequirements,
   };
 }
 

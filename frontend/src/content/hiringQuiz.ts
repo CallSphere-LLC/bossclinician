@@ -13,13 +13,12 @@
  * total is divided by the maximum (7 × 3 = 21); 70% or more is "ready", 40% or
  * more is "almost", anything lower is "notYet".
  *
- * The two pages work as they did on Kajabi: /hire-form asks for name, email
- * and two practice questions, then sends the visitor to /hiring-quiz. The
- * Resource Hub links straight to /hiring-quiz too, so the quiz also works on
- * its own. When the visitor came through /hire-form, the result is filed for
- * them under the matching result form (migration 099) as soon as it is shown,
- * which tags the contact and emails them the result; otherwise an optional
- * "email me my result" form sits under the result.
+ * /hiring-quiz opens on the opt-in (name, email and two practice questions,
+ * filed under `hire-form`), then swaps in the quiz on the same address, as the
+ * owner asked (QA sheet row 207). /hire-form is the same page, for old links.
+ * The result is filed under the matching result form (migration 099) as soon
+ * as it is shown, which tags the contact and emails them the result; if that
+ * fails, an optional "email me my result" form sits under the result.
  */
 
 export type HiringResultKey = "ready" | "almost" | "notYet";
@@ -136,7 +135,7 @@ export const HIRING_QUIZ_RESULTS: Record<HiringResultKey, HiringQuizResult> = {
     ctaCopy: "The Boss Clinician Boardroom is for group practice owners who are ready to grow — and want to do it right. Get peer-level strategy, CEO leadership development, and a room full of practice owners navigating exactly what you're navigating.",
     ctaBtn: "Apply for the Boss Clinician Boardroom",
     ctaLink: "/boardroom",
-    ctaUrl: "www.bossclinician.com/boardroom",
+    ctaUrl: "bossclinician.com/boardroom",
     formSlug: "hiring-quiz-ready",
     label: "Ready",
   },
@@ -156,7 +155,7 @@ export const HIRING_QUIZ_RESULTS: Record<HiringResultKey, HiringQuizResult> = {
     ctaCopy: "The Boss Clinician Boardroom helps group practice owners close exactly these gaps — with peer support, expert strategy, and real accountability. It's designed for clinicians in exactly this season.",
     ctaBtn: "Apply for the Boss Clinician Boardroom",
     ctaLink: "/boardroom",
-    ctaUrl: "www.bossclinician.com/boardroom",
+    ctaUrl: "bossclinician.com/boardroom",
     formSlug: "hiring-quiz-almost",
     label: "Almost Ready",
   },
@@ -176,7 +175,7 @@ export const HIRING_QUIZ_RESULTS: Record<HiringResultKey, HiringQuizResult> = {
     ctaCopy: "The Boss Clinician Lounge is your next step — a monthly membership for established clinicians ready to strengthen their structure, stabilize their income, and build toward sustainable growth, including a future team.",
     ctaBtn: "Join the Boss Clinician Lounge",
     ctaLink: "/lounge",
-    ctaUrl: "www.bossclinician.com/lounge",
+    ctaUrl: "bossclinician.com/lounge",
     formSlug: "hiring-quiz-not-yet",
     label: "Not Yet",
   },
@@ -200,14 +199,14 @@ export const HIRING_QUIZ_PAGE = {
   retake: "Take the quiz again",
 } as const;
 
-/** The optional email step under the result, for a visitor who skipped /hire-form. Not on the source. */
+/** The fallback email step under the result, when filing it automatically failed. Not on the source. */
 export const HIRING_QUIZ_EMAIL = {
   eyebrow: "Keep Your Result",
   heading: "Want your action plan in your inbox?",
   sub: "Enter your name and email and we will send you your result and your next steps.",
   submit: "EMAIL MY RESULT",
   sent: "Sent — check your inbox (and your spam folder, just in case).",
-  /** Shown instead of the form when the visitor came through /hire-form. */
+  /** Shown instead of the form while the result is filed automatically. */
   onItsWay: "Your result and next steps are on their way to",
 } as const;
 
@@ -235,7 +234,7 @@ export const HIRE_FORM = {
   formSlug: "hire-form",
 } as const;
 
-/** Where /hire-form leaves the visitor's name and email for /hiring-quiz to find. */
+/** Where the opt-in keeps the visitor's name and email for this browser tab. */
 export const HIRING_CONTACT_STORAGE_KEY = "bc.hiringQuiz.contact";
 
 export interface HiringContact {

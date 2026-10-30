@@ -398,8 +398,8 @@ export default function OfferNotificationsTab({ offerId }: { offerId: number }) 
             </Note>
           )}
           <p className="text-xs text-ink-soft">
-            Reminders are checked every 30 minutes, so one can arrive up to half an hour after its time. Unsubscribes
-            always apply.
+            Reminders are checked every 30 minutes, so one can arrive up to half an hour after its time. Nobody gets more
+            than one reminder in 24 hours, across all offers. Unsubscribes always apply.
           </p>
         </div>
       </Card>

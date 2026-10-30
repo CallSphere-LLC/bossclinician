@@ -253,6 +253,9 @@ async function remindOneMember(
     const index = position.get(target.id);
     if (index === undefined) continue;
     const lesson = lessons[index];
+    // In "next lesson" mode an optional video is not what they are waiting on. An
+    // automation that names this lesson is the owner asking, so it still reminds.
+    if (lesson.skippable && !config.lessonId) continue;
     // Locked — by the drip, a schedule, or the lesson before it — is not
     // "not watched"; there is nothing they could have watched.
     if (!lesson.unlocked) {

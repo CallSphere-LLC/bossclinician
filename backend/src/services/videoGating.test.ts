@@ -6,9 +6,12 @@ import {
   formatRemaining,
   fullWatchRequiredSeconds,
   isFullyWatched,
+  pickContinueLesson,
+  summariseProgress,
 } from "./curriculum";
 import {
   certificateGaps,
+  earnedCeuCredit,
   summarizeCertificateStatus,
   type CertificateFacts,
   type CertificateLessonRow,
@@ -124,6 +127,48 @@ describe("buildModules with \"Require watching the full video\"", () => {
     expect(first.fullWatch.required).toBe(false);
     expect(second.unlocked).toBe(true);
   });
+
+  describe("per-lesson setting (row 210)", () => {
+    const optional = (id: number, extra: Record<string, unknown> = {}) =>
+      row(id, { content_type: "video", has_media: true, video_duration_seconds: 1000, require_full_video: false, watch_rule: "skippable", ...extra });
+
+    it("a skippable video holds nothing up, even for a lesson locked in order", () => {
+      const [first, second] = lessons([optional(1), row(2, { requires_previous_lesson: true })]);
+      expect(first.skippable).toBe(true);
+      expect(first.fullWatch.required).toBe(false);
+      expect(second.unlocked).toBe(true);
+    });
+
+    it("a skippable video is no way around the must-watch video before it", () => {
+      const [, , third] = lessons([video(), optional(2), row(3)]);
+      expect(third).toMatchObject({ unlocked: false, lockReason: "previous_incomplete" });
+    });
+
+    it("a skippable video's required quiz still has to be passed", () => {
+      const [, second] = lessons([optional(1, { assessment_requires_pass: true }), row(2)]);
+      expect(second).toMatchObject({ unlocked: false, lockReason: "previous_quiz_not_passed" });
+    });
+
+    it("the setting means nothing on a lesson with no media", () => {
+      const [first, second] = lessons([row(1, { watch_rule: "skippable", require_full_video: false }), row(2, { requires_previous_lesson: true, require_full_video: false })]);
+      expect(first.skippable).toBe(false);
+      expect(second.unlocked).toBe(false);
+    });
+
+    it("an inherit lesson behaves as it always did", () => {
+      const [first, second] = lessons([video({ watch_rule: "inherit" }), row(2)]);
+      expect(first.skippable).toBe(false);
+      expect(second.unlocked).toBe(false);
+    });
+
+    it("an unfinished skippable video is not owed, and is counted once finished", () => {
+      const open = lessons([optional(1), row(2, { require_full_video: false, completed_at: NOW })]);
+      expect(summariseProgress(open)).toMatchObject({ lessonsTotal: 1, lessonsCompleted: 1, percent: 100 });
+      expect(pickContinueLesson(open)).toBeNull();
+      const watched = lessons([optional(1, { completed_at: NOW }), row(2, { require_full_video: false, completed_at: NOW })]);
+      expect(summariseProgress(watched)).toMatchObject({ lessonsTotal: 2, lessonsCompleted: 2, percent: 100 });
+    });
+  });
 });
 
 /* ------------------------------------------------------------- certificate */
@@ -189,6 +234,28 @@ describe("certificateGaps", () => {
     const unmeasured = lesson({ hasMedia: true, watchedPercent: 89 });
     expect(certificateGaps([unmeasured], { requireFullVideo: true }).videosToFinish).toHaveLength(1);
     expect(certificateGaps([{ ...unmeasured, watchedPercent: 90 }], { requireFullVideo: true }).videosToFinish).toHaveLength(0);
+  });
+
+  it("lets each lesson answer for itself (row 210)", () => {
+    const gaps = certificateGaps(
+      [
+        lesson({ title: "Welcome", hasMedia: true, completed: false, fullWatchRequired: false, skippable: true }),
+        trainingVideo(1000),
+      ],
+      { requireFullVideo: true }
+    );
+    expect(gaps).toMatchObject({ lessonsRemaining: 0, otherLessonsRemaining: 0 });
+    expect(gaps.videosToFinish.map((gap) => gap.lessonTitle)).toEqual(["Watch the training"]);
+    // A must-watch video in a course with no rule of its own.
+    expect(
+      certificateGaps([{ ...trainingVideo(1000), fullWatchRequired: true }], { requireFullVideo: false }).videosToFinish
+    ).toHaveLength(1);
+  });
+
+  it("does not hold CE credit back for a skippable video, only for the others (row 210)", () => {
+    const unwatched = { contentType: "video", durationMinutes: 5, hasMedia: true, videoDurationSeconds: 300, playedToSeconds: 0, watchedPercent: 0, firstViewedAt: null, completedAt: null };
+    expect(earnedCeuCredit([unwatched])).toBe(false);
+    expect(earnedCeuCredit([{ ...unwatched, skippable: true }])).toBe(true);
   });
 });
 

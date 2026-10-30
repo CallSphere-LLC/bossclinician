@@ -24,6 +24,7 @@ import { asyncHandler } from "../../utils/asyncHandler";
 import { HttpError, badRequest, forbidden, notFound } from "../../utils/httpError";
 import { publishDomainEvent } from "../../services/domainEvents";
 import { reminderPromise, requestReminderTick } from "../../services/eventReminders";
+import { notifyOwnerOfOptIn } from "../../services/ownerOptInNotification";
 
 /**
  * Public events: the registration page, the room, and the calendar file.
@@ -256,7 +257,7 @@ eventsPublicRouter.post(
     const validation = await validateCollectedEmail(email);
     if (!validation.accepted) throw badRequest(validation.reason || "Please check your email address.");
 
-    const registration = await pool.query<{ id: string; session_at: Date }>(
+    const registration = await pool.query<{ id: string; session_at: Date; inserted: boolean }>(
       `INSERT INTO event_registrations
          (event_id, email, name, timezone, session_at, replay_expires_at)
        VALUES ($1, $2, $3, $4, $5, $6)
@@ -283,7 +284,7 @@ eventsPublicRouter.post(
               -- session gets a fresh set of reminders because the key changed,
               -- rather than because three timestamps were blanked. Same intent,
               -- expressed somewhere that can also record what happened to each.
-       RETURNING id, session_at`,
+       RETURNING id, session_at, (xmax = 0) AS inserted`,
       [
         event.id,
         email,
@@ -360,6 +361,17 @@ eventsPublicRouter.post(
     // the visitor retries. The five-minute schedule is the backstop, and the
     // tick is idempotent, so doing both sends one email rather than two.
     await requestReminderTick(registrationId);
+
+    // xmax is zero only on a row this statement inserted: registering twice is
+    // not a second piece of news.
+    if (row.inserted) {
+      notifyOwnerOfOptIn({
+        what: event.title,
+        name: input.name ?? "",
+        email,
+        details: [{ label: "Session", value: describeSession(confirmedAt, event.timezone) }],
+      });
+    }
 
     const token = signRegistration(registrationId);
     res.status(201).json({

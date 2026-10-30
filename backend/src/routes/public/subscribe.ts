@@ -15,12 +15,27 @@ import {
   upsertContactWithStatus,
 } from "../../services/contacts";
 import { publishDomainEvent } from "../../services/domainEvents";
+import { notifyOwnerOfOptIn } from "../../services/ownerOptInNotification";
 import { enrollContact } from "../../services/sequences";
 
 export const subscribeRouter = Router();
 
 /** The source a funnel's opt-in stage signs people up under — pages/FunnelPage.tsx. */
 const FUNNEL_SOURCE = /^funnel:(.+)$/;
+
+/** Where the sign-up boxes are, as the owner would say it; `source` is otherwise free text. */
+const SOURCE_IN_WORDS: Record<string, string> = {
+  footer: "Mailing list (site footer)",
+  resources: "Mailing list (Resource Hub)",
+  newsletter: "Mailing list",
+  "practice-reset-planner": "Practice Reset Planner mailing list",
+};
+
+function sourceInWords(source: string): string {
+  const funnel = FUNNEL_SOURCE.exec(source)?.[1];
+  if (funnel) return `Funnel: ${funnel.replace(/-/g, " ")}`;
+  return SOURCE_IN_WORDS[source] ?? `Mailing list (${source})`;
+}
 
 /**
  * Gives a funnel's new subscriber the tag and follow-up its blueprint made.
@@ -77,10 +92,13 @@ subscribeRouter.post(
     const validation = await validateCollectedEmail(email);
     if (!validation.accepted) throw badRequest(validation.reason || "Please check your email address.");
 
-    const subscriber = await pool.query<{ id: number }>(
-      `INSERT INTO subscribers (email, source) VALUES ($1, $2)
+    // `prior` reads the row as it was before this statement, so the owner hears
+    // about a new sign-up or a new place, not the same box being filled in twice.
+    const subscriber = await pool.query<{ id: number; prior_source: string | null }>(
+      `WITH prior AS (SELECT source FROM subscribers WHERE email = $1)
+       INSERT INTO subscribers (email, source) VALUES ($1, $2)
        ON CONFLICT (email) DO UPDATE SET source = EXCLUDED.source
-       RETURNING id`,
+       RETURNING id, (SELECT source FROM prior) AS prior_source`,
       [email, source]
     );
 
@@ -119,6 +137,10 @@ subscribeRouter.post(
 
     const { subject, text, html } = subscriberWelcome(email);
     void sendMail({ to: email, subject, text, html });
+
+    if (subscriber.rows[0].prior_source !== source) {
+      notifyOwnerOfOptIn({ what: sourceInWords(source), email });
+    }
 
     fireTriggerAsync("subscriber_created", { email, source });
 

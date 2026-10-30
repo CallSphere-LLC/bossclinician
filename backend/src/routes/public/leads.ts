@@ -108,7 +108,7 @@ leadsRouter.post(
     const notifyTo = await notificationRecipients("lead");
     if (notifyTo) {
       const { subject, text, html } = newLeadNotification({ name, email, phone, message, source });
-      void sendMail({ to: notifyTo, subject, text, html });
+      void sendMail({ to: notifyTo, subject, text, html, replyTo: email, topic: "owner_lead_notification" });
     }
 
     // The calculator's capture band promises the reader their own numbers

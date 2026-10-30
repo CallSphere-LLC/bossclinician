@@ -7,6 +7,7 @@ import { asyncHandler } from "../../utils/asyncHandler";
 import { badRequest, forbidden, notFound, unauthorized } from "../../utils/httpError";
 import { denyImpersonation, type AuthedMember } from "../../middleware/memberAuth";
 import { hasCourseAccess } from "../../services/access";
+import { recomputeCourseProgress } from "../../services/curriculum";
 import {
   CERTIFICATE_COLUMNS,
   certificateFile,
@@ -224,6 +225,16 @@ memberCertificatesRouter.post(
     const { courseId } = parsed.data;
 
     if (!(await hasCourseAccess(member.id, courseId))) throw notFound(NOT_FOUND);
+
+    // Marking a video "Can be skipped" can finish a course for somebody who has
+    // nothing else left to do, and with no further lesson to play nothing else
+    // would refresh the stored rollup this claim is judged on.
+    const hasSkippable = await pool.query(
+      `SELECT 1 FROM course_lessons l JOIN course_modules m ON m.id = l.module_id
+        WHERE m.course_id = $1 AND l.published AND l.watch_rule = 'skippable' LIMIT 1`,
+      [courseId]
+    );
+    if (hasSkippable.rows.length > 0) await recomputeCourseProgress(member.id, courseId);
 
     const row = await issueCertificateIfEarned(member.id, courseId);
     if (!row) {

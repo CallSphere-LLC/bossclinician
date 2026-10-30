@@ -100,6 +100,15 @@ describeDb('Optional course add-ons', () => {
     expect((await call('/api/member/library/p-qa-addons-extra','GET',undefined,member)).status).toBe(404);
     expect((await db.client.query('SELECT published FROM courses WHERE id=$1',[course])).rows[0].published).toBe(false);
   });
+  it('hides an add-on the member already holds, since checkout would still take the payment',async()=>{
+    const url='/api/member/library/p-qa-addons-course';
+    await db.client.query(`INSERT INTO access_grants(member_id,product_id,source,status) VALUES($1,$2,'manual','active')`,[memberId,addonProduct]);
+    try {
+      expect((await call(url,'GET',undefined,member)).body.course.addOns).toEqual([]);
+      expect((await load(course)).map(item=>item.offerId)).toEqual([offer]);
+    } finally { await db.client.query('DELETE FROM access_grants WHERE member_id=$1 AND product_id=$2',[memberId,addonProduct]); }
+    expect((await call(url,'GET',undefined,member)).body.course.addOns[0]).toMatchObject({offerId:offer});
+  });
   it('admin preview shows the same optional purchase links without grants',async()=>{
     const preview=await call(`/api/admin/courses/${course}/preview`);
     expect(preview.status).toBe(200);

@@ -40,6 +40,13 @@ import { formConfirmationEmail } from "../../email/formConfirmation";
 import { generateToken, hashToken } from "../../auth/tokens";
 import { renderMarkdown } from "../../email/provider";
 import { formSubmissionNotification, type FormAnswerRow } from "../../email/templates";
+import {
+  BOSS_ASSESSMENT_FORM_SLUG,
+  applyBossAssessmentConsent,
+  readBossAssessmentSubmission,
+  sendBossAssessmentResults,
+  type BossAssessmentSubmission,
+} from "../../services/bossAssessment";
 
 /** Public endpoints for podcasts (RSS), forms and funnels. */
 export const growthPublicRouter = Router();
@@ -633,6 +640,7 @@ export async function notifyOwnerOfReply(
   form: { id: number; name: string; slug: string; fields: unknown; notify_emails?: unknown },
   who: { name: string; email: string },
   answers: Record<string, unknown>,
+  options: { optIn?: boolean } = {},
 ): Promise<void> {
   try {
     const to = await replyRecipients(form);
@@ -643,8 +651,9 @@ export async function notifyOwnerOfReply(
       email: who.email,
       answers: submissionAnswerRows(form.fields, answers),
       adminUrl: adminRepliesUrl(form.id),
+      optIn: options.optIn,
     });
-    await sendMail({ to, subject, text, html, replyTo: who.email });
+    await sendMail({ to, subject, text, html, replyTo: who.email, topic: "owner_form_notification" });
   } catch (err) {
     // eslint-disable-next-line no-console
     console.error(`[forms] could not email the owner about a reply to ${form.slug}:`, (err as Error).message);
@@ -686,6 +695,19 @@ export const formUploadFormLimiter = rateLimit({
   message: {
     error: "This form has had a lot of files sent to it in the last hour. Please try again a little later.",
   },
+});
+
+/**
+ * /boss-assessment emails whatever address it is given, so it gets a tighter
+ * hourly ceiling per IP than `leadsLimiter`. No other form is counted.
+ */
+const bossAssessmentIpLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  limit: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: (req) => req.params.slug !== BOSS_ASSESSMENT_FORM_SLUG,
+  message: { error: "Too many requests. Please try again later." },
 });
 
 /** The multipart reply's answers: one `payload` field holding the JSON body. */
@@ -802,6 +824,7 @@ export async function storeSubmission(input: {
 growthPublicRouter.post(
   "/forms/:slug/submit",
   leadsLimiter,
+  bossAssessmentIpLimiter,
   formUploadIpLimiter,
   // Looked up before the body is read: a multipart body can only be checked
   // against the form's own file questions, and the per-form limit needs its id.
@@ -859,6 +882,18 @@ growthPublicRouter.post(
       );
       res.status(201).json({ ok: true, message: form.success_message });
       return;
+    }
+
+    // This reply gets an email with its results in it, so the score is worked
+    // out here from the ten answers and the whole reply is replaced by what the
+    // server built. Nothing else the client sent is stored or mailed.
+    let bossAssessment: BossAssessmentSubmission | null = null;
+    if (form.slug === BOSS_ASSESSMENT_FORM_SLUG) {
+      const checked = readBossAssessmentSubmission(parsed.data.data);
+      if ("problem" in checked) throw badRequest(checked.problem);
+      bossAssessment = checked;
+      parsed.data.data = checked.data;
+      parsed.data.email = checked.email;
     }
 
     // Nothing a client says about a file question is its answer — only a file
@@ -944,6 +979,14 @@ growthPublicRouter.post(
         )
       : null;
     const contactId = contactRecord?.id ?? null;
+
+    // Ahead of the tags and events below, which can start marketing automations.
+    if (bossAssessment && contactRecord) {
+      const { marketingConsent } = bossAssessment;
+      await afterSubmission(`the marketing consent on ${form.slug}`, () =>
+        applyBossAssessmentConsent(contactRecord.id, contactRecord.created, marketingConsent),
+      );
+    }
 
     if (contactId !== null) {
       await afterSubmission(`attaching submission ${submissionId} to its contact`, async () => {
@@ -1056,7 +1099,8 @@ growthPublicRouter.post(
     // Outside the lead block so a failed lead insert cannot also cost the
     // email, and not awaited — see notifyOwnerOfReply.
     if (wantsReplyEmail(form)) {
-      void notifyOwnerOfReply(form, { name, email }, answers);
+      // The one public form that is not a sign-up: a buyer's intake after purchase.
+      void notifyOwnerOfReply(form, { name, email }, answers, { optIn: form.slug !== "directory-makeover-audit-intake" });
     }
 
     if (contactRecord?.created) {
@@ -1072,6 +1116,12 @@ growthPublicRouter.post(
     // Fire-and-forget, and after the response is decided: `fireTrigger` never
     // throws, and an automation that sends an email must not hold a visitor on
     // a spinner while it does.
+    //
+    // A quiz that files every result under one form (/private-practice-for-you)
+    // has the result as a hidden answer. It rides on the event so an automation's
+    // "only if" can start that result's sequence (migration 176). Nothing else
+    // the person typed goes on the event.
+    const resultAnswer = typeof data.result === "string" ? data.result.trim().slice(0, 200) : "";
     await publishDomainEvent("form_submitted", {
       eventKey: `form-submitted:${submissionId}`,
       contactId,
@@ -1079,6 +1129,7 @@ growthPublicRouter.post(
       name,
       subjectId: form.id,
       source: `form:${form.slug}`,
+      ...(resultAnswer ? { facts: { result: resultAnswer } } : {}),
     });
 
     // 3.7: a sequence whose job was to get somebody to fill in THIS form has
@@ -1097,7 +1148,22 @@ growthPublicRouter.post(
       );
     }
 
-    res.status(201).json({ ok: true, message: form.success_message, confirmationRequired });
+    // Awaited, once per stored reply, so the page only says "sent" if it was.
+    let resultsEmailed: boolean | undefined;
+    if (bossAssessment) {
+      const { email: to, firstName, result } = bossAssessment;
+      const sent = await afterSubmission(`the results email for submission ${submissionId}`, () =>
+        sendBossAssessmentResults({ email: to, firstName, result, submissionId, contactId }),
+      );
+      resultsEmailed = sent === true;
+    }
+
+    res.status(201).json({
+      ok: true,
+      message: form.success_message,
+      confirmationRequired,
+      ...(resultsEmailed === undefined ? {} : { resultsEmailed }),
+    });
   }),
 );
 

@@ -153,7 +153,7 @@ export const PUBLIC_ROUTES: readonly { path: string; Component: RouteComponent }
   { path: "/funnel/:slug", Component: lazyRoute(() => import("@/pages/FunnelPage")) },
   { path: "/funnel/:slug/:step", Component: lazyRoute(() => import("@/pages/FunnelPage")) },
   { path: "/privacy-policy", Component: lazyRoute(() => import("@/pages/legal/PrivacyPolicy")) },
-  // Kajabi's current Terms of Use (effective 04/01/2026) replaced the 2025 site
+  // The current Terms of Use (effective 10/26/2026) replaced the 2025 site
   // terms; /terms and /terms-of-use show the same document.
   { path: "/terms", Component: lazyRoute(() => import("@/pages/kajabi/pages/TermsOfUse")) },
   { path: "/disclaimer", Component: lazyRoute(() => import("@/pages/legal/Disclaimer")) },

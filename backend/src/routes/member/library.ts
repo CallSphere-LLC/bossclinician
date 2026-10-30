@@ -481,6 +481,7 @@ export function toOutlineJson(course: MemberCourseView, productSlug: string) {
         completedAt: lesson.completedAt,
         lastPositionSeconds: lesson.lastPositionSeconds,
         watchedPercent: lesson.watchedPercent,
+        skippable: lesson.skippable,
         href: `/library/${productSlug}/lessons/${lesson.slug}`,
       })),
     })),
@@ -540,7 +541,7 @@ memberLibraryRouter.get(
       // deleted — nothing the member can be shown.
       if (!course) throw notFound(PRODUCT_MISSING);
       const community = await linkedCommunityFor(member.id, product.course_id);
-      res.json({ ...base, course: { ...toOutlineJson(course, product.slug), community, addOns: await safeCourseAddons(product.course_id) } });
+      res.json({ ...base, course: { ...toOutlineJson(course, product.slug), community, addOns: await safeCourseAddons(product.course_id, member.id) } });
       return;
     }
 
@@ -555,7 +556,7 @@ memberLibraryRouter.get(
           ...base,
           kind: "course",
           coachingOfferId: product.coaching_offer_id,
-          course: { ...toOutlineJson(course, product.slug), addOns: await safeCourseAddons(product.content_course_id) },
+          course: { ...toOutlineJson(course, product.slug), addOns: await safeCourseAddons(product.content_course_id, member.id) },
         });
         return;
       }
@@ -821,6 +822,8 @@ memberLibraryRouter.get(
         // The player stops seeks past `playedToSeconds` and counts down to
         // `requiredSeconds`; the server enforces both on its own.
         fullWatch: lesson.fullWatch,
+        // The owner marked this video "Can be skipped" (migration 178).
+        skippable: lesson.skippable,
       },
     });
   })

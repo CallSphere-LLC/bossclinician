@@ -158,12 +158,12 @@ export const avatarSections: AvatarSectionData[] = [
       {
         id: "boss-assessment",
         tag: "Free Self-Assessment",
-        badge: "Featured · 11 Pages",
+        badge: "Featured · 3 Minutes",
         featured: true,
         title: "Are You Running Your Practice, or Is It Running You?",
         description:
-          "A self-assessment for group practice owners who built the team but still can't step back. Score yourself across 5 common blockers, identify exactly what's keeping you stuck, and walk away with a clear picture of what to address first.",
-        ctaLabel: "Download the Free Assessment",
+          "Discover which of five hidden blockers is keeping you tied to day-to-day operations, and where to focus first. Answer ten statements, see your results right away, and have them emailed to you.",
+        ctaLabel: "Take the Free Assessment",
         href: "/boss-assessment",
       },
       {

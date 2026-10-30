@@ -182,6 +182,38 @@ export interface PublicOffer {
   /** The offer at list price, so the summary paints before any quote returns. */
   quote: Quote;
   alreadyOwned: boolean;
+  /** What the owner requires before payment (QA rows 202-203); null when nothing is on. */
+  checkoutRequirements?: CheckoutRequirements | null;
+}
+
+export interface CheckoutAcknowledgmentView {
+  key: string;
+  version: number;
+  text: string;
+  linkLabel: string;
+  linkUrl: string;
+}
+
+export interface EnrollmentTermsView {
+  offerTitle: string;
+  paymentOption: string;
+  totalInvestment: string;
+  dueToday: string;
+  paymentArrangement: string;
+  remainingObligations: string;
+  programTerm: string;
+  includedBenefits: string;
+  refundTerms: string;
+  obligationsNote: string;
+}
+
+export interface CheckoutRequirements {
+  invitationRequired: boolean;
+  acknowledgments: CheckoutAcknowledgmentView[];
+  agreements: { contractId: number; title: string; pdfSha256: string }[];
+  enrollment: { optionId: number | null; terms: EnrollmentTermsView }[];
+  disclosure: string;
+  intent: string;
 }
 
 export interface PublicPricingOption {
@@ -222,6 +254,9 @@ export interface CheckoutInput extends QuoteInput {
   customFields?: Record<string, string>;
   acceptedTerms?: boolean;
   paymentProvider?: "stripe" | "paypal";
+  checkoutAcknowledgments?: { key: string; version: number }[];
+  agreementSignatures?: { contractId: number; typedName: string; electronicConsent: true; signingIntent: true }[];
+  invitationToken?: string;
 }
 
 export type ClientSecretType = "payment_intent" | "setup_intent" | null;

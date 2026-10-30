@@ -105,6 +105,8 @@ export interface OutlineLesson {
   id: number;
   slug: string;
   title: string;
+  /** The owner marked this video "Can be skipped". */
+  skippable?: boolean;
   contentType: LessonContentType;
   durationMinutes: number;
   videoDurationSeconds: number;
@@ -294,6 +296,8 @@ export interface UnlockedLesson extends LessonCommon {
    * the admin preview's lesson read does not send it.
    */
   fullWatch?: FullWatchState;
+  /** The owner marked this video "Can be skipped". */
+  skippable?: boolean;
 }
 
 /** How far a full-watch lesson has been played through, and how far it must be. */
