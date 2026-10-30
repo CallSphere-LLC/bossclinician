@@ -1099,8 +1099,9 @@ growthPublicRouter.post(
     // Outside the lead block so a failed lead insert cannot also cost the
     // email, and not awaited — see notifyOwnerOfReply.
     if (wantsReplyEmail(form)) {
-      // The one public form that is not a sign-up: a buyer's intake after purchase.
-      void notifyOwnerOfReply(form, { name, email }, answers, { optIn: form.slug !== "directory-makeover-audit-intake" });
+      // The public forms that are not sign-ups: service requests and post-purchase intakes.
+      const notSignUp = ["directory-makeover-audit-intake", "credential-for-you-request", "credential-for-you-intake"];
+      void notifyOwnerOfReply(form, { name, email }, answers, { optIn: !notSignUp.includes(form.slug) });
     }
 
     if (contactRecord?.created) {

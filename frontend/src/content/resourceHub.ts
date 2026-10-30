@@ -110,6 +110,16 @@ export const avatarSections: AvatarSectionData[] = [
         ctaLabel: "Get the Free 5-Step Marketing Plan",
         href: "/5-step-marketing",
       },
+      {
+        id: "credential-for-you",
+        tag: "Done-For-You Service",
+        tagAccent: "dark",
+        title: "Credential For You",
+        description: "Done-for-you insurance credentialing support for mental health providers.",
+        note: "Whether you need help with one insurance company or several, our team can help organize, submit, track, and follow up on your credentialing applications.",
+        ctaLabel: "Explore Credentialing Support",
+        href: "/credential-for-you",
+      },
     ],
     cta: {
       body: "Ready for the full foundation-building experience with live coaching, monthly kits, and a community that actually gets it?",

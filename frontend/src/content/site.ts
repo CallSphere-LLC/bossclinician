@@ -128,13 +128,26 @@ export const exploreMenu: NavMenu = {
 // at the owner's request (QA sheet row 98, 15 Oct). The pages the menu does not
 // carry (Contact, Store, Free Resources, the Practice Quiz) are reached from
 // the footer and from the pages that sell them.
+// Resources is where her supporting services live (sheet row 214). Credential For
+// You is done-for-you and Credential With Confidence is the DIY course: she wants
+// both listed, and neither is one of the three programs above.
+export const resourcesMenu: NavMenu = {
+  label: "Resources",
+  items: [
+    { label: "Resource Hub", to: "/resource-hub", description: "" },
+    { label: "Credential For You", to: "/credential-for-you", description: "Done-for-you credentialing support" },
+    { label: "Credential With Confidence", to: "/courses/credential-with-confidence", description: "DIY credentialing education" },
+  ],
+};
+
 export const nav: NavEntry[] = [
   { label: "About", to: "/about" },
   workWithMeMenu,
   { label: "Courses", to: "/courses" },
-  { label: "Resource Hub", to: "/resource-hub" },
   { label: "Retreats", to: "/retreats" },
   { label: "Blog", to: "/blog" },
+  // Last, so the phone's flat list doesn't file Retreats and the Blog under it.
+  resourcesMenu,
 ];
 
 export const footer = {
@@ -160,6 +173,7 @@ export const footer = {
     { label: "Club: Free Practice Prep Training", to: "/practicepreptraining" },
     { label: "Lounge: Free Masterclass", to: "/freedom-masterclass" },
     { label: "Resource Hub", to: "/resource-hub" },
+    { label: "Credential For You", to: "/credential-for-you" },
     { label: "5-Step Marketing Plan", to: "/5-step-marketing" },
     { label: "Group Practice Assessment", to: "/boss-assessment" },
     { label: "Hiring Readiness Quiz", to: "/hiring-quiz" },

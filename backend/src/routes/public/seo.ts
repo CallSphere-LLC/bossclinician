@@ -78,6 +78,10 @@ const STATIC_ROUTES: SitemapEntry[] = [
   // on purpose: it is noindex, and listing a page while telling crawlers not to
   // index it is a contradiction search consoles report as an error.
   { loc: "/freedom-masterclass", changefreq: "monthly", priority: "0.8" },
+  // Credential For You. /credentialing-next-steps and /credentialing-intake are
+  // left out for the same reason as /watch-now: both are noindex.
+  { loc: "/credential-for-you", changefreq: "monthly", priority: "0.8" },
+  { loc: "/credentialing-request", changefreq: "yearly", priority: "0.4" },
   { loc: "/courses", changefreq: "weekly", priority: "0.9" },
   { loc: "/store", changefreq: "weekly", priority: "0.8" },
   { loc: "/resources", changefreq: "weekly", priority: "0.7" },

@@ -15,6 +15,7 @@ import NotFound from "@/pages/NotFound";
 // thank-you pages, and the quizzes. Each family keeps its own route table.
 import { leadMagnetPublicRoutes } from "@/pages/kajabi/leadmagnets/routes";
 import { kajabiPublicRoutes } from "@/pages/kajabi/pages/routes";
+import { credentialingPublicRoutes } from "@/pages/credentialing/routes";
 import { quizRouteTable } from "@/pages/kajabi/quizzes/routeTable";
 import { bookACallRoutes } from "@/pages/bookACallRoute";
 
@@ -165,6 +166,7 @@ export const PUBLIC_ROUTES: readonly { path: string; Component: RouteComponent }
   { path: "/accessibility", Component: lazyRoute(() => import("@/pages/legal/AccessibilityStatement")) },
   ...leadMagnetPublicRoutes,
   ...kajabiPublicRoutes,
+  ...credentialingPublicRoutes,
   ...quizRouteTable,
   ...bookACallRoutes.map(({ path, Component }) => ({ path, Component })),
 ];

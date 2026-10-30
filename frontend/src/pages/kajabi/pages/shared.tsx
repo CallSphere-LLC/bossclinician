@@ -372,6 +372,7 @@ export function KajabiForm({
   successMessage = "Thank you — we got it.",
   consent,
   className,
+  initialValues,
 }: {
   formSlug: string;
   fields: readonly KajabiFieldSpec[];
@@ -380,10 +381,12 @@ export function KajabiForm({
   successMessage?: ReactNode;
   consent?: ReactNode;
   className?: string;
+  /** Answers already known when the form opens, keyed as `fields` is. */
+  initialValues?: Record<string, string>;
 }) {
   const navigate = useNavigate();
   const [honeypot, trapField] = useHoneypot();
-  const [values, setValues] = useState<Record<string, string>>({});
+  const [values, setValues] = useState<Record<string, string>>(initialValues ?? {});
   const [status, setStatus] = useState<"idle" | "sending" | "done">("idle");
   const [error, setError] = useState<string | null>(null);
 

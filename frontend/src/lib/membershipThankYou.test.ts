@@ -6,6 +6,9 @@ describe("membership receipt destinations", () => {
     ["the-club", "/the-club-ty"],
     ["the-lounge", "/lounge-confirmed"],
     ["the-lounge-vip", "/lounge-confirmed"],
+    ["credential-for-you-commercial", "/credentialing-next-steps"],
+    ["credential-for-you-medicare", "/credentialing-next-steps"],
+    ["credential-for-you-package", "/credentialing-next-steps"],
   ])("routes a server-confirmed paid %s receipt", (offerSlug, redirectUrl) => {
     expect(destination({ status: "paid", offerSlug, redirectUrl })).toBe(redirectUrl);
   });

@@ -85,6 +85,11 @@ const ROUTES: { path: string; load?: Loader }[] = [
   // by the name in its query string, is noindex, and has nothing a crawler
   // should read, so it stays the client-rendered shell.
   { path: "/freedom-masterclass" },
+  // Credential For You (migration 181). Same rule as /boardroom.
+  { path: "/credential-for-you" },
+  { path: "/credentialing-next-steps" },
+  { path: "/credentialing-request" },
+  { path: "/credentialing-intake" },
   { path: "/practice-quiz" },
   { path: "/practice-reset-planner" },
   { path: "/privacy-policy" },
