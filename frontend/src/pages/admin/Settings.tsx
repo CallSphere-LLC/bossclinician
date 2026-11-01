@@ -54,7 +54,6 @@ import {
 const SITE_PAGES: { href: string; label: string }[] = [
   { href: "/", label: "Home" },
   { href: "/about", label: "About Yvette" },
-  { href: "/work-with-me", label: "Work With Me" },
   { href: "/courses", label: "Courses" },
   { href: "/resources", label: "Free Resources" },
   { href: "/resource-hub", label: "Resource Hub" },

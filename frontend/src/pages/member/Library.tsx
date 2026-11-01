@@ -546,8 +546,8 @@ function EmptyLibrary() {
 
       <div className="mt-7 flex flex-wrap justify-center gap-3">
         <LuxeButton to="/courses">Browse the courses</LuxeButton>
-        <LuxeButton to="/work-with-me" variant="glass">
-          Work with Yvette
+        <LuxeButton to="/club" variant="glass">
+          Explore the programs
         </LuxeButton>
       </div>
     </GlassCard>

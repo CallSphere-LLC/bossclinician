@@ -181,7 +181,7 @@ function NoCommunitiesYet() {
         to any email from us.
       </p>
       <div className="mt-6 flex flex-wrap justify-center gap-3">
-        <LuxeButton to="/work-with-me" size="sm">
+        <LuxeButton to="/lounge" size="sm">
           See what is included
         </LuxeButton>
         <LuxeButton to="/library" variant="glass" size="sm">

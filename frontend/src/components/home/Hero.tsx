@@ -38,7 +38,7 @@ export function Hero() {
               without doing it alone.
             </p>
             <div className="mt-10 flex flex-wrap items-center gap-4">
-              <Button to="/work-with-me" variant="gold" size="lg">
+              <Button to="/offer-quiz" variant="gold" size="lg">
                 Find Your Path
               </Button>
               <Button to="/freedom-masterclass" variant="outline-light" size="lg">

@@ -35,7 +35,6 @@ const ROUTES: { path: string; load?: Loader }[] = [
     load: async (_req, keys) => ({ [keys.testimonials()]: await loadTestimonials() }),
   },
   { path: "/about" },
-  { path: "/work-with-me" },
   {
     path: "/courses",
     load: async (_req, keys) => ({ [keys.courses()]: await loadCourses() }),

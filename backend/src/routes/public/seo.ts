@@ -63,7 +63,6 @@ ${urls}
 const STATIC_ROUTES: SitemapEntry[] = [
   { loc: "/", changefreq: "weekly", priority: "1.0" },
   { loc: "/about", changefreq: "monthly", priority: "0.8" },
-  { loc: "/work-with-me", changefreq: "monthly", priority: "0.9" },
   // The two programme sales pages. Same paths as on the source site, where
   // both are indexed.
   { loc: "/club", changefreq: "monthly", priority: "0.9" },

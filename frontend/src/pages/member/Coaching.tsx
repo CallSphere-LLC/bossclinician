@@ -372,12 +372,12 @@ function NoCoachingYet() {
       </span>
       <h2 className="mt-6 font-display text-2xl text-white">No coaching on your account yet</h2>
       <p className="copy-luxe mt-3 max-w-md text-balance text-sm">
-        Coaching is one-to-one time with Yvette on whatever is actually in the way — pricing,
-        caseload, the thing you keep putting off. Once you have a package, you book your calls here.
+        Your coaching calls appear here when your program includes them, and you book them from
+        this page. Questions about your program? We are happy to help.
       </p>
       <div className="mt-8">
-        <LuxeButton to="/work-with-me" variant="foil" size="sm">
-          See how coaching works
+        <LuxeButton to="/contact" variant="foil" size="sm">
+          Contact us
         </LuxeButton>
       </div>
     </GlassCard>
@@ -401,8 +401,8 @@ function OutOfCredits() {
             history here stays exactly as it is.
           </p>
           <div className="mt-5">
-            <LuxeButton to="/work-with-me" variant="glass" size="sm">
-              Add more sessions
+            <LuxeButton to="/contact" variant="glass" size="sm">
+              Contact us
             </LuxeButton>
           </div>
         </div>

@@ -5,7 +5,7 @@
  * (boss-clinician-boardroom.yvette728001.chatgpt.site, 27 September 2026), band
  * by band and in the page's own order: hero → the statement → the CEO-decision
  * questions → the four things the room works on → the two ways in → what
- * happens inside → the CEO Council → her note → who it is for → only six seats
+ * happens inside → the CEO Council → her note → who it is for → an intimate group of 6–8
  * → the closing call → the application.
  *
  * Nothing here is paraphrased. Her apostrophes are mostly straight and her
@@ -288,13 +288,12 @@ const APPLICATION_STEPS: readonly ApplicationStep[] = [
         required: true,
         hint: SELECT_ALL,
         groupError: "Choose at least one payment option.",
-        // The Boardroom's price is what checkout charges (offer
-        // the-boss-boardroom, Kajabi GSWsHBTx): $12,000 in full, or 4 quarterly
-        // payments of $3,000. Migration 103 writes the same strings to the form
-        // row the server validates replies against.
+        // No dollar figures on the public page (owner brief, 1 Nov 2026): the member's
+        // price is in their private invitation. Migration 189 writes the same strings
+        // to the form row the server validates replies against.
         options: [
-          "Pay in full — $12,000",
-          "4 quarterly payments of $3,000",
+          "Pay in full",
+          "Quarterly installments",
           "I'd like to discuss the options before deciding",
         ],
       },
@@ -309,7 +308,7 @@ const APPLICATION_STEPS: readonly ApplicationStep[] = [
       {
         key: "commitment",
         label:
-          "I understand the 12-month investment is $12,000, and I am willing to review my actual numbers, make decisions, and participate honestly in a small peer room.",
+          "I understand The Boardroom is a 12-month commitment, and I am willing to review my actual numbers, make decisions, and participate honestly in a small peer room.",
         type: "checkbox",
         required: true,
       },
@@ -321,7 +320,7 @@ export const boardroom = {
   seo: {
     title: "The Boardroom | Boss Clinician",
     description:
-      "The Boardroom is a private business mastermind for mental health practice owners building and leading growing practices.",
+      "The Boardroom is an application-only, 12-month group mastermind for mental health practice owners building and leading growing practices.",
     image: "/images/boardroom/boardroom-share.jpg",
   },
 
@@ -341,9 +340,9 @@ export const boardroom = {
     titleAccent: "Boardroom",
     tag: "Build a practice that can grow beyond you.",
     intro:
-      "A private business mastermind for mental health practice owners building and leading growing practices.",
+      "An application-only, 12-month group mastermind for mental health practice owners building and leading growing practices.",
     cta: "Apply for The Boardroom",
-    seatNote: "Only six practice owners at a time.",
+    seatNote: "An intimate group of 6–8 practice owners, capped at eight.",
     photo: {
       src: "/images/boardroom/yvette-office.webp",
       alt: "Yvette Howard seated confidently at her desk in a polished executive setting",
@@ -440,26 +439,33 @@ export const boardroom = {
     /** An accordion; the first item starts open, as on her page. */
     items: [
       {
-        title: "Private Boardroom Strategy Sessions",
-        body: "Bring the actual decisions happening inside your business. We work through them together.",
+        title: "4 Quarterly CEO Strategy Intensives",
+        body: "3–4 hours each, with peer hot seats on the real decisions in front of you.",
       },
       {
-        title: "The Boardroom CEO Dashboard",
-        body: "See what your numbers are telling you before you hire, give a raise, add benefits, step back, or make another major move.",
+        title: "8 Momentum Check-Ins",
+        body: "60 minutes each, in the eight months without a quarterly intensive.",
       },
       {
-        title: "CEO Resource Vault",
-        body: "Use hiring tools, SOPs, leadership templates, credentialing systems, financial planning resources, and compensation tools when you need to implement a decision.",
+        title: "2 Private CEO Strategy Sessions",
+        body: "45 minutes each during your 12-month term: an initial CEO Strategy Reset and a Midyear Executive Review.",
       },
       {
-        title: "Quarterly CEO Reviews",
-        body: "Step out of the day-to-day and assess what's working, what's costing you, and what your next priority needs to be.",
+        title: "2 Guest Expert Sessions",
+        body: "Each year, with speakers and topics selected by Boss Clinician according to the group's needs.",
       },
       {
-        title: "Direct Support Between Calls",
-        body: "Because sometimes you need to make the decision before the next meeting.",
+        title: "Voice-Note Questions",
+        body: "Up to 2 voice-note questions per month, with a response targeted within 2 business days, excluding announced closures and holidays.",
+      },
+      {
+        title: "CEO Dashboard, Living Business Plan & Executive Circle",
+        body: "Plus relevant vault resources for the term you enroll in.",
       },
     ],
+    /** Owner brief, 1 Nov 2026: state plainly what the mastermind is not. */
+    notIncluded:
+      "The Boardroom is a peer mastermind: you implement your own strategy. Done-for-you operations and payer credentialing are not included. Any special CEO experience is optional and is not a guaranteed benefit.",
   },
 
   council: {
@@ -467,7 +473,7 @@ export const boardroom = {
     mark: ["Your CEO", "Council"],
     eyebrow: "Every CEO needs a council",
     title: "Your CEO Council",
-    body: "Every successful CEO needs trusted advisors. Inside The Boardroom, you’ll join a private council of six mental health practice owners who understand the weight of leadership. Together, we’ll review numbers, work through challenges, evaluate opportunities, and make stronger decisions for your business.",
+    body: "Every successful CEO needs trusted advisors. Inside The Boardroom, you’ll join a private council of 6–8 mental health practice owners who understand the weight of leadership. Together, we’ll review numbers, work through challenges, evaluate opportunities, and make stronger decisions for your business.",
     promise: "Trusted perspectives · Stronger decisions · Healthier businesses",
   },
 
@@ -525,14 +531,14 @@ export const boardroom = {
   six: {
     photo: {
       src: "/images/boardroom/boardroom-hero.webp",
-      alt: "Six diverse practice owners collaborating around an intimate Boardroom table",
+      alt: "Diverse practice owners collaborating around an intimate Boardroom table",
       width: 1536,
       height: 864,
     } satisfies BoardroomPhoto,
     eyebrow: "Your CEO Council",
-    title: "Only Six Seats.",
-    body: "Six mental health practice owners. Six businesses. Real numbers. Real decisions. No disappearing in a giant coaching program.",
-    process: ["Apply", "Personal Review", "Invitation"],
+    title: "An Intimate Group of 6–8.",
+    body: "Six to eight mental health practice owners, capped at eight. Real businesses. Real numbers. Real decisions. No disappearing in a giant coaching program.",
+    process: ["Apply", "Discovery Call", "Private Invitation"],
     close:
       "I want to know what's happening inside your practice, so when you bring a decision to your Council, we aren't starting from zero every time.",
   },
@@ -546,7 +552,7 @@ export const boardroom = {
 
   application: {
     eyebrow: "Application",
-    title: "There are six chairs in this room.",
+    title: "There are no more than eight chairs in this room.",
     paragraphs: [
       "If you believe one may be yours, apply.",
       "I personally review each application. You do not need to have everything figured out, but you should be ready to look honestly at your numbers, leadership, systems, and the decisions shaping your next stage of growth.",

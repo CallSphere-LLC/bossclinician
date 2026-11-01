@@ -47,7 +47,7 @@ export function WhatYouNeed() {
         </RevealGroup>
 
         <div className="mt-14 text-center">
-          <Button to="/work-with-me" variant="gold" size="lg">
+          <Button to="/offer-quiz" variant="gold" size="lg">
             Find Your Path
           </Button>
         </div>

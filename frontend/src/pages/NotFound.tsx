@@ -91,8 +91,8 @@ export default function NotFound() {
           <LuxeButton variant="foil" to="/" className="min-h-[44px]">
             Back to Home
           </LuxeButton>
-          <LuxeButton variant="outline" to="/work-with-me" className="min-h-[44px]">
-            Work With Me
+          <LuxeButton variant="outline" to="/courses" className="min-h-[44px]">
+            Browse Courses
           </LuxeButton>
         </motion.div>
       </Section>

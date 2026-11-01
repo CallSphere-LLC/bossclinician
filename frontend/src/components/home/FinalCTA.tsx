@@ -27,7 +27,7 @@ export function FinalCTA() {
           starts with finding the right community.
         </p>
         <div className="mt-11 flex flex-wrap items-center justify-center gap-4">
-          <Button to="/work-with-me" variant="gold" size="lg">
+          <Button to="/offer-quiz" variant="gold" size="lg">
             Find Your Path
           </Button>
           <Button to="/boardroom#apply" variant="outline-light" size="lg">

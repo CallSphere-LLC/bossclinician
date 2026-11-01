@@ -2,7 +2,7 @@
 # Source: the `redirects` table. Regenerate with:
 #   docker compose exec backend node scripts/generate-nginx-redirects.js
 #   docker compose exec nginx nginx -s reload
-# Generated from 110 rows.
+# Generated from 111 rows.
 
 # The podcast episode paths (/podcasts/<show>/episodes/<id>) overflow the
 # 64-byte default bucket, and nginx refuses to start rather than truncating.
@@ -21,7 +21,7 @@ map $uri $redirect_target {
     /blog/alma-vs-private-pay-group-practice-numbers /blog;
     /blog/how-to-stop-seeing-25-clients-a-week /blog/how-to-stop-seeing-25-clients-a-week-and-still-hit-your-income-goals;
     /blog/is-talkspace-right-for-your-practice-goals /blog;
-    /boss-builders-sales-page /work-with-me;
+    /boss-builders-sales-page /;
     /boss-clinician-boardroom /boardroom;
     /boss-clinician-home /;
     /confirmation-boss-clinician-lounge /checkout/success;
@@ -111,13 +111,14 @@ map $uri $redirect_target {
     /start-your-own-private-practice-quiz /practice-quiz;
     /startersuitecourse /courses/private-practice-starter-suite;
     /terms-of-service-boss-clinician /terms;
-    /the-boss-builders-collective-thank-you-page /work-with-me;
+    /the-boss-builders-collective-thank-you-page /;
     /the-directory-makeover-audit /courses/directory-makeover-audit;
     /the-lounge-suite /lounge;
     /turn-doctor-referrals-into-ideal-client /courses/provider-partnership-guide;
     /users/sign_in /login;
     /users/sign_up /signup;
     /webinar-waitlist-thank-you /resources;
+    /work-with-me /;
 }
 
 map $uri $redirect_target_temp {

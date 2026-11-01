@@ -49,8 +49,8 @@ interface Service {
  */
 const SERVICES: readonly Service[] = [
   {
-    name: "The Boss Boardroom",
-    price: "$12,000.00 USD",
+    name: "The Boardroom",
+    price: "",
     // The mastermind's own page, where the application is. No checkout: the
     // Boardroom is by application and invitation.
     to: "/boardroom",

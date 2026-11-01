@@ -451,8 +451,8 @@ function EmptyLibrary() {
         The training library is being updated. Please check back soon.
       </p>
 
-      <LuxeButton variant="glass" size="sm" to="/work-with-me" className="mt-6 min-h-[44px]">
-        Work With Me
+      <LuxeButton variant="glass" size="sm" to="/resource-hub" className="mt-6 min-h-[44px]">
+        Visit the Resource Hub
       </LuxeButton>
     </GlassCard>
   );

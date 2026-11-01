@@ -44,7 +44,7 @@ export default function Apply() {
       />
 
       <LuxePageHero
-        eyebrow="Work With Me"
+        eyebrow="The Boardroom"
         title={HERO_TITLE}
         titleAccent={HERO_ACCENT}
         lede={applyPage.intro}

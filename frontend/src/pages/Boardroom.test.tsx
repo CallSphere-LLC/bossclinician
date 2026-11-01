@@ -47,7 +47,10 @@ describe("the Boardroom page, server-rendered", () => {
   it("says everything before any script runs, and hides none of it", () => {
     expect(html).toContain("$500,000.");
     expect(html).toContain("The Boardroom is where we work on the business underneath the revenue.");
-    expect(html).toContain("Only Six Seats.");
+    expect(html).toContain("An Intimate Group of 6–8.");
+    // Owner brief, 1 Nov 2026: group benefits only, and no fixed price on the public page.
+    expect(html).not.toMatch(/\$12,000|\$18,000|\$3,000|only six|six chairs|council of six|private consulting|full-day/i);
+    expect(html).toContain("Done-for-you operations and payer credentialing are not included.");
     // The reveal is armed in the browser, never in the server's markup.
     expect(html).not.toContain("br-reveal-armed");
     expect(html).not.toContain("br-visible");
@@ -85,21 +88,21 @@ describe("the Boardroom application and the form it posts to", () => {
     placeholder?: string;
     helpText?: string;
   }[];
-  // Migration 103 re-priced the Boardroom ($18,000 -> $12,000) and rewrote the
-  // payment choices in the stored form; apply the same edit so the comparison is
+  // Migrations 103 and 189 rewrote the payment choices and the commitment line in
+  // the stored form; apply the same edit so the comparison is
   // with the form as the database now holds it.
   const stored = created.map((field) =>
     field.key === "payment_preference"
       ? {
           ...field,
           options: [
-            "Pay in full — $12,000",
-            "4 quarterly payments of $3,000",
+            "Pay in full",
+            "Quarterly installments",
             "I'd like to discuss the options before deciding",
           ],
         }
       : field.key === "commitment"
-        ? { ...field, label: field.label.replace("$18,000", "$12,000") }
+        ? { ...field, label: field.label.replace("the 12-month investment is $18,000", "The Boardroom is a 12-month commitment") }
         : field,
   );
   const asked = boardroom.application.steps.flatMap((step) => step.fields);

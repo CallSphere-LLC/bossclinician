@@ -83,7 +83,7 @@ const GROUPS: LinkGroup[] = [
     ],
   },
   {
-    label: "Work With Me",
+    label: "Programs",
     links: [
       {
         icon: "🌱",

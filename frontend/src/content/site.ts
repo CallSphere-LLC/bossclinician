@@ -156,7 +156,6 @@ export const footer = {
     "Community, strategy, and mastermind for therapists and clinicians building practices that are actually theirs.",
   exploreLinks: [
     { label: "About Yvette", to: "/about" },
-    { label: "Work With Me", to: "/work-with-me" },
     { label: "Boss Clinician Club", to: "/club" },
     { label: "Boss Clinician Lounge", to: "/lounge" },
     { label: "Boss Clinician Boardroom", to: "/boardroom" },
@@ -255,7 +254,7 @@ export const home = {
     {
       title: "Find the Program That Best Fits Your Needs",
       body: 'If the masterclass leaves you thinking, "This is exactly what I need," explore the Club, Lounge, and Boardroom. We\'ll review where you are, where you want to go, and determine if this high-touch level of service is the right fit.',
-      cta: "Work With Me",
+      cta: "Explore the Programs",
     },
     {
       title: "Build Your Business with High-Level Support",

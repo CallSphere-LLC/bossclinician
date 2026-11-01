@@ -29,22 +29,6 @@ const DESTINATIONS: readonly VoiceDestination[] = [
     surfaces: PUBLIC,
   },
   {
-    key: "work-with-me",
-    path: "/work-with-me",
-    label: "Work With Me",
-    aliases: [
-      "work with me",
-      "work with Yvette",
-      "coaching",
-      "one to one",
-      "how do I hire her",
-      "what are my options",
-    ],
-    narration:
-      "Work With Me introduces the B.O.S.S. Boardroom, a group experience for practice owners. Read the current page for its format, application details and frequently asked questions. One-to-one consulting is no longer offered.",
-    surfaces: PUBLIC,
-  },
-  {
     key: "club",
     path: "/club",
     label: "Boss Clinician Club",
@@ -389,29 +373,6 @@ const TOUR: readonly TourStop[] = [
     ],
   },
   {
-    destination: "work-with-me",
-    purpose:
-      "The full menu of strategic partnerships, with who each is for and how the work actually runs.",
-    beats: [
-      {
-        focus: "Built to heal others.",
-        say: "Built to heal others — now let's build something that sustains you. That is the whole premise of this page, and it is the one that costs money, so it is worth reading properly.",
-      },
-      {
-        focus: "Strategic partnerships",
-        say: "This is the B.O.S.S. Boardroom. Read the details on screen to explain the current group experience and who it serves.",
-      },
-      {
-        focus: "How we work together",
-        say: "And this part is the mechanics: what happens after you apply, how often you meet, and what is expected of you in between.",
-      },
-      {
-        focus: "Frequently asked questions",
-        say: "The questions at the bottom are the ones people actually ask before applying, so it is worth a scroll before you fill anything in.",
-      },
-    ],
-  },
-  {
     destination: "club",
     purpose:
       "The six-month programme for someone still building the foundation of a private practice.",
@@ -451,11 +412,11 @@ const TOUR: readonly TourStop[] = [
         say: "The Boardroom is the third way in. It is for practice owners whose next decisions are CEO decisions: when to hire, what they can afford, and how to step back without everything falling apart.",
       },
       {
-        focus: "Only Six Seats.",
-        say: "It is deliberately small — six practice owners, six businesses, real numbers. Joining is an application, then Yvette's personal review, then an invitation.",
+        focus: "An Intimate Group of 6–8.",
+        say: "It is deliberately small — six to eight practice owners, capped at eight, for a 12-month term. Joining is an application, then a discovery call, then a private invitation.",
       },
       {
-        focus: "There are six chairs in this room.",
+        focus: "There are no more than eight chairs in this room.",
         say: "The application is here, in six short steps. You do not need to have everything figured out to apply.",
       },
     ],

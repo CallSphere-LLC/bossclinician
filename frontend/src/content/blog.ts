@@ -574,7 +574,7 @@ If your heart just skipped a beat reading this — welcome. You’re not behind.
 
 And you don’t have to do it alone.
 
-If you’re ready to build your practice with strategy, clarity, and support—not hustle and exhaustion—[apply to work with me](/work-with-me). This work is meant to be built with intention, not urgency.
+If you’re ready to build your practice with strategy, clarity, and support—not hustle and exhaustion—[find the program that fits you](/offer-quiz). This work is meant to be built with intention, not urgency.
 `,
   },
   {

@@ -498,7 +498,7 @@ export const linkInBio = {
       ],
     },
     {
-      heading: "Work With Me",
+      heading: "Programs",
       links: [
         {
           glyph: "🌱",

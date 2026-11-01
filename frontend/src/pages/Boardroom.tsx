@@ -235,6 +235,7 @@ export default function Boardroom() {
               </details>
             ))}
           </div>
+          <p>{b.inside.notIncluded}</p>
         </div>
       </section>
 

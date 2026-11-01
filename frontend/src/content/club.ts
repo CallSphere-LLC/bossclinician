@@ -404,7 +404,7 @@ export const club = {
       },
       {
         q: "Do you offer refunds?",
-        a: "Join the Club and do the work for 14 days. Complete your onboarding, work through Start Here and Module 01, finish the Module 01 worksheets, and attend or watch your first coaching call. If you have done all of that and still do not believe the Club is a powerful investment in your practice, show us your completed work within 14 days of enrollment and we will refund your tuition.",
+        a: "Join the Club and do the work for 14 days. Complete your onboarding, work through Start Here and Module 01, finish the Module 01 worksheets, and attend or watch your first coaching call. If you have done all of that and still do not believe the Club is a powerful investment in your practice, email your request and completed work to support@bossclinician.com within 14 calendar days of enrollment. An approved claim refunds tuition already collected and cancels any unpaid remaining installments. Without an approved claim, the remaining installments under your fixed six-month purchase remain payable, subject to applicable law.",
       },
       {
         q: "What if I’m scared about losing benefits?",
@@ -419,7 +419,7 @@ export const club = {
   },
 
   footerLine: "Build it. Sustain it. Lead it. Leave it on your terms.",
-  nbcc: "Boss Clinician, LLC has been approved by NBCC as an Approved Continuing Education Provider, ACEP No. 7998. Programs that do not qualify for NBCC credit are clearly identified. Boss Clinician, LLC is solely responsible for all aspects of the programs. CE grievance, refund, and cancellation policies are available by request at support@bossclinician.com.",
+  nbcc: "Boss Clinician, LLC has been approved by NBCC as an Approved Continuing Education Provider, ACEP No. 7998. Programs that do not qualify for NBCC credit are clearly identified. Boss Clinician, LLC is solely responsible for all aspects of the programs. CE grievance, refund, and cancellation policies are available at www.bossclinician.com/continuing-education-boss-clinician or by request at support@bossclinician.com.",
 };
 
 /**
@@ -428,8 +428,8 @@ export const club = {
  * public checkout API. Prices are NOT here: the order form reads them from the
  * offer (`the-club`), so the page can never quote different money from the
  * charge. The one edit: the source's NBCC line says policies are "available at
- * [LINK] or by request" — an unfilled placeholder — so, as on /club, it reads
- * "available by request".
+ * [LINK] or by request" — an unfilled placeholder. It now names the NBCC policy
+ * page, /continuing-education-boss-clinician (the Nevada-board page is /ceu-terms).
  */
 export const clubCheckout = {
   seo: {
@@ -487,15 +487,15 @@ export const clubCheckout = {
       body: "Your first month inside The Club already mapped out. Use the planner to stay focused on the right milestones, track your progress, and know what to work on next as you begin building your practice. Designed to help you implement — not just consume more information.",
     },
     {
-      label: "FAST ACTION BONUS",
+      label: "ENROLLMENT BONUS",
       title: "The Ramp-Up Rate Pricing Formula",
-      body: "Enroll within 72 hours and get the complete rate-setting system free: the Rate-Setting Blueprint, mindset reset training, Ramp-Up Rate Calculator, Rate Comparison Calculator, and workbook, so you charge with confidence from your very first client. ($197 value, sold separately. Does not carry NBCC credit.)",
+      body: "Included when you enroll, the complete rate-setting system: the Rate-Setting Blueprint, mindset reset training, Ramp-Up Rate Calculator, Rate Comparison Calculator, and workbook, so you charge with confidence from your very first client. ($197 value, sold separately. Does not carry NBCC credit.)",
     },
   ],
-  nbcc: "The Boss Move is approved by NBCC under the program title \"Profitable Private Practices: Training for Clinically-Aligned Private Practices\" for 4 clock hours. Your certificate of completion will carry the approved program title. Boss Clinician, LLC has been approved by NBCC as an Approved Continuing Education Provider, ACEP No. 7998. Programs that do not qualify for NBCC credit are clearly identified. Boss Clinician, LLC is solely responsible for all aspects of the programs. Continuing education credit applies to this course only; coaching calls, community access, and bonus materials do not carry NBCC credit. CE grievance, refund, and cancellation policies are available by request at support@bossclinician.com.",
+  nbcc: "The Boss Move is approved by NBCC under the program title \"Profitable Private Practices: Training for Clinically-Aligned Private Practices\" for 4 clock hours. Your certificate of completion will carry the approved program title. Boss Clinician, LLC has been approved by NBCC as an Approved Continuing Education Provider, ACEP No. 7998. Programs that do not qualify for NBCC credit are clearly identified. Boss Clinician, LLC is solely responsible for all aspects of the programs. Continuing education credit applies to this course only; coaching calls, community access, and bonus materials do not carry NBCC credit. CE grievance, refund, and cancellation policies are available at www.bossclinician.com/continuing-education-boss-clinician or by request at support@bossclinician.com.",
   refund: {
     title: "14-Day Boss Move Guarantee",
-    body: "Complete onboarding, Start Here, Module 01, the Module 01 worksheets, and attend or watch the first coaching call. If you have completed that work and still do not believe the Club is a powerful investment in your practice, submit your completed work within 14 days of enrollment to request a tuition refund under the Boss Move Guarantee. No refunds are provided after 14 days or for change of mind or non-participation.",
+    body: "Within 14 calendar days of enrollment (by 11:59 p.m. Pacific Time on the 14th calendar day), complete onboarding, Start Here, Module 01 and all required worksheets, attend or watch the designated first coaching call, and email your request and completed work to support@bossclinician.com. If a required material, call, or replay is unavailable through no fault of yours, we will give you a reasonable extension or an equivalent opportunity. An approved claim refunds tuition already collected and cancels any unpaid remaining installments. Without an approved claim, the remaining installments under your fixed six-month purchase remain payable, subject to applicable law. No refunds are provided after 14 days or for change of mind or non-participation.",
     link: { label: "Click here for full details.", to: "/terms" },
   },
   security: {
@@ -505,7 +505,7 @@ export const clubCheckout = {
   /** Kajabi's service agreement, shown above its "I accept" checkbox. */
   agreement: {
     title: "Enrollment terms",
-    body: "By enrolling, I agree to the Terms of Use and confirm that I understand: the Club is a 6-month program; payment plans consist of 6 monthly payments and all 6 payments are owed upon enrollment; refunds are available only under the Boss Move Guarantee, which requires completing onboarding, Start Here, Module 01, and the Module 01 worksheets, and attending or watching the first coaching call, with completed work submitted within 14 days of enrollment; no refunds are provided after 14 days or for change of mind or non-participation. Bonus materials are included at no charge and carry no cash value. All Club content and materials are for my individual use only and may not be shared or distributed. The Club provides business education and coaching, not clinical supervision, legal, tax, or financial advice, and no specific income results are promised or guaranteed.",
+    body: "By enrolling, I agree to the Terms of Use and confirm that I understand: the Club is a 6-month program; payment plans consist of 6 monthly payments and all 6 payments are owed upon enrollment, except that an approved Boss Move Guarantee claim refunds tuition already collected and cancels any unpaid remaining installments; refunds are available only under the Boss Move Guarantee, which requires completing onboarding, Start Here, Module 01, and the Module 01 worksheets, and attending or watching the first coaching call, with my request and completed work emailed to support@bossclinician.com within 14 calendar days of enrollment; no refunds are provided after 14 days or for change of mind or non-participation. Bonus materials are included at no charge and carry no cash value. All Club content and materials are for my individual use only and may not be shared or distributed. The Club provides business education and coaching, not clinical supervision, legal, tax, or financial advice, and no specific income results are promised or guaranteed.",
     note: "Accepting the terms in the order form below confirms these enrollment terms.",
   },
   unavailable: {

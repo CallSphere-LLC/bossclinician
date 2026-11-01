@@ -394,7 +394,7 @@ type MobileRow =
 const MOBILE_ROWS: MobileRow[] = nav.flatMap((entry): MobileRow[] =>
   isNavMenu(entry)
     ? [
-        { kind: "heading", key: `group:${entry.label}`, label: entry.label === "Learn" ? "Work With Me" : entry.label, to: entry.to },
+        { kind: "heading", key: `group:${entry.label}`, label: entry.label === "Learn" ? "Programs" : entry.label, to: entry.to },
         ...entry.items.map(
           (item): MobileRow => ({ kind: "link", key: `${entry.label}:${item.to}`, label: item.label, to: item.to }),
         ),

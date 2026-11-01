@@ -83,7 +83,6 @@ const PodcastPage = lazyRoute(() => import("@/pages/Podcast"));
 export const PUBLIC_ROUTES: readonly { path: string; Component: RouteComponent }[] = [
   { path: "/", Component: lazyRoute(() => import("@/pages/Home")) },
   { path: "/about", Component: lazyRoute(() => import("@/pages/About")) },
-  { path: "/work-with-me", Component: lazyRoute(() => import("@/pages/WorkWithMe")) },
   { path: "/courses", Component: lazyRoute(() => import("@/pages/Courses")) },
   { path: "/services/:slug", Component: lazyRoute(() => import("@/pages/NonCourseProduct")) },
   { path: "/downloads/:slug", Component: lazyRoute(() => import("@/pages/NonCourseProduct")) },
@@ -239,6 +238,9 @@ function memberRoutes() {
         <Route path="/account/purchases" element={<MemberPurchases />} />
         <Route path="/account/downloads" element={<MemberDownloads />} />
         <Route path="/downloads" element={<Navigate to="/library?tab=documents" replace />} />
+        {/* Retired from public view (owner brief, 1 Nov 2026). nginx answers this path with a
+            real 301 (migration 189); this covers navigation inside the running app. */}
+        <Route path="/work-with-me" element={<Navigate to="/" replace />} />
         <Route path="/account/email" element={<MemberEmailPreferences />} />
         {/* A receipt's permanent address, and its PDF's. Inside RequireMember,
             so a signed-out visit goes to /login and returns here. */}
