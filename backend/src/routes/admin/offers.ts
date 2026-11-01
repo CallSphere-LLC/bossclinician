@@ -1094,9 +1094,9 @@ adminOffersRouter.post(
       await client.query(
         `INSERT INTO offer_pricing_options
            (offer_id, label, pricing_type, amount_cents, min_amount_cents, currency,
-            interval, interval_count, installment_count, trial_days, recommended, active, sort, deposit_cents, sales_start_at, sales_end_at, plan_total_cents, balance_due_by)
+            interval, interval_count, installment_count, minimum_months, trial_days, recommended, active, sort, deposit_cents, sales_start_at, sales_end_at, plan_total_cents, balance_due_by)
          SELECT $2, label, pricing_type, amount_cents, min_amount_cents, currency,
-                interval, interval_count, installment_count, trial_days, recommended, active, sort, deposit_cents, sales_start_at, sales_end_at, plan_total_cents, balance_due_by
+                interval, interval_count, installment_count, minimum_months, trial_days, recommended, active, sort, deposit_cents, sales_start_at, sales_end_at, plan_total_cents, balance_due_by
            FROM offer_pricing_options WHERE offer_id = $1`,
         [id, created.id],
       );

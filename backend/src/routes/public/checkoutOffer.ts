@@ -792,10 +792,13 @@ checkoutOfferRouter.post(
     if (body.paymentProvider === "paypal") {
       if (!paypalEnabled()) throw serviceUnavailable("PayPal checkout is not available right now. Please pay by card.");
       if ((offer.currency || "usd").toLowerCase() !== "usd") throw badRequest("PayPal checkout supports US dollar offers only. Please pay by card.");
+      if (offer.minimum_months) throw badRequest("This membership is paid by card. Please choose card to continue.");
       if (isRecurring(offer) && body.cartItems) throw badRequest("Subscriptions and payment plans are bought from their own checkout page.");
     }
     if (body.cartItems && (body.cartItems[0].slug !== offer.slug || (body.cartItems[0].pricingOptionId ?? null) !== (offer.pricing_option_id ?? null))) throw badRequest("The cart changed. Refresh it before paying.");
 
+    // A percent-off code on a subscription with no end would discount it forever.
+    if (offer.minimum_months && body.couponCode) throw badRequest("Discount codes are not available for this membership option.");
     if (body.giftRecipientEmail && (!offer.allow_gifting || isRecurring(offer))) {
       throw badRequest("This offer cannot be sent as a gift. Choose a one-time purchase.");
     }
@@ -1034,6 +1037,7 @@ checkoutOfferRouter.post(
             ...metadata,
             installmentCount: String(offer.installment_count ?? ""),
             installmentCents: String(offer.amount_cents),
+            ...(offer.minimum_months ? { minimumMonths: String(offer.minimum_months) } : {}),
           },
         };
         // Adjust only the opening invoice. The subscription Price remains the

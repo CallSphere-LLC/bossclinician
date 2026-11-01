@@ -448,6 +448,13 @@ function describeSubscription(subscription: MemberSubscription): {
     };
   }
 
+  if (subscription.scheduledCancelAt) {
+    return {
+      pill: { label: "Ending", accent: "neutral" },
+      detail: `Ends ${formatDate(subscription.scheduledCancelAt)}, when your minimum commitment finishes. Your scheduled payments continue until then.`,
+    };
+  }
+
   if (subscription.cancelAtPeriodEnd) {
     return {
       pill: { label: "Ending", accent: "neutral" },
@@ -485,6 +492,11 @@ function describeSubscription(subscription: MemberSubscription): {
       renewal && subscription.nextChargeAmountCents !== null
         ? `Renews ${renewal} — ${formatCurrency(subscription.nextChargeAmountCents, subscription.currency)}.`
         : "Renews automatically.",
+    ...(subscription.minimumTermEndsAt && new Date(subscription.minimumTermEndsAt) > new Date()
+      ? {
+          detail: `${renewal && subscription.nextChargeAmountCents !== null ? `Next payment ${renewal} — ${formatCurrency(subscription.nextChargeAmountCents, subscription.currency)}. ` : ""}Minimum commitment through ${formatDate(subscription.minimumTermEndsAt)}, then month-to-month until you cancel.`,
+        }
+      : {}),
   };
 }
 

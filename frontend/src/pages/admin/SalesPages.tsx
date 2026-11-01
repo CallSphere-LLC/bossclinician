@@ -769,6 +769,36 @@ export function SubscriptionsPage() {
         ),
       },
       {
+        id: "cancelRequest",
+        header: "Cancel request",
+        enableSorting: false,
+        cell: ({ row }) => {
+          const subscription = row.original;
+          if (subscription.endedAt || subscription.cancelAtPeriodEnd || !subscription.stripeSubscriptionId) return null;
+          return (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                adminApi
+                  .requestSubscriptionCancel(subscription.id)
+                  .then((updated) => {
+                    setRows((current) => current?.map((item) => (item.id === updated.id ? updated : item)) ?? current);
+                    toast.success(
+                      updated.scheduledCancelAt
+                        ? `Booked to end ${formatDate(updated.scheduledCancelAt)}. Scheduled payments continue until then.`
+                        : "Set to end when the paid period finishes.",
+                    );
+                  })
+                  .catch(() => toast.error("That didn't go through. Nothing was changed."));
+              }}
+            >
+              Record cancel request
+            </Button>
+          );
+        },
+      },
+      {
         accessorKey: "amountCents",
         header: "How much",
         cell: ({ row }) => (

@@ -9,6 +9,7 @@ import { stripe } from "../../stripe/client";
 import { stripeEnabled } from "../../config/env";
 import { paypalStatus } from "../../services/paypalClient";
 import { requirePermission } from "../../services/permissions";
+import { cancellationDate } from "../../services/membershipMinimum";
 import {
   loadReceiptDocument,
   renderReceipt,
@@ -340,6 +341,47 @@ adminSalesRouter.get(
        ORDER BY s.created_at DESC LIMIT 500`,
     );
     res.json(rowsToCamel(result.rows));
+  }),
+);
+
+/**
+ * A member emailed to cancel. Inside a minimum term this books the end of the term
+ * and leaves the scheduled charges running; after it, it ends at the paid period.
+ * Refunds are a separate action, so a cancellation request never stops an installment.
+ */
+adminSalesRouter.post(
+  "/subscriptions/:id/request-cancel",
+  requireManage,
+  asyncHandler(async (req, res) => {
+    const found = await pool.query<{
+      stripe_subscription_id: string | null;
+      minimum_term_ends_at: Date | null;
+      current_period_end: Date | null;
+      ended_at: Date | null;
+    }>(
+      `SELECT stripe_subscription_id, minimum_term_ends_at, current_period_end, ended_at
+         FROM subscriptions WHERE id = $1`,
+      [Number(req.params.id)],
+    );
+    const row = found.rows[0];
+    if (!row || row.ended_at !== null) throw notFound("That subscription has already ended.");
+    if (!row.stripe_subscription_id) throw badRequest("This subscription isn't billed by Stripe.");
+    const inMinimum = row.minimum_term_ends_at !== null && row.minimum_term_ends_at > new Date();
+    const cancelAt = inMinimum ? cancellationDate(row.minimum_term_ends_at!, row.current_period_end) : null;
+    await stripe().subscriptions.update(
+      row.stripe_subscription_id,
+      cancelAt
+        ? { cancel_at: Math.floor(cancelAt.getTime() / 1000), proration_behavior: "none" }
+        : { cancel_at_period_end: true },
+    );
+    const updated = await pool.query(
+      `UPDATE subscriptions
+          SET cancel_at_period_end = true, scheduled_cancel_at = $2,
+              canceled_at = COALESCE(canceled_at, now()), updated_at = now()
+        WHERE id = $1 RETURNING *`,
+      [Number(req.params.id), cancelAt],
+    );
+    res.json(rowToCamel(updated.rows[0]));
   }),
 );
 

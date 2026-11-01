@@ -1,3 +1,4 @@
+import { minimumMonthsFrom, minimumTermEnd } from "../../services/membershipMinimum";
 import { Router } from "express";
 import { z } from "zod";
 import type Stripe from "stripe";
@@ -2261,6 +2262,9 @@ async function handleSubscriptionChange(
   const status = deleted ? "canceled" : sub.status;
 
   const order = meta.orderId !== undefined ? await loadOrderById(meta.orderId) : null;
+  // A cancellation inside a minimum term is a dated `cancel_at`, not a period-end flag.
+  const minimumMonths = minimumMonthsFrom(sub.metadata);
+  const endingOnSchedule = sub.cancel_at_period_end || (minimumMonths > 0 && sub.cancel_at != null);
 
   const upserted = await pool.query<{ id: number; created: boolean }>(
     `INSERT INTO subscriptions
@@ -2304,7 +2308,7 @@ async function handleSubscriptionChange(
       status,
       periodStart,
       periodEnd,
-      sub.cancel_at_period_end,
+      endingOnSchedule,
       toDate(sub.trial_end),
       toDate(sub.canceled_at),
       toDate(sub.ended_at),
@@ -2317,6 +2321,18 @@ async function handleSubscriptionChange(
 
   const subscriptionId = upserted.rows[0]?.id ?? null;
   log(`subscription ${sub.id} mirrored as ${status}`);
+
+  if (minimumMonths > 0 && subscriptionId !== null) {
+    const anchor = toDate(sub.billing_cycle_anchor);
+    await pool.query(
+      `UPDATE subscriptions
+          SET minimum_term_ends_at = COALESCE(minimum_term_ends_at, $2),
+              minimum_order_id = COALESCE(minimum_order_id, $3),
+              scheduled_cancel_at = $4
+        WHERE id = $1`,
+      [subscriptionId, anchor ? minimumTermEnd(anchor, minimumMonths) : null, order?.id ?? null, toDate(sub.cancel_at)]
+    );
+  }
 
   // This row is half of the link between a subscription and the access it pays
   // for, and it is the half that may arrive second: invoice.paid grants the
@@ -2378,7 +2394,7 @@ async function handleSubscriptionChange(
   // cancellation started in the Stripe dashboard counts too; the event key
   // makes the repeat webhooks Stripe sends for the same subscription collapse
   // into one occurrence.
-  if (!deleted && sub.cancel_at_period_end && subscriptionId !== null) {
+  if (!deleted && endingOnSchedule && subscriptionId !== null) {
     const identity = await automationIdentity(order?.member_id ?? null, order?.email ?? "");
     await publishDomainEvent("subscription_cancel_requested", {
       eventKey: `subscription-cancel-requested:${subscriptionId}`,
@@ -2529,7 +2545,15 @@ async function handleChargeRefunded(charge: Stripe.Charge): Promise<void> {
   // whole — `recordRefund` weighs each refund against everything the order
   // collected, and it is that comparison, not this one, that decides access.
   const chargeFullyRefunded = charge.amount_refunded >= charge.amount;
-  const { revokeAccessOnFullRefund } = await billingSettings();
+  const billing = await billingSettings();
+  // An approved refund on a membership with a minimum term ends the enrollment and
+  // its future payments (owner brief, 1 Nov 2026), whatever the general setting says.
+  const committed = await pool.query<{ stripe_subscription_id: string }>(
+    `SELECT stripe_subscription_id FROM subscriptions
+      WHERE minimum_order_id = $1 AND ended_at IS NULL AND stripe_subscription_id IS NOT NULL`,
+    [transaction.order_id],
+  );
+  const revokeAccessOnFullRefund = billing.revokeAccessOnFullRefund || committed.rows.length > 0;
   let orderFullyRefunded = false;
   let revokedCount = 0;
 
@@ -2589,6 +2613,17 @@ async function handleChargeRefunded(charge: Stripe.Charge): Promise<void> {
           charge.currency,
           result.fullyRefunded,
         ).catch((error: unknown) => console.error(`[stripe] refund receipt ${charge.id} failed:`, error));
+      }
+    }
+  }
+
+  if (orderFullyRefunded) {
+    for (const row of committed.rows) {
+      try {
+        await stripe().subscriptions.cancel(row.stripe_subscription_id, { prorate: false });
+        log(`subscription ${row.stripe_subscription_id} ended by a full refund of order ${transaction.order_id}`);
+      } catch (error) {
+        console.error(`[stripe] REFUNDED BUT STILL BILLING: could not end ${row.stripe_subscription_id}:`, error);
       }
     }
   }

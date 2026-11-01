@@ -358,6 +358,9 @@ export interface Subscription {
   amountCents: number;
   currency: string;
   createdAt: string;
+  endedAt?: string | null;
+  stripeSubscriptionId?: string | null;
+  scheduledCancelAt?: string | null;
 }
 
 export interface Invoice {

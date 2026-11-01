@@ -45,6 +45,7 @@ export interface OfferBilling {
   paymentSchedule?: {amountCents:number;dueAt:string}[];
   planTotalCents: number | null;
   minAmountCents: number | null;
+  minimumMonths?: number | null;
 }
 
 export interface CustomFieldDef {
@@ -206,6 +207,7 @@ export interface EnrollmentTermsView {
   refundTerms: string;
   refundDeadlineRule?: string;
   obligationsNote: string;
+  paymentDates?: string;
 }
 
 export interface CheckoutRequirements {

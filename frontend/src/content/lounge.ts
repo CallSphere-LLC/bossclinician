@@ -17,6 +17,12 @@
  * or 6 x $197; VIP $3,497 or 6 x $347), so each button opens our own checkout.
  * Migration 064 already redirects both Kajabi paths to this page.
  */
+/**
+ * Flip together with backend/scripts/lounge-billing-activate.sql, in one release:
+ * the page must never describe billing the checkout does not do.
+ */
+export const LOUNGE_BILLING_LIVE = false;
+
 export const LOUNGE_MEMBER_ROUTE = "/checkout/the-lounge";
 export const LOUNGE_VIP_ROUTE = "/checkout/the-lounge-vip";
 
@@ -223,7 +229,9 @@ export const lounge = {
         name: "Lounge Member",
         tagline: "",
         price: "$197/mo",
-        terms: "Founding rate · 6 monthly payments ($1,182 total) · or $1,997 paid in full",
+        terms: LOUNGE_BILLING_LIVE
+          ? "Founding rate · 6-month minimum ($1,182 total), then month-to-month until you cancel · or $1,997 paid in full for 12 months of access, with no automatic renewal"
+          : "Founding rate · 6 monthly payments ($1,182 total) · or $1,997 paid in full",
         scarcity: "Limited founding seats. When they fill, the monthly rate rises to $247.",
         features: [
           "The Practice Elevation: all four modules, video lessons, worksheets, swipe files, and templates",
@@ -243,7 +251,9 @@ export const lounge = {
         name: "★ Lounge VIP",
         tagline: "The Lounge teaches you how to fix your practice. VIP puts my eyes on yours.",
         price: "$347/mo",
-        terms: "Founding VIP rate · 6 monthly payments ($2,082 total) · or $3,497 paid in full",
+        terms: LOUNGE_BILLING_LIVE
+          ? "Founding VIP rate · 6-month minimum ($2,082 total), then month-to-month until you cancel · or $3,497 paid in full for 12 months of access, with no automatic renewal"
+          : "Founding VIP rate · 6 monthly payments ($2,082 total) · or $3,497 paid in full",
         scarcity: "Four founding VIP seats at this rate. Then $447.",
         features: [
           "Everything in Lounge Member",
@@ -257,8 +267,9 @@ export const lounge = {
         cta: "JOIN AS A VIP",
       },
     ],
-    commitment:
-      "*Meaningful practice changes take time to implement, evaluate, and refine. That's why the Lounge begins with a 6-month commitment.",
+    commitment: LOUNGE_BILLING_LIVE
+      ? "*Monthly begins with a 6-month minimum commitment, because meaningful practice changes take time to implement, evaluate, and refine. Paying in full is a separate option that buys 12 months of access. Both include our 7-Day Money-Back Guarantee on your initial purchase: email support@bossclinician.com within seven calendar days of your first payment, by 11:59 p.m. Pacific Time."
+      : "*Meaningful practice changes take time to implement, evaluate, and refine. That's why the Lounge begins with a 6-month commitment.",
   },
 
   founder: {
@@ -306,7 +317,9 @@ export const lounge = {
       },
       {
         q: "Can I cancel?",
-        a: "The Lounge runs on a 6-month commitment, monthly or annual. We want you here because you're getting results, not because you're locked in. But the work is sequential and builds over time, and the members who get the most are the ones who stay long enough to do the full cycle. Not sure it's the right fit? Book a consult call before you join and we'll figure it out together.",
+        a: LOUNGE_BILLING_LIVE
+          ? "Your first purchase is covered by our 7-Day Money-Back Guarantee: email support@bossclinician.com within seven calendar days of your first payment for a full refund, and your membership and future payments end. Monthly: the first six charges are your minimum commitment. After the guarantee window, leaving early does not ordinarily waive the remaining minimum-term payments, subject to applicable law. After six months it continues month-to-month until you cancel by email or from Account > Billing. Paid in full: one payment buys 12 months of access. It does not renew, and access ends at 12 months unless you renew. After the guarantee window the annual fee is generally nonrefundable, subject to applicable law."
+          : "The Lounge runs on a 6-month commitment, monthly or annual. We want you here because you're getting results, not because you're locked in. But the work is sequential and builds over time, and the members who get the most are the ones who stay long enough to do the full cycle. Not sure it's the right fit? Book a consult call before you join and we'll figure it out together.",
       },
     ],
     cta: "STEP INTO THE LOUNGE",

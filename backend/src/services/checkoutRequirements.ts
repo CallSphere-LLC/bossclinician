@@ -4,7 +4,7 @@ import { z } from "zod";
 import { pool } from "../db/pool";
 import { badRequest, forbidden } from "../utils/httpError";
 import { DISCLOSURE_VERSION, ELECTRONIC_CONSENT, SIGNING_INTENT } from "./contractAudit";
-import { formatMoney, paymentPlanTotalCents, type OrderTotal, type PricedOffer } from "./pricing";
+import { addInterval, formatMoney, paymentPlanTotalCents, type OrderTotal, type PricedOffer } from "./pricing";
 import type { OfferRow } from "../routes/public/offers";
 
 /**
@@ -206,6 +206,8 @@ export interface EnrollmentTerms {
   /** That rule in words, for the record before a payment fixes the actual date. */
   refundDeadlineRule?: string;
   obligationsNote: string;
+  /** When each installment of a fixed plan falls due, counted from today. */
+  paymentDates?: string;
   /** Added when the order is opened: what this order actually comes to. */
   charged?: { subtotal: string; discount: string; tax: string; total: string; couponCode: string };
   /**
@@ -250,6 +252,7 @@ export function enrollmentTermsFor(offer: OfferRow, settings: RequirementSetting
   let remainingCents = 0;
   let arrangement = `Paid in full: ${money(offer.amount_cents)}`;
   let remaining = "Nothing further after this payment.";
+  let minimumTerm: { programTerm: string; obligationsNote: string } | null = null;
 
   if (offer.pricing_type === "payment_plan") {
     const count = offer.installment_count ?? 1;
@@ -263,12 +266,35 @@ export function enrollmentTermsFor(offer: OfferRow, settings: RequirementSetting
     remaining = remainingPayments > 0
       ? `${remainingPayments} more ${remainingPayments === 1 ? "payment" : "payments"} after today, ${money(remainingCents)} in total.`
       : "Nothing further after this payment.";
+  } else if (offer.pricing_type === "subscription" && offer.minimum_months) {
+    const months = offer.minimum_months;
+    const monthlyAmount = money(offer.amount_cents);
+    total = offer.amount_cents * months;
+    remainingPayments = months - 1;
+    remainingCents = offer.amount_cents * (months - 1);
+    arrangement = `${monthlyAmount} ${every}: ${months} scheduled charges totaling ${money(total)}, then it continues month-to-month at ${monthlyAmount} until you cancel.`;
+    remaining = `${remainingPayments} more monthly payments after today (${money(remainingCents)}) are part of your ${months}-month minimum commitment.`;
+    minimumTerm = {
+      programTerm: `${months}-month minimum commitment, then month-to-month until you cancel.`,
+      obligationsNote:
+        "After the guarantee window, leaving early does not ordinarily waive unpaid minimum-term installments, subject to applicable law. To cancel, email support@bossclinician.com or use Account > Billing. Cancelling stops renewals after your minimum term and does not refund charges already processed.",
+    };
   } else if (offer.pricing_type === "subscription") {
     total = null;
     arrangement = `${money(offer.amount_cents)} ${every}${trial ? ` after a ${offer.trial_days}-day trial` : ""}, renewing until cancelled`;
     remaining = `Renews at ${money(offer.amount_cents)} ${every} until cancelled.`;
   } else if (offer.pricing_type === "free") {
     arrangement = "No charge";
+  }
+
+  // A fixed installment plan shows its due dates before anyone agrees to them.
+  let paymentDates = "";
+  if (offer.pricing_type === "payment_plan" && !trial && offer.interval && (offer.installment_count ?? 0) >= 2 && !offer.payment_schedule?.length) {
+    const start = new Date();
+    paymentDates = Array.from({ length: offer.installment_count! }, (_, index) => {
+      const due = index === 0 ? start : addInterval(start, offer.interval!, offer.interval_count * index);
+      return `${index === 0 ? "Today" : new Intl.DateTimeFormat("en-US", { dateStyle: "long", timeZone: "UTC" }).format(due)}: ${money(offer.amount_cents)}`;
+    }).join("\n");
   }
 
   return {
@@ -286,8 +312,8 @@ export function enrollmentTermsFor(offer: OfferRow, settings: RequirementSetting
     remainingPayments,
     remainingCents,
     remainingObligations: remaining,
-    programTerm: settings.programTerm,
-    termMonths: settings.termMonths,
+    programTerm: minimumTerm?.programTerm ?? settings.programTerm,
+    termMonths: minimumTerm ? null : settings.termMonths,
     includedBenefits: settings.includedBenefits,
     refundTerms: settings.refundTerms,
     refundWindowDays: settings.refundWindowDays,
@@ -297,7 +323,8 @@ export function enrollmentTermsFor(offer: OfferRow, settings: RequirementSetting
           refundDeadlineRule: `11:59 p.m. ${timeZoneLabel(settings.refundDeadlineTimeZone)} on the ${ordinal(settings.refundWindowDays)} calendar day after your enrollment date`,
         }
       : {}),
-    obligationsNote: settings.obligationsNote,
+    obligationsNote: minimumTerm?.obligationsNote ?? settings.obligationsNote,
+    ...(paymentDates ? { paymentDates } : {}),
   };
 }
 
@@ -354,7 +381,7 @@ export async function publicCheckoutRequirements(
       acknowledgments: activeAcknowledgments(requirements).map(({ key, version, text, linkLabel, linkUrl }) => ({ key, version, text, linkLabel, linkUrl })),
       agreements: requirements.contracts.map((contract) => ({ contractId: contract.id, title: contract.title, pdfSha256: contract.pdfSha256 })),
       enrollment:
-        requirements.contracts.length > 0
+        requirements.contracts.length > 0 || requirements.settings.refundTerms !== "" || requirements.settings.programTerm !== ""
           ? priceChoices.map((choice) => ({ optionId: choice.pricing_option_id ?? null, terms: enrollmentTermsFor(choice, requirements.settings) }))
           : [],
       disclosure: ELECTRONIC_CONSENT,
@@ -527,8 +554,8 @@ export async function recordAcceptedRequirements(input: {
   try {
     await client.query("BEGIN");
     await client.query(
-      `UPDATE orders SET checkout_acknowledgments = $2::jsonb, enrollment_invitation_id = $3, updated_at = now() WHERE id = $1`,
-      [orderId, JSON.stringify(accepted.acknowledgments), accepted.invitationId]
+      `UPDATE orders SET enrollment_terms = $4::jsonb, checkout_acknowledgments = $2::jsonb, enrollment_invitation_id = $3, updated_at = now() WHERE id = $1`,
+      [orderId, JSON.stringify(accepted.acknowledgments), accepted.invitationId, JSON.stringify(terms)]
     );
     for (const { contract, typedName } of accepted.signatures) {
       const signedAt = new Date().toISOString();

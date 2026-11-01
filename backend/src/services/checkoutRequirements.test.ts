@@ -58,6 +58,29 @@ beforeEach(() => {
 });
 
 describe("enrollmentTermsFor", () => {
+  it("states a minimum-term membership's total, renewal and exit", () => {
+    const terms = enrollmentTermsFor(
+      offer({ pricing_type: "subscription", amount_cents: 19700, installment_count: null, minimum_months: 6 }),
+      { ...SETTINGS, programTerm: "12 months of access", termMonths: 12 },
+    );
+    expect(terms.totalInvestmentCents).toBe(118200);
+    expect(terms.dueTodayCents).toBe(19700);
+    expect(terms.remainingCents).toBe(98500);
+    expect(terms.programTerm).toBe("6-month minimum commitment, then month-to-month until you cancel.");
+    expect(terms.termMonths).toBeNull();
+    expect(terms.paymentArrangement).toContain("then it continues month-to-month");
+    expect(terms.obligationsNote).toContain("support@bossclinician.com");
+  });
+
+  it("lists a fixed plan's due dates", () => {
+    const terms = enrollmentTermsFor(
+      offer({ amount_cents: 300000, interval_count: 3, installment_count: 4 }),
+      SETTINGS,
+    );
+    expect(terms.paymentDates?.split("\n")).toHaveLength(4);
+    expect(terms.paymentDates).toMatch(/^Today: \$3,000/);
+  });
+
   it("states the whole contract of a payment plan", () => {
     const terms = enrollmentTermsFor(offer(), SETTINGS);
     expect(terms.totalInvestmentCents).toBe(238200);

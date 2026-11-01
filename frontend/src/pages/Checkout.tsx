@@ -728,7 +728,7 @@ function CheckoutForm({ offer, pricingOption, mode, onAmountChange }: CheckoutFo
 
   // PayPal sells every offer type in US dollars. A PayPal order skips the
   // one-click upsell (it needs a saved card) and goes straight to its receipt.
-  const showPayPal = paypal.enabled && !preview && paymentRequired && currency.toLowerCase() === "usd";
+  const showPayPal = paypal.enabled && !preview && paymentRequired && currency.toLowerCase() === "usd" && !billing.minimumMonths;
 
   const buttonLabel = submitting
     ? "Processing…"

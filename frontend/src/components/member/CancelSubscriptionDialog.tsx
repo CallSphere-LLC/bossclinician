@@ -65,9 +65,13 @@ export function CancelSubscriptionDialog({
     subscription.intervalCount,
   );
 
-  const paidUntil = subscription.currentPeriodEnd
+  const commitmentEnds =
+    subscription.minimumTermEndsAt && new Date(subscription.minimumTermEndsAt) > new Date()
+      ? formatDate(subscription.minimumTermEndsAt)
+      : null;
+  const paidUntil = commitmentEnds ?? (subscription.currentPeriodEnd
     ? formatDate(subscription.currentPeriodEnd)
-    : null;
+    : null);
 
   // Nothing to pause on a plan that is already paused or already ending.
   const canPause = !subscription.paused && !subscription.cancelAtPeriodEnd;
@@ -189,7 +193,13 @@ export function CancelSubscriptionDialog({
             >
               <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5 sm:px-7">
                 <p className="copy-luxe text-sm">
-                  {paidUntil ? (
+                  {commitmentEnds ? (
+                    <>
+                      Your minimum commitment runs until <strong className="text-white">{commitmentEnds}</strong>
+                      . Your scheduled payments continue until that date. Then it closes, and you will
+                      not be charged again.
+                    </>
+                  ) : paidUntil ? (
                     <>
                       You have already paid up to <strong className="text-white">{paidUntil}</strong>
                       . Everything stays open until that date — then it closes, and you will not be
@@ -206,7 +216,7 @@ export function CancelSubscriptionDialog({
                   Anything you bought outright is untouched — this only ends the recurring part.
                 </p>
 
-                {canPause && (
+                {canPause && !commitmentEnds && (
                   <div className="mt-6 rounded-2xl border border-gold/25 bg-gold/[0.06] p-4 sm:p-5">
                     <div className="flex items-start gap-3.5">
                       <PauseCircle aria-hidden className="mt-0.5 size-5 shrink-0 text-gold" />

@@ -210,6 +210,7 @@ function EnrollmentRecord({ terms }: { terms: EnrollmentTermsView }) {
       <RecordRow label="Total investment" value={terms.totalInvestment} strong />
       <RecordRow label="Payment arrangement" value={terms.paymentArrangement} />
       <RecordRow label="Due today" value={terms.dueToday} strong />
+      <RecordRow label="Payment dates" value={terms.paymentDates ?? ""} />
       <RecordRow label="Remaining obligations" value={terms.remainingObligations} />
       <RecordRow label="Further payment terms" value={terms.obligationsNote} />
       <RecordRow label="Included benefits" value={terms.includedBenefits} />
@@ -298,6 +299,8 @@ export function CheckoutRequirementsPanel({
           </section>
         );
       })}
+
+      {requirements.agreements.length === 0 && terms && <EnrollmentRecord terms={terms} />}
 
       {requirements.acknowledgments.length > 0 && (
         <div className="space-y-3">

@@ -867,6 +867,8 @@ export const adminApi = {
 
   payments: () => request<Payment[]>("/admin/sales/payments"),
   subscriptions: () => request<Subscription[]>("/admin/sales/subscriptions"),
+  requestSubscriptionCancel: (id: number) =>
+    request<Subscription>(`/admin/sales/subscriptions/${id}/request-cancel`, { method: "POST" }),
   invoices: () => request<Invoice[]>("/admin/sales/invoices"),
   revenue: () => request<RevenueSummary>("/admin/sales/revenue"),
   stripeStatus: () => request<StripeStatus>("/admin/sales/stripe-status"),

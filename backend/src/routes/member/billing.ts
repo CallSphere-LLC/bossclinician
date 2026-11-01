@@ -1,3 +1,4 @@
+import { cancellationDate } from "../../services/membershipMinimum";
 import { Request, Response, Router } from "express";
 import { ipKeyGenerator, rateLimit } from "express-rate-limit";
 import { z } from "zod";
@@ -132,6 +133,8 @@ interface SubscriptionRow {
   ended_at: Date | null;
   cancel_reason: string;
   cancel_feedback: string;
+  minimum_term_ends_at: Date | null;
+  scheduled_cancel_at: Date | null;
   created_at: Date;
 }
 
@@ -148,7 +151,8 @@ const SUBSCRIPTION_SELECT = `
          s.status, s.amount_cents, s.currency, s.interval, s.interval_count,
          s.current_period_start, s.current_period_end, s.trial_ends_at,
          s.cancel_at_period_end, s.canceled_at, s.paused_at, s.ended_at,
-         s.cancel_reason, s.cancel_feedback, s.created_at
+         s.cancel_reason, s.cancel_feedback, s.created_at,
+         s.minimum_term_ends_at, s.scheduled_cancel_at
     FROM subscriptions s
     LEFT JOIN offers o  ON o.id  = s.offer_id
     LEFT JOIN plans  pl ON pl.id = s.plan_id
@@ -172,6 +176,8 @@ interface SubscriptionJson {
   endedAt: string | null;
   cancelReason: string;
   cancelFeedback: string;
+  minimumTermEndsAt: string | null;
+  scheduledCancelAt: string | null;
   nextChargeAt: string | null;
   nextChargeAmountCents: number | null;
   createdAt: string;
@@ -192,7 +198,10 @@ function toSubscriptionJson(row: SubscriptionRow): SubscriptionJson {
   // stop at the end of the period, or has already ended.
   const willCharge =
     !paused &&
-    !row.cancel_at_period_end &&
+    (!row.cancel_at_period_end ||
+      (row.scheduled_cancel_at !== null &&
+        row.current_period_end !== null &&
+        row.scheduled_cancel_at > row.current_period_end)) &&
     row.ended_at === null &&
     LIVE_SUBSCRIPTION_STATUSES.includes(row.status);
 
@@ -214,6 +223,8 @@ function toSubscriptionJson(row: SubscriptionRow): SubscriptionJson {
     endedAt: iso(row.ended_at),
     cancelReason: row.cancel_reason,
     cancelFeedback: row.cancel_feedback,
+    minimumTermEndsAt: iso(row.minimum_term_ends_at),
+    scheduledCancelAt: iso(row.scheduled_cancel_at),
     nextChargeAt: willCharge ? iso(row.current_period_end) : null,
     nextChargeAmountCents: willCharge ? row.amount_cents : null,
     createdAt: iso(row.created_at) ?? "",
@@ -1012,6 +1023,9 @@ interface OwnedSubscriptionRow {
   cancel_at_period_end: boolean;
   paused_at: Date | null;
   ended_at: Date | null;
+  current_period_end: Date | null;
+  minimum_term_ends_at: Date | null;
+  scheduled_cancel_at: Date | null;
 }
 
 /** Loads a subscription the member owns, or 404s. */
@@ -1020,7 +1034,8 @@ async function loadOwnedSubscription(
   subscriptionId: number
 ): Promise<OwnedSubscriptionRow> {
   const found = await pool.query<OwnedSubscriptionRow>(
-    `SELECT id, status, stripe_subscription_id, paypal_subscription_id, cancel_at_period_end, paused_at, ended_at
+    `SELECT id, status, stripe_subscription_id, paypal_subscription_id, cancel_at_period_end, paused_at, ended_at,
+            current_period_end, minimum_term_ends_at, scheduled_cancel_at
        FROM subscriptions WHERE id = $1 AND member_id = $2`,
     [subscriptionId, memberId]
   );
@@ -1120,9 +1135,15 @@ memberBillingRouter.post(
       // current_period_end exactly as a Stripe period-end cancellation does.
       await cancelPayPalSubscription(row.paypal_subscription_id, `Cancelled by member: ${reason}`);
     }
+    // Inside a minimum term a cancellation is booked for the end of the term, so the
+    // remaining scheduled charges still run. It never stops them early.
+    const inMinimum = row.minimum_term_ends_at !== null && row.minimum_term_ends_at > new Date();
+    const cancelAt = inMinimum ? cancellationDate(row.minimum_term_ends_at!, row.current_period_end) : null;
     if (row.stripe_subscription_id !== null) {
       await stripe().subscriptions.update(row.stripe_subscription_id, {
-        cancel_at_period_end: true,
+        ...(cancelAt
+          ? { cancel_at: Math.floor(cancelAt.getTime() / 1000), proration_behavior: "none" as const }
+          : { cancel_at_period_end: true }),
         cancellation_details: {
           feedback: STRIPE_CANCEL_FEEDBACK[reason] ?? "other",
           // Stripe caps the comment; ours allows more, and the full text is kept
@@ -1141,9 +1162,10 @@ memberBillingRouter.post(
               cancel_reason   = $3,
               cancel_feedback = $4,
               canceled_at     = COALESCE(canceled_at, now()),
+              scheduled_cancel_at = $5,
               updated_at      = now()
         WHERE id = $1 AND member_id = $2`,
-      [subscriptionId, member.id, reason, feedback]
+      [subscriptionId, member.id, reason, feedback, cancelAt]
     );
 
     res.json(await readSubscription(member.id, subscriptionId));
@@ -1181,6 +1203,9 @@ memberBillingRouter.post(
     }
     if (!LIVE_SUBSCRIPTION_STATUSES.includes(row.status)) {
       throw badRequest("That subscription isn't active yet, so it can't be paused.");
+    }
+    if (row.minimum_term_ends_at !== null && row.minimum_term_ends_at > new Date()) {
+      throw badRequest("This membership can't be paused during its minimum commitment.");
     }
     assertStripeReachable(row);
 
@@ -1306,7 +1331,18 @@ memberBillingRouter.post(
 
     const returnUrl = `${env.publicSiteUrl}/account/billing`;
 
+    // Stripe's portal home can offer an immediate cancel, which would stop a minimum
+    // term's charges, so these members update their card on our own screen.
+    const committed = await pool.query(
+      `SELECT 1 FROM subscriptions
+        WHERE member_id = $1 AND minimum_term_ends_at IS NOT NULL AND ended_at IS NULL LIMIT 1`,
+      [member.id]
+    );
+
     try {
+      if (committed.rows.length > 0) {
+        throw Object.assign(new Error("Portal skipped for a committed membership"), { type: "StripeInvalidRequestError" });
+      }
       const session = await stripe().billingPortal.sessions.create({
         customer: customerId,
         return_url: returnUrl,
@@ -1430,12 +1466,15 @@ memberBillingRouter.post(
     assertStripeReachable(row);
 
     if (row.stripe_subscription_id !== null) {
-      await stripe().subscriptions.update(row.stripe_subscription_id, { cancel_at_period_end: false });
+      await stripe().subscriptions.update(
+        row.stripe_subscription_id,
+        row.scheduled_cancel_at !== null ? { cancel_at: "" } : { cancel_at_period_end: false }
+      );
     }
 
     await pool.query(
       `UPDATE subscriptions
-          SET cancel_at_period_end = false, canceled_at = NULL,
+          SET cancel_at_period_end = false, canceled_at = NULL, scheduled_cancel_at = NULL,
               cancel_reason = '', cancel_feedback = '', updated_at = now()
         WHERE id = $1 AND member_id = $2 AND ended_at IS NULL`,
       [subscriptionId, member.id]

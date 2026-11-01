@@ -108,6 +108,16 @@ export function describeBilling(input: {
         };
       }
 
+      if (billing.minimumMonths) {
+        return {
+          badge: "Membership",
+          totalLabel: "Due today",
+          nothingDueToday: false,
+          commitment: `${price}, starting today.`,
+          detail: `This begins a ${billing.minimumMonths}-month minimum commitment, then continues month-to-month until you cancel. Your enrollment terms are shown below.`,
+        };
+      }
+
       return {
         badge: "Membership",
         totalLabel: "Due today",

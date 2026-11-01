@@ -70,6 +70,8 @@ export interface OfferRow {
   stripe_product_id: string | null;
   /** Present when the price was overlaid from an additional checkout option. */
   pricing_option_id?: number | null;
+  /** A membership's minimum term in months. Null or absent: none. */
+  minimum_months?: number | null;
   pricing_label?: string;
   plan_total_cents?: number | null;
   balance_due_by?: string | null;
@@ -162,6 +164,7 @@ export interface OfferPricingOptionRow {
   stripe_price_id: string | null;
   stripe_product_id: string | null;
   sort: number;
+  minimum_months?: number | null;
   plan_total_cents?: number | null;
   balance_due_by?: string | null;
   final_installment_cents?: number;
@@ -169,7 +172,7 @@ export interface OfferPricingOptionRow {
 }
 
 const PRICING_OPTION_COLUMNS = `id, offer_id, label, pricing_type, amount_cents, deposit_cents, sales_start_at, sales_end_at,
-  min_amount_cents, currency, interval, interval_count, installment_count,
+  min_amount_cents, currency, interval, interval_count, installment_count, minimum_months,
   trial_days, recommended, active, stripe_price_id, stripe_product_id, sort, plan_total_cents, balance_due_by::text`;
 
 export async function loadOfferPricingOptions(
@@ -212,6 +215,7 @@ function optionOverlay(offer: OfferRow, option: OfferPricingOptionRow): OfferRow
     stripe_product_id: option.stripe_product_id,
     pricing_option_id: option.id,
     pricing_label: option.label,
+    minimum_months: option.minimum_months ?? null,
     plan_total_cents: option.plan_total_cents,
     balance_due_by: option.balance_due_by,
     final_installment_cents: option.final_installment_cents,
@@ -576,6 +580,7 @@ export function billingToJson(offer: OfferRow, priced: PricedOffer): Record<stri
     finalInstallmentCents: offer.final_installment_cents,
     balanceDueBy: offer.balance_due_by,
     paymentSchedule: offer.payment_schedule,
+    minimumMonths: offer.minimum_months ?? null,
   };
 }
 

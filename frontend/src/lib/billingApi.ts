@@ -30,6 +30,8 @@ export interface MemberSubscription {
   currentPeriodEnd: string | null;
   trialEndsAt: string | null;
   cancelAtPeriodEnd: boolean;
+  minimumTermEndsAt?: string | null;
+  scheduledCancelAt?: string | null;
   canceledAt: string | null;
   paused: boolean;
   pausedAt: string | null;
