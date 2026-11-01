@@ -22,7 +22,7 @@ But instead you find yourself:
 - Frustrated because the strategies that promised results feel scattered, half-done, or off-target.
 - Overwhelmed with too many tasks—niche, marketing, rates, scheduling, systems—without clarity on what actually moves the needle.
 - Watching other therapists hit their stride, while you’re wondering how they did it, and when it will be your turn.
-> CTA: WORK WITH ME!
+> CTA: FIND YOUR PROGRAM
 ## You were never meant to do this alone.
 Dedicated therapists like you are reaching out and getting the support they need to successfully start their private practices.
 Hear from the boss clinicians who have successfully made the leap…
@@ -136,12 +136,13 @@ I'm a mom. A business owner. A leader. A therapist. A coach. A doctoral student.
 > CTA: APPLY NOW AND BUILD YOUR PRACTICE
 Follow me on Instagram
 
-## The Boss Boardroom
-
-## The Boss Boardroom
-An advanced mastermind for established practice owners who want higher-level strategy, peer collaboration, accountability, and support with scaling their business.
-The Practice Reset Intensive and Scale and Reclaim Suite have been withdrawn. Yvette no longer offers standalone 1:1 consulting packages. Do not recommend or sell them.
-Apply for the Boardroom at /apply. For foundational practice-building support explore /club; for established clinicians explore /lounge.
+## The Boardroom
+The Boardroom is an application-only, 12-month group mastermind for mental health practice owners: an intimate peer group of 6-8, capped at eight, guided by Yvette. Joining is an application at /boardroom#apply, then a discovery call, then a private invitation.
+Included: 4 quarterly CEO strategy intensives (3-4 hours each, with peer hot seats); 8 momentum check-ins (60 minutes each); 2 private 45-minute CEO strategy sessions in the term; 2 guest expert sessions a year, chosen by Boss Clinician; up to 2 voice-note questions a month, with a response targeted within 2 business days; CEO Dashboard, Living Business Plan, Executive Circle and relevant vault resources.
+Done-for-you operations and payer credentialing are not included.
+Never state a price for The Boardroom. Pricing is shared privately with invited applicants; if asked, say so and point to the application.
+The Practice Reset Intensive and Scale and Reclaim Suite have been withdrawn. Yvette no longer offers standalone 1:1 consulting packages, and there is no Work With Me page. Do not recommend or sell them.
+For foundational practice-building support explore /club; for established clinicians explore /lounge.
 
 ## Courses & Digital Resources Library
 
@@ -248,28 +249,6 @@ I’m here to help therapists turn their clinical skills into sustainable, align
 I grew from solo practitioner to group practice owner, made every mistake imaginable, navigated insurance chaos, scaled into a W2 agency, and learned how to lead a practice that supports both clients and clinicians. Today, I run a thriving group practice, serve as a clinical supervisor, and build businesses that create freedom, flexibility, and stability—for me and for the therapists I support.
 Now, through Boss Clinician , I teach therapists how to become CEOs of their clinical expertise and build practices that actually support their lives.
 
-## How to Apply for the Boss Boardroom
-
-## Are you ready to stop surviving your practice and start building one that truly supports you?
-I help therapists at every stage—from starting to scaling—build structured, profitable practices that attract aligned clients and support long-term growth.
-### Fill out the form below
-HEY MY THERAPIST FRIEND!
-👋 Welcome — I’m so glad you’re here.
-The fact that you’re reading this tells me something important: you’re ready for more. More clarity, more confidence, more structure, more ownership of your practice… and more ease in building it.
-This isn’t just another coaching application. This is the first honest step toward building the private practice you keep envisioning —the one that pays you well, fits your life, and lets you lead with purpose (not hustle and burnout).
-I take on a limited number of clinicians at a time—because this isn’t surface-level coaching. It’s deep, strategic, personal, and tailored to your goals, your vision, and the business you want to grow.
-So please take your time as you complete this form. Your answers help me understand where you are now, where you want to be, and whether I’m the right coach to help you get there.
-I review every application myself and you’ll hear back from me within 24 hours.
-If you’re ready to move from clinician to Boss Clinician—you're in the right place.
-LET’S BEGIN YOUR JOURNEY.
-> CTA: DONE! LETS DO THIS!
-
-## The Boss Boardroom & Pricing
-
-## Build a smoother, more profitable practice with support!
-## BOSS CLINICIAN CONSULTING SERVICES
-> CTA: The Boss Boardroom $12,000.00 USD
-
 ## Private Practice Readiness Quiz
 
 ## Has starting a private practice been on your mind?
@@ -278,7 +257,7 @@ LET’S BEGIN YOUR JOURNEY.
 ## Contact & Membership / Program Notes
 
 ## Hey There!
-Have a question or want to work with me?
+Have a question?
 Send me an email at
 yvette@bossclinician.com
 Currently, Yvette offers private practice coaching through her Profitable Private Practice group programs. This is her high-touch coaching program, and the best way to get personal access to her for help with starting, scaling, and expanding your practice.
