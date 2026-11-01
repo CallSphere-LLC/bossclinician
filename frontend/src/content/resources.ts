@@ -63,17 +63,4 @@ export const resources: Resource[] = [
     sort: 5,
     published: true,
   },
-  {
-    id: "r-business-plan-guide",
-    slug: "private-practice-business-plan-guide",
-    title: "Private Practice Business Plan Guide",
-    description:
-      "Download the free Private Practice Business Plan Guide and map out your vision, goals, and structure for a profitable practice — before you start, scale, or expand.",
-    image: "/images/87860f443ed2.png",
-    ctaLabel: "Download the Guide",
-    ctaUrl: "/business-plan-guide",
-    kind: "guide",
-    sort: 6,
-    published: true,
-  },
 ];

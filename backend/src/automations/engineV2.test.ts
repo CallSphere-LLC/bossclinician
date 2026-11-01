@@ -110,6 +110,12 @@ describe("what counts as a finished step", () => {
     // caller whose perfectly good step is called unfinished.
     expect(describeActionProblem("add_tag", { tagId: "4" })).toBeNull();
     expect(describeActionProblem("subscribe_sequence", { sequenceId: 2 })).toBeNull();
+    expect(describeActionProblem("subscribe_sequence", { sequenceId: 2, startAtPosition: 2 })).toBeNull();
+    // The parse the runner acts on must keep it, or a VIP starts on the Lounge welcome.
+    expect(ACTION_CONFIG_SCHEMAS.subscribe_sequence.parse({ sequenceId: 2, startAtPosition: 2 })).toEqual({
+      sequenceId: 2,
+      startAtPosition: 2,
+    });
     expect(describeActionProblem("fire_webhook", { url: "https://example.com/hook" })).toBeNull();
     expect(describeActionProblem("send_email", { subject: "Hello", bodyMd: "Hi there" })).toBeNull();
     expect(describeActionProblem("create_task", { title: "Call them" })).toBeNull();

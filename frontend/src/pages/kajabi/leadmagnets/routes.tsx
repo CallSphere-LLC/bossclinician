@@ -24,8 +24,8 @@ const DocumentationThankYouEdu = lazyRoute(() =>
 export const leadMagnetPublicRoutes: readonly { path: string; Component: RouteComponent }[] = [
   { path: "/5-step-marketing", Component: lazyRoute(() => import("./FiveStepMarketing")) },
   { path: "/marketing-step-form", Component: lazyRoute(() => import("./MarketingStepForm")) },
-  { path: "/business-plan-guide", Component: lazyRoute(() => import("./BusinessPlanGuide")) },
-  { path: "/business-plan-ty", Component: lazyRoute(() => import("./BusinessPlanThankYou")) },
+  { path: "/business-plan-guide", Component: lazyRoute(() => import("./RetiredGuideRedirect")) },
+  { path: "/business-plan-ty", Component: lazyRoute(() => import("./RetiredGuideRedirect")) },
   { path: "/insurance-guide", Component: lazyRoute(() => import("./InsuranceGuide")) },
   { path: "/kickstartguide", Component: lazyRoute(() => import("./KickstartGuide")) },
   {

@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import { motion, useReducedMotion } from "motion/react";
 import { Seo } from "@/components/Seo";
@@ -11,13 +11,17 @@ import { cn } from "@/lib/cn";
 import {
   HIRE_FORM,
   HIRING_CONTACT_STORAGE_KEY,
+  HIRING_PROGRESS_STORAGE_KEY,
   HIRING_QUIZ_EMAIL,
   HIRING_QUIZ_MAX_SCORE,
   HIRING_QUIZ_PAGE,
   HIRING_QUIZ_QUESTIONS,
   HIRING_QUIZ_RESULTS,
+  emptyHiringProgress,
+  restoreHiringProgress,
   scoreHiringQuiz,
   type HiringContact,
+  type HiringProgress,
   type HiringResultKey,
 } from "@/content/hiringQuiz";
 import {
@@ -42,16 +46,21 @@ import { LeadFormCard, type LeadContact } from "./LeadFormCard";
  * the share of questions behind you and the counter reads "Complete!" at the
  * result. The result is the total against the 70% / 40% thresholds.
  *
- * The page opens on the opt-in: the same `hire-form` builder form /hire-form
- * has always filed (tag "Hiring Quiz", the two practice questions on the
- * contact). Submitting it swaps the quiz in, on this same address. Someone who
- * opted in earlier in this browser tab goes straight to the quiz. /hire-form is
- * this page too, so old links still work.
+ * The questions come first, then the opt-in, then the result (the owner's
+ * decision of 30 Oct 2026, Q17): the same `hire-form` builder form /hire-form has
+ * always filed (tag "Hiring Quiz", the two practice questions on the contact).
+ * The result is worked out only once that has succeeded, so nothing of it reaches
+ * the page before the opt-in. Someone who opted in earlier in this browser tab
+ * goes straight to their result. /hire-form is this page too, so old links still
+ * work.
  *
  * Their result is filed under the matching result form as soon as it is shown,
  * which tags them and emails them the result — what "Enter your name and email
  * to get your results!" promises. If that filing fails, an optional form under
  * the result offers it again.
+ *
+ * A refresh keeps the tab's place (restoreHiringProgress): the answers, the
+ * opt-in, or the result for someone who has opted in, which is not filed twice.
  */
 
 const TOTAL = HIRING_QUIZ_QUESTIONS.length;
@@ -81,8 +90,12 @@ function plainNumbers(text: string) {
   );
 }
 
-function emptyPicks(): (number | null)[] {
-  return new Array<number | null>(TOTAL).fill(null);
+function readProgress(hasContact: boolean): HiringProgress {
+  try {
+    return restoreHiringProgress(window.sessionStorage.getItem(HIRING_PROGRESS_STORAGE_KEY), hasContact);
+  } catch {
+    return emptyHiringProgress();
+  }
 }
 
 function readContact(): HiringContact | null {
@@ -109,28 +122,62 @@ export default function HiringQuiz() {
 
   const [index, setIndex] = useState(0);
   const [direction, setDirection] = useState<1 | -1>(1);
-  const [picks, setPicks] = useState<(number | null)[]>(emptyPicks);
+  const [picks, setPicks] = useState<(number | null)[]>(() => emptyHiringProgress().picks);
+  const [optIn, setOptIn] = useState(false);
   const [result, setResult] = useState<HiringResultKey | null>(null);
   const [round, setRound] = useState(0);
   // Read after mount: the server has no sessionStorage, and the first client
   // render has to match the server's markup.
   const [contact, setContact] = useState<HiringContact | null>(null);
   const [filing, setFiling] = useState<FilingState>("idle");
+  // False until the tab's place is read back, so saving cannot overwrite it first.
+  const [restored, setRestored] = useState(false);
   const swap = useSwap(direction);
 
   useLayoutEffect(() => {
-    setContact(readContact());
+    const person = readContact();
+    const progress = readProgress(person !== null);
+    setContact(person);
+    setIndex(progress.index);
+    setPicks(progress.picks);
+    setOptIn(progress.optIn);
+    if (progress.revealed) {
+      setResult(scoreHiringQuiz(progress.picks).result);
+      // Already filed, or a filing this refresh cut off: offer the form, never re-send.
+      setFiling(progress.filed ? "sent" : "failed");
+    }
+    setRestored(true);
   }, []);
+
+  useEffect(() => {
+    if (!restored) return;
+    const progress: HiringProgress = { index, picks, optIn, revealed: result !== null, filed: filing === "sent" };
+    try {
+      window.sessionStorage.setItem(HIRING_PROGRESS_STORAGE_KEY, JSON.stringify(progress));
+    } catch {
+      // Private browsing: a refresh starts the quiz over.
+    }
+  }, [restored, index, picks, optIn, result, filing]);
+
+  /** The only way a new result reaches the page; both callers have a contact in hand. */
+  function reveal(person: HiringContact) {
+    const scored = scoreHiringQuiz(picks);
+    arm();
+    setDirection(1);
+    setOptIn(false);
+    setResult(scored.result);
+    scrollToEl(progressRef.current, reduce);
+    void fileFor(person, scored.result, scored.total);
+  }
 
   function handleOptIn(person: LeadContact) {
     try {
       window.sessionStorage.setItem(HIRING_CONTACT_STORAGE_KEY, JSON.stringify(person));
     } catch {
-      // Private browsing: the quiz still runs for this visit, from state.
+      // Private browsing: the result still shows for this visit, from state.
     }
-    arm();
     setContact(person);
-    scrollToEl(progressRef.current, reduce);
+    reveal(person);
   }
 
   const question = HIRING_QUIZ_QUESTIONS[index];
@@ -187,24 +234,38 @@ export default function HiringQuiz() {
       go(index + 1, 1);
       return;
     }
-    const scored = scoreHiringQuiz(picks);
+    if (contact) {
+      reveal(contact);
+      return;
+    }
     arm();
     setDirection(1);
-    setResult(scored.result);
+    setOptIn(true);
     scrollToEl(progressRef.current, reduce);
-    if (contact) void fileFor(contact, scored.result, scored.total);
+  }
+
+  function backToQuestions() {
+    arm();
+    setDirection(-1);
+    setOptIn(false);
+    scrollToEl(progressRef.current, reduce);
   }
 
   function retake() {
-    setPicks(emptyPicks());
+    setPicks(emptyHiringProgress().picks);
+    setOptIn(false);
     setResult(null);
     setFiling("idle");
     setRound((r) => r + 1);
     go(0, -1);
   }
 
-  const pct = result ? 100 : Math.round((index / TOTAL) * 100);
-  const counter = result ? HIRING_QUIZ_PAGE.complete : `Question ${index + 1} of ${TOTAL}`;
+  const pct = result || optIn ? 100 : Math.round((index / TOTAL) * 100);
+  const counter = result
+    ? HIRING_QUIZ_PAGE.complete
+    : optIn
+      ? HIRING_QUIZ_PAGE.lastStep
+      : `Question ${index + 1} of ${TOTAL}`;
   const total = result ? scoreHiringQuiz(picks).total : 0;
   const showOptionalForm = result && filing === "failed";
 
@@ -245,26 +306,38 @@ export default function HiringQuiz() {
 
       <Section surface="deep" space="md" seam={false} containerClassName="max-w-2xl">
         <div ref={progressRef}>
-          {!contact ? (
-            <LeadFormCard
-              formSlug={HIRE_FORM.formSlug}
-              selects={[
-                { key: "years_in_practice", ...HIRE_FORM.practiceYears },
-                { key: "years_group_owner", ...HIRE_FORM.groupOwnerYears },
-              ]}
-              submitLabel={HIRE_FORM.submit}
-              disclaimer={HIRE_FORM.disclaimer}
-              intro={<p className="mb-6 text-center font-semibold text-white">{HIRE_FORM.lead}</p>}
-              onSuccess={handleOptIn}
-            />
-          ) : (
-            <QuizProgress label={HIRING_QUIZ_PAGE.progressLabel} right={counter} pct={pct} />
-          )}
+          <QuizProgress label={HIRING_QUIZ_PAGE.progressLabel} right={counter} pct={pct} />
         </div>
 
-        {contact && <div className="mt-7">
-          <motion.div key={result ? `result-${round}` : `q${index}-${round}`} {...swap}>
-            {!result && question && (
+        <div className="mt-7">
+          <motion.div key={result ? `result-${round}` : optIn ? `opt-in-${round}` : `q${index}-${round}`} {...swap}>
+            {!result && optIn && (
+              <>
+                <LeadFormCard
+                  formSlug={HIRE_FORM.formSlug}
+                  selects={[
+                    { key: "years_in_practice", ...HIRE_FORM.practiceYears },
+                    { key: "years_group_owner", ...HIRE_FORM.groupOwnerYears },
+                  ]}
+                  submitLabel={HIRE_FORM.submit}
+                  disclaimer={HIRE_FORM.disclaimer}
+                  intro={
+                    <h2 ref={focusOnMount} tabIndex={-1} className="mb-6 text-center font-semibold text-white outline-none">
+                      {HIRE_FORM.lead}
+                    </h2>
+                  }
+                  onSuccess={handleOptIn}
+                />
+                <div className="mt-6">
+                  <LuxeButton variant="outline" size="sm" onClick={backToQuestions} className="min-h-[44px]">
+                    <Arrow back />
+                    Back
+                  </LuxeButton>
+                </div>
+              </>
+            )}
+
+            {!result && !optIn && question && (
               <GlassCard accent="gold" interactive={false} spotlight={false} className="p-6 sm:p-9">
                 <p className="text-[0.7rem] font-bold uppercase tabular-nums tracking-[0.18em] text-orchid">
                   Question {index + 1} of {TOTAL}
@@ -328,7 +401,7 @@ export default function HiringQuiz() {
               </>
             )}
           </motion.div>
-        </div>}
+        </div>
       </Section>
     </>
   );

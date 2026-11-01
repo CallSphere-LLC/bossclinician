@@ -122,9 +122,6 @@ Friend, the answer is yes. You can. And you don’t have to do it alone.
 ### What I help you build:
 ✔ A private pay or hybrid practice with consistency, clarity, and confidence ✔ Ethical, scalable systems—credentialing, billing, compliance, documentation, workflows ✔ Sustainable revenue—priced correctly, structured intentionally, protected legally ✔ Leadership identity—moving from therapist to CEO, mentor, and eventually employer ✔ A business that supports your life—not the other way around
 ## Supporting You Every Step of the Way
-## Your Business Plan Starts Here
-Download the free Private Practice Business Plan Guide and map out your vision, goals, and structure for a profitable practice—before you start, scale, or expand.
-> CTA: DOWNLOAD THE GUIDE
 ## Be Seen, Chosen & Paid
 > CTA: FILL YOUR PRACTICE WITH CLIENTS NOW!
 ## Let’s Build It Together

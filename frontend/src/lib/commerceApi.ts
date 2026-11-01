@@ -257,6 +257,8 @@ export interface CheckoutInput extends QuoteInput {
   checkoutAcknowledgments?: { key: string; version: number }[];
   agreementSignatures?: { contractId: number; typedName: string; electronicConsent: true; signingIntent: true }[];
   invitationToken?: string;
+  /** The browser's IANA zone, for dates on a signed enrollment record. The server checks it. */
+  buyerTimeZone?: string;
 }
 
 export type ClientSecretType = "payment_intent" | "setup_intent" | null;

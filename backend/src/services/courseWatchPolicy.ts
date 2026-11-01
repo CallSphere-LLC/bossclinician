@@ -21,12 +21,11 @@ export function watchRequirementSql(course: string, member: string, lesson?: str
 }
 
 /**
- * A video or audio lesson the owner marked "Can be skipped": nothing waits for it
- * and it does not count against finishing the course. The setting means nothing
- * on a lesson with no media, so reading or a quiz can never be skipped this way.
+ * A lesson the owner marked "Can be skipped": nothing waits for it and it does not
+ * count against finishing the course. A quiz or evaluation can never be skipped.
  */
 export function lessonSkippableSql(lesson: string): string {
-  return `(${lesson}.watch_rule = 'skippable' AND (COALESCE(${lesson}.video_url, '') <> '' OR COALESCE(${lesson}.audio_url, '') <> ''))`;
+  return `(${lesson}.watch_rule = 'skippable' AND COALESCE(${lesson}.content_type, '') <> 'assessment')`;
 }
 
 /** Known lengths use contiguous credit; unknown lengths use time-bounded percent. */

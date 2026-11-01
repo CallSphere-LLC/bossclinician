@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const { query } = vi.hoisted(() => ({ query: vi.fn() }));
 vi.mock("../db/pool", () => ({ pool: { query, connect: vi.fn() } }));
 
-import { enforceCheckoutRequirements, enrollmentTermsFor, parseAcknowledgments, requirementsAreOn, type RequirementSettings } from "./checkoutRequirements";
+import { enforceCheckoutRequirements, enrollmentTermsFor, parseAcknowledgments, requirementsAreOn, resolveBuyerTimeZone, type RequirementSettings } from "./checkoutRequirements";
 import type { OfferRow } from "../routes/public/offers";
 
 const SETTINGS: RequirementSettings = {
@@ -124,6 +124,9 @@ describe("enforceCheckoutRequirements", () => {
     const accepted = await enforceCheckoutRequirements({ ...base, signatures: [{ contractId: 5, typedName: "Pat Buyer" }] });
     expect(accepted?.signatures).toEqual([{ contract: { id: 5, title: "Agreement", pdfSha256: "f".repeat(64) }, typedName: "Pat Buyer" }]);
     expect(accepted?.terms.totalInvestmentCents).toBe(238200);
+    expect(accepted?.terms.timeZone).toBe("America/Los_Angeles");
+    const zoned = await enforceCheckoutRequirements({ ...base, buyerTimeZone: "America/New_York", signatures: [{ contractId: 5, typedName: "Pat Buyer" }] });
+    expect(zoned?.terms.timeZone).toBe("America/New_York");
   });
 
   it("refuses an invitation-only offer without a usable invitation for this email", async () => {
@@ -136,5 +139,14 @@ describe("enforceCheckoutRequirements", () => {
     });
     await expect(enforceCheckoutRequirements({ ...base, invitationToken: "t".repeat(30) })).rejects.toThrow(/invitation is for someone@example.test/);
     await expect(enforceCheckoutRequirements({ ...base, email: "someone@example.test", invitationToken: "t".repeat(30) })).resolves.toMatchObject({ invitationId: 9 });
+  });
+});
+
+describe("resolveBuyerTimeZone", () => {
+  it("keeps a real zone and falls back to Pacific for anything else", () => {
+    expect(resolveBuyerTimeZone("Europe/London")).toBe("Europe/London");
+    for (const bad of [undefined, null, 5, "", "Not/AZone", "+01:00", "America/New_York<script>", "x".repeat(65)]) {
+      expect(resolveBuyerTimeZone(bad)).toBe("America/Los_Angeles");
+    }
   });
 });

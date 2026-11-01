@@ -560,7 +560,7 @@ function toLessonView(
     watchedPercent: row.watched_percent ?? 0,
     lastViewedAt: iso(row.last_viewed_at),
     fullWatch: fullWatchFor(row),
-    skippable: row.watch_rule === "skippable" && row.has_media === true,
+    skippable: row.watch_rule === "skippable" && row.content_type !== "assessment",
   };
 }
 

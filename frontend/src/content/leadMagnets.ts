@@ -3,7 +3,6 @@
  * Kajabi pages they replace (captured 1 Oct 2026):
  *
  *   /5-step-marketing  ->  /marketing-step-form            (5-Step Marketing Plan)
- *   /business-plan-guide  ->  /business-plan-ty            (Business Plan Guide)
  *   /insurance-guide  (its Kajabi thank-you page is gone)  (Insurance vs Superbills)
  *   /kickstartguide  ->  /step-by-step-guide-thank-you-page (Kickstart Guide)
  *
@@ -22,7 +21,6 @@
 /** The forms created by migration 097. The slugs are the page paths. */
 export const LEAD_MAGNET_FORMS = {
   marketingPlan: "marketing-step-form",
-  businessPlan: "business-plan-guide",
   insurance: "insurance-guide",
   kickstart: "kickstartguide",
 } as const;
@@ -30,12 +28,10 @@ export const LEAD_MAGNET_FORMS = {
 /**
  * Where each free guide lives on this site, in public/downloads. The emails link
  * these same addresses (migrations 097 and 162), so renaming one breaks every
- * email already sent. The business plan guide has no file yet: until it is there
- * the link opens public/download-not-found.html.
+ * email already sent.
  */
 export const FREEBIE_FILES = {
   marketingPlan: "/downloads/5-step-marketing-plan.pdf",
-  businessPlan: "/downloads/private-practice-business-plan-guide.pdf",
   insurance: "/downloads/insurance-vs-superbills-guide.pdf",
   kickstart: "/downloads/private-practice-kickstart-guide.pdf",
 } as const;
@@ -156,150 +152,6 @@ export const marketingStepForm = {
   success: {
     title: "Your 5-Step Marketing Plan is on its way.",
     body: "Check your inbox — we've sent the free fillable PDF to the email you entered.",
-  },
-} as const;
-
-/* ── /business-plan-guide ───────────────────────────────────────────── */
-
-export const businessPlanGuide = {
-  seo: {
-    title: "Start, Scale, and Expand Your Private Practice",
-    description:
-      "A step-by-step guide to help you start, scale or expand your private practice without the overwhelm.",
-  },
-  hero: {
-    eyebrow: "FREE PLANING GUIDE EVERY THERAPIST NEEDS TO MOVE FROM CLINICIAN TO CEO",
-    title: "THE PRIVATE PRACTICE",
-    titleAccent: "BUSINESS PLAN",
-    lede:
-      "Turn your practice vision into an actionable, income-generating business—without confusion, overwhelm, or guessing your way through it.",
-    cta: "YES, I NEED THIS!",
-    image: {
-      src: "/images/leadmagnets/business-plan-laptop-mockup.webp",
-      alt: "The Private Practice Business Plan guide shown on a laptop",
-      width: 500,
-      height: 500,
-    },
-  },
-  helpImage: {
-    src: "/images/leadmagnets/business-plan-free-guide-will-help.jpg",
-    alt: "This free guide will help you — a therapist planning her practice at her desk",
-    width: 1000,
-    height: 969,
-  },
-  benefits: [
-    {
-      title: "Clarify Your Practice Vision & Goals",
-      body: "Identify your ideal practice model, income goals, and long-term vision—so you're building with purpose, not guessing.",
-    },
-    {
-      title: "Plan Your Business Structure the Right Way",
-      body: "Gain clarity on legal setup, business name, EIN, NPI, paperwork, and foundational requirements without confusion.",
-    },
-    {
-      title: "Design Services That Align With Your Purpose & Income",
-      body: "Define what you offer, who it’s for, and how it fits your lifestyle—so your services work for you, not just your clients.",
-    },
-    {
-      title: "Build a CEO-Level Pricing & Profit Plan",
-      body: "Map out your fees, expenses, and revenue goals—so you can confidently build a financially sustainable private practice.",
-    },
-    {
-      title: "Create Your Strategic Roadmap to Launch, Grow, and Expand",
-      body: "Walk away with a step-by-step plan to start, scale, or eventually hire, so you always know your next move.",
-    },
-  ],
-  benefitsCta: "ORGANIZE MY PRACTICE",
-  passion: {
-    title: "You’re a therapist with a passion for helping others.",
-    paragraphs: [
-      "The missing link? A clear, strategic plan to start, grow, or expand your practice—without overwhelm, confusion, or random Googling. Because without a roadmap, even the most passionate therapist can stay stuck in vision mode instead of CEO mode..",
-      "That’s where I come in—guide in one hand, roadmap in the other. Shall we get started?",
-    ],
-    whyTitle: "WHY YOU’LL LOVE THIS GUIDE:",
-    why: [
-      { label: "Actionable Steps", body: "No fluff—just clear, practical steps to move forward." },
-      { label: "Expert Tips", body: "Learn from a therapist who successfully made the leap." },
-      { label: "Confidence Boost", body: "Mindset shifts to help you own your role as a business owner." },
-    ],
-    image: {
-      src: "/images/leadmagnets/yvette-business-plan.jpg",
-      alt: "Yvette Howard, LCSW, arms folded and smiling",
-      width: 900,
-      height: 1017,
-    },
-  },
-  grab: {
-    title: "Grab it now 👇",
-    body: "The strategic planning guide therapists use to start, structure, and scale their private practice the right way.",
-    submit: "YES, LET'S DO THIS!",
-    image: {
-      src: "/images/leadmagnets/business-plan-guide-cover.webp",
-      alt: "Cover of the free Private Practice Business Plan guide",
-      width: 500,
-      height: 500,
-    },
-  },
-  guide: {
-    eyebrow: "Meet Your Guide",
-    title: "Hi, I’m Yvette",
-    paragraphs: [
-      "Therapist turned private practice strategist, self-care enthusiast, and founder of Brighter Tomorrow Therapy and Boss Clinician Consulting, helping therapists leave their 9-5 and build thriving private practices.",
-      "You’re a talented therapist with a passion for helping others. The missing link? A clear plan to build a profitable practice—without the overwhelm. Because without the right steps, your dream practice can feel out of reach.",
-      "That’s where I come in… guide in one hand, strategy in the other—ready to help you make the leap with confidence. Shall we get started?",
-    ],
-    cta: "Let’s get you started!",
-    photo: {
-      src: "/images/leadmagnets/yvette-meet-your-guide.jpg",
-      alt: "Yvette Howard, LCSW, smiling in a green top",
-      width: 900,
-      height: 1336,
-    },
-  },
-  ps: {
-    title: "P.S. Don’t miss out— your dream practice is closer than you think!",
-    body: "Grab the guide and start your journey today.",
-  },
-} as const;
-
-/* ── /business-plan-ty ──────────────────────────────────────────────── */
-
-export const businessPlanThankYou = {
-  seo: {
-    title: "Business Plan- Thank you Page",
-    description: "Your Private Practice Business Plan Guide is on its way to your inbox.",
-  },
-  shout: "Yesssss!!!!!!",
-  title: "Your Private Practice Business Plan Guide Is All Yours!",
-  body:
-    "You’re officially out of “dreaming mode” and stepping into “design-and-build mode.” This guide helps you start planning like a CEO—so your practice becomes intentional, profitable, and sustainable.",
-  inbox: "Check your inbox to grab your new guide!",
-  junk: "(Don't see it after a few minutes? Try checking your Junk Folder",
-  upsell: {
-    title: "Want to know how I was able to have consistent clients and now have my staff fully booked?",
-    subtitle: "Grab Your Fully Booked Toolkit for only $67",
-    body:
-      "Whether you're ready to start your journey to private practice or looking for practical tools to ensure a fully booked practice, this is your go-to resource bundle.",
-    cta: "SIGN UP FOR THE FULLY BOOKED TOOLKIT ($67)",
-    to: "/courses/fully-booked-toolkit",
-  },
-  training: {
-    title:
-      "But Wait... Want to know how But wait… want to see the exact 4-step blueprint I used to go from overworked clinician to CEO of my own thriving group practice?",
-    register: "Register for the Free Training that Reveals the steps needed to become the CEO of your practice.",
-    image: {
-      src: "/images/leadmagnets/four-step-blueprint-training.webp",
-      alt: "From Imposter to CEO: The 4-Step Blueprint to Building a Profitable Private Practice — free training",
-      width: 1200,
-      height: 675,
-    },
-    consent: KAJABI_CONSENT,
-  },
-  photo: {
-    src: "/images/leadmagnets/thank-you-celebrate.jpg",
-    alt: "A therapist celebrating at her desk",
-    width: 1200,
-    height: 933,
   },
 } as const;
 
@@ -460,7 +312,12 @@ export const kickstartThankYou = {
     cta: "SIGN UP FOR THE STARTER PACK ($27)",
     to: "/courses/private-practice-starter-suite",
   },
-  photo: businessPlanThankYou.photo,
+  photo: {
+    src: "/images/leadmagnets/thank-you-celebrate.jpg",
+    alt: "A therapist celebrating at her desk",
+    width: 1200,
+    height: 933,
+  },
 } as const;
 
 /* ── /opt-in ────────────────────────────────────────────────────────── */
@@ -475,7 +332,7 @@ export const optIn = {
   seo: {
     title: "Free Guides for Therapists | Boss Clinician",
     description:
-      "Free guides for therapists building a private practice: the 5-Step Marketing Plan, the Private Practice Kickstart Guide, the Insurance vs Superbills guide and the Private Practice Business Plan.",
+      "Free guides for therapists building a private practice: the 5-Step Marketing Plan, the Private Practice Kickstart Guide and the Insurance vs Superbills guide.",
   },
   eyebrow: "Free resources",
   title: "Get it now",
@@ -501,13 +358,6 @@ export const optIn = {
       to: "/insurance-guide",
       cta: "DOWNLOAD NOW",
       image: "/images/leadmagnets/insurance-vs-superbills-guide.webp",
-    },
-    {
-      title: "The Private Practice Business Plan",
-      body: "Turn your practice vision into an actionable, income-generating business—without confusion, overwhelm, or guessing your way through it.",
-      to: "/business-plan-guide",
-      cta: "YES, I NEED THIS!",
-      image: "/images/leadmagnets/business-plan-guide-cover.webp",
     },
   ],
 } as const;

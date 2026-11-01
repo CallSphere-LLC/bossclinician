@@ -262,7 +262,9 @@ function actionSentence(
     case "send_email":
       return `${wait}send them the email "${String(config.subject ?? "").slice(0, 60) || "(no subject yet)"}"`;
     case "subscribe_sequence":
-      return `${wait}start them on ${nameOf(lookup, "sequences", config.sequenceId) || "a sequence"}`;
+      return `${wait}start them on ${nameOf(lookup, "sequences", config.sequenceId) || "a sequence"}${
+        Number(config.startAtPosition) > 1 ? `, from email ${Number(config.startAtPosition)}` : ""
+      }`;
     case "unsubscribe_sequence":
       return `${wait}take them off ${nameOf(lookup, "sequences", config.sequenceId) || "a sequence"}`;
     case "add_tag":

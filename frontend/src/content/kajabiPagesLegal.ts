@@ -1008,7 +1008,7 @@ export const termsOfUse: KajabiLegalDoc = {
   eyebrow: "BOSS CLINICIAN",
   title: "Terms of Use",
   lede: "Boss Clinician, LLC  |  Yvette Howard, LCSW  |  bossclinician.com",
-  dateLine: "Effective Date: 10/26/2026",
+  dateLine: "Effective Date: 11/01/2026",
   clauses: [
     {
       id: "preamble",

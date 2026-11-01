@@ -169,6 +169,13 @@ describe("earnedCeuCredit", () => {
     ).toBe(false);
   });
 
+  it("does not hold a short page with no reading time to a clock (row 216)", () => {
+    const instant = AT("2026-03-01T10:00:00Z");
+    const page = textLesson({ durationMinutes: 0, firstViewedAt: instant, completedAt: AT("2026-03-01T10:00:08Z") });
+    expect(earnedCeuCredit([page])).toBe(true);
+    expect(earnedCeuCredit([{ ...page, completedAt: null }])).toBe(false);
+  });
+
   it("refuses a lesson that was never opened or never finished", () => {
     expect(earnedCeuCredit([textLesson({ firstViewedAt: null })])).toBe(false);
     expect(earnedCeuCredit([textLesson({ completedAt: null })])).toBe(false);

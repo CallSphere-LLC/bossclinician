@@ -147,7 +147,7 @@ export function requirementsAreOn(requirements: OfferRequirements): boolean {
 }
 
 /** The same test as `requirementsAreOn`, in SQL, for an offers row aliased `o`. */
-const OFFER_HAS_REQUIREMENTS = `(
+export const OFFER_HAS_REQUIREMENTS = `(
   EXISTS (SELECT 1 FROM offer_contracts oc WHERE oc.offer_id = o.id AND oc.required_before_payment)
   OR EXISTS (SELECT 1 FROM offer_checkout_requirements r WHERE r.offer_id = o.id
               AND (r.invitation_required OR r.acknowledgments @> '[{"active":true}]'::jsonb))
@@ -199,7 +199,12 @@ export interface EnrollmentTerms {
   obligationsNote: string;
   /** Added when the order is opened: what this order actually comes to. */
   charged?: { subtotal: string; discount: string; tax: string; total: string; couponCode: string };
-  /** Added when the payment succeeds. Dates are UTC. */
+  /**
+   * The buyer's IANA time zone, chosen at checkout (`resolveBuyerTimeZone`). The
+   * dates below stay stored as UTC instants; this says how to print them.
+   */
+  timeZone?: string;
+  /** Added when the payment succeeds. Whole UTC instants. */
   enrollmentStart?: string;
   enrollmentEnd?: string;
   refundDeadline?: string;
@@ -281,6 +286,27 @@ export function enrollmentTermsFor(offer: OfferRow, settings: RequirementSetting
   };
 }
 
+/* ── The buyer's time zone ───────────────────────────────────────────────── */
+
+/** Refund deadlines are shown in the buyer's zone where known, otherwise Pacific. */
+export const FALLBACK_TIME_ZONE = "America/Los_Angeles";
+
+/**
+ * The browser's report of its zone is only a hint, so a missing or unusable value
+ * falls back rather than refusing a sale. The pattern keeps out what Intl would
+ * also accept but is not a zone name, such as an offset ("+01:00").
+ */
+export function resolveBuyerTimeZone(raw: unknown): string {
+  if (typeof raw !== "string" || raw.length > 64 || !/^[A-Za-z][A-Za-z0-9_+-]*(?:\/[A-Za-z0-9_+-]+)*$/.test(raw)) {
+    return FALLBACK_TIME_ZONE;
+  }
+  try {
+    return new Intl.DateTimeFormat("en-US", { timeZone: raw }).resolvedOptions().timeZone;
+  } catch {
+    return FALLBACK_TIME_ZONE;
+  }
+}
+
 /* ── What the checkout page is told ──────────────────────────────────────── */
 
 /**
@@ -359,6 +385,8 @@ export const checkoutRequirementFields = {
     .max(10)
     .optional(),
   invitationToken: z.string().min(20).max(200).optional(),
+  // Never fails validation: resolveBuyerTimeZone falls back instead.
+  buyerTimeZone: z.unknown().optional(),
 };
 
 export interface AcceptedRequirements {
@@ -385,6 +413,7 @@ export async function enforceCheckoutRequirements(input: {
   acknowledgments?: Array<{ key: string; version: number }>;
   signatures?: Array<{ contractId: number; typedName: string }>;
   invitationToken?: string;
+  buyerTimeZone?: unknown;
   ip?: string;
   userAgent?: string;
 }): Promise<AcceptedRequirements | null> {
@@ -436,7 +465,7 @@ export async function enforceCheckoutRequirements(input: {
   return {
     acknowledgments,
     signatures,
-    terms: enrollmentTermsFor(input.offer, settings),
+    terms: { ...enrollmentTermsFor(input.offer, settings), timeZone: resolveBuyerTimeZone(input.buyerTimeZone) },
     invitationId,
     memberId: input.memberId,
     email: input.email,

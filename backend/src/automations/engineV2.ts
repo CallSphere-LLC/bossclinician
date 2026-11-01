@@ -551,7 +551,12 @@ const sendEmailConfig = z.object({
   topic: z.string().default("marketing"),
 });
 
-const sequenceConfig = z.object({ sequenceId: z.coerce.number().int().positive() });
+const sequenceConfig = z.object({
+  sequenceId: z.coerce.number().int().positive(),
+  // Join at this email instead of the first: a VIP gets the Lounge emails without
+  // the Lounge welcome (migration 182). Only `subscribe_sequence` reads it.
+  startAtPosition: z.coerce.number().int().positive().optional(),
+});
 const tagConfig = z.object({ tagId: z.coerce.number().int().positive() });
 const offerConfig = z.object({ offerId: z.coerce.number().int().positive() });
 const eventConfig = z.object({ eventId: z.coerce.number().int().positive() });
@@ -758,6 +763,7 @@ async function performAction(
 
       const result = await enrollContact(parsed.data.sequenceId, contactId, {
         reason: `automation ${automationId}`,
+        startAtPosition: parsed.data.startAtPosition,
       });
       return { log: `Sequence: ${result.outcome.replace(/_/g, " ")}${result.reason ? ` — ${result.reason}` : ""}`, stop: false };
     }

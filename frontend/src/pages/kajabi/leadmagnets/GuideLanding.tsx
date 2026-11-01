@@ -40,10 +40,10 @@ export interface GuideLandingContent {
 }
 
 /**
- * The shape both of her free-guide landing pages share (/business-plan-guide
- * and /kickstartguide): hero, what the guide helps with, "you're a therapist
- * with a passion for helping others", the sign-up, meet your guide, and a P.S.
- * Each page passes its own words and the form it posts to.
+ * The shape of her free-guide landing page (/kickstartguide): hero, what the
+ * guide helps with, "you're a therapist with a passion for helping others", the
+ * sign-up, meet your guide, and a P.S. The page passes its own words and the form
+ * it posts to.
  */
 export function GuideLanding({
   content: c,

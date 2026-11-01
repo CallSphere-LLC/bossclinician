@@ -44,7 +44,7 @@ export interface SignatureRow {
   assignment_id: string | number | null;
 }
 
-/** The dates a payment fixes. Whole UTC instants, labelled as UTC wherever printed. */
+/** The dates a payment fixes, stored as whole UTC instants. `printedMoment` shows them. */
 function withPaymentDates(terms: EnrollmentTerms, paidAt: Date): EnrollmentTerms {
   return {
     ...terms,
@@ -176,14 +176,33 @@ function utc(value: string): string {
   return `${new Date(value).toISOString().replace("T", " ").slice(0, 19)} UTC`;
 }
 
+/**
+ * A date as the buyer reads it: local to the zone captured at checkout, with the
+ * stored UTC instant beside it. A record with no zone prints UTC alone, as it did
+ * when it was signed. The replace is for the thin spaces ICU puts before "PM",
+ * which the standard PDF fonts cannot draw.
+ */
+export function printedMoment(value: string, timeZone?: string): string {
+  const instant = utc(value);
+  if (!timeZone) return instant;
+  try {
+    const local = new Intl.DateTimeFormat("en-US", { timeZone, dateStyle: "long", timeStyle: "long" })
+      .format(new Date(value))
+      .replace(/[\u00a0\u202f]/g, " ");
+    return `${local} (${timeZone}); ${instant}`;
+  } catch {
+    return instant;
+  }
+}
+
 /** The enrollment record as label/value lines, for any PDF. */
 export function enrollmentTermLines(terms: EnrollmentTerms): Array<[string, string]> {
   const lines: Array<[string, string]> = [
     ["Program", terms.offerTitle],
     ["Payment option", terms.paymentOption],
     ["Program term", terms.programTerm],
-    ["Start date", terms.enrollmentStart ? utc(terms.enrollmentStart) : ""],
-    ["End date", terms.enrollmentEnd ? utc(terms.enrollmentEnd) : ""],
+    ["Start date", terms.enrollmentStart ? printedMoment(terms.enrollmentStart, terms.timeZone) : ""],
+    ["End date", terms.enrollmentEnd ? printedMoment(terms.enrollmentEnd, terms.timeZone) : ""],
     ["Total investment", terms.totalInvestment],
     ["Payment arrangement", terms.paymentArrangement],
     ["Due at enrollment", terms.dueToday],
@@ -192,7 +211,7 @@ export function enrollmentTermLines(terms: EnrollmentTerms): Array<[string, stri
     ["Order total", terms.charged ? `${terms.charged.total} (subtotal ${terms.charged.subtotal}, discount ${terms.charged.discount}${terms.charged.couponCode ? ` with code ${terms.charged.couponCode}` : ""}, tax ${terms.charged.tax})` : ""],
     ["Included benefits", terms.includedBenefits],
     ["Refund terms", terms.refundTerms],
-    ["Refund deadline", terms.refundDeadline ? utc(terms.refundDeadline) : ""],
+    ["Refund deadline", terms.refundDeadline ? printedMoment(terms.refundDeadline, terms.timeZone) : ""],
   ];
   return lines.filter(([, value]) => value !== "");
 }
@@ -257,6 +276,8 @@ export async function emailSignedAgreementCopies(orderId: number): Promise<void>
       attachments.push({ filename: "Signing record.pdf", content: record.toString("base64"), contentType: "application/pdf", encoding: "base64" });
 
       const url = `${env.publicSiteUrl}${MEMBER_CONTRACTS_PATH}`;
+      const { refundDeadline, timeZone } = signature.enrollment_terms;
+      const deadline = refundDeadline ? `Refund deadline: ${printedMoment(refundDeadline, timeZone)}.` : "";
       const intro = `Here is your copy of ${signature.contract_title}, which you signed when you enrolled in ${signature.offer_title}. The signing record shows the payment terms you accepted.`;
       const outcome = await sendMail({
         topic: "contract_signed_copy",
@@ -264,10 +285,11 @@ export async function emailSignedAgreementCopies(orderId: number): Promise<void>
         memberId: signature.member_id,
         to: signature.signed_email,
         subject: `Your signed agreement: ${signature.contract_title}`,
-        text: [`Hi ${signature.signed_name},`, "", intro, "", `You can find it any time in your account: ${url}`, "", "If you have any questions, just reply to this email."].join("\n"),
+        text: [`Hi ${signature.signed_name},`, "", intro, ...(deadline ? ["", deadline] : []), "", `You can find it any time in your account: ${url}`, "", "If you have any questions, just reply to this email."].join("\n"),
         html: [
           `<p>Hi ${escapeHtml(signature.signed_name)},</p>`,
           `<p>${escapeHtml(intro)}</p>`,
+          ...(deadline ? [`<p>${escapeHtml(deadline)}</p>`] : []),
           `<p>You can find it any time in <a href="${escapeHtml(url)}">your account</a>.</p>`,
           `<p>If you have any questions, just reply to this email.</p>`,
         ].join("\n"),

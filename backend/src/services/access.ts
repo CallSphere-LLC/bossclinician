@@ -154,6 +154,10 @@ export async function grantAccess(input: GrantAccessInput): Promise<AccessGrant>
  * renewals, plan grants, automations and bulk grants all come through here: that
  * is done by `deliverPurchase` and `deliverManualGrant`, for a sale or a single
  * admin grant only (QA row 211).
+ *
+ * `access_expires_after_days` belongs to the offer's own price. An order placed
+ * on a recurring pricing option is left out of it: that buyer's access follows
+ * their payments, not a calendar (owner decision Q2, 30 Oct 2026).
  */
 export async function grantOfferAccess(input: {
   memberId: number;
@@ -168,19 +172,25 @@ export async function grantOfferAccess(input: {
 }): Promise<number[]> {
   const db = input.client ?? pool;
 
+  const expiryDays = `CASE WHEN EXISTS (
+      SELECT 1 FROM orders ord
+        JOIN offer_pricing_options po ON po.id = ord.pricing_option_id
+       WHERE ord.id = $2::int AND ord.offer_id = o.id
+         AND po.pricing_type IN ('subscription', 'payment_plan')
+    ) THEN NULL ELSE o.access_expires_after_days END`;
   const res = await db.query<{ product_id: number; access_expires_after_days: number | null }>(
-    `SELECT DISTINCT p.id AS product_id, o.access_expires_after_days
+    `SELECT DISTINCT p.id AS product_id, ${expiryDays} AS access_expires_after_days
        FROM offers o
        JOIN offer_products op ON op.offer_id = o.id
        JOIN products p        ON p.id = op.product_id
       WHERE o.id = $1
       UNION
-     SELECT DISTINCT bi.product_id, o.access_expires_after_days
+     SELECT DISTINCT bi.product_id, ${expiryDays} AS access_expires_after_days
        FROM offers o
        JOIN offer_products op       ON op.offer_id = o.id
       JOIN product_bundle_items bi ON bi.bundle_product_id = op.product_id
       WHERE o.id = $1`,
-    [input.offerId]
+    [input.offerId, input.orderId ?? null]
   );
 
   // grantAccess takes one advisory lock per product. A stable order prevents

@@ -839,6 +839,7 @@ checkoutOfferRouter.post(
           acknowledgments: body.checkoutAcknowledgments,
           signatures: body.agreementSignatures,
           invitationToken: body.invitationToken,
+          buyerTimeZone: body.buyerTimeZone,
           ip: req.ip,
           userAgent: req.get("user-agent"),
         });

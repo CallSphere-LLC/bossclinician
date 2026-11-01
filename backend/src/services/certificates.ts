@@ -694,6 +694,7 @@ export function requiredDwellSeconds(durationMinutes: number): number {
 
 /** One published lesson of a course, and what this member has done with it. */
 export interface CeuLessonRecord {
+  title?: string;
   contentType: string;
   durationMinutes: number;
   /**
@@ -741,26 +742,36 @@ export interface CeuLessonRecord {
  * of the course.
  */
 export function earnedCeuCredit(lessons: CeuLessonRecord[]): boolean {
-  return lessons.every((lesson) => {
-    // The owner has said this video is not part of what the document attests.
-    if (lesson.skippable === true) return true;
-    if (
-      lesson.hasMedia === true ||
-      lesson.contentType === "video" ||
-      lesson.contentType === "audio"
-    ) {
-      return lesson.watchExempt === true
-        ? lesson.completedAt !== null
-        : mediaWatchSatisfied(lesson.videoDurationSeconds ?? 0, lesson.playedToSeconds ?? 0, lesson.watchedPercent);
-    }
-    // The graded quiz has a pass gate and a native survey has a submitted
-    // response gate. A one-minute dwell check on those assessment screens
-    // would reject an honestly completed form with no way to repair the clock.
-    if (lesson.contentType === "assessment") return lesson.completedAt !== null;
-    if (lesson.completedAt === null || lesson.firstViewedAt === null) return false;
-    const seconds = (lesson.completedAt.getTime() - lesson.firstViewedAt.getTime()) / 1000;
-    return seconds >= requiredDwellSeconds(lesson.durationMinutes);
-  });
+  return lessonsShortOfCeuCredit(lessons).length === 0;
+}
+
+/** The lessons still holding a CE certificate back, so the member can be told which. */
+export function lessonsShortOfCeuCredit(lessons: CeuLessonRecord[]): CeuLessonRecord[] {
+  return lessons.filter((lesson) => !ceuCredited(lesson));
+}
+
+function ceuCredited(lesson: CeuLessonRecord): boolean {
+  // The owner has said this video is not part of what the document attests.
+  if (lesson.skippable === true) return true;
+  if (
+    lesson.hasMedia === true ||
+    lesson.contentType === "video" ||
+    lesson.contentType === "audio"
+  ) {
+    return lesson.watchExempt === true
+      ? lesson.completedAt !== null
+      : mediaWatchSatisfied(lesson.videoDurationSeconds ?? 0, lesson.playedToSeconds ?? 0, lesson.watchedPercent);
+  }
+  // The graded quiz has a pass gate and a native survey has a submitted
+  // response gate. A one-minute dwell check on those assessment screens
+  // would reject an honestly completed form with no way to repair the clock.
+  if (lesson.contentType === "assessment") return lesson.completedAt !== null;
+  if (lesson.completedAt === null || lesson.firstViewedAt === null) return false;
+  // No reading time set by the owner means nothing to hold a short page to, and
+  // a tick can't be redone, so a one-minute floor here could never be repaired.
+  if (!(lesson.durationMinutes > 0)) return true;
+  const seconds = (lesson.completedAt.getTime() - lesson.firstViewedAt.getTime()) / 1000;
+  return seconds >= requiredDwellSeconds(lesson.durationMinutes);
 }
 
 async function loadCeuLessonRecords(
@@ -768,6 +779,7 @@ async function loadCeuLessonRecords(
   courseId: number
 ): Promise<CeuLessonRecord[]> {
   const found = await pool.query<{
+    title: string;
     content_type: string | null;
     duration_minutes: number | null;
     has_media: boolean;
@@ -779,7 +791,7 @@ async function loadCeuLessonRecords(
     first_viewed_at: Date | null;
     completed_at: Date | null;
   }>(
-    `SELECT l.content_type, l.duration_minutes, l.video_duration_seconds, lp.max_position_seconds,
+    `SELECT l.title, l.content_type, l.duration_minutes, l.video_duration_seconds, lp.max_position_seconds,
             ${watchExemptionSql("c", "$1")} AS watch_exempt,
             ${lessonSkippableSql("l")} AS skippable,
             (COALESCE(l.video_url, '') <> '' OR COALESCE(l.audio_url, '') <> '') AS has_media,
@@ -788,11 +800,13 @@ async function loadCeuLessonRecords(
        JOIN course_modules m ON m.id = l.module_id
        JOIN courses c ON c.id=m.course_id
        LEFT JOIN lesson_progress lp ON lp.lesson_id = l.id AND lp.member_id = $1
-      WHERE m.course_id = $2 AND l.published`,
+      WHERE m.course_id = $2 AND l.published
+      ORDER BY m.sort, l.sort`,
     [memberId, courseId]
   );
 
   return found.rows.map((row) => ({
+    title: row.title,
     contentType: row.content_type ?? "text",
     durationMinutes: row.duration_minutes ?? 0,
     hasMedia: row.has_media === true,
@@ -1165,7 +1179,7 @@ export async function certificateStatus(
   const issued = existing.rows.length > 0;
   const gaps = certificateGaps(loaded.lessons, { requireFullVideo: loaded.requireFullVideo });
   const quizzesToPass = requiresPass ? await loadUnpassedQuizzes(memberId, courseId) : [];
-  const ceuPending =
+  const ceuLessonsToRevisit =
     !issued &&
     allowed &&
     template !== null &&
@@ -1173,8 +1187,10 @@ export async function certificateStatus(
     gaps.lessonsRemaining === 0 &&
     gaps.videosToFinish.length === 0 &&
     gaps.evaluationsToSubmit.length === 0 &&
-    quizzesToPass.length === 0 &&
-    !earnedCeuCredit(await loadCeuLessonRecords(memberId, courseId));
+    quizzesToPass.length === 0
+      ? lessonsShortOfCeuCredit(await loadCeuLessonRecords(memberId, courseId)).map((lesson) => lesson.title ?? "")
+      : [];
+  const ceuPending = ceuLessonsToRevisit.length > 0;
 
   const course = !issued && allowed && template ? await loadCourseForMember(memberId, courseId) : null;
   const next = course ? flattenLessons(course.modules).find(lesson => lesson.unlocked && (
@@ -1195,6 +1211,7 @@ export async function certificateStatus(
       evaluationsToSubmit: gaps.evaluationsToSubmit,
       excludedByPurchase: !allowed,
       ceuPending,
+      ceuLessonsToRevisit,
     }),
   };
 }
@@ -1218,6 +1235,7 @@ export interface CertificateFacts {
   evaluationsToSubmit?: string[];
   excludedByPurchase?: boolean;
   ceuPending: boolean;
+  ceuLessonsToRevisit?: string[];
 }
 
 /**
@@ -1230,7 +1248,7 @@ export interface CertificateFacts {
  * when it is the only thing left, gets its own sentence.
  */
 export function summarizeCertificateStatus(facts: CertificateFacts): CertificateStatus {
-  const { issued, hasTemplate, requiresPassingQuizzes, totalLessons, lessonsRemaining, quizzesToPass, ceuPending } =
+  const { issued, hasTemplate, requiresPassingQuizzes, totalLessons, lessonsRemaining, quizzesToPass, ceuPending, ceuLessonsToRevisit } =
     facts;
   const videosToFinish = facts.videosToFinish ?? [];
   const evaluationsToSubmit = facts.evaluationsToSubmit ?? [];
@@ -1267,7 +1285,7 @@ export function summarizeCertificateStatus(facts: CertificateFacts): Certificate
       message = `${sentence.charAt(0).toUpperCase()}${sentence.slice(1)} to get your certificate.`;
     } else if (ceuPending) {
       message =
-        "This certificate carries CE credit, so every video has to be watched through and every reading given its full time — not only ticked. Revisit any lesson you skipped ahead in, then press Get my certificate.";
+        `This certificate carries CE credit, so every video has to be watched through and every reading given its full time. Still needed: ${(ceuLessonsToRevisit ?? []).join(", ")}. Open each one, finish it, then press Get my certificate.`;
     } else if (lessonsRemaining > 0) {
       message = `Finish the remaining ${lessonsRemaining === 1 ? "lesson" : `${lessonsRemaining} lessons`} to get your certificate.`;
     } else {

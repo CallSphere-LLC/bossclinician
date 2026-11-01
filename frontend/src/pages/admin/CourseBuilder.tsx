@@ -1479,15 +1479,15 @@ export default function CourseBuilder() {
                   );
                 })()}
               </div>
-              {(lessonDraft.lesson.contentType === "video" || lessonDraft.lesson.contentType === "audio") && (
+              {lessonDraft.lesson.contentType !== "assessment" && (
                 <div className="sm:col-span-2">
                   <Field
-                    label="Does this need to be watched in full?"
+                    label={lessonDraft.lesson.contentType === "video" || lessonDraft.lesson.contentType === "audio" ? "Does this need to be watched in full?" : "Can students skip this lesson?"}
                     hint={
                       lessonDraft.lesson.watchRule === "required"
                         ? "students cannot skip ahead or tick it off until they have watched it, and the next lesson waits. Anyone who already ticked it without watching will need to watch it"
                         : lessonDraft.lesson.watchRule === "skippable"
-                          ? "students can skip ahead or skip it altogether, and it does not hold up the next lesson or the certificate. Do not use this for a video that counts toward CE hours"
+                          ? "students can skip ahead or skip it altogether, and it does not hold up the next lesson or the certificate. Do not use this for a lesson that counts toward CE hours"
                           : "follows the course: courses with a certificate, or with “Require watching the full video” on, need it watched in full"
                     }
                   >
@@ -1497,7 +1497,7 @@ export default function CourseBuilder() {
                       onChange={(e) => updateLesson({ watchRule: e.target.value as NonNullable<LessonExtras["watchRule"]> })}
                     >
                       <option value="inherit">Inherit from course</option>
-                      <option value="required">Must watch in full</option>
+                      {(lessonDraft.lesson.contentType === "video" || lessonDraft.lesson.contentType === "audio") && <option value="required">Must watch in full</option>}
                       <option value="skippable">Can be skipped</option>
                     </select>
                   </Field>

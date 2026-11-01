@@ -6,6 +6,7 @@ import {
   insertCourseProduct,
   insertMember,
   insertOffer,
+  insertOrder,
 } from "../testing/db";
 
 /**
@@ -134,6 +135,32 @@ describeDb("access grants (integration)", () => {
     expect(new Date(second.rows[0].expires_at).getTime()).toBeGreaterThan(
       new Date(first.rows[0].expires_at).getTime()
     );
+  });
+
+  it("applies an offer's expiry to its own price but not to a recurring option", async () => {
+    const p = await insertCourseProduct(client, "annual-or-monthly");
+    const offerId = await insertOffer(client, "offer-annual-or-monthly", [p.productId], {
+      accessExpiresAfterDays: 365,
+    });
+    const option = await client.query<{ id: number }>(
+      `INSERT INTO offer_pricing_options (offer_id, label, pricing_type, amount_cents, currency, interval, interval_count, installment_count, sort)
+       VALUES ($1, 'Monthly', 'payment_plan', 1000, 'usd', 'month', 1, 6, 1) RETURNING id`,
+      [offerId]
+    );
+
+    const annual = await insertMember(client, "paid-in-full@test.invalid");
+    const annualOrder = await insertOrder(client, { offerId, email: "paid-in-full@test.invalid", totalCents: 2700, memberId: annual });
+    await access.grantOfferAccess({ memberId: annual, offerId, orderId: annualOrder });
+
+    const monthly = await insertMember(client, "paid-monthly@test.invalid");
+    const monthlyOrder = await insertOrder(client, { offerId, email: "paid-monthly@test.invalid", totalCents: 1000, memberId: monthly });
+    await client.query(`UPDATE orders SET pricing_option_id = $2 WHERE id = $1`, [monthlyOrder, option.rows[0].id]);
+    await access.grantOfferAccess({ memberId: monthly, offerId, orderId: monthlyOrder });
+
+    const expiryOf = async (memberId: number) =>
+      (await client.query(`SELECT expires_at FROM access_grants WHERE member_id = $1 AND product_id = $2`, [memberId, p.productId])).rows[0].expires_at;
+    expect(await expiryOf(annual)).not.toBeNull();
+    expect(await expiryOf(monthly)).toBeNull();
   });
 
   it("restores access when a revoked product is bought again", async () => {

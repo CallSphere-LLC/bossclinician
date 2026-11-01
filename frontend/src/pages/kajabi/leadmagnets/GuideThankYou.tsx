@@ -23,9 +23,9 @@ export interface GuideThankYouContent {
 }
 
 /**
- * Her two free-guide thank-you pages (/business-plan-ty and
- * /step-by-step-guide-thank-you-page): the celebration, "check your inbox",
- * and the paid next step. The guide is linked here as well as emailed.
+ * Her free-guide thank-you page (/step-by-step-guide-thank-you-page): the
+ * celebration, "check your inbox", and the paid next step. The guide is linked
+ * here as well as emailed.
  * Noindex — a thank-you page is not a search result.
  */
 export function GuideThankYou({
@@ -35,7 +35,7 @@ export function GuideThankYou({
 }: {
   content: GuideThankYouContent;
   download: string;
-  /** Anything after the offer — the business-plan page adds its training sign-up. */
+  /** Anything after the offer. */
   children?: ReactNode;
 }) {
   return (

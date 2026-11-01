@@ -170,11 +170,13 @@ interface SequenceRow {
   exit_tag_id: number | null;
   completion_tag_id: number | null;
   allow_reentry: boolean;
+  /** Emails only for people who still hold this offer (migration 182). */
+  requires_offer_id: number | null;
 }
 
 const SEQUENCE_COLUMNS = `id, name, status, topic, skip_weekends,
   send_window_start_minute, send_window_end_minute, use_contact_timezone, timezone,
-  exit_on_purchase, exit_tag_id, completion_tag_id, allow_reentry`;
+  exit_on_purchase, exit_tag_id, completion_tag_id, allow_reentry, requires_offer_id`;
 
 function rulesFor(sequence: SequenceRow, contactTimezone: string): SequenceSendRules {
   return {
@@ -207,7 +209,12 @@ export interface EnrollResult {
 export async function enrollContact(
   sequenceId: number,
   contactId: number,
-  options: { reason?: string; now?: Date } = {}
+  options: {
+    reason?: string;
+    now?: Date;
+    /** Join at this email rather than the first; earlier ones are never sent. */
+    startAtPosition?: number;
+  } = {}
 ): Promise<EnrollResult> {
   const now = options.now ?? new Date();
 
@@ -230,9 +237,9 @@ export async function enrollContact(
 
   const firstRes = await pool.query<{ position: number; delay_minutes: number }>(
     `SELECT position, delay_minutes FROM sequence_emails
-      WHERE sequence_id = $1 AND enabled
+      WHERE sequence_id = $1 AND enabled AND position >= $2
       ORDER BY position LIMIT 1`,
-    [sequenceId]
+    [sequenceId, options.startAtPosition ?? 0]
   );
   const first = firstRes.rows[0];
   if (!first) return { subscriptionId: null, outcome: "blocked", reason: "sequence has no emails" };
@@ -611,6 +618,45 @@ export async function sendDueEmail(
         return {
           outcome: "exited",
           detail: "exit tag applied",
+          sequenceId: subscription.sequence_id,
+          contactId: subscription.contact_id,
+        };
+      }
+    }
+
+    // A sequence about a benefit stops when the benefit does: refund, revocation
+    // or expiry, by whichever route, without each one having to know about email.
+    // Matched on the address as well, because a contact is not always linked to
+    // the member holding the access, and a missed match would cost a real member
+    // their emails.
+    if (sequence.requires_offer_id) {
+      const holds = await client.query(
+        `SELECT 1 FROM access_grants g
+           JOIN members m ON m.id = g.member_id
+          WHERE g.offer_id = $1 AND g.status = 'active'
+            AND (g.expires_at IS NULL OR g.expires_at > now())
+            AND (m.contact_id = $2 OR lower(m.email::text) = lower($3))
+          LIMIT 1`,
+        [sequence.requires_offer_id, subscription.contact_id, contact.email]
+      );
+      if ((holds.rowCount ?? 0) === 0) {
+        await client.query(
+          `UPDATE sequence_subscriptions
+              SET status = 'exited', exit_reason = 'access ended',
+                  next_send_at = NULL, completed_at = now(), updated_at = now()
+            WHERE id = $1`,
+          [subscription.id]
+        );
+        await client.query("COMMIT");
+        await publishSequenceEvent("sequence_unsubscribed", {
+          subscriptionId: subscription.id,
+          sequenceId: subscription.sequence_id,
+          contactId: subscription.contact_id,
+          reason: "access ended",
+        });
+        return {
+          outcome: "exited",
+          detail: "access ended",
           sequenceId: subscription.sequence_id,
           contactId: subscription.contact_id,
         };

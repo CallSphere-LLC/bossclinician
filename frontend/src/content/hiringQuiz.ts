@@ -13,11 +13,12 @@
  * total is divided by the maximum (7 × 3 = 21); 70% or more is "ready", 40% or
  * more is "almost", anything lower is "notYet".
  *
- * /hiring-quiz opens on the opt-in (name, email and two practice questions,
- * filed under `hire-form`), then swaps in the quiz on the same address, as the
- * owner asked (QA sheet row 207). /hire-form is the same page, for old links.
- * The result is filed under the matching result form (migration 099) as soon
- * as it is shown, which tags the contact and emails them the result; if that
+ * /hiring-quiz opens on the questions, then asks for the opt-in (name, email and
+ * two practice questions, filed under `hire-form`), then shows the result, all
+ * on the same address. The owner moved the opt-in here on 30 Oct 2026 (Q17),
+ * replacing QA sheet row 207's opt-in first. /hire-form is the same page, for old
+ * links. The result is filed under the matching result form (migration 099) as
+ * soon as it is shown, which tags the contact and emails them the result; if that
  * fails, an optional "email me my result" form sits under the result.
  */
 
@@ -195,6 +196,8 @@ export const HIRING_QUIZ_PAGE = {
   last: "See My Results →",
   back: "← Back",
   complete: "Complete!",
+  /** The counter at the opt-in, after the last question. Not on the source. */
+  lastStep: "One last step",
   stepsLabel: "Your Next Steps",
   retake: "Take the quiz again",
 } as const;
@@ -241,6 +244,71 @@ export interface HiringContact {
   firstName: string;
   lastName: string;
   email: string;
+}
+
+/** Where the quiz keeps its place for this browser tab, so a refresh loses nothing. */
+export const HIRING_PROGRESS_STORAGE_KEY = "bc.hiringQuiz.progress";
+
+/** Answers and position only: the score and the result are never stored. */
+export interface HiringProgress {
+  index: number;
+  picks: (number | null)[];
+  /** The questions are done and the opt-in is on screen. */
+  optIn: boolean;
+  /** The result is on screen. */
+  revealed: boolean;
+  /** This result has been filed, so showing it again must not file it again. */
+  filed: boolean;
+}
+
+export function emptyHiringProgress(): HiringProgress {
+  return {
+    index: 0,
+    picks: new Array<number | null>(HIRING_QUIZ_QUESTIONS.length).fill(null),
+    optIn: false,
+    revealed: false,
+    filed: false,
+  };
+}
+
+/**
+ * Where a refresh lands, from what the tab stored. Anything unreadable starts the
+ * quiz over. The result comes back only for someone who has opted in: without a
+ * stored contact, finished answers go to the opt-in instead.
+ */
+export function restoreHiringProgress(raw: string | null, hasContact: boolean): HiringProgress {
+  const empty = emptyHiringProgress();
+  if (!raw) return empty;
+  let stored: Partial<HiringProgress>;
+  try {
+    stored = JSON.parse(raw) as Partial<HiringProgress>;
+  } catch {
+    return empty;
+  }
+  if (stored === null || typeof stored !== "object") return empty;
+  const last = HIRING_QUIZ_QUESTIONS.length - 1;
+  const { index, picks } = stored;
+  if (!Array.isArray(picks) || picks.length !== HIRING_QUIZ_QUESTIONS.length) return empty;
+  if (typeof index !== "number" || !Number.isInteger(index) || index < 0 || index > last) return empty;
+  const valid = picks.every(
+    (pick, qi) =>
+      pick === null ||
+      (Number.isInteger(pick) && pick >= 0 && pick < HIRING_QUIZ_QUESTIONS[qi].answers.length),
+  );
+  if (!valid) return empty;
+
+  const questions: HiringProgress = { index, picks, optIn: false, revealed: false, filed: false };
+  if (picks.some((pick) => pick === null)) return questions;
+  if (stored.revealed === true) {
+    return hasContact
+      ? { ...questions, revealed: true, filed: stored.filed === true }
+      : { ...questions, optIn: true };
+  }
+  if (stored.optIn === true) {
+    // Opted in with nothing filed yet: back on the last question, whose button files it.
+    return hasContact ? { ...questions, index: last } : { ...questions, optIn: true };
+  }
+  return questions;
 }
 
 export const HIRING_QUIZ_MAX_SCORE = HIRING_QUIZ_QUESTIONS.length * 3;

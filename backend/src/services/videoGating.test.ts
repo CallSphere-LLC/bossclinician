@@ -149,10 +149,12 @@ describe("buildModules with \"Require watching the full video\"", () => {
       expect(second).toMatchObject({ unlocked: false, lockReason: "previous_quiz_not_passed" });
     });
 
-    it("the setting means nothing on a lesson with no media", () => {
+    it("a reading can be skipped, but a quiz or evaluation cannot", () => {
       const [first, second] = lessons([row(1, { watch_rule: "skippable", require_full_video: false }), row(2, { requires_previous_lesson: true, require_full_video: false })]);
-      expect(first.skippable).toBe(false);
-      expect(second.unlocked).toBe(false);
+      expect(first.skippable).toBe(true);
+      expect(second.unlocked).toBe(true);
+      const [quiz] = lessons([row(1, { watch_rule: "skippable", content_type: "assessment", require_full_video: false })]);
+      expect(quiz.skippable).toBe(false);
     });
 
     it("an inherit lesson behaves as it always did", () => {

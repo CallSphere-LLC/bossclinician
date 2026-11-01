@@ -268,7 +268,7 @@ export function CheckoutExperience({ offer }: { offer: PublicOffer }) {
     };
   }, [mode, amountCents, selectedPricing.currency, siteTheme]);
 
-  if (usesInvitationGate(offer, Boolean(preview))) return <InvitationRequiredNotice />;
+  if (usesInvitationGate(offer, Boolean(preview))) return <InvitationRequiredNotice offerSlug={offer.slug} />;
 
   return (
     <div className="space-y-5">

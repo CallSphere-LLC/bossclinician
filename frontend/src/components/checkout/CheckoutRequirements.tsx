@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { FileSignature, ShieldCheck } from "lucide-react";
 import { GlassCard } from "@/components/luxe/GlassCard";
+import { LuxeButton } from "@/components/luxe/LuxeButton";
 import { LuxeInput } from "@/components/luxe/LuxeField";
 import { commerceErrorMessage, type CheckoutInput, type CheckoutRequirements, type EnrollmentTermsView, type PublicOffer } from "@/lib/commerceApi";
 import { memberRequest } from "@/lib/memberApi";
@@ -29,7 +30,13 @@ export function usesInvitationGate(offer: PublicOffer, preview: boolean): boolea
   return !preview && !offer.cartItems && Boolean(offer.checkoutRequirements?.invitationRequired) && invitationTokenFromUrl() === null;
 }
 
-export function InvitationRequiredNotice() {
+/** Where to apply, for a by-invitation offer that takes applications on the site. */
+const APPLICATION_LINKS: Record<string, { label: string; to: string }> = {
+  "the-boss-boardroom": { label: "Apply for The Boardroom", to: "/boardroom#apply" },
+};
+
+export function InvitationRequiredNotice({ offerSlug }: { offerSlug: string }) {
+  const application = APPLICATION_LINKS[offerSlug];
   return (
     <GlassCard accent="plum" interactive={false} className="mx-auto max-w-xl px-6 py-10 text-center sm:px-10">
       <h2 className="font-display text-[1.8rem] leading-tight text-white">Enrollment is by invitation</h2>
@@ -37,6 +44,11 @@ export function InvitationRequiredNotice() {
         Once your application is approved, you'll receive a personal link to review your agreement and enroll. Questions? Email{" "}
         <a className="text-gold underline underline-offset-4" href="mailto:support@bossclinician.com">support@bossclinician.com</a>.
       </p>
+      {application && (
+        <LuxeButton variant="foil" to={application.to} className="mt-8 min-h-[44px]">
+          {application.label}
+        </LuxeButton>
+      )}
     </GlassCard>
   );
 }
@@ -65,7 +77,15 @@ export interface CheckoutRequirementsState {
   setTick: (key: string, value: boolean) => void;
   setDraft: (contractId: number, patch: Partial<AgreementDraft>) => void;
   validate: () => boolean;
-  payload: Pick<CheckoutInput, "checkoutAcknowledgments" | "agreementSignatures" | "invitationToken">;
+  payload: Pick<CheckoutInput, "checkoutAcknowledgments" | "agreementSignatures" | "invitationToken" | "buyerTimeZone">;
+}
+
+function browserTimeZone(): string | undefined {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function draftIsComplete(draft: AgreementDraft): boolean {
@@ -136,6 +156,7 @@ export function useCheckoutRequirements(input: {
                   ? [{ contractId: agreement.contractId, typedName: draft.typedName.trim(), electronicConsent: true as const, signingIntent: true as const }]
                   : [];
               }),
+              buyerTimeZone: browserTimeZone(),
             }
           : {}),
         ...(invitationRequired && invitationToken ? { invitationToken } : {}),
