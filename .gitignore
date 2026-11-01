@@ -44,3 +44,4 @@ backend/tsconfig.tsbuildinfo
 *.csv
 api_keys_paypal_.txt
 STRIPE_API.txt
+backend/uploads-protected/
