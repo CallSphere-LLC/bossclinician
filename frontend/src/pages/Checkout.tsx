@@ -43,6 +43,7 @@ import { checkoutButtonStyle } from "@/components/checkout/checkoutStyle";
 import { CheckoutMarkdown } from "@/components/checkout/CheckoutMarkdown";
 import { checkoutPlainText } from "@/components/checkout/checkoutMarkdown";
 import { CheckoutRequirementsPanel, InvitationRequiredNotice, useCheckoutRequirements, usesInvitationGate } from "@/components/checkout/CheckoutRequirements";
+import { isCredentialForYouOffer, NO_GUARANTEE_DISCLAIMER, NO_REFUND_POLICY } from "@/content/credentialForYou";
 
 const EASE_LUXE: [number, number, number, number] = [0.22, 1, 0.36, 1];
 
@@ -981,6 +982,12 @@ function CheckoutForm({ offer, pricingOption, mode, onAmountChange }: CheckoutFo
           {previewNotice && <Notice tone="gold">{previewNotice}</Notice>}
 
           <div>
+            {isCredentialForYouOffer(offer.slug) && (
+              <div className="mb-4 space-y-2 text-sm leading-relaxed text-orchid">
+                <p>{NO_GUARANTEE_DISCLAIMER}</p>
+                <p>{NO_REFUND_POLICY}</p>
+              </div>
+            )}
             <LuxeButton
               variant="foil"
               size="lg"

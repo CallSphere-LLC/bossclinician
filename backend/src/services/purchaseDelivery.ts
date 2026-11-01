@@ -10,6 +10,7 @@ import { upsertContactWithStatus } from "./contacts";
 import { exitContactOnPurchase } from "./sequences";
 import { readSetting } from "./settings";
 import { sendOwnerSaleNotification } from "./ownerSaleNotification";
+import { sendCredentialingIntake } from "./credentialingIntake";
 import { sendDirectoryAuditIntake } from "./directoryAuditIntake";
 
 /**
@@ -331,6 +332,7 @@ export async function deliverPurchase(
     // A service purchase needs its intake instructions after access is granted.
     // The helper checks the real published form and claims each order once.
     if (!sandbox) await sendDirectoryAuditIntake(order);
+    if (!sandbox) await sendCredentialingIntake(order);
 
     /* --------------------------------------------------- list housekeeping */
 

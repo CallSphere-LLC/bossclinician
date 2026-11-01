@@ -8,7 +8,7 @@ import { appendContractEvent } from "./contractAudit";
 import { readContractSource } from "./contractStorage";
 import { MEMBER_CONTRACTS_PATH } from "./offerContracts";
 import { addInterval } from "./pricing";
-import type { EnrollmentTerms } from "./checkoutRequirements";
+import { timeZoneLabel, type EnrollmentTerms } from "./checkoutRequirements";
 
 /**
  * What happens to an agreement signed at checkout once the payment succeeds, and
@@ -44,14 +44,62 @@ export interface SignatureRow {
   assignment_id: string | number | null;
 }
 
+/** A moment's wall-clock reading in a zone, as if that reading were UTC. */
+function wallClockMs(instantMs: number, timeZone: string): { ms: number; year: number; month: number; day: number } {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hourCycle: "h23",
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+    hour: "numeric",
+    minute: "numeric",
+    second: "numeric",
+  }).formatToParts(new Date(instantMs));
+  const part = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find((entry) => entry.type === type)?.value);
+  return {
+    ms: Date.UTC(part("year"), part("month") - 1, part("day"), part("hour"), part("minute"), part("second")),
+    year: part("year"),
+    month: part("month"),
+    day: part("day"),
+  };
+}
+
+/**
+ * The last moment of the day `days` calendar days after `from`'s date, both read in
+ * `timeZone`. The offset is taken at the answer rather than at `from`, and the second
+ * pass settles it, so a clock change between the two lands on the right instant.
+ */
+export function endOfDayInZone(from: Date, timeZone: string, days: number): Date {
+  const start = wallClockMs(from.getTime(), timeZone);
+  const target = Date.UTC(start.year, start.month - 1, start.day + days, 23, 59, 59);
+  let instant = target;
+  for (let pass = 0; pass < 2; pass += 1) {
+    instant = target - (wallClockMs(instant, timeZone).ms - instant);
+  }
+  return new Date(instant + 999);
+}
+
+function refundDeadlineAfter(terms: EnrollmentTerms, paidAt: Date, days: number): Date {
+  if (terms.refundDeadlineTimeZone) {
+    try {
+      return endOfDayInZone(paidAt, terms.refundDeadlineTimeZone, days);
+    } catch {
+      // A zone Intl refuses must not cost the buyer their record: settling runs under
+      // a savepoint that would drop it. The window itself still applies.
+    }
+  }
+  return new Date(paidAt.getTime() + days * 86_400_000);
+}
+
 /** The dates a payment fixes, stored as whole UTC instants. `printedMoment` shows them. */
-function withPaymentDates(terms: EnrollmentTerms, paidAt: Date): EnrollmentTerms {
+export function withPaymentDates(terms: EnrollmentTerms, paidAt: Date): EnrollmentTerms {
   return {
     ...terms,
     enrollmentStart: paidAt.toISOString(),
     ...(terms.termMonths ? { enrollmentEnd: addInterval(paidAt, "month", terms.termMonths).toISOString() } : {}),
     ...(terms.refundWindowDays !== null && terms.refundWindowDays !== undefined
-      ? { refundDeadline: new Date(paidAt.getTime() + terms.refundWindowDays * 86_400_000).toISOString() }
+      ? { refundDeadline: refundDeadlineAfter(terms, paidAt, terms.refundWindowDays).toISOString() }
       : {}),
   };
 }
@@ -195,6 +243,29 @@ export function printedMoment(value: string, timeZone?: string): string {
   }
 }
 
+/**
+ * The refund deadline as a buyer reads it. An offer with an end-of-day rule states
+ * that rule's own date and zone, whatever zone the buyer was in. Any other offer
+ * prints as it always has.
+ */
+export function printedRefundDeadline(terms: EnrollmentTerms): string {
+  if (!terms.refundDeadline) return "";
+  const zone = terms.refundDeadlineTimeZone;
+  if (!zone) return printedMoment(terms.refundDeadline, terms.timeZone);
+  try {
+    const date = new Intl.DateTimeFormat("en-US", { timeZone: zone, dateStyle: "long" }).format(new Date(terms.refundDeadline));
+    return `${date} at 11:59 p.m. ${timeZoneLabel(zone)}`;
+  } catch {
+    return printedMoment(terms.refundDeadline, terms.timeZone);
+  }
+}
+
+function recordedRefundDeadline(terms: EnrollmentTerms): string {
+  if (!terms.refundDeadline) return terms.refundDeadlineRule ?? "";
+  const printed = printedRefundDeadline(terms);
+  return terms.refundDeadlineTimeZone && !printed.endsWith(" UTC") ? `${printed}; ${utc(terms.refundDeadline)}` : printed;
+}
+
 /** The enrollment record as label/value lines, for any PDF. */
 export function enrollmentTermLines(terms: EnrollmentTerms): Array<[string, string]> {
   const lines: Array<[string, string]> = [
@@ -211,7 +282,7 @@ export function enrollmentTermLines(terms: EnrollmentTerms): Array<[string, stri
     ["Order total", terms.charged ? `${terms.charged.total} (subtotal ${terms.charged.subtotal}, discount ${terms.charged.discount}${terms.charged.couponCode ? ` with code ${terms.charged.couponCode}` : ""}, tax ${terms.charged.tax})` : ""],
     ["Included benefits", terms.includedBenefits],
     ["Refund terms", terms.refundTerms],
-    ["Refund deadline", terms.refundDeadline ? printedMoment(terms.refundDeadline, terms.timeZone) : ""],
+    ["Refund deadline", recordedRefundDeadline(terms)],
   ];
   return lines.filter(([, value]) => value !== "");
 }
@@ -276,8 +347,8 @@ export async function emailSignedAgreementCopies(orderId: number): Promise<void>
       attachments.push({ filename: "Signing record.pdf", content: record.toString("base64"), contentType: "application/pdf", encoding: "base64" });
 
       const url = `${env.publicSiteUrl}${MEMBER_CONTRACTS_PATH}`;
-      const { refundDeadline, timeZone } = signature.enrollment_terms;
-      const deadline = refundDeadline ? `Refund deadline: ${printedMoment(refundDeadline, timeZone)}.` : "";
+      const printedDeadline = printedRefundDeadline(signature.enrollment_terms);
+      const deadline = printedDeadline ? `Refund deadline: ${printedDeadline}.` : "";
       const intro = `Here is your copy of ${signature.contract_title}, which you signed when you enrolled in ${signature.offer_title}. The signing record shows the payment terms you accepted.`;
       const outcome = await sendMail({
         topic: "contract_signed_copy",

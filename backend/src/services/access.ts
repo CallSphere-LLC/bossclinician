@@ -155,9 +155,15 @@ export async function grantAccess(input: GrantAccessInput): Promise<AccessGrant>
  * is done by `deliverPurchase` and `deliverManualGrant`, for a sale or a single
  * admin grant only (QA row 211).
  *
- * `access_expires_after_days` belongs to the offer's own price. An order placed
- * on a recurring pricing option is left out of it: that buyer's access follows
- * their payments, not a calendar (owner decision Q2, 30 Oct 2026).
+ * `access_expires_after_days` is the length of the term bought, however it is
+ * paid for, so a fixed-count payment plan follows it. The exceptions have no end
+ * to count from: a subscription option, whose access follows its payments, and a
+ * plan on an offer marked `plan_access_open_ended`, which carries on month to
+ * month after its minimum (the Lounge, owner decision Q1, 30 Oct 2026).
+ *
+ * Only the opening payment reaches this for a plan: later installments stop at
+ * `advancePaymentPlan` (Stripe) or the `!isPlan` check (PayPal), so they can't
+ * push the end date out.
  */
 export async function grantOfferAccess(input: {
   memberId: number;
@@ -176,7 +182,8 @@ export async function grantOfferAccess(input: {
       SELECT 1 FROM orders ord
         JOIN offer_pricing_options po ON po.id = ord.pricing_option_id
        WHERE ord.id = $2::int AND ord.offer_id = o.id
-         AND po.pricing_type IN ('subscription', 'payment_plan')
+         AND (po.pricing_type = 'subscription'
+              OR (po.pricing_type = 'payment_plan' AND o.plan_access_open_ended))
     ) THEN NULL ELSE o.access_expires_after_days END`;
   const res = await db.query<{ product_id: number; access_expires_after_days: number | null }>(
     `SELECT DISTINCT p.id AS product_id, ${expiryDays} AS access_expires_after_days

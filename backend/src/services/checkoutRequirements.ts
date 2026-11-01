@@ -50,6 +50,8 @@ export interface RequirementSettings {
   includedBenefits: string;
   refundTerms: string;
   refundWindowDays: number | null;
+  /** When set, the deadline is the end of the day in this zone rather than an instant plus days. */
+  refundDeadlineTimeZone?: string | null;
   obligationsNote: string;
 }
 
@@ -72,6 +74,7 @@ const EMPTY_SETTINGS: RequirementSettings = {
   includedBenefits: "",
   refundTerms: "",
   refundWindowDays: null,
+  refundDeadlineTimeZone: null,
   obligationsNote: "",
 };
 
@@ -105,10 +108,11 @@ export async function loadOfferRequirements(offerId: number, db: Queryable = poo
       included_benefits: string;
       refund_terms: string;
       refund_window_days: number | null;
+      refund_deadline_time_zone: string | null;
       obligations_note: string;
     }>(
       `SELECT acknowledgments, invitation_required, program_term, term_months, included_benefits,
-              refund_terms, refund_window_days, obligations_note
+              refund_terms, refund_window_days, refund_deadline_time_zone, obligations_note
          FROM offer_checkout_requirements WHERE offer_id = $1`,
       [offerId]
     ),
@@ -131,6 +135,7 @@ export async function loadOfferRequirements(offerId: number, db: Queryable = poo
           includedBenefits: row.included_benefits,
           refundTerms: row.refund_terms,
           refundWindowDays: row.refund_window_days,
+          refundDeadlineTimeZone: row.refund_deadline_time_zone ?? null,
           obligationsNote: row.obligations_note,
         }
       : EMPTY_SETTINGS,
@@ -196,6 +201,10 @@ export interface EnrollmentTerms {
   includedBenefits: string;
   refundTerms: string;
   refundWindowDays: number | null;
+  /** The offer's end-of-day rule, kept with the record. Absent on older records. */
+  refundDeadlineTimeZone?: string | null;
+  /** That rule in words, for the record before a payment fixes the actual date. */
+  refundDeadlineRule?: string;
   obligationsNote: string;
   /** Added when the order is opened: what this order actually comes to. */
   charged?: { subtotal: string; discount: string; tax: string; total: string; couponCode: string };
@@ -282,14 +291,31 @@ export function enrollmentTermsFor(offer: OfferRow, settings: RequirementSetting
     includedBenefits: settings.includedBenefits,
     refundTerms: settings.refundTerms,
     refundWindowDays: settings.refundWindowDays,
+    ...(settings.refundDeadlineTimeZone && settings.refundWindowDays !== null
+      ? {
+          refundDeadlineTimeZone: settings.refundDeadlineTimeZone,
+          refundDeadlineRule: `11:59 p.m. ${timeZoneLabel(settings.refundDeadlineTimeZone)} on the ${ordinal(settings.refundWindowDays)} calendar day after your enrollment date`,
+        }
+      : {}),
     obligationsNote: settings.obligationsNote,
   };
+}
+
+function ordinal(n: number): string {
+  const teen = n % 100 >= 11 && n % 100 <= 13;
+  const suffix = teen ? "th" : (["th", "st", "nd", "rd"][n % 10] ?? "th");
+  return `${n}${suffix}`;
 }
 
 /* ── The buyer's time zone ───────────────────────────────────────────────── */
 
 /** Refund deadlines are shown in the buyer's zone where known, otherwise Pacific. */
 export const FALLBACK_TIME_ZONE = "America/Los_Angeles";
+
+/** How an end-of-day refund deadline names its zone to a buyer. */
+export function timeZoneLabel(timeZone: string): string {
+  return timeZone === "America/Los_Angeles" ? "Pacific Time" : timeZone;
+}
 
 /**
  * The browser's report of its zone is only a hint, so a missing or unusable value

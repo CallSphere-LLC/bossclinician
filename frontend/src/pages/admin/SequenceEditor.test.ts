@@ -1,5 +1,26 @@
 import { describe, expect, it } from "vitest";
-import { describeWhereTheyAre } from "./SequenceEditor";
+import { describeTrigger, describeWhereTheyAre } from "./SequenceEditor";
+
+describe("describeTrigger", () => {
+  it("names the offer in plain words", () => {
+    expect(
+      describeTrigger({
+        triggerType: "offer_purchased",
+        triggerSentence: "When someone buys an offer or you give it to them — The Club",
+      }),
+    ).toBe("When someone buys The Club");
+  });
+
+  it("leaves other triggers, and an offer not chosen yet, as the sentence they came with", () => {
+    const form = { triggerType: "form_submitted", triggerSentence: "When someone submits a form — Quiz" };
+    const any = {
+      triggerType: "offer_purchased",
+      triggerSentence: "When someone buys an offer or you give it to them (any)",
+    };
+    expect(describeTrigger(form)).toBe(form.triggerSentence);
+    expect(describeTrigger(any)).toBe(any.triggerSentence);
+  });
+});
 
 describe("describeWhereTheyAre", () => {
   // Email 2 was deleted, so the stored positions have a gap.

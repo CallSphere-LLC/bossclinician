@@ -7,8 +7,8 @@ import type { KajabiFieldSpec } from "@/pages/kajabi/pages/shared";
  * The slugs, and each form's keys, are one contract with migration 181.
  */
 
-/** The three paid offers are drafts until the owner settles their terms (migration 181). */
-const CHECKOUTS_OPEN = false as boolean;
+/** The three paid offers are published (migration 187). */
+const CHECKOUTS_OPEN = true as boolean;
 const CHECKOUT = (slug: string) => `/checkout/${slug}`;
 
 export const REQUEST_PATH = "/credentialing-request";
@@ -38,11 +38,20 @@ const startCta = (label: string, slug: string, service: RequestService) =>
     ? { label, to: CHECKOUT(slug) }
     : { label: "Request Credentialing Support", to: requestLink(service) };
 
-/** Her official start-date language (section 14 of the directions). */
-export const START_DATE_LINES = [
-  "Your credentialing timeline begins once your intake is complete and all required documents have been received.",
-  "The purchase date is not automatically the credentialing start date.",
-] as const;
+/** Her official start-date language, as revised on 31 Oct 2026. */
+const TIMELINE_START =
+  "Your credentialing timeline begins once your intake is complete, your service agreement is completed, and all required documents and information have been received.";
+
+export const START_DATE_LINES = [TIMELINE_START, "The purchase date is not automatically the credentialing start date."] as const;
+
+/** Her exact refund and guarantee sentences, shown beside the Pay button and on the sales page. */
+export const NO_REFUND_POLICY =
+  "All Credential For You purchases are final and non-refundable. Because credentialing services involve administrative preparation, review, onboarding, and reserved service capacity, refunds are not provided after purchase.";
+export const NO_GUARANTEE_DISCLAIMER =
+  "Boss Clinician does not guarantee payer approval, network acceptance, reimbursement rates, effective dates, or credentialing completion timelines.";
+
+/** The offers whose checkout carries those two sentences (migration 181). */
+export const isCredentialForYouOffer = (slug: string) => slug.startsWith("credential-for-you-");
 
 export interface CredentialService {
   label: string;
@@ -98,7 +107,7 @@ export const credentialForYou = {
       {
         label: "Commercial Insurance",
         title: "Commercial Insurance Credentialing",
-        price: "$225 per payer / provider",
+        price: "$225 per payer, per provider",
         body: "For providers enrolling with commercial insurance companies.",
         items: [
           "Provider information review",
@@ -167,19 +176,22 @@ export const credentialForYou = {
   package: {
     eyebrow: "Need several payers?",
     title: "Provider Credentialing Package",
-    price: "Starting at $1,997",
+    price: "$1,997",
     body: "Designed for providers who want support establishing a broader insurance-based practice without managing multiple payer applications on their own.",
     items: [
       "CAQH setup or review",
       "Up to 6 commercial payer applications",
       "Application preparation",
       "Application submission",
-      "Payer follow-up",
-      "Credentialing tracker",
+      "Routine payer follow-up",
+      "Credentialing tracking",
       "Effective-date tracking",
       "Final credentialing status summary",
     ],
-    note: "Medicare, Medicaid, TRICARE, group enrollment, or other complex enrollment needs may be added separately.",
+    scope: [
+      "This package includes up to 6 commercial payer applications for one provider.",
+      "Medicare, Medicaid, TRICARE/federal plans, group enrollment, additional providers, and other enrollment needs outside of this scope are not included and may require a separate service or quote.",
+    ],
     cta: startCta("Start My Credentialing Package", "credential-for-you-package", "Commercial Insurance"),
   },
   additional: {
@@ -218,7 +230,6 @@ export const credentialForYou = {
       "Practice information",
       "W-9 / tax information",
       "CAQH information",
-      "Banking / EFT information",
       "Group information when applicable",
     ],
   },
@@ -248,6 +259,8 @@ export const credentialForYou = {
       "Payer approval or contracting terms",
     ],
     closing: "Credentialing timelines may be affected by payer processing times, panel availability, provider type, state requirements, missing documentation, or requests for additional information.",
+    guarantee: NO_GUARANTEE_DISCLAIMER,
+    refund: NO_REFUND_POLICY,
   },
   final: {
     eyebrow: "Ready to get started?",
@@ -260,14 +273,16 @@ export const credentialForYou = {
 export const credentialingNextSteps = {
   seo: {
     title: "Credentialing Support — Next Steps | Boss Clinician",
-    description: "Complete your credentialing intake and provide the documentation needed for your enrollment.",
+    description: "Complete your credentialing intake and see what happens next.",
   },
-  title: "You're In. Let's Get Your Credentialing Started.",
+  title: "What Happens Next",
   paragraphs: [
-    "Thank you for trusting Boss Clinician with your credentialing support.",
-    "Your next step is to complete your credentialing intake and provide the documentation needed for your enrollment.",
+    "After completing your intake, a member of our credentialing team will review your information.",
+    "Allondra from Boss Clinician will contact you at the email address provided during checkout with your service agreement and instructions for submitting the additional information and documentation needed for your credentialing application.",
   ],
-  important: "Your credentialing timeline begins once your intake is complete and all required documentation has been received.",
+  watchFor: "Please watch for an email from:",
+  watchForEmail: "allondra@bossclinician.com",
+  important: TIMELINE_START,
   cta: "Complete My Credentialing Intake",
 } as const;
 

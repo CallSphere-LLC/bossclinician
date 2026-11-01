@@ -227,6 +227,7 @@ export default function AutomationBuilder() {
       setSearchParams(
         (previous) => {
           const next = new URLSearchParams(previous);
+          next.delete("addToSequence");
           if (id === null) next.delete("automation");
           else next.set("automation", String(id));
           return next;
@@ -237,7 +238,13 @@ export default function AutomationBuilder() {
     [setSearchParams],
   );
   const [error, setError] = useState<string | null>(null);
-  const [creating, setCreating] = useState(false);
+  // A sequence's "Add a trigger" lands here with ?addToSequence=<id>: the new
+  // automation opens ready to be named, with starting that sequence as its step.
+  const [addToSequence, setAddToSequence] = useState<number | null>(() => {
+    const requested = Number(searchParams.get("addToSequence"));
+    return Number.isInteger(requested) && requested > 0 ? requested : null;
+  });
+  const [creating, setCreating] = useState(addToSequence !== null);
   const [confirm, confirmDialog] = useConfirm();
 
   // Search and Filters (QA row 71, as Kajabi) live in the query string, next to
@@ -326,6 +333,17 @@ export default function AutomationBuilder() {
     try {
       const created = await marketingApi.createAutomation({ name, triggerType });
       toast.success("Automation created — it starts paused so you can build it safely.");
+      if (addToSequence !== null) {
+        try {
+          await marketingApi.addAction(created.id, {
+            actionType: "subscribe_sequence",
+            config: { sequenceId: addToSequence },
+          });
+        } catch (err) {
+          toast.error(friendlyError(err, "automation"));
+        }
+        setAddToSequence(null);
+      }
       setCreating(false);
       loadList();
       setOpenId(created.id);
@@ -559,7 +577,22 @@ export default function AutomationBuilder() {
         <NewAutomationModal
           open={creating}
           triggers={options.triggers}
-          onOpenChange={setCreating}
+          forSequence={addToSequence !== null}
+          onOpenChange={(open) => {
+            setCreating(open);
+            if (!open && addToSequence !== null) {
+              // Cancelled: the next "New automation" is an ordinary one.
+              setAddToSequence(null);
+              setSearchParams(
+                (previous) => {
+                  const next = new URLSearchParams(previous);
+                  next.delete("addToSequence");
+                  return next;
+                },
+                { replace: true },
+              );
+            }
+          }}
           onCreate={create}
         />
       )}
@@ -574,16 +607,22 @@ export default function AutomationBuilder() {
 function NewAutomationModal({
   open,
   triggers,
+  forSequence,
   onOpenChange,
   onCreate,
 }: {
   open: boolean;
   triggers: TriggerDescriptor[];
+  /** Opened from a sequence page: that sequence will be its step. */
+  forSequence: boolean;
   onOpenChange: (open: boolean) => void;
   onCreate: (name: string, triggerType: string) => Promise<void>;
 }) {
   const [name, setName] = useState("");
-  const [triggerType, setTriggerType] = useState(triggers[0]?.type ?? "");
+  const [triggerType, setTriggerType] = useState(
+    (forSequence && triggers.find((trigger) => trigger.type === "offer_purchased")?.type) ||
+      (triggers[0]?.type ?? ""),
+  );
   const [saving, setSaving] = useState(false);
 
   async function submit(event: FormEvent) {
@@ -600,7 +639,11 @@ function NewAutomationModal({
       open={open}
       onOpenChange={onOpenChange}
       title="Set up a new automation"
-      description="Pick what starts it off. You can add the steps next."
+      description={
+        forSequence
+          ? "Pick what starts it off. Starting your email sequence is added as its step. On the next screen, choose which offer or form and turn it on."
+          : "Pick what starts it off. You can add the steps next."
+      }
       footer={
         <>
           <Button variant="secondary" size="sm" onClick={() => onOpenChange(false)}>

@@ -374,6 +374,7 @@ interface FactRow {
   order_updated_at: Date | null;
   stripe_payment_intent_id: string | null;
   description: string;
+  offer_refund_policy: string | null;
   member_email: string | null;
 }
 
@@ -489,6 +490,7 @@ export async function loadReceiptDocument(
             o.stripe_payment_intent_id,
             COALESCE(NULLIF(fo.title, ''), NULLIF(fs.title, ''), NULLIF(pl.name, ''),
                      NULLIF(o.course_title, ''), 'Purchase') AS description,
+            COALESCE(NULLIF(fo.receipt_refund_policy, ''), NULLIF(fs.receipt_refund_policy, '')) AS offer_refund_policy,
             m.email AS member_email
        FROM (SELECT $1::int AS invoice_id, $2::int AS order_id) k
        LEFT JOIN invoices i      ON i.id  = k.invoice_id
@@ -579,7 +581,9 @@ export async function loadReceiptDocument(
   // Trimmed and length-capped rather than trusted: both are free text from
   // settings, and the first is a page heading.
   const receiptTitle = asText(settings.receiptTitle).slice(0, 60) || "Receipt";
-  const refundPolicy = asText(settings.refundPolicy).slice(0, 600);
+  // An offer with its own policy prints that instead of the site-wide one.
+  // Not through asText, which stops at 200 characters: hers runs longer.
+  const refundPolicy = (row.offer_refund_policy?.trim() || asText(settings.refundPolicy)).slice(0, 600);
 
   const reference = row.number ?? (orderId === null ? `#${row.invoice_id}` : `#${orderId}`);
   const buyerName = row.billing_name ?? "";

@@ -137,30 +137,77 @@ describeDb("access grants (integration)", () => {
     );
   });
 
-  it("applies an offer's expiry to its own price but not to a recurring option", async () => {
-    const p = await insertCourseProduct(client, "annual-or-monthly");
-    const offerId = await insertOffer(client, "offer-annual-or-monthly", [p.productId], {
-      accessExpiresAfterDays: 365,
+  describe("an offer's term and the way it is paid for", () => {
+    async function buyer(slug: string, offerId: number, optionId: number | null) {
+      const email = `${slug}@test.invalid`;
+      const memberId = await insertMember(client, email);
+      const orderId = await insertOrder(client, { offerId, email, totalCents: 1000, memberId });
+      if (optionId !== null) await client.query(`UPDATE orders SET pricing_option_id = $2 WHERE id = $1`, [orderId, optionId]);
+      await access.grantOfferAccess({ memberId, offerId, orderId });
+      return { memberId, orderId };
+    }
+
+    async function option(offerId: number, pricingType: "payment_plan" | "subscription") {
+      const inserted = await client.query<{ id: number }>(
+        `INSERT INTO offer_pricing_options (offer_id, label, pricing_type, amount_cents, currency, interval, interval_count, installment_count, sort)
+         VALUES ($1, 'Option', $2, 1000, 'usd', 'month', 1, $3, 1) RETURNING id`,
+        [offerId, pricingType, pricingType === "payment_plan" ? 6 : null]
+      );
+      return inserted.rows[0].id;
+    }
+
+    const expiryOf = async (memberId: number, productId: number) =>
+      (await client.query(`SELECT expires_at FROM access_grants WHERE member_id = $1 AND product_id = $2`, [memberId, productId])).rows[0].expires_at as Date | null;
+
+    it("gives a fixed-count plan the same term as paying in full", async () => {
+      const p = await insertCourseProduct(client, "term-plan");
+      const offerId = await insertOffer(client, "offer-term-plan", [p.productId], { accessExpiresAfterDays: 183 });
+      const full = await buyer("term-in-full", offerId, null);
+      const plan = await buyer("term-on-plan", offerId, await option(offerId, "payment_plan"));
+      const days = (date: Date | null) => Math.round((new Date(date as Date).getTime() - Date.now()) / 86_400_000);
+      expect(days(await expiryOf(full.memberId, p.productId))).toBe(183);
+      expect(days(await expiryOf(plan.memberId, p.productId))).toBe(183);
     });
-    const option = await client.query<{ id: number }>(
-      `INSERT INTO offer_pricing_options (offer_id, label, pricing_type, amount_cents, currency, interval, interval_count, installment_count, sort)
-       VALUES ($1, 'Monthly', 'payment_plan', 1000, 'usd', 'month', 1, 6, 1) RETURNING id`,
-      [offerId]
-    );
 
-    const annual = await insertMember(client, "paid-in-full@test.invalid");
-    const annualOrder = await insertOrder(client, { offerId, email: "paid-in-full@test.invalid", totalCents: 2700, memberId: annual });
-    await access.grantOfferAccess({ memberId: annual, offerId, orderId: annualOrder });
+    it("leaves a subscription option out of the term", async () => {
+      const p = await insertCourseProduct(client, "term-sub");
+      const offerId = await insertOffer(client, "offer-term-sub", [p.productId], { accessExpiresAfterDays: 365 });
+      const monthly = await buyer("term-sub", offerId, await option(offerId, "subscription"));
+      expect(await expiryOf(monthly.memberId, p.productId)).toBeNull();
+    });
 
-    const monthly = await insertMember(client, "paid-monthly@test.invalid");
-    const monthlyOrder = await insertOrder(client, { offerId, email: "paid-monthly@test.invalid", totalCents: 1000, memberId: monthly });
-    await client.query(`UPDATE orders SET pricing_option_id = $2 WHERE id = $1`, [monthlyOrder, option.rows[0].id]);
-    await access.grantOfferAccess({ memberId: monthly, offerId, orderId: monthlyOrder });
+    it("leaves a plan out of the term on an offer marked open-ended, as the Lounge is", async () => {
+      const p = await insertCourseProduct(client, "term-lounge");
+      const offerId = await insertOffer(client, "offer-term-lounge", [p.productId], { accessExpiresAfterDays: 365 });
+      await client.query(`UPDATE offers SET plan_access_open_ended = true WHERE id = $1`, [offerId]);
+      const annual = await buyer("lounge-annual", offerId, null);
+      const monthly = await buyer("lounge-monthly", offerId, await option(offerId, "payment_plan"));
+      expect(await expiryOf(annual.memberId, p.productId)).not.toBeNull();
+      expect(await expiryOf(monthly.memberId, p.productId)).toBeNull();
+    });
 
-    const expiryOf = async (memberId: number) =>
-      (await client.query(`SELECT expires_at FROM access_grants WHERE member_id = $1 AND product_id = $2`, [memberId, p.productId])).rows[0].expires_at;
-    expect(await expiryOf(annual)).not.toBeNull();
-    expect(await expiryOf(monthly)).toBeNull();
+    it("never gives an end date to somebody who already holds the product without one", async () => {
+      const p = await insertCourseProduct(client, "term-lifetime");
+      const lifetime = await insertOffer(client, "offer-term-lifetime", [p.productId]);
+      const offerId = await insertOffer(client, "offer-term-new", [p.productId], { accessExpiresAfterDays: 183 });
+      const memberId = await insertMember(client, "already-lifetime@test.invalid");
+      await access.grantOfferAccess({ memberId, offerId: lifetime });
+      const orderId = await insertOrder(client, { offerId, email: "already-lifetime@test.invalid", totalCents: 1000, memberId });
+      await access.grantOfferAccess({ memberId, offerId, orderId });
+      expect(await expiryOf(memberId, p.productId)).toBeNull();
+    });
+
+    it("ends a plan's access at its term, and the sweep marks it without undoing anything", async () => {
+      const p = await insertCourseProduct(client, "term-ended");
+      const offerId = await insertOffer(client, "offer-term-ended", [p.productId], { accessExpiresAfterDays: 183 });
+      const { memberId } = await buyer("term-ended", offerId, await option(offerId, "payment_plan"));
+      expect(await access.hasProductAccess(memberId, p.productId)).toBe(true);
+      await client.query(`UPDATE access_grants SET expires_at = now() - interval '1 minute' WHERE member_id = $1 AND product_id = $2`, [memberId, p.productId]);
+      expect(await access.hasProductAccess(memberId, p.productId)).toBe(false);
+      expect(await access.sweepExpiredGrants()).toBeGreaterThanOrEqual(1);
+      const row = await client.query(`SELECT status FROM access_grants WHERE member_id = $1 AND product_id = $2`, [memberId, p.productId]);
+      expect(row.rows[0].status).toBe("expired");
+    });
   });
 
   it("restores access when a revoked product is bought again", async () => {

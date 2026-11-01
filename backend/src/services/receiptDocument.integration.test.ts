@@ -162,6 +162,23 @@ describeDb("receipts for one-off orders (integration)", () => {
     expect(String(rows.rows[0].number)).toMatch(/^R-\d{4}-\d{5}$/);
   });
 
+  it("prints an offer's own refund policy in full, and the site's for every other offer", async () => {
+    const policy =
+      "All Credential For You purchases are final and non-refundable. Because credentialing services involve administrative preparation, review, onboarding, and reserved service capacity, refunds are not provided after purchase.";
+    const memberId = await insertMember(client, "receipt-policy@test.invalid");
+    const ownPolicy = await insertOffer("receipt-own-policy", 22500);
+    await client.query(`UPDATE offers SET receipt_refund_policy = $2 WHERE id = $1`, [ownPolicy, policy]);
+    const sitePolicy = await insertOffer("receipt-site-policy", 22500);
+    const orderFor = (offerId: number) =>
+      insertOrder({ offerId, memberId, email: "receipt-policy@test.invalid", subtotalCents: 22500, discountCents: 0 });
+
+    const own = await receipts.loadReceiptDocument({ orderId: await orderFor(ownPolicy) }, { admin: true });
+    const site = await receipts.loadReceiptDocument({ orderId: await orderFor(sitePolicy) }, { admin: true });
+
+    expect(own?.view.refundPolicy).toBe(policy);
+    expect(site?.view.refundPolicy).toBe("Refunds within 14 days, no questions asked.");
+  });
+
   it("issues one for an order a coupon took to $0.00, and gets the figures right", async () => {
     // The order on file: $19.00 less MADHAVFREE, total $0.00, status paid.
     const memberId = await insertMember(client, "receipt-free@test.invalid");

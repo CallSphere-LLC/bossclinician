@@ -453,7 +453,7 @@ function toSessionJson(
   row: SessionRow,
   policy: CoachingPolicy,
   now: Date,
-  options: { timezone?: string; files?: SessionFileJson[] } = {}
+  options: { timezone?: string; files?: SessionFileJson[]; accessEnded?: boolean } = {}
 ): SessionJson {
   const zone = options.timezone ?? sessionTimezone(row, policy.timezone);
   const startsAt = row.scheduled_at;
@@ -483,10 +483,10 @@ function toSessionJson(
     ...labels,
     agenda: row.agenda,
     sharedNotes: row.shared_notes,
-    recordingUrl: row.recording_url,
+    recordingUrl: options.accessEnded ? "" : row.recording_url,
     // A cancelled session's room is not a room any more, and a stale link in a
     // member's history is a way to walk into somebody else's appointment.
-    meetingUrl: row.status === "cancelled" ? "" : row.meeting_url,
+    meetingUrl: row.status === "cancelled" || options.accessEnded ? "" : row.meeting_url,
     changeDeadline: deadline?.toISOString() ?? null,
     canReschedule: changeable && outsideWindow,
     canCancel: changeable,
@@ -495,6 +495,34 @@ function toSessionJson(
     icsUrl: `/api/member/coaching/sessions/${row.id}/ics`,
     files: options.files ?? [],
   };
+}
+
+/**
+ * The coaching packages whose access ran out on its end date, with nothing live
+ * still covering them. A session row outlives its term, so its room link and its
+ * recording stop here. Asked about the end date only: somebody who holds a session
+ * with no end date behind it (an import, a call the admin arranged) keeps it.
+ */
+async function lapsedCoachingOfferIds(memberId: number): Promise<Set<number>> {
+  const res = await pool.query<{ coaching_offer_id: number }>(
+    `SELECT DISTINCT p.coaching_offer_id
+       FROM access_grants g
+       JOIN products p ON p.id = g.product_id
+      WHERE g.member_id = $1
+        AND p.coaching_offer_id IS NOT NULL
+        AND g.status IN ('active', 'expired')
+        AND g.expires_at IS NOT NULL AND g.expires_at <= now()
+        AND NOT EXISTS (
+              SELECT 1 FROM access_grants live
+                JOIN products lp ON lp.id = live.product_id
+               WHERE live.member_id = g.member_id
+                 AND lp.coaching_offer_id = p.coaching_offer_id
+                 AND live.status = 'active'
+                 AND (live.expires_at IS NULL OR live.expires_at > now())
+            )`,
+    [memberId]
+  );
+  return new Set(res.rows.map((row) => row.coaching_offer_id));
 }
 
 /**
@@ -884,18 +912,22 @@ memberCoachingRouter.get(
     const policy = await loadCoachingPolicy();
     const zone = readTimezone(req.query.timezone, policy.timezone);
 
-    const [credits, sessions, programs] = await Promise.all([
+    const [credits, sessions, programs, lapsed] = await Promise.all([
       pool.query<CreditRow>(`${CREDIT_SELECT} WHERE c.member_id = $1 ORDER BY c.id`, [member.id]),
       pool.query<SessionRow>(`${SESSION_SELECT} WHERE s.member_id = $1 ORDER BY s.scheduled_at`, [
         member.id,
       ]),
       loadProgramMaterials(member.id),
+      lapsedCoachingOfferIds(member.id),
     ]);
 
     const upcoming: SessionJson[] = [];
     const past: SessionJson[] = [];
     for (const row of sessions.rows) {
-      const json = toSessionJson(row, policy, now, { timezone: zone });
+      const json = toSessionJson(row, policy, now, {
+        timezone: zone,
+        accessEnded: row.offer_id !== null && lapsed.has(row.offer_id),
+      });
       const isAhead =
         row.status === "scheduled" &&
         row.scheduled_at !== null &&
@@ -1213,9 +1245,10 @@ memberCoachingRouter.get(
 
     const policy = await loadCoachingPolicy();
     const zone = readTimezone(req.query.timezone, sessionTimezone(row, policy.timezone));
-    const files = await loadSessionFiles(member.id, row.id);
+    const accessEnded = row.offer_id !== null && (await lapsedCoachingOfferIds(member.id)).has(row.offer_id);
+    const files = accessEnded ? [] : await loadSessionFiles(member.id, row.id);
 
-    res.json({ session: toSessionJson(row, policy, new Date(), { timezone: zone, files }) });
+    res.json({ session: toSessionJson(row, policy, new Date(), { timezone: zone, files, accessEnded }) });
   })
 );
 

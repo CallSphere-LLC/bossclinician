@@ -8,7 +8,7 @@ import CredentialingNextSteps from "./CredentialingNextSteps";
 import CredentialingRequest from "./CredentialingRequest";
 import { credentialingPublicRoutes } from "./routes";
 import { PUBLIC_ROUTES } from "@/App";
-import { credentialForYou, credentialingIntake, credentialingNextSteps, START_DATE_LINES } from "@/content/credentialForYou";
+import { credentialForYou, credentialingIntake, credentialingNextSteps, NO_GUARANTEE_DISCLAIMER, NO_REFUND_POLICY, START_DATE_LINES } from "@/content/credentialForYou";
 import { avatarSections } from "@/content/resourceHub";
 import { footer, isNavMenu, nav, workWithMeMenu } from "@/content/site";
 import { SsrProvider } from "@/ssr/context";
@@ -34,15 +34,39 @@ describe("/credential-for-you", () => {
     expect(head.at(-1)?.title).toBe("Credentialing Support for Mental Health Providers | Boss Clinician");
   });
 
-  it("sends every service to the request form while the paid offers are drafts", () => {
-    for (const slug of ["commercial", "medicare", "package"]) {
-      expect(html).not.toContain(`href="/checkout/credential-for-you-${slug}"`);
+  it("sends the three paid services to checkout with her labels, and the rest to the request form", () => {
+    for (const [slug, label] of [
+      ["commercial", "Start Commercial Credentialing"],
+      ["medicare", "Start Medicare Credentialing"],
+      ["package", "Start My Credentialing Package"],
+    ]) {
+      expect(html).toContain(`href="/checkout/credential-for-you-${slug}"`);
+      expect(html).toContain(label);
     }
     expect(html).not.toContain("credential-for-you-caqh");
     expect(html).not.toContain("credential-for-you-recredentialing");
     const requests = html.match(/href="\/credentialing-request\?service=/g) ?? [];
-    expect(requests).toHaveLength(11);
+    expect(requests).toHaveLength(8);
+    expect(html).toContain("/credentialing-request?service=Medicaid");
     expect(html).not.toContain("Buy Now");
+  });
+
+  it("states the package as a fixed price with her exact scope", () => {
+    expect(html).not.toContain("Starting at $1,997");
+    expect(html).toContain("$1,997");
+    expect(html).toContain("This package includes up to 6 commercial payer applications for one provider.");
+    expect(html).toContain(
+      "Medicare, Medicaid, TRICARE/federal plans, group enrollment, additional providers, and other enrollment needs outside of this scope are not included and may require a separate service or quote."
+    );
+    for (const item of ["Routine payer follow-up", "Credentialing tracking", "Final credentialing status summary"]) {
+      expect(html).toContain(item);
+    }
+  });
+
+  it("states her refund policy and disclaimer, promises no refund window, and asks for no banking details", () => {
+    expect(html).toContain(NO_REFUND_POLICY);
+    expect(html).toContain(NO_GUARANTEE_DISCLAIMER);
+    expect(html).not.toMatch(/14[- ]day|within 14|Banking/i);
   });
 
   it("carries the start-date language and the anchor the checkout box links to", () => {
@@ -61,7 +85,14 @@ describe("the page after purchase", () => {
 
   it("has her copy, the intake button, and is noindex", () => {
     expect(head.at(-1)?.noindex).toBe(true);
-    expect(html).toContain(escaped(credentialingNextSteps.title));
+    expect(html).toContain("What Happens Next");
+    expect(html).toContain("After completing your intake, a member of our credentialing team will review your information.");
+    expect(html).toContain(
+      "Allondra from Boss Clinician will contact you at the email address provided during checkout with your service agreement and instructions for submitting the additional information and documentation needed for your credentialing application."
+    );
+    expect(html).toContain("Please watch for an email from:");
+    expect(html).toContain('href="mailto:allondra@bossclinician.com"');
+    expect(html).toContain("Your credentialing timeline begins once your intake is complete, your service agreement is completed, and all required documents and information have been received.");
     expect(html).toContain('href="/credentialing-intake"');
     expect(html).toContain(credentialingNextSteps.cta);
   });

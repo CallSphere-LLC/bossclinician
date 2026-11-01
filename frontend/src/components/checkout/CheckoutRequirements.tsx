@@ -214,6 +214,7 @@ function EnrollmentRecord({ terms }: { terms: EnrollmentTermsView }) {
       <RecordRow label="Further payment terms" value={terms.obligationsNote} />
       <RecordRow label="Included benefits" value={terms.includedBenefits} />
       <RecordRow label="Refund terms" value={terms.refundTerms} />
+      <RecordRow label="Refund deadline" value={terms.refundDeadlineRule ?? ""} />
     </dl>
   );
 }

@@ -344,7 +344,20 @@ adminAutomationsV2Router.get(
     // each automation has ("Then"), and the things those steps point at.
     const typesOf = new Map<number, string[]>();
     const refsOf = new Map<number, string[]>();
+    // For a sequence's "Triggered by" panel. actionRefs cannot answer that: it also
+    // holds the sequences an automation takes people off.
+    const subscribesTo = new Map<number, number[]>();
     for (const action of actions.rows) {
+      if (action.action_type === "subscribe_sequence") {
+        const sequenceId = Number(action.config?.sequenceId);
+        if (Number.isInteger(sequenceId) && sequenceId > 0) {
+          subscribesTo.set(action.automation_id, [
+            ...(subscribesTo.get(action.automation_id) ?? []),
+            sequenceId,
+          ]);
+        }
+      }
+
       const list = byAutomation.get(action.automation_id) ?? [];
       list.push(actionSentence(lookup, action.action_type, action.config ?? {}, action.delay_minutes));
       byAutomation.set(action.automation_id, list);
@@ -373,6 +386,7 @@ adminAutomationsV2Router.get(
         actionSentences: byAutomation.get(row.id) ?? [],
         actionTypes: typesOf.get(row.id) ?? [],
         actionRefs: refsOf.get(row.id) ?? [],
+        subscribesTo: subscribesTo.get(row.id) ?? [],
         // The list is where she decides which automation to trust, so an
         // unfinished one has to say so here rather than only once she opens it.
         needsAttention:

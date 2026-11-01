@@ -1060,7 +1060,8 @@ adminOffersRouter.post(
             custom_fields, terms_url, require_terms, redirect_url, thank_you_page_id,
             access_expires_after_days, send_welcome_email, welcome_next_steps, allow_gifting,
             internal_title, notify_owner_on_sale, notify_owner_recipients, recovery_enabled,
-            recovery_mode, recovery_overrides, deposit_cents, show_in_cart)
+            recovery_mode, recovery_overrides, deposit_cents, show_in_cart,
+            receipt_refund_policy, plan_access_open_ended)
          SELECT left(s.title || ' (copy)', 300), $2, 'draft', s.description, s.checkout_headline,
                 s.thumbnail_url, s.currency, s.pricing_type, s.amount_cents, s.min_amount_cents,
                 s.interval, s.interval_count, s.installment_count, s.trial_days, s.collect_tax,
@@ -1070,7 +1071,8 @@ adminOffersRouter.post(
                 CASE WHEN s.internal_title = '' THEN ''
                      ELSE left(s.internal_title || ' (copy)', 150) END,
                 s.notify_owner_on_sale, s.notify_owner_recipients, s.recovery_enabled,
-                s.recovery_mode, s.recovery_overrides, s.deposit_cents, s.show_in_cart
+                s.recovery_mode, s.recovery_overrides, s.deposit_cents, s.show_in_cart,
+                s.receipt_refund_policy, s.plan_access_open_ended
            FROM offers s WHERE s.id = $1
          RETURNING ${OFFER_COLUMNS}`,
         [id, slug],

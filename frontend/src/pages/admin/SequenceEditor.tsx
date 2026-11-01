@@ -13,6 +13,7 @@ import {
   Send,
   Trash2,
   UserMinus,
+  Workflow,
 } from "lucide-react";
 import { toast } from "sonner";
 import { adminApi } from "@/lib/api";
@@ -23,6 +24,7 @@ import {
   minutesToTimeInput,
   splitWait,
   timeInputToMinutes,
+  type AutomationSummary,
   type NamedOption,
   type Sequence,
   type SequenceEmail,
@@ -132,6 +134,16 @@ export function describeWhereTheyAre(
   return row.status === "paused" ? `${where} (paused)` : where;
 }
 
+/** "When someone buys The Club", for the "Triggered by" panel. */
+export function describeTrigger(
+  automation: Pick<AutomationSummary, "triggerType" | "triggerSentence">,
+): string {
+  const offer = automation.triggerSentence.split(" — ").slice(1).join(" — ");
+  return automation.triggerType === "offer_purchased" && offer
+    ? `When someone buys ${offer}`
+    : automation.triggerSentence;
+}
+
 export default function SequenceEditor() {
   const params = useParams<{ id: string }>();
   const sequenceId = Number(params.id);
@@ -158,6 +170,19 @@ export default function SequenceEditor() {
   const [testAddressError, setTestAddressError] = useState<string | null>(null);
   const [sendingTest, setSendingTest] = useState(false);
   const [confirm, confirmDialog] = useConfirm();
+  /** The automations that start this sequence. null until they have loaded. */
+  const [triggers, setTriggers] = useState<AutomationSummary[] | null>(null);
+  const [triggersError, setTriggersError] = useState(false);
+
+  useEffect(() => {
+    if (!Number.isFinite(sequenceId)) return;
+    marketingApi
+      .automations()
+      .then((rows) =>
+        setTriggers(rows.filter((row) => (row.subscribesTo ?? []).includes(sequenceId))),
+      )
+      .catch(() => setTriggersError(true));
+  }, [sequenceId]);
 
   const load = useCallback(() => {
     if (!Number.isFinite(sequenceId)) return;
@@ -442,6 +467,54 @@ export default function SequenceEditor() {
           </p>
         </Card>
       )}
+
+      {/* -------------------------------------------------------- triggered by */}
+
+      <Card>
+        <CardHeader
+          title="Triggered by"
+          subtitle="What puts someone on this sequence. Each one is an automation, and only a running one adds people."
+          icon={<Workflow />}
+          action={
+            <Button asChild size="sm" variant="secondary">
+              <Link to={`/admin/marketing/automations-v2?addToSequence=${sequence.id}`}>
+                <Plus />
+                Add a trigger
+              </Link>
+            </Button>
+          }
+        />
+        {triggersError ? (
+          <p className="px-5 pb-5 text-sm text-ink-soft">
+            We couldn't load the triggers just now.
+          </p>
+        ) : triggers === null ? (
+          <Skeleton className="mx-5 mb-5 h-12 rounded-xl" />
+        ) : triggers.length === 0 ? (
+          <p className="px-5 pb-5 text-sm text-ink-soft">
+            Nothing starts this sequence yet, so nobody joins it on their own.
+          </p>
+        ) : (
+          <ul className="divide-y divide-hairline/60">
+            {triggers.map((automation) => (
+              <li
+                key={automation.id}
+                className="flex flex-wrap items-center justify-between gap-3 px-5 py-3"
+              >
+                <Link
+                  to={`/admin/marketing/automations-v2?automation=${automation.id}`}
+                  className="min-w-0 text-sm text-ink [overflow-wrap:anywhere] hover:text-gold"
+                >
+                  {describeTrigger(automation)}
+                </Link>
+                <Badge tone={automation.status === "active" ? "green" : "slate"}>
+                  {automation.status === "active" ? "Running" : "Paused"}
+                </Badge>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Card>
 
       {/* ------------------------------------------------------------ emails */}
 

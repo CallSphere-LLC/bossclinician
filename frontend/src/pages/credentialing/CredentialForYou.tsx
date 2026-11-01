@@ -120,7 +120,11 @@ export default function CredentialForYou() {
           <p className={cn(PRICE, "mt-4")}>{copy.package.price}</p>
           <p className="copy-luxe mt-4 text-pretty">{copy.package.body}</p>
           <CheckList items={copy.package.items} className="mt-6 sm:grid-cols-2 sm:gap-x-8" />
-          <p className="copy-luxe mt-6 text-pretty">{copy.package.note}</p>
+          <div className="copy-luxe mt-6 space-y-3 text-pretty">
+            {copy.package.scope.map((line) => (
+              <p key={line}>{line}</p>
+            ))}
+          </div>
           <LuxeButton variant="foil" size="lg" to={copy.package.cta.to} className="mt-7 w-full sm:w-auto">
             {copy.package.cta.label}
           </LuxeButton>
@@ -180,6 +184,8 @@ export default function CredentialForYou() {
           <p>{copy.disclaimer.lead}</p>
           <BulletList items={copy.disclaimer.items} />
           <p>{copy.disclaimer.closing}</p>
+          <p>{copy.disclaimer.guarantee}</p>
+          <p>{copy.disclaimer.refund}</p>
         </div>
       </Section>
 

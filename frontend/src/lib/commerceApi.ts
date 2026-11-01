@@ -204,6 +204,7 @@ export interface EnrollmentTermsView {
   programTerm: string;
   includedBenefits: string;
   refundTerms: string;
+  refundDeadlineRule?: string;
   obligationsNote: string;
 }
 

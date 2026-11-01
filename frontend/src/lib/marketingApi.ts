@@ -189,6 +189,8 @@ export interface AutomationSummary {
   actionCount: number;
   triggerSentence: string;
   actionSentences: string[];
+  /** Sequences its steps put people on. */
+  subscribesTo?: number[];
 }
 
 export interface Automation extends Omit<AutomationSummary, "actionSentences" | "actionCount"> {

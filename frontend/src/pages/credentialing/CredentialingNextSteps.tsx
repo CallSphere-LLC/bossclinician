@@ -2,7 +2,7 @@ import { Seo } from "@/components/Seo";
 import { GlassCard } from "@/components/luxe/GlassCard";
 import { LuxeButton } from "@/components/luxe/LuxeButton";
 import { Section, SectionTitle } from "@/components/luxe/Section";
-import { credentialingNextSteps as copy, INTAKE_PATH, START_DATE_LINES } from "@/content/credentialForYou";
+import { credentialingNextSteps as copy, INTAKE_PATH } from "@/content/credentialForYou";
 
 /**
  * /credentialing-next-steps — where every credentialing offer lands after
@@ -20,16 +20,15 @@ export default function CredentialingNextSteps() {
             {copy.paragraphs.map((paragraph) => (
               <p key={paragraph}>{paragraph}</p>
             ))}
+            <p>
+              {copy.watchFor}{" "}
+              <a className="text-gold underline underline-offset-4" href={`mailto:${copy.watchForEmail}`}>{copy.watchForEmail}</a>
+            </p>
             <p className="font-semibold text-white">Important: {copy.important}</p>
           </div>
           <LuxeButton variant="foil" size="lg" to={INTAKE_PATH} className="mt-8 w-full sm:w-auto">
             {copy.cta}
           </LuxeButton>
-          <div className="mt-6 space-y-1 text-pretty text-sm leading-relaxed text-orchid">
-            {START_DATE_LINES.map((line) => (
-              <p key={line}>{line}</p>
-            ))}
-          </div>
         </GlassCard>
       </Section>
     </>
