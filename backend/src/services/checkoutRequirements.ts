@@ -40,6 +40,8 @@ export interface CheckoutAcknowledgment {
   linkLabel: string;
   linkUrl: string;
   active: boolean;
+  /** A pricing type this box is for. Absent: every option. */
+  appliesTo?: string;
 }
 
 export interface RequirementSettings {
@@ -93,6 +95,7 @@ export function parseAcknowledgments(raw: unknown): CheckoutAcknowledgment[] {
       linkLabel: typeof source.linkLabel === "string" ? source.linkLabel : "",
       linkUrl: typeof source.linkUrl === "string" ? source.linkUrl : "",
       active: source.active === true,
+      ...(typeof source.appliesTo === "string" && source.appliesTo ? { appliesTo: source.appliesTo } : {}),
     });
   }
   return out;
@@ -277,7 +280,7 @@ export function enrollmentTermsFor(offer: OfferRow, settings: RequirementSetting
     minimumTerm = {
       programTerm: `${months}-month minimum commitment, then month-to-month until you cancel.`,
       obligationsNote:
-        "After the guarantee window, leaving early does not ordinarily waive unpaid minimum-term installments, subject to applicable law. To cancel, email support@bossclinician.com or use Account > Billing. Cancelling stops renewals after your minimum term and does not refund charges already processed.",
+        "After the guarantee window, leaving early does not ordinarily waive unpaid minimum-term installments, subject to applicable law. To request cancellation, email support@bossclinician.com before your next billing date, or use Account > Billing. Monthly cancellations take effect after your initial commitment, or at the end of your current billing period once that commitment is completed. Cancelling does not refund charges already processed.",
     };
   } else if (offer.pricing_type === "subscription") {
     total = null;
@@ -378,7 +381,7 @@ export async function publicCheckoutRequirements(
     if (!requirementsAreOn(requirements)) return null;
     return {
       invitationRequired: requirements.settings.invitationRequired,
-      acknowledgments: activeAcknowledgments(requirements).map(({ key, version, text, linkLabel, linkUrl }) => ({ key, version, text, linkLabel, linkUrl })),
+      acknowledgments: activeAcknowledgments(requirements).map(({ key, version, text, linkLabel, linkUrl, appliesTo }) => ({ appliesTo, key, version, text, linkLabel, linkUrl })),
       agreements: requirements.contracts.map((contract) => ({ contractId: contract.id, title: contract.title, pdfSha256: contract.pdfSha256 })),
       enrollment:
         requirements.contracts.length > 0 || requirements.settings.refundTerms !== "" || requirements.settings.programTerm !== ""
@@ -498,6 +501,7 @@ export async function enforceCheckoutRequirements(input: {
 
   const acknowledgments: Array<Record<string, unknown>> = [];
   for (const item of activeAcknowledgments(requirements)) {
+    if (item.appliesTo && item.appliesTo !== input.offer.pricing_type) continue;
     const ticked = input.acknowledgments?.find((entry) => entry.key === item.key);
     if (!ticked) throw badRequest("Please tick each required box to continue.");
     if (ticked.version !== item.version) throw badRequest("The wording of a required box has just changed. Refresh this page, read it again and tick it to continue.");

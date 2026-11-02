@@ -95,11 +95,17 @@ function draftIsComplete(draft: AgreementDraft): boolean {
 export function useCheckoutRequirements(input: {
   offer: PublicOffer;
   pricingOptionId: number | null;
+  /** The chosen option's kind: a box can be written for one kind of payment only. */
+  pricingType?: string;
   preview: boolean;
 }): CheckoutRequirementsState {
-  const { offer, pricingOptionId, preview } = input;
+  const { offer, pricingOptionId, pricingType, preview } = input;
   // A cart refuses these offers on the server, so its form has nothing to ask.
-  const requirements = offer.cartItems ? null : offer.checkoutRequirements ?? null;
+  const offered = offer.cartItems ? null : offer.checkoutRequirements ?? null;
+  const requirements = offered && {
+    ...offered,
+    acknowledgments: offered.acknowledgments.filter((item) => !item.appliesTo || item.appliesTo === pricingType),
+  };
 
   const [ticks, setTicks] = useState<Record<string, boolean>>({});
   const [drafts, setDrafts] = useState<Record<number, AgreementDraft>>({});

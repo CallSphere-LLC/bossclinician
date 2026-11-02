@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { motion } from "motion/react";
 import { Link } from "react-router";
 import { Seo } from "@/components/Seo";
@@ -16,7 +17,7 @@ import { LuxeButton, LuxePill } from "@/components/luxe/LuxeButton";
 import { LuxePageHero } from "@/components/luxe/LuxePageHero";
 import { GoldRule, Section, SectionTitle } from "@/components/luxe/Section";
 import { RevealGroup, RevealItem } from "@/components/ui/Reveal";
-import { LOUNGE_MEMBER_ROUTE, LOUNGE_VIP_ROUTE, lounge } from "@/content/lounge";
+import { LOUNGE_MEMBER_ROUTE, LOUNGE_VIP_ROUTE, lounge, loungeMembershipV2Enabled } from "@/content/lounge";
 import { useEntranceMotion } from "@/hooks/useEntranceMotion";
 import { cn } from "@/lib/cn";
 import { ORGANIZATION_ID, absoluteUrl, faqPageNode } from "@/seo/schema";
@@ -137,18 +138,25 @@ const TIER_ROUTE: Record<string, string> = {
 function productNode(origin: string): JsonLdNode {
   const offers: JsonLdNode[] = [];
   for (const tier of lounge.pricing.tiers) {
-    const match = /\$([\d,]+)/.exec(tier.price);
-    if (!match) continue;
-    offers.push({
+    if (!loungeMembershipV2Enabled) {
+      const match = /\$([\d,]+)/.exec(tier.price);
+      if (match) offers.push({ "@type": "Offer", name: tier.name.replace(/^★\s*/, ""), description: tier.terms, price: match[1].replace(/,/g, ""), priceCurrency: "USD", url: absoluteUrl(origin, "/lounge"), availability: "https://schema.org/LimitedAvailability", seller: { "@id": `${origin}/${ORGANIZATION_ID}` } });
+      continue;
+    }
+    for (const mode of ["monthly", "annual"] as const) {
+      const match = /\$([\d,]+)/.exec(mode === "monthly" ? tier.monthlyPrice : tier.annualPrice);
+      if (!match) continue;
+      offers.push({
       "@type": "Offer",
-      name: tier.name.replace(/^★\s*/, ""),
-      description: tier.terms,
+      name: `${tier.name} — ${mode === "monthly" ? "Monthly" : "Annual"} Membership`,
+      description: mode === "monthly" ? tier.monthlyTerms : `${tier.annualTerms} ${lounge.pricing.annualRenewal}`,
       price: match[1].replace(/,/g, ""),
       priceCurrency: "USD",
-      url: absoluteUrl(origin, "/lounge"),
+      url: absoluteUrl(origin, `${TIER_ROUTE[tier.id]}?membership=${mode}`),
       availability: "https://schema.org/LimitedAvailability",
       seller: { "@id": `${origin}/${ORGANIZATION_ID}` },
-    });
+      });
+    }
   }
 
   return {
@@ -584,6 +592,157 @@ function FitSection() {
 /* ── 11 · Two tiers ───────────────────────────────────────────────────── */
 
 function PricingSection() {
+  return loungeMembershipV2Enabled ? <MembershipPricingSection /> : <LegacyPricingSection />;
+}
+
+function MembershipPricingSection() {
+  const [plans, setPlans] = useState<Record<string, "monthly" | "annual">>({ member: "monthly", vip: "monthly" });
+  return (
+    <Section
+      id="join"
+      surface="raised"
+      space="lg"
+      aurora="mixed"
+      auroraIntensity={0.55}
+      aria-label={lounge.pricing.title}
+      className="scroll-mt-24"
+    >
+      <SectionTitle title={lounge.pricing.title} body={lounge.pricing.intro} />
+
+      <RevealGroup
+        as="ul"
+        className="mx-auto mt-12 grid max-w-5xl list-none grid-cols-1 items-stretch gap-6 lg:grid-cols-2"
+      >
+        {lounge.pricing.tiers.map((tier) => {
+          const vip = tier.id === "vip";
+          const plan = plans[tier.id];
+
+          return (
+            <RevealItem key={tier.id} as="li" className="h-full">
+              <GlassCard as="article" accent={vip ? "gold" : "plum"} className="flex h-full flex-col p-7 sm:p-9">
+                <h3 className="text-[0.74rem] font-bold uppercase tracking-[0.22em] text-gold">
+                  {tier.name}
+                </h3>
+                {tier.tagline && (
+                  <p className="mt-4 text-pretty font-display text-[1.1rem] italic leading-[1.4] text-white">
+                    {tier.tagline}
+                  </p>
+                )}
+
+                <fieldset className="mt-6">
+                  <legend className="text-sm font-semibold text-white">Choose your {tier.name} payment option</legend>
+                  <div className="mt-3 space-y-3">
+                    {(["monthly", "annual"] as const).map((mode) => (
+                      <label key={mode} className={cn("flex cursor-pointer items-start gap-3 rounded-xl border p-4 text-sm leading-relaxed", plan === mode ? "border-gold bg-gold/10" : "border-white/20")}>
+                        <input type="radio" name={`${tier.id}-membership`} checked={plan === mode} onChange={() => setPlans((current) => ({ ...current, [tier.id]: mode }))} className="mt-1 size-4 shrink-0 accent-[#c9a46a] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold" />
+                        <span className="min-w-0">
+                          <span className="block font-semibold text-white">{mode === "monthly" ? `Monthly Membership: ${tier.monthlyPrice}` : `Annual Membership: ${tier.annualPrice}`}</span>
+                          <span className="mt-2 block text-orchid">{mode === "monthly" ? tier.monthlyTerms : tier.annualTerms}</span>
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </fieldset>
+                <p className="mt-3">
+                  <LuxePill accent={vip ? "gold" : "plum"} className="h-auto whitespace-normal text-left leading-[1.6]">
+                    {tier.scarcity}
+                  </LuxePill>
+                </p>
+
+                <div aria-hidden className="rule-faint mt-7 w-full" />
+                <h4 className="mt-7 text-base font-semibold text-white">{vip ? "Your VIP membership includes everything in Lounge Member, plus:" : "Your membership includes:"}</h4>
+                <MarkedList items={tier.features} variant="check" className="mt-7 flex-1" />
+
+                <LuxeButton
+                  variant={vip ? "foil" : "glass"}
+                  size="lg"
+                  to={`${TIER_ROUTE[tier.id] ?? LOUNGE_MEMBER_ROUTE}?membership=${plan}`}
+                  className="mt-9 min-h-[48px] w-full tracking-[0.16em]"
+                >
+                  {tier.cta}
+                </LuxeButton>
+              </GlassCard>
+            </RevealItem>
+          );
+        })}
+      </RevealGroup>
+
+      <p className="copy-luxe mx-auto mt-10 max-w-2xl text-pretty text-center text-sm">
+        {lounge.pricing.commitment}
+      </p>
+      <p className="copy-luxe mx-auto mt-4 max-w-2xl text-pretty text-center text-sm">{lounge.pricing.foundingRate}</p>
+      <p className="copy-luxe mx-auto mt-4 max-w-2xl text-pretty text-center text-sm">
+        {lounge.pricing.annualRenewal} View the <a href="/terms" className="text-gold underline underline-offset-4">membership billing and 7-day guarantee terms</a>.
+      </p>
+      <div className="mx-auto mt-12 max-w-3xl">
+        <h3 className="font-display text-2xl text-white">Which Membership Is Right for Me?</h3>
+        <div className="copy-luxe mt-5 space-y-4">
+          <p><strong className="text-white">Choose Lounge Member</strong> if you want the curriculum, practical tools, community, and monthly group strategy support to help you implement changes in your practice.</p>
+          <p><strong className="text-white">Choose Lounge VIP</strong> if you want everything in Lounge Member plus private strategy calls, monthly personalized feedback, and a guaranteed quarterly hot seat.</p>
+          <p>Both tiers support implementation. VIP adds more direct attention to your individual practice.</p>
+        </div>
+      </div>
+    </Section>
+  );
+}
+
+/* ── 12 · The close ───────────────────────────────────────────────────── */
+
+function ClosingSection() {
+  const reduce = useEntranceMotion();
+
+  return (
+    <Section
+      surface="deep"
+      space="xl"
+      aurora="violet"
+      auroraIntensity={0.7}
+      aria-label={lounge.closing.title}
+      containerClassName="max-w-3xl text-center"
+    >
+      <motion.div {...rise(reduce)}>
+        <h2 className="text-balance font-display text-[2.1rem] font-medium leading-[1.12] text-white sm:text-[2.8rem] lg:text-[3.3rem]">
+          {lounge.closing.title}
+          <span className="text-foil mt-1.5 block italic">{lounge.closing.titleAccent}</span>
+        </h2>
+        <GoldRule className="mx-auto mt-9" />
+        <Prose paragraphs={lounge.closing.paragraphs} align="center" className="mx-auto mt-9 max-w-2xl" />
+      </motion.div>
+
+      <motion.div
+        {...rise(reduce, 0.1)}
+        className="mt-12 flex flex-col items-stretch justify-center gap-8 sm:flex-row sm:items-start"
+      >
+        <div className="flex flex-1 flex-col items-center">
+          <LuxeButton variant="glass" size="lg" to={LOUNGE_MEMBER_ROUTE} className="w-full tracking-[0.16em] sm:w-auto">
+            {lounge.pricing.tiers[0].cta}
+          </LuxeButton>
+          <p className="copy-luxe mt-4 max-w-xs text-pretty text-xs">{lounge.closing.memberNote}</p>
+        </div>
+        <div className="flex flex-1 flex-col items-center">
+          <LuxeButton variant="foil" size="lg" to={LOUNGE_VIP_ROUTE} className="w-full tracking-[0.16em] sm:w-auto">
+            {lounge.pricing.tiers[1].cta}
+          </LuxeButton>
+          <p className="copy-luxe mt-4 max-w-xs text-pretty text-xs">{lounge.closing.vipNote}</p>
+        </div>
+      </motion.div>
+
+      <p className="copy-luxe mx-auto mt-10 max-w-2xl text-pretty text-sm">{lounge.pricing.commitment}</p>
+
+      <p className="mt-10 text-sm text-orchid">
+        {lounge.closing.contact}{" "}
+        <a
+          href={`mailto:${lounge.closing.email}`}
+          className="break-all text-gold underline decoration-gold/35 underline-offset-4 transition-colors duration-300 ease-luxe hover:text-gold-bright"
+        >
+          {lounge.closing.email}
+        </a>
+      </p>
+    </Section>
+  );
+}
+
+function LegacyPricingSection() {
   return (
     <Section
       id="join"
@@ -646,62 +805,6 @@ function PricingSection() {
 
       <p className="copy-luxe mx-auto mt-10 max-w-2xl text-pretty text-center text-sm">
         {lounge.pricing.commitment}
-      </p>
-    </Section>
-  );
-}
-
-/* ── 12 · The close ───────────────────────────────────────────────────── */
-
-function ClosingSection() {
-  const reduce = useEntranceMotion();
-
-  return (
-    <Section
-      surface="deep"
-      space="xl"
-      aurora="violet"
-      auroraIntensity={0.7}
-      aria-label={lounge.closing.title}
-      containerClassName="max-w-3xl text-center"
-    >
-      <motion.div {...rise(reduce)}>
-        <h2 className="text-balance font-display text-[2.1rem] font-medium leading-[1.12] text-white sm:text-[2.8rem] lg:text-[3.3rem]">
-          {lounge.closing.title}
-          <span className="text-foil mt-1.5 block italic">{lounge.closing.titleAccent}</span>
-        </h2>
-        <GoldRule className="mx-auto mt-9" />
-        <Prose paragraphs={lounge.closing.paragraphs} align="center" className="mx-auto mt-9 max-w-2xl" />
-      </motion.div>
-
-      <motion.div
-        {...rise(reduce, 0.1)}
-        className="mt-12 flex flex-col items-stretch justify-center gap-8 sm:flex-row sm:items-start"
-      >
-        <div className="flex flex-1 flex-col items-center">
-          <LuxeButton variant="glass" size="lg" to={LOUNGE_MEMBER_ROUTE} className="w-full tracking-[0.16em] sm:w-auto">
-            {lounge.pricing.tiers[0].cta}
-          </LuxeButton>
-          <p className="copy-luxe mt-4 max-w-xs text-pretty text-xs">{lounge.closing.memberNote}</p>
-        </div>
-        <div className="flex flex-1 flex-col items-center">
-          <LuxeButton variant="foil" size="lg" to={LOUNGE_VIP_ROUTE} className="w-full tracking-[0.16em] sm:w-auto">
-            {lounge.pricing.tiers[1].cta}
-          </LuxeButton>
-          <p className="copy-luxe mt-4 max-w-xs text-pretty text-xs">{lounge.closing.vipNote}</p>
-        </div>
-      </motion.div>
-
-      <p className="copy-luxe mx-auto mt-10 max-w-2xl text-pretty text-sm">{lounge.pricing.commitment}</p>
-
-      <p className="mt-10 text-sm text-orchid">
-        {lounge.closing.contact}{" "}
-        <a
-          href={`mailto:${lounge.closing.email}`}
-          className="break-all text-gold underline decoration-gold/35 underline-offset-4 transition-colors duration-300 ease-luxe hover:text-gold-bright"
-        >
-          {lounge.closing.email}
-        </a>
       </p>
     </Section>
   );

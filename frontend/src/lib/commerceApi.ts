@@ -188,6 +188,7 @@ export interface PublicOffer {
 }
 
 export interface CheckoutAcknowledgmentView {
+  appliesTo?: string;
   key: string;
   version: number;
   text: string;

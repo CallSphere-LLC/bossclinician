@@ -42,6 +42,7 @@ import { api } from "@/lib/api";
 import { checkoutButtonStyle } from "@/components/checkout/checkoutStyle";
 import { CheckoutMarkdown } from "@/components/checkout/CheckoutMarkdown";
 import { checkoutPlainText } from "@/components/checkout/checkoutMarkdown";
+import { loungeButtonLabel } from "@/content/loungeRelease";
 import { CheckoutRequirementsPanel, InvitationRequiredNotice, useCheckoutRequirements, usesInvitationGate } from "@/components/checkout/CheckoutRequirements";
 import { isCredentialForYouOffer, NO_GUARANTEE_DISCLAIMER, NO_REFUND_POLICY } from "@/content/credentialForYou";
 
@@ -215,7 +216,12 @@ function elementsModeFor(offer: PublicOffer): ElementsMode {
  * `Elements`.
  */
 export function CheckoutExperience({ offer }: { offer: PublicOffer }) {
-  const [pricingOptionId, setPricingOptionId] = useState<number | null>(offer.selectedPricingOptionId);
+  const [pricingOptionId, setPricingOptionId] = useState<number | null>(() => {
+    // /lounge sends ?membership=monthly|annual so the buyer lands on what they picked.
+    const wanted = typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("membership");
+    const picked = wanted && offer.pricingOptions?.find((option) => Boolean(option.billing.minimumMonths) === (wanted === "monthly"));
+    return picked ? picked.id : offer.selectedPricingOptionId;
+  });
   const selectedPricing = offer.pricingOptions.find((option) => option.id === pricingOptionId)
     ?? offer.pricingOptions[0];
   const pricedOffer = useMemo(
@@ -379,7 +385,7 @@ function CheckoutForm({ offer, pricingOption, mode, onAmountChange }: CheckoutFo
   const [paymentError, setPaymentError] = useState<string | null>(null);
   const [formNotice, setFormNotice] = useState<string | null>(null);
   const [previewNotice, setPreviewNotice] = useState<string | null>(null);
-  const requirements = useCheckoutRequirements({ offer, pricingOptionId: pricingOption.id, preview: Boolean(preview) });
+  const requirements = useCheckoutRequirements({ offer, pricingType: pricingOption.billing.pricingType, pricingOptionId: pricingOption.id, preview: Boolean(preview) });
   const invitedEmail = requirements.invitedEmail;
   useEffect(() => {
     if (invitedEmail) setEmail(invitedEmail);
@@ -736,7 +742,7 @@ function CheckoutForm({ offer, pricingOption, mode, onAmountChange }: CheckoutFo
       ? "Get instant access"
       : wording.nothingDueToday
         ? "Start my free trial"
-        : `Pay ${quote.formatted.total}`;
+        : (loungeButtonLabel(offer.slug, quote.formatted.total) ?? `Pay ${quote.formatted.total}`);
 
   return (
     <div className="grid grid-cols-1 gap-8 lg:grid-cols-[minmax(0,1fr)_25rem] lg:items-start lg:gap-12">
@@ -912,7 +918,7 @@ function CheckoutForm({ offer, pricingOption, mode, onAmountChange }: CheckoutFo
                 />
               )}
 
-              {checkoutSettings.showCoupons !== false && <CouponField
+              {checkoutSettings.showCoupons !== false && !billing.minimumMonths && <CouponField
                 value={couponCode}
                 onChange={setCouponCode}
                 pending={quoteState.pending}

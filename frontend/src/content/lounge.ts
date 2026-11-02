@@ -1,41 +1,22 @@
-/**
- * The Boss Clinician Lounge — sales page copy.
- *
- * Transcribed from bossclinician.com/lounge (18 September 2026), section by
- * section and in the page's own order. Prices, founding-seat terms, the
- * commitment note and the CEU wording are the published text — nothing here is
- * paraphrased, rounded or invented. The source page's image-only blocks (module
- * mock-ups with no text) have no counterpart here.
- */
+import { lounge as legacyLounge } from "./loungeLegacy";
+import { LOUNGE_BILLING_LIVE } from "./loungeRelease";
 
-/**
- * Where the two "Join" buttons go.
- *
- * On the source they open Kajabi checkouts (/resource_redirect/offers/5RwMdHLj
- * for Member, /resource_redirect/offers/awvKo5oi for VIP). Both offers are
- * published here by migration 103 at Kajabi's checkout prices ($1,997 in full
- * or 6 x $197; VIP $3,497 or 6 x $347), so each button opens our own checkout.
- * Migration 064 already redirects both Kajabi paths to this page.
- */
-/**
- * Flip together with backend/scripts/lounge-billing-activate.sql, in one release:
- * the page must never describe billing the checkout does not do.
- */
-export const LOUNGE_BILLING_LIVE = false;
+export const loungeMembershipV2Enabled = LOUNGE_BILLING_LIVE;
 
+/** Lounge copy updated from Bugs rows 194–196, 26 October 2026. */
 export const LOUNGE_MEMBER_ROUTE = "/checkout/the-lounge";
 export const LOUNGE_VIP_ROUTE = "/checkout/the-lounge-vip";
 
-export const lounge = {
+const replacementLounge = {
   seo: {
     title: "The Lounge | Sustainable Private Practice for Therapists",
     description:
-      "A flexible monthly membership offering ongoing business support, resources, training, and community for clinicians building and growing their practices.",
+      "Ongoing business support, resources, training, and community for established clinicians making their practices more sustainable. Choose monthly or annual membership.",
   },
 
   hero: {
     banner:
-      "Founding Member pricing · Limited seats, then rates rise · Lock in your rate for life",
+      "Founding Member Pricing · Limited Availability · Keep Your Founding Rate While Your Membership Remains Active",
     title: "Your practice is working.",
     titleAccent: "But can you keep working like this?",
     lede: [
@@ -48,7 +29,7 @@ export const lounge = {
   fact: {
     title:
       "FACT: You can have a full caseload and still feel financially stretched, exhausted, and too dependent on your own clinical hours to keep the practice running.",
-    leadIn: "Not because you're not working hard enough....",
+    leadIn: "Not because you're not working hard enough.",
     lead: "Because no one taught you how to run the business underneath the clinical work.",
     paragraphs: [
       "Right now, you've been thinking you need to create an ebook, launch a course, invest in another certification or become a coach in order to have sustainable income in your private practice.",
@@ -113,7 +94,7 @@ export const lounge = {
     items: [
       {
         title: "Monthly Lounge Strategy Sessions with Yvette",
-        body: "Live 90-minute coaching + Q&A calls for personalized support. Work through income decisions, caseload capacity, systems bottlenecks, time-off planning, boundaries, and the business decisions keeping your practice too dependent on you. Hot seats included, replays always posted.",
+        body: "Live 90-minute coaching + Q&A calls for personalized support. Work through income decisions, caseload capacity, systems bottlenecks, time-off planning, boundaries, and the business decisions keeping your practice too dependent on you. Teaching, hot seats, and Q&A are included. Recordings and resources are available in the Replay Vault during active membership.",
       },
       {
         title: "The Practice Elevation Signature Curriculum",
@@ -125,7 +106,7 @@ export const lounge = {
       },
       {
         title: "The Practice Elevation Dashboard",
-        body: "Your practice's numbers, all in one place. Track your income by source, your real effective hourly rate, your salary, and your time off, month over month. Plus the built-in Practice Health Assessment: score your practice across five domains when you join, re-score each quarter, and watch your transformation in actual numbers, not vibes.",
+        body: "Your practice's numbers, all in one place. Track your income by source, your real effective hourly rate, your salary, and your time off, month over month. Plus the built-in Practice Health Assessment: score your practice across five domains when you join, re-score each quarter, and review changes in your practice over time.",
       },
       {
         title: "The Lounge Community",
@@ -137,7 +118,7 @@ export const lounge = {
       },
       {
         title: "The Private Practice Business Plan",
-        body: "A guided business-planning document you build as you move through the curriculum, so your goals, numbers, operations, and next steps are all in one place. By the end of Module 04, you hold a complete document you can hand to a bank, a grant committee, or your own annual review..",
+        body: "A guided business-planning document you build as you move through the curriculum, so your goals, numbers, operations, and next steps are all in one place. Use it to review your priorities and guide your next steps as your practice evolves.",
       },
       {
         title: "Live Challenge Access",
@@ -162,8 +143,8 @@ export const lounge = {
 
   phases: {
     eyebrow: "Go All-In with The Lounge",
-    title: "Four phases. One rebuilt practice.",
-    body: "The curriculum is sequential because the work builds in order. You cannot optimize a model you haven't measured. You cannot sustain a practice you haven't systematized. Every phase unlocks the next one.",
+    title: "Four phases to help you strengthen your practice.",
+    body: "The published Practice Elevation curriculum is available when your membership access is granted; it is not released on a drip schedule. Work through the four phases at your own pace. We recommend starting with the practice assessment, reviewing your numbers, identifying your priority, and attending your first Strategy Session.",
     items: [
       {
         letter: "B",
@@ -173,7 +154,7 @@ export const lounge = {
       {
         letter: "O",
         title: "OPTIMIZE: Make the Model Work Better",
-        body: "Strengthen your income model, client mix, rates, payer relationships, and workload so your practice isn't relying on maximum clinical volume to work..",
+        body: "Strengthen your income model, client mix, rates, payer relationships, and workload so your practice isn't relying on maximum clinical volume to work.",
       },
       {
         letter: "S",
@@ -183,7 +164,7 @@ export const lounge = {
       {
         letter: "S",
         title: "SUSTAIN: Build a Practice That Pays You",
-        body: "Pay yourself consistently. Take real time off. Reduce your caseload without losing income. Build the practice that protects your time, your health, and your long-term capacity.",
+        body: "Work toward consistent owner pay, real time off, and a sustainable caseload. Develop a plan that supports your time, health, income goals, and long-term capacity.",
       },
     ],
     cta: "I'M READY TO HAVE FREEDOM",
@@ -212,8 +193,8 @@ export const lounge = {
     ],
     notTitle: "This is not for you if...",
     notItems: [
-      "You are newly licensed or still building your first caseload. The Club is the better starting point.",
-      "Your main problem is getting enough clients. The Lounge is for clinicians who already have the caseload and need to make the practice itself work better..",
+      "You are starting or rebuilding your practice foundation. The Club is the better starting point.",
+      "Your main problem is getting enough clients. The Lounge is for clinicians who already have the caseload and need to make the practice itself work better.",
       "You are looking for someone to run your marketing, create your content, or manage your social media for you.",
       "You are not willing to look honestly at your numbers, workload, systems, and business decisions.",
       "You want a quick fix without making changes to the way your practice is structured.",
@@ -222,55 +203,61 @@ export const lounge = {
   },
 
   pricing: {
-    title: "Choose your path into the Lounge",
-    tiers: [
-      {
-        id: "member",
-        name: "Lounge Member",
-        tagline: "",
-        price: "$197/mo",
-        terms: LOUNGE_BILLING_LIVE
-          ? "Founding rate · 6-month minimum ($1,182 total), then month-to-month until you cancel · or $1,997 paid in full for 12 months of access, with no automatic renewal"
-          : "Founding rate · 6 monthly payments ($1,182 total) · or $1,997 paid in full",
-        scarcity: "Limited founding seats. When they fill, the monthly rate rises to $247.",
-        features: [
-          "The Practice Elevation: all four modules, video lessons, worksheets, swipe files, and templates",
-          "Current Model Audit Worksheet: your financial foundation for every decision in the Lounge",
-          "The Practice Elevation Dashboard: your monthly numbers, effective hourly rate, and quarterly Practice Health Assessment in one tracker",
-          "Private Practice Business Plan (fillable) built section by section through the curriculum",
-          "Monthly 90-minute live Strategy Session with Yvette: teaching, hot seats, open Q&A",
-          "Live challenge access throughout the year",
-          "Private Lounge community with phase-organized channels",
-          "All linked courses and resources inside the curriculum",
-          "Annual business plan review, done together inside the community every year",
-        ],
-        cta: "JOIN THE LOUNGE",
-      },
-      {
-        id: "vip",
-        name: "★ Lounge VIP",
-        tagline: "The Lounge teaches you how to fix your practice. VIP puts my eyes on yours.",
-        price: "$347/mo",
-        terms: LOUNGE_BILLING_LIVE
-          ? "Founding VIP rate · 6-month minimum ($2,082 total), then month-to-month until you cancel · or $3,497 paid in full for 12 months of access, with no automatic renewal"
-          : "Founding VIP rate · 6 monthly payments ($2,082 total) · or $3,497 paid in full",
-        scarcity: "Four founding VIP seats at this rate. Then $447.",
-        features: [
-          "Everything in Lounge Member",
-          "The VIP Strategy Call Series: three private 30-minute calls with Yvette. A Kickoff Call when you join, a 90-Day Momentum Call, and a 6-Month Elevation Review. Your dashboard is our shared screen, so every call starts with your real numbers",
-          "My personal answer to your question, every month, in a voice note",
-          "My eyes on your actual materials every month: your profile, your pricing, your website copy, with recorded feedback on your stuff, not generic examples. One submission, one thorough recorded review, every month.",
-          "Priority hot seat: guaranteed one hot seat per quarter on the monthly call",
-          "Early access to new modules and resources before general release",
-          "Private VIP submission portal",
-        ],
-        cta: "JOIN AS A VIP",
-      },
+    "title": "Choose Your Lounge Membership",
+    "intro": "Choose monthly membership with a six-month minimum commitment or save with annual membership paid upfront. Both payment options include the benefits of your selected membership tier and our 7-Day Money-Back Guarantee on your initial purchase.",
+    "tiers": [
+        {
+            "id": "member",
+            "name": "Lounge Member",
+            "tagline": "The curriculum, tools, community, and monthly strategy support to help you build a more sustainable practice.",
+            "monthlyPrice": "$197/month",
+            "annualPrice": "$1,997 for 12 months",
+            "monthlyTerms": "Six-month minimum commitment. Your initial six-month commitment totals $1,182. After six months, membership continues month-to-month unless canceled.",
+            "annualTerms": "One upfront payment for 12 months of membership. Save $367 compared with paying $197 monthly for 12 months.",
+            "scarcity": "Limited founding-member availability. The monthly rate for new members increases to $247 after founding enrollment closes.",
+            "features": [
+                "The Practice Elevation signature curriculum: all four modules, video lessons, worksheets, and implementation resources.",
+                "Practice assessment and financial audit tools to help identify your priorities.",
+                "The Practice Elevation Dashboard to track income, effective hourly rate, and practice health.",
+                "A guided Private Practice Business Plan you develop throughout the curriculum.",
+                "One monthly 90-minute live Strategy Session with Yvette, including teaching, hot seats, and Q&A.",
+                "The Boss Clinician Toolkit with templates, trackers, swipe files, and workbooks.",
+                "Private Lounge community access.",
+                "The Replay Vault with recordings and resources available during your active membership.",
+                "Access to live Lounge challenges throughout the year.",
+                "An annual community business-plan review."
+            ],
+            "cta": "JOIN THE LOUNGE"
+        },
+        {
+            "id": "vip",
+            "name": "Lounge VIP",
+            "tagline": "Everything in Lounge Member, plus personalized feedback and private strategy support for your practice.",
+            "monthlyPrice": "$347/month",
+            "annualPrice": "$3,497 for 12 months",
+            "monthlyTerms": "Six-month minimum commitment. Your initial six-month commitment totals $2,082. After six months, membership continues month-to-month unless canceled.",
+            "annualTerms": "One upfront payment for 12 months of VIP membership. Save $667 compared with paying $347 monthly for 12 months.",
+            "scarcity": "Four founding VIP seats are available at this rate.",
+            "features": [
+                "Everything in Lounge Member, plus personalized feedback and private strategy support.",
+                "Private Strategy Calls: three private 30-minute calls with Yvette during your first six months.",
+                "Kickoff Call: review your practice snapshot, clarify priorities, and identify your first steps.",
+                "90-Day Momentum Review: evaluate progress, work through barriers, and adjust your plan.",
+                "6-Month Elevation Review: review results and map your next six months.",
+                "After your first six months, receive one additional private 30-minute Strategic Review every six months while your VIP membership remains continuously active: around month twelve, then months eighteen, twenty-four, and so on.",
+                "The same call schedule applies to monthly and annual VIP memberships. Calls are scheduled within their designated milestone windows and do not accumulate or roll over. The initial three-call series does not restart with renewal.",
+                "Monthly Personalized Voice-Note Support: submit one practice-related question each month and receive a personalized voice-note response from Yvette.",
+                "Monthly Recorded Materials Review: submit one item each month, such as a professional profile, pricing document, or website copy, and receive recorded feedback with practical recommendations.",
+                "Quarterly Priority Hot Seat: one guaranteed hot seat per quarter during a monthly group Strategy Session.",
+                "Additional VIP Access: early access to new modules and resources before general release, plus a private VIP submission portal."
+            ],
+            "cta": "JOIN AS A VIP"
+        }
     ],
-    commitment: LOUNGE_BILLING_LIVE
-      ? "*Monthly begins with a 6-month minimum commitment, because meaningful practice changes take time to implement, evaluate, and refine. Paying in full is a separate option that buys 12 months of access. Both include our 7-Day Money-Back Guarantee on your initial purchase: email support@bossclinician.com within seven calendar days of your first payment, by 11:59 p.m. Pacific Time."
-      : "*Meaningful practice changes take time to implement, evaluate, and refine. That's why the Lounge begins with a 6-month commitment.",
-  },
+    "commitment": "Meaningful practice changes take time to implement, evaluate, and refine. Choose monthly membership with a six-month minimum commitment or annual membership with 12 months paid upfront.",
+    "foundingRate": "Your founding rate stays the same while you maintain continuous membership on your selected plan. If you cancel and later rejoin, the pricing available at that time will apply.",
+    "annualRenewal": "Your annual membership does not automatically renew. Access ends after twelve months unless you renew. 7-Day Money-Back Guarantee: email support@bossclinician.com within seven calendar days of your initial payment, by 11:59 p.m. Pacific Time, for a full refund; an approved refund ends your enrollment and future payments."
+},
 
   founder: {
     title: "Hey, I’m Yvette Howard, LCSW",
@@ -291,6 +278,31 @@ export const lounge = {
     eyebrow: "FAQs",
     title: "Frequently asked questions",
     items: [
+      { q: "What is the 7-day money-back guarantee?", a: "Your initial paid purchase carries a full refund if you email support@bossclinician.com within seven calendar days of your first payment, by 11:59 p.m. Pacific Time, whether or not you have viewed or downloaded resources. It is a paid purchase, not a free trial, and it does not restart on renewals. An approved refund ends your enrollment and any future payments." },
+      {
+        "q": "What is the membership commitment?",
+        "a": "Monthly membership begins with a six-month minimum commitment. After those six months, your membership continues month-to-month unless canceled. Annual membership includes 12 months of access paid upfront and does not automatically renew."
+},
+      {
+        "q": "How do I cancel my monthly membership?",
+        "a": "Email support@bossclinician.com before your next billing date to request cancellation, or use Account > Billing. If you are still within your initial six-month commitment, cancellation takes effect after that commitment is completed. You remain responsible for the payments within that initial term, subject to applicable law. Once you have completed your six-month commitment, cancellation takes effect at the end of your current monthly billing period. Access continues through that date."
+},
+      {
+        "q": "Does annual membership include the same benefits?",
+        "a": "Yes. Annual membership includes the same benefits as monthly membership for your selected tier, with a discount for paying for 12 months upfront. Annual VIP members follow the same private-call schedule as monthly VIP members."
+},
+      {
+        "q": "What happens after I complete the four modules?",
+        "a": "Your support continues throughout your active membership. Use the monthly Strategy Sessions, community, tools, and resources to keep implementing and refining your practice. As your goals, income needs, and capacity change, revisit the curriculum, update your dashboard, and adjust your business plan."
+},
+      {
+        "q": "Do I keep access after my membership ends?",
+        "a": "Access to the curriculum, community, Replay Vault, live sessions, and ongoing membership benefits is available while your membership is active. Membership does not include lifetime access."
+},
+      {
+        "q": "Do the VIP private calls repeat?",
+        "a": "Your first six months include three private 30-minute calls: a Kickoff Call, a 90-Day Momentum Review, and a 6-Month Elevation Review. After that, you receive one additional private 30-minute Strategic Review every six months while your VIP membership remains continuously active. The initial three-call series does not restart with renewal."
+},
       {
         q: "How much time does this take each month?",
         a: "Plan for 2 to 3 hours per month minimum: the monthly strategy session plus one module lesson and its worksheet. And here is the part that matters if you're already stretched thin: there is no falling behind in the Lounge. The curriculum is not a cohort racing ahead of you. It's a pathway you move through at your pace, and the monthly call meets you wherever you are. Members who get the most out of the Lounge show up consistently, not intensively. One lesson, applied to your real practice, beats five lessons watched at midnight.",
@@ -308,18 +320,8 @@ export const lounge = {
         a: "The Lounge is designed to support you after that work, with the ongoing structure, curriculum, and community to implement and maintain what you've learned. A course gives you knowledge. The Lounge gives you the accountability, the coaching, and the community to make it stick month after month and year after year.",
       },
       {
-        q: "What happens after I complete the four modules?",
-        a: "You stay. Business development doesn't end when the curriculum ends. Your practice keeps evolving and the Lounge keeps pace with it. You return to the same modules with a more developed practice and they hit differently every time. Your business plan gets updated every January. Your community relationships deepen. The monthly call keeps a strategist in your corner without 1:1 coaching rates.",
-      },
-      {
         q: "Do I have to stop taking insurance?",
         a: "No. The Lounge is not built around one specific payer model. You'll evaluate your rates, insurance panels, private-pay options, platforms, and client mix based on what actually supports your practice.",
-      },
-      {
-        q: "Can I cancel?",
-        a: LOUNGE_BILLING_LIVE
-          ? "Your first purchase is covered by our 7-Day Money-Back Guarantee: email support@bossclinician.com within seven calendar days of your first payment for a full refund, and your membership and future payments end. Monthly: the first six charges are your minimum commitment. After the guarantee window, leaving early does not ordinarily waive the remaining minimum-term payments, subject to applicable law. After six months it continues month-to-month until you cancel by email or from Account > Billing. Paid in full: one payment buys 12 months of access. It does not renew, and access ends at 12 months unless you renew. After the guarantee window the annual fee is generally nonrefundable, subject to applicable law."
-          : "The Lounge runs on a 6-month commitment, monthly or annual. We want you here because you're getting results, not because you're locked in. But the work is sequential and builds over time, and the members who get the most are the ones who stay long enough to do the full cycle. Not sure it's the right fit? Book a consult call before you join and we'll figure it out together.",
       },
     ],
     cta: "STEP INTO THE LOUNGE",
@@ -333,8 +335,14 @@ export const lounge = {
       "The Lounge is where that work happens. In sequence. With a strategist, a community, and a structured curriculum that stays relevant as long as your practice keeps growing.",
     ],
     memberNote: "Founding rate. Limited seats, then the monthly rate rises to $247.",
-    vipNote: "Four founding seats at this rate. When they fill, VIP opens a waitlist.",
+    vipNote: "Four founding VIP seats are available at this rate.",
     contact: "Got questions? Unsure? Reach out:",
     email: "support@bossclinician.com",
   },
 };
+
+// Keep the incumbent sales page intact until billing, policy, and sandbox QA
+// are approved together. The build flag is deliberately off by default.
+export const lounge = loungeMembershipV2Enabled
+  ? { ...replacementLounge, pricing: { ...replacementLounge.pricing, tiers: replacementLounge.pricing.tiers.map((tier, index) => ({ ...legacyLounge.pricing.tiers[index], ...tier })) } }
+  : { ...legacyLounge, pricing: { ...replacementLounge.pricing, ...legacyLounge.pricing, tiers: legacyLounge.pricing.tiers.map((tier, index) => ({ ...replacementLounge.pricing.tiers[index], ...tier })) } };
