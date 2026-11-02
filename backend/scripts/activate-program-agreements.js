@@ -43,7 +43,7 @@ const MAX_PDF_BYTES = 10 * 1024 * 1024;
  * BEFORE SENDING FOR SIGNATURE ... Have counsel approve", and its document title
  * says "Final Draft for Attorney Review", which shows on the browser tab.
  */
-const APPROVED = new Set(["c4b5b133bb19a4c9d021830545b3a95fee8a00783d797a809b19e54e2054d710"]);
+const APPROVED = new Set(["f116304a78c1dfb2d2e437f1cd43b038729136695065ad7f369c60795000a28e", "c4b5b133bb19a4c9d021830545b3a95fee8a00783d797a809b19e54e2054d710"]);
 
 const PROGRAMS = {
   club: {
@@ -64,15 +64,13 @@ const PROGRAMS = {
   },
   boardroom: {
     slug: "the-boss-boardroom",
-    contractTitle: "The Boardroom — Executive Advisory Agreement",
+    contractTitle: "The Boardroom Mastermind — Evergreen Executive Advisory Agreement",
     invitationRequired: true,
     programTerm:
       "Twelve months. The Boardroom is a fixed-term program lasting twelve months from the Participant's individualized start date recorded at enrollment, unless a different term is expressly accepted in writing.",
     termMonths: 12,
-    // The agreement says what features "may" be included and that the session
-    // counts must be stated in the record, but gives no counts. The owner fills
-    // this in on the offer's Contracts tab; a re-run keeps what she wrote.
-    includedBenefits: "",
+    // Final PDF supplied by the owner on 2 November 2026 (UTC), section 1.
+    includedBenefits: "4 quarterly CEO strategy intensives (3-4 hours each); 8 momentum check-ins (60 minutes each); 2 private 45-minute CEO strategy sessions; 2 guest expert sessions; up to 2 voice-note questions per month, with a response targeted within 2 business days, excluding announced closures and holidays; CEO Dashboard, Living Business Plan, Executive Circle, Executive Resource Vault and designated Practice Elevation course content for the individual 12-month term. Done-for-you operations and payer credentialing are not included.",
     refundTerms:
       "Subject to applicable law and express written exceptions, all Boardroom payments are final and nonrefundable. Voluntary nonattendance, dissatisfaction with results, schedule or business changes, and a decision to stop participating do not create a right to a prorated refund, program credit, or early release from valid installments. This policy does not eliminate nonwaivable rights or remedies, including those arising from a material breach or failure by Company to provide agreed services.",
     // Null, not 0: the agreement has no refund window, and 0 would print a deadline.

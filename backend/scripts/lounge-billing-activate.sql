@@ -1,6 +1,6 @@
--- Turns on the Lounge's real billing. To release: copy this to the next migration
--- number and set LOUNGE_BILLING_LIVE = true in frontend/src/content/lounge.ts, in one
--- commit. Not run automatically. Existing manual grants and any earlier order are untouched.
+-- Owner approved activation by email on 2 November 2026 (UTC).
+-- Applied by migration 192 alongside LOUNGE_BILLING_LIVE.
+-- Existing manual grants and earlier orders are untouched.
 UPDATE offer_pricing_options p
    SET pricing_type = 'subscription', installment_count = NULL, minimum_months = 6, stripe_price_id = NULL,
        label = CASE o.slug WHEN 'the-lounge' THEN '$197/month: 6-month minimum, then month-to-month'
@@ -47,7 +47,7 @@ INSERT INTO offer_pricing_options (offer_id, label, pricing_type, amount_cents, 
 SELECT o.id, $l$Annual Membership — $1,997 for 12 months$l$, 'one_time', 199700, 'usd', 1, 2, true
   FROM offers o WHERE o.slug = 'the-lounge'
    AND NOT EXISTS (SELECT 1 FROM offer_pricing_options p WHERE p.offer_id = o.id AND p.pricing_type = 'one_time' AND p.amount_cents = 199700);
-UPDATE offer_checkout_requirements r SET acknowledgments = $a$[{"key": "lounge-monthly", "version": 1, "text": "I understand that I am enrolling at $197 per month with a six-month minimum commitment totaling $1,182. After six months, my membership continues monthly unless canceled.", "linkLabel": "Read the Terms of Use and refund policy", "linkUrl": "/terms", "active": true, "appliesTo": "subscription"}, {"key": "lounge-annual", "version": 1, "text": "I understand that my $1,997 payment provides twelve months of membership and does not automatically renew.", "linkLabel": "Read the Terms of Use and refund policy", "linkUrl": "/terms", "active": true, "appliesTo": "one_time"}]$a$::jsonb, updated_at = now()
+UPDATE offer_checkout_requirements r SET acknowledgments = $a$[{"key": "lounge-monthly", "version": 1, "text": "I understand that I am enrolling in The Lounge at $197 per month with a 6-month minimum commitment totaling $1,182. After the initial 6 months, my membership continues month-to-month at $197 until canceled. I have read and agree to the Terms of Use and refund policy.", "linkLabel": "Read the Terms of Use and refund policy", "linkUrl": "/terms", "active": true, "appliesTo": "subscription"}, {"key": "lounge-annual", "version": 1, "text": "I understand that my $1,997 payment provides twelve months of membership and does not automatically renew.", "linkLabel": "Read the Terms of Use and refund policy", "linkUrl": "/terms", "active": true, "appliesTo": "one_time"}]$a$::jsonb, updated_at = now()
   FROM offers o WHERE o.id = r.offer_id AND o.slug = 'the-lounge';
 UPDATE offers SET checkout_headline = $h$Join The Boss Clinician Lounge VIP$h$, description = $d$Build a more sustainable practice with the Lounge curriculum, tools, and community—plus personalized feedback and private strategy support from Yvette.
 
@@ -107,5 +107,5 @@ INSERT INTO offer_pricing_options (offer_id, label, pricing_type, amount_cents, 
 SELECT o.id, $l$Annual VIP Membership — $3,497 for 12 months$l$, 'one_time', 349700, 'usd', 1, 2, true
   FROM offers o WHERE o.slug = 'the-lounge-vip'
    AND NOT EXISTS (SELECT 1 FROM offer_pricing_options p WHERE p.offer_id = o.id AND p.pricing_type = 'one_time' AND p.amount_cents = 349700);
-UPDATE offer_checkout_requirements r SET acknowledgments = $a$[{"key": "lounge-monthly", "version": 1, "text": "I understand that I am enrolling in VIP membership at $347 per month with a six-month minimum commitment totaling $2,082. After six months, my membership continues monthly unless canceled.", "linkLabel": "Read the Terms of Use and refund policy", "linkUrl": "/terms", "active": true, "appliesTo": "subscription"}, {"key": "lounge-annual", "version": 1, "text": "I understand that my $3,497 payment provides twelve months of VIP membership and does not automatically renew.", "linkLabel": "Read the Terms of Use and refund policy", "linkUrl": "/terms", "active": true, "appliesTo": "one_time"}]$a$::jsonb, updated_at = now()
+UPDATE offer_checkout_requirements r SET acknowledgments = $a$[{"key": "lounge-monthly", "version": 1, "text": "I understand that I am enrolling in The Lounge VIP at $347 per month with a 6-month minimum commitment totaling $2,082. After the initial 6 months, my membership continues month-to-month at $347 until canceled. I have read and agree to the Terms of Use and refund policy.", "linkLabel": "Read the Terms of Use and refund policy", "linkUrl": "/terms", "active": true, "appliesTo": "subscription"}, {"key": "lounge-annual", "version": 1, "text": "I understand that my $3,497 payment provides twelve months of VIP membership and does not automatically renew.", "linkLabel": "Read the Terms of Use and refund policy", "linkUrl": "/terms", "active": true, "appliesTo": "one_time"}]$a$::jsonb, updated_at = now()
   FROM offers o WHERE o.id = r.offer_id AND o.slug = 'the-lounge-vip';

@@ -69,6 +69,10 @@ describe("enrollmentTermsFor", () => {
     expect(terms.programTerm).toBe("6-month minimum commitment, then month-to-month until you cancel.");
     expect(terms.termMonths).toBeNull();
     expect(terms.paymentArrangement).toContain("then it continues month-to-month");
+    expect(terms.obligationsNote).toContain("After the 7-day guarantee period, your 6-month minimum commitment remains in effect.");
+    expect(terms.obligationsNote).toContain("Cancelling during the initial commitment does not cancel the remaining required payments, subject to applicable law.");
+    expect(terms.obligationsNote).toContain("After the initial 6 months, your membership continues month-to-month and may be canceled before your next billing date.");
+    expect(terms.obligationsNote).toContain("Charges already processed are non-refundable.");
     expect(terms.obligationsNote).toContain("support@bossclinician.com");
   });
 

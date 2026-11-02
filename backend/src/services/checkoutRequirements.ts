@@ -280,7 +280,7 @@ export function enrollmentTermsFor(offer: OfferRow, settings: RequirementSetting
     minimumTerm = {
       programTerm: `${months}-month minimum commitment, then month-to-month until you cancel.`,
       obligationsNote:
-        "After the guarantee window, leaving early does not ordinarily waive unpaid minimum-term installments, subject to applicable law. To request cancellation, email support@bossclinician.com before your next billing date, or use Account > Billing. Monthly cancellations take effect after your initial commitment, or at the end of your current billing period once that commitment is completed. Cancelling does not refund charges already processed.",
+        `After the 7-day guarantee period, your ${months}-month minimum commitment remains in effect. Cancelling during the initial commitment does not cancel the remaining required payments, subject to applicable law. After the initial ${months} months, your membership continues month-to-month and may be canceled before your next billing date. Charges already processed are non-refundable. To request cancellation, email support@bossclinician.com before your next billing date, or use Account > Billing.`,
     };
   } else if (offer.pricing_type === "subscription") {
     total = null;

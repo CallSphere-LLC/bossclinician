@@ -285,7 +285,7 @@ const replacementLounge = {
 },
       {
         "q": "How do I cancel my monthly membership?",
-        "a": "Email support@bossclinician.com before your next billing date to request cancellation, or use Account > Billing. If you are still within your initial six-month commitment, cancellation takes effect after that commitment is completed. You remain responsible for the payments within that initial term, subject to applicable law. Once you have completed your six-month commitment, cancellation takes effect at the end of your current monthly billing period. Access continues through that date."
+        "a": "After the 7-day guarantee period, your 6-month minimum commitment remains in effect. Cancelling during the initial commitment does not cancel the remaining required payments, subject to applicable law. After the initial 6 months, your membership continues month-to-month and may be canceled before your next billing date. Charges already processed are non-refundable. To request cancellation, email support@bossclinician.com before your next billing date, or use Account > Billing. Access continues through your cancellation date."
 },
       {
         "q": "Does annual membership include the same benefits?",

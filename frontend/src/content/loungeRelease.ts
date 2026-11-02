@@ -2,7 +2,7 @@
  * Flip together with backend/scripts/lounge-billing-activate.sql, in one release:
  * the page must never describe billing the checkout does not do.
  */
-export const LOUNGE_BILLING_LIVE = false;
+export const LOUNGE_BILLING_LIVE = true;
 
 /** Her button wording (sheet rows 195-196). The preview draft shows it before the switch. */
 const JOIN_PREFIX: Record<string, string> = {
