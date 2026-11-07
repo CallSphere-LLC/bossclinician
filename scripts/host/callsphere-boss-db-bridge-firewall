@@ -1,0 +1,11 @@
+#!/bin/sh
+# Permit only the dedicated Docker TCP proxy to its database. K3s policies remain first.
+set -eu
+bridge=br-265f642bbc16
+rule() {
+ /usr/sbin/iptables -w 5 "$1" DOCKER-USER -i "$bridge" -o "$bridge" \
+   -s 172.18.0.3/32 -d 172.18.0.2/32 -p tcp --dport 5432 \
+   -m conntrack --ctstate NEW,ESTABLISHED \
+   -m comment --comment callsphere-boss-db-proxy -j ACCEPT
+}
+rule -C 2>/dev/null || rule -A

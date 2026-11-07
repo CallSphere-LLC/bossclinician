@@ -29,6 +29,9 @@ else
   exit "$rc"
 fi
 
+# Reassert only the private proxy-to-database flow after Docker/network changes.
+/usr/local/sbin/callsphere-boss-db-bridge-firewall
+
 if ! ss -tlnH 'sport = :15432' | grep -q '10.42.0.1:15432'; then
   cd /opt/bossclinician
   docker compose -p bossclinician -f docker-compose.yml -f k8s/docker-compose.data.yml -f k8s/docker-compose.security-data.yml up -d --pull never --no-deps --force-recreate db-bridge

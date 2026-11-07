@@ -1,0 +1,49 @@
+# Apply after docker-compose.yml and docker-compose.data.yml.
+# Exact running software retained; OS packages and gosu toolchain patched.
+services:
+  db:
+    image: security/boss-docker-pg16:20261013-deps
+    networks:
+      default:
+        ipv4_address: 172.18.0.2
+    command:
+      - postgres
+      - -c
+      - max_connections=50
+      - -c
+      - work_mem=4MB
+      - -c
+      - maintenance_work_mem=64MB
+      - -c
+      - effective_cache_size=512MB
+      - -c
+      - ssl=on
+      - -c
+      - ssl_cert_file=/run/pg-tls/server.crt
+      - -c
+      - ssl_key_file=/run/pg-tls/server.key
+      - -c
+      - ssl_min_protocol_version=TLSv1.2
+    volumes:
+      - /var/lib/postgresql/security-docker-remediation/boss-pg-tls/server:/run/pg-tls:ro
+  db-bridge:
+    image: security/boss-bridge:20261013-deps
+    # Dedicated static TCP proxy: start nginx without the unused HTTP-template APK lookup.
+    entrypoint: ["nginx"]
+    command: ["-g", "daemon off;"]
+    networks:
+      default:
+        # The post-DNAT NetworkPolicy permits this exact address/5432.
+        ipv4_address: 172.18.0.3
+  coturn:
+    image: security/boss-docker-coturn:20261001
+  backend:
+    environment:
+      DATABASE_URL: postgres://boss:${DB_PASSWORD}@db:5432/bossclinician?sslmode=verify-full&sslrootcert=/etc/bossclinician/pg-ca/ca.crt
+    volumes:
+      - /etc/bossclinician/pg-ca:/etc/bossclinician/pg-ca:ro
+
+networks:
+  default:
+    external: true
+    name: bossclinician_default

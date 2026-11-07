@@ -43,6 +43,8 @@ for target in api web; do
 done
 docker build --label "io.bossclinician.source-sha256=$source_hash" -t "bossclinician-k3-ai:$release" ai
 docker build --label "io.bossclinician.source-sha256=$source_hash" -f k8s/gateway.Dockerfile -t "bossclinician-k3-gateway:$release" .
+# Fail before import or rollout when any built image has a fixable high/critical finding.
+sudo -n python3 scripts/verify-release-security.py "$release"
 python3 scripts/release-source-manifest.py > "$work/source-after-build.json"
 if ! cmp -s "$work/source-manifest.json" "$work/source-after-build.json"; then
   echo 'Deployment source changed during build; refusing to roll out mixed source. Retry after edits finish.' >&2
