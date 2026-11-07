@@ -54,7 +54,7 @@ FROM node:24-alpine AS api
 # Public helper and its private glibc runtime only; credentials are mounted at runtime.
 COPY --from=aws_identity_helper /aws_signing_helper /ld-linux-x86-64.so.2 /libc.so.6 /libresolv.so.2 /opt/aws-helper-runtime/
 COPY --from=aws_identity_helper /credential-helper /usr/local/bin/aws_signing_helper
-RUN echo 'bfcde1b91a2ed1b6ad485f70b1ff74d291a321031c35edc8301a9b16e3fca189  /opt/aws-helper-runtime/aws_signing_helper' | sha256sum -c - \
+RUN echo '453f75b2cceee0231f8ef856a9e990dbe956e2a80ac0670914b4a209f377339b  /opt/aws-helper-runtime/aws_signing_helper' | sha256sum -c - \
     && echo 'bda779ea9e9ad234f60315477d7cfd0bdde861cd8ddd9df8cdaf62f18c4cec14  /opt/aws-helper-runtime/ld-linux-x86-64.so.2' | sha256sum -c - \
     && echo '85e64f97e348786a8fb4d9f3d52fec289e2fb86bba20f0731dfe61990525e0f7  /opt/aws-helper-runtime/libc.so.6' | sha256sum -c - \
     && echo '6b99ecf94bcb81732ed1e81615084a5cfe7383eb89ce83106fa51077409ce609  /opt/aws-helper-runtime/libresolv.so.2' | sha256sum -c - \
