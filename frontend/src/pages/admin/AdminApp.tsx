@@ -53,6 +53,7 @@ import Podcasts from "@/pages/admin/Podcasts";
 import Newsletters from "@/pages/admin/Newsletters";
 import Campaigns from "@/pages/admin/Campaigns";
 import Funnels from "@/pages/admin/Funnels";
+import MarketingStudio from "@/pages/admin/marketingStudio/MarketingStudio";
 import Automations from "@/pages/admin/Automations";
 import Sequences from "@/pages/admin/Sequences";
 import SequenceEditor from "@/pages/admin/SequenceEditor";
@@ -149,6 +150,7 @@ function ProtectedRoutes() {
         <Route path="/marketing/overview" element={<MarketingOverview />} />
         <Route path="/marketing/events" element={<Events />} />
         <Route path="/marketing/campaigns" element={<Campaigns />} />
+        <Route path="/marketing/studio" element={<MarketingStudio />} />
         <Route path="/marketing/funnels" element={<Funnels />} />
         <Route path="/marketing/sequences" element={<Sequences />} />
         <Route path="/marketing/sequences/:id" element={<SequenceEditor />} />

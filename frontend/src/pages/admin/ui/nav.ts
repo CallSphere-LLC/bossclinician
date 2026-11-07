@@ -142,6 +142,9 @@ export const NAV_GROUPS: NavGroup[] = [
       // resets and welcome notes the site sends on its own, not a design for
       // a campaign.
       { to: "/admin/marketing/emails", label: "Automatic Emails", ready: true },
+      // Her content planner (developer brief, 31 Oct 2026), asked for "in the
+      // marketing section above funnels". Admin only; it publishes nothing.
+      { to: "/admin/marketing/studio", label: "Marketing Studio", ready: true },
       { to: "/admin/marketing/funnels", label: "Funnels", ready: true },
       // The first automations screen is deliberately not listed. It reads and
       // writes the same records as the one below, in an older shape: opening an

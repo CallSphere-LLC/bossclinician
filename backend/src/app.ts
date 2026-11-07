@@ -16,6 +16,7 @@ import { renderRouter } from "./routes/public/render";
 import { apiV1Router } from "./routes/public/apiV1";
 import { notFoundHandler, errorHandler } from "./middleware/errorHandler";
 import { apiLimiter } from "./middleware/rateLimit";
+import { MAX_BODY_LIMIT as MARKETING_STUDIO_BODY_LIMIT } from "./routes/admin/marketingStudio";
 
 import { rejectRetiredHosts } from "./middleware/retiredHosts";
 
@@ -84,6 +85,13 @@ export function createApp(): Express {
   // 64kb matches the cap services/voice/liveSession.ts enforces on the offer
   // itself; body-parser's own 413 is rendered by the error handler.
   app.use("/api/voice/connect", express.text({ type: "application/sdp", limit: "64kb" }));
+
+  // Marketing → Studio saves the owner's whole planning board as one JSON
+  // document, which can outgrow the 2 MB cap below. A path-scoped parser ahead
+  // of the global one raises the limit for that route alone; once it has parsed
+  // the body the global parser sees it is done and leaves it be. The route
+  // still sits behind requireAuth and the marketing gate in admin/index.ts.
+  app.use("/api/admin/marketing-studio", express.json({ limit: MARKETING_STUDIO_BODY_LIMIT }));
 
   app.use(express.json({ limit: "2mb" }));
   app.use(express.urlencoded({ extended: true }));

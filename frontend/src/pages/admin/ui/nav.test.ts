@@ -81,6 +81,7 @@ describe("the sidebar's shape", () => {
       "/admin/marketing/events",
       "/admin/marketing/campaigns",
       "/admin/marketing/funnels",
+      "/admin/marketing/studio",
       "/admin/marketing/automations-v2",
       "/admin/marketing/emails",
       "/admin/marketing/quizzes",

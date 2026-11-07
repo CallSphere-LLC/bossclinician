@@ -1,0 +1,191 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,500;0,600;1,500&display=swap');
+/* Scoped copy of the reference Marketing Studio style.css (published version 5). Every rule is prefixed with .ms-root so nothing leaks into the admin console. */
+.ms-root{--navy:#313d5a;--purple:#73628a;--lav:#cbc5ea;--gold:#c9a84c;--ink:#302c3b;--muted:#777182;--paper:#faf9fc}
+.ms-root *{box-sizing:border-box}
+.ms-root{margin:0;background:var(--paper);color:var(--ink);font:15px 'DM Sans',sans-serif}
+.ms-root button,.ms-root input{font:inherit}
+.ms-root button{cursor:pointer}
+.ms-root button:focus-visible,.ms-root input:focus-visible{outline:3px solid var(--gold);outline-offset:3px}
+.ms-root .ms-aside{position:fixed;width:240px;height:100vh;background:#fff;border-right:1px solid #eae6f0;padding:35px 24px;display:flex;flex-direction:column}
+.ms-root .brand{font-family:'Playfair Display',serif;font-size:30px;color:var(--navy)}
+.ms-root .eyebrow{font-size:10px;letter-spacing:2.5px;font-weight:700;text-transform:uppercase}
+.ms-root .brand small{display:block;font:9px 'DM Sans';letter-spacing:3px;margin-top:9px}
+.ms-root .divider{height:1px;background:#eee9f1;margin:28px 0}
+.ms-root .ms-nav button{display:flex;gap:13px;border:0;background:transparent;color:#777182;padding:14px 15px;width:100%;text-align:left;border-radius:9px;margin-bottom:6px}
+.ms-root .ms-nav button.active{background:#eeebf6;color:var(--purple);font-weight:700}
+.ms-root .sidefoot{margin-top:auto;padding:18px;background:#f7f5fa;border-radius:12px;font-size:12px;line-height:1.7}
+.ms-root .sidefoot b{color:var(--purple)}
+.ms-root .ms-main{margin-left:240px;padding:0 44px 50px;max-width:1600px}
+.ms-root .ms-header{height:90px;border-bottom:1px solid #e8e4ee;display:flex;justify-content:space-between;align-items:center}
+.ms-root .avatar{display:inline-grid;place-items:center;width:38px;height:38px;border-radius:50%;background:#e9e4f2;color:var(--purple);font-weight:bold;margin-left:12px}
+.ms-root .topright{display:flex;align-items:center;color:var(--muted);font-size:12px}
+.ms-root .tag{display:inline-block;padding:6px 10px;border-radius:5px;font-size:10px;font-weight:700;letter-spacing:1px;background:#f0ebd9;color:#8e722a}
+.ms-root h1,.ms-root h2,.ms-root h3,.ms-root p{margin-top:0}
+.ms-root h1,.ms-root h2,.ms-root .hero h3{font-family:'Playfair Display',serif;font-weight:500}
+.ms-root h1{font-size:38px;margin-bottom:10px}
+.ms-root h2{font-size:26px;margin-bottom:9px}
+.ms-root .welcome{padding:32px 0 24px}
+.ms-root .welcome p,.ms-root .sub{color:var(--muted);line-height:1.7}
+.ms-root .hero{background:var(--navy);color:white;border-radius:16px;padding:34px 38px;display:grid;grid-template-columns:1.3fr 1fr;gap:40px;position:relative;overflow:hidden}
+.ms-root .hero:after{content:'';position:absolute;width:290px;height:290px;border:1px solid #ffffff12;border-radius:50%;right:-95px;top:-90px;pointer-events:none}
+.ms-root .hero .eyebrow{color:#dfc884;margin-bottom:15px}
+.ms-root .hero h3{font-size:32px;line-height:1.2;margin-bottom:14px}
+.ms-root .hero p{color:#ddddea;font-size:14px;line-height:1.7;max-width:440px}
+.ms-root .primary{background:var(--purple);color:white;border:0;padding:12px 19px;border-radius:7px;font-size:12px;font-weight:700}
+.ms-root .hero .primary{background:#e4d3a0;color:#343347}
+.ms-root .outline{border:1px solid #dfd8e9;background:white;border-radius:7px;padding:10px 14px;color:var(--purple);font-size:12px}
+.ms-root .kitlist{border-left:1px solid #ffffff22;padding-left:30px;align-self:center;line-height:2.6;font-size:13px;color:#eeeaf5}
+.ms-root .sectionhead{display:flex;align-items:center;justify-content:space-between;margin:32px 0 18px}
+.ms-root .sectionhead p{margin:0;color:var(--muted);font-size:13px}
+.ms-root .categories{display:grid;grid-template-columns:repeat(5,1fr);gap:12px}
+.ms-root .category{border:1px solid #e8e2ed;border-radius:12px;background:white;padding:18px 13px;text-align:left;color:var(--ink);transition:.2s}
+.ms-root .category:hover{transform:translateY(-3px);border-color:var(--purple)}
+.ms-root .category.selected{border-color:var(--purple);background:#f0edf6}
+.ms-root .icon{display:grid;place-items:center;width:36px;height:36px;background:#f1edf7;color:var(--purple);border-radius:10px;font-size:20px;margin-bottom:14px}
+.ms-root .category b{font-size:12px;display:block;line-height:1.5}
+.ms-root .category small{display:block;color:var(--muted);font-size:10px;margin-top:7px}
+.ms-root .toolbar{display:flex;gap:10px;margin:20px 0;flex-wrap:wrap}
+.ms-root input{background:white;border:1px solid #e6dfed;padding:12px 15px;border-radius:8px;min-width:230px;flex:1}
+.ms-root .chip{border:1px solid #e6dfed;background:white;border-radius:7px;padding:9px 13px;color:var(--muted);font-size:12px}
+.ms-root .chip.selected{background:var(--purple);color:white;border-color:var(--purple)}
+.ms-root .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:19px}
+.ms-root .card{background:white;border:1px solid #e9e3ef;border-radius:12px;overflow:hidden}
+.ms-root .art{height:116px;background:#eae4f2;display:flex;align-items:center;justify-content:center;position:relative;color:var(--purple)}
+.ms-root .art span{font-family:'Playfair Display';font-size:25px;letter-spacing:-.5px;border:1px solid #ffffffb0;padding:15px 25px}
+.ms-root .art.navy{background:#e2e6ee;color:var(--navy)}
+.ms-root .art.gold{background:#f1ebda;color:#967934}
+.ms-root .save{position:absolute;right:12px;top:12px;border:0;background:#ffffffd9;border-radius:50%;width:30px;height:30px;color:var(--purple);font-size:19px}
+.ms-root .cardbody{padding:19px}
+.ms-root .meta{font-size:9px;letter-spacing:1px;color:var(--purple);font-weight:700;text-transform:uppercase}
+.ms-root .card h3{font-size:15px;margin:10px 0;line-height:1.5}
+.ms-root .card p{font-size:12px;color:var(--muted);line-height:1.7;min-height:41px}
+.ms-root .cardbottom{display:flex;justify-content:space-between;align-items:center;border-top:1px solid #eeeaf3;padding-top:14px;margin-top:15px;font-size:10px;color:var(--muted)}
+.ms-root .textbtn{border:0;background:transparent;color:var(--purple);font-size:12px;font-weight:bold;padding:4px 0}
+.ms-root .banner{margin-top:28px;border:1px solid #e3dbea;background:#f1edf6;border-radius:12px;padding:23px;display:flex;align-items:center;justify-content:space-between;gap:20px}
+.ms-root .banner h3{font-family:'Playfair Display';font-size:22px;margin-bottom:7px}
+.ms-root .banner p{font-size:12px;color:var(--muted);margin:0}
+.ms-root .notice{font-size:10px;color:#958d9d;letter-spacing:.5px;margin-top:28px}
+.ms-root dialog{border:0;border-radius:16px;padding:34px;max-width:620px;width:calc(100% - 32px);color:var(--ink);box-shadow:0 20px 90px #19132555}
+.ms-root dialog::backdrop{background:#24203488;backdrop-filter:blur(4px)}
+.ms-root dialog h2{margin-top:20px}
+.ms-root dialog p,.ms-root dialog li{font-size:14px;line-height:1.8;color:#686171}
+.ms-root dialog textarea{width:100%;height:190px;border:1px solid #ded6e8;border-radius:8px;padding:15px;font:13px/1.7 'DM Sans';color:#51475d;background:#faf8fc}
+.ms-root .close{float:right;background:#f0ecf5;border:0;border-radius:50%;width:30px;height:30px;color:var(--purple)}
+.ms-root .modalactions{display:flex;gap:10px;margin-top:18px}
+.ms-root .empty{padding:40px;border:1px dashed #d5cddd;border-radius:12px;grid-column:1/-1;color:var(--muted);text-align:center}
+.ms-root .checkitem{display:flex;gap:12px;padding:12px;background:#f5f2f9;border-radius:7px;margin:9px 0}
+.ms-root .checkitem input{min-width:0;flex:none}
+.ms-root .toast{position:fixed;bottom:25px;left:50%;transform:translateX(-50%);background:var(--navy);color:white;padding:13px 22px;border-radius:9px;z-index:10;font-size:13px}
+.ms-root .hidden{display:none!important}
+@media(min-width:1450px){.ms-root .ms-main{padding-left:65px;padding-right:65px}
+}
+@media(max-width:1050px){.ms-root .ms-aside{width:195px;padding:25px 15px}
+.ms-root .ms-main{margin-left:195px;padding:0 25px 35px}
+.ms-root .categories{grid-template-columns:repeat(3,1fr)}
+.ms-root .grid{grid-template-columns:repeat(2,1fr)}
+.ms-root .hero{gap:20px;padding:28px}
+.ms-root .kitlist{padding-left:20px}
+}
+@media(max-width:700px){.ms-root .ms-aside{position:static;width:100%;height:auto;padding:20px}
+.ms-root .brand{font-size:25px}
+.ms-root .brand small,.ms-root .divider,.ms-root .sidefoot{display:none}
+.ms-root .ms-nav{display:flex;overflow:auto;margin-top:15px}
+.ms-root .ms-nav button{white-space:nowrap;width:auto;font-size:11px;padding:10px;gap:5px;margin:0}
+.ms-root .ms-main{margin:0;padding:0 20px 30px}
+.ms-root .ms-header{height:60px}
+.ms-root .topright>span:first-child{display:none}
+.ms-root .hero{grid-template-columns:1fr}
+.ms-root .kitlist{display:none}
+.ms-root h1{font-size:31px}
+.ms-root .hero h3{font-size:29px}
+.ms-root .categories{grid-template-columns:repeat(2,1fr)}
+.ms-root .grid{grid-template-columns:1fr}
+.ms-root .sectionhead{align-items:flex-start;gap:10px}
+.ms-root .banner{align-items:flex-start;flex-direction:column}
+.ms-root .welcome{padding-top:25px}
+}
+.ms-root .categories{grid-template-columns:repeat(4,1fr)}
+.ms-root .offerbar{display:flex;gap:8px;flex-wrap:wrap;margin-top:15px}
+.ms-root .plannerrow{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:15px 0}
+.ms-root .plannerrow input,.ms-root .plannerrow select{min-width:0;border:1px solid #ded6e8;padding:10px;border-radius:8px}
+.ms-root dialog textarea{height:250px}
+.ms-root .stat{font-size:27px;font-family:'Playfair Display';color:var(--purple)}
+@media(max-width:700px){.ms-root .categories{grid-template-columns:repeat(2,1fr)}
+}
+.ms-root .niche{background:white;border:1px solid #e5deed;border-radius:14px;padding:25px;margin:20px 0}
+.ms-root .formgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:18px}
+.ms-root .field{display:block;font-size:12px;font-weight:600;color:var(--purple)}
+.ms-root .field input,.ms-root .field select,.ms-root .field textarea{display:block;width:100%;min-width:0;margin-top:7px;padding:12px;border:1px solid #dfd7e8;border-radius:8px;background:#fff;font:14px/1.5 'DM Sans',sans-serif;color:var(--ink)}
+.ms-root .field textarea{height:100px}
+.ms-root .wide{grid-column:1/-1}
+.ms-root .hint{font-size:12px;line-height:1.7;color:var(--muted);font-weight:400}
+.ms-root .routebox{background:#f2eef8;border-left:3px solid var(--gold);padding:20px;border-radius:9px;margin:20px 0;overflow-wrap:anywhere}
+.ms-root .routebox p{margin:6px 0;font-size:13px;line-height:1.8}
+.ms-root .routebox a{color:var(--purple)}
+.ms-root .actions{display:flex;gap:10px;flex-wrap:wrap;margin:18px 0}
+.ms-root .warning{background:#fff5d9;color:#795b12;border:1px solid #e9d48b;border-radius:8px;padding:13px;font-size:12px;line-height:1.8}
+.ms-root .error{color:#a12f4b}
+.ms-root .sync{padding:13px 16px;border-radius:8px;background:#eeebf4;color:#665673;font-size:12px;line-height:1.6}
+.ms-root .tabview{display:none}
+.ms-root .tabview.active{display:block}
+.ms-root .output{height:210px!important;background:#fcfbfe!important;white-space:pre-wrap}
+.ms-root .output.small{height:85px!important}
+.ms-root .card h3{min-height:60px}
+.ms-root .card p{min-height:0}
+.ms-root .cardbody{padding:20px}
+.ms-root .pillarrow{display:flex;gap:8px;flex-wrap:wrap}
+.ms-root .status{font-size:10px;color:var(--purple)}
+.ms-root dialog{max-width:1040px;max-height:90vh}
+.ms-root .pill{background:#eee8f5;padding:6px 9px;border-radius:5px;font-size:11px;color:var(--purple)}
+.ms-root .tablewrap{overflow:auto}
+.ms-root table{border-collapse:collapse;width:100%;font-size:12px}
+.ms-root th,.ms-root td{padding:14px 10px;border-bottom:1px solid #e7e0ed;text-align:left;vertical-align:top}
+.ms-root th{color:var(--purple);font-size:11px}
+.ms-root td button{white-space:nowrap}
+.ms-root .checkline{display:flex;gap:10px;align-items:center;margin:12px 0;font-size:13px}
+.ms-root .checkline input{min-width:0;flex:none}
+.ms-root .previewlist{max-height:200px;overflow:auto;font-size:12px;line-height:1.8}
+.ms-root .statgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:15px}
+.ms-root .statbox{padding:23px;border:1px solid #e4deeb;border-radius:12px;background:white}
+.ms-root .statbox b{display:block;font:29px 'Playfair Display';margin-bottom:6px;color:var(--purple)}
+.ms-root .thumb{padding:18px;background:#f0eaf7;color:var(--purple);font:20px 'Playfair Display';min-height:70px}
+.ms-root .legacy{font-size:12px;line-height:1.8}
+.ms-root .fit{padding:12px;background:#edf4f1;border-radius:8px;color:#3d6a59;font-size:12px;line-height:1.8}
+.ms-root .toprow{display:flex;justify-content:space-between;align-items:center;gap:14px}
+.ms-root .pagination{display:flex;align-items:center;gap:15px;margin:24px 0}
+.ms-root .pagination button:disabled{opacity:.4;cursor:default}
+@media(max-width:700px){.ms-root .formgrid{grid-template-columns:1fr}
+.ms-root .statgrid{grid-template-columns:1fr}
+.ms-root .wide{grid-column:auto}
+.ms-root .toprow{align-items:flex-start;flex-direction:column}
+.ms-root dialog{padding:22px}
+.ms-root .card h3{min-height:0}
+}
+
+/* ---- Embedded in the admin console ------------------------------------
+   The reference is a full-page app with a fixed sidebar. Inside the admin it
+   sits in the content column, so the studio sidebar scrolls with the page and
+   becomes a row of tabs when the column is narrow. */
+.ms-root.ms-embed{display:flex;align-items:flex-start;min-height:70vh;border:1px solid #eae6f0;border-radius:14px;overflow:clip;background:var(--paper)}
+.ms-root.ms-embed .ms-aside{position:sticky;top:0;height:auto;min-height:70vh;width:230px;flex:none}
+.ms-root.ms-embed .ms-main{margin-left:0;flex:1;min-width:0;padding:0 36px 44px}
+.ms-root.ms-embed .ms-save{display:inline-block;margin-left:8px;font-weight:700}
+.ms-root.ms-embed .ms-save.bad{color:#a12f4b}
+.ms-root .hookedit{float:right;border:0;background:transparent;color:var(--purple);font-size:11px;font-weight:700;margin-right:10px}
+.ms-root .archived{opacity:.6}
+@media(max-width:1280px){
+.ms-root.ms-embed{flex-direction:column}
+.ms-root.ms-embed .ms-aside{position:static;width:100%;min-height:0;padding:16px 20px;border-right:0;border-bottom:1px solid #eae6f0}
+.ms-root.ms-embed .brand{font-size:24px}
+.ms-root.ms-embed .brand small,.ms-root.ms-embed .divider,.ms-root.ms-embed .sidefoot{display:none}
+.ms-root.ms-embed .ms-nav{display:flex;overflow:auto;margin-top:12px;gap:4px}
+.ms-root.ms-embed .ms-nav button{white-space:nowrap;width:auto;font-size:12px;padding:10px 12px;gap:6px;margin:0}
+.ms-root.ms-embed .ms-main{padding:0 24px 32px}
+.ms-root.ms-embed .grid{grid-template-columns:repeat(2,1fr)}
+}
+@media(max-width:700px){
+.ms-root.ms-embed{border-radius:0;border-left:0;border-right:0}
+.ms-root.ms-embed .ms-main{padding:0 16px 28px}
+.ms-root.ms-embed .grid{grid-template-columns:1fr}
+.ms-root.ms-embed .ms-header{height:auto;padding:14px 0;flex-wrap:wrap;gap:8px}
+}

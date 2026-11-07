@@ -46,6 +46,7 @@ import { adminEventsRouter } from "./events";
 import { adminFormsRouter as adminFormsV2Router } from "./formsV2";
 import { adminAvailabilityRouter } from "./availability";
 import { adminMarketingOverviewRouter } from "./marketingOverview";
+import { adminMarketingStudioRouter } from "./marketingStudio";
 import { adminCoachingSessionFilesRouter } from "./coachingSessionFiles";
 import { adminCoachingProgramsRouter } from "./coachingPrograms";
 import { adminContractsRouter } from "./contracts";
@@ -235,6 +236,10 @@ adminRouter.use("/availability", requireAuth, moduleGate("settings"), adminAvail
 // Read-only summary for Marketing → Overview: GET only, so the plain view
 // permission is the whole gate (as for /dashboard above).
 adminRouter.use("/marketing-overview", requireAuth, requirePermission("marketing.view"), adminMarketingOverviewRouter);
+// Marketing → Studio, the owner's content-planning board: reading it is
+// marketing.view, saving it is marketing.manage, as for every marketing screen.
+// Its body can exceed the site-wide 2 MB JSON cap, so app.ts parses this path first.
+adminRouter.use("/marketing-studio", requireAuth, moduleGate("marketing"), adminMarketingStudioRouter);
 // Accepting an invite happens BEFORE the invitee has an account, so this one
 // router deliberately sits outside requireAuth. Its own token is the credential.
 adminRouter.use("/", adminInviteRouter);

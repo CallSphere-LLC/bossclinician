@@ -389,6 +389,22 @@ const DESTINATIONS: readonly VoiceDestination[] = [
     surfaces: ADMIN,
   },
   {
+    key: "marketing-studio",
+    path: "/admin/marketing/studio",
+    label: "Marketing Studio",
+    aliases: [
+      "marketing studio",
+      "content planner",
+      "plan my posts",
+      "hook library",
+      "coaching insights",
+      "instagram content",
+    ],
+    narration:
+      "Your content planner: choose the audience, pick one of the evergreen hooks, edit the post and put it in the planner. It saves to your account and never posts anything for you.",
+    surfaces: ADMIN,
+  },
+  {
     key: "funnels",
     path: "/admin/marketing/funnels",
     label: "Funnels",
@@ -1161,6 +1177,20 @@ const TOUR: readonly TourStop[] = [
       {
         focus: "Clear filters",
         say: "Three filters sit above the list — by kind, by state and by folder — and this clears all of them at once when you have narrowed yourself into a corner.",
+      },
+    ],
+  },
+  {
+    destination: "marketing-studio",
+    purpose: "Your content planner: the right audience, a ready hook, an editable post and a date for it.",
+    beats: [
+      {
+        focus: "Choose your audience first.",
+        say: "Start with who the post is for: Club, Lounge or Boardroom. The topic and the resource you invite them to follow from that.",
+      },
+      {
+        focus: "Content Planner",
+        say: "Every post you save lands in the planner in posting order, and it saves to your account, so your phone and computer see the same drafts. Nothing here posts for you.",
       },
     ],
   },
