@@ -8,7 +8,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 COPY requirements.txt .
 RUN apt-get update \
-    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends --only-upgrade libpcre2-8-0 libssl3t64 openssl openssl-provider-legacy \
+    && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends --only-upgrade libpcre2-8-0 libssl3t64 openssl openssl-provider-legacy zlib1g \
     && pip install -r requirements.txt \
     && python -m pip uninstall -y setuptools \
     && python -m pip check \
