@@ -2,7 +2,7 @@ import { externalResourceUrl } from "../../services/externalResource";
 import { usesS3Media, mediaStore, serveStoredMedia } from "../../services/objectStorage";
 import fs from "fs";
 import { Router } from "express";
-import { rateLimit } from "express-rate-limit";
+import { rateLimit, ipKeyGenerator } from "express-rate-limit";
 import { pool } from "../../db/pool";
 import { asyncHandler } from "../../utils/asyncHandler";
 import { notFound } from "../../utils/httpError";
@@ -49,12 +49,37 @@ const TOO_MANY = { error: "Too many requests. Please try again later." };
  * between all of them. The token is unguessable, so this ceiling is about what a
  * flood would cost us rather than about what it could reach.
  */
-const fileLimiter = rateLimit({
+const fileLimiterOptions = {
   windowMs: 15 * 60 * 1000,
   max: 600,
   standardHeaders: true,
   legacyHeaders: false,
   message: TOO_MANY,
+} as const;
+
+/*
+ * Keyed on the account a valid token names, not on req.ip alone. In production
+ * req.ip is a constant (see the `trust proxy` note in app.ts and the sizing note
+ * on apiLimiter), so an IP key made 600 requests per 15 minutes a budget shared
+ * by every member on the site — and a <video> spends one request per seek, per
+ * stall-and-reconnect, plus a tail range for each moov-at-end import. A handful
+ * of concurrent viewers would start getting 429s mid-lesson. A token that does
+ * not verify falls back to the IP bucket, so forged tokens still share one.
+ */
+const fileLimiter = rateLimit({
+  ...fileLimiterOptions,
+  keyGenerator: (req): string => {
+    const payload = verifyDownload(String(req.params.token ?? ""));
+    return payload ? `member:${payload.memberId}` : `ip:${ipKeyGenerator(req.ip ?? "")}`;
+  },
+});
+
+const adminFileLimiter = rateLimit({
+  ...fileLimiterOptions,
+  keyGenerator: (req): string => {
+    const payload = verifyAdminPreview(String(req.params.token ?? ""));
+    return payload ? `admin:${payload.adminUserId}` : `ip:${ipKeyGenerator(req.ip ?? "")}`;
+  },
 });
 
 /**
@@ -274,7 +299,7 @@ const PREVIEW_DEAD = "This preview has expired. Close this and open it again.";
  */
 verifyRouter.get(
   "/admin-files/:token",
-  fileLimiter,
+  adminFileLimiter,
   asyncHandler(async (req, res, next) => {
     const payload = verifyAdminPreview(String(req.params.token ?? ""));
     if (payload === null) throw notFound(PREVIEW_DEAD);
