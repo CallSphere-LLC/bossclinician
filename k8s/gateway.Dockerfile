@@ -6,8 +6,10 @@ RUN sed -i -e 's/listen 80/listen 8080/g' -e 's|http://backend:4000|http://127.0
 EXPOSE 8080
 
 # Security baseline: writable runtime state is confined to /tmp/nginx.
+# /tmp/nginx is a 64Mi tmpfs, so proxied responses never spill to temp files:
+# buffering the 100MB masterclass video there filled it and cut playback off.
 RUN apk upgrade --no-cache && sed -i '/^user[[:space:]]/d; s@pid[[:space:]]*[^;]*;@pid /tmp/nginx/nginx.pid;@' /etc/nginx/nginx.conf \
-    && sed -i '/http {/a\    client_body_temp_path /tmp/nginx/client_temp;\n    proxy_temp_path /tmp/nginx/proxy_temp;\n    fastcgi_temp_path /tmp/nginx/fastcgi_temp;\n    uwsgi_temp_path /tmp/nginx/uwsgi_temp;\n    scgi_temp_path /tmp/nginx/scgi_temp;' /etc/nginx/nginx.conf \
+    && sed -i '/http {/a\    client_body_temp_path /tmp/nginx/client_temp;\n    proxy_temp_path /tmp/nginx/proxy_temp;\n    proxy_max_temp_file_size 0;\n    fastcgi_temp_path /tmp/nginx/fastcgi_temp;\n    uwsgi_temp_path /tmp/nginx/uwsgi_temp;\n    scgi_temp_path /tmp/nginx/scgi_temp;' /etc/nginx/nginx.conf \
     && mkdir -p /tmp/nginx && chown -R 101:101 /tmp/nginx
 USER 101:101
 ENTRYPOINT ["nginx"]
