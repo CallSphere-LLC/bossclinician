@@ -1,10 +1,11 @@
-import { useId, useState, type FormEvent } from "react";
+import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { motion, useReducedMotion } from "motion/react";
 import { GlassCard } from "@/components/luxe/GlassCard";
 import { GoldRule } from "@/components/luxe/Section";
 import { LuxeButton } from "@/components/luxe/LuxeButton";
 import { LuxeInput, LuxeTextarea } from "@/components/luxe/LuxeField";
 import { useHoneypot } from "@/components/forms/useHoneypot";
+import { TurnstileField, type TurnstileHandle } from "@/components/forms/TurnstileField";
 import { api } from "@/lib/api";
 import type { LeadPayload } from "@/types";
 
@@ -12,6 +13,8 @@ const EASE: [number, number, number, number] = [0.22, 1, 0.36, 1];
 
 /** Matches the `phone` cap in backend/src/validation/schemas.ts → leadSchema. */
 const PHONE_MAX = 40;
+
+const CAPTCHA_PROMPT = "Please complete the quick security check above the button, then send again.";
 
 /**
  * Deliberately loose: digits with the usual punctuation and an optional
@@ -22,6 +25,32 @@ function isPlausiblePhone(value: string): boolean {
   if (!/^[\d\s()+.\-/#*a-z]*$/i.test(value)) return false;
   const digits = value.replace(/\D/g, "").length;
   return digits >= 7 && digits <= 20;
+}
+
+/**
+ * The Turnstile site key, when Settings → Forms asks for Turnstile on the
+ * contact form. Read from the public settings endpoint in an effect (the page
+ * renders on the server, and the key may change without a rebuild); null means
+ * "no widget" and the form behaves exactly as it does with the honeypot alone.
+ */
+function useContactTurnstileKey(source: LeadPayload["source"]): string | null {
+  const [siteKey, setSiteKey] = useState<string | null>(null);
+  useEffect(() => {
+    if (source !== "contact") return;
+    let cancelled = false;
+    api
+      .settings()
+      .then((settings) => {
+        const fs = settings.form_settings as { spamProtection?: unknown; turnstileSiteKey?: unknown } | undefined;
+        const key = typeof fs?.turnstileSiteKey === "string" ? fs.turnstileSiteKey.trim() : "";
+        if (!cancelled && fs?.spamProtection === "turnstile" && key) setSiteKey(key);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [source]);
+  return source === "contact" ? siteKey : null;
 }
 
 interface LeadFormProps {
@@ -65,6 +94,10 @@ export function LeadForm({
   const [message, setMessage] = useState("");
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
+  const turnstileSiteKey = useContactTurnstileKey(source);
+  const captchaActive = turnstileSiteKey !== null;
+  const turnstile = useRef<TurnstileHandle>(null);
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -77,23 +110,34 @@ export function LeadForm({
       setError("That phone number doesn't look right. Please check it, or leave it blank.");
       return;
     }
+    if (captchaActive && !turnstileToken) {
+      setError(CAPTCHA_PROMPT);
+      return;
+    }
     setStatus("loading");
+    const payload: LeadPayload & { turnstileToken?: string } = {
+      name: name.trim(),
+      email: email.trim(),
+      phone: (showPhone && phone.trim()) || undefined,
+      message: message.trim() || undefined,
+      source,
+      ...honeypot(),
+      ...(captchaActive && turnstileToken ? { turnstileToken } : {}),
+    };
     try {
-      await api.submitLead({
-        name: name.trim(),
-        email: email.trim(),
-        phone: (showPhone && phone.trim()) || undefined,
-        message: message.trim() || undefined,
-        source,
-        ...honeypot(),
-      });
+      await api.submitLead(payload);
       setStatus("success");
     } catch (err) {
       setStatus("error");
+      // A 400 carries a message meant for the visitor — including the
+      // `captcha_failed` answer when the security check did not verify.
       const failure = err as { status?: number; message?: string };
       setError(failure.status === 400 && failure.message
         ? failure.message
         : "Something went wrong submitting your form. Please email bossclinician@gmail.com directly.");
+    } finally {
+      // Turnstile tokens are single-use; the next attempt needs a fresh one.
+      if (captchaActive) turnstile.current?.reset();
     }
   }
 
@@ -203,6 +247,17 @@ export function LeadForm({
           value={message}
           onChange={(e) => setMessage(e.target.value)}
         />
+
+        {turnstileSiteKey && (
+          <TurnstileField
+            ref={turnstile}
+            siteKey={turnstileSiteKey}
+            onToken={(token) => {
+              setTurnstileToken(token);
+              if (token) setError((current) => (current === CAPTCHA_PROMPT ? null : current));
+            }}
+          />
+        )}
 
         {error && (
           <motion.p

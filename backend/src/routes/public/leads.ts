@@ -12,6 +12,7 @@ import { fireTriggerAsync } from "../../automations/engine";
 import { linkContact, recordActivity, upsertContactWithStatus } from "../../services/contacts";
 import { publishDomainEvent } from "../../services/domainEvents";
 import { notificationRecipients } from "../../services/notificationRecipients";
+import { CAPTCHA_FAILED_BODY, passesLeadCaptcha } from "../../services/turnstile";
 
 export const leadsRouter = Router();
 
@@ -51,7 +52,8 @@ leadsRouter.post(
   asyncHandler(async (req, res) => {
     const parsed = leadSchema.safeParse(req.body);
     if (!parsed.success) throw badRequest("Invalid lead payload", parsed.error.flatten());
-    const { name, email, phone, message, source, meta, company, elapsedMs } = parsed.data;
+    const { name, email, phone, message, source, meta, company, elapsedMs, turnstileToken } =
+      parsed.data;
 
     // A filled honeypot, or a form sent faster than a person can read it, is a
     // script. It gets the same 201 a real submission gets — an error response
@@ -59,6 +61,15 @@ leadsRouter.post(
     // or triggered.
     if (company?.trim() || (elapsedMs !== undefined && elapsedMs < MIN_FILL_MS)) {
       res.status(201).json({ ok: true });
+      return;
+    }
+
+    // Cloudflare Turnstile, only where the owner switched it on (form_settings)
+    // and only for the /contact form, which is the one that renders the widget.
+    // After the honeypot so a trapped bot costs no round-trip to Cloudflare;
+    // before the email check and every write. Fails closed.
+    if (!(await passesLeadCaptcha(source, turnstileToken, req.ip))) {
+      res.status(400).json(CAPTCHA_FAILED_BODY);
       return;
     }
 

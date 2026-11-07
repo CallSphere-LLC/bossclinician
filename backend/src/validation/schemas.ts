@@ -41,6 +41,9 @@ export const leadSchema = z.object({
   // Both optional — an older client that posts neither is still a valid lead.
   company: z.string().max(200).optional(),
   elapsedMs: z.number().int().nonnegative().optional(),
+  // Cloudflare Turnstile response, sent by the /contact form when the owner
+  // turned it on (services/turnstile.ts). Verified, never stored.
+  turnstileToken: z.string().max(2048).optional(),
 });
 
 export const subscribeSchema = z.object({

@@ -104,6 +104,17 @@ const TOOLBAR: { id: FormatId; label: string; Icon: LucideIcon }[] = [
   { id: "link", label: "Add a link", Icon: Link2 },
 ];
 
+const FONT_CONTROLS: { prop: "font-size" | "font-family"; label: string; options: [string, string][] }[] = [
+  { prop: "font-family", label: "Font", options: [
+    ["Arial", "Arial, Helvetica, sans-serif"],
+    ["Georgia", "Georgia, serif"],
+    ["Times New Roman", "'Times New Roman', Times, serif"],
+    ["Verdana", "Verdana, Geneva, sans-serif"],
+    ["Trebuchet MS", "'Trebuchet MS', Helvetica, sans-serif"],
+  ] },
+  { prop: "font-size", label: "Size", options: [["Small", "14px"], ["Normal", "16px"], ["Large", "20px"], ["Extra large", "28px"]] },
+];
+
 const BLOCKS: Record<string, { label: string; body: string; Icon: LucideIcon }> = {
   text: { label: "Text", body: "Write your message here.", Icon: Pilcrow },
   heading: { label: "Heading", body: "## Your heading", Icon: Heading2 },
@@ -559,6 +570,26 @@ export default function EmailComposer({
               <Icon />
             </Button>
           ))}
+        {/* QA row 221: font and size, applied to the selection as inline styles. */}
+        {!preview && FONT_CONTROLS.map(({ prop, label, options }) => (
+          <label key={prop} className="ml-1">
+            <span className="sr-only">{label}</span>
+            <select
+              className={`${selectStyles} min-h-11 py-1.5 text-sm`}
+              defaultValue=""
+              title={label}
+              onChange={(event) => {
+                if (event.target.value) ref.current?.font(prop, event.target.value);
+                event.target.value = "";
+              }}
+            >
+              <option value="" disabled>{label}</option>
+              {options.map(([name, css]) => (
+                <option key={name} value={css}>{name}</option>
+              ))}
+            </select>
+          </label>
+        ))}
         {!preview && <Button type="button" variant="secondary" size="sm" onClick={() => setChoosingImage(true)}><Image />Image / GIF</Button>}
         {!preview && (
           <label className="ml-1">
