@@ -53,6 +53,9 @@ jobs:
         run: docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.7 -color
       - name: No secrets or .env files committed
         run: scripts/ci/secret-scan.sh
+      - name: Media storage release config tests
+        working-directory: scripts
+        run: python -m unittest test_media_storage_release -v
 
   dependency-review:
     # Pull requests only: compares the dependency manifests against the base
@@ -120,7 +123,7 @@ jobs:
         run: npm run build
 
   frontend:
-    name: Frontend — typecheck, unit
+    name: Frontend — typecheck, unit, build
     runs-on: ubuntu-latest
     timeout-minutes: 15
     defaults:
@@ -141,6 +144,8 @@ jobs:
         run: npm run typecheck
       - name: Unit tests
         run: npm test
+      - name: Production build (client bundle and SSR entry)
+        run: npm run build
 
   ai:
     name: AI service — tests
@@ -188,12 +193,12 @@ jobs:
         # manifest.json, and backend/Dockerfile re-checks each pinned hash.
         env:
           GH_TOKEN: ${{ github.token }}
-          TARBALL_SHA256: 3dab68e1def87bc8a0e59f4238edb9e85007efe49fbf9a82ba8a0461ecdf3be5
+          TARBALL_SHA256: 201722fb83da9732785a4993471667f4e23fc0a91395dd69c371ccccdbe3a7b7
         run: |
           set -euo pipefail
           dir="$RUNNER_TEMP/aws-helper"
           mkdir -p "$dir" && cd "$dir"
-          gh release download aws-helper-runtime-20261013 --repo "$GITHUB_REPOSITORY" --pattern aws-helper-runtime.tar.gz
+          gh release download aws-helper-runtime-20261106 --repo "$GITHUB_REPOSITORY" --pattern aws-helper-runtime.tar.gz
           echo "$TARBALL_SHA256  aws-helper-runtime.tar.gz" | sha256sum -c -
           tar -xzf aws-helper-runtime.tar.gz
           cd aws-helper-runtime

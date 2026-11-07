@@ -12,7 +12,8 @@ verify() {
   curl -fsS --retry 3 --retry-delay 1 --retry-all-errors --max-time 10 -H 'Host: www.bossclinician.com' "$1/api/health" | python3 -c 'import json,sys; assert json.load(sys.stdin).get("release") == sys.argv[1], "release mismatch"' "$release"
 }
 verify "http://$preview"
-for retired in bossclinician.callsphere.site; do
+retired_hosts=(bossclinician.callsphere.site)
+for retired in "${retired_hosts[@]}"; do
   [[ "$(curl -sS --max-time 10 -o /dev/null -w '%{http_code}' -H "Host: $retired" "http://$preview/admin/login")" == 410 ]] || { echo "Retired host is still active: $retired" >&2; exit 1; }
 done
 curl -fsS --max-time 10 -H 'Host: admin.bossclinician.com' "http://$preview/admin/login" >/dev/null
