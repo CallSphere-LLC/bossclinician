@@ -19,6 +19,7 @@ import { footer } from "@/content/site";
 import { createVoiceApiClient } from "@/voice/kernel";
 import { policyForPath } from "@/voice/surfaces";
 import { readApprovalAnswer, useConciergeChat, useFirstVisitOffer } from "@/voice/text";
+import { ChatTeaser, rememberChatTeaserDismissed } from "@/components/ChatTeaser";
 
 /**
  * The voice controls and approval card belong to the voice slice and are pulled in
@@ -99,6 +100,10 @@ export function ChatWidget() {
   const policy = policyForPath(location.pathname);
   const compactAuthLauncher = policy.surface === "public" &&
     /^\/(login|signup|forgot-password|reset-password|verify-email)(\/|$)/.test(location.pathname);
+  // The typing tip is for the marketing site only, and stays off sign-in and
+  // checkout pages, where somebody is typing into a form of their own.
+  const showTeaser = policy.surface === "public" && !compactAuthLauncher &&
+    !/checkout/i.test(location.pathname);
 
   const [initialMessages] = useState<ChatMessage[]>(() => {
     const history = loadHistory(policy.surface);
@@ -136,6 +141,7 @@ export function ChatWidget() {
   // of the page remains available while somebody chats.
   useEffect(() => {
     if (open) {
+      rememberChatTeaserDismissed();
       openedRef.current = true;
       closeButtonRef.current?.focus();
     } else if (openedRef.current) {
@@ -435,6 +441,7 @@ export function ChatWidget() {
          */}
         {!open && (
           <div className="relative">
+            {showTeaser && <ChatTeaser onOpen={() => setOpen(true)} />}
             <motion.span
               aria-hidden="true"
               className={cn(

@@ -47,7 +47,7 @@ export const luxeAppearance: Appearance = {
   labels: "above",
   variables: {
     fontFamily: "Montserrat, Arial, sans-serif",
-    fontSizeBase: "15px",
+    fontSizeBase: "16px",
     spacingUnit: "4px",
     borderRadius: "12px",
     colorPrimary: GOLD,
@@ -56,22 +56,28 @@ export const luxeAppearance: Appearance = {
     colorBackground: "#100B1C",
     colorText: "#FFFFFF",
     colorTextSecondary: ORCHID,
-    colorTextPlaceholder: "#635473",
+    // Placeholders ("1234 1234 1234 1234", "CVC") were #635473, about 2.6:1 on
+    // the field; buyers on dark mode could barely see what each box was for.
+    colorTextPlaceholder: "#A99BBE",
     colorDanger: "#F87171",
     colorIcon: ORCHID,
   },
   rules: {
+    // A field that is visibly a field: a lifted solid fill and a border that
+    // reads against the card, with the digits in white at a medium weight.
     ".Input": {
-      backgroundColor: "rgba(255,255,255,0.04)",
-      border: "1px solid rgba(255,255,255,0.12)",
+      backgroundColor: "#1E1630",
+      border: "1px solid rgba(255,255,255,0.30)",
       boxShadow: "none",
       padding: "12px 14px",
+      color: "#FFFFFF",
+      fontWeight: "500",
     },
     ".Input:focus": {
       border: `1px solid rgba(201,164,106,0.6)`,
       boxShadow: "0 0 0 2px rgba(201,164,106,0.35)",
     },
-    ".Input--invalid": { border: "1px solid rgba(248,113,113,0.6)" },
+    ".Input--invalid": { border: "1px solid rgba(248,113,113,0.8)" },
     ".Label": {
       fontSize: "11px",
       fontWeight: "600",
@@ -80,8 +86,8 @@ export const luxeAppearance: Appearance = {
       color: ORCHID,
     },
     ".Tab": {
-      backgroundColor: "rgba(255,255,255,0.035)",
-      border: "1px solid rgba(255,255,255,0.09)",
+      backgroundColor: "#1A1329",
+      border: "1px solid rgba(255,255,255,0.22)",
     },
     ".Tab:hover": { border: "1px solid rgba(201,164,106,0.35)" },
     ".Tab--selected": {
@@ -90,8 +96,8 @@ export const luxeAppearance: Appearance = {
       color: "#FFFFFF",
     },
     ".Block": {
-      backgroundColor: "rgba(255,255,255,0.03)",
-      border: "1px solid rgba(255,255,255,0.08)",
+      backgroundColor: "#160F22",
+      border: "1px solid rgba(255,255,255,0.18)",
     },
   },
 };
@@ -113,7 +119,7 @@ export const luxeLightAppearance: Appearance = {
   labels: "above",
   variables: {
     fontFamily: "Montserrat, Arial, sans-serif",
-    fontSizeBase: "15px",
+    fontSizeBase: "16px",
     spacingUnit: "4px",
     borderRadius: "12px",
     colorPrimary: GOLD_ON_LIGHT,
