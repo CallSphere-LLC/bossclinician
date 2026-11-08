@@ -276,6 +276,27 @@ export async function enrollContact(
     [sequenceId, contactId, first.position, sendAt]
   );
 
+  // An email due now (delay 0, no send window in the way) is queued straight
+  // away rather than left for the 5-minute sequence tick. A quiz result or a
+  // welcome email is expected the moment the page says "on its way" (QA row
+  // 228). Same dedupe key as the tick, so the tick cannot queue it a second
+  // time, and sendDueEmail re-checks next_send_at under the row lock. Never
+  // fails the enrolment: the tick still picks it up if this cannot be queued.
+  if (sendAt.getTime() <= now.getTime()) {
+    const subscriptionId = inserted.rows[0].id;
+    await enqueueMany([
+      {
+        kind: "sequence.sendEmail",
+        payload: { subscriptionId: Number(subscriptionId) },
+        priority: PRIORITY.normal,
+        dedupeKey: `sequence-send:${subscriptionId}:${first.position}`,
+      },
+    ]).catch((err: unknown) => {
+      // eslint-disable-next-line no-console
+      console.error(`[sequences] immediate send for subscription ${subscriptionId} not queued:`, err);
+    });
+  }
+
   await recordActivity({
     contactId,
     kind: "sequence_started",
