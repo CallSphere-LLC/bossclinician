@@ -96,7 +96,7 @@ export function ChatTeaser({ onOpen }: { onOpen: () => void }) {
           style={{ transformOrigin: "100% 80%" }}
           className="chat-teaser absolute bottom-1 right-[4.6rem] w-[min(16.5rem,calc(100vw-7rem))]"
         >
-          <div className="glass glass-edge relative rounded-2xl rounded-br-md shadow-[0_18px_40px_-18px_rgba(0,0,0,0.55)]">
+          <div className="glass-edge relative rounded-2xl rounded-br-md border border-hairline bg-surface-raised/[0.97] backdrop-blur-md shadow-[0_18px_40px_-18px_rgba(0,0,0,0.55)]">
             <button
               type="button"
               onClick={onOpen}
