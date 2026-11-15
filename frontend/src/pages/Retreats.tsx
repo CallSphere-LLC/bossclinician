@@ -362,7 +362,7 @@ export default function Retreats() {
       <Band>
         <div className="retreat-narrow retreat-centered">
           <Heading title="This Is the First FlourisHealer Bali Retreat." />
-          <p>An intimate retreat limited to 12 women.</p>
+          <p>An intimate retreat for 11 guests plus Yvette, for 12 people total.</p>
           <p>Explore the villa and accommodations, activities and inclusions, and pre-trip support. This experience draws on Yvette’s own retreat experience since 2023.</p>
         </div>
       </Band>

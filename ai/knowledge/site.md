@@ -137,7 +137,7 @@ I'm a mom. A business owner. A leader. A therapist. A coach. A doctoral student.
 Follow me on Instagram
 
 ## The Boardroom
-The Boardroom is an application-only, 12-month group mastermind for mental health practice owners: an intimate peer group of 6-8, capped at eight, guided by Yvette. Joining is an application at /boardroom#apply, then a discovery call, then a private invitation.
+The Boardroom is an application-only, 12-month group mastermind for mental health practice owners: an intimate peer group of exactly six practice owners, guided by Yvette. Joining is an application at /boardroom#apply, then a discovery call, then a private invitation.
 Included: 4 quarterly CEO strategy intensives (3-4 hours each, with peer hot seats); 8 momentum check-ins (60 minutes each); 2 private 45-minute CEO strategy sessions in the term; 2 guest expert sessions a year, chosen by Boss Clinician; up to 2 voice-note questions a month, with a response targeted within 2 business days; CEO Dashboard, Living Business Plan, Executive Circle and relevant vault resources.
 Done-for-you operations and payer credentialing are not included.
 Never state a price for The Boardroom. Pricing is shared privately with invited applicants; if asked, say so and point to the application.

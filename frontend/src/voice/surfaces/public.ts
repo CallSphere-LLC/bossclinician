@@ -92,7 +92,7 @@ const DESTINATIONS: readonly VoiceDestination[] = [
       "when is the retreat",
     ],
     narration:
-      "A luxury wellness retreat for women mental health professionals: six days, five nights, twelve women and one private villa in Ubud, Bali, from the fifteenth to the twentieth of June 2027. A private king suite is five thousand five hundred dollars.",
+      "A luxury wellness retreat for women mental health professionals: six days, five nights, eleven guests plus Yvette for twelve people total, and one private villa in Ubud, Bali, from the fifteenth to the twentieth of June 2027. A private king suite is five thousand five hundred dollars.",
     surfaces: PUBLIC,
   },
   {
@@ -412,8 +412,8 @@ const TOUR: readonly TourStop[] = [
         say: "The Boardroom is the third way in. It is for practice owners whose next decisions are CEO decisions: when to hire, what they can afford, and how to step back without everything falling apart.",
       },
       {
-        focus: "An Intimate Group of 6–8.",
-        say: "It is deliberately small — six to eight practice owners, capped at eight, for a 12-month term. Joining is an application, then a discovery call, then a private invitation.",
+        focus: "An Intimate Group of Six.",
+        say: "It is deliberately small: exactly six practice owners for a 12-month term. Joining is an application, then a discovery call, then a private invitation.",
       },
       {
         focus: "There are no more than eight chairs in this room.",

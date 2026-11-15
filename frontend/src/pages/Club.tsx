@@ -1,3 +1,5 @@
+import { ProgramFounderVideo } from "@/components/luxe/ProgramFounderVideo";
+import { ApprovedTestimonials } from "@/components/luxe/ApprovedTestimonials";
 import { motion } from "motion/react";
 import { Seo } from "@/components/Seo";
 import {
@@ -213,6 +215,7 @@ export default function Club() {
       <TaughtSection />
       <StartSection />
       <HoldingBackSection />
+      <ProgramFounderVideo program="club" />
       <ClubPhilosophy />
       <QuoteFilmBand />
       <WarningSection />
@@ -227,6 +230,7 @@ export default function Club() {
       <PaceSection />
       <ValueSection />
       <ClubFaqJump />
+      <ApprovedTestimonials program="club" />
       <NextMoveSection />
       <FounderLetter
         eyebrow={club.founder.eyebrow}

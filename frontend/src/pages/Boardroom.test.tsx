@@ -47,9 +47,11 @@ describe("the Boardroom page, server-rendered", () => {
   it("says everything before any script runs, and hides none of it", () => {
     expect(html).toContain("$500,000.");
     expect(html).toContain("The Boardroom is where we work on the business underneath the revenue.");
-    expect(html).toContain("An Intimate Group of 6–8.");
+    expect(html).toContain("An Intimate Group of Six.");
+    expect(html).toContain("An intimate group of exactly six practice owners.");
+    expect(html).toContain("private council of six mental health practice owners");
     // Owner brief, 1 Nov 2026: group benefits only, and no fixed price on the public page.
-    expect(html).not.toMatch(/\$12,000|\$18,000|\$3,000|only six|six chairs|council of six|private consulting|full-day/i);
+    expect(html).not.toMatch(/\$12,000|\$18,000|\$3,000|6[–-]8|six to eight|capped at eight|private consulting|full-day/i);
     expect(html).toContain("Done-for-you operations and payer credentialing are not included.");
     // The reveal is armed in the browser, never in the server's markup.
     expect(html).not.toContain("br-reveal-armed");

@@ -1,3 +1,4 @@
+import { ApprovedTestimonials } from "@/components/luxe/ApprovedTestimonials";
 import { useEffect, useRef, type RefObject } from "react";
 import { Link } from "react-router";
 import { Seo } from "@/components/Seo";
@@ -348,6 +349,8 @@ export default function Boardroom() {
         <p>Review the most common questions before deciding whether to apply.</p>
         <a className="br-button br-button-dark" href="#faq">View FAQs</a>
       </section>
+
+      <ApprovedTestimonials program="boardroom" />
 
       <section className="br-final-cta br-section br-reveal">
         <p className="br-eyebrow br-gold">{b.finalCta.eyebrow}</p>

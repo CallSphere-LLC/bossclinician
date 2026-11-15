@@ -5,7 +5,7 @@
  * (boss-clinician-boardroom.yvette728001.chatgpt.site, 27 September 2026), band
  * by band and in the page's own order: hero → the statement → the CEO-decision
  * questions → the four things the room works on → the two ways in → what
- * happens inside → the CEO Council → her note → who it is for → an intimate group of 6–8
+ * happens inside → the CEO Council → her note → who it is for → an intimate group of six
  * → the closing call → the application.
  *
  * Nothing here is paraphrased. Her apostrophes are mostly straight and her
@@ -342,7 +342,7 @@ export const boardroom = {
     intro:
       "An application-only, 12-month group mastermind for mental health practice owners building and leading growing practices.",
     cta: "Apply for The Boardroom",
-    seatNote: "An intimate group of 6–8 practice owners, capped at eight.",
+    seatNote: "An intimate group of exactly six practice owners.",
     photo: {
       src: "/images/boardroom/yvette-office.webp",
       alt: "Yvette Howard seated confidently at her desk in a polished executive setting",
@@ -473,7 +473,7 @@ export const boardroom = {
     mark: ["Your CEO", "Council"],
     eyebrow: "Every CEO needs a council",
     title: "Your CEO Council",
-    body: "Every successful CEO needs trusted advisors. Inside The Boardroom, you’ll join a private council of 6–8 mental health practice owners who understand the weight of leadership. Together, we’ll review numbers, work through challenges, evaluate opportunities, and make stronger decisions for your business.",
+    body: "Every successful CEO needs trusted advisors. Inside The Boardroom, you’ll join a private council of six mental health practice owners who understand the weight of leadership. Together, we’ll review numbers, work through challenges, evaluate opportunities, and make stronger decisions for your business.",
     promise: "Trusted perspectives · Stronger decisions · Healthier businesses",
   },
 
@@ -536,8 +536,8 @@ export const boardroom = {
       height: 864,
     } satisfies BoardroomPhoto,
     eyebrow: "Your CEO Council",
-    title: "An Intimate Group of 6–8.",
-    body: "Six to eight mental health practice owners, capped at eight. Real businesses. Real numbers. Real decisions. No disappearing in a giant coaching program.",
+    title: "An Intimate Group of Six.",
+    body: "Exactly six mental health practice owners. Real businesses. Real numbers. Real decisions. No disappearing in a giant coaching program.",
     process: ["Apply", "Discovery Call", "Private Invitation"],
     close:
       "I want to know what's happening inside your practice, so when you bring a decision to your Council, we aren't starting from zero every time.",

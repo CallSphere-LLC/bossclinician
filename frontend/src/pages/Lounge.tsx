@@ -1,3 +1,4 @@
+import { ProgramFounderVideo } from "@/components/luxe/ProgramFounderVideo";
 import { useState } from "react";
 import { motion } from "motion/react";
 import { Link } from "react-router";
@@ -219,6 +220,7 @@ export default function Lounge() {
       />
 
       <LoungePracticeReframe />
+      <ProgramFounderVideo program="lounge" />
       <FoundingBand />
       <GoodNewsSection />
       <LoungeDecisions />

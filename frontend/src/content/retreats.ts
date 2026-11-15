@@ -3,7 +3,7 @@
  *
  * Transcribed from www.bossclinician.com/retreats (19 September 2026), band by
  * band and in the page's own order: hero → the numbers → the retreat → why
- * Yvette built it → what's included → why twelve women → the villa gallery →
+ * Yvette built it → what's included → why eleven guests → the villa gallery →
  * retreat moments → the pattern → the woman who returns → imagine → reserve →
  * your host → why Bali → what is and is not included → the burnout quiz → the
  * fourteen questions.
@@ -171,7 +171,7 @@ const FAQS: readonly RetreatFaq[] = [
   },
   {
     q: "What is the total group size?",
-    a: "This retreat is limited to twelve women. That intimacy is intentional. Twelve women in one private villa creates genuine connection and a space where you can fully exhale.",
+    a: "The group is limited to 11 guests plus Yvette, for 12 people total. That intimacy is intentional. One private villa creates space for genuine connection and a chance to fully exhale.",
   },
   {
     q: "What is included in my package?",
@@ -216,7 +216,7 @@ const FAQS: readonly RetreatFaq[] = [
   },
   {
     q: "How do I secure my spot?",
-    a: "Spots are limited to twelve women and fill in the order reservations are received. Choose your payment option above to lock in your place. Remember, all payments must be completed by June 8, 2027, see the cancellation and refund policy above for details.",
+    a: "The retreat is designed for 11 guests plus Yvette, for 12 people total. Choose your payment option above to lock in your place. Remember, all payments must be completed by June 8, 2027, see the cancellation and refund policy above for details.",
   },
 ];
 
@@ -224,7 +224,7 @@ export const retreat = {
   seo: {
     title: "Release. Restore. Reconnect.",
     description:
-      "A luxury wellness retreat in Ubud, Bali for twelve women mental health and wellness professionals. June 15–20, 2027.",
+      "A luxury wellness retreat in Ubud, Bali for 11 women mental health and wellness professionals, hosted by Yvette. June 15–20, 2027.",
   },
 
   hero: {
@@ -235,7 +235,7 @@ export const retreat = {
     ledeA: "A LUXURY WELLNESS RETREAT FOR WOMEN MENTAL HEALTH AND WELLNESS PROFESSIONALS",
     ledeB:
       "BECAUSE THE WOMEN WHO SPEND THEIR LIVES HOLDING SPACE FOR OTHERS DESERVE A SPACE CREATED JUST FOR THEM.",
-    strip: `6 DAYS${DOT}5 NIGHTS${DOT}12 WOMEN${DOT}ONE PRIVATE VILLA IN UBUD, BALI`,
+    strip: `6 DAYS${DOT}5 NIGHTS${DOT}11 GUESTS + YVETTE${DOT}ONE PRIVATE VILLA IN UBUD, BALI`,
     reserveCta: "RESERVE YOUR PLACE",
     discoverCta: "DISCOVER THE EXPERIENCE",
   },
@@ -298,20 +298,20 @@ export const retreat = {
 
   intimacy: {
     eyebrow: "THE INTIMACY IS THE POINT",
-    title: "Why twelve women.",
+    title: "Why eleven guests.",
     titleAccent: "Why this villa.",
     blocks: [
       {
-        title: "Why Only 12 Women",
+        title: "Why Only 11 Guests",
         body: [
-          "This is not a conference. It is not a room of a hundred people nodding along to a speaker and going home strangers. Twelve women in one private villa means you are not performing for anyone. You are not managing your face. You get to actually be known, by the end of six days, by name and by story, not just by profession.",
+          "This is not a conference. It is not a room of a hundred people nodding along to a speaker and going home strangers. Eleven guests and Yvette in one private villa means you are not performing for anyone. You are not managing your face. You get to actually be known, by the end of six days, by name and by story, not just by profession.",
           "Smaller also means safer. The kind of rest we are talking about, the kind where your nervous system actually lets go, does not happen in a crowd. It happens when you know exactly who is in the room with you.",
         ],
       },
       {
         title: "Why This Villa",
         body: [
-          "We chose one private twelve bedroom estate in Ubud on purpose. No hotel staff walking through common areas. No other guests at the pool. No shared spaces with strangers. The entire property, both infinity pools, the yoga shala, the gym, the spa facility, is only for the twelve of us the entire time we are there.",
+          "We chose one private twelve bedroom estate in Ubud on purpose. No hotel staff walking through common areas. No other guests at the pool. No shared spaces with strangers. The entire property, both infinity pools, the yoga shala, the gym, the spa facility, is only for our group of twelve, including me, the entire time we are there.",
           "That privacy is not a luxury detail. It is what makes it possible for you to actually exhale. You cannot fully let your guard down in a space you are sharing with people who do not know what you carry. Here, you do not have to.",
         ],
       },
@@ -441,7 +441,7 @@ export const retreat = {
   },
 
   reserve: {
-    eyebrow: "LIMITED TO 12 WOMEN",
+    eyebrow: "11 GUESTS + YVETTE",
     title: "Stop saying next year.",
     titleAccent: "Next year is now.",
     strip: `BALI${DOT}JUNE 15–20, 2027${DOT}LUXURY RETREAT PACKAGE`,
@@ -475,7 +475,7 @@ export const retreat = {
     ],
     cta: "RESERVE YOUR PLACE",
     ctaNote: "Choose pay in full or a $500 deposit with monthly payments. New payment plans close February 1, 2027; all balances are due by June 8, 2027.",
-    scarcity: `RESERVE BEFORE SPOTS CLOSE${DOT}LIMITED TO 12 WOMEN`,
+    scarcity: `11 GUESTS + YVETTE${DOT}12 PEOPLE TOTAL`,
     insurance:
       "Travel insurance is strongly recommended. You are welcome to choose any provider that meets your needs. For convenience, you can view options from Trawick International below.",
     insuranceCta: "VIEW TRAVEL INSURANCE OPTIONS",
