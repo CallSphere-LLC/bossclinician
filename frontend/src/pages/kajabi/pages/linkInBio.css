@@ -587,3 +587,13 @@
     font-size: 0.63rem;
   }
 }
+
+/* Four stages remain stacked in the same order, including on mobile. */
+.lib-stages { display: grid; gap: 28px; }
+.lib-stage-title { margin: 0 0 12px; color: #fff; font-size: 16px; line-height: 1.5; font-weight: 600; }
+.lib-stage-description { margin-bottom: 14px; color: var(--lib-lav-l); font-size: 13px; line-height: 1.7; }
+.lib-fit-quiz { margin-top: 12px; color: var(--lib-lav-l); font-size: 12px; line-height: 1.7; }
+.lib-fit-quiz a { display: inline-flex; align-items: center; min-height: 44px; color: var(--lib-gold); text-decoration: underline; text-underline-offset: 3px; }
+.lib-fit-quiz a:focus-visible { outline: 2px solid var(--lib-gold); outline-offset: 3px; border-radius: 3px; }
+
+.lib-page #lib-stage-heading { font-size: 1rem; line-height: 1.5; letter-spacing: 0; text-transform: none; white-space: normal; text-align: center; color: #fff; }

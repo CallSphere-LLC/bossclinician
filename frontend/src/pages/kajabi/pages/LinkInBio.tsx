@@ -11,7 +11,7 @@ import pageCss from "./linkInBio.css?inline";
  * custom-code page rather than reinterpreted in the site's luxe kit.
  *
  * Her page was one self-contained document: a 480px column on navy, gold and
- * purple accents, nine buttons in four groups, four testimonials, a short bio,
+ * purple accents, stage-led links, four testimonials, a short bio,
  * socials and policies. That is what someone who just tapped her Instagram bio
  * should see, so this page keeps its own palette whatever the site theme is:
  * every colour lives in linkInBio.css under `lib-` classes (no Tailwind colour
@@ -30,7 +30,7 @@ type BadgeTone = "gold" | "green" | "purple" | "goldSoft";
 interface LinkButton {
   icon: string;
   title: string;
-  sub: string;
+  sub?: string;
   to: string;
   variant: Variant;
   badge?: { label: string; tone: BadgeTone };
@@ -44,7 +44,7 @@ interface LinkGroup {
 const SEO = {
   title: "Boss Clinician Link In Bio",
   description:
-    "Private Practice Strategist helping therapists build profitable, sustainable practices. Find your resources, offers, and next step here.",
+    "Private Practice Strategist helping mental health clinicians build profitable, sustainable practices. Find your resources, offers, and next step here.",
   image: "/images/link-in-bio/yvette.webp",
 };
 
@@ -53,94 +53,51 @@ const LOGO = { src: "/images/link-in-bio/boss-clinician-logo.png", alt: "Boss Cl
 
 const CREDENTIALS = ["LCSW", "Group Practice Owner", "Doctoral Candidate"];
 
+const STAGES: { title: string; description?: string; link: LinkButton; quiz?: boolean }[] = [
+  {
+    title: "I want to start or restart my private practice.",
+    description: "Learn how to start building while you’re still employed and plan around the income and benefits you rely on.",
+    link: { icon: "🌱", title: "Watch the Free Practice Prep Training", to: "/practicepreptraining", variant: "featured" },
+    quiz: true,
+  },
+  {
+    title: "My practice is busy. I want more control over my hours and pay.",
+    link: { icon: "🎥", title: "Watch the Free Lounge Masterclass", to: "/freedom-masterclass", variant: "audit" },
+  },
+  {
+    title: "I’m considering my first clinician hire.",
+    link: { icon: "🧠", title: "Take the Hiring-Readiness Quiz", to: "/hiring-quiz", variant: "quiz" },
+  },
+  {
+    title: "I have a team, and too many decisions still come back to me.",
+    link: { icon: "📋", title: "Take the Group Practice Assessment", to: "/boss-assessment", variant: "assessment" },
+  },
+];
+
 const GROUPS: LinkGroup[] = [
   {
-    label: "Start Here",
+    label: "Looking for a specific program?",
     links: [
-      {
-        icon: "📋",
-        // The live session (Sept 25) is over; the button now opens the on-demand replay.
-        title: "Documentation That Protects Your Practice",
-        sub: "CE training replay. Watch it on demand.",
-        to: "/replay-documentation",
-        variant: "featured",
-      },
-      {
-        icon: "🎥",
-        title: "Free Masterclass: Create a Private Practice That Supports Your Income, Energy & Future",
-        sub: "For established therapists who don't want to see 25 to 30 clients forever. Includes the Practice Freedom Audit.",
-        to: "/freedom-masterclass",
-        variant: "audit",
-      },
-      {
-        icon: "🧠",
-        badge: { label: "Free Quiz", tone: "gold" },
-        title: "Is Your Practice Set Up to Pay You, or Just Keep You Busy?",
-        sub: "2 minutes. Find out what stage your practice is in and what to focus on next.",
-        to: "/practice-quiz",
-        variant: "quiz",
-      },
+      { icon: "🌱", title: "Explore the Club", to: "/club", variant: "club" },
+      { icon: "💜", title: "Explore the Lounge", to: "/lounge", variant: "lounge" },
+      { icon: "👑", title: "Explore the Boardroom and Apply", to: "/boardroom", variant: "boardroom" },
     ],
   },
   {
-    label: "Programs",
-    links: [
-      {
-        icon: "🌱",
-        badge: { label: "Build It", tone: "green" },
-        title: "Boss Clinician Club",
-        sub: "Build a private practice you won't have to undo later. 6-month program for therapists building or rebuilding their private practice foundation.",
-        to: "/club",
-        variant: "club",
-      },
-      {
-        icon: "💜",
-        badge: { label: "Sustain It", tone: "purple" },
-        title: "Boss Clinician Lounge",
-        sub: "Make the practice you already built work better for the life you actually want. Monthly membership for established therapists ready to create more income, capacity, freedom, and sustainability.",
-        to: "/lounge",
-        variant: "lounge",
-      },
-      {
-        icon: "👑",
-        badge: { label: "Lead It", tone: "goldSoft" },
-        title: "Boss Clinician Boardroom",
-        sub: "Build a practice that can grow beyond you. Strategic mastermind for group practice owners ready to lead with stronger systems, structure, and less owner dependence.",
-        to: "/boardroom",
-        variant: "boardroom",
-      },
-    ],
+    label: "Retreat",
+    links: [{ icon: "🌴", title: "Explore the FlourisHealer Bali Retreat", to: "/retreats", variant: "hub" }],
   },
   {
-    label: "Free Resources",
+    label: "More resources",
     links: [
-      {
-        icon: "📚",
-        title: "Free Resource Hub",
-        sub: "Free resources for every stage of practice: Build It, Sustain It, or Lead It.",
-        to: "/resource-hub",
-        variant: "hub",
-      },
-      {
-        icon: "📋",
-        title: "Free Group Practice Self-Assessment",
-        sub: "See where your group practice is still too dependent on you, and what needs strengthening next.",
-        to: "/boss-assessment",
-        variant: "assessment",
-      },
+      { icon: "📋", title: "Documentation That Protects Your Practice", sub: "CE training replay. Watch it on demand.", to: "/replay-documentation", variant: "hub" },
+      { icon: "🧠", title: "Is Your Practice Set Up to Pay You, or Just Keep You Busy?", sub: "2 minutes. Find out what stage your practice is in and what to focus on next.", to: "/practice-quiz", variant: "quiz", badge: { label: "Free Quiz", tone: "gold" } },
+      { icon: "📚", title: "Free Resource Hub", sub: "Free resources for every stage of practice: Build It, Sustain It, or Lead It.", to: "/resource-hub", variant: "hub" },
     ],
   },
   {
     label: "About",
-    links: [
-      {
-        icon: "👋🏾",
-        title: "My Story",
-        sub: "From dialysis social worker to multi-six-figure group practice",
-        to: "/about",
-        variant: "about",
-      },
-    ],
+    links: [{ icon: "👋🏾", title: "My Story", sub: "From dialysis social worker to multi-six-figure group practice", to: "/about", variant: "about" }],
   },
 ];
 
@@ -182,7 +139,7 @@ const TESTIMONIALS: { quote: string; initial: string; tone: "green" | "purple" |
 const ABOUT = {
   name: "Yvette Howard, LCSW",
   role: "Private Practice Strategist · Boss Clinician",
-  body: "I started my private practice in 2018 while working in dialysis and took it full-time in 2019. I went on to build a multi-six-figure group practice, and learned firsthand that revenue alone does not create freedom. Today, I help therapists build businesses that support their income, energy, life, and future instead of requiring them to stay maxed out forever.",
+  body: "I started my private practice in 2018 while working in dialysis and took it full-time in 2019. I went on to build a multi-six-figure group practice, and learned firsthand that revenue alone does not create freedom. Today, I help mental health clinicians build businesses that support their income, energy, life, and future instead of requiring them to stay maxed out forever.",
 };
 
 const SOCIALS = [
@@ -221,7 +178,7 @@ function LinkCard({ link }: { link: LinkButton }) {
         <span className="lib-btn-text">
           {link.badge && <span className={`lib-badge lib-badge--${link.badge.tone}`}>{link.badge.label}</span>}
           <span className="lib-btn-title">{link.title}</span>
-          <span className="lib-btn-sub">{link.sub}</span>
+          {link.sub && <span className="lib-btn-sub">{link.sub}</span>}
         </span>
         <span className="lib-btn-arrow" aria-hidden>
           →
@@ -248,12 +205,11 @@ export default function LinkInBio() {
             Build a private practice <em>you can actually stay in.</em>
           </h1>
           <p className="lib-name">
-            Yvette Howard, <em>LCSW</em>
+            Hey, I’m Yvette Howard, <em>LCSW.</em>
           </p>
           <p className="lib-handle">@bossclinician</p>
           <p className="lib-bio">
-            Helping therapists build private practices that support their income, energy, life, and future, without
-            requiring them to max themselves out to maintain them.
+            I help mental health clinicians build and run a private practice that gives them more say over their income, their hours, and when they can step away.
           </p>
           <ul className="lib-creds" aria-label="Credentials">
             {CREDENTIALS.map((c) => (
@@ -264,13 +220,22 @@ export default function LinkInBio() {
           </ul>
         </div>
 
-        <div className="lib-callout">
-          <p className="lib-callout-lead">Build it. Sustain it. Lead it. Leave it on your terms.</p>
-          <p>
-            Whether you're building your practice, making an established practice more sustainable, or learning to lead
-            a growing team, <strong>start with the stage you're in now.</strong>
-          </p>
-        </div>
+        <nav aria-labelledby="lib-stage-heading">
+          <Divider id="lib-stage-heading">What are you working on right now?</Divider>
+          <div className="lib-stages">
+            {STAGES.map((stage) => (
+              <div className="lib-stage" key={stage.link.to}>
+                <h3 className="lib-stage-title">{stage.title}</h3>
+                {stage.description && <p className="lib-stage-description">{stage.description}</p>}
+                <ul className="lib-links"><LinkCard link={stage.link} /></ul>
+                {stage.quiz && <div className="lib-fit-quiz">
+                  <p>Still deciding whether private practice fits your goals?</p>
+                  <Link to="/private-practice-for-you">Take the Free Quiz</Link>
+                </div>}
+              </div>
+            ))}
+          </div>
+        </nav>
 
         {GROUPS.map((group, i) => (
           <nav key={group.label} aria-labelledby={`lib-group-${i}`}>
