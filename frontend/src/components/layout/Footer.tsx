@@ -80,15 +80,7 @@ export function Footer() {
                 </Link>
               </li>
             ))}
-            <li>
-              <Link
-                to={footer.bookACall}
-                onClick={toTopIfCurrent(footer.bookACall)}
-                className={columnLink}
-              >
-                Book a Free Call
-              </Link>
-            </li>
+
           </ul>
         </div>
 

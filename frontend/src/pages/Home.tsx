@@ -8,7 +8,7 @@ import { testimonials as fallbackTestimonials } from "@/content/testimonials";
 import { LuxeHero } from "@/components/home/luxe/LuxeHero";
 import { LuxeCredBar } from "@/components/home/luxe/LuxeCredBar";
 import { LuxeThreeThings } from "@/components/home/luxe/LuxeThreeThings";
-import { LuxeKeepItReal } from "@/components/home/luxe/LuxeKeepItReal";
+import { HomeOpening, HomeCoreBelief, HomeTrust } from "@/components/home/luxe/HomeEditorial";
 import { LuxeOffers } from "@/components/home/luxe/LuxeOffers";
 import { LuxeMeetYvette } from "@/components/home/luxe/LuxeMeetYvette";
 import { LuxeQuiz } from "@/components/home/luxe/LuxeQuiz";
@@ -36,14 +36,16 @@ export default function Home() {
     <>
       <Seo
         title="Build a Private Practice You Can Actually Stay In | Boss Clinician"
-        description="Boss Clinician helps therapists at every stage of practice ownership: build the foundation, make your practice sustainable, and lead beyond yourself. Build it. Sustain it. Lead it. Leave it on your terms."
+        description="Boss Clinician helps mental health clinicians build, sustain, and lead private practices that support their income, time, and life."
       />
       <LuxeHero />
+      <HomeOpening />
       <LuxeCredBar />
+      <HomeCoreBelief />
       <LuxeThreeThings />
-      <LuxeKeepItReal />
       <LuxeOffers />
       <LuxeMeetYvette />
+      <HomeTrust />
       <LuxeQuiz />
       <LuxeTestimonials testimonials={testimonials.filter((t) => t.published)} />
       <LuxeBlogTeaser />

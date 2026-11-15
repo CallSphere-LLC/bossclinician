@@ -41,11 +41,12 @@ const QUIZ_HREF = "/practice-quiz";
  */
 const OFFERS: readonly Offer[] = [
   {
-    ribbon: "6-MONTH PROGRAM",
+    ribbon: "BUILD IT",
     name: "The Club",
-    tagline: "Build a private practice you won't have to undo later.",
+    tagline: "Build a Private Practice You Won’t Have to Undo Later.",
     desc: [
-      "For clinicians building their foundation, attracting clients, and learning how to run the business side of private practice with more confidence and less guessing.",
+      "For clinicians who are starting, rebuilding, or building alongside employment and want to make smart decisions about clients, pricing, insurance, systems, and the transition into ownership.",
+      "You do not need to know everything before you start. But the things you skip now often become the things you pay to fix later.",
     ],
     audience: "For: The clinician building or rebuilding",
     cta: "Explore the Club",
@@ -54,27 +55,28 @@ const OFFERS: readonly Offer[] = [
     accent: "green",
   },
   {
-    ribbon: "MEMBERSHIP",
+    ribbon: "SUSTAIN IT",
     name: "The Lounge",
-    tagline: "Make the practice you already built work better for the life you actually want.",
+    tagline: "Build a Financially Secure Practice Without Relying on a Packed Caseload.",
     desc: [
-      "For established clinicians whose practice is full or nearly full, but still requires more time, energy, or clinical output than they want to maintain long-term.",
-      "Strengthen your income model, reduce how much the practice depends on your maximum capacity, build better systems, and create more room for the life and future you actually want.",
+      "For established practice owners who already have clients and revenue but are tired of working so hard just to keep the practice feeling safe.",
+      "Inside The Lounge, you learn how to make clearer decisions about caseload, owner pay, payer mix, platform dependence, delegation, time off, and the business model underneath your clinical work.",
     ],
-    audience: "For: The Maxed Out Clinician",
+    audience: "For: The Established Practice Owner",
     cta: "Explore the Lounge",
     to: "/lounge",
     secondary: { label: "Watch the Free Masterclass", to: MASTERCLASS_ROUTE },
     accent: "plum",
   },
   {
-    ribbon: "MASTERMIND",
+    ribbon: "LEAD IT",
     name: "The Boardroom",
-    tagline: "Build a practice that can grow beyond you.",
+    tagline: "Build a Practice That Can Grow Beyond You.",
     desc: [
-      "For group-practice owners and scaling clinicians who need stronger leadership, team systems, and CEO-level decision-making as the business becomes bigger than one person.",
+      "For established mental health practice owners actively preparing to hire or already leading a team.",
+      "When your decisions now involve payroll, compensation, profitability, clinician capacity, systems, and leadership, you need a different room.",
     ],
-    audience: "For: The Stretched Thin Clinician",
+    audience: "For: The Practice Owner Building or Leading a Team",
     cta: "Apply for The Boardroom",
     to: "/boardroom",
     accent: "gold",

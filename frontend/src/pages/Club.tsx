@@ -178,15 +178,19 @@ export default function Club() {
       />
 
       <LuxePageHero
-        eyebrow={club.hero.eyebrow}
+        eyebrow="THE CLUB | 6-MONTH PROGRAM"
         title={club.hero.title}
         titleAccent={club.hero.titleAccent}
         tone="mixed"
         align="center"
         lede={
           <>
-            <span className="block">{club.hero.lede[0]}</span>
-            <span className="mt-5 block">{club.hero.lede[1]}</span>
+            <span className="block">For clinicians who are ready to stop researching private practice and start building one with the right foundation.</span>
+            <span className="mt-5 block">
+              Build while you are working.<br />
+              Grow intentionally.<br />
+              Transition on your terms.
+            </span>
           </>
         }
         actions={
@@ -199,7 +203,7 @@ export default function Club() {
             >
               {club.hero.cta}
             </LuxeButton>
-            <p className="copy-luxe max-w-xl text-pretty text-sm">{club.hero.includes}</p>
+            <p className="copy-luxe max-w-xl text-pretty text-sm">Includes The Boss Move curriculum, live coaching, community, implementation resources, and core CE training.</p>
             <LuxePill accent="gold">{club.hero.bonus}</LuxePill>
           </div>
         }
@@ -209,16 +213,20 @@ export default function Club() {
       <TaughtSection />
       <StartSection />
       <HoldingBackSection />
+      <ClubPhilosophy />
       <QuoteFilmBand />
       <WarningSection />
       <ClinicianStorySection />
       <PersonasSection />
       <EnterSection />
       <PillarsSection />
+      <ClubDecisionSection />
+      <ClubReadinessSection />
       <BonusesSection />
       <TestimonialsSection />
       <PaceSection />
       <ValueSection />
+      <ClubFaqJump />
       <NextMoveSection />
       <FounderLetter
         eyebrow={club.founder.eyebrow}
@@ -243,7 +251,7 @@ function AudienceBand() {
   return (
     <Section surface="raised" space="sm" aria-label="Who the Club is for">
       <p className="mx-auto max-w-3xl text-balance text-center text-[0.78rem] font-semibold uppercase leading-[1.9] tracking-[0.16em] text-gold/90">
-        {club.hero.banner}
+        For clinicians and psychiatric providers ready to build private practice with the right foundation from the start.
       </p>
     </Section>
   );
@@ -253,10 +261,11 @@ function AudienceBand() {
 
 function TaughtSection() {
   const reduce = useEntranceMotion();
+  const title = "You Know How to Be the Clinician. Now You Have to Learn How to Be the Owner.";
 
   return (
-    <Section surface="base" space="lg" aurora="plum" auroraIntensity={0.45} aria-label={club.taught.title}>
-      <SectionTitle title={club.taught.title} className="max-w-3xl" />
+    <Section surface="base" space="lg" aurora="plum" auroraIntensity={0.45} aria-label={title}>
+      <SectionTitle title={title} className="max-w-3xl" />
       {/* Her portrait beside the argument, as the source sets it; stacked on
           top of it below lg. */}
       <div className="mx-auto mt-7 grid max-w-5xl items-center gap-8 sm:mt-8 lg:grid-cols-[0.8fr_1.2fr] lg:gap-14">
@@ -264,10 +273,23 @@ function TaughtSection() {
           <Framed picture={TAUGHT_PHOTO} imgClassName="aspect-[4/5] object-top" />
         </motion.div>
         <motion.div {...rise(reduce, 0.1)} className="mx-auto max-w-2xl">
-          <Prose paragraphs={club.taught.paragraphs} align="center" className="lg:text-left" />
+          <Prose paragraphs={[
+            "You spent years learning how to assess, diagnose, document, and care for clients.",
+            "Then private practice asks you to suddenly understand:",
+          ]} />
+          <div className="mt-4"><MarkedList items={[
+            "business structure", "pricing", "insurance", "credentialing", "billing", "referrals", "policies",
+            "scheduling", "expenses", "client flow", "systems", "taxes",
+            "and how much money you actually need the practice to produce",
+          ]} /></div>
+          <Prose className="mt-5" paragraphs={[
+            "Nobody taught you this part.",
+            "So you start Googling. Joining Facebook groups. Saving posts. Downloading templates. Watching free trainings.",
+            "And somehow you end up with more information and less clarity about what to do first.",
+          ]} />
         </motion.div>
       </div>
-      <Pull className="mt-8 sm:mt-10">{club.taught.closing}</Pull>
+      <Pull className="mt-8 sm:mt-10">The Club gives you structure.</Pull>
     </Section>
   );
 }
@@ -310,6 +332,10 @@ function HoldingBackSection() {
       <SectionTitle title={club.holdingBack.title} />
       <motion.div {...rise(reduce, 0.1)} className="mt-7 sm:mt-8">
         <Prose paragraphs={club.holdingBack.paragraphs} />
+        <div className="mt-7"><MarkedList items={[
+          "Should I credential directly with insurance or start with a platform like Alma, Headway, Rula, Grow, or Talkspace?",
+          "Which payer or platform options actually make sense for the kind of practice I want to build?",
+        ]} /></div>
       </motion.div>
       <Cta label={club.holdingBack.cta} to={JOIN_ANCHOR} className="mt-7 sm:mt-8" />
     </Section>
@@ -829,6 +855,84 @@ function AccreditationSection() {
         {club.footerLine}
       </p>
       <p className="mt-6 text-pretty text-center text-xs leading-[1.8] text-orchid">{club.nbcc}</p>
+    </Section>
+  );
+}
+
+
+/* Keep this adjacent to buyer recognition; the approved Club VSL goes immediately above it. */
+function ClubPhilosophy() {
+  const title = "Learn How Your Practice Works Before You Delegate Parts of It.";
+  return (
+    <Section surface="raised" space="lg" aria-label={title} containerClassName="max-w-3xl">
+      <SectionTitle title={title} />
+      <div className="mt-7 space-y-5">
+        <Prose paragraphs={[
+          "I believe practice owners should understand the basic functions of their business before outsourcing them.",
+          "That does not mean you should do billing, admin, or every operational task forever.",
+          "It means you should understand enough to know:",
+        ]} />
+        <MarkedList items={[
+          "what good billing looks like", "how insurance affects your numbers", "how credentialing works",
+          "how third-party platforms affect your economics and client flow", "what your systems are supposed to accomplish",
+          "what your policies need to protect", "what your practice actually costs to operate",
+        ]} />
+        <Prose paragraphs={["Because it is hard to manage something you never learned to understand."]} />
+      </div>
+      <Pull className="mt-8">Learn it first. Delegate it later.</Pull>
+    </Section>
+  );
+}
+
+function ClubDecisionSection() {
+  const title = "Inside The Club, you will learn how to make smarter decisions about:";
+  return (
+    <Section surface="raised" space="md" aria-label={title} containerClassName="max-w-3xl">
+      <SectionTitle title={title} />
+      <GlassCard interactive={false} className="mt-7 p-6 sm:p-8">
+        <MarkedList items={[
+          "your business foundation", "pricing and financial targets",
+          "insurance, private pay, third-party platforms, or a hybrid model",
+          "credentialing", "client attraction and referral strategy", "policies and systems",
+          "your schedule", "your transition from employment", "what you actually need before leaving your job",
+        ]} />
+      </GlassCard>
+      <Prose className="mt-7" paragraphs={[
+        "You will not leave with a carbon-copy practice.",
+        "You will understand how to make decisions for yours.",
+      ]} />
+    </Section>
+  );
+}
+
+function ClubReadinessSection() {
+  const title = "The Club is for you if:";
+  return (
+    <Section surface="deep" space="md" aria-label={title} containerClassName="max-w-3xl">
+      <SectionTitle title={title} />
+      <div className="mt-7 space-y-6">
+        <MarkedList items={[
+          "you have not started yet", "you are building while employed", "you started but know your foundation is shaky",
+          "you have been researching longer than you have been implementing", "you want structure, accountability, and practical guidance",
+          "you want to leave employment when the numbers support it, not just because you are burned out",
+        ]} />
+        <Prose paragraphs={[
+          "The Club is not for you if you already have an established practice and your primary problem is sustainability, caseload dependence, or owner workload.",
+          "That is what The Lounge is for.",
+        ]} />
+        <LuxeButton to="/lounge" variant="outline">Explore The Lounge</LuxeButton>
+      </div>
+    </Section>
+  );
+}
+
+function ClubFaqJump() {
+  return (
+    <Section surface="raised" space="sm" aria-label="Have More Questions?" containerClassName="max-w-3xl">
+      <SectionTitle title="Have More Questions?" body="See what clinicians commonly ask before joining." />
+      <div className="mt-6 text-center">
+        <LuxeButton href="#faq" variant="outline">View FAQs</LuxeButton>
+      </div>
     </Section>
   );
 }

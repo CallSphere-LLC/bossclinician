@@ -6,23 +6,19 @@ import { LuxeButton, LuxePill } from "@/components/luxe/LuxeButton";
 const EASE_LUXE: [number, number, number, number] = [0.22, 1, 0.36, 1];
 const VIEWPORT = { once: true, margin: "-12% 0px -8% 0px" } as const;
 
-/**
- * The "Meet Your Strategist" copy from the bossclinician.com home page,
- * verbatim and in order. The long founder story lives on /about; the home page
- * carries this shorter version. Paragraph one stays a single unbroken string
- * (rather than being pre-split around its drop cap) so the source copy can be
- * diffed against the live site without reassembly.
- */
-const STORY: readonly string[] = [
-  "I started my private practice in 2018, went full-time in 2019, and eventually built a multi-six-figure group practice.",
-  "Along the way, I learned that growth alone does not create freedom.",
-  "I've experienced the full caseload, the platforms, the insurance decisions, the hiring, the leadership challenges, the systems, and the point where a business can look successful on paper while still asking too much of the owner.",
-  "That's why I created Boss Clinician.",
-  "Today, I help therapists build, sustain, and lead private practices that support their income, energy, life, and future, without requiring them to max themselves out to maintain them.",
+const STORY = [
+  "I started my private practice in 2018 and eventually built a multi-six-figure group practice.",
+  "I have navigated insurance panels, credentialing, audits, documentation, billing, hiring, contractor-to-employee transitions, payroll, leadership, systems, delegation, and the uncomfortable realization that high revenue does not automatically create freedom.",
+  "My practice eventually reached $500,000 in revenue.",
+  "And the year we reached our highest revenue was also the year I realized I did not want to keep running the business the same way.",
+  "The number did not save me.",
+  "The structure underneath it was still built on me.",
+  "That changed the way I think about private practice.",
+  "Today, I help clinicians make the business decisions I wish more of us understood before we became exhausted trying to hold everything together.",
+  "I am not here to convince you to build the biggest practice.",
 ];
 
-const CLOSING =
-  "When I'm not mentoring clinicians or leading my team, you'll find me sipping iced chai, dancing with my son in the kitchen, or planning my next retreat.";
+const CLOSING = "I am here to help you build the practice that works for your life.";
 
 const CREDENTIALS: readonly string[] = [
   "LCSW",
@@ -120,11 +116,7 @@ export function LuxeMeetYvette() {
             {...rise(reduce, 0.14)}
             className="text-balance font-display text-[1.9rem] font-medium leading-[1.14] text-white sm:text-[2.4rem] lg:text-[2.9rem] lg:tracking-[-0.012em]"
           >
-            I built this for the clinician who is holding everything together and still wondering
-            why it does not feel like enough.{" "}
-            {/* The turn in the sentence, set apart by Playfair's italic rather
-                than by more gold. */}
-            <em className="italic text-orchid">Especially her.</em>
+            I Didn’t Learn This From the Sidelines.
           </motion.h2>
 
           <motion.div {...rise(reduce, 0.24)}>

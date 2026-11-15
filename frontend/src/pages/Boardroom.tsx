@@ -139,7 +139,9 @@ export default function Boardroom() {
             <em>{b.hero.titleAccent}</em>
           </h1>
           <p className="br-hero-tag">{b.hero.tag}</p>
-          <p className="br-hero-intro">{b.hero.intro}</p>
+          <p className="br-hero-intro">An application-only, 12-month mastermind for established mental health practice owners preparing to hire or already leading a team.</p>
+          <p>Your decisions now affect more than your own schedule.</p>
+          <p>They affect payroll, profitability, team capacity, compensation, systems, culture, and the people depending on you to lead.</p>
           <a className="br-button" href="#apply">
             {b.hero.cta}
           </a>
@@ -198,6 +200,18 @@ export default function Boardroom() {
             </article>
           ))}
         </div>
+      </section>
+
+      <section className="br-section br-dark">
+        <div className="br-section-heading br-reveal">
+          <h2>Bigger Is Not Automatically Better.</h2>
+          <p>The goal of The Boardroom is not to help you build the largest team possible.</p>
+          <p>It is to help you make sure the practice gets better as it gets bigger.</p>
+        </div>
+        <div className="br-focus-grid br-reveal">
+          {["the numbers behind hiring", "fully loaded clinician cost", "compensation", "profitability", "utilization", "leadership", "accountability", "systems", "delegation", "owner dependence"].map((item) => <article key={item}><h3>{item}</h3></article>)}
+        </div>
+        <p className="br-center-callout br-reveal">You Don’t Need More Numbers.<br /><em>You Need to Know What Decision the Numbers Are Asking You to Make.</em></p>
       </section>
 
       <section className="br-pathways br-section">
@@ -319,6 +333,20 @@ export default function Boardroom() {
           </ol>
           <p>{b.six.close}</p>
         </div>
+      </section>
+
+      <section id="faq" className="br-section">
+        <div className="br-section-heading"><h2>Common Questions About The Boardroom</h2></div>
+        <div className="br-accordion">
+          <details><summary>Who is The Boardroom for?</summary><p>Established mental health practice owners preparing to hire or already leading a team.</p></details>
+          <details><summary>How long is the program?</summary><p>The Boardroom is a 12-month mastermind.</p></details>
+          <details><summary>How do I join?</summary><p>Start with the application below. The Boardroom is application-only, with a fit conversation before an invitation.</p></details>
+        </div>
+      </section>
+      <section className="br-section br-reveal">
+        <h2>Have More Questions?</h2>
+        <p>Review the most common questions before deciding whether to apply.</p>
+        <a className="br-button br-button-dark" href="#faq">View FAQs</a>
       </section>
 
       <section className="br-final-cta br-section br-reveal">

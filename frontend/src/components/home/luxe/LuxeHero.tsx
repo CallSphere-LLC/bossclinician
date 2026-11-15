@@ -100,7 +100,7 @@ export function LuxeHero() {
               {/* 0.6rem resolved to 9.6px on a phone — below the floor where a
                   wide-tracked uppercase label stays comfortably readable. */}
               <span className="eyebrow-luxe mb-0 text-[0.7rem] tracking-[0.16em] sm:text-[0.68rem] sm:tracking-[0.28em]">
-                YVETTE HOWARD, LCSW // PRIVATE PRACTICE STRATEGIST
+                YVETTE HOWARD, LCSW | PRIVATE PRACTICE STRATEGIST
               </span>
             </motion.div>
 
@@ -111,10 +111,10 @@ export function LuxeHero() {
                 KineticText collapses to plain text under reduced motion. */}
             <h1 className="mt-6 text-balance font-display text-[length:min(3rem,15vw)] font-normal leading-[1.03] tracking-[-0.02em] text-white sm:mt-7 sm:text-[3.6rem] md:text-[4.2rem] lg:text-[3.1rem] xl:text-[3.7rem] 2xl:text-[4.5rem]">
               <span className="block">
-                <KineticText text="Build a private practice" immediate delay={0.16} />
+                <KineticText text="Build a Private Practice" immediate delay={0.16} />
               </span>
               <span className="text-foil mt-1.5 block font-display italic">
-                <KineticText text="you can actually stay in." immediate delay={0.42} />
+                <KineticText text="You Can Actually Stay In." immediate delay={0.42} />
               </span>
             </h1>
 
@@ -122,9 +122,9 @@ export function LuxeHero() {
               {...rise(staticEntrance, 0.24)}
               className="copy-luxe mt-7 max-w-[34rem] text-pretty sm:mt-8 sm:text-[1.04rem] lg:text-[1.08rem]"
             >
-              Boss Clinician helps therapists build, sustain, and lead private practices that
-              support their income, energy, life, and future, without requiring them to max
-              themselves out to maintain them.
+              Boss Clinician helps mental health clinicians build, sustain, and lead private practices
+              that support their income, time, and life, without requiring them to keep adding
+              more just to feel financially secure.
             </motion.p>
 
             <motion.div

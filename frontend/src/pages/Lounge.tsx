@@ -28,11 +28,8 @@ import { useHeadContext } from "@/ssr/context";
  * The Boss Clinician Lounge — `/lounge`, at the path the source site sells it
  * from.
  *
- * Section order is the source page's: the fact → the good news → what becomes
- * possible → what it actually looks like → the Lounge → what is inside → why it
- * is different → four phases → it changes with you → who it is for → two tiers
- * → Yvette's letter → objections → the close. Copy lives in content/lounge.ts
- * and is the published wording.
+ * Offer configuration, pricing, and FAQs come from content/lounge.ts.
+ * The public positioning sections follow the latest website handoff.
  *
  * Mid-page actions scroll to the pricing band (`#join`), as the source's do;
  * only the tier buttons leave the page.
@@ -177,15 +174,15 @@ export default function Lounge() {
     <>
       <Seo
         title={lounge.seo.title}
-        description={lounge.seo.description}
+        description="Build a financially secure private practice without relying on a packed caseload. The Lounge helps established clinicians make clearer business decisions."
         image={PORTRAIT}
         jsonLd={[productNode(origin), faqPageNode(origin, "/lounge", lounge.faq.items)]}
       />
 
       <LuxePageHero
-        eyebrow="BOSS CLINICIAN LOUNGE · MEMBERSHIP"
-        title={lounge.hero.title}
-        titleAccent={lounge.hero.titleAccent}
+        eyebrow="BOSS CLINICIAN LOUNGE | MEMBERSHIP"
+        title="Your Practice Is Working."
+        titleAccent="But Can You Keep Working Like This?"
         tone="violet"
         align="left"
         aside={
@@ -201,8 +198,12 @@ export default function Lounge() {
         }
         lede={
           <>
-            <span className="block">{lounge.hero.lede[0]}</span>
-            <span className="mt-5 block">{lounge.hero.lede[1]}</span>
+            <span className="block">Build a financially secure practice without relying on a packed caseload.</span>
+            <span className="mt-5 block">
+              Work fewer days.<br />
+              Make clearer business decisions.<br />
+              Create more room for your life.
+            </span>
           </>
         }
         actions={
@@ -217,13 +218,18 @@ export default function Lounge() {
         }
       />
 
+      <LoungePracticeReframe />
       <FoundingBand />
-      <FactSection />
       <GoodNewsSection />
+      <LoungeDecisions />
       <PossibleSection />
+      <LoungeFirstMonth />
+      <LoungeOutcomes />
       <LooksLikeSection />
       <StepIntoSection />
+      <LoungeFourNumbers />
       <InsideSection />
+      <LoungeInsuranceApproach />
       <DifferentSection />
       <PhasesSection />
       <EvolvesSection />
@@ -236,6 +242,10 @@ export default function Lounge() {
         image={PHOTOS.founder.src}
         imageAlt={PHOTOS.founder.alt}
       />
+      <Section surface="raised" space="sm" aria-label="More questions about the Lounge">
+        <SectionTitle align="center" title="Have More Questions?" body="Get clarity on the commitment, support, pricing, and what to expect inside." />
+        <Cta label="View FAQs" to="#faq" className="mt-6" />
+      </Section>
       <ProgramFaq eyebrow={lounge.faq.eyebrow} title={lounge.faq.title} items={lounge.faq.items}>
         <Cta label={lounge.faq.cta} to={JOIN_ANCHOR} />
       </ProgramFaq>
@@ -258,57 +268,177 @@ function FoundingBand() {
 
 /* ── 1 · The fact ─────────────────────────────────────────────────────── */
 
-function FactSection() {
-  const reduce = useEntranceMotion();
-
+function LoungePracticeReframe() {
   return (
-    <Section
-      surface="base"
-      space="lg"
-      aurora="plum"
-      auroraIntensity={0.45}
-      aria-label="The fact"
-      containerClassName="max-w-5xl"
-    >
-      <SectionTitle
-        title={lounge.fact.title}
-        className="max-w-3xl"
-        titleClassName="text-[1.6rem] sm:text-[2rem] lg:text-[2.3rem]"
-      />
-
-      {/* The source's two image rows: portrait beside the turn, then the
-          laptop photograph beside the argument. Each stacks on a phone. */}
-      <motion.div
-        {...rise(reduce, 0.1)}
-        className="mt-10 grid items-center gap-8 lg:grid-cols-[0.75fr_1.25fr] lg:gap-14"
-      >
-        <Plate
-          photo={PHOTOS.seated}
-          className="mx-auto w-full max-w-[17rem] sm:max-w-xs"
-          imgClassName="aspect-[4/5] object-top"
-        />
-        <div>
-          <p className="text-pretty font-display text-[1.2rem] italic leading-[1.45] text-orchid">
-            {lounge.fact.leadIn}
-          </p>
-          <p className="mt-3 text-pretty font-display text-[1.35rem] leading-[1.4] text-white sm:text-[1.55rem]">
-            {lounge.fact.lead}
-          </p>
+    <>
+      <Section surface="base" space="lg" aurora="plum" auroraIntensity={0.45} containerClassName="max-w-5xl">
+        <div className="grid items-center gap-8 lg:grid-cols-[1.25fr_0.75fr] lg:gap-14">
+          <div>
+            <SectionTitle title="You May Not Be Tired of Private Practice. You May Be Tired of the Way You’re Currently Running It." />
+            <Prose className="mt-7" paragraphs={["Maybe you are:"]} />
+            <MarkedList className="mt-4" variant="check" items={[
+              "seeing 22–25+ clients a week and still not feeling financially secure",
+              "doing billing and admin long after your last session",
+              "checking your work email from vacation",
+              "panicking when two clients discharge",
+              "nervous every summer when referrals slow down",
+              "thinking about joining another payer panel",
+              "wondering whether you need another income stream",
+              "scrolling Indeed at night wondering if working for someone else would honestly be easier",
+            ]} />
+            <Prose className="mt-7" paragraphs={[
+              "You built this practice for autonomy.",
+              "Somewhere along the way, it started requiring more and more of you just to feel safe.",
+            ]} />
+          </div>
+          <Plate photo={PHOTOS.seated} className="mx-auto w-full max-w-[17rem] sm:max-w-xs" imgClassName="aspect-[4/5] object-top" />
         </div>
-      </motion.div>
+      </Section>
+      <Section surface="raised" space="lg" containerClassName="max-w-5xl">
+        <div className="grid items-center gap-8 lg:grid-cols-[1.1fr_0.9fr] lg:gap-14">
+          <div>
+            <SectionTitle title="Maybe You Don’t Need More Clients." />
+            <Prose className="mt-7" paragraphs={[
+              "If you are already seeing 24 clients a week and still do not feel financially stable, another directory may not fix the problem.",
+              "Before you market harder, look at:",
+            ]} />
+            <MarkedList className="mt-4" variant="check" items={[
+              "what the practice costs to run", "your lowest and highest payer rates", "your payer mix",
+              "how much you need to pay yourself", "how many sessions you actually need",
+              "how much unpaid admin time you are carrying", "what could appropriately be delegated",
+              "whether another service actually makes sense",
+            ]} />
+            <Prose className="mt-7" paragraphs={[
+              "The problem may not be your marketing.",
+              "The problem may be the model underneath your caseload.",
+            ]} />
+          </div>
+          <Plate photo={PHOTOS.laptop} className="mx-auto w-full max-w-md lg:max-w-none" />
+        </div>
+      </Section>
+      <Section surface="deep" space="lg" aurora="plum" containerClassName="max-w-4xl">
+        <SectionTitle title={lounge.fact.closing} align="center" />
+        <Prose className="mt-8" paragraphs={["You may not need:"]} />
+        <MarkedList className="mt-4" variant="cross" items={[
+          "another certification", "another insurance panel", "another directory", "a coaching business",
+          "a course", "a bigger team", "an entirely new career",
+        ]} />
+        <Prose className="mt-7" paragraphs={[
+          "Sometimes the answer is adding something.",
+          "Sometimes the answer is changing what is already there.",
+          "That is what we figure out inside The Lounge.",
+        ]} />
+      </Section>
+    </>
+  );
+}
 
-      <motion.div
-        {...rise(reduce, 0.1)}
-        className="mt-10 grid items-center gap-8 lg:grid-cols-[1.1fr_0.9fr] lg:gap-14"
-      >
-        <Prose paragraphs={lounge.fact.paragraphs} />
-        <Plate photo={PHOTOS.laptop} className="mx-auto w-full max-w-md lg:max-w-none" />
-      </motion.div>
-      <Pull className="mt-12">
-        <span className="not-italic text-[0.8em] font-semibold uppercase tracking-[0.14em] text-gold">
-          {lounge.fact.closing}
-        </span>
-      </Pull>
+function LoungeDecisions() {
+  return (
+    <Section surface="base" space="lg" containerClassName="max-w-4xl">
+      <SectionTitle title="Stop Making Every Major Practice Decision Alone." />
+      <Prose className="mt-7" paragraphs={["These are the kinds of questions we work through:"]} />
+      <MarkedList className="mt-4" variant="check" items={[
+        "Can I afford to reduce my caseload?",
+        "Which insurance panels actually make sense to keep?",
+        "Should I stay with Alma or Headway, credential independently, or use a combination of both?",
+        "How do I reduce my dependence on Alma, Headway, or other third-party platforms without destabilizing my income?",
+        "Should I hire an admin or another clinician?",
+        "Can I work three days and still pay myself what I need?",
+        "Do I need another income stream — or do I need to fix my current practice model?",
+        "Should I go cash pay, stay insurance-based, or build a hybrid model?",
+        "Does a group make sense for my client population?",
+        "Can supervision become part of my practice without adding more chaos?",
+        "What should I focus on for the next 90 days?",
+      ]} />
+      <Prose className="mt-7" paragraphs={[
+        "The Lounge is not about giving you more things to do.",
+        "It is about helping you decide what actually deserves your attention.",
+      ]} />
+    </Section>
+  );
+}
+
+function LoungeFirstMonth() {
+  return (
+    <Section surface="raised" space="lg" containerClassName="max-w-4xl">
+      <SectionTitle title="Your First Month: Get Out of Reaction Mode." />
+      <Prose className="mt-7" paragraphs={[
+        "You will not leave your first month with 47 new tasks.",
+        "You will identify 3–5 business goals for the next 90 days.",
+        "Then we will help you choose one priority first.",
+        "Your focus may be:",
+      ]} />
+      <MarkedList className="mt-4" variant="check" items={[
+        "reducing your caseload", "increasing owner pay", "changing payer mix", "dropping a low-paying panel",
+        "reducing dependence on third-party platforms", "hiring admin support", "building a 3-day workweek",
+        "creating a vacation fund", "deciding whether a group or supervision makes sense",
+      ]} />
+      <Prose className="mt-7" paragraphs={[
+        "The goal is not to add more to your plate.",
+        "The goal is to decide what should come off it.",
+      ]} />
+    </Section>
+  );
+}
+
+function LoungeOutcomes() {
+  return (
+    <Section surface="base" space="lg" containerClassName="max-w-4xl">
+      <SectionTitle title="What This Work Can Look Like in Real Life" />
+      <Prose className="mt-7" paragraphs={["Depending on your practice and goals, your work inside The Lounge may include:"]} />
+      <MarkedList className="mt-4" variant="check" items={[
+        "moving from 25 sessions a week toward 18", "increasing consistent owner pay",
+        "dropping or reducing dependence on a low-paying payer",
+        "creating a plan to move away from or reduce reliance on Alma, Headway, or similar platforms",
+        "delegating billing or admin", "building a 3-day workweek", "creating a vacation fund",
+        "starting an appropriate therapy group", "creating a 90-day financial plan",
+        "confidently evaluating whether students or pre-licensed clinicians fit your practice",
+      ]} />
+      <Prose className="mt-7" paragraphs={["These are examples, not guaranteed outcomes."]} />
+      <Cta label="I’m Ready to Build Differently" to={JOIN_ANCHOR} className="mt-8" />
+    </Section>
+  );
+}
+
+function LoungeFourNumbers() {
+  return (
+    <Section surface="deep" space="lg" aurora="plum" containerClassName="max-w-5xl">
+      <SectionTitle align="center" title="Four Numbers Can Tell You a Lot About Whether Your Practice Is Working for You." />
+      <Prose className="mt-7" align="center" paragraphs={["Inside The Lounge, we keep coming back to:"]} />
+      <ul className="mt-7 grid grid-cols-2 gap-4 sm:grid-cols-4">
+        {["Sessions per week", "Profit", "Owner pay", "Days worked"].map((name) => (
+          <li key={name}>
+            <GlassCard accent="plum" interactive={false} className="h-full p-5 text-center">
+              <span className="font-display text-lg font-medium text-white">{name}</span>
+            </GlassCard>
+          </li>
+        ))}
+      </ul>
+      <Prose className="mt-7" align="center" paragraphs={[
+        "Because the goal is not simply more revenue.",
+        "The goal is a practice where you can work fewer days, see fewer clients, pay yourself appropriately, and still maintain a healthy business.",
+      ]} />
+    </Section>
+  );
+}
+
+function LoungeInsuranceApproach() {
+  return (
+    <Section surface="base" space="lg" containerClassName="max-w-4xl">
+      <SectionTitle title="This Is Not a “Get Off Insurance” Program." />
+      <Prose className="mt-7" paragraphs={["I am not going to tell you that every clinician should:"]} />
+      <MarkedList className="mt-4" variant="cross" items={[
+        "go cash pay", "hire", "raise rates", "create a course", "start coaching", "build a group practice",
+      ]} />
+      <Prose className="mt-7" paragraphs={["Your strategy depends on:"]} />
+      <MarkedList className="mt-4" variant="check" items={[
+        "your numbers", "your values", "your client population", "your capacity", "your goals", "your season",
+      ]} />
+      <Prose className="mt-7" paragraphs={[
+        "There is no one correct practice model.",
+        "There is the model that works for you.",
+      ]} />
     </Section>
   );
 }
@@ -564,16 +694,25 @@ function FitSection() {
       <RevealGroup className="mt-12 grid grid-cols-1 gap-6 lg:grid-cols-2">
         <RevealItem className="h-full">
           <GlassCard accent="green" interactive={false} className="h-full p-7 sm:p-9">
-            <h3 className="font-display text-[1.4rem] font-medium text-white">{lounge.fit.forTitle}</h3>
+            <h3 className="font-display text-[1.4rem] font-medium text-white">The Lounge is for an established clinician or practice owner who:</h3>
             <GoldRule width="w-10" className="mt-5" />
-            <MarkedList items={lounge.fit.forItems} variant="check" className="mt-7" />
+            <MarkedList items={[
+              "already has a functioning practice", "wants ongoing access to experienced judgment",
+              "has recurring business decisions coming up", "is tired of reacting to every problem alone",
+              "wants to reduce dependence on a packed caseload", "is willing to look at the numbers",
+              "is willing to implement over several months", "wants a practice that supports life outside of work",
+            ]} variant="check" className="mt-7" />
           </GlassCard>
         </RevealItem>
         <RevealItem className="h-full">
           <GlassCard accent="neutral" interactive={false} className="h-full p-7 sm:p-9">
-            <h3 className="font-display text-[1.4rem] font-medium text-white">{lounge.fit.notTitle}</h3>
+            <h3 className="font-display text-[1.4rem] font-medium text-white">It is not for someone who:</h3>
             <GoldRule width="w-10" className="mt-5" />
-            <MarkedList items={lounge.fit.notItems} variant="cross" className="mt-7" />
+            <MarkedList items={[
+              "has not started a practice yet", "only wants more referrals", "wants guaranteed income results",
+              "wants someone to do everything for them", "refuses to look at the numbers",
+              "wants a quick fix without implementation", "only wants another certification to collect",
+            ]} variant="cross" className="mt-7" />
             <p className="mt-7 text-sm">
               <Link
                 to={lounge.fit.clubLink.to}
@@ -623,7 +762,12 @@ function MembershipPricingSection() {
                 <h3 className="text-[0.74rem] font-bold uppercase tracking-[0.22em] text-gold">
                   {tier.name}
                 </h3>
-                {tier.tagline && (
+                {vip ? (
+                  <Prose className="mt-4" paragraphs={[
+                    "Choose VIP if you want me to look at what’s happening in your practice and help you decide what to do next. Maybe you want Fridays off, but you’re unsure what that would mean for your take-home pay. Or you’ve rewritten your pricing page three times and want another set of eyes on it before you publish.",
+                    "Bring the schedule decision to a private strategy call. Send me the pricing page for recorded feedback. And at your 90-day review, we’ll look at what you tried, what changed, and what needs adjusting.",
+                  ]} />
+                ) : tier.tagline && (
                   <p className="mt-4 text-pretty font-display text-[1.1rem] italic leading-[1.4] text-white">
                     {tier.tagline}
                   </p>
@@ -677,9 +821,8 @@ function MembershipPricingSection() {
       <div className="mx-auto mt-12 max-w-3xl">
         <h3 className="font-display text-2xl text-white">Which Membership Is Right for Me?</h3>
         <div className="copy-luxe mt-5 space-y-4">
-          <p><strong className="text-white">Choose Lounge Member</strong> if you want the curriculum, practical tools, community, and monthly group strategy support to help you implement changes in your practice.</p>
-          <p><strong className="text-white">Choose Lounge VIP</strong> if you want everything in Lounge Member plus private strategy calls, monthly personalized feedback, and a guaranteed quarterly hot seat.</p>
-          <p>Both tiers support implementation. VIP adds more direct attention to your individual practice.</p>
+          <p><strong className="text-white">Choose Lounge Member</strong> if you like working through the tools at your own pace and bringing questions to the monthly group Strategy Session.</p>
+          <p><strong className="text-white">Choose Lounge VIP</strong> if you want that same support plus time to talk through your decisions privately, get feedback on something you’ve created, and revisit your progress with me.</p>
         </div>
       </div>
     </Section>

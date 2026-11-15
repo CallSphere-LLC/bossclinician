@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { useHashScroll } from "@/hooks/useHashScroll";
 import { Seo } from "@/components/Seo";
 import {
   retreat as r,
@@ -113,6 +114,7 @@ function ReserveLink() {
 }
 
 export default function Retreats() {
+  useHashScroll();
   const { origin } = useHeadContext();
   return (
     <div className="retreat-page">
@@ -167,7 +169,7 @@ export default function Retreats() {
           </h1>
           <p className="retreat-triad">{r.hero.triad.join(" ")}</p>
           <p className="retreat-eyebrow">{r.hero.ledeA}</p>
-          <p className="retreat-hero-lede">{r.hero.ledeB}</p>
+          <p className="retreat-hero-lede">For women who are ready to stop being responsible for everything for a few days.</p>
           <p className="retreat-strip">{r.hero.strip}</p>
           <div className="retreat-actions">
             <a href="#reserve" className="retreat-button">
@@ -219,6 +221,18 @@ export default function Retreats() {
           <Copy lines={r.founder.body} />
           <blockquote>{r.founder.pull}</blockquote>
           <p>{r.founder.close}</p>
+        </div>
+      </Band>
+      <Band light>
+        <div className="retreat-narrow">
+          <Heading title="A Vacation Can Still Leave You Responsible for Everything." />
+          <p>You may have traveled before. But were you still:</p>
+          <ul>
+            {["planning the itinerary?", "checking work?", "making reservations?", "answering family questions?", "organizing everyone else?"].map((item) => <li key={item}>{item}</li>)}
+          </ul>
+          <p>A retreat is different.</p>
+          <p>The intention is not simply to change locations.</p>
+          <p>The intention is to create enough space for your nervous system, mind, and body to stop being responsible for everyone else.</p>
         </div>
       </Band>
       <Band id="included" light>
@@ -345,6 +359,13 @@ export default function Retreats() {
           </a>
         </div>
       </Band>
+      <Band>
+        <div className="retreat-narrow retreat-centered">
+          <Heading title="This Is the First FlourisHealer Bali Retreat." />
+          <p>An intimate retreat limited to 12 women.</p>
+          <p>Explore the villa and accommodations, activities and inclusions, and pre-trip support. This experience draws on Yvette’s own retreat experience since 2023.</p>
+        </div>
+      </Band>
       <Band id="reserve" light>
         <Heading
           eyebrow={r.reserve.eyebrow}
@@ -454,6 +475,26 @@ export default function Retreats() {
           <a href={RETREAT_QUIZ_URL} className="retreat-button">
             {r.quiz.cta}
           </a>
+        </div>
+      </Band>
+      <Band>
+        <div className="retreat-narrow retreat-centered">
+          <h2>Have More Questions?</h2>
+          <p>Start with the FAQs, or schedule a Retreat Interest Call if you still want to talk it through.</p>
+          <a className="retreat-button" href="#faq">View FAQs</a>
+        </div>
+      </Band>
+      <Band light>
+        <div className="retreat-narrow">
+          <Heading title="Bali Is Calling You, But You Still Have Questions?" />
+          <p>Maybe you want to know more about:</p>
+          <ul>
+            {["traveling alone", "the accommodations", "the payment plan", "what the days will feel like", "who else is attending", "whether this experience is right for you"].map((item) => <li key={item}>{item}</li>)}
+          </ul>
+          <p>You do not have to figure that out from a website.</p>
+          <p>Schedule a complimentary Retreat Interest Call and talk through your questions before reserving.</p>
+          <p>No pressure. No presentation. Just a chance to get the clarity you need to make your decision.</p>
+          <a className="retreat-button" href="https://tidycal.com/profitwithyvette/retreat" target="_blank" rel="noopener noreferrer">Schedule a Retreat Interest Call</a>
         </div>
       </Band>
       <Band id="faq" light>
