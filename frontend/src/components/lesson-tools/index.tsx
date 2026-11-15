@@ -1,3 +1,4 @@
+import { RateRaiseLab } from "./RateRaiseLab";
 import type { ComponentType } from "react";
 import { LessonForm } from "@/components/player/LessonForm";
 import { BoardroomCeoDashboard } from "./BoardroomCeoDashboard";
@@ -23,6 +24,7 @@ import { RampUpRateComparison } from "./RampUpRateComparison";
  * in that migration.
  */
 export const LESSON_TOOLS: Record<string, ComponentType> = {
+  "rate-raise-lab": RateRaiseLab,
   "ramp-up-rate-calculator": RampUpRateCalculator,
   "ramp-up-rate-comparison": RampUpRateComparison,
   "pto-set-aside-calculator": PtoSetAsideCalculator,

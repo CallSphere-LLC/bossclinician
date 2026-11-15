@@ -18,7 +18,7 @@ export function useVersionedToolState<T extends object>(key: string, defaults: (
   const version = useRef(0), epoch = useRef(0);
   const pending = useRef<T | null>(null), busy = useRef(false), loaded = useRef(false), blocked = useRef(false);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const path = `/member/tool-state/${encodeURIComponent(key)}`;
+  const path = `/member/tool-state/${encodeURIComponent(key)}${key === "rate-raise-lab" ? `?expectedMemberId=${memberId ?? ""}` : ""}`;
   const norm = useRef(normalise); norm.current = normalise;
   const init = useRef(defaults); init.current = defaults;
   const refresh = useCallback(async (replace = false) => {
@@ -32,8 +32,13 @@ export function useVersionedToolState<T extends object>(key: string, defaults: (
       loaded.current = true; blocked.current = false;
       if (replace) pending.current = null;
       setReady(true); setSavedAt(result.updatedAt); setStatus(readonly ? "readonly" : result.updatedAt ? "saved" : "idle");
-    } catch { if (generation === epoch.current && !loaded.current) setStatus("offline"); }
-  }, [path, preview, readonly]);
+    } catch (error) {
+      if (generation !== epoch.current) return;
+      if (key === "rate-raise-lab" && error instanceof MemberApiError && [401,403,404,409].includes(error.status)) {
+        blocked.current=true;pending.current=null;loaded.current=false;local(init.current());setReady(false);setStatus("readonly");
+      } else if (!loaded.current) setStatus("offline");
+    }
+  }, [path, preview, readonly, key]);
   const flush = useCallback(async (keepalive = false) => {
     clearTimeout(timer.current);
     if (preview || readonly || busy.current || !loaded.current || blocked.current || !pending.current) return;
@@ -47,8 +52,16 @@ export function useVersionedToolState<T extends object>(key: string, defaults: (
     } catch (error) {
       if (generation !== epoch.current) return;
       pending.current ??= next;
-      if (error instanceof MemberApiError && error.status === 409) { blocked.current = true; setStatus("conflict"); }
-      else if (error instanceof MemberApiError && [401,403,404].includes(error.status)) { blocked.current = true; setStatus("readonly"); }
+      if (error instanceof MemberApiError && error.status === 409) {
+        blocked.current = true;
+        if(key === "rate-raise-lab" && (error.details as {code?:string} | undefined)?.code === "member_changed"){
+          pending.current=null;loaded.current=false;local(init.current());setReady(false);setStatus("readonly");
+        } else setStatus("conflict");
+      }
+      else if (error instanceof MemberApiError && [401,403,404].includes(error.status)) {
+        blocked.current = true; setStatus("readonly");
+        if(key === "rate-raise-lab"){pending.current=null;loaded.current=false;local(init.current());setReady(false);}
+      }
       else setStatus("error");
     } finally {
       if (generation === epoch.current) {
@@ -56,7 +69,7 @@ export function useVersionedToolState<T extends object>(key: string, defaults: (
         if (pending.current && !blocked.current) timer.current = setTimeout(() => void flush(), 2000);
       }
     }
-  }, [path, preview, readonly, memberId]);
+  }, [path, preview, readonly, memberId, key]);
   useEffect(() => {
     epoch.current++; loaded.current = false; blocked.current = false; pending.current = null; busy.current = false; version.current = 0;
     local(init.current()); setReady(!!preview); setStatus(preview ? "preview" : "loading");

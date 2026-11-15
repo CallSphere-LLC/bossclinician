@@ -50,6 +50,7 @@ export async function mayUseTool(memberId: number, toolKey: string): Promise<boo
        FROM course_lessons l
        JOIN course_modules m ON m.id = l.module_id
       WHERE l.tool_key = $1 AND l.published
+        AND ($1 <> 'rate-raise-lab' OR (l.id = 163 AND m.course_id = 61))
       ORDER BY l.id`,
     [toolKey],
   );

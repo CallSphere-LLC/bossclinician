@@ -89,6 +89,7 @@ COPY backend/scripts ./scripts
 # Versioned certificate designs are bundled, never fetched from external URLs
 # while a member is issued a regulated CE document.
 COPY backend/assets/certificates ./assets/certificates
+COPY backend/assets/lesson-tools ./assets/lesson-tools
 # Both storage roots exist in the image so the volumes mounted over them inherit
 # this ownership. A directory Docker creates for a missing mount point belongs to
 # root, and the `node` user below could not write an upload into it.

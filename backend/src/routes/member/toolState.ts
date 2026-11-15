@@ -1,3 +1,6 @@
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+import { validRateState } from "../../services/rateRaiseState";
 import { Router, type Request } from "express";
 import { ipKeyGenerator, rateLimit } from "express-rate-limit";
 import { z } from "zod";
@@ -57,9 +60,30 @@ async function allowedToolKey(req: Request): Promise<string> {
 }
 
 memberToolStateRouter.get(
+  "/tool-document/rate-raise-lab",
+  asyncHandler(async (req, res) => {
+    res.setHeader("Cache-Control", "private, no-store");
+    if (req.query.expectedMemberId !== String(currentMemberId(req))) throw conflict("The signed-in account changed. Reload this page.");
+    if (!(await mayUseTool(currentMemberId(req), "rate-raise-lab"))) throw notFound(TOOL_MISSING);
+    res.setHeader("Cache-Control", "private, no-store");
+    res.setHeader("Vary", "Authorization");
+    const html = await readFile(path.resolve(__dirname, "../../../assets/lesson-tools/rate-raise-lab.html"), "utf8");
+    res.json({ html });
+  }),
+);
+
+memberToolStateRouter.get(
   "/tool-state/:toolKey",
   asyncHandler(async (req, res) => {
+    if (req.params.toolKey === "rate-raise-lab") {
+      res.setHeader("Cache-Control", "private, no-store");
+      if (req.query.expectedMemberId !== String(currentMemberId(req))) throw conflict("The signed-in account changed. Reload this page.");
+    }
     const toolKey = await allowedToolKey(req);
+    if (toolKey === "rate-raise-lab") {
+      res.setHeader("Cache-Control", "private, no-store");
+      res.setHeader("Vary", "Authorization");
+    }
     res.json(await loadToolState(currentMemberId(req), toolKey));
   }),
 );
@@ -103,12 +127,19 @@ memberToolStateRouter.put(
     const parsed = saveSchema.safeParse(req.body);
     if (!parsed.success) throw badRequest("Nothing to save.");
     if (parsed.data.expectedMemberId !== undefined && parsed.data.expectedMemberId !== currentMemberId(req)) {
-      throw conflict("The signed-in account changed. Reload this page before saving.");
+      throw conflict("The signed-in account changed. Reload this page before saving.", {code:"member_changed"});
     }
     const problem = toolStateProblem(parsed.data.state);
     if (problem) throw badRequest(problem);
 
     const toolKey = await allowedToolKey(req);
+    if (toolKey === "rate-raise-lab") {
+      res.setHeader("Cache-Control", "private, no-store");
+      if (parsed.data.revision === undefined || parsed.data.expectedMemberId === undefined)
+        throw conflict("Please reload this lab before saving.");
+      if (!saveSchema.strict().safeParse(req.body).success || !validRateState(parsed.data.state))
+        throw badRequest("Only valid numbers, dates, fixed choices and checklists can be saved.");
+    }
     if (toolKey === "practice-elevation-dashboard" && parsed.data.revision === undefined) throw conflict("Please reload this dashboard to update its editor.");
     if (toolKey === "boardroom-ceo-assessment") {
       if (parsed.data.revision === undefined || parsed.data.expectedMemberId === undefined) {
