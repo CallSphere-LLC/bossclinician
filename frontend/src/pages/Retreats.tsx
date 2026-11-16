@@ -481,7 +481,10 @@ export default function Retreats() {
         <div className="retreat-narrow retreat-centered">
           <h2>Have More Questions?</h2>
           <p>Start with the FAQs, or schedule a Retreat Interest Call if you still want to talk it through.</p>
-          <a className="retreat-button" href="#faq">View FAQs</a>
+          <div className="flex flex-col items-center justify-center gap-3 sm:flex-row sm:gap-4">
+            <a className="retreat-button" href="#faq">View FAQs</a>
+            <a className="retreat-button" href="https://tidycal.com/profitwithyvette/retreat" target="_blank" rel="noopener noreferrer">Schedule a Retreat Interest Call</a>
+          </div>
         </div>
       </Band>
       <Band light>

@@ -15,4 +15,13 @@ describe("Lounge release switch", () => {
     expect(loungeButtonLabel("lounge-billing-preview", "$197.00")).toBe("Join Lounge — Pay $197 Today");
     expect(loungeButtonLabel("some-other-offer", "$10.00")).toBeNull();
   });
+
+  it("publishes the approved audience copy and anonymized coaching case studies", () => {
+    expect(lounge.stepInto.body).toBe(
+      "You’re a mental health clinician with an established practice, and you want more say over what you earn, how many appointments you take, and when your workday ends.",
+    );
+    expect(lounge.caseStudies.title).toBe("Two practice owners. Two different next steps.");
+    expect(lounge.caseStudies.items).toHaveLength(2);
+    expect(lounge.caseStudies.items[0].paragraphs.at(-1)).toContain("reported receiving inquiries");
+  });
 });

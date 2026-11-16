@@ -80,7 +80,7 @@ const replacementLounge = {
     eyebrow: "step into...",
     title: "The Lounge",
     lead: "A structured membership for established clinicians who have built the caseload — and are ready to make the practice itself more sustainable.",
-    body: "For the therapist or psychiatric nurse practitioner who wants stronger income, a lighter clinical load, better systems, and more options for the future.",
+    body: "You’re a mental health clinician with an established practice, and you want more say over what you earn, how many appointments you take, and when your workday ends.",
     cta: "LET'S ELEVATE MY PRACTICE",
     curriculumEyebrow: "The Practice Elevation",
     curriculumTitle:
@@ -200,6 +200,25 @@ const replacementLounge = {
       "You want a quick fix without making changes to the way your practice is structured.",
     ],
     clubLink: { label: "See The Club", to: "/club" },
+  },
+
+  caseStudies: {
+    title: "Two practice owners. Two different next steps.",
+    items: [
+      {
+        title: "Growing a cash-pay practice in a new market",
+        paragraphs: [
+          "An established clinician wanted to reach cash-pay clients in a new market while continuing to accept insurance in her existing practice.",
+          "We clarified who she wanted to reach, revised her Psychology Today profile, identified referral partners, and built a 90-day plan around the pace of growth she wanted. By the end of our work together, she reported receiving inquiries through her updated profile.",
+        ],
+      },
+      {
+        title: "Deciding to pause a solo practice",
+        paragraphs: [
+          "A solo practice owner wanted more freedom and came to coaching to figure out what to do next. As we talked through what she wanted her days to look like, she decided to pause her practice. We worked on a plan for returning when she’s ready.",
+        ],
+      },
+    ],
   },
 
   pricing: {
@@ -343,6 +362,10 @@ const replacementLounge = {
 
 // Keep the incumbent sales page intact until billing, policy, and sandbox QA
 // are approved together. The build flag is deliberately off by default.
-export const lounge = loungeMembershipV2Enabled
-  ? { ...replacementLounge, pricing: { ...replacementLounge.pricing, tiers: replacementLounge.pricing.tiers.map((tier, index) => ({ ...legacyLounge.pricing.tiers[index], ...tier })) } }
-  : { ...legacyLounge, pricing: { ...replacementLounge.pricing, ...legacyLounge.pricing, tiers: legacyLounge.pricing.tiers.map((tier, index) => ({ ...replacementLounge.pricing.tiers[index], ...tier })) } };
+export const lounge = {
+  ...(loungeMembershipV2Enabled
+    ? { ...replacementLounge, pricing: { ...replacementLounge.pricing, tiers: replacementLounge.pricing.tiers.map((tier, index) => ({ ...legacyLounge.pricing.tiers[index], ...tier })) } }
+    : { ...legacyLounge, pricing: { ...replacementLounge.pricing, ...legacyLounge.pricing, tiers: legacyLounge.pricing.tiers.map((tier, index) => ({ ...replacementLounge.pricing.tiers[index], ...tier })) } }),
+  // This approved public proof belongs to either pricing presentation.
+  caseStudies: replacementLounge.caseStudies,
+};

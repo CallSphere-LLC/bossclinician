@@ -236,6 +236,7 @@ export default function Lounge() {
       <PhasesSection />
       <EvolvesSection />
       <FitSection />
+      <CaseStudiesSection />
       <PricingSection />
       <FounderLetter
         title={lounge.founder.title}
@@ -730,7 +731,30 @@ function FitSection() {
   );
 }
 
-/* ── 11 · Two tiers ───────────────────────────────────────────────────── */
+/* ── 11 · Coaching case studies ───────────────────────────────────────── */
+
+function CaseStudiesSection() {
+  return (
+    <Section surface="base" space="lg" aria-label={lounge.caseStudies.title}>
+      <SectionTitle align="center" title={lounge.caseStudies.title} />
+      <RevealGroup className="mx-auto mt-12 grid max-w-5xl grid-cols-1 gap-6 lg:grid-cols-2">
+        {lounge.caseStudies.items.map((study) => (
+          <RevealItem key={study.title} className="h-full">
+            <GlassCard as="article" accent="plum" interactive={false} className="h-full p-7 sm:p-9">
+              <h3 className="text-balance font-display text-[1.55rem] font-medium leading-[1.2] text-white">
+                {study.title}
+              </h3>
+              <GoldRule width="w-10" className="mt-5" />
+              <Prose className="mt-6" paragraphs={study.paragraphs} />
+            </GlassCard>
+          </RevealItem>
+        ))}
+      </RevealGroup>
+    </Section>
+  );
+}
+
+/* ── 12 · Two tiers ───────────────────────────────────────────────────── */
 
 function PricingSection() {
   return loungeMembershipV2Enabled ? <MembershipPricingSection /> : <LegacyPricingSection />;

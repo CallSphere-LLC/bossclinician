@@ -416,7 +416,7 @@ const TOUR: readonly TourStop[] = [
         say: "It is deliberately small: exactly six practice owners for a 12-month term. Joining is an application, then a discovery call, then a private invitation.",
       },
       {
-        focus: "There are no more than eight chairs in this room.",
+        focus: "There are six seats in The Boardroom.",
         say: "The application is here, in six short steps. You do not need to have everything figured out to apply.",
       },
     ],

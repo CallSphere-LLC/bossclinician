@@ -552,7 +552,7 @@ export const boardroom = {
 
   application: {
     eyebrow: "Application",
-    title: "There are no more than eight chairs in this room.",
+    title: "There are six seats in The Boardroom.",
     paragraphs: [
       "If you believe one may be yours, apply.",
       "I personally review each application. You do not need to have everything figured out, but you should be ready to look honestly at your numbers, leadership, systems, and the decisions shaping your next stage of growth.",

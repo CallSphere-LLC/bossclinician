@@ -48,6 +48,8 @@ describe("the Boardroom page, server-rendered", () => {
     expect(html).toContain("$500,000.");
     expect(html).toContain("The Boardroom is where we work on the business underneath the revenue.");
     expect(html).toContain("An Intimate Group of Six.");
+    expect(html).toContain("There are six seats in The Boardroom.");
+    expect(html).not.toContain("There are no more than eight chairs in this room.");
     expect(html).toContain("An intimate group of exactly six practice owners.");
     expect(html).toContain("private council of six mental health practice owners");
     // Owner brief, 1 Nov 2026: group benefits only, and no fixed price on the public page.
