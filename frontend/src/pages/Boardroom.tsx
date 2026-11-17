@@ -344,13 +344,13 @@ export default function Boardroom() {
           <details><summary>How do I join?</summary><p>Start with the application below. The Boardroom is application-only, with a fit conversation before an invitation.</p></details>
         </div>
       </section>
+      <ApprovedTestimonials program="boardroom" />
+
       <section className="br-section br-reveal">
         <h2>Have More Questions?</h2>
         <p>Review the most common questions before deciding whether to apply.</p>
         <a className="br-button br-button-dark" href="#faq">View FAQs</a>
       </section>
-
-      <ApprovedTestimonials program="boardroom" />
 
       <section className="br-final-cta br-section br-reveal">
         <p className="br-eyebrow br-gold">{b.finalCta.eyebrow}</p>

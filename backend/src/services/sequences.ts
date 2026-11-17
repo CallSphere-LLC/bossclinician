@@ -214,6 +214,13 @@ export async function enrollContact(
     now?: Date;
     /** Join at this email rather than the first; earlier ones are never sent. */
     startAtPosition?: number;
+    /**
+     * The purchase that started this run (QA row 230). Given, the run ends when
+     * that purchase does — refund, revoked access, a defaulted plan, a
+     * subscription whose access has ended — and holds while its renewal is
+     * failing. Omitted, the run is not tied to any purchase.
+     */
+    source?: { offerId: number | null; orderId: number | null };
   } = {}
 ): Promise<EnrollResult> {
   const now = options.now ?? new Date();
@@ -264,16 +271,29 @@ export async function enrollContact(
 
   const sendAt = nextSendAt(now, first.delay_minutes, rulesFor(sequence, contact.timezone));
 
+  // A re-entry replaces the purchase stamp too, cleared when this run has none:
+  // a second run must never inherit the refund of the purchase that started the
+  // first.
   const inserted = await pool.query<{ id: string }>(
     `INSERT INTO sequence_subscriptions
-       (sequence_id, contact_id, status, position, next_send_at, entered_at)
-     VALUES ($1, $2, 'active', $3, $4, now())
+       (sequence_id, contact_id, status, position, next_send_at, entered_at,
+        source_offer_id, source_order_id)
+     VALUES ($1, $2, 'active', $3, $4, now(), $5, $6)
      ON CONFLICT (sequence_id, contact_id) DO UPDATE
        SET status = 'active', position = EXCLUDED.position,
            next_send_at = EXCLUDED.next_send_at, exit_reason = '',
-           entered_at = now(), completed_at = NULL, updated_at = now()
+           entered_at = now(), completed_at = NULL, updated_at = now(),
+           source_offer_id = EXCLUDED.source_offer_id,
+           source_order_id = EXCLUDED.source_order_id
      RETURNING id`,
-    [sequenceId, contactId, first.position, sendAt]
+    [
+      sequenceId,
+      contactId,
+      first.position,
+      sendAt,
+      positiveIdOrNull(options.source?.offerId),
+      positiveIdOrNull(options.source?.orderId),
+    ]
   );
 
   // An email due now (delay 0, no send window in the way) is queued straight
@@ -465,6 +485,217 @@ export async function exitContactOnFormSubmission(
   return res.rowCount ?? 0;
 }
 
+/* ------------------------------------------------ purchase-started runs */
+
+/**
+ * QA row 230: a sequence a purchase started ends when that purchase does.
+ *
+ * "Ends" needs positive evidence, never the mere absence of an active grant:
+ * access that simply ran its course, or an offer that grants nothing tied to
+ * the offer, is not a cancellation, and reading it as one would cut real
+ * buyers off. The evidence is a refunded order, or a grant for the offer that
+ * was taken away (refund, revoke, a defaulted plan, a subscription whose access
+ * ended, retries exhausted) — and in either case no other live access to the
+ * same offer, so somebody who bought it twice keeps their emails.
+ *
+ * A failing renewal is not an ending. Stripe and PayPal retry, and with
+ * re-entry off a customer who pays two days later would lose the sequence for
+ * good, so the run is held and picks up where it was once the payment clears.
+ *
+ * Mirrors `dunning.FAILED_PAYMENT_REVOKE_REASON`, the revoke reason the
+ * "stop access on the first failed payment" pause writes and `invoice.paid`
+ * restores from. Copied rather than imported so this module does not pull in
+ * the Stripe client; sequences.test.ts pins the two together.
+ */
+export const PAYMENT_PAUSE_REVOKE_REASON = "recurring payment failed";
+
+/** How long a held run waits before it looks again. */
+export const PAYMENT_HOLD_MINUTES = 24 * 60;
+
+/** A past-due row older than this no longer holds anything (see the SQL). */
+const PAYMENT_HOLD_MAX_DAYS = 60;
+
+export interface PurchaseStandingFacts {
+  /** Live access to the offer that does not come from a refunded source order. */
+  hasLiveAccess: boolean;
+  /** The order that started the run has been refunded in full. */
+  orderRefunded: boolean;
+  /** Why access to the offer was taken away, when it was; '' when it never was. */
+  endedReason: string;
+  /** A renewal or installment for the offer is failing right now. */
+  paymentFailing: boolean;
+}
+
+export type PurchaseStanding =
+  | { action: "continue" }
+  | { action: "hold"; reason: string }
+  | { action: "exit"; reason: string };
+
+/** The decision, pure, so the cases can be pinned down without a database. */
+export function purchaseStanding(facts: PurchaseStandingFacts): PurchaseStanding {
+  if (facts.hasLiveAccess && !facts.paymentFailing) return { action: "continue" };
+  if (facts.orderRefunded && !facts.hasLiveAccess) {
+    return { action: "exit", reason: "purchase refunded" };
+  }
+  if (facts.endedReason && !facts.hasLiveAccess) {
+    return { action: "exit", reason: `purchase ended: ${facts.endedReason}`.slice(0, 200) };
+  }
+  if (facts.paymentFailing) return { action: "hold", reason: "payment failing" };
+  return { action: "continue" };
+}
+
+interface PurchaseStandingRow {
+  id: string;
+  sequence_id: number;
+  contact_id: number;
+  has_live_access: boolean;
+  order_refunded: boolean;
+  ended_reason: string;
+  payment_failing: boolean;
+}
+
+/**
+ * The facts for runs stamped with a source offer, as one query.
+ *
+ * Members are matched on the contact link or the address, as the
+ * `requires_offer_id` check does: a contact is not always linked to the member
+ * holding the access (a gift, a guest checkout claimed later), and a missed
+ * match would read as "no access" — which on its own never ends a run here, but
+ * would hide the evidence that should.
+ *
+ * `$1` is the payment-pause revoke reason; `extraWhere` narrows the runs and
+ * may use `$2` onwards.
+ */
+function purchaseStandingSql(extraWhere: string): string {
+  const sameBuyer = `(m.contact_id = s.contact_id OR lower(m.email::text) = lower(c.email::text))`;
+  // Live access counts through ANY offer whose purchase starts this sequence,
+  // not just the one stamped. The Lounge sequence is started by The Lounge and
+  // by The Lounge | VIP: a member who upgrades is "already enrolled", keeps the
+  // Lounge stamp, and must not lose the emails when the Lounge plan they
+  // upgraded from is cancelled while they still hold VIP.
+  return `
+    SELECT s.id, s.sequence_id, s.contact_id,
+           EXISTS (
+             SELECT 1 FROM access_grants g JOIN members m ON m.id = g.member_id
+              WHERE g.status = 'active'
+                AND (g.expires_at IS NULL OR g.expires_at > now())
+                AND ${sameBuyer}
+                AND NOT (COALESCE(src.refunded, false)
+                         AND g.order_id IS NOT DISTINCT FROM s.source_order_id)
+                AND (g.offer_id = s.source_offer_id
+                     OR g.offer_id IN (
+                       SELECT CASE WHEN (a.trigger_config ->> 'offerId') ~ '^[0-9]+$'
+                                   THEN (a.trigger_config ->> 'offerId')::int END
+                         FROM automations a
+                         JOIN automation_actions x ON x.automation_id = a.id
+                        WHERE a.trigger_type = 'offer_purchased'
+                          AND x.action_type = 'subscribe_sequence'
+                          AND x.config ->> 'sequenceId' = s.sequence_id::text
+                     ))
+           ) AS has_live_access,
+           COALESCE(src.refunded, false) AS order_refunded,
+           COALESCE((
+             SELECT CASE WHEN g.revoke_reason = '' THEN 'access removed' ELSE g.revoke_reason END
+               FROM access_grants g JOIN members m ON m.id = g.member_id
+              WHERE g.offer_id = s.source_offer_id
+                AND ${sameBuyer}
+                AND g.revoke_reason <> $1
+                AND (g.status = 'revoked'
+                     OR (g.revoke_reason <> '' AND g.expires_at IS NOT NULL AND g.expires_at <= now()))
+              ORDER BY COALESCE(g.revoked_at, g.expires_at, g.updated_at) DESC
+              LIMIT 1
+           ), '') AS ended_reason,
+           (
+             EXISTS (
+               SELECT 1 FROM access_grants g JOIN members m ON m.id = g.member_id
+                WHERE g.offer_id = s.source_offer_id AND g.status = 'revoked'
+                  AND g.revoke_reason = $1 AND ${sameBuyer}
+             )
+             -- Past due and still being retried. 'unpaid' is not here: that is
+             -- an ending, and endSubscriptionAccess revokes for it. The window
+             -- keeps a row somebody abandoned in past_due from holding a run
+             -- for ever; real retries finish well inside it.
+             OR EXISTS (
+               SELECT 1 FROM subscriptions sb JOIN members m ON m.id = sb.member_id
+                WHERE sb.offer_id = s.source_offer_id AND sb.status = 'past_due'
+                  AND sb.updated_at > now() - interval '${PAYMENT_HOLD_MAX_DAYS} days'
+                  AND ${sameBuyer}
+             )
+             OR EXISTS (
+               SELECT 1 FROM payment_plans pp JOIN members m ON m.id = pp.member_id
+                WHERE pp.offer_id = s.source_offer_id AND pp.status = 'past_due'
+                  AND pp.updated_at > now() - interval '${PAYMENT_HOLD_MAX_DAYS} days'
+                  AND ${sameBuyer}
+             )
+           ) AS payment_failing
+      FROM sequence_subscriptions s
+      JOIN contacts c ON c.id = s.contact_id
+      LEFT JOIN LATERAL (
+        SELECT (o.status = 'refunded'
+                OR (o.refunded_cents > 0
+                    AND o.refunded_cents >= GREATEST(o.total_cents, o.amount_cents))) AS refunded
+          FROM orders o WHERE o.id = s.source_order_id
+      ) src ON true
+     WHERE s.source_offer_id IS NOT NULL
+       AND ${extraWhere}`;
+}
+
+function standingOf(row: PurchaseStandingRow): PurchaseStanding {
+  return purchaseStanding({
+    hasLiveAccess: row.has_live_access,
+    orderRefunded: row.order_refunded,
+    endedReason: row.ended_reason,
+    paymentFailing: row.payment_failing,
+  });
+}
+
+/**
+ * Ends every live run whose purchase has ended (QA row 230).
+ *
+ * Runs at the top of each sequence tick, so a refund, a revoke or a defaulted
+ * plan shows on the contact as "exited — purchase refunded" within minutes,
+ * by whichever route the access went — Stripe, PayPal, the admin, an
+ * automation — without each of those having to know about email. `sendDueEmail`
+ * checks the same thing again before every send, so nothing goes out in the
+ * minutes between.
+ */
+export async function stopEndedPurchaseRuns(): Promise<number> {
+  const res = await pool.query<PurchaseStandingRow>(
+    `${purchaseStandingSql(`s.status = 'active'`)} ORDER BY s.id LIMIT ${TICK_BATCH_FOR_PURCHASE_SWEEP}`,
+    [PAYMENT_PAUSE_REVOKE_REASON]
+  );
+
+  let stopped = 0;
+  for (const row of res.rows) {
+    const standing = standingOf(row);
+    if (standing.action !== "exit") continue;
+    const ended = await pool.query<{ id: string }>(
+      `UPDATE sequence_subscriptions
+          SET status = 'exited', exit_reason = $2, next_send_at = NULL,
+              completed_at = now(), updated_at = now()
+        WHERE id = $1 AND status = 'active'
+        RETURNING id`,
+      [row.id, standing.reason]
+    );
+    if (!ended.rows[0]) continue;
+    stopped += 1;
+    await publishSequenceEvent("sequence_unsubscribed", {
+      subscriptionId: row.id,
+      sequenceId: row.sequence_id,
+      contactId: row.contact_id,
+      reason: standing.reason,
+    });
+  }
+  return stopped;
+}
+
+/** Live stamped runs one sweep looks at; there are a handful, not thousands. */
+const TICK_BATCH_FOR_PURCHASE_SWEEP = 2000;
+
+function positiveIdOrNull(value: number | null | undefined): number | null {
+  return typeof value === "number" && Number.isInteger(value) && value > 0 ? value : null;
+}
+
 /* ------------------------------------------------------------------- tick */
 
 /** How many due subscriptions one tick will pick up. */
@@ -480,6 +711,14 @@ const TICK_BATCH = 500;
  * email is free to be queued later.
  */
 export async function tickDueSubscriptions(now: Date = new Date()): Promise<{ queued: number }> {
+  // Housekeeping first, and never at the cost of the sends: sendDueEmail makes
+  // the same check before every email, so a sweep that fails costs only how
+  // soon the contact page shows the exit.
+  await stopEndedPurchaseRuns().catch((err: unknown) => {
+    // eslint-disable-next-line no-console
+    console.error("[sequences] purchase sweep failed:", err);
+  });
+
   const due = await pool.query<{ id: string; position: number }>(
     `SELECT s.id, s.position
        FROM sequence_subscriptions s
@@ -547,8 +786,9 @@ export async function sendDueEmail(
       status: string;
       position: number;
       next_send_at: Date | null;
+      source_offer_id: number | null;
     }>(
-      `SELECT id, sequence_id, contact_id, status, position, next_send_at
+      `SELECT id, sequence_id, contact_id, status, position, next_send_at, source_offer_id
          FROM sequence_subscriptions WHERE id = $1 FOR UPDATE`,
       [subscriptionId]
     );
@@ -678,6 +918,57 @@ export async function sendDueEmail(
         return {
           outcome: "exited",
           detail: "access ended",
+          sequenceId: subscription.sequence_id,
+          contactId: subscription.contact_id,
+        };
+      }
+    }
+
+    // QA row 230: a run a purchase started stops when the purchase does, and
+    // waits while its renewal is failing. The tick's sweep usually gets there
+    // first; this is the guarantee that no email slips out in between.
+    if (subscription.source_offer_id !== null) {
+      const standingRes = await client.query<PurchaseStandingRow>(
+        purchaseStandingSql(`s.id = $2`),
+        [PAYMENT_PAUSE_REVOKE_REASON, subscription.id]
+      );
+      const row = standingRes.rows[0];
+      const standing: PurchaseStanding = row ? standingOf(row) : { action: "continue" };
+      if (standing.action === "exit") {
+        await client.query(
+          `UPDATE sequence_subscriptions
+              SET status = 'exited', exit_reason = $2,
+                  next_send_at = NULL, completed_at = now(), updated_at = now()
+            WHERE id = $1`,
+          [subscription.id, standing.reason]
+        );
+        await client.query("COMMIT");
+        await publishSequenceEvent("sequence_unsubscribed", {
+          subscriptionId: subscription.id,
+          sequenceId: subscription.sequence_id,
+          contactId: subscription.contact_id,
+          reason: standing.reason,
+        });
+        return {
+          outcome: "exited",
+          detail: standing.reason,
+          sequenceId: subscription.sequence_id,
+          contactId: subscription.contact_id,
+        };
+      }
+      if (standing.action === "hold") {
+        // Same position, later date: once the payment clears, the email they
+        // were due is the one they get, not the one after it.
+        await client.query(
+          `UPDATE sequence_subscriptions
+              SET next_send_at = $2, updated_at = now()
+            WHERE id = $1`,
+          [subscription.id, new Date(now.getTime() + PAYMENT_HOLD_MINUTES * 60_000)]
+        );
+        await client.query("COMMIT");
+        return {
+          outcome: "skipped",
+          detail: `on hold — ${standing.reason}`,
           sequenceId: subscription.sequence_id,
           contactId: subscription.contact_id,
         };

@@ -702,6 +702,25 @@ function unfinished(actionType: string): ActionOutcome {
 }
 
 /**
+ * The purchase a sequence run started from, when it started from one (QA row 230).
+ *
+ * Only "someone buys an offer" ties a run to a purchase: the run then ends if
+ * that purchase is refunded, revoked or defaulted, and waits while its renewal
+ * fails (services/sequences.ts). Every other trigger — a form, a tag, a quiz —
+ * returns undefined, and the run is not tied to anything, exactly as before.
+ * The order is absent on a manual grant, which still ties the run to the offer.
+ */
+export function purchaseSourceOf(
+  context: Pick<RunContext, "trigger" | "subjectId" | "facts">
+): { offerId: number; orderId: number | null } | undefined {
+  if (context.trigger !== "offer_purchased") return undefined;
+  const offerId = Number(context.subjectId ?? context.facts?.offerId);
+  if (!Number.isInteger(offerId) || offerId <= 0) return undefined;
+  const orderId = Number(context.facts?.orderId);
+  return { offerId, orderId: Number.isInteger(orderId) && orderId > 0 ? orderId : null };
+}
+
+/**
  * Performs one action and returns the line it writes in the run log.
  *
  * Every branch returns a sentence rather than throwing on a missing bit of
@@ -764,6 +783,7 @@ async function performAction(
       const result = await enrollContact(parsed.data.sequenceId, contactId, {
         reason: `automation ${automationId}`,
         startAtPosition: parsed.data.startAtPosition,
+        source: purchaseSourceOf(context),
       });
       return { log: `Sequence: ${result.outcome.replace(/_/g, " ")}${result.reason ? ` — ${result.reason}` : ""}`, stop: false };
     }

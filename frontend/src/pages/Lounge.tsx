@@ -220,7 +220,6 @@ export default function Lounge() {
       />
 
       <LoungePracticeReframe />
-      <ProgramFounderVideo program="lounge" />
       <FoundingBand />
       <GoodNewsSection />
       <LoungeDecisions />
@@ -319,7 +318,8 @@ function LoungePracticeReframe() {
           <Plate photo={PHOTOS.laptop} className="mx-auto w-full max-w-md lg:max-w-none" />
         </div>
       </Section>
-      <Section surface="deep" space="lg" aurora="plum" containerClassName="max-w-4xl">
+      <ProgramFounderVideo program="lounge" />
+      <Section surface="base" space="lg" aurora="plum" containerClassName="max-w-4xl">
         <SectionTitle title={lounge.fact.closing} align="center" />
         <Prose className="mt-8" paragraphs={["You may not need:"]} />
         <MarkedList className="mt-4" variant="cross" items={[
