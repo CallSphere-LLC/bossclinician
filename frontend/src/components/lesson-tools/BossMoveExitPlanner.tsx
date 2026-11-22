@@ -43,12 +43,20 @@ import {
   type NumericKey,
 } from "./exitPlanner";
 import { useToolState } from "./useToolState";
+import { Disclosure, FreedomSection, ReserveSection, RoadmapSection, ScheduleSection, SnapshotSection } from "./BossMoveIncomeSections";
+import { cents, dollars, freedomFigures, type FreedomPlanState } from "./incomePlanner";
 
 /**
- * The Boss Move — Private Practice Exit Planner (QA sheet row 102), on
- * "Lesson 0: Planning Your Exit Timeline". A native port of Yvette's
- * prototype: the same seven sections, inputs, wording and arithmetic
- * (exitPlanner.ts), saved to the member's account instead of the browser.
+ * The Boss Move Dashboard — Private Practice Exit Planner (QA sheet row 102).
+ * A native port of Yvette's prototype (exitPlanner.ts), saved to the member's
+ * account instead of the browser.
+ *
+ * Row 238 (21 Nov 2026) moved it from "Lesson 0: Planning Your Exit Timeline"
+ * into its own lesson straight after it (migration 199) and added My Freedom
+ * Number, My Ideal Work Schedule, My Revenue Roadmap, My Cash Reserve Plan and
+ * My Exit Readiness Snapshot (BossMoveIncomeSections.tsx, incomePlanner.ts).
+ * The original monthly household, revenue and runway models are kept, folded
+ * under those sections.
  */
 
 export const EXIT_PLANNER_KEY = "boss-move-exit-planner";
@@ -74,6 +82,10 @@ export function BossMoveExitPlanner() {
     setState((prev) => ({ ...prev, [key]: value }));
   const setNum = (key: NumericKey) => (value: number | null) => set(key, Math.max(0, Number(value) || 0));
   const n = (key: NumericKey) => numOf(state, key);
+  const setFreedom = <K extends keyof FreedomPlanState>(key: K, value: FreedomPlanState[K]) =>
+    setState((prev) => ({ ...prev, freedom: { ...prev.freedom, [key]: value } }));
+  const fig = freedomFigures(state);
+  const income = { state, fig, setFreedom, setShared: setNum };
 
   const sum = summarise(state);
   const p = sum.projectedRevenue;
@@ -102,14 +114,14 @@ export function BossMoveExitPlanner() {
   const print = () =>
     printReport(
       "My Boss Move Exit Plan",
-      `<small>THE BOSS MOVE • INTERACTIVE WORKBOOK</small><h1>My Private Practice Exit Plan</h1>${summaryLines(state)
+      `<small>THE BOSS MOVE DASHBOARD</small><h1>My Private Practice Exit Plan</h1>${summaryLines(state)
         .map((line) => (line === "" ? "<br>" : /^[A-Z ]+$/.test(line) ? `<h2>${escapeHtml(line)}</h2>` : `<div>${escapeHtml(line)}</div>`))
         .join("")}`,
     );
 
   if (!ready) {
     return (
-      <DashboardFrame eyebrow="The Boss Move • Interactive Workbook" title="Your Exit Dashboard" status={status}>
+      <DashboardFrame eyebrow="The Boss Move Dashboard" title="Your Exit Dashboard" status={status}>
         <p className="text-sm text-orchid-dim">Loading your planner…</p>
       </DashboardFrame>
     );
@@ -117,7 +129,7 @@ export function BossMoveExitPlanner() {
 
   return (
     <DashboardFrame
-      eyebrow="The Boss Move • Interactive Workbook"
+      eyebrow="The Boss Move Dashboard"
       title={section.title}
       subtitle={section.sub}
       status={status}
@@ -149,6 +161,11 @@ export function BossMoveExitPlanner() {
             <Tile label="Required gross collections / month" value={usd(target)} hint="Planning estimate with deductions" />
             <Tile label="Available savings runway" value={runwayLabel(state, "No cash draw")} hint="At projected cash shortfall" />
             <Tile label="Business readiness milestones" value={`${Math.round(sum.percentage)}%`} hint="Completed checklist items" />
+          </Grid>
+          <Grid cols={3}>
+            <Tile label="Required annual practice revenue" value={dollars(fig.income.requiredRevenue)} hint={fig.income.requiredRevenue === null ? "Start in My Freedom Number" : "Pretax estimate, not take-home pay"} />
+            <Tile label="Required collections per paid session" value={cents(fig.model.requiredRate)} hint={`Current average ${cents(fig.currentRate)}`} />
+            <Tile label="Business reserve progress" value={fig.reserve.percent === null ? "—" : `${Math.round(fig.reserve.percent)}%`} hint="In My Cash Reserve Plan" />
           </Grid>
           <Grid>
             <Panel title="Choose your transition" intro="This changes which questions and checklist tasks are emphasized.">
@@ -202,9 +219,12 @@ export function BossMoveExitPlanner() {
         </>
       )}
 
-      {tab === "income" && (
+      {tab === "freedom" && <FreedomSection {...income} />}
+
+      {tab === "freedom" && (
+        <Disclosure title="Your household budget and current work income" hint="Monthly figures used by the runway and readiness tools">
         <Grid>
-          <Panel title="1 • Your personal freedom number" intro="Start with the actual money your household needs—not a social-media income goal.">
+          <Panel title="Your personal monthly need" intro="Start with the actual money your household needs—not a social-media income goal.">
             <Grid>
               <NumField label="Monthly personal living costs ($)" step={50} value={state.living} onChange={setNum("living")} hint="Housing, food, childcare, debt, transportation, personal needs" />
               <NumField label="Additional monthly personal savings ($)" step={50} value={state.personalSavings} onChange={setNum("personalSavings")} />
@@ -217,7 +237,7 @@ export function BossMoveExitPlanner() {
               <span className="text-xs">Does not yet include taxes or business expenses; those are handled in the revenue plan.</span>
             </Callout>
           </Panel>
-          <Panel title="2 • How work supports you today" intro="Know what you are replacing—and which benefits you actually want to keep.">
+          <Panel title="How work supports you today" intro="Know what you are replacing—and which benefits you actually want to keep.">
             <Grid>
               <NumField label="Current take-home from job / platforms ($ per month)" value={state.existingIncome} onChange={setNum("existingIncome")} />
               <NumField label="Other reliable practice collections ($ per month)" value={state.existingPracticeCollections} onChange={setNum("existingPracticeCollections")} hint="Gross collections from your own practice, not take-home pay" />
@@ -229,11 +249,14 @@ export function BossMoveExitPlanner() {
             </Callout>
           </Panel>
         </Grid>
+        </Disclosure>
       )}
+
+      {tab === "schedule" && <ScheduleSection {...income} />}
 
       {tab === "benefits" && (
         <Panel
-          title="3 • Replace the benefits you actually need"
+          title="Replace the benefits you actually need"
           intro={
             <>
               Enter estimated <b className="text-white">monthly costs you would personally pay after leaving</b>. Use actual quotes when possible. Employer benefits may have tax treatment and coverage differences; this is a budgeting tool, not an equivalence calculation.
@@ -275,8 +298,10 @@ export function BossMoveExitPlanner() {
       )}
 
       {tab === "runway" && (
+        <ReserveSection {...income}>
+        <Disclosure title="Your whole-transition runway" hint="Personal costs, benefits and business expenses combined, month by month">
         <Grid>
-          <Panel title="4 • Build your exit runway" intro="Model cash reserves for slower months, delays in claims, and early client-growth uncertainty.">
+          <Panel title="Build your exit runway" intro="Model cash reserves for slower months, delays in claims, and early client-growth uncertainty.">
             <Grid>
               <NumField label="Available cash reserves ($)" value={state.reserves} onChange={setNum("reserves")} />
               <NumField label="Target reserve months" min={1} max={36} value={state.months} onChange={setNum("months")} />
@@ -306,12 +331,16 @@ export function BossMoveExitPlanner() {
             </p>
           </Panel>
         </Grid>
+        </Disclosure>
+        </ReserveSection>
       )}
 
       {tab === "revenue" && (
+        <RoadmapSection {...income}>
+        <Disclosure title="Your detailed monthly model" hint="Monthly expenses, payroll, tax planning reserve and retained profit">
         <Grid>
           <Panel
-            title="5 • Reverse-engineer your private practice"
+            title="Reverse-engineer your private practice"
             intro={
               <>
                 Use the <b className="text-white">average amount you realistically collect per completed session</b>—which may be different from your advertised fee.
@@ -355,11 +384,13 @@ export function BossMoveExitPlanner() {
             </p>
           </Panel>
         </Grid>
+        </Disclosure>
+        </RoadmapSection>
       )}
 
       {tab === "readiness" && (
         <Panel
-          title="6 • Your readiness milestones"
+          title="Your readiness milestones"
           intro="Based on your original Exit Timeline Planner: financial preparation, legal setup, credentialing/billing, marketing, support, and contingency planning. Checking boxes tracks your own reported progress, not regulatory verification."
         >
           {CHECK_GROUPS.map((group) => (
@@ -381,9 +412,11 @@ export function BossMoveExitPlanner() {
         </Panel>
       )}
 
+      {tab === "snapshot" && <SnapshotSection state={state} fig={fig} />}
+
       {tab === "plan" && (
         <Grid>
-          <Panel title="7 • Your transition action plan">
+          <Panel title="Your transition action plan">
             <Grid>
               <AreaField label="My most important next milestone" value={state.nextAction} onChange={(v) => set("nextAction", v)} placeholder="e.g., obtain family health insurance quotes and confirm effective dates" />
               <AreaField label="My biggest barrier or unknown" value={state.barrier} onChange={(v) => set("barrier", v)} placeholder="e.g., I do not know my reimbursement timeline" />
@@ -393,7 +426,7 @@ export function BossMoveExitPlanner() {
               <TextField label="My preferred graduation goal" value={state.milestoneGoal} onChange={(v) => set("milestoneGoal", v)} placeholder="e.g., consistent client flow before giving notice" />
             </Grid>
           </Panel>
-          <Panel title="Download your personal plan" intro="Export a readable summary, print to PDF, or save a backup of every input you entered.">
+          <Panel title="Download your personal plan" intro="Export a readable summary of every section, including your Freedom Number, schedule, cash reserves and snapshot. Print to PDF, or save a backup of every input you entered.">
             <div className="flex flex-wrap gap-2">
               <ActionButton
                 icon="download"

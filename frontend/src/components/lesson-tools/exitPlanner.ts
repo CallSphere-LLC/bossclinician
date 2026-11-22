@@ -5,7 +5,13 @@
  * QA sheet row 102). Every formula, default, checklist item and sentence below
  * is the prototype's; the React component only draws it. Kept free of React so
  * the numbers can be pinned in exitPlanner.test.ts.
+ *
+ * Row 238 (21 Nov 2026) adds income planning and cash reserves under the
+ * nested `freedom` key (incomePlanner.ts); everything else is unchanged, so
+ * documents saved before then load exactly as they were.
  */
+
+import { freedomDefaults, freedomSummaryLines, normaliseFreedom, type FreedomPlanState } from "./incomePlanner";
 
 export type ExitPath = "agency" | "platform" | "rebuild";
 export type ExitPace = "gradual" | "full" | "explore";
@@ -48,6 +54,8 @@ export interface ExitPlannerState {
   firstDeadline: string;
   milestoneGoal: string;
   checks: Record<string, boolean>;
+  /** Row 238: My Freedom Number, Ideal Work Schedule and Cash Reserve Plan. */
+  freedom: FreedomPlanState;
 }
 
 export type NumericKey = {
@@ -92,9 +100,10 @@ export const EXIT_DEFAULTS: ExitPlannerState = {
   firstDeadline: "",
   milestoneGoal: "",
   checks: {},
+  freedom: freedomDefaults(),
 };
 
-export const exitDefaults = (): ExitPlannerState => ({ ...EXIT_DEFAULTS, checks: {} });
+export const exitDefaults = (): ExitPlannerState => ({ ...EXIT_DEFAULTS, checks: {}, freedom: freedomDefaults() });
 
 const PATHS: readonly ExitPath[] = ["agency", "platform", "rebuild"];
 const PACES: readonly ExitPace[] = ["gradual", "full", "explore"];
@@ -121,17 +130,20 @@ export function normaliseExit(raw: unknown): ExitPlannerState {
     }
   }
   out.checks = checks;
+  out.freedom = normaliseFreedom(src.freedom);
   return out as unknown as ExitPlannerState;
 }
 
 export const EXIT_SECTIONS = [
   { id: "dashboard", label: "Overview", title: "Your Exit Dashboard", sub: "A realistic plan for your next move—not a countdown to quitting." },
-  { id: "income", label: "01 Income", title: "Your Freedom Number", sub: "Understand how much personal income your practice needs to support." },
-  { id: "benefits", label: "02 Benefits", title: "Replace Your Benefits", sub: "Account for the real cost of leaving employer-provided benefits." },
-  { id: "runway", label: "03 Runway", title: "Build Your Cash Runway", sub: "Prepare for slower months and the costs of getting started." },
-  { id: "revenue", label: "04 Revenue", title: "Map Your Practice Revenue", sub: "Connect sustainable clinical capacity with required monthly collections." },
-  { id: "readiness", label: "05 Readiness", title: "Your Practice Readiness", sub: "Track the important business milestones before making a change." },
-  { id: "plan", label: "06 Exit Plan", title: "Your Boss Move Plan", sub: "Turn your financial assumptions into an actionable, exportable plan." },
+  { id: "freedom", label: "My Freedom Number", title: "My Freedom Number", sub: "Start with your annual income goal and work out what your practice needs to collect." },
+  { id: "schedule", label: "My Ideal Work Schedule", title: "My Ideal Work Schedule", sub: "See what your goal asks of your week, or what your preferred week needs to earn." },
+  { id: "revenue", label: "My Revenue Roadmap", title: "My Revenue Roadmap", sub: "Connect sustainable clinical capacity with required yearly, monthly and weekly collections." },
+  { id: "benefits", label: "Benefits", title: "Replace Your Benefits", sub: "Account for the real cost of leaving employer-provided benefits." },
+  { id: "runway", label: "My Cash Reserve Plan", title: "My Cash Reserve Plan", sub: "Build a safety net for the practice and for your household, kept separate." },
+  { id: "readiness", label: "Readiness", title: "Your Practice Readiness", sub: "Track the important business milestones before making a change." },
+  { id: "snapshot", label: "My Exit Readiness Snapshot", title: "My Exit Readiness Snapshot", sub: "Your plan at a glance: where each goal stands today." },
+  { id: "plan", label: "Exit Plan", title: "Your Boss Move Plan", sub: "Turn your financial assumptions into an actionable, exportable plan." },
 ] as const;
 
 export type ExitSectionId = (typeof EXIT_SECTIONS)[number]["id"];
@@ -354,6 +366,7 @@ export function summaryLines(s: ExitPlannerState): string[] {
     `Required completed sessions per week: ${ceil(requiredSessions(s))}`,
     `Projected completed sessions per week: ${num(s, "sessions")}`,
     "",
+    ...freedomSummaryLines(s),
     "EXIT RUNWAY",
     `Reserves available: ${usd(num(s, "reserves"))}`,
     `One-time setup: ${usd(num(s, "startup"))}`,
