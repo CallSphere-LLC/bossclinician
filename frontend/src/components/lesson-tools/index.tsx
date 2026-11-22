@@ -10,6 +10,8 @@ import { PracticeElevationDashboard } from "./PracticeElevationDashboard";
 import { PracticeResetSnapshotTool } from "./PracticeResetSnapshot";
 import { PracticeResetSnapshotV2 } from "./PracticeResetSnapshotV2";
 import { VipPracticeHealth } from "./VipPracticeHealth";
+import { IncomeStreamAssessment } from "./IncomeStreamAssessment";
+import { INCOME_STREAM_KEY } from "./incomeStream";
 import { PtoSetAsideCalculator } from "./PtoSetAsideCalculator";
 import { RampUpRateCalculator } from "./RampUpRateCalculator";
 import { RampUpRateComparison } from "./RampUpRateComparison";
@@ -38,6 +40,8 @@ export const LESSON_TOOLS: Record<string, ComponentType> = {
   "practice-reset-snapshot-v2": PracticeResetSnapshotV2, // rows 158 + 170 — orientation, above the dashboard
   "living-business-plan": LivingBusinessPlan, // row 159 — orientation, below the dashboard
   "vip-practice-health": VipPracticeHealth, // row 182 — Lounge VIP, directly after welcome
+  // QA sheet 2026-11-21 (migration 200)
+  [INCOME_STREAM_KEY]: IncomeStreamAssessment, // row 240 — Module 02 income stream decision (stateless)
 };
 
 /**
