@@ -25,8 +25,8 @@ import {
   errorMessage,
 } from "./retreatUi";
 import { RetreatChecklist } from "./RetreatChecklist";
-import { FlightPreferencesForm } from "./FlightPreferencesForm";
-import { TravelInsuranceForm, TravelInsuranceGuidance } from "./TravelInsuranceForm";
+import { TravelInsuranceGuidance } from "./TravelInsuranceForm";
+import { QuestionnaireForm } from "./QuestionnaireForm";
 import { MemoriesGallery } from "./MemoriesGallery";
 import { ReflectionForm } from "./ReflectionForm";
 import { InterestSelector } from "./InterestSelector";
@@ -110,8 +110,10 @@ export function RetreatDashboard({ data, slug, preview, onReload, focusSection }
               {data.importantDates.map((entry) => (
                 <div key={entry.label} className="rounded-xl border border-white/10 px-4 py-3">
                   <dt className="text-xs text-orchid-dim">{entry.label}</dt>
-                  <dd className="mt-0.5 font-body font-bold text-white">{formatRetreatDate(entry.date)}</dd>
-                  {entry.note && <dd className="mt-0.5 text-xs text-orchid-dim">{entry.note}</dd>}
+                  <dd className="mt-0.5 font-body font-bold text-white">
+                    {entry.date ? formatRetreatDate(entry.date) : entry.note === COMING_SOON ? COMING_SOON : formatRetreatDate(null)}
+                  </dd>
+                  {entry.note && entry.note !== COMING_SOON && <dd className="mt-0.5 text-xs text-orchid-dim">{entry.note}</dd>}
                 </div>
               ))}
             </dl>
@@ -126,11 +128,12 @@ export function RetreatDashboard({ data, slug, preview, onReload, focusSection }
         </p>
       </Section>
 
-      {/* ── Travel Insurance: near the top, before big nonrefundable purchases ── */}
-      <Section id="travel-insurance" title="Travel Insurance" status={data.checklist.find((c) => c.key === "travel_insurance")?.status}>
-        <TravelInsuranceGuidance />
-        <TravelInsuranceForm slug={slug} initial={data.travelInsurance} readOnly={readOnly} onSaved={onReload} />
-      </Section>
+      {/* ── Travel Insurance: guidance only — strongly recommended, not required ── */}
+      {data.insurance.show && (
+        <Section id="travel-insurance" title="Travel Insurance">
+          <TravelInsuranceGuidance />
+        </Section>
+      )}
 
       {/* ── My Agreement ───────────────────────────────────────────── */}
       <Section id="agreement" title="My Agreement" status={data.agreement.status}>
@@ -150,18 +153,8 @@ export function RetreatDashboard({ data, slug, preview, onReload, focusSection }
         )}
       </Section>
 
-      {/* ── Guest Profile ──────────────────────────────────────────── */}
-      <Section id="guest-profile" title="Guest Profile" status={data.guestProfile.status}>
-        <p>
-          Tell us about you so we can prepare for your stay. The form opens in a new tab. When you've sent it, let us know
-          below — it shows as Submitted until our team verifies it.
-        </p>
-        <JotformLink url={data.guestProfile.url} label="Open the Guest Profile form" />
-        <SelfReport slug={slug} taskKey="guest_profile" status={data.guestProfile.status} readOnly={readOnly} label="I've submitted my Guest Profile" onSaved={onReload} />
-      </Section>
-
-      {/* ── Travel & Flights ───────────────────────────────────────── */}
-      <Section id="travel-flights" title="Travel & Flights" status={data.checklist.find((c) => c.key === "flight_preferences")?.status}>
+      {/* ── Travel & Flights guidance (the flight forms are questionnaires below) ── */}
+      <Section id="travel-flights" title="Travel & Flights">
         <div className="rounded-xl border border-white/10 px-4 py-3">
           <p className="flex items-center gap-2 font-semibold text-white">
             <Plane aria-hidden className="size-4 text-gold" />
@@ -169,33 +162,46 @@ export function RetreatDashboard({ data, slug, preview, onReload, focusSection }
           </p>
           {data.flightGuidance.note && <p className="mt-1 whitespace-pre-wrap">{data.flightGuidance.note}</p>}
         </div>
-        <div>
-          <h3 className="text-base font-semibold text-white">Flight Preferences</h3>
-          <p className="mt-1">
-            Before you buy a flight, share your preferences so we can research options together. You choose and book your
-            own airfare.
+        {retreat.airport && (
+          <p>
+            <span className="font-semibold text-white">Airport:</span> {retreat.airport}
           </p>
-        </div>
-        <FlightPreferencesForm slug={slug} initial={data.flightPreferences} readOnly={readOnly} onSaved={onReload} />
-        <div className="flex flex-col gap-3 border-t border-white/10 pt-5">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h3 className="text-base font-semibold text-white">Booked Flight Tracker</h3>
-            <StatusText status={data.flightTracker.status} />
-          </div>
-          <p>Once you have booked your flights, share your confirmed flight details. Please only submit this after booking.</p>
-          <JotformLink url={data.flightTracker.url} label="Open the Booked Flight Tracker" />
-          <SelfReport slug={slug} taskKey="flight_details" status={data.flightTracker.status} readOnly={readOnly} label="I've submitted my booked flight details" onSaved={onReload} />
-        </div>
+        )}
+        {data.details.transportNote && <p>{data.details.transportNote}</p>}
+        <ShuttleWindows data={data} />
+        <p className="text-xs text-orchid-dim">
+          You can complete your Retreat Profile before you book flights, and add your flight details later.
+        </p>
       </Section>
 
+      {/* ── Questionnaires (owner-built; each saves progress and can be updated later) ── */}
+      {data.questionnaires.map((questionnaire) => (
+        <Section key={questionnaire.key} id={`questionnaire-${questionnaire.key}`} title={questionnaire.title} status={questionnaire.status}>
+          <QuestionnaireForm
+            key={`${questionnaire.key}:${questionnaire.version}`}
+            slug={slug}
+            questionnaire={questionnaire}
+            readOnly={readOnly}
+            showAudienceTags={readOnly && data.audience === "all"}
+            onSaved={onReload}
+          />
+        </Section>
+      ))}
+
       {/* ── Passport & Preparation ─────────────────────────────────── */}
-      <Section id="passport-preparation" title="Passport & Preparation" status={data.passport.status}>
+      <Section
+        id="passport-preparation"
+        title={data.passport.enabled ? "Passport & Preparation" : "Preparation"}
+        status={data.passport.enabled ? data.passport.status : undefined}
+      >
         {data.preparationMd.trim() ? (
           <RetreatMarkdown body={data.preparationMd} />
         ) : (
           <p>Preparation guidance will be posted here.</p>
         )}
-        <SelfReport slug={slug} taskKey="passport" status={data.passport.status} readOnly={readOnly} label="I've checked my passport" onSaved={onReload} />
+        {data.passport.enabled && (
+          <SelfReport slug={slug} taskKey="passport" status={data.passport.status} readOnly={readOnly} label="I've checked my passport" onSaved={onReload} />
+        )}
       </Section>
 
       {/* ── Retreat Details & Itinerary ────────────────────────────── */}
@@ -208,13 +214,16 @@ export function RetreatDashboard({ data, slug, preview, onReload, focusSection }
           {retreat.airport && <Detail icon={<Plane aria-hidden className="size-4 text-gold" />} label="Airport" value={retreat.airport} />}
         </dl>
         {data.details.transportNote && <p>{data.details.transportNote}</p>}
-        {data.details.shuttle.confirmed && data.details.shuttle.details ? (
+        <ShuttleWindows data={data} />
+        {data.details.activities.length > 0 && (
           <div>
-            <h3 className="text-sm font-semibold text-white">Pickup windows</h3>
-            <p className="mt-1 whitespace-pre-wrap">{data.details.shuttle.details}</p>
+            <h3 className="text-sm font-semibold text-white">Planned activities</h3>
+            <ul className="mt-2 list-disc space-y-1 pl-5">
+              {data.details.activities.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
           </div>
-        ) : (
-          <p className="font-semibold text-white/85">Pickup windows: to be confirmed</p>
         )}
         {data.details.inclusions.length > 0 && (
           <div>
@@ -242,9 +251,11 @@ export function RetreatDashboard({ data, slug, preview, onReload, focusSection }
       </Section>
 
       {/* ── Guest Connection & Group Call ──────────────────────────── */}
-      <Section id="guest-connection" title="Guest Connection & Group Call" status={data.checklist.find((c) => c.key === "group_call")?.status}>
-        <GroupCall data={data} slug={slug} readOnly={readOnly} onSaved={onReload} />
-      </Section>
+      {data.groupCall.enabled && (
+        <Section id="guest-connection" title="Guest Connection & Group Call" status={data.checklist.find((c) => c.key === "group_call")?.status}>
+          <GroupCall data={data} slug={slug} readOnly={readOnly} onSaved={onReload} />
+        </Section>
+      )}
 
       {/* ── Messages & Announcements ───────────────────────────────── */}
       <Section id="messages" title="Messages & Announcements">
@@ -287,6 +298,22 @@ export function RetreatDashboard({ data, slug, preview, onReload, focusSection }
         </Section>
       )}
     </div>
+  );
+}
+
+/** Yvette, 22 Nov: unconfirmed shuttle windows and pre-trip call details read "Details coming soon". */
+const COMING_SOON = "Details coming soon";
+
+function ShuttleWindows({ data }: { data: RetreatDashboardData }) {
+  return data.details.shuttle.confirmed && data.details.shuttle.details ? (
+    <div>
+      <h3 className="text-sm font-semibold text-white">Shuttle windows</h3>
+      <p className="mt-1 whitespace-pre-wrap">{data.details.shuttle.details}</p>
+    </div>
+  ) : (
+    <p>
+      <span className="font-semibold text-white/85">Shuttle windows:</span> {COMING_SOON}
+    </p>
   );
 }
 
@@ -348,22 +375,6 @@ function Detail({ label, value, icon }: { label: string; value: string; icon?: R
   );
 }
 
-function StatusText({ status }: { status: TaskStatus }) {
-  return <span className="text-xs font-semibold uppercase tracking-[0.12em] text-orchid-dim">{TASK_STATUS_LABEL[status]}</span>;
-}
-
-function JotformLink({ url, label }: { url: string; label: string }) {
-  if (!url) return <p className="text-orchid-dim">This form will be available here soon.</p>;
-  return (
-    <div>
-      <a href={url} target="_blank" rel="noopener noreferrer" className={BUTTON_PRIMARY}>
-        {label}
-        <ExternalLink aria-hidden className="size-3.5" />
-      </a>
-    </div>
-  );
-}
-
 /**
  * The guest saying "I've done this". It can move a task to Submitted, never to
  * Verified — only the organizer's review does that, on the server.
@@ -377,7 +388,7 @@ function SelfReport({
   onSaved,
 }: {
   slug: string;
-  taskKey: "guest_profile" | "flight_details" | "passport";
+  taskKey: "passport";
   status: TaskStatus;
   readOnly: boolean;
   label: string;
@@ -517,8 +528,9 @@ function GroupCall({
   if (!call.confirmed) {
     return (
       <>
-        <p className="font-semibold text-white/85">Pre-trip group call: to be confirmed</p>
-        <p>The date, time and joining link will be shared here once they are confirmed.</p>
+        <p>
+          <span className="font-semibold text-white/85">Pre-trip group call:</span> {COMING_SOON}
+        </p>
       </>
     );
   }

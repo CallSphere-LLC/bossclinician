@@ -88,7 +88,7 @@ export const coachingTerms: KajabiLegalDoc = {
         { type: "p", text: "This Coaching Agreement (“Agreement”) is entered into by and between:" },
         { type: "p", text: "Boss Clinician, LLC" },
         { type: "p", text: "848 N Rainbow Blvd #441, Las Vegas, NV 89107" },
-        { type: "p", text: "yvette@proftitableprivatepractices.com" },
+        { type: "p", text: "support@bossclinician.com" },
         {
           type: "p",
           text: [
@@ -568,7 +568,16 @@ export const continuingEducation: KajabiLegalDoc = {
 
 /* ══════════════════════════════════════════════════════════════════════════
    /retreatagreement — Release. Restore. Reconnect. (Bali, June 2027)
-   ══════════════════════════════════════════════════════════════════════════ */
+   ══════════════════════════════════════════════════════════════════════════
+
+   22 Nov 2026, owner reply items 4 and 7. The shared room stays on this page:
+   $4,500 per person, one room only, by arrangement for a guest bringing a
+   friend; it is not a public booking option and no roommate is assigned or
+   matched. Airport transport uses her wording (designated group transfers
+   during June 15–20, final shuttle windows shared before travel, never on
+   demand). Travel insurance is strongly recommended, not required, in every
+   section. The signed/assignable PDF agreements (participant_contracts 4 and
+   5) are separate documents and were not changed. */
 
 const RETREATS_EMAIL = "retreats@bossclinician.com";
 const RETREATS_MAILTO: LegalSpan = { text: RETREATS_EMAIL, href: `mailto:${RETREATS_EMAIL}` };
@@ -583,7 +592,7 @@ export const retreatAgreement: KajabiLegalDoc = {
   title: "Terms of Service",
   titleAccent: "& Retreat Agreement",
   lede: "Release. Restore. Reconnect.  ·  Bali, Indonesia  ·  June 15–20, 2027",
-  dateLine: "Effective Date: June 1, 2026",
+  dateLine: "Effective Date: June 1, 2026 · Updated November 22, 2026",
   clauses: [
     {
       id: "preamble",
@@ -624,7 +633,7 @@ export const retreatAgreement: KajabiLegalDoc = {
           type: "list",
           items: [
             "Five nights’ accommodation at a private 12-bedroom villa estate in Ubud, Bali (room type based on package selected)",
-            "Group luxury airport transportation to and from I Gusti Ngurah Rai International Airport (DPS) on official arrival and departure days at designated shuttle times",
+            "Airport transportation to and from Ngurah Rai International Airport, Denpasar (DPS) through designated group transfers during June 15–20, 2027, with final shuttle windows coordinated with guests and shared before travel",
             "All meals prepared daily by a private villa chef, including breakfast, brunch, and dinner, plus outside villa meals as scheduled",
             "Wellness experiences: sound bath, breathwork session, Balinese massage, and flower bath",
             "Curated group activities: temple tour, fire show, beach day, photo day, shared storytelling, and dancing",
@@ -648,7 +657,7 @@ export const retreatAgreement: KajabiLegalDoc = {
           type: "list",
           items: [
             "Airfare to and from I Gusti Ngurah Rai International Airport (DPS), Bali, Indonesia",
-            "Travel insurance (strongly recommended — see Section 7)",
+            "Travel insurance (strongly recommended, not required — see Section 7)",
             "Passport or visa fees",
             "Airport transfers outside of designated shuttle times",
             "Personal spending outside of included retreat activities",
@@ -662,7 +671,7 @@ export const retreatAgreement: KajabiLegalDoc = {
       label: "Section 04",
       heading: "Investment & Payment Terms",
       blocks: [
-        { type: "p", text: "Private rooms are open for enrollment. Shared rooms may be available separately, subject to availability. All prices are per person." },
+        { type: "p", text: "Private rooms are open for enrollment. There is one shared room, available by arrangement for a guest bringing a friend. It is not offered for public booking, and roommate matching is not offered. All prices are per person." },
         {
           type: "pricing",
           options: [
@@ -673,11 +682,11 @@ export const retreatAgreement: KajabiLegalDoc = {
               note: ["$500 deposit · remaining balance", "due in full by June 8, 2027"],
             },
             {
-              eyebrow: "Shared Room",
+              eyebrow: "Shared Room · By Arrangement",
               name: "Shared Luxury Room",
               price: "$4,500",
               per: "per person",
-              note: ["$500 deposit · remaining balance", "due in full by June 8, 2027"],
+              note: ["One room, by arrangement for a guest bringing a friend", "$500 deposit · remaining balance due in full by June 8, 2027"],
             },
           ],
         },
@@ -744,7 +753,7 @@ export const retreatAgreement: KajabiLegalDoc = {
               { text: "Final payment deadline: June 8, 2027.", bold: true },
               " All balances must be paid in full one week before the retreat begins. Any participant with an outstanding balance after this date will be removed from the retreat with no refund or credit issued.",
             ],
-            "Force majeure events — including but not limited to natural disasters, weather events, political unrest, government travel restrictions, or pandemics — will not result in refunds. Travel insurance is required to protect against these circumstances.",
+            "Force majeure events — including but not limited to natural disasters, weather events, political unrest, government travel restrictions, or pandemics — will not result in refunds. Travel insurance is strongly recommended, not required, to help protect against these circumstances.",
           ],
         },
       ],
@@ -781,7 +790,7 @@ export const retreatAgreement: KajabiLegalDoc = {
           text: [
             "Travel insurance is ",
             { text: "strongly recommended", bold: true },
-            " for all participants. Because all payments are non-refundable, travel insurance is your primary financial protection in the event of unforeseen circumstances including illness, injury, flight cancellations, or force majeure events.",
+            ", not required, for all participants. Because all payments are non-refundable, travel insurance is your primary financial protection in the event of unforeseen circumstances including illness, injury, flight cancellations, or force majeure events.",
           ],
         },
         { type: "p", text: "We recommend a comprehensive policy that includes:" },
@@ -821,9 +830,13 @@ export const retreatAgreement: KajabiLegalDoc = {
             ],
             [
               { text: "Shared Luxury Room", bold: true },
-              " includes a private bedroom with two single beds and an en suite bathroom, shared with one other retreat participant. Each guest in a Shared Luxury Room purchases their own spot independently at $4,500 per person.",
+              " includes a private bedroom with two single beds and an en suite bathroom, shared by two guests who are attending together. There is one Shared Luxury Room, available by arrangement for a guest bringing a friend; each guest pays $4,500 per person.",
             ],
-            "If you select the Shared Luxury Room without naming a roommate preference, one will be thoughtfully assigned by Boss Clinician, LLC.",
+            [
+              "The Shared Luxury Room is not a public booking option, and roommate matching is not offered. To ask about it, contact ",
+              RETREATS_MAILTO,
+              " before reserving.",
+            ],
             "The retreat property is a private villa estate in Ubud, Bali. The specific property address will be shared with confirmed participants prior to departure. The property is subject to change only in extenuating circumstances, in which case a comparable alternative will be arranged.",
           ],
         },
@@ -836,7 +849,7 @@ export const retreatAgreement: KajabiLegalDoc = {
       blocks: [
         {
           type: "p",
-          text: "Group luxury shuttle transportation will be provided between I Gusti Ngurah Rai International Airport (DPS) and the retreat villa at designated times on the official arrival day (June 15, 2027) and departure day (June 20, 2027).",
+          text: "The retreat runs June 15–20, 2027, with checkout June 20. Airport transportation is provided through designated group transfers during these dates. Final shuttle windows will be coordinated with guests and shared before travel.",
         },
         {
           type: "p",

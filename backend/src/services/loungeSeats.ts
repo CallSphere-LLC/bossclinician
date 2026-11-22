@@ -27,6 +27,11 @@ import { conflict } from "../utils/httpError";
  *    checkout (an annual renewal before the term ends).
  *  - Paid means an order with a total above zero for a contact that is not
  *    internal. A 100%-off coupon, a manual grant or a comp claims nothing.
+ *  - Migration 222 (her round-2 answers, item 3): an order that used the
+ *    LOUNGE26 test code never claims; "same plan" is enforced (a founding
+ *    monthly member buying annual, or the reverse, pays the current price);
+ *    Emails 11-12 carry her General / VIP blocks (LOUNGE_BLOCKS), chosen per
+ *    tier at send time; the VIP waitlist notice is services/loungeWaitlist.ts.
  *
  * Overselling: the price is fixed when the order is created, so the checkout
  * reserves the place (a 30-minute `held` row) under a per-tier advisory lock,
@@ -114,6 +119,17 @@ export interface BuyerStanding {
   claimPhase: PricePhase | null;
   /** The buyer has active access to the tier right now. */
   active: boolean;
+  /**
+   * Migration 222: the plan of the order that claimed the place
+   * ('subscription' monthly or 'one_time' annual). Null when unknown (a
+   * backfilled or Kajabi claim), which is treated as any plan.
+   */
+  claimPlan?: string | null;
+}
+
+/** Her rule: the founding rate is kept "while continuously enrolled on the same plan". */
+export function samePlan(claimPlan: string | null | undefined, planType: string | null | undefined): boolean {
+  return !claimPlan || !planType || claimPlan === planType;
 }
 
 export interface BuyerDecision {
@@ -134,10 +150,16 @@ export interface BuyerDecision {
  * never waitlisted or counted twice, but only a signed-in member is shown, and
  * so charged, their founding price after founding closes.
  */
-export function decideForBuyer(status: TierStatus, buyer: BuyerStanding, allowContinuation = true): BuyerDecision {
+export function decideForBuyer(
+  status: TierStatus,
+  buyer: BuyerStanding,
+  allowContinuation = true,
+  /** The plan being bought; a founding member switching plan pays the current price. */
+  planType: string | null = null
+): BuyerDecision {
   // Already a member holding a seat: never waitlisted, never counted again.
   if (buyer.active && buyer.claimPhase !== null) {
-    const continuation = allowContinuation && buyer.claimPhase === "founding";
+    const continuation = allowContinuation && buyer.claimPhase === "founding" && samePlan(buyer.claimPlan, planType);
     return {
       phase: continuation ? "founding" : status.phase,
       purchasable: true,
@@ -206,15 +228,19 @@ export async function readSeatCounts(db: Queryable, tier: SeatTier, excludeEmail
 export async function readBuyerStanding(db: Queryable, tier: SeatTier, email: string): Promise<BuyerStanding> {
   const normalized = email.trim().toLowerCase();
   if (!normalized) return { claimPhase: null, active: false };
-  const result = await db.query<{ phase: PricePhase; active: boolean }>(
-    `SELECT s.phase, ${ACTIVE_ACCESS} AS active
+  const result = await db.query<{ phase: PricePhase; active: boolean; plan: string | null }>(
+    `SELECT s.phase, ${ACTIVE_ACCESS} AS active,
+            (SELECT po.pricing_type FROM orders co JOIN offer_pricing_options po ON po.id = co.pricing_option_id
+              WHERE co.id = s.order_id) AS plan
        FROM lounge_seats s
       WHERE s.tier = $1 AND s.status = 'claimed' AND s.email = $3
       LIMIT 1`,
     [tier, [...TIER_RULES[tier].offerSlugs], normalized]
   );
   const row = result.rows[0];
-  return row ? { claimPhase: row.phase, active: row.active === true } : { claimPhase: null, active: false };
+  return row
+    ? { claimPhase: row.phase, active: row.active === true, claimPlan: row.plan ?? null }
+    : { claimPhase: null, active: false };
 }
 
 export async function tierStatus(tier: SeatTier, db: Queryable = pool, excludeEmail = ""): Promise<TierStatus> {
@@ -265,7 +291,7 @@ export async function seatPricingFor(tier: SeatTier, viewer: SeatViewer | undefi
  * Keeps only the options of the phase this viewer may buy. Options with no
  * phase (every other offer) pass straight through, with no query at all.
  */
-export async function filterPhasedOptions<T extends { price_phase?: PricePhase | null }>(
+export async function filterPhasedOptions<T extends { price_phase?: PricePhase | null; pricing_type?: string | null }>(
   rows: T[],
   offerSlug: string | null | undefined,
   viewer: SeatViewer | undefined,
@@ -275,8 +301,15 @@ export async function filterPhasedOptions<T extends { price_phase?: PricePhase |
   const tier = tierForSlug(offerSlug);
   // A phased option on an offer this module does not know: show founding only,
   // never both prices side by side.
-  const phase: PricePhase = tier ? (await seatPricingFor(tier, viewer, db)).viewerPhase : "founding";
-  return rows.filter((row) => !row.price_phase || row.price_phase === phase);
+  if (!tier) return rows.filter((row) => !row.price_phase || row.price_phase === "founding");
+  const email = await viewerEmail(db, viewer);
+  const status = await tierStatus(tier, db, email);
+  const buyer = email ? await readBuyerStanding(db, tier, email) : { claimPhase: null, active: false };
+  // Per plan (migration 222): a continuing founding member sees the founding
+  // price on the plan they hold and the current price on the other one.
+  return rows.filter(
+    (row) => !row.price_phase || row.price_phase === decideForBuyer(status, buyer, true, row.pricing_type ?? null).phase
+  );
 }
 
 /* ── Checkout: reserve the place before any charge exists ─────────────── */
@@ -300,6 +333,8 @@ export async function reserveLoungeSeat(input: {
   email: string;
   /** Only a signed-in member may be priced as a continuing founding member. */
   signedIn: boolean;
+  /** The chosen option's pricing_type: the founding rate continues on the same plan only. */
+  pricingType?: string | null;
 }): Promise<void> {
   const tier = tierForSlug(input.offerSlug);
   if (!tier) return;
@@ -312,7 +347,7 @@ export async function reserveLoungeSeat(input: {
     const standing = await readBuyerStanding(client, tier, email);
     // The page priced a guest at the public phase, so a guest is charged it;
     // an active member is still never waitlisted or counted twice.
-    const decision = decideForBuyer(status, standing, input.signedIn);
+    const decision = decideForBuyer(status, standing, input.signedIn, input.pricingType ?? null);
     if (!decision.purchasable) throw conflict(VIP_WAITLIST_MESSAGE, { waitlist: true });
     if ((input.pricePhase ?? "founding") !== decision.phase) throw conflict(FOUNDING_JUST_FILLED, { phase: decision.phase });
     if (decision.takesFoundingPlace || decision.takesCapacitySeat) {
@@ -361,13 +396,26 @@ export async function claimLoungeSeatSafely(client: Queryable, orderId: number):
   }
 }
 
+/**
+ * Test transactions never take a place (her rule; migration 222). Test
+ * accounts are contacts marked internal (contacts.is_internal), refused before
+ * this. LOUNGE26 was the owner's test code (order 201, 8 Nov 2026), switched
+ * off by migration 222; an order that used it is never counted.
+ */
+export const TEST_COUPON_CODES: readonly string[] = ["LOUNGE26"];
+
+export function testOrderReason(order: { couponCode?: string | null }): string {
+  const code = (order.couponCode ?? "").trim().toUpperCase();
+  return code && TEST_COUPON_CODES.includes(code) ? "test coupon" : "";
+}
+
 export async function claimLoungeSeat(client: Queryable, orderId: number): Promise<ClaimResult> {
   const found = await client.query<{
     slug: string; email: string; total_cents: number; contact_id: number | null; member_id: number | null;
-    is_internal: boolean | null; price_phase: PricePhase | null;
+    is_internal: boolean | null; price_phase: PricePhase | null; coupon_code?: string | null;
   }>(
     `SELECT o.slug, lower(ord.email) AS email, ord.total_cents, ord.contact_id, ord.member_id,
-            c.is_internal, po.price_phase
+            c.is_internal, po.price_phase, ord.coupon_code
        FROM orders ord
        JOIN offers o ON o.id = ord.offer_id
        LEFT JOIN contacts c ON c.id = ord.contact_id
@@ -381,6 +429,8 @@ export async function claimLoungeSeat(client: Queryable, orderId: number): Promi
   if (!(Number(order.total_cents) > 0)) return { claimed: false, overLimit: false, reason: "not a paid order" };
   if (order.is_internal) return { claimed: false, overLimit: false, reason: "internal contact" };
   if (!order.email) return { claimed: false, overLimit: false, reason: "no email" };
+  const testReason = testOrderReason({ couponCode: order.coupon_code });
+  if (testReason) return { claimed: false, overLimit: false, reason: testReason };
 
   await client.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [lockKey(tier)]);
   // Legacy prices carry no phase; every price sold before 22 Nov was a founding one.
@@ -424,7 +474,75 @@ export function memberRateSentence(phase: PricePhase): string {
     : "The Lounge Member rate is $247 per month, with a six-month minimum commitment totaling $1,482, or $2,497 for 12 months paid upfront. After the six months, monthly membership continues month-to-month unless canceled.";
 }
 
+/**
+ * Masterclass Emails 11-12 (Yvette's revised doc, "TEAM IMPLEMENTATION NOTES",
+ * 22 Nov 2026): one General block and one VIP block, each chosen on its own
+ * from the live seat state at send time. Her exact texts, without the doc's
+ * enclosing quotes. The same texts are the Lounge page and checkout lines
+ * (frontend/src/content/loungePricing.ts); keep the two copies identical.
+ */
+export const LOUNGE_BLOCKS = {
+  generalFounding:
+    "General: The first 20 paid General members can join for $197/month or $1,997/year. The monthly option has a six-month minimum totaling $1,182, then continues month-to-month. Starting with the 21st paid General member, pricing becomes $247/month or $2,497/year.",
+  generalStandard:
+    "General: Join for $247/month or $2,497/year. The monthly option has a six-month minimum totaling $1,482, then continues month-to-month.",
+  vipFounding:
+    "VIP: The first six paid VIP members can join for $347/month or $3,497/year. The monthly option has a six-month minimum totaling $2,082, then continues month-to-month. Once all six seats are filled, a waitlist opens. Future available seats are $447/month or $4,497/year.",
+  vipFull:
+    "VIP is currently full. Join the VIP waitlist through The Lounge page to hear when a seat becomes available. Future seats are $447/month or $4,497/year. Seats are first come, first served; joining the waitlist does not reserve a place.",
+  vipSeatAvailable:
+    "A VIP seat is available at $447/month or $4,497/year. The monthly option has a six-month minimum totaling $2,682, then continues month-to-month. Available seats are first come, first served.",
+} as const;
+
+export type LoungeBlockKey = keyof typeof LOUNGE_BLOCKS;
+
+/** General: founding while any of the 20 places is left (counting live checkout holds, as the checkout does). */
+export function generalBlockKey(status: TierStatus): LoungeBlockKey {
+  return status.phase === "founding" ? "generalFounding" : "generalStandard";
+}
+
+/**
+ * VIP: founding while any of the six founding places is left; after that,
+ * "full" while every seat is taken (a live 30-minute checkout hold counts,
+ * exactly as the checkout counts it) and "seat available" otherwise.
+ */
+export function vipBlockKey(status: TierStatus): LoungeBlockKey {
+  if (status.phase === "founding") return "vipFounding";
+  return status.purchasable ? "vipSeatAvailable" : "vipFull";
+}
+
+export const LOUNGE_BLOCK_TOKENS = ["lounge_general_pricing_block", "lounge_vip_availability_block"] as const;
+
+export function loungeBlockValues(general: TierStatus, vip: TierStatus): Record<(typeof LOUNGE_BLOCK_TOKENS)[number], string> {
+  return {
+    lounge_general_pricing_block: LOUNGE_BLOCKS[generalBlockKey(general)],
+    lounge_vip_availability_block: LOUNGE_BLOCKS[vipBlockKey(vip)],
+  };
+}
+
+/**
+ * Every Lounge token, read from the live seat state. Throws if the state
+ * cannot be read: the caller then has no value, and the send guard
+ * (services/emailSendGuard.ts) holds the email rather than send a guessed price.
+ */
 export async function loungeMergeValues(db: Queryable): Promise<Record<string, string>> {
   const general = await tierStatus("general", db);
-  return { "lounge.memberRate": memberRateSentence(general.phase) };
+  const vip = await tierStatus("vip", db);
+  return { "lounge.memberRate": memberRateSentence(general.phase), ...loungeBlockValues(general, vip) };
+}
+
+/** For the sequence send: under a savepoint, so a failed read neither sends nor aborts the run's transaction. */
+export async function loungeMergeValuesSafe(client: Queryable): Promise<Record<string, string>> {
+  try {
+    await client.query("SAVEPOINT lounge_merge");
+    const values = await loungeMergeValues(client);
+    await client.query("RELEASE SAVEPOINT lounge_merge");
+    return values;
+  } catch (error) {
+    await client.query("ROLLBACK TO SAVEPOINT lounge_merge").catch(() => undefined);
+    console.error("[lounge-seats] could not read the seat state for an email", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return {};
+  }
 }

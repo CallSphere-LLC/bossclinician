@@ -2,13 +2,13 @@ import { Router } from "express";
 import { z } from "zod";
 import { asyncHandler } from "../../utils/asyncHandler";
 import { badRequest, notFound } from "../../utils/httpError";
-import { alumniPreview, saveAlumniSettings } from "../../services/retreatAlumni";
+import { ALUMNI_PREVIEW_SAMPLE_NAME, alumniPreview, saveAlumniSettings } from "../../services/retreatAlumni";
 
 /**
  * Post-retreat alumni emails (sheet row 249) — mounted at
  * /api/admin/retreat-alumni behind the marketing module.
  *
- *   GET /:slug/preview?firstName=Jasmine   send dates, the four emails rendered
+ *   GET /:slug/preview?firstName=Alex      send dates, the four emails rendered
  *                                          for that retreat, its guests, gaps
  *   PUT /:slug/settings                    { nextUrl?, featuredRetreatSlug?, enabled? }
  *
@@ -22,7 +22,7 @@ adminRetreatAlumniRouter.get(
     const firstName =
       typeof req.query.firstName === "string" && req.query.firstName.trim()
         ? req.query.firstName.trim().slice(0, 60)
-        : "Jasmine";
+        : ALUMNI_PREVIEW_SAMPLE_NAME;
     const preview = await alumniPreview(req.params.slug, firstName);
     if (!preview) throw notFound("Retreat not found");
     res.json(preview);

@@ -18,10 +18,8 @@ import {
   feedbackView,
   findRetreatById,
   findRetreatBySlug,
-  formView,
   loadAgreementAssignments,
   loadFeedbackRow,
-  loadFormRecords,
   loadInterest,
   loadPayments,
   loadTaskRecords,
@@ -37,6 +35,9 @@ import {
   type TaskKey,
 } from "../../services/retreats";
 import { storeStagedMemory } from "../member/retreats";
+import { adminRetreatExtrasRouter } from "./retreatExtras";
+import { loadGuestAccessRecords } from "../../services/retreatAccess";
+import { guestRoomType, loadQuestionnaires, loadResponses, responseStatus, type SnapshotEntry } from "../../services/retreatQuestionnaires";
 
 /**
  * `/api/admin/retreats/*` — the FlourisHealer organizer view.
@@ -60,6 +61,8 @@ export function requireRetreatOrganizer(req: Request, _res: Response, next: Next
 }
 
 adminRetreatsRouter.use(requireRetreatOrganizer);
+// Questionnaires, duplicate, access and the access email (migration 224) — owner/admin only, like everything here.
+adminRetreatsRouter.use(adminRetreatExtrasRouter);
 
 function adminId(req: Request): number {
   return Number(req.user?.sub);
@@ -84,17 +87,26 @@ function memberIdParam(raw: unknown): number {
   return id;
 }
 
-/** Members holding the dashboard product, plus booking-product holders not yet given it. */
+/**
+ * Members holding the dashboard product, booking-product holders not yet given
+ * it, and anyone an organizer gave access to before (retreat_guests) — so a
+ * guest whose access was removed, and her answers, stay reachable here.
+ */
 async function retreatPeople(retreat: RetreatRow) {
   const result = await pool.query<{ member_id: number; dashboard: boolean; booking: boolean }>(
-    `SELECT g.member_id,
-            bool_or(g.product_id = $1) AS dashboard,
-            bool_or(g.product_id = $2) AS booking
-       FROM access_grants g
-      WHERE g.product_id IN ($1, $2) AND g.status = 'active'
-        AND (g.expires_at IS NULL OR g.expires_at > now())
-      GROUP BY g.member_id`,
-    [retreat.product_id ?? -1, retreat.booking_product_id ?? -1],
+    `SELECT member_id, bool_or(dashboard) AS dashboard, bool_or(booking) AS booking
+       FROM (
+         SELECT g.member_id, g.product_id = $1 AS dashboard, g.product_id = $2 AS booking
+           FROM access_grants g
+          WHERE g.product_id IN ($1, $2) AND g.status = 'active'
+            AND (g.expires_at IS NULL OR g.expires_at > now())
+         UNION ALL
+         SELECT rg.member_id, false, false FROM retreat_guests rg
+           JOIN members m ON m.id = rg.member_id AND m.status <> 'deleted'
+          WHERE rg.retreat_id = $3 AND rg.access_granted_at IS NOT NULL
+       ) people
+      GROUP BY member_id`,
+    [retreat.product_id ?? -1, retreat.booking_product_id ?? -1, retreat.id],
   );
   return result.rows;
 }
@@ -260,8 +272,10 @@ adminRetreatsRouter.get(
   "/:id/preview",
   asyncHandler(async (req, res) => {
     const retreat = await retreatOf(req);
+    const audienceParam = String(req.query.audience ?? "");
+    const audience = audienceParam === "shared" || audienceParam === "private" || audienceParam === "all" ? audienceParam : undefined;
     if (req.query.memberId === undefined) {
-      res.json(await buildDashboard(retreat, null, { preview: true }));
+      res.json(await buildDashboard(retreat, null, { preview: true, audience }));
       return;
     }
     const memberId = memberIdParam(req.query.memberId);
@@ -305,23 +319,35 @@ adminRetreatsRouter.get(
   asyncHandler(async (req, res) => {
     const retreat = await retreatOf(req);
     const people = await retreatPeople(retreat);
+    const access = await loadGuestAccessRecords(retreat.id);
     const guests = [];
     for (const person of people) {
-      const [identity, dashboard, feedback, interest] = await Promise.all([
+      const [identity, dashboard, feedback, interest, roomType, account] = await Promise.all([
         memberIdentity(person.member_id),
         buildDashboard(retreat, person.member_id, { preview: true }),
         loadFeedbackRow(retreat.id, person.member_id),
         loadInterest(retreat.id, person.member_id),
+        guestRoomType(retreat.id, person.member_id),
+        pool.query<{ has_password: boolean }>(`SELECT (password_hash IS NOT NULL) AS has_password FROM members WHERE id = $1`, [person.member_id]),
       ]);
-      const insurance = dashboard.travelInsurance.data as { coverageStatus?: string };
+      const record = access.get(person.member_id) ?? null;
       guests.push({
         memberId: person.member_id,
         contactId: identity.contactId,
         name: identity.name,
         email: identity.email,
         hasDashboardAccess: person.dashboard,
-        checklist: dashboard.checklist.map((item) => ({ key: item.key, status: item.status })),
-        coverageStatus: dashboard.travelInsurance.state === "submitted" ? insurance.coverageStatus ?? null : null,
+        holdsBooking: person.booking,
+        hasPassword: account.rows[0]?.has_password ?? false,
+        roomType,
+        roomTypeSetByOrganizer: record?.roomType ?? null,
+        bookingEmail: record?.bookingEmail ?? "",
+        emailMismatchAccepted: record?.emailMismatchAccepted ?? false,
+        accessGrantedAt: record?.accessGrantedAt ?? null,
+        accessRemovedAt: record?.accessRemovedAt ?? null,
+        welcomeSentAt: record?.welcomeSentAt ?? null,
+        welcomeSendCount: record?.welcomeSendCount ?? 0,
+        checklist: dashboard.checklist.map((item) => ({ key: item.key, label: item.label, status: item.status })),
         paymentsStatus: dashboard.payments.status,
         feedbackSubmitted: Boolean(feedback?.submitted_at),
         interest: interest.interest,
@@ -335,40 +361,71 @@ adminRetreatsRouter.get(
 
 async function guestDetail(retreat: RetreatRow, memberId: number, req: Request) {
   const access = await assertRetreatPerson(retreat, memberId);
-  const [identity, dashboard, forms, assignments, payments, feedbackRow, interest, tasks, media] = await Promise.all([
+  const [identity, dashboard, assignments, payments, feedbackRow, interest, tasks, media, questionnaires, responses, roomType, records] = await Promise.all([
     memberIdentity(memberId),
     buildDashboard(retreat, memberId, { preview: true }),
-    loadFormRecords(retreat.id, memberId),
     loadAgreementAssignments(retreat.id, memberId),
     loadPayments(retreat.id, memberId),
     loadFeedbackRow(retreat.id, memberId),
     loadInterest(retreat.id, memberId),
     loadTaskRecords(retreat.id, memberId),
     pool.query<MediaRow>(`${MEDIA_SELECT} WHERE m.retreat_id = $1 AND m.member_id = $2 ORDER BY m.created_at DESC`, [retreat.id, memberId]),
+    loadQuestionnaires(retreat.id, { includeArchived: true }),
+    loadResponses(retreat.id, memberId),
+    guestRoomType(retreat.id, memberId),
+    loadGuestAccessRecords(retreat.id),
   ]);
-  const history = async (responseId: number | undefined) =>
-    responseId
-      ? (
-          await pool.query<{ data: Record<string, unknown>; submitted_at: Date }>(
-            `SELECT data, submitted_at FROM retreat_form_submissions WHERE response_id = $1 ORDER BY submitted_at DESC LIMIT 50`,
-            [responseId],
-          )
-        ).rows.map((row) => ({ data: row.data, submittedAt: new Date(row.submitted_at).toISOString() }))
-      : [];
-  const flight = forms.get("flight_preferences");
-  const insurance = forms.get("travel_insurance");
   const call = tasks.get("group_call");
+  const answers = [];
+  for (const q of questionnaires) {
+    const response = responses.get(q.id);
+    const history = response
+      ? (
+          await pool.query<{ version: number; answers: Record<string, unknown>; question_snapshot: Record<string, SnapshotEntry>; submitted_at: Date }>(
+            `SELECT version, answers, question_snapshot, submitted_at FROM retreat_questionnaire_submissions
+              WHERE response_id = $1 ORDER BY submitted_at DESC LIMIT 50`,
+            [response.id],
+          )
+        ).rows
+      : [];
+    const files = (
+      await pool.query<{ id: number; question_id: string; original_name: string; mime: string }>(
+        `SELECT id, question_id, original_name, mime FROM retreat_questionnaire_files WHERE questionnaire_id = $1 AND member_id = $2 ORDER BY id`,
+        [q.id, memberId],
+      )
+    ).rows;
+    answers.push({
+      id: q.id,
+      key: q.key,
+      title: q.title,
+      archived: q.archived,
+      currentVersion: q.current_version,
+      status: responseStatus(response),
+      state: response?.state ?? "none",
+      version: response?.version ?? null,
+      updatedAt: response ? new Date(response.updated_at).toISOString() : null,
+      submittedAt: response?.submitted_at ? new Date(response.submitted_at).toISOString() : null,
+      reviewNote: response?.review_note ?? "",
+      // Rendered from the stored snapshot: the wording she was shown, whatever the questionnaire says now.
+      answers: answerRows(response?.answers ?? {}, response?.question_snapshot ?? {}, q.definition),
+      history: history.map((h) => ({
+        version: h.version,
+        submittedAt: new Date(h.submitted_at).toISOString(),
+        answers: answerRows(h.answers, h.question_snapshot, null),
+      })),
+      files: files.map((f) => ({ id: f.id, questionId: f.question_id, name: f.original_name, mime: f.mime })),
+    });
+  }
   return {
     memberId,
     contactId: identity.contactId,
     name: identity.name,
     email: identity.email,
     hasDashboardAccess: access.dashboard,
+    roomType,
+    access: records.get(memberId) ?? null,
     checklist: dashboard.checklist,
-    forms: {
-      flight_preferences: { ...formView(flight), history: await history(flight?.id) },
-      travel_insurance: { ...formView(insurance), history: await history(insurance?.id) },
-    },
+    questionnaires: answers,
     agreement: {
       ...agreementView(assignments),
       assignments: assignments.map((a) => ({ id: a.id, status: a.status, signedAt: a.signed_at ? new Date(a.signed_at).toISOString() : null })),
@@ -383,6 +440,30 @@ async function guestDetail(retreat: RetreatRow, memberId: number, req: Request) 
     interest,
     media: await Promise.all(media.rows.map((row) => adminMediaJson(row, req))),
   };
+}
+
+/**
+ * Stored answers as label/value rows: current question order first, then any
+ * answered question that has since been removed. The label always comes from
+ * the snapshot taken when she answered, never from today's wording.
+ */
+export function answerRows(
+  answers: Record<string, unknown>,
+  snapshot: Record<string, SnapshotEntry>,
+  definition: { sections: { questions: { id: string }[] }[] } | null,
+) {
+  const order = definition ? definition.sections.flatMap((s) => s.questions.map((q) => q.id)) : [];
+  const ids = [...order.filter((id) => id in answers), ...Object.keys(answers).filter((id) => !order.includes(id))];
+  return ids.map((id) => ({
+    questionId: id,
+    label: snapshot[id]?.label ?? id,
+    section: snapshot[id]?.section ?? "",
+    type: snapshot[id]?.type ?? "short_text",
+    sensitive: snapshot[id]?.sensitive ?? false,
+    askedInVersion: snapshot[id]?.version ?? null,
+    removedFromQuestionnaire: definition ? !order.includes(id) : false,
+    value: answers[id],
+  }));
 }
 
 adminRetreatsRouter.get(

@@ -17,9 +17,11 @@ import { adminRetreatsApi, type AdminRetreatDetail, type RetreatDashboardData } 
  */
 export default function RetreatPreview() {
   const params = useParams();
-  const [search] = useSearchParams();
+  const [search, setSearch] = useSearchParams();
   const id = Number(params.id);
   const memberId = Number(search.get("memberId")) || undefined;
+  const audienceParam = search.get("audience");
+  const audience: "all" | "private" | "shared" = audienceParam === "private" || audienceParam === "shared" ? audienceParam : "all";
   const [data, setData] = useState<RetreatDashboardData | null>(null);
   const [detail, setDetail] = useState<AdminRetreatDetail | null>(null);
   const [error, setError] = useState("");
@@ -27,7 +29,7 @@ export default function RetreatPreview() {
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([adminRetreatsApi.preview(id, memberId), adminRetreatsApi.get(id)])
+    Promise.all([adminRetreatsApi.preview(id, memberId, memberId ? undefined : audience), adminRetreatsApi.get(id)])
       .then(([dashboard, retreat]) => {
         if (cancelled) return;
         setData(dashboard);
@@ -38,7 +40,7 @@ export default function RetreatPreview() {
     return () => {
       cancelled = true;
     };
-  }, [id, memberId, reload]);
+  }, [id, memberId, audience, reload]);
 
   const preview = useMemo(() => ({ memories: () => adminRetreatsApi.previewMemories(id) }), [id]);
 
@@ -51,6 +53,25 @@ export default function RetreatPreview() {
             Owner preview — read-only. Guests can't see this{detail && !detail.published ? " until you publish it" : ""}.
             {memberId && data?.guest && <span className="text-orchid-dim"> Viewing {data.guest.firstName}'s dashboard.</span>}
           </p>
+          {!memberId && (
+            <label className="flex items-center gap-2 text-white/85">
+              Preview as
+              <select
+                className="min-h-9 rounded-lg border border-white/20 bg-night-deep px-2 text-sm text-white"
+                value={audience}
+                onChange={(e) => {
+                  const next = new URLSearchParams(search);
+                  if (e.target.value === "all") next.delete("audience");
+                  else next.set("audience", e.target.value);
+                  setSearch(next, { replace: true });
+                }}
+              >
+                <option value="all">Every question (marked by who sees it)</option>
+                <option value="private">A private-room guest</option>
+                <option value="shared">A shared-room guest</option>
+              </select>
+            </label>
+          )}
           <Link to={`/admin/retreats/${id}`} className="inline-flex items-center gap-1.5 text-gold hover:underline">
             <ArrowLeft aria-hidden className="size-4" /> Back to the retreat
           </Link>

@@ -7,18 +7,17 @@ import { ipKeyGenerator, rateLimit } from "express-rate-limit";
 import { z } from "zod";
 import { pool } from "../../db/pool";
 import { asyncHandler } from "../../utils/asyncHandler";
-import { badRequest, conflict, forbidden, notFound, unauthorized } from "../../utils/httpError";
+import { badRequest, forbidden, notFound, unauthorized } from "../../utils/httpError";
 import { denyImpersonation } from "../../middleware/memberAuth";
 import { partsDir } from "../../services/mediaStorage";
 import { protectedRef, uploadPath } from "../../services/signedUrls";
 import { finishStagedMedia, persistStagedMedia, removeStoredMedia, usesS3Media } from "../../services/objectStorage";
+import { memberRetreatQuestionnairesRouter } from "./retreatQuestionnaires";
 import {
-  FORM_KEYS,
   MEDIA_SELECT,
   SELF_REPORTED_TASKS,
   buildDashboard,
   feedbackView,
-  formView,
   guestMayView,
   interestSchema,
   isOpen,
@@ -33,8 +32,6 @@ import {
   sniffMemoryMime,
   todayIn,
   validateFeedback,
-  validateForm,
-  type FormKey,
   type MediaRow,
   type RetreatRow,
 } from "../../services/retreats";
@@ -99,96 +96,18 @@ memberRetreatsRouter.get(
   }),
 );
 
-/* ───────────────────────────── native forms ──────────────────────────── */
+/* ───────────────────────────── questionnaires ─────────────────────────── */
 
-const formBodySchema = z
-  .object({
-    data: z.record(z.string(), z.unknown()),
-    submit: z.boolean(),
-    revision: z.number().int().nonnegative(),
-  })
-  .strict();
-
-/**
- * PUT /retreats/:slug/forms/:formKey — Save & Finish Later (submit=false, no
- * required fields) or a validated submission (submit=true). `revision` is the
- * one the guest loaded: a save from a stale tab or second device is refused
- * rather than silently replacing newer answers. Each submission is also kept
- * in retreat_form_submissions, so a corrected itinerary keeps its history.
- */
-memberRetreatsRouter.put(
-  "/retreats/:slug/forms/:formKey",
-  denyImpersonation,
-  writeLimiter,
-  asyncHandler(async (req, res) => {
-    const memberId = memberIdOf(req);
-    const retreat = await loadGuestRetreat(memberId, String(req.params.slug));
-    const formKey = String(req.params.formKey) as FormKey;
-    if (!(FORM_KEYS as readonly string[]).includes(formKey)) throw notFound("We couldn't find that form.");
-    const parsed = formBodySchema.safeParse(req.body);
-    if (!parsed.success) throw badRequest("Nothing to save.");
-    if (Buffer.byteLength(JSON.stringify(parsed.data.data), "utf8") > 64 * 1024) throw badRequest("That's more than this form can save.");
-
-    const { clean, errors } = validateForm(formKey, parsed.data.data, parsed.data.submit);
-    if (Object.keys(errors).length > 0) {
-      res.status(400).json({
-        error: "Please check the highlighted answers.",
-        fieldErrors: errors,
-        details: { fieldErrors: Object.fromEntries(Object.entries(errors).map(([k, v]) => [k, [v]])) },
-      });
-      return;
-    }
-
-    const client = await pool.connect();
-    try {
-      await client.query("BEGIN");
-      const existing = await client.query<{ id: number; revision: number }>(
-        `SELECT id, revision FROM retreat_form_responses
-          WHERE retreat_id = $1 AND member_id = $2 AND form_key = $3 FOR UPDATE`,
-        [retreat.id, memberId, formKey],
-      );
-      const current = existing.rows[0];
-      if ((current?.revision ?? 0) !== parsed.data.revision) {
-        throw conflict("This form was updated on another device. Reload to see the latest answers.");
-      }
-      const state = parsed.data.submit ? "submitted" : "draft";
-      const saved = await client.query(
-        current
-          ? `UPDATE retreat_form_responses
-                SET data = $4::jsonb, state = $5, revision = revision + 1, updated_at = now(),
-                    submitted_at = CASE WHEN $5 = 'submitted' THEN now() ELSE submitted_at END
-              WHERE retreat_id = $1 AND member_id = $2 AND form_key = $3
-              RETURNING id, form_key, data, state, revision, updated_at, submitted_at`
-          : `INSERT INTO retreat_form_responses (retreat_id, member_id, form_key, data, state, submitted_at)
-             VALUES ($1, $2, $3, $4::jsonb, $5, CASE WHEN $5 = 'submitted' THEN now() END)
-             RETURNING id, form_key, data, state, revision, updated_at, submitted_at`,
-        [retreat.id, memberId, formKey, JSON.stringify(clean), state],
-      );
-      const row = saved.rows[0];
-      if (parsed.data.submit) {
-        await client.query(`INSERT INTO retreat_form_submissions (response_id, data) VALUES ($1, $2::jsonb)`, [
-          row.id,
-          JSON.stringify(clean),
-        ]);
-      }
-      await client.query("COMMIT");
-      noStore(res);
-      res.json({ response: formView(row) });
-    } catch (error) {
-      await client.query("ROLLBACK").catch(() => undefined);
-      throw error;
-    } finally {
-      client.release();
-    }
-  }),
-);
+// Guest Profile, Flight Preferences and Flight Details are owner-editable
+// questionnaires now (migration 224); the old fixed forms endpoint is gone.
+memberRetreatsRouter.use(memberRetreatQuestionnairesRouter);
 
 /* ─────────────────────────── self-reported tasks ─────────────────────── */
 
 /**
- * POST /retreats/:slug/tasks/:taskKey — the guest says she has submitted her
- * Guest Profile / booked-flight Jotform, or checked her passport. The most
- * this can record is "submitted"; Verified comes only from an organizer.
+ * POST /retreats/:slug/tasks/:taskKey — the guest says she has checked her
+ * passport. The most this can record is "submitted"; Verified comes only
+ * from an organizer.
  */
 memberRetreatsRouter.post(
   "/retreats/:slug/tasks/:taskKey",

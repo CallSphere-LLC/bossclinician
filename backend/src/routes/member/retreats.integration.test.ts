@@ -177,6 +177,9 @@ describe.skipIf(!hasTestDatabase)("FlourisHealer retreat dashboard access (scrat
     const a = await call("GET", dash, guestA.token);
     expect(a.status).toBe(200);
     expect(a.body.dashboardTitle).toBe("YOUR RETREAT DASHBOARD");
+    expect(a.body.welcomeMessage.startsWith("We are so excited to have you join us in Ubud, Bali, June 15–20, 2027!")).toBe(true);
+    expect(JSON.stringify(a.body)).not.toMatch(/\{\{/);
+    expect(JSON.stringify(a.body)).not.toContain("Bali mornings");
     expect(a.body.retreat).toMatchObject({ startDate: "2027-06-15", endDate: "2027-06-20" });
     expect(a.body.payments.status).toBe("incomplete");
     expect(a.body.groupCall.confirmed).toBe(false);
@@ -187,60 +190,64 @@ describe.skipIf(!hasTestDatabase)("FlourisHealer retreat dashboard access (scrat
     expect((await call("GET", "/api/member/retreats", guestA.token)).body.retreats.map((r: { slug: string }) => r.slug)).toEqual(["bali-2027"]);
   });
 
-  it("keeps each guest's form answers to herself", async () => {
-    const saved = await call("PUT", `${dash}/forms/flight_preferences`, guestA.token, { data: { departureAirport: "LAX" }, submit: false, revision: 0 });
+  const fp = `${dash}/questionnaires/flight-preferences`;
+
+  it("keeps each guest's questionnaire answers to herself", async () => {
+    const saved = await call("PUT", fp, guestA.token, { answers: { departure_airport: "LAX" }, submit: false, revision: 0 });
     expect(saved.status).toBe(200);
-    expect(saved.body.response).toMatchObject({ state: "draft", data: { departureAirport: "LAX" }, revision: 1 });
+    expect(saved.body.response).toMatchObject({ state: "draft", answers: { departure_airport: "LAX" }, revision: 1 });
 
     const b = await call("GET", dash, guestB.token);
-    expect(b.body.flightPreferences.state).toBe("none");
+    expect(b.body.questionnaires.find((q: { key: string }) => q.key === "flight-preferences").response.state).toBe("none");
     expect(JSON.stringify(b.body)).not.toContain("LAX");
 
     // There is no way to name another guest: unknown body keys are refused.
-    const smuggled = await call("PUT", `${dash}/forms/flight_preferences`, guestB.token, {
-      data: { departureAirport: "JFK" },
-      submit: false,
-      revision: 0,
-      memberId: guestA.id,
-    });
+    const smuggled = await call("PUT", fp, guestB.token, { answers: { departure_airport: "JFK" }, submit: false, revision: 0, memberId: guestA.id });
     expect(smuggled.status).toBe(400);
-    const own = await call("PUT", `${dash}/forms/flight_preferences`, guestB.token, { data: { departureAirport: "JFK" }, submit: false, revision: 0 });
+    const own = await call("PUT", fp, guestB.token, { answers: { departure_airport: "JFK" }, submit: false, revision: 0 });
     expect(own.status).toBe(200);
-    const a = await call("GET", dash, guestA.token);
-    expect(a.body.flightPreferences.data).toEqual({ departureAirport: "LAX" });
+    const a = await call("GET", fp, guestA.token);
+    expect(a.body.response.answers).toEqual({ departure_airport: "LAX" });
+    expect((await call("GET", fp, outsider.token)).status).toBe(404);
+    expect((await call("GET", fp, otherGuest.token)).status).toBe(404);
   });
 
   it("validates a submission, keeps drafts free, and refuses a stale revision", async () => {
-    const missing = await call("PUT", `${dash}/forms/flight_preferences`, guestA.token, { data: { departureAirport: "LAX" }, submit: true, revision: 1 });
+    const missing = await call("PUT", fp, guestA.token, { answers: { departure_airport: "LAX" }, submit: true, revision: 1 });
     expect(missing.status).toBe(400);
-    expect(Object.keys(missing.body.details.fieldErrors).sort()).toEqual(["connections", "groupTravel"]);
+    expect(Object.keys(missing.body.details.fieldErrors).sort()).toEqual(["connections", "group_travel"]);
 
-    const stale = await call("PUT", `${dash}/forms/flight_preferences`, guestA.token, { data: { departureAirport: "SFO" }, submit: false, revision: 0 });
+    const stale = await call("PUT", fp, guestA.token, { answers: { departure_airport: "SFO" }, submit: false, revision: 0 });
     expect(stale.status).toBe(409);
 
-    const submitted = await call("PUT", `${dash}/forms/flight_preferences`, guestA.token, {
-      data: { departureAirport: "LAX", connections: "one_stop_ok", groupTravel: "yes" },
+    const submitted = await call("PUT", fp, guestA.token, {
+      answers: { departure_airport: "LAX", connections: "One stop is fine", group_travel: "Yes" },
       submit: true,
       revision: 1,
     });
     expect(submitted.status).toBe(200);
     const a = await call("GET", dash, guestA.token);
-    expect(a.body.checklist.find((i: { key: string }) => i.key === "flight_preferences").status).toBe("submitted");
-    const history = await db.client.query(`SELECT count(*)::int AS n FROM retreat_form_submissions`);
+    expect(a.body.checklist.find((i: { key: string }) => i.key === "questionnaire:flight-preferences").status).toBe("submitted");
+    const history = await db.client.query(`SELECT count(*)::int AS n FROM retreat_questionnaire_submissions`);
     expect(history.rows[0].n).toBe(1);
   });
 
-  it("lets a guest report Submitted but never Verified, and blocks 'view as member' writes", async () => {
-    const reported = await call("POST", `${dash}/tasks/guest_profile`, guestA.token, { done: true });
+  it("lets a guest report her passport Submitted but never Verified, and blocks 'view as member' writes", async () => {
+    const reported = await call("POST", `${dash}/tasks/passport`, guestA.token, { done: true });
     expect(reported.body.status).toBe("submitted");
     expect((await call("POST", `${dash}/tasks/agreement`, guestA.token, { done: true })).status).toBe(404);
     expect((await call("POST", `${dash}/tasks/payments`, guestA.token, { done: true })).status).toBe(404);
-    expect((await call("POST", `${dash}/tasks/guest_profile`, guestA.token, { done: true, status: "verified" })).status).toBe(400);
+    expect((await call("POST", `${dash}/tasks/guest_profile`, guestA.token, { done: true })).status).toBe(404);
+    expect((await call("POST", `${dash}/tasks/passport`, guestA.token, { done: true, status: "verified" })).status).toBe(400);
     expect((await call("POST", `${dash}/tasks/passport`, impersonatedA, { done: true })).status).toBe(403);
+    expect((await call("PUT", fp, impersonatedA, { answers: {}, submit: false, revision: 2 })).status).toBe(403);
     expect((await call("GET", dash, impersonatedA)).status).toBe(200);
 
     const b = await call("GET", dash, guestB.token);
-    expect(b.body.checklist.find((i: { key: string }) => i.key === "guest_profile").status).toBe("not_started");
+    expect(b.body.checklist.find((i: { key: string }) => i.key === "passport").status).toBe("not_started");
+    // Travel insurance is guidance only: no checklist item, no form.
+    expect(b.body.checklist.map((i: { key: string }) => i.key)).not.toContain("travel_insurance");
+    expect(b.body.insurance).toEqual({ show: true });
   });
 
   it("shows the agreement as signed only from the signing record, and never its title", async () => {
@@ -264,14 +271,17 @@ describe.skipIf(!hasTestDatabase)("FlourisHealer retreat dashboard access (scrat
   });
 
   it("lets only the organizer verify, with the guest seeing a correction note", async () => {
-    const review = await call("PUT", `/api/admin/retreats/${retreatId}/guests/${guestA.id}/tasks/flight_preferences`, ownerToken, {
+    const qid = (await db.client.query(`SELECT id FROM retreat_questionnaires WHERE retreat_id = $1 AND key = 'flight-preferences'`, [retreatId])).rows[0].id;
+    const review = await call("PUT", `/api/admin/retreats/${retreatId}/guests/${guestA.id}/questionnaires/${qid}/review`, ownerToken, {
       status: "needs_attention",
       note: "Please add your return date",
     });
     expect(review.status).toBe(200);
     const a = await call("GET", dash, guestA.token);
-    const item = a.body.checklist.find((i: { key: string }) => i.key === "flight_preferences");
+    const item = a.body.checklist.find((i: { key: string }) => i.key === "questionnaire:flight-preferences");
     expect(item).toMatchObject({ status: "needs_attention", reviewNote: "Please add your return date" });
+    const b = await call("GET", dash, guestB.token);
+    expect(JSON.stringify(b.body)).not.toContain("Please add your return date");
     expect((await call("PUT", `/api/admin/retreats/${retreatId}/guests/${guestA.id}/tasks/agreement`, ownerToken, { status: "verified" })).status).toBe(400);
     expect((await call("PUT", `/api/admin/retreats/${retreatId}/guests/${outsider.id}/tasks/passport`, ownerToken, { status: "verified" })).status).toBe(404);
   });

@@ -3,14 +3,15 @@ import { Seo } from "@/components/Seo";
 import { GlassCard } from "@/components/luxe/GlassCard";
 import { Section, SectionTitle } from "@/components/luxe/Section";
 import { useEntranceMotion } from "@/hooks/useEntranceMotion";
-import { resetAuditForm, resetPlannerForm } from "@/content/kajabiPages";
+import { resetPlannerForm } from "@/content/kajabiPages";
 import { KajabiForm, OPT_IN_FIELDS, OptInConsent, rise } from "./shared";
 
 /**
- * The two 2026 Kajabi opt-in pages: a heading, one line, and the form. Same
- * four questions on both (first name, last name, email, years in practice),
- * now posting to this site's forms (`reset-audit`, `reset-planner` — migration
- * 100) instead of Kajabi's.
+ * The 2026 Kajabi opt-in page: a heading, one line, and the form (first name,
+ * last name, email, years in practice), now posting to this site's
+ * `reset-planner` form (migration 100) instead of Kajabi's. Its twin, the
+ * Practice Reset Audit's /reset-audit-form, was retired on 22 Nov 2026 (Yvette,
+ * item 9) and now redirects to /reset-planner-form.
  */
 function OptInFormPage({
   seo,
@@ -52,11 +53,6 @@ function OptInFormPage({
       </Section>
     </>
   );
-}
-
-/** /reset-audit-form → /practice-reset-audit-ty on success, as on Kajabi. */
-export function ResetAuditForm() {
-  return <OptInFormPage {...resetAuditForm} />;
 }
 
 /** /reset-planner-form — Kajabi set no thank-you page, so the form confirms in place. */

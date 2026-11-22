@@ -1,6 +1,6 @@
 /**
  * Copy for the one-off pages rebuilt from bossclinician.com (Kajabi): the
- * Practice Reset Audit family, the Profitable Practice Planner opt-in, the
+ * Practice Freedom Audit opt-in form, the Profitable Practice Planner opt-in, the
  * purchase thank-you pages, the link-in-bio hub, the consulting next-steps page
  * and the masterclass review sheet.
  *
@@ -13,125 +13,10 @@
 
 const IMG = "/images/kajabi-pages";
 
-/* ══ /reset-audit ══════════════════════════════════════════════════════ */
-
-export const resetAudit = {
-  seo: {
-    title: "The Practice Reset Audit | Free Workbook | Boss Clinician",
-    description:
-      "A free practice audit for therapists — identify what's draining your time and income and walk away with a clear reset plan.",
-  },
-  back: { label: "← Back to Resource Hub", href: "/resource-hub" },
-  eyebrow: "Free Workbook · Boss Clinician",
-  title: "The Practice Reset Audit",
-  titleAccent: "Because a misaligned practice costs you more than money.",
-  lede: "A free, fillable audit for therapists who are ready to get honest about what's actually working — and what needs to go.",
-  note: "Set aside 20–30 minutes. Grab your coffee. Be honest. This is for you.",
-  cta: { label: "Get the Free Audit", href: "/reset-audit-form" },
-  meta: "Free · Fillable PDF · 8 pages · No fluff",
-  truth: {
-    eyebrow: "The Truth Nobody Tells You",
-    title: "You don't have a productivity problem.",
-    titleAccent: "You have an alignment problem.",
-    paragraphs: [
-      "You're not behind because you're not working hard enough. You're behind because the structure underneath your practice is requiring more from you than it's giving back.",
-      "This audit helps you get clear on exactly what's draining your time, energy, and income — and gives you a direct, honest path to resetting it. No fluff. No generic tips. Just you, your practice, and the truth.",
-    ],
-    bullets: [
-      "Identify the tasks and patterns quietly draining your practice",
-      "Run every time-consuming activity through a simple clarity filter",
-      "Decide what to keep, what to restructure, and what to stop entirely",
-      "Walk away with a real reset plan — and permission to act on it",
-    ],
-  },
-  who: {
-    eyebrow: "Who This Is For",
-    title:
-      "This audit is for the therapist who knows something isn't working — but hasn't stopped long enough to figure out what.",
-    body: "You're showing up. You're working hard. And somehow your practice still feels heavier than it should. This audit gives you the clarity to see exactly what's costing you — and the structure to do something about it.",
-    quote: "\"Busy is not the goal. Building is.\"",
-    quoteBy: "— Yvette Howard, LCSW · Boss Clinician",
-  },
-  yvette: {
-    image: `${IMG}/reset-audit/yvette.webp`,
-    imageAlt: "Yvette Howard, LCSW — Private Practice Strategist, Boss Clinician",
-    eyebrow: "From Yvette",
-    title: "I built this audit because I needed it myself.",
-    paragraphs: [
-      "There was a point in my own practice where I was doing everything — and still felt behind. Not because I wasn't working hard enough. Because I was working on the wrong things.",
-      "The Practice Reset Audit is the exact process I used to get honest about what was actually moving my practice forward — and what was just keeping me busy.",
-    ],
-    signature: "— Yvette Howard, LCSW · Private Practice Strategist · Boss Clinician",
-  },
-  close: {
-    eyebrow: "Get the Free Audit",
-    title: "Ready to reset your practice?",
-    body: "Enter your name and email and we'll send the free fillable PDF straight to your inbox.",
-    privacy:
-      "We respect your privacy. No spam — just your audit and occasional strategy content from Boss Clinician.",
-  },
-} as const;
-
-/* ══ /reset-audit-form ═════════════════════════════════════════════════ */
-
-export const resetAuditForm = {
-  seo: { title: "Reset Audit form | Boss Clinician", description: resetAudit.seo.description },
-  formSlug: "reset-audit",
-  eyebrow: "Get the Free Audit",
-  title: "Ready to reset your practice?",
-  body: "Enter your name and email and we'll send the free fillable PDF straight to your inbox.",
-  submit: "AUDIT MY PRACTICE NOW",
-  redirectTo: "/practice-reset-audit-ty",
-} as const;
-
-/* ══ /practice-reset-audit-ty ══════════════════════════════════════════ */
-
-export const practiceResetAuditTy = {
-  seo: {
-    title: "Your Practice Reset Audit Is On Its Way | Boss Clinician",
-    description: "Your free Practice Reset Audit is heading to your inbox. Here is what to do next.",
-  },
-  eyebrow: "Boss Clinician",
-  title: "Your Practice Reset Audit is on its way.",
-  lede: "Check your inbox. Your free audit guide is heading there right now so you can identify exactly what is draining your time and income, and what to restructure first.",
-  inboxNote: "📬 Not seeing it? Check your spam or promotions folder",
-  stepsEyebrow: "Get the Most From Your Audit",
-  steps: [
-    {
-      title: "Set aside 20 quiet minutes",
-      body: "The audit works best when you answer honestly, not aspirationally. Give yourself space to look at your practice as it actually is.",
-    },
-    {
-      title: "Complete every section",
-      body: "The pattern across your answers matters more than any single one. That pattern is what shows you where to start.",
-    },
-    {
-      title: "Pick your one starting point",
-      body: "Do not try to fix everything at once. The audit will surface your biggest drain. Start there and only there.",
-    },
-  ],
-  keepEyebrow: "Keep Building",
-  links: [
-    {
-      eyebrow: "Free 2-Minute Quiz",
-      title: "Find Your Practice Builder Type",
-      body: "Discover your archetype and get 3 next steps for your exact stage →",
-      href: "/practice-quiz",
-    },
-    {
-      eyebrow: "Free Resources",
-      title: "Visit the Resource Hub",
-      body: "More free guides, quizzes, and tools for every stage of practice →",
-      href: "/resource-hub",
-    },
-    {
-      eyebrow: "Monthly Membership",
-      title: "The Boss Clinician Lounge",
-      body: "Ready to restructure with support? Strategy and community for established clinicians →",
-      href: "/lounge",
-    },
-  ],
-} as const;
+/* 22 Nov 2026 (Yvette, item 9): the separate Practice Reset Audit pages
+ * (/reset-audit, /reset-audit-form, /practice-reset-audit-ty) were retired. Their
+ * addresses 301 to the Practice Freedom Audit (/practice-reset-planner and
+ * /reset-planner-form) — migration 226 and nginx/redirects.map. */
 
 /* ══ /reset-planner-form ═══════════════════════════════════════════════ */
 

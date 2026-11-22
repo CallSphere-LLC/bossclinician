@@ -886,7 +886,7 @@ checkoutOfferRouter.post(
     // Lounge founding places and VIP seats: reserved before any charge exists,
     // or a 409 (price just changed / VIP waitlist). A no-op for other offers.
     try {
-      await reserveLoungeSeat({ orderId, offerSlug: offer.slug, pricePhase: offer.price_phase, email, signedIn: Boolean(req.member) });
+      await reserveLoungeSeat({ orderId, offerSlug: offer.slug, pricePhase: offer.price_phase, email, signedIn: Boolean(req.member), pricingType: offer.pricing_type });
     } catch (err) {
       await markOrderFailed(orderId);
       throw err;

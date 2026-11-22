@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import { Link, useParams } from "react-router";
-import { ArrowLeft, Eye, FileSignature, Settings2 } from "lucide-react";
+import { Link, useNavigate, useParams } from "react-router";
+import { ArrowLeft, CalendarClock, Copy, Eye, FileSignature, ListChecks, Plus, Settings2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   adminRetreatsApi,
@@ -8,9 +8,10 @@ import {
   type AdminRetreatDetail,
   type FeedbackLabels,
   type OpenMode,
+  type RetreatDeadline,
   type RetreatSettings,
 } from "@/lib/retreatsApi";
-import { useConfirm } from "@/pages/admin/ui/Dialog";
+import { Modal, useConfirm } from "@/pages/admin/ui/Dialog";
 import {
   Badge,
   Button,
@@ -31,11 +32,13 @@ import { RetreatGuests } from "./RetreatGuests";
 import { RetreatAnnouncements } from "./RetreatAnnouncements";
 import { RetreatMemories } from "./RetreatMemories";
 import { RetreatAlumni } from "./RetreatAlumni";
+import { RetreatQuestionnaires } from "./RetreatQuestionnaires";
 
-type TabId = "settings" | "guests" | "announcements" | "memories" | "alumni";
+type TabId = "settings" | "questionnaires" | "guests" | "announcements" | "memories" | "alumni";
 
 const TABS: { id: TabId; label: string }[] = [
   { id: "settings", label: "Overview & Settings" },
+  { id: "questionnaires", label: "Questionnaires" },
   { id: "guests", label: "Guest Manager" },
   { id: "announcements", label: "Announcements" },
   { id: "memories", label: "Memories" },
@@ -55,6 +58,7 @@ export default function RetreatAdmin() {
   const [error, setError] = useState("");
   const [tab, setTab] = useState<TabId>("settings");
   const [confirm, confirmDialog] = useConfirm();
+  const [duplicating, setDuplicating] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -124,6 +128,9 @@ export default function RetreatAdmin() {
                     <Link to={`/admin/courses/${detail.courseId}/curriculum`}>Open course</Link>
                   </Button>
                 )}
+                <Button variant="secondary" size="sm" onClick={() => setDuplicating(true)}>
+                  <Copy aria-hidden /> Duplicate retreat
+                </Button>
                 <Button size="sm" variant={detail.published ? "secondary" : "primary"} onClick={() => void togglePublished()}>
                   {detail.published ? "Unpublish" : "Publish"}
                 </Button>
@@ -151,15 +158,97 @@ export default function RetreatAdmin() {
           </div>
 
           <div role="tabpanel">
-            {tab === "settings" && <SettingsTab detail={detail} onSaved={setDetail} />}
+            {tab === "settings" && <SettingsTab key={detail.id} detail={detail} onSaved={setDetail} />}
+            {tab === "questionnaires" && <RetreatQuestionnaires retreatId={id} />}
             {tab === "guests" && <RetreatGuests retreatId={id} />}
             {tab === "announcements" && <RetreatAnnouncements retreatId={id} />}
             {tab === "memories" && <RetreatMemories retreatId={id} />}
             {tab === "alumni" && <RetreatAlumni retreatId={id} />}
           </div>
+          {duplicating && <DuplicateModal detail={detail} onClose={() => setDuplicating(false)} />}
         </>
       )}
     </div>
+  );
+}
+
+/* ───────────────────────────── Duplicate retreat ─────────────────────────── */
+
+const SLUG = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+
+function DuplicateModal({ detail, onClose }: { detail: AdminRetreatDetail; onClose: () => void }) {
+  const navigate = useNavigate();
+  const [title, setTitle] = useState("");
+  const [slug, setSlug] = useState("");
+  const [location, setLocation] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [timezone, setTimezone] = useState(detail.timezone);
+  const [airport, setAirport] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function submit() {
+    if (title.trim().length < 3) return setError("Give the new retreat a title.");
+    if (!SLUG.test(slug)) return setError("Use lowercase letters, numbers and single dashes for the web address, e.g. costa-rica-2028.");
+    if (!startDate || !endDate) return setError("Choose the start and end dates.");
+    if (endDate < startDate) return setError("The end date is before the start date.");
+    setBusy(true);
+    setError("");
+    try {
+      const created = await adminRetreatsApi.duplicate(detail.id, {
+        title: title.trim(),
+        slug,
+        location: location.trim(),
+        startDate,
+        endDate,
+        timezone: timezone.trim() || undefined,
+        airport: airport.trim(),
+      });
+      toast.success("Draft retreat created");
+      onClose();
+      navigate(`/admin/retreats/${created.id}`);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not duplicate the retreat.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal
+      open
+      onOpenChange={(o) => !o && onClose()}
+      title={`Duplicate ${detail.title}`}
+      description="Creates a new draft retreat. Nothing is published, granted or sent."
+      size="lg"
+      footer={
+        <div className="flex justify-end gap-2">
+          <Button variant="ghost" onClick={onClose}>Cancel</Button>
+          <Button disabled={busy} onClick={() => void submit()}>{busy ? "Creating…" : "Create draft retreat"}</Button>
+        </div>
+      }
+    >
+      <div className="space-y-4 text-sm">
+        <p className="text-ink-soft">
+          Copies this retreat's settings, checklist choices and questionnaires into a new draft retreat. Guests, answers, agreements,
+          bookings, payments, announcements and photos are not copied. Shuttle windows, the group call, flight guidance, the passport
+          date and deadline dates start empty. Review the copied wording before publishing: welcome, questionnaires (for example, the activities named in the health question), preparation, itinerary and inclusions.
+        </p>
+        {error && <ErrorNotice message={error} />}
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="Title" className="sm:col-span-2"><Input value={title} placeholder="FlourisHealer Costa Rica 2028" onChange={(e) => setTitle(e.target.value)} /></Field>
+          <Field label="Web address" hint="e.g. costa-rica-2028; becomes /retreats/dashboard/<address>">
+            <Input value={slug} onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/\s+/g, "-"))} />
+          </Field>
+          <Field label="Destination"><Input value={location} onChange={(e) => setLocation(e.target.value)} /></Field>
+          <Field label="Start (arrival) date"><Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} /></Field>
+          <Field label="End (checkout) date"><Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} /></Field>
+          <Field label="Time zone"><Input value={timezone} onChange={(e) => setTimezone(e.target.value)} /></Field>
+          <Field label="Airport"><Input value={airport} onChange={(e) => setAirport(e.target.value)} /></Field>
+        </div>
+      </div>
+    </Modal>
   );
 }
 
@@ -215,9 +304,12 @@ function SettingsTab({ detail, onSaved }: { detail: AdminRetreatDetail; onSaved:
   const [timezone, setTimezone] = useState(detail.timezone);
   const [s, setS] = useState<RetreatSettings>(detail.settings);
   const [inclusionsText, setInclusionsText] = useState(detail.settings.inclusions.join("\n"));
+  const [activitiesText, setActivitiesText] = useState(detail.settings.activities.join("\n"));
   const [busy, setBusy] = useState(false);
 
   const patch = <K extends keyof RetreatSettings>(key: K, value: RetreatSettings[K]) => setS((prev) => ({ ...prev, [key]: value }));
+  const setDeadline = (index: number, change: Partial<RetreatDeadline>) =>
+    setS((prev) => ({ ...prev, deadlines: prev.deadlines.map((d, i) => (i === index ? { ...d, ...change } : d)) }));
 
   async function save() {
     setBusy(true);
@@ -225,11 +317,16 @@ function SettingsTab({ detail, onSaved }: { detail: AdminRetreatDetail; onSaved:
       const settings: RetreatSettings = {
         ...s,
         inclusions: inclusionsText.split("\n").map((line) => line.trim()).filter(Boolean),
+        activities: activitiesText.split("\n").map((line) => line.trim()).filter(Boolean),
+        deadlines: s.deadlines
+          .map((d) => ({ label: d.label.trim(), date: d.date || null, note: d.note.trim() }))
+          .filter((d) => d.label),
       };
       const saved = await adminRetreatsApi.update(detail.id, { title, location, startDate, endDate, timezone, settings });
       onSaved(saved);
       setS(saved.settings);
       setInclusionsText(saved.settings.inclusions.join("\n"));
+      setActivitiesText(saved.settings.activities.join("\n"));
       toast.success("Retreat settings saved");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not save the settings.");
@@ -242,7 +339,7 @@ function SettingsTab({ detail, onSaved }: { detail: AdminRetreatDetail; onSaved:
     <div className="space-y-5">
       <Section title="Retreat" icon={<Settings2 />}>
         <Field label="Title"><Input value={title} onChange={(e) => setTitle(e.target.value)} /></Field>
-        <Field label="Location"><Input value={location} onChange={(e) => setLocation(e.target.value)} /></Field>
+        <Field label="Destination" hint="Shown to guests and used for {{destination}}"><Input value={location} onChange={(e) => setLocation(e.target.value)} /></Field>
         <Field label="Start (arrival) date"><Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} /></Field>
         <Field label="End (checkout) date"><Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} /></Field>
         <Field label="Time zone" hint="Used for the countdown and the post-retreat email timing"><Input value={timezone} onChange={(e) => setTimezone(e.target.value)} /></Field>
@@ -252,14 +349,12 @@ function SettingsTab({ detail, onSaved }: { detail: AdminRetreatDetail; onSaved:
       <Section title="Welcome" subtitle="What every guest sees first">
         <Field label="Dashboard title"><Input value={s.dashboardTitle} onChange={(e) => patch("dashboardTitle", e.target.value)} /></Field>
         <Field label="Support email"><Input type="email" value={s.supportEmail} onChange={(e) => patch("supportEmail", e.target.value)} /></Field>
-        <Field label="Welcome message" className="sm:col-span-2">
+        <Field label="Welcome message" hint="{{destination}} and {{dates}} are filled in from this retreat" className="sm:col-span-2">
           <Textarea rows={4} value={s.welcomeMessage} onChange={(e) => patch("welcomeMessage", e.target.value)} />
         </Field>
       </Section>
 
-      <Section title="Forms and travel" subtitle="Guest Profile and Booked Flight Tracker are still your Jotforms in Phase 1">
-        <Field label="Guest Profile link (Jotform)"><Input value={s.guestProfileUrl} onChange={(e) => patch("guestProfileUrl", e.target.value)} /></Field>
-        <Field label="Booked Flight Tracker link (Jotform)"><Input value={s.flightTrackerUrl} onChange={(e) => patch("flightTrackerUrl", e.target.value)} /></Field>
+      <Section title="Travel" subtitle="Guest Profile and flight details are questionnaires now — edit them on the Questionnaires tab">
         <Field label="Flight guidance status">
           <Select
             value={s.flightGuidance.status}
@@ -277,15 +372,15 @@ function SettingsTab({ detail, onSaved }: { detail: AdminRetreatDetail; onSaved:
           <Textarea rows={3} value={s.transportNote} onChange={(e) => patch("transportNote", e.target.value)} />
         </Field>
         <div className="sm:col-span-2 space-y-2 rounded-xl border border-hairline p-4">
-          <Toggle checked={s.shuttle.confirmed} onChange={(v) => patch("shuttle", { ...s.shuttle, confirmed: v })} label="Pickup windows are confirmed" />
-          <Field label="Confirmed pickup windows">
+          <Toggle checked={s.shuttle.confirmed} onChange={(v) => patch("shuttle", { ...s.shuttle, confirmed: v })} label="Shuttle windows are confirmed" />
+          <Field label="Confirmed shuttle windows">
             <Textarea rows={3} value={s.shuttle.details} onChange={(e) => patch("shuttle", { ...s.shuttle, details: e.target.value })} />
           </Field>
-          <p className="text-xs text-ink-soft">Until this is ticked, guests see “to be confirmed” and never these details.</p>
+          <p className="text-xs text-ink-soft">Until this is ticked, guests see “Details coming soon”.</p>
         </div>
       </Section>
 
-      <Section title="Pre-trip group call" subtitle="Unconfirmed details are never shown to guests">
+      <Section title="Pre-trip group call" subtitle="Until confirmed, guests see “Details coming soon”">
         <div className="sm:col-span-2">
           <Toggle checked={s.groupCall.confirmed} onChange={(v) => patch("groupCall", { ...s.groupCall, confirmed: v })} label="The call details are confirmed" />
         </div>
@@ -297,8 +392,11 @@ function SettingsTab({ detail, onSaved }: { detail: AdminRetreatDetail; onSaved:
       </Section>
 
       <Section title="Retreat details, itinerary and preparation">
-        <Field label="Included (one per line)" hint="Only what the signed agreement includes" className="sm:col-span-2">
+        <Field label="Included (one per line)" hint="Only what the signed agreement includes">
           <Textarea rows={6} value={inclusionsText} onChange={(e) => setInclusionsText(e.target.value)} />
+        </Field>
+        <Field label="Planned activities (one per line)" hint="Shown under Retreat Details; leave empty to hide">
+          <Textarea rows={6} value={activitiesText} onChange={(e) => setActivitiesText(e.target.value)} />
         </Field>
         <Field label="Day-by-day itinerary (Markdown)" hint="Only publish confirmed experiences" className="sm:col-span-2">
           <Textarea rows={6} value={s.itineraryMd} onChange={(e) => patch("itineraryMd", e.target.value)} />
@@ -309,6 +407,34 @@ function SettingsTab({ detail, onSaved }: { detail: AdminRetreatDetail; onSaved:
         <Field label="Recommended passport validity through">
           <Input type="date" value={s.passportValidThrough ?? ""} onChange={(e) => patch("passportValidThrough", e.target.value || null)} />
         </Field>
+      </Section>
+
+      <Card>
+        <CardHeader icon={<CalendarClock />} title="Deadlines" subtitle="Shown in Important dates. A deadline without a date shows “Details coming soon”." />
+        <div className="space-y-3 p-5">
+          {s.deadlines.length === 0 && <p className="text-sm text-ink-soft">No deadlines yet.</p>}
+          {s.deadlines.map((d, index) => (
+            <div key={index} className="grid gap-3 rounded-xl border border-hairline p-3 sm:grid-cols-[1fr_11rem_1fr_auto] sm:items-end">
+              <Field label="Deadline"><Input value={d.label} placeholder="e.g. Retreat Profile due" onChange={(e) => setDeadline(index, { label: e.target.value })} /></Field>
+              <Field label="Date"><Input type="date" value={d.date ?? ""} onChange={(e) => setDeadline(index, { date: e.target.value || null })} /></Field>
+              <Field label="Note" hint="Optional"><Input value={d.note} onChange={(e) => setDeadline(index, { note: e.target.value })} /></Field>
+              <Button size="iconSm" variant="dangerGhost" aria-label="Remove deadline" onClick={() => patch("deadlines", s.deadlines.filter((_, i) => i !== index))}>
+                <Trash2 aria-hidden />
+              </Button>
+            </div>
+          ))}
+          <Button size="sm" variant="secondary" onClick={() => patch("deadlines", [...s.deadlines, { label: "", date: null, note: "" }])}>
+            <Plus aria-hidden /> Add a deadline
+          </Button>
+        </div>
+      </Card>
+
+      <Section title="Checklist" subtitle="Which fixed items this retreat uses (questionnaires are set on their own tab)" icon={<ListChecks />}>
+        <div className="sm:col-span-2 space-y-1">
+          <Toggle checked={s.checklist.passport} onChange={(v) => patch("checklist", { ...s.checklist, passport: v })} label="Passport & preparation task" />
+          <Toggle checked={s.checklist.groupCall} onChange={(v) => patch("checklist", { ...s.checklist, groupCall: v })} label="Pre-trip group call" />
+          <Toggle checked={s.insurance.show} onChange={(v) => patch("insurance", { show: v })} label="Show travel insurance guidance (strongly recommended, not required)" />
+        </div>
       </Section>
 
       <Section title="After the retreat" subtitle={MODE_HINT}>

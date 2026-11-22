@@ -11,6 +11,7 @@ import {
   type OfferCardStatus,
 } from "@/lib/retreatsApi";
 import { useConfirm } from "@/pages/admin/ui/Dialog";
+import { INTEREST_LIST_LABEL } from "@/components/retreats/JoinUsAgain";
 import {
   Badge,
   Button,
@@ -379,7 +380,7 @@ function CardsEditor({ retreatId }: { retreatId: number }) {
               {(Object.keys(CARD_STATUS_LABEL) as OfferCardStatus[]).map((s) => <option key={s} value={s}>{CARD_STATUS_LABEL[s]}</option>)}
             </Select>
           </Field>
-          <Field label="Button label"><Input value={draft.ctaLabel} placeholder={draft.status === "interest_list" ? "Get first access" : ""} onChange={(e) => setDraft({ ...draft, ctaLabel: e.target.value })} /></Field>
+          <Field label="Button label"><Input value={draft.ctaLabel} placeholder={draft.status === "interest_list" ? INTEREST_LIST_LABEL : ""} onChange={(e) => setDraft({ ...draft, ctaLabel: e.target.value })} /></Field>
           <Field label="Button link" hint={draft.status === "registration_open" ? "Required — a verified booking page" : "Optional"}>
             <Input value={draft.ctaUrl} onChange={(e) => setDraft({ ...draft, ctaUrl: e.target.value })} />
           </Field>

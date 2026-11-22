@@ -31,6 +31,11 @@ export interface GrantAccessInput {
   grantedAt?: Date;
   /** Runs inside a caller's transaction when given — webhooks need this. */
   client?: Queryable;
+  /**
+   * false: no in-app "You now have access" notice. For access that is not a
+   * purchase (the retreat dashboard given to an existing booking, migration 224).
+   */
+  notify?: boolean;
 }
 
 export interface AccessGrant {
@@ -113,7 +118,7 @@ export async function grantAccess(input: GrantAccessInput): Promise<AccessGrant>
     // rolled-back grant leaves no notice behind. Only on a real transition: a
     // webhook retried or a re-grant of live access must not repeat it. Bulk
     // imports are skipped - those customers bought long ago, elsewhere.
-    if (transitionedToActive && (input.source ?? "purchase") !== "import") {
+    if (transitionedToActive && (input.source ?? "purchase") !== "import" && input.notify !== false) {
       await notifyPurchaseAccessSafely({
         memberId: input.memberId,
         productId: input.productId,

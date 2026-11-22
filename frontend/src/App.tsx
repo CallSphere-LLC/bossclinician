@@ -81,6 +81,8 @@ const PayPalReturnPage = lazyRoute(() => import("@/pages/PayPalReturn"));
  */
 /** One component for both podcast addresses, so moving between them does not remount and refetch. */
 const PodcastPage = lazyRoute(() => import("@/pages/Podcast"));
+/** The Bali sales page, at /retreats and at its destination-and-year address /retreats/bali-2027. */
+const RetreatsPage = lazyRoute(() => import("@/pages/Retreats"));
 
 export const PUBLIC_ROUTES: readonly { path: string; Component: RouteComponent }[] = [
   { path: "/", Component: lazyRoute(() => import("@/pages/Home")) },
@@ -129,7 +131,16 @@ export const PUBLIC_ROUTES: readonly { path: string; Component: RouteComponent }
   { path: "/checkout/success", Component: CheckoutSuccessPage },
   { path: "/checkout/paypal/return", Component: PayPalReturnPage },
   { path: "/contact", Component: lazyRoute(() => import("@/pages/Contact")) },
-  { path: "/retreats", Component: lazyRoute(() => import("@/pages/Retreats")) },
+  { path: "/retreats", Component: RetreatsPage },
+  // Owner reply 22 Nov 2026 item 6 (migration 223). Each listed retreat has a
+  // destination-and-year address; Bali's is the same sales page as /retreats
+  // (canonical /retreats), declared before the generic one so the preload map
+  // resolves it to that page. /retreats/dashboard is the member area's (more
+  // specific, matched by the outer router), never this.
+  { path: "/retreats/bali-2027", Component: RetreatsPage },
+  { path: "/retreats/:slug", Component: lazyRoute(() => import("@/pages/RetreatDetail")) },
+  { path: "/upcoming-retreats", Component: lazyRoute(() => import("@/pages/UpcomingRetreats")) },
+  { path: "/retreat-interest", Component: lazyRoute(() => import("@/pages/RetreatInterest")) },
   { path: "/store", Component: lazyRoute(() => import("@/pages/Store")) },
   { path: "/club", Component: lazyRoute(() => import("@/pages/Club")) },
   { path: "/club/checkout", Component: lazyRoute(() => import("@/pages/ClubCheckout")) },

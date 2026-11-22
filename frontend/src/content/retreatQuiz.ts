@@ -183,12 +183,12 @@ export const RETREAT_THANK_YOU = {
     },
     {
       title: "Get Travel Insurance",
-      body: "Because all payments are non-refundable, travel insurance is strongly recommended. We suggest Trawick International — visit trawickinternational.com to explore coverage options before booking your flights.",
+      body: "Because all payments are non-refundable, travel insurance is strongly recommended, not required. We suggest Trawick International — visit trawickinternational.com to explore coverage options before booking your flights.",
       link: { text: "Trawick International", href: "https://trawickinternational.com/" },
     },
     {
       title: "Book Your Flights",
-      body: "Book your flights to Ngurah Rai International Airport, Denpasar (DPS). Arrival is June 15, 2027 and checkout is June 20, 2027. Airport transportation is provided during June 15–20 through designated group transfers. Exact pickup windows will be coordinated with guests.",
+      body: "Book your flights to Ngurah Rai International Airport, Denpasar (DPS). Arrival is June 15, 2027 and checkout is June 20, 2027. Airport transportation is provided through designated group transfers during these dates. Final shuttle windows will be coordinated with guests and shared before travel.",
     },
     {
       title: "Follow & Stay Close",

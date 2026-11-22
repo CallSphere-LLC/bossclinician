@@ -18,9 +18,8 @@ import {
   validateFlightPreferences,
   validateTravelInsurance,
   verifyMediaToken,
-  type FormKey,
-  type FormRecord,
   type PaymentsSummary,
+  type QuestionnaireChecklistInput,
   type TaskKey,
   type TaskRecord,
 } from "./retreats";
@@ -40,27 +39,27 @@ function task(key: TaskKey, patch: Partial<TaskRecord> = {}): TaskRecord {
   };
 }
 
-function form(key: FormKey, patch: Partial<FormRecord> = {}): FormRecord {
-  return { id: 1, form_key: key, data: {}, state: "draft", revision: 1, updated_at: new Date("2027-01-01T00:00:00Z"), submitted_at: null, ...patch };
-}
-
 function checklist(input: {
   tasks?: TaskRecord[];
-  forms?: FormRecord[];
+  questionnaires?: QuestionnaireChecklistInput[];
   signed?: boolean;
   payments?: PaymentsSummary;
   groupCallConfirmed?: boolean;
+  enabled?: { passport: boolean; groupCall: boolean };
 }) {
   return buildChecklist({
     agreement: agreementView(input.signed ? [{ id: 1, status: "signed", signed_at: new Date("2026-11-03T18:00:00Z") }] : []),
     tasks: new Map((input.tasks ?? []).map((t) => [t.task_key, t])),
-    forms: new Map((input.forms ?? []).map((f) => [f.form_key, f])),
     payments: input.payments ?? INCOMPLETE,
     groupCallConfirmed: input.groupCallConfirmed ?? false,
+    questionnaires: input.questionnaires,
+    enabled: input.enabled,
   });
 }
 
-const statusOf = (items: ReturnType<typeof checklist>, key: TaskKey) => items.find((i) => i.key === key)!.status;
+const statusOf = (items: ReturnType<typeof checklist>, key: string) => items.find((i) => i.key === key)!.status;
+
+const PROFILE: QuestionnaireChecklistInput = { key: "retreat-profile", title: "Retreat Profile", status: "not_started", updatedAt: null, reviewNote: null };
 
 describe("settings", () => {
   it("fills every missing or mistyped value with the safe default", () => {
@@ -105,14 +104,19 @@ describe("dates", () => {
 });
 
 describe("checklist statuses come from records, never from a click", () => {
-  it("starts every task at Not started (agreement included) for a new guest", () => {
-    const items = checklist({});
+  it("starts every task at Not started (agreement included) for a new guest, with no insurance task", () => {
+    const items = checklist({ questionnaires: [PROFILE, { ...PROFILE, key: "flight-details", title: "Flight Details" }] });
     expect(items.map((i) => i.key)).toEqual([
-      "agreement", "guest_profile", "flight_preferences", "travel_insurance", "flight_details", "passport", "payments", "group_call",
+      "agreement", "questionnaire:retreat-profile", "questionnaire:flight-details", "passport", "payments", "group_call",
     ]);
-    for (const key of ["agreement", "guest_profile", "flight_preferences", "travel_insurance", "flight_details", "passport", "group_call"] as TaskKey[]) {
+    for (const key of ["agreement", "questionnaire:retreat-profile", "questionnaire:flight-details", "passport", "group_call"]) {
       expect(statusOf(items, key)).toBe("not_started");
     }
+    expect(items.find((i) => i.key === "group_call")!.detail).toBe("Details coming soon.");
+  });
+
+  it("leaves out the passport and group call when a retreat doesn't use them", () => {
+    expect(checklist({ enabled: { passport: false, groupCall: false } }).map((i) => i.key)).toEqual(["agreement", "payments"]);
   });
 
   it("marks the agreement Verified only from a signed record", () => {
@@ -127,36 +131,16 @@ describe("checklist statuses come from records, never from a click", () => {
     expect(statusOf(items, "agreement")).toBe("not_started");
   });
 
-  it("moves a form from In progress (draft) to Submitted, and only a review makes it Verified", () => {
-    expect(statusOf(checklist({ forms: [form("flight_preferences")] }), "flight_preferences")).toBe("in_progress");
-    const submitted = form("flight_preferences", { state: "submitted", submitted_at: new Date("2027-01-01T00:00:00Z") });
-    expect(statusOf(checklist({ forms: [submitted] }), "flight_preferences")).toBe("submitted");
-    const verified = checklist({
-      forms: [submitted],
-      tasks: [task("flight_preferences", { review_status: "verified", reviewed_at: new Date("2027-01-02T00:00:00Z") })],
-    });
-    expect(statusOf(verified, "flight_preferences")).toBe("verified");
+  it("shows a questionnaire's own status and the organizer's note only when it needs attention", () => {
+    const items = checklist({ questionnaires: [{ ...PROFILE, status: "needs_attention", reviewNote: "Add your emergency contact" }] });
+    expect(items[1]).toMatchObject({ status: "needs_attention", reviewNote: "Add your emergency contact", section: "questionnaire-retreat-profile" });
+    const ok = checklist({ questionnaires: [{ ...PROFILE, status: "submitted", reviewNote: "old note" }] });
+    expect(ok[1].reviewNote).toBeNull();
   });
 
-  it("lets a resubmission after Needs attention go back to Submitted", () => {
-    const review = { review_status: "needs_attention" as const, review_note: "Add your return flight", reviewed_at: new Date("2027-01-02T00:00:00Z") };
-    const stillOpen = checklist({
-      forms: [form("travel_insurance", { state: "submitted", updated_at: new Date("2027-01-01T00:00:00Z") })],
-      tasks: [task("travel_insurance", review)],
-    });
-    const item = stillOpen.find((i) => i.key === "travel_insurance")!;
-    expect(item.status).toBe("needs_attention");
-    expect(item.reviewNote).toBe("Add your return flight");
-    const fixed = checklist({
-      forms: [form("travel_insurance", { state: "submitted", updated_at: new Date("2027-01-03T00:00:00Z") })],
-      tasks: [task("travel_insurance", review)],
-    });
-    expect(statusOf(fixed, "travel_insurance")).toBe("submitted");
-  });
-
-  it("records a self-report as Submitted at most", () => {
-    const items = checklist({ tasks: [task("guest_profile", { guest_status: "submitted", guest_updated_at: new Date() })] });
-    expect(statusOf(items, "guest_profile")).toBe("submitted");
+  it("records a passport self-report as Submitted at most", () => {
+    const items = checklist({ tasks: [task("passport", { guest_status: "submitted", guest_updated_at: new Date() })] });
+    expect(statusOf(items, "passport")).toBe("submitted");
   });
 
   it("keeps the group call Not started until the owner confirms it", () => {
@@ -174,7 +158,7 @@ describe("checklist statuses come from records, never from a click", () => {
 
   it("counts Submitted and Verified as progress", () => {
     const items = checklist({ signed: true, tasks: [task("passport", { guest_status: "submitted", guest_updated_at: new Date() })] });
-    expect(checklistProgress(items)).toEqual({ completed: 2, total: 8 });
+    expect(checklistProgress(items)).toEqual({ completed: 2, total: 4 });
   });
 
   it("lets a review win only while it is newer than the guest's change", () => {

@@ -106,7 +106,7 @@ function answer(sql: string, params: unknown[]) {
         {
           email: "guest@example.com",
           name: "Guest",
-          first_name: "Jasmine",
+          first_name: "Alex",
           last_name: "",
           timezone: "America/New_York",
           email_marketing_status: "subscribed",
@@ -155,7 +155,7 @@ vi.mock("../email/provider", () => ({
     s.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_m, k: string) => values[k] ?? ""),
   sendEmail: state.sendEmail,
 }));
-vi.mock("../email/mergeValues", () => ({ buildMergeValues: () => ({ firstName: "Jasmine" }) }));
+vi.mock("../email/mergeValues", () => ({ buildMergeValues: () => ({ firstName: "Alex" }) }));
 vi.mock("../jobs/queue", () => ({ PRIORITY: { normal: 5, bulk: 1 }, enqueueMany: vi.fn(async () => 0) }));
 vi.mock("./contacts", () => ({ applyTags: vi.fn(), recordActivity: vi.fn() }));
 vi.mock("./domainEvents", () => ({ publishDomainEvent: state.publishDomainEvent }));
@@ -188,7 +188,9 @@ beforeEach(() => {
 describe("classic sequences are unchanged", () => {
   it("times the next email from the send, on its own delay, and never reads a retreat table", async () => {
     // Classic emails have no per-email topic either.
-    state.emails = ALUMNI.map((e) => ({ ...e, anchor_offset_days: null, topic: null, skip_rules: {} }));
+    // A classic run has no retreat, so its emails carry no retreat links (the
+    // pre-send guard would rightly hold an unfilled {{retreat...}} token).
+    state.emails = ALUMNI.map((e) => ({ ...e, body_md: "Hey {{firstName}},", anchor_offset_days: null, topic: null, skip_rules: {} }));
     const now = new Date("2026-11-16T12:00:00Z");
 
     const result = await sendDueEmail(77, now);
@@ -201,7 +203,7 @@ describe("classic sequences are unchanged", () => {
   });
 
   it("ignores retreat skip rules on a classic sequence", async () => {
-    state.emails = ALUMNI.map((e) => ({ ...e, anchor_offset_days: null, topic: null }));
+    state.emails = ALUMNI.map((e) => ({ ...e, body_md: "Hey {{firstName}},", anchor_offset_days: null, topic: null }));
     state.position = 2;
     state.feedbackRows = 1;
 
@@ -305,8 +307,9 @@ describe("retreat-anchored sequences", () => {
     expect(state.sendEmail.mock.calls[0][0].text).toContain("/retreats/dashboard/bali-2027/interest");
   });
 
-  it("holds Email 4 while its link is not set, without sending or advancing", async () => {
+  it("holds Email 4 while its owner-set link is not a usable https link, without sending or advancing", async () => {
     state.position = 4;
+    state.nextUrl = "not-a-link";
     const now = new Date("2027-07-11T16:05:00Z");
 
     const result = await sendDueEmail(77, now);
@@ -338,8 +341,16 @@ describe("retreat-anchored sequences", () => {
     expect(state.sendEmail.mock.calls[0][0].text).toContain("https://www.bossclinician.com/retreats");
   });
 
-  it("drops Email 4 if the link is still unset three days after its date", async () => {
+  it("with no owner-set link, sends Email 4 to the permanent /upcoming-retreats page (migration 225)", async () => {
     state.position = 4;
+    const result = await sendDueEmail(77, new Date("2027-07-11T16:05:00Z"));
+    expect(result.outcome).toBe("completed");
+    expect(state.sendEmail.mock.calls[0][0].text).toContain("https://www.bossclinician.com/upcoming-retreats");
+  });
+
+  it("drops Email 4 if the link is still unusable three days after its date", async () => {
+    state.position = 4;
+    state.nextUrl = "not-a-link";
     const result = await sendDueEmail(77, new Date("2027-07-14T17:00:00Z"));
     expect(result.outcome).toBe("completed");
     expect(result.detail).toMatch(/too late/);

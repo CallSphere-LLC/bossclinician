@@ -51,7 +51,7 @@ export function Section({
   children,
   tag,
 }: {
-  id: RetreatSectionId;
+  id: RetreatSectionId | `questionnaire-${string}`;
   title: string;
   eyebrow?: string;
   status?: TaskStatus;

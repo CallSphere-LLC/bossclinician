@@ -3,6 +3,18 @@ import { z } from "zod";
 import { pool } from "../db/pool";
 import { env } from "../config/env";
 import { notFound } from "../utils/httpError";
+import {
+  guestQuestionnaireView,
+  guestRoomType,
+  loadOwnedFiles,
+  loadQuestionnaires,
+  loadResponses,
+  renderWording,
+  type Audience,
+  type ResponseRow,
+  type RoomType,
+  type WordingContext,
+} from "./retreatQuestionnaires";
 
 /**
  * FlourisHealer Retreat Dashboard (sheet row 248, Yvette's item 11; migrations
@@ -37,12 +49,12 @@ export const TASK_KEYS = [
 export type TaskKey = (typeof TASK_KEYS)[number];
 export type TaskStatus = "not_started" | "in_progress" | "submitted" | "verified" | "needs_attention";
 
-/** Tasks the guest marks done herself (Jotform-backed, or a personal check). */
-export const SELF_REPORTED_TASKS = ["guest_profile", "flight_details", "passport"] as const;
+/** The task the guest marks done herself (a personal check). Guest Profile and flight details are questionnaires now (migration 224). */
+export const SELF_REPORTED_TASKS = ["passport"] as const;
 export type SelfReportedTask = (typeof SELF_REPORTED_TASKS)[number];
 
 /** Tasks an organizer may mark Verified / Needs attention. The agreement follows its signature only. */
-export const REVIEWABLE_TASKS: readonly TaskKey[] = TASK_KEYS.filter((key) => key !== "agreement");
+export const REVIEWABLE_TASKS: readonly TaskKey[] = ["passport", "payments", "group_call"];
 
 export const FORM_KEYS = ["flight_preferences", "travel_insurance"] as const;
 export type FormKey = (typeof FORM_KEYS)[number];
@@ -104,6 +116,20 @@ export interface RetreatSettings {
   feedback: { mode: OpenMode; labels: FeedbackLabels };
   interest: { mode: OpenMode };
   joinUsAgain: { mode: OpenMode; intro: string };
+  /** Planned activities shown under Retreat Details (owner-editable, migration 224). */
+  activities: string[];
+  /** Owner-set deadlines shown in Important dates; a null date shows "Details coming soon". */
+  deadlines: RetreatDeadline[];
+  /** Which fixed checklist items this retreat uses (a domestic retreat may not need a passport). */
+  checklist: { passport: boolean; groupCall: boolean };
+  /** Travel insurance guidance (strongly recommended, never required). */
+  insurance: { show: boolean };
+}
+
+export interface RetreatDeadline {
+  label: string;
+  date: string | null;
+  note: string;
 }
 
 /** The reflection questions as the owner's brief words them (editable per retreat). */
@@ -140,6 +166,10 @@ export const DEFAULT_SETTINGS: RetreatSettings = {
   feedback: { mode: "auto", labels: DEFAULT_FEEDBACK_LABELS },
   interest: { mode: "auto" },
   joinUsAgain: { mode: "closed", intro: "" },
+  activities: [],
+  deadlines: [],
+  checklist: { passport: true, groupCall: true },
+  insurance: { show: true },
 };
 
 /** Upper bounds the owner cannot raise past (request body + memory/disk). */
@@ -210,6 +240,12 @@ export const settingsPatchSchema = z
     feedback: z.object({ mode: MODE, labels: labelsSchema.partial() }).partial(),
     interest: z.object({ mode: MODE }).partial(),
     joinUsAgain: z.object({ mode: MODE, intro: shortText(1000) }).partial(),
+    activities: z.array(shortText(300)).max(40),
+    deadlines: z
+      .array(z.object({ label: shortText(200).min(1), date: z.string().regex(DATE_ONLY).nullable(), note: shortText(500).default("") }).strict())
+      .max(20),
+    checklist: z.object({ passport: z.boolean(), groupCall: z.boolean() }).partial(),
+    insurance: z.object({ show: z.boolean() }).partial(),
   })
   .partial()
   .strict();
@@ -229,7 +265,9 @@ export function normaliseSettings(raw: unknown): RetreatSettings {
   const out: Record<string, unknown> = {};
   for (const [key, fallback] of Object.entries(DEFAULT_SETTINGS) as [keyof RetreatSettings, unknown][]) {
     const value = stored[key];
-    if (Array.isArray(fallback)) {
+    if (key === "deadlines") {
+      out[key] = normaliseDeadlines(value);
+    } else if (Array.isArray(fallback)) {
       out[key] = Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : fallback;
     } else if (isRecord(fallback)) {
       const nested: Record<string, unknown> = { ...fallback };
@@ -251,6 +289,18 @@ export function normaliseSettings(raw: unknown): RetreatSettings {
     }
   }
   return out as unknown as RetreatSettings;
+}
+
+function normaliseDeadlines(value: unknown): RetreatDeadline[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter(isRecord)
+    .filter((item) => typeof item.label === "string" && item.label.trim() !== "")
+    .map((item) => ({
+      label: String(item.label),
+      date: typeof item.date === "string" && DATE_ONLY.test(item.date) ? item.date : null,
+      note: typeof item.note === "string" ? item.note : "",
+    }));
 }
 
 function sameType(value: unknown, fallback: unknown): boolean {
@@ -669,7 +719,8 @@ export async function loadPayments(retreatId: number, memberId: number): Promise
 /* ─────────────────────────────── checklist ────────────────────────────── */
 
 export interface ChecklistItem {
-  key: TaskKey;
+  /** A fixed task key, or "questionnaire:<key>" for an owner-built questionnaire. */
+  key: string;
   label: string;
   status: TaskStatus;
   detail: string;
@@ -702,17 +753,36 @@ const TASK_SECTIONS: Record<TaskKey, string> = {
 
 const LONG_DATE = new Intl.DateTimeFormat("en-US", { dateStyle: "long", timeZone: "America/Los_Angeles" });
 
+/** One owner-built questionnaire's line on the checklist (status from its response record). */
+export interface QuestionnaireChecklistInput {
+  key: string;
+  title: string;
+  status: TaskStatus;
+  updatedAt: Date | null;
+  reviewNote: string | null;
+}
+
+export const COMING_SOON = "Details coming soon";
+
 export interface ChecklistInputs {
   agreement: AgreementView;
   tasks: Map<TaskKey, TaskRecord>;
-  forms: Map<FormKey, FormRecord>;
   payments: PaymentsSummary;
   groupCallConfirmed: boolean;
+  /** The retreat's questionnaires that appear on the checklist, in order. */
+  questionnaires?: QuestionnaireChecklistInput[];
+  /** Fixed items this retreat uses; both default on. */
+  enabled?: { passport: boolean; groupCall: boolean };
 }
 
-/** Pure: the eight items from the records already loaded. */
+/**
+ * Pure: the checklist from the records already loaded — the agreement, each
+ * questionnaire, then passport, payments and the group call. Travel insurance
+ * is guidance only (strongly recommended, not required) and is not a task.
+ */
 export function buildChecklist(input: ChecklistInputs): ChecklistItem[] {
   const items: ChecklistItem[] = [];
+  const enabled = input.enabled ?? { passport: true, groupCall: true };
   const review = (key: TaskKey) => {
     const record = input.tasks.get(key);
     return record ? { status: record.review_status, at: record.reviewed_at } : null;
@@ -744,24 +814,23 @@ export function buildChecklist(input: ChecklistInputs): ChecklistItem[] {
       : "Your agreement will appear here when it is ready for you to sign.",
   });
 
-  const selfReported = (key: SelfReportedTask, detail: Partial<Record<TaskStatus, string>>) => {
-    const record = input.tasks.get(key);
-    const base: TaskStatus = record?.guest_status === "submitted" ? "submitted" : "not_started";
-    push(key, base, record?.guest_updated_at ?? null, detail);
-  };
-  const formTask = (key: FormKey, detail: Partial<Record<TaskStatus, string>>) => {
-    const record = input.forms.get(key);
-    push(key, formBaseStatus(record), record ? record.updated_at : null, detail);
-  };
+  for (const q of input.questionnaires ?? []) {
+    items.push({
+      key: `questionnaire:${q.key}`,
+      label: q.title,
+      status: q.status,
+      detail: QUESTIONNAIRE_DETAIL[q.status],
+      reviewNote: q.status === "needs_attention" ? q.reviewNote : null,
+      updatedAt: q.updatedAt ? new Date(q.updatedAt).toISOString() : null,
+      section: `questionnaire-${q.key}`,
+    });
+  }
 
-  selfReported("guest_profile", { submitted: "You told us you submitted it. We'll verify it." });
-  formTask("flight_preferences", { in_progress: "Draft saved. Continue when you're ready." });
-  formTask("travel_insurance", { in_progress: "Draft saved. Continue when you're ready." });
-  selfReported("flight_details", {
-    not_started: "Once you've booked your flights, share your flight details.",
-    submitted: "You told us you submitted your flight details. We'll verify them.",
-  });
-  selfReported("passport", { submitted: "You've checked your passport." });
+  if (enabled.passport) {
+    const record = input.tasks.get("passport");
+    const base: TaskStatus = record?.guest_status === "submitted" ? "submitted" : "not_started";
+    push("passport", base, record?.guest_updated_at ?? null, { submitted: "You've checked your passport." });
+  }
 
   const p = input.payments;
   const paymentsBase: TaskStatus = p.status === "complete" && (p.balanceCents ?? 1) <= 0 ? "verified" : "in_progress";
@@ -773,16 +842,26 @@ export function buildChecklist(input: ChecklistInputs): ChecklistItem[] {
         : "Contact us about your payment schedule.",
   });
 
-  const call = input.tasks.get("group_call");
-  const rsvp = typeof call?.guest_data?.rsvp === "string" ? call.guest_data.rsvp : null;
-  const callBase: TaskStatus = input.groupCallConfirmed && rsvp ? "submitted" : "not_started";
-  push("group_call", callBase, call?.guest_updated_at ?? null, {
-    not_started: input.groupCallConfirmed ? "Let us know if you can join." : "Date and time to be confirmed.",
-    submitted: "Thanks — your RSVP is saved.",
-  });
+  if (enabled.groupCall) {
+    const call = input.tasks.get("group_call");
+    const rsvp = typeof call?.guest_data?.rsvp === "string" ? call.guest_data.rsvp : null;
+    const callBase: TaskStatus = input.groupCallConfirmed && rsvp ? "submitted" : "not_started";
+    push("group_call", callBase, call?.guest_updated_at ?? null, {
+      not_started: input.groupCallConfirmed ? "Let us know if you can join." : `${COMING_SOON}.`,
+      submitted: "Thanks — your RSVP is saved.",
+    });
+  }
 
   return items;
 }
+
+const QUESTIONNAIRE_DETAIL: Record<TaskStatus, string> = {
+  not_started: "Not started yet. You can save your progress and finish later.",
+  in_progress: "Progress saved. Continue when you're ready.",
+  submitted: "Submitted. You can update your answers at any time.",
+  verified: "Reviewed by our team. You can still update your answers.",
+  needs_attention: "We need a little more from you.",
+};
 
 const DEFAULT_DETAIL: Record<TaskStatus, string> = {
   not_started: "Not started yet.",
@@ -1067,41 +1146,85 @@ export async function loadGuestCards(retreatId: number, memberId: number | null,
 export interface BuildOptions {
   preview: boolean;
   now?: Date;
+  /**
+   * Which room-specific questions to include. Defaults to the guest's own
+   * room type; the owner's blank preview defaults to "all" (every question,
+   * each marked with who sees it).
+   */
+  audience?: Audience;
+}
+
+/** The fill-ins for {{destination}}, {{dates}}, {{retreat}} and {{airport}}. */
+export function wordingContext(retreat: RetreatRow, settings: RetreatSettings): WordingContext {
+  return {
+    destination: retreat.location,
+    startDate: retreat.start_date,
+    endDate: retreat.end_date,
+    title: retreat.title,
+    airport: settings.airport,
+  };
 }
 
 /**
  * The whole guest dashboard. `memberId` null is the owner's blank preview: what
- * a brand-new guest sees, with no guest named and nothing on file.
+ * a brand-new guest sees, with no guest named and nothing on file. Every
+ * record below is loaded for (this retreat, this member) only.
  */
 export async function buildDashboard(retreat: RetreatRow, memberId: number | null, options: BuildOptions) {
   const now = options.now ?? new Date();
   const settings = normaliseSettings(retreat.settings);
+  const ctx = wordingContext(retreat, settings);
   const today = todayIn(retreat.timezone, now);
   const { phase, daysUntilStart } = retreatPhase(retreat.start_date, retreat.end_date, today);
 
   let tasks = new Map<TaskKey, TaskRecord>();
-  let forms = new Map<FormKey, FormRecord>();
   let assignments: AgreementAssignment[] = [];
   let payments: PaymentsSummary = INCOMPLETE;
   let feedbackRow: FeedbackRow | undefined;
   let interest: InterestView = emptyInterest();
   let identity: Awaited<ReturnType<typeof memberIdentity>> | null = null;
+  let responses = new Map<number, ResponseRow>();
+  let roomType: RoomType | "unknown" = "unknown";
   if (memberId !== null) {
-    [tasks, forms, assignments, payments, feedbackRow, interest, identity] = await Promise.all([
+    [tasks, assignments, payments, feedbackRow, interest, identity, responses, roomType] = await Promise.all([
       loadTaskRecords(retreat.id, memberId),
-      loadFormRecords(retreat.id, memberId),
       loadAgreementAssignments(retreat.id, memberId),
       loadPayments(retreat.id, memberId),
       loadFeedbackRow(retreat.id, memberId),
       loadInterest(retreat.id, memberId),
       memberIdentity(memberId),
+      loadResponses(retreat.id, memberId),
+      guestRoomType(retreat.id, memberId),
     ]);
+  }
+  const audience: Audience = options.audience ?? (memberId === null ? "all" : roomType);
+
+  const questionnaireRows = await loadQuestionnaires(retreat.id);
+  const questionnaires = [];
+  for (const q of questionnaireRows) {
+    const files = memberId === null ? [] : await loadOwnedFiles(q.id, memberId);
+    questionnaires.push({ ...guestQuestionnaireView(q, responses.get(q.id), files, audience, ctx), inChecklist: q.in_checklist });
   }
 
   const agreement = agreementView(assignments);
   const groupCallConfirmed = settings.groupCall.confirmed && Boolean(settings.groupCall.startsAt);
-  const checklist = buildChecklist({ agreement, tasks, forms, payments, groupCallConfirmed });
-  const statusOf = (key: TaskKey) => checklist.find((item) => item.key === key)!.status;
+  const checklist = buildChecklist({
+    agreement,
+    tasks,
+    payments,
+    groupCallConfirmed,
+    enabled: settings.checklist,
+    questionnaires: questionnaires
+      .filter((q) => q.inChecklist)
+      .map((q) => ({
+        key: q.key,
+        title: q.title,
+        status: q.status,
+        updatedAt: q.response.updatedAt ? new Date(q.response.updatedAt) : null,
+        reviewNote: q.reviewNote,
+      })),
+  });
+  const statusOf = (key: string) => checklist.find((item) => item.key === key)?.status ?? "not_started";
   const call = tasks.get("group_call");
   const rsvp = typeof call?.guest_data?.rsvp === "string" ? (call.guest_data.rsvp as "yes" | "no" | "maybe") : null;
 
@@ -1118,25 +1241,38 @@ export async function buildDashboard(retreat: RetreatRow, memberId: number | nul
   const joinOpen = isOpen(settings.joinUsAgain.mode, retreat.end_date, today);
 
   const importantDates = [
-    { label: "Arrival in Bali", date: retreat.start_date, note: settings.airport },
+    { label: "Arrival", date: retreat.start_date, note: settings.airport },
     { label: "Checkout", date: retreat.end_date, note: "" },
     {
       label: "Final payment deadline",
       date: payments.status === "complete" ? payments.finalPaymentDue : null,
       note: payments.status === "complete" ? "" : "As set out in your signed agreement. Contact us with any questions.",
     },
-    {
-      label: "Pre-trip group call",
-      date: groupCallConfirmed ? todayIn(settings.groupCall.timezone || retreat.timezone, new Date(settings.groupCall.startsAt!)) : null,
-      note: groupCallConfirmed ? "" : "To be confirmed",
-    },
-    ...(settings.passportValidThrough
+    ...(settings.checklist.groupCall
+      ? [
+          {
+            label: "Pre-trip group call",
+            date: groupCallConfirmed ? todayIn(settings.groupCall.timezone || retreat.timezone, new Date(settings.groupCall.startsAt!)) : null,
+            note: groupCallConfirmed ? "" : COMING_SOON,
+          },
+        ]
+      : []),
+    ...questionnaires
+      .filter((q) => q.dueDate)
+      .map((q) => ({ label: `${q.title} due`, date: q.dueDate, note: "" })),
+    ...settings.deadlines.map((d) => ({
+      label: renderWording(d.label, ctx),
+      date: d.date,
+      note: d.date ? renderWording(d.note, ctx) : COMING_SOON,
+    })),
+    ...(settings.checklist.passport && settings.passportValidThrough
       ? [{ label: "Passport valid through at least", date: settings.passportValidThrough, note: "Recommended" }]
       : []),
   ];
 
   return {
     preview: options.preview,
+    audience,
     retreat: {
       slug: retreat.slug,
       title: retreat.title,
@@ -1149,38 +1285,42 @@ export async function buildDashboard(retreat: RetreatRow, memberId: number | nul
       daysUntilStart,
     },
     guest: identity ? { firstName: identity.firstName } : null,
-    dashboardTitle: settings.dashboardTitle,
-    welcomeMessage: settings.welcomeMessage,
+    dashboardTitle: renderWording(settings.dashboardTitle, ctx),
+    welcomeMessage: renderWording(settings.welcomeMessage, ctx),
     supportEmail: settings.supportEmail,
     checklist,
     progress: checklistProgress(checklist),
     importantDates,
     agreement,
-    guestProfile: { url: settings.guestProfileUrl, status: statusOf("guest_profile") },
-    flightTracker: { url: settings.flightTrackerUrl, status: statusOf("flight_details") },
-    flightPreferences: formView(forms.get("flight_preferences")),
-    flightGuidance: settings.flightGuidance,
-    travelInsurance: formView(forms.get("travel_insurance")),
-    passport: { status: statusOf("passport") },
+    questionnaires: questionnaires.map(({ inChecklist: _inChecklist, ...q }) => q),
+    flightGuidance: { status: settings.flightGuidance.status, note: renderWording(settings.flightGuidance.note, ctx) },
+    insurance: settings.insurance,
+    passport: { enabled: settings.checklist.passport, status: statusOf("passport") },
     details: {
-      inclusions: settings.inclusions,
-      transportNote: settings.transportNote,
-      // Pickup windows stay "to be confirmed" until the owner enters confirmed ones.
-      shuttle: settings.shuttle.confirmed ? settings.shuttle : { confirmed: false, details: "" },
-      itineraryMd: settings.itineraryMd,
+      inclusions: settings.inclusions.map((item) => renderWording(item, ctx)),
+      activities: settings.activities.map((item) => renderWording(item, ctx)),
+      transportNote: renderWording(settings.transportNote, ctx),
+      // Shuttle windows stay "Details coming soon" until the owner enters confirmed ones.
+      shuttle: settings.shuttle.confirmed
+        ? { confirmed: true, details: renderWording(settings.shuttle.details, ctx) }
+        : { confirmed: false, details: "" },
+      itineraryMd: renderWording(settings.itineraryMd, ctx),
     },
-    preparationMd: settings.preparationMd,
+    preparationMd: renderWording(settings.preparationMd, ctx),
     payments,
-    groupCall: groupCallConfirmed
-      ? {
-          confirmed: true,
-          startsAt: settings.groupCall.startsAt,
-          timezone: settings.groupCall.timezone,
-          joinUrl: settings.groupCall.joinUrl || null,
-          notes: settings.groupCall.notes,
-          rsvp,
-        }
-      : { confirmed: false, startsAt: null, timezone: null, joinUrl: null, notes: "", rsvp: null },
+    groupCall: !settings.checklist.groupCall
+      ? { enabled: false, confirmed: false, startsAt: null, timezone: null, joinUrl: null, notes: "", rsvp: null }
+      : groupCallConfirmed
+        ? {
+            enabled: true,
+            confirmed: true,
+            startsAt: settings.groupCall.startsAt,
+            timezone: settings.groupCall.timezone,
+            joinUrl: settings.groupCall.joinUrl || null,
+            notes: renderWording(settings.groupCall.notes, ctx),
+            rsvp,
+          }
+        : { enabled: true, confirmed: false, startsAt: null, timezone: null, joinUrl: null, notes: "", rsvp: null },
     announcements: announcements.rows.map((row) => ({
       id: row.id,
       title: row.title,

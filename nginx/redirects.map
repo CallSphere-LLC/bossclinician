@@ -2,7 +2,7 @@
 # Source: the `redirects` table. Regenerate with:
 #   docker compose exec backend node scripts/generate-nginx-redirects.js
 #   docker compose exec nginx nginx -s reload
-# Generated from 111 rows.
+# Generated from 119 rows.
 
 # The podcast episode paths (/podcasts/<show>/episodes/<id>) overflow the
 # 64-byte default bucket, and nginx refuses to start rather than truncating.
@@ -21,9 +21,10 @@ map $uri $redirect_target {
     /blog/alma-vs-private-pay-group-practice-numbers /blog;
     /blog/how-to-stop-seeing-25-clients-a-week /blog/how-to-stop-seeing-25-clients-a-week-and-still-hit-your-income-goals;
     /blog/is-talkspace-right-for-your-practice-goals /blog;
-    /boss-builders-sales-page /;
+    /boss-builders-sales-page /club;
     /boss-clinician-boardroom /boardroom;
     /boss-clinician-home /;
+    /checkout/ppp-collective /club;
     /confirmation-boss-clinician-lounge /checkout/success;
     /confirmation-page-1 /checkout/success;
     /create-account /signup;
@@ -41,6 +42,7 @@ map $uri $redirect_target {
     /fullybookedtherapist /courses/fully-booked-toolkit;
     /heyyvettehere /about;
     /join /signup;
+    /leap-accelerator-thank-you /club;
     /log-in /login;
     /log-out /logout;
     /masterclass /freedom-masterclass;
@@ -68,10 +70,13 @@ map $uri $redirect_target {
     /offers/z9zxy5pi/checkout /retreats;
     /password/new /forgot-password;
     /password/reset /forgot-password;
+    /pppbossbuildersales /club;
     /practice-protection-pack /courses/private-practice-protection-pack;
+    /practice-reset-audit-ty /practice-reset-planner;
     /practice-set-up-quiz /practice-quiz;
     /privacy-policy-8b664a08-e1e5-4f19-8d9a-5cb8f33bf104 /privacy-policy;
     /profiletoprofitguide /courses/from-profile-to-profit;
+    /profitable-private-practice-leap-accelerator /club;
     /protect-your-practice /courses/private-practice-protection-pack;
     /rampedrevenue /courses/ramp-up-rate-formula;
     /ready-form /private-practice-for-you;
@@ -79,6 +84,8 @@ map $uri $redirect_target {
     /register /signup;
     /replay-audit-your-ppractice-edu /resources;
     /replay-audit-your-practice /resources;
+    /reset-audit /practice-reset-planner;
+    /reset-audit-form /reset-planner-form;
     /reset-password /forgot-password;
     /resource_redirect/landing_pages/2150414734 /courses/fully-booked-toolkit;
     /resource_redirect/landing_pages/2150427089 /courses/from-profile-to-profit;
@@ -111,10 +118,11 @@ map $uri $redirect_target {
     /start-your-own-private-practice-quiz /practice-quiz;
     /startersuitecourse /courses/private-practice-starter-suite;
     /terms-of-service-boss-clinician /terms;
-    /the-boss-builders-collective-thank-you-page /;
+    /the-boss-builders-collective-thank-you-page /club;
     /the-directory-makeover-audit /courses/directory-makeover-audit;
     /the-lounge-suite /lounge;
     /turn-doctor-referrals-into-ideal-client /courses/provider-partnership-guide;
+    /uploads/kajabi-rehost/practice-reset-audit-fillable-c996ffdf7c4c.pdf /downloads/practice-freedom-audit.pdf;
     /users/sign_in /login;
     /users/sign_up /signup;
     /webinar-waitlist-thank-you /resources;

@@ -5,6 +5,7 @@ import {
   consentedAttribution,
   isReviewable,
   isSafeCardUrl,
+  roomTypeLabel,
 } from "./retreatAdminRules";
 
 describe("Join Us Again card rules", () => {
@@ -50,6 +51,18 @@ describe("task review", () => {
   it("never lets an organizer hand-verify the agreement", () => {
     expect(isReviewable("agreement")).toBe(false);
     expect(isReviewable("payments")).toBe(true);
-    expect(isReviewable("guest_profile")).toBe(true);
+    expect(isReviewable("passport")).toBe(true);
+    expect(isReviewable("guest_profile")).toBe(false);
+    expect(isReviewable("travel_insurance")).toBe(false);
+    expect(isReviewable("questionnaire:retreat-profile")).toBe(false);
+  });
+});
+
+describe("room type labels", () => {
+  it("names each room and an unknown room", () => {
+    expect(roomTypeLabel("shared")).toBe("Shared room");
+    expect(roomTypeLabel("private")).toBe("Private room");
+    expect(roomTypeLabel("unknown")).toBe("Not set");
+    expect(roomTypeLabel(null)).toBe("Not set");
   });
 });

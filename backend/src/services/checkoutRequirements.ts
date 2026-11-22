@@ -390,7 +390,10 @@ export async function publicCheckoutRequirements(
       invitationRequired: requirements.settings.invitationRequired,
       acknowledgments: activeAcknowledgments(requirements)
         // A Lounge box for the other price phase is not shown (no choice carries that phase).
-        .filter((item) => !item.pricePhase || priceChoices.some((choice) => (choice.price_phase ?? null) === item.pricePhase))
+        // Migration 222: matched per plan too, since a continuing founding member can be
+        // offered founding monthly beside standard annual (the server enforces the same pair).
+        .filter((item) => !item.pricePhase || priceChoices.some((choice) =>
+          (choice.price_phase ?? null) === item.pricePhase && (!item.appliesTo || item.appliesTo === choice.pricing_type)))
         .map(({ key, version, text, linkLabel, linkUrl, appliesTo }) => ({ appliesTo, key, version, text, linkLabel, linkUrl })),
       agreements: requirements.contracts.map((contract) => ({ contractId: contract.id, title: contract.title, pdfSha256: contract.pdfSha256 })),
       enrollment:

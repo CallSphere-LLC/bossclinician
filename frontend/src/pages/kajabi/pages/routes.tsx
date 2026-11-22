@@ -1,5 +1,6 @@
 import type { ComponentType, JSX } from "react";
 import { lazyRoute, type RouteComponent } from "@/ssr/lazyRoute";
+import { RETIRED_PAGE_TARGETS } from "./retiredPages";
 
 /**
  * Routes for the one-off pages rebuilt from bossclinician.com (Kajabi), each at
@@ -26,12 +27,11 @@ function page(load: () => Promise<unknown>, name = "default"): RouteComponent {
 const optIns = () => import("./OptInFormPages");
 const upsells = () => import("./UpsellThankYou");
 const purchases = () => import("./PurchaseThankYou");
+const retired = page(() => import("./RetiredPageRedirect"));
 
 export const kajabiPublicRoutes: readonly { path: string; Component: RouteComponent }[] = [
-  // Practice Reset Audit / Planner family
-  { path: "/reset-audit", Component: page(() => import("./ResetAudit")) },
-  { path: "/reset-audit-form", Component: page(optIns, "ResetAuditForm") },
-  { path: "/practice-reset-audit-ty", Component: page(() => import("./PracticeResetAuditTy")) },
+  // Practice Freedom Audit / Planner family. The separate Practice Reset Audit
+  // pages were retired on 22 Nov 2026 (Yvette, item 9): see `retired` below.
   { path: "/reset-planner-form", Component: page(optIns, "ResetPlannerForm") },
   { path: "/practice-reset-snapshot", Component: page(() => import("./PracticeResetSnapshot")) },
   { path: "/practice-planner", Component: page(() => import("./PracticePlanner")) },
@@ -48,11 +48,6 @@ export const kajabiPublicRoutes: readonly { path: string; Component: RouteCompon
   },
 
   // Programs and misc
-  {
-    path: "/profitable-private-practice-leap-accelerator",
-    Component: page(() => import("./LeapAccelerator")),
-  },
-  { path: "/leap-accelerator-thank-you", Component: page(() => import("./LeapAcceleratorThankYou")) },
   { path: "/private-practice-for-you", Component: page(() => import("./PrivatePracticeForYou")) },
   { path: "/private-practice-for-you-ty", Component: page(() => import("./PrivatePracticeForYouTy")) },
   { path: "/next-steps-consult", Component: page(() => import("./NextStepsConsult")) },
@@ -69,6 +64,12 @@ export const kajabiPublicRoutes: readonly { path: string; Component: RouteCompon
   { path: "/thank-you-rate-renegotiate", Component: page(purchases, "ThankYouRateRenegotiate") },
   { path: "/lounge-confirmed", Component: page(() => import("./LoungeConfirmed")) },
   { path: "/the-club-ty", Component: page(() => import("./ClubThankYou")) },
+
+  // Retired 22 Nov 2026 (Yvette, item 9): Leap Accelerator / Boss Builders
+  // Collective → /club, Practice Reset Audit → Practice Freedom Audit. A full
+  // page load gets the 301 from nginx/redirects.map first; these cover
+  // in-app navigation.
+  ...Object.keys(RETIRED_PAGE_TARGETS).map((path) => ({ path, Component: retired })),
 ];
 
 export const kajabiPageRoutes: { path: string; element: JSX.Element }[] = kajabiPublicRoutes.map(

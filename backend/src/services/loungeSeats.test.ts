@@ -45,8 +45,14 @@ import {
   decideForBuyer,
   decideTierStatus,
   filterPhasedOptions,
+  LOUNGE_BLOCKS,
+  generalBlockKey,
+  loungeBlockValues,
+  loungeMergeValuesSafe,
   memberRateSentence,
   reserveLoungeSeat,
+  testOrderReason,
+  vipBlockKey,
   tierForSlug,
   type SeatCounts,
 } from "./loungeSeats";
@@ -264,5 +270,136 @@ describe("masterclass email 11 price line", () => {
     expect(memberRateSentence("standard")).toContain("$247 per month");
     expect(memberRateSentence("standard")).toContain("$1,482");
     expect(memberRateSentence("standard")).not.toMatch(/founding/i);
+  });
+});
+
+/* ── Migration 222: Emails 11-12 pricing blocks, same-plan rule, test code ── */
+
+describe("masterclass Emails 11-12 pricing blocks (her exact texts)", () => {
+  // Her revised doc, TEAM IMPLEMENTATION NOTES, word for word (quotes removed).
+  const DOC = {
+    generalFounding: "General: The first 20 paid General members can join for $197/month or $1,997/year. The monthly option has a six-month minimum totaling $1,182, then continues month-to-month. Starting with the 21st paid General member, pricing becomes $247/month or $2,497/year.",
+    generalStandard: "General: Join for $247/month or $2,497/year. The monthly option has a six-month minimum totaling $1,482, then continues month-to-month.",
+    vipFounding: "VIP: The first six paid VIP members can join for $347/month or $3,497/year. The monthly option has a six-month minimum totaling $2,082, then continues month-to-month. Once all six seats are filled, a waitlist opens. Future available seats are $447/month or $4,497/year.",
+    vipFull: "VIP is currently full. Join the VIP waitlist through The Lounge page to hear when a seat becomes available. Future seats are $447/month or $4,497/year. Seats are first come, first served; joining the waitlist does not reserve a place.",
+    vipSeatAvailable: "A VIP seat is available at $447/month or $4,497/year. The monthly option has a six-month minimum totaling $2,682, then continues month-to-month. Available seats are first come, first served.",
+  };
+
+  it("holds her five texts exactly", () => {
+    expect(LOUNGE_BLOCKS).toEqual(DOC);
+    for (const text of Object.values(LOUNGE_BLOCKS)) {
+      expect(text).not.toMatch(/\{\{|\}\}|[“”<>&]/);
+      expect(text).not.toMatch(/\b(left|remaining|hurry|deadline)\b/i);
+    }
+  });
+
+  const general = {
+    founding0: decideTierStatus("general", counts()),
+    founding19: decideTierStatus("general", counts({ foundingClaimed: 19 })),
+    last20Held: decideTierStatus("general", counts({ foundingClaimed: 19, foundingHeld: 1 })),
+    standard20: decideTierStatus("general", counts({ foundingClaimed: 20 })),
+    standard35: decideTierStatus("general", counts({ foundingClaimed: 35 })),
+  };
+  const vip = {
+    founding0: decideTierStatus("vip", counts()),
+    founding5: decideTierStatus("vip", counts({ foundingClaimed: 5, activeSeats: 5 })),
+    full: decideTierStatus("vip", counts({ foundingClaimed: 6, activeSeats: 6 })),
+    seatOpen: decideTierStatus("vip", counts({ foundingClaimed: 6, activeSeats: 5 })),
+    // A refunded founding member: the place is not given back, but the seat is.
+    refundedFounder: decideTierStatus("vip", counts({ foundingClaimed: 4, activeSeats: 3 })),
+    seatHeld: decideTierStatus("vip", counts({ foundingClaimed: 6, activeSeats: 5, capacityHeld: 1 })),
+  };
+
+  it("chooses the General block from General's own count", () => {
+    expect(generalBlockKey(general.founding0)).toBe("generalFounding");
+    expect(generalBlockKey(general.founding19)).toBe("generalFounding");
+    // The 20th place reserved at checkout counts, exactly as the checkout counts it.
+    expect(generalBlockKey(general.last20Held)).toBe("generalStandard");
+    expect(generalBlockKey(general.standard20)).toBe("generalStandard");
+    expect(generalBlockKey(general.standard35)).toBe("generalStandard");
+  });
+
+  it("chooses the VIP block from VIP's own founding count and current capacity", () => {
+    expect(vipBlockKey(vip.founding0)).toBe("vipFounding");
+    expect(vipBlockKey(vip.founding5)).toBe("vipFounding");
+    expect(vipBlockKey(vip.full)).toBe("vipFull");
+    expect(vipBlockKey(vip.seatOpen)).toBe("vipSeatAvailable");
+    expect(vipBlockKey(vip.refundedFounder)).toBe("vipFounding");
+    // A freed seat in someone's 30-minute checkout counts as taken.
+    expect(vipBlockKey(vip.seatHeld)).toBe("vipFull");
+  });
+
+  it("selects each tier independently: every combination gives one General and one VIP block", () => {
+    for (const g of Object.values(general)) {
+      for (const v of Object.values(vip)) {
+        const values = loungeBlockValues(g, v);
+        expect(Object.keys(values).sort()).toEqual(["lounge_general_pricing_block", "lounge_vip_availability_block"]);
+        expect(values.lounge_general_pricing_block).toBe(LOUNGE_BLOCKS[generalBlockKey(g)]);
+        expect(values.lounge_vip_availability_block).toBe(LOUNGE_BLOCKS[vipBlockKey(v)]);
+        expect(values.lounge_general_pricing_block.startsWith("General: ")).toBe(true);
+        expect(values.lounge_vip_availability_block).toMatch(/VIP/);
+      }
+    }
+  });
+
+  it("reads the live state at send time, and gives no values (so the email is held) if it cannot", async () => {
+    state.counts.founding_claimed = 20;
+    const client = await pool.connect();
+    const values = await loungeMergeValuesSafe(client);
+    expect(values.lounge_general_pricing_block).toBe(DOC.generalStandard);
+    // The mock answers both tiers with the same counts: VIP past its six founding places, no active seats.
+    expect(values.lounge_vip_availability_block).toBe(DOC.vipSeatAvailable);
+    state.failOn = "AS founding_claimed";
+    const errors = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    expect(await loungeMergeValuesSafe(client)).toEqual({});
+    expect(state.queries.at(-1)?.sql).toBe("ROLLBACK TO SAVEPOINT lounge_merge");
+    errors.mockRestore();
+  });
+});
+
+describe("founding rate continues on the same plan only", () => {
+  const closed = decideTierStatus("general", counts({ foundingClaimed: 20 }));
+  const monthlyFounder = { claimPhase: "founding" as const, active: true, claimPlan: "subscription" };
+
+  it("keeps the founding price on the plan the member holds", () => {
+    expect(decideForBuyer(closed, monthlyFounder, true, "subscription")).toMatchObject({ phase: "founding", continuation: true });
+  });
+
+  it("prices a switch to the other plan at the current rate, still without counting them again", () => {
+    expect(decideForBuyer(closed, monthlyFounder, true, "one_time")).toMatchObject({
+      phase: "standard", continuation: false, takesFoundingPlace: false, takesCapacitySeat: false,
+    });
+  });
+
+  it("treats an unknown claim plan (backfilled / Kajabi) as the same plan", () => {
+    expect(decideForBuyer(closed, { claimPhase: "founding", active: true, claimPlan: null }, true, "one_time")).toMatchObject({ phase: "founding" });
+  });
+
+  it("shows a continuing monthly founder founding monthly and standard annual", async () => {
+    state.counts.founding_claimed = 20;
+    state.standing = { phase: "founding", active: true, plan: "subscription" } as never;
+    const rows = [
+      { id: 10, price_phase: "founding" as const, pricing_type: "subscription" },
+      { id: 37, price_phase: "founding" as const, pricing_type: "one_time" },
+      { id: 90, price_phase: "standard" as const, pricing_type: "subscription" },
+      { id: 91, price_phase: "standard" as const, pricing_type: "one_time" },
+    ];
+    expect((await filterPhasedOptions(rows, "the-lounge", { email: "founder@example.com" }, pool)).map((r) => r.id)).toEqual([10, 91]);
+  });
+});
+
+describe("test transactions never take a founding place", () => {
+  it("knows the owner's LOUNGE26 test code, in any case", () => {
+    expect(testOrderReason({ couponCode: "LOUNGE26" })).toBe("test coupon");
+    expect(testOrderReason({ couponCode: " lounge26 " })).toBe("test coupon");
+    expect(testOrderReason({ couponCode: "" })).toBe("");
+    expect(testOrderReason({ couponCode: null })).toBe("");
+    expect(testOrderReason({ couponCode: "WELCOME10" })).toBe("");
+  });
+
+  it("does not claim a place for a paid LOUNGE26 order", async () => {
+    state.order = { slug: "the-lounge", email: "owner@example.com", total_cents: 200, contact_id: 225, member_id: 119, is_internal: false, price_phase: "founding", coupon_code: "LOUNGE26" };
+    expect(await claimLoungeSeatSafely(await pool.connect(), 201)).toMatchObject({ claimed: false, reason: "test coupon" });
+    expect(state.queries.some((q) => q.sql.includes("INSERT INTO lounge_seats"))).toBe(false);
   });
 });

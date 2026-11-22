@@ -99,19 +99,21 @@ describe("firstSendableAnchoredEmail", () => {
 });
 
 describe("retreat merge values", () => {
-  it("builds the dashboard deep links and refuses a non-https next link", () => {
+  it("builds the dashboard deep links, defaults Email 4 to /upcoming-retreats and refuses a non-https next link", () => {
     const v = retreatMergeValues({ siteUrl: "https://www.bossclinician.com/", slug: "bali-2027", title: "Bali", nextUrl: "" });
     expect(v.retreatMemoriesUrl).toBe("https://www.bossclinician.com/retreats/dashboard/bali-2027/memories");
     expect(v.retreatFeedbackUrl).toBe("https://www.bossclinician.com/retreats/dashboard/bali-2027/feedback");
     expect(v.retreatInterestUrl).toBe("https://www.bossclinician.com/retreats/dashboard/bali-2027/interest");
     expect(v.retreatDashboardUrl).toBe("https://www.bossclinician.com/retreats/dashboard/bali-2027");
-    expect(v.retreatNextUrl).toBe("");
+    expect(v.retreatNextUrl).toBe("https://www.bossclinician.com/upcoming-retreats");
     expect(retreatMergeValues({ siteUrl: "x", slug: "s", title: "t", nextUrl: "http://insecure" }).retreatNextUrl).toBe("");
     expect(retreatMergeValues({ siteUrl: "x", slug: "s", title: "t", nextUrl: " https://ok.test/next " }).retreatNextUrl).toBe("https://ok.test/next");
   });
 
-  it("flags Email 4 as blocked until its link is set, and nothing else", () => {
-    const v = retreatMergeValues({ siteUrl: "https://s.test", slug: "bali-2027", title: "Bali", nextUrl: "" });
+  it("flags Email 4 as blocked only while its owner-set link is unusable, and nothing else", () => {
+    const fine = retreatMergeValues({ siteUrl: "https://s.test", slug: "bali-2027", title: "Bali", nextUrl: "" });
+    expect(ALUMNI_EMAILS.map((e) => missingRetreatTokens([e.subject, e.previewText, e.bodyMd], fine))).toEqual([[], [], [], []]);
+    const v = retreatMergeValues({ siteUrl: "https://s.test", slug: "bali-2027", title: "Bali", nextUrl: "not-a-link" });
     const blocked = ALUMNI_EMAILS.map((e) => missingRetreatTokens([e.subject, e.previewText, e.bodyMd], v));
     expect(blocked).toEqual([[], [], [], ["retreatNextUrl"]]);
     const set = { ...v, retreatNextUrl: "https://s.test/next" };
@@ -160,16 +162,40 @@ describe("retreat skip rules", () => {
   });
 });
 
-describe("migration 220 carries exactly the email text in retreatAlumniEmails.ts", () => {
+describe("migrations 220 + 225 carry exactly the email text in retreatAlumniEmails.ts", () => {
   const sql = fs.readFileSync(
     path.join(__dirname, "../db/migrations/220_retreat_alumni_sequence.sql"),
     "utf8"
   );
+  const sql225 = fs.readFileSync(
+    path.join(__dirname, "../db/migrations/225_retreat_alumni_round2.sql"),
+    "utf8"
+  );
+  /** A dollar-quoted literal from migration 225, e.g. tag "oldp". */
+  const lit = (tag: string): string => {
+    const m = new RegExp(`\\$${tag}\\$([\\s\\S]*?)\\$${tag}\\$`).exec(sql225);
+    if (!m) throw new Error(`no $${tag}$ literal in 225`);
+    return m[1];
+  };
+  /** Email 4 as 220 inserted it, after 225's guarded revision. */
+  const revised = (preview: string, body: string) => ({
+    preview: preview === lit("old") ? lit("new") : preview,
+    body: body.replace(lit("oldp"), lit("newp")).replace(lit("oldb"), lit("newb")),
+  });
 
   it.each(ALUMNI_EMAILS.map((e) => [e.position, e] as const))("email %i", (_position, e) => {
     expect(sql).toContain(`$subj$${e.subject}$subj$`);
-    expect(sql).toContain(`$prev$${e.previewText}$prev$`);
-    expect(sql).toContain(`$body$${e.bodyMd}$body$`);
+    if (e.position === 4) {
+      const prev = /\$prev\$([^$]*)\$prev\$/g;
+      const previews = [...sql.matchAll(prev)].map((m) => m[1]);
+      const bodies = [...sql.matchAll(/\$body\$([\s\S]*?)\$body\$/g)].map((m) => m[1]);
+      const after = revised(previews[3], bodies[3]);
+      expect(after.preview).toBe(e.previewText);
+      expect(after.body).toBe(e.bodyMd);
+    } else {
+      expect(sql).toContain(`$prev$${e.previewText}$prev$`);
+      expect(sql).toContain(`$body$${e.bodyMd}$body$`);
+    }
     expect(sql).toContain(`$rules$${JSON.stringify(e.skipRules)}$rules$`);
     expect(sql).toMatch(new RegExp(`\\(${e.position}, ${e.offsetDays}, \\d+, \\$subj\\$`));
   });

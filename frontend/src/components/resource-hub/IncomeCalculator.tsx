@@ -174,7 +174,7 @@ function ResultsCapture({ rate, clients, weeks, annual, clientWord }: ResultsCap
     } catch {
       setStatus("error");
       setError(
-        "Something went wrong sending your results. Please email bossclinician@gmail.com and I'll send them over.",
+        "Something went wrong sending your results. Please email support@bossclinician.com and I'll send them over.",
       );
     }
   }
@@ -295,7 +295,7 @@ function ResultsCapture({ rate, clients, weeks, annual, clientWord }: ResultsCap
               <circle cx="12" cy="12" r="9.25" />
               <path d="M12 7.5v5.25M12 16.25v.01" />
             </svg>
-            {/* min-w-0 lets a long address (bossclinician@gmail.com) wrap
+            {/* min-w-0 lets a long address (support@bossclinician.com) wrap
                 instead of forcing the card wider than a 360px viewport. */}
             <span className="min-w-0 break-words">{error}</span>
           </motion.p>

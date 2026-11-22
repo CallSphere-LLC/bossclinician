@@ -451,6 +451,11 @@ export const club = {
         q: "How do I qualify for the Ramp-Up Rate Formula bonus?",
         a: "Join The Club by the personalized deadline provided after your first registration for the free training. Your deadline is 11:59 p.m. Pacific Time, 14 calendar days after registration. Registering again does not restart your bonus window.",
       },
+      // Round 2 (22 Nov, item 2): her sentence for a different purchase email.
+      {
+        q: "I registered and purchased with different email addresses. Can I still receive the bonus?",
+        a: "Buyers who registered and purchased with different email addresses can contact support@bossclinician.com for eligibility verification.",
+      },
     ],
     cta: "SAY LESS.. I'M READY TO JOIN THE CLUB",
   },
@@ -531,7 +536,7 @@ export const clubCheckout = {
       // which it adds an eligible subscriber's own date.
       label: RAMP_UP_BONUS_LABEL,
       title: "The Ramp-Up Rate Formula",
-      body: "Starting your practice comes with enough decisions. Your fee does not have to be another number you choose out of fear or by copying someone else. Use the Ramp-Up Rate Formula to connect your fee to the income your practice needs to support and the number of clients you want to see. Join The Club within 14 days of your first registration for the free training to receive this bonus with your enrollment. (Does not carry NBCC credit.)",
+      body: "Starting your practice comes with enough decisions. Your fee does not have to be another number you choose out of fear or by copying someone else. Use the Ramp-Up Rate Formula to connect your fee to the income your practice needs to support and the number of clients you want to see. Join The Club within 14 days of your first registration for the free training to receive this bonus with your enrollment. Buyers who registered and purchased with different email addresses can contact support@bossclinician.com for eligibility verification. (Does not carry NBCC credit.)",
     },
   ],
   nbcc: "The Boss Move is approved by NBCC under the program title \"Profitable Private Practices: Training for Clinically-Aligned Private Practices\" for 4 clock hours. Your certificate of completion will carry the approved program title. Boss Clinician, LLC has been approved by NBCC as an Approved Continuing Education Provider, ACEP No. 7998. Programs that do not qualify for NBCC credit are clearly identified. Boss Clinician, LLC is solely responsible for all aspects of the programs. Continuing education credit applies to this course only; coaching calls, community access, and bonus materials do not carry NBCC credit. CE grievance, refund, and cancellation policies are available at www.bossclinician.com/continuing-education-boss-clinician or by request at support@bossclinician.com.",

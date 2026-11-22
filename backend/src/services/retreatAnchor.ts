@@ -148,11 +148,25 @@ export const RETREAT_MERGE_KEYS = [
 ] as const;
 export type RetreatMergeKey = (typeof RETREAT_MERGE_KEYS)[number];
 
+/**
+ * The permanent "Upcoming Retreats" page Email 4 links to (Yvette, 22 Nov 2026
+ * round 2, item 6: "Keep the alumni email linked to the permanent
+ * upcoming-retreats page so we do not have to update the automation for every
+ * trip"). Built by another part of the site; Email 4 ships disabled until it
+ * is live.
+ */
+export const UPCOMING_RETREATS_PATH = "/upcoming-retreats";
+
 export function retreatMergeValues(input: {
   siteUrl: string;
   slug: string;
   title: string;
-  /** Owner-set "explore what's next / join first access" URL. Blank holds Email 4. */
+  /**
+   * Owner-set override for Email 4's "Explore upcoming retreats" button
+   * (retreat_alumni_settings.next_url). Blank: the permanent
+   * /upcoming-retreats page. Set but not an https link: '' (Email 4 holds
+   * rather than printing a broken button).
+   */
   nextUrl: string;
 }): Record<RetreatMergeKey, string> {
   const site = input.siteUrl.replace(/\/+$/, "");
@@ -164,9 +178,8 @@ export function retreatMergeValues(input: {
     retreatMemoriesUrl: `${dashboard}/memories`,
     retreatFeedbackUrl: `${dashboard}/feedback`,
     retreatInterestUrl: `${dashboard}/interest`,
-    // Only an absolute https link is a link: anything else would print the
-    // button's markdown literally, so it counts as "not set".
-    retreatNextUrl: /^https:\/\/\S+$/i.test(next) ? next : "",
+    retreatNextUrl:
+      next === "" ? `${site}${UPCOMING_RETREATS_PATH}` : /^https:\/\/\S+$/i.test(next) ? next : "",
   };
 }
 

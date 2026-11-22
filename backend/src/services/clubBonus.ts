@@ -6,12 +6,18 @@ import { buildMergeValues } from "../email/mergeValues";
 import { mergeLinks, renderMarkdown, renderTokens, sendEmail } from "../email/provider";
 import { grantAccess } from "./access";
 import {
+  REMINDER_LOOKAHEAD_DAYS,
   REMINDER_POSITION,
   bonusDeadlineFor,
+  bonusDeadlineMergeValues,
   dueReminder,
   formatBonusDeadline,
-  isReminderDay,
+  promotionConflict,
+  tooClose,
+  unresolvedPlaceholders,
   withinBonusWindow,
+  type ReminderKey,
+  type ReminderLedger,
 } from "./clubBonusDeadline";
 
 /**
@@ -33,7 +39,16 @@ import {
  *    3-D Secure, PayPal or webhook delay past midnight cannot flip it.
  *  - club_bonus_reminder_sends: the C1-C3 ledger; one send per window, reminder
  *    and deadline, never backfilled.
- *  - settings.club_bonus: { goLiveAt, registrationFormIds, legacyPendingGetsBonus }.
+ *  - settings.club_bonus: { goLiveAt, registrationFormIds, legacyPendingGetsBonus,
+ *    excludedEmails }.
+ *
+ * Test accounts (migration 221, Yvette 22 Nov round 2, item 1): a window with
+ * rule 'test_excluded', an address in settings.club_bonus.excludedEmails, or a
+ * contact marked internal (contacts.is_internal) is never eligible, is not a
+ * participant, and gets no C1-C3 (see `clubBonusExclusion`). The four existing
+ * registrants are excluded by rule + list rather than is_internal, because
+ * is_internal also hides a contact from the People list and the owner's
+ * audience counts/reports, and two of the four are Yvette's own addresses.
  *
  * The C1-C3 copy lives in the 'club-bonus-reminders' sequence so it can be
  * edited in the sequence editor. That sequence's STATUS is the on/off switch:
@@ -48,6 +63,14 @@ type Queryable = Pick<PoolClient, "query"> | typeof pool | { query: typeof pool.
 export const CLUB_OFFER_SLUG = "the-club";
 export const RAMP_UP_PRODUCT_SLUG = "ramp-up-rate-formula";
 export const REMINDER_SEQUENCE_SLUG = "club-bonus-reminders";
+/**
+ * The ordinary Club promotions a reminder keeps its distance from (the Club
+ * nurture, migration 202, and the reminders themselves): a reminder is skipped
+ * when one of these went out to the subscriber too recently (tooClose).
+ */
+export const CLUB_PROMOTION_SEQUENCE_SLUGS = ["practice-prep-to-the-club", REMINDER_SEQUENCE_SLUG] as const;
+/** club_bonus_windows.rule for a test account (migration 221). */
+export const TEST_EXCLUDED_RULE = "test_excluded";
 /** The Practice Prep Training sign-up (forms.slug), used when the setting is missing. */
 const DEFAULT_REGISTRATION_FORM_SLUG = "practicepreptraining";
 
@@ -59,6 +82,8 @@ export interface ClubBonusSettings {
   registrationFormIds: number[];
   /** What a purchase by an undecided existing registrant gets. Default true. */
   legacyPendingGetsBonus: boolean;
+  /** Lower-cased test addresses: never eligible, never reminded (migration 221). */
+  excludedEmails: string[];
 }
 
 const CACHE_MS = 60_000;
@@ -90,6 +115,12 @@ export async function clubBonusSettings(db: Queryable = pool): Promise<ClubBonus
     goLiveAt: goLive && Number.isFinite(goLive.getTime()) ? goLive : new Date(8.64e15),
     registrationFormIds: formIds,
     legacyPendingGetsBonus: raw.legacyPendingGetsBonus !== false,
+    excludedEmails: Array.isArray(raw.excludedEmails)
+      ? raw.excludedEmails
+          .filter((e): e is string => typeof e === "string")
+          .map((e) => normaliseEmail(e))
+          .filter(Boolean)
+      : [],
   };
   settingsCache = { value, at: Date.now() };
   return value;
@@ -189,13 +220,22 @@ export async function ensureWindow(db: Queryable, rawEmail: string): Promise<Bon
   if (!row) return null;
 
   const legacy = row.created_at.getTime() < (settings.goLiveAt?.getTime() ?? Infinity);
-  const deadline = legacy ? null : bonusDeadlineFor(row.created_at);
+  // A listed test address is saved without a date, as a test account.
+  const testAccount = settings.excludedEmails.includes(email);
+  const deadline = legacy || testAccount ? null : bonusDeadlineFor(row.created_at);
   await db.query(
     `INSERT INTO club_bonus_windows
        (email, contact_id, first_registered_at, first_submission_id, deadline_at, rule)
      VALUES ($1, $2, $3, $4, $5, $6)
      ON CONFLICT (email) DO NOTHING`,
-    [email, row.contact_id, row.created_at, row.id, deadline, legacy ? "legacy_pending" : "first_registration"]
+    [
+      email,
+      row.contact_id,
+      row.created_at,
+      row.id,
+      deadline,
+      testAccount ? TEST_EXCLUDED_RULE : legacy ? "legacy_pending" : "first_registration",
+    ]
   );
   const saved = await db.query<WindowRow>(
     `SELECT ${WINDOW_COLUMNS} FROM club_bonus_windows WHERE email = $1`,
@@ -229,6 +269,64 @@ export async function syncWindows(db: Queryable = pool): Promise<number> {
 async function windowById(db: Queryable, id: number): Promise<BonusWindow | null> {
   const res = await db.query<WindowRow>(`SELECT ${WINDOW_COLUMNS} FROM club_bonus_windows WHERE id = $1`, [id]);
   return toWindow(res.rows[0]);
+}
+
+/* --------------------------------------------------------- test accounts */
+
+/**
+ * Pure: whether a person is a test account for the Club bonus. Reusable by any
+ * Club-bonus count or sender: `rule` is their window's rule (if any), `email`
+ * their address, `isInternal` their contact's is_internal flag.
+ */
+export function isClubBonusTestAccount(
+  input: { email?: string | null; rule?: string | null; isInternal?: boolean | null },
+  excludedEmails: readonly string[]
+): boolean {
+  if (input.rule === TEST_EXCLUDED_RULE) return true;
+  if (input.isInternal === true) return true;
+  const email = normaliseEmail(input.email);
+  return email !== "" && excludedEmails.includes(email);
+}
+
+/**
+ * The same test in SQL, for counts over club_bonus_windows aliased `w`
+ * ($1 = settings.club_bonus.excludedEmails as text[]).
+ */
+export const CLUB_BONUS_PARTICIPANT_SQL = `w.rule <> '${TEST_EXCLUDED_RULE}'
+   AND NOT (w.email = ANY($1::text[]))
+   AND NOT EXISTS (SELECT 1 FROM contacts ci
+                    WHERE ci.is_internal
+                      AND (ci.id = w.contact_id OR lower(ci.email::text) = w.email))`;
+
+/** Real participants: everybody with a saved window who is not a test account. */
+export async function clubBonusParticipantCount(db: Queryable = pool): Promise<number> {
+  const settings = await clubBonusSettings(db);
+  const res = await db.query<{ n: number }>(
+    `SELECT count(*)::int AS n FROM club_bonus_windows w WHERE ${CLUB_BONUS_PARTICIPANT_SQL}`,
+    [settings.excludedEmails]
+  );
+  return res.rows[0]?.n ?? 0;
+}
+
+/**
+ * Whether this person is a test account, checked live (the list and the
+ * internal flag can change after the window was saved). The contact is looked
+ * up by id or address.
+ */
+export async function clubBonusExclusion(
+  db: Queryable,
+  input: { email: string; contactId?: number | null; window?: BonusWindow | null }
+): Promise<boolean> {
+  const settings = await clubBonusSettings(db);
+  const email = normaliseEmail(input.email);
+  if (isClubBonusTestAccount({ email, rule: input.window?.rule }, settings.excludedEmails)) return true;
+  const internal = await db.query(
+    `SELECT 1 FROM contacts
+      WHERE is_internal AND (id = $1::int OR ($2::text <> '' AND lower(email::text) = $2::text))
+      LIMIT 1`,
+    [input.contactId ?? input.window?.contactId ?? null, email]
+  );
+  return (internal.rowCount ?? 0) > 0;
 }
 
 /* ---------------------------------------------------------------- token */
@@ -310,6 +408,8 @@ export async function publicBonusStatus(input: {
     const id = verifyClubBonusToken(input.token);
     window = id === null ? null : await windowById(pool, id);
   }
+  // A test account sees the public wording and is never shown a date.
+  if (window && (await clubBonusExclusion(pool, { email: window.email, window }))) return { state: "public" };
   const state = windowState(window, now);
   if (state === "open" && window?.deadlineAt) {
     return { state: "open", deadline: formatBonusDeadline(window.deadlineAt), deadlineAt: window.deadlineAt.toISOString() };
@@ -321,7 +421,16 @@ export async function publicBonusStatus(input: {
 /* ------------------------------------------------------ merge values */
 
 /** Tokens a Club email can use. Blank date when the subscriber has none. */
-export const CLUB_BONUS_MERGE_KEYS = ["clubBonusDeadline", "clubBonusLink", "clubBonusToken"] as const;
+export const CLUB_BONUS_MERGE_KEYS = [
+  "clubBonusDeadline",
+  "clubBonusLink",
+  "clubBonusToken",
+  "bonus_deadline_date",
+  "bonus_deadline_time",
+  "bonus_deadline_timezone",
+] as const;
+
+const NO_DEADLINE = { bonus_deadline_date: "", bonus_deadline_time: "", bonus_deadline_timezone: "" };
 
 /**
  * `{{clubBonusDeadline}}` "December 6" ('' without a date), `{{clubBonusLink}}`
@@ -335,12 +444,17 @@ export async function clubBonusMergeValues(db: Queryable, email: string): Promis
     clubBonusDeadline: window?.deadlineAt ? formatBonusDeadline(window.deadlineAt) : "",
     clubBonusLink: clubBonusLink(window),
     clubBonusToken: window ? signClubBonusToken(window.id) : "",
+    ...(window?.deadlineAt ? bonusDeadlineMergeValues(window.deadlineAt) : NO_DEADLINE),
   };
 }
 
 /** Whether a template uses any of the Club bonus tokens (so others pay nothing). */
 export function usesClubBonusTokens(...templates: Array<string | null | undefined>): boolean {
-  return templates.some((t) => typeof t === "string" && /\{\{\s*clubBonus(Deadline|Link|Token)\s*\}\}/.test(t));
+  return templates.some(
+    (t) =>
+      typeof t === "string" &&
+      /\{\{\s*(clubBonus(Deadline|Link|Token)|bonus_deadline_(date|time|timezone))\s*\}\}/.test(t)
+  );
 }
 
 /* ------------------------------------------------------- ownership */
@@ -368,24 +482,45 @@ async function remindersOn(db: Queryable): Promise<{ id: number; topic: string }
 
 /* -------------------------------------- sequence skip rule (migration 215) */
 
+/** The C1-C3 ledger for one window and deadline. */
+async function reminderLedger(db: Queryable, windowId: number, deadlineAt: Date): Promise<ReminderLedger> {
+  const res = await db.query<{ reminder: ReminderKey; sent_at: Date; outcome: string }>(
+    `SELECT reminder, sent_at, outcome FROM club_bonus_reminder_sends
+      WHERE window_id = $1 AND deadline_at = $2`,
+    [windowId, deadlineAt]
+  );
+  const ledger: ReminderLedger = {};
+  for (const row of res.rows) ledger[row.reminder] = { sentAt: row.sent_at, sent: row.outcome === "sent" };
+  return ledger;
+}
+
 /**
- * Skip rule `{"clubBonusReminderDay": true}` on the Club sequence's promotional
- * emails: skip when the reminders are switched on and today (Pacific) is one of
- * this subscriber's C1-C3 days. '' (send) in every other case, so with the
- * reminders off the sequence runs exactly as before.
+ * Skip rules on the Club sequence's promotional emails (migrations 215/221):
+ * `{"clubBonusReminderDay": true}` (emails 3-17) and, on Email 8 / Email 11,
+ * `{"clubBonusReplaces": "C1" | "C2"}`. Revised doc: "Replace Email 8 with C1
+ * and replace Email 11 with C2; retain Email 9 on Day 10 and Email 10 on Day
+ * 11 ... preserve at least 24 hours between promotions; suppress a conflicting
+ * ordinary promotion rather than delaying a reminder past expiry."
+ *
+ * Returns a reason only while the reminders are switched on, for a real
+ * participant (a saved deadline, not a test account, not a Club owner). '' —
+ * send as before — in every other case, so with the reminders off, or for
+ * anybody without a dated window, the sequence runs exactly as it does today.
  */
 export async function clubBonusReminderDaySkip(
   db: Queryable,
   contactId: number,
   email: string,
-  now: Date = new Date()
+  now: Date = new Date(),
+  replaces?: ReminderKey
 ): Promise<string> {
   if (!(await remindersOn(db))) return "";
   const window = await ensureWindow(db, email);
-  if (!window?.deadlineAt || !isReminderDay(window.deadlineAt, now)) return "";
+  if (!window?.deadlineAt) return "";
+  if (await clubBonusExclusion(db, { email, contactId, window })) return "";
   const { clubOfferId } = await catalogIds(db);
   if (clubOfferId !== null && (await ownsClub(db, clubOfferId, contactId, normaliseEmail(email)))) return "";
-  return "Club bonus reminder goes today";
+  return promotionConflict(window.deadlineAt, now, await reminderLedger(db, window.id, window.deadlineAt), replaces);
 }
 
 /**
@@ -411,8 +546,18 @@ async function savepointed<T>(client: Queryable, name: string, run: () => Promis
   }
 }
 
-export function clubBonusReminderDaySkipSafe(client: Queryable, contactId: number, email: string): Promise<string> {
-  return savepointed(client, "club_bonus_skip", () => clubBonusReminderDaySkip(client, contactId, email), "");
+export function clubBonusReminderDaySkipSafe(
+  client: Queryable,
+  contactId: number,
+  email: string,
+  replaces?: ReminderKey
+): Promise<string> {
+  return savepointed(
+    client,
+    "club_bonus_skip",
+    () => clubBonusReminderDaySkip(client, contactId, email, new Date(), replaces),
+    ""
+  );
 }
 
 export function clubBonusMergeValuesSafe(client: Queryable, email: string): Promise<Record<string, string>> {
@@ -420,6 +565,7 @@ export function clubBonusMergeValuesSafe(client: Queryable, email: string): Prom
     clubBonusDeadline: "",
     clubBonusLink: clubBonusLink(null),
     clubBonusToken: "",
+    ...NO_DEADLINE,
   });
 }
 
@@ -427,18 +573,34 @@ export function clubBonusMergeValuesSafe(client: Queryable, email: string): Prom
 
 export interface OrderBonusDecision {
   included: boolean;
-  reason: "not_club" | "not_registered" | "within_window" | "legacy_pending" | "expired" | "legacy_pending_excluded";
+  reason:
+    | "not_club"
+    | "not_registered"
+    | "within_window"
+    | "legacy_pending"
+    | "expired"
+    | "legacy_pending_excluded"
+    | "test_account";
   windowId: number | null;
 }
 
-/** Pure: the decision for an order placed at `orderedAt` by somebody with `window`. */
+/**
+ * Pure: the decision for an order placed at `orderedAt` by somebody with
+ * `window`. A test account never gets the bonus (migration 221), whatever its
+ * window says; a buyer who never registered is not eligible automatically
+ * (support@bossclinician.com verifies a different-address registration and
+ * grants it by hand: Contacts → the buyer → Access → offer "Ramp Up Rate
+ * Pricing Formula").
+ */
 export function decideOrderBonus(
   window: BonusWindow | null,
   orderedAt: Date,
-  legacyPendingGetsBonus: boolean
+  legacyPendingGetsBonus: boolean,
+  testAccount: boolean = false
 ): OrderBonusDecision {
   const state = windowState(window, orderedAt);
   const windowId = window?.id ?? null;
+  if (testAccount || window?.rule === TEST_EXCLUDED_RULE) return { included: false, reason: "test_account", windowId };
   if (state === "none") return { included: false, reason: "not_registered", windowId };
   if (state === "pending") {
     return legacyPendingGetsBonus
@@ -502,13 +664,14 @@ async function applyClubBonus(
   const settings = await clubBonusSettings(client);
   // The buyer's registration decides. A gift is decided on whichever of the
   // buyer and the recipient registered (the recipient is who enrolls).
-  let decision = decideOrderBonus(await ensureWindow(client, order.email), order.created_at, settings.legacyPendingGetsBonus);
-  if (!decision.included && order.gift_recipient_email) {
-    const gift = decideOrderBonus(
-      await ensureWindow(client, order.gift_recipient_email),
-      order.created_at,
-      settings.legacyPendingGetsBonus
-    );
+  const decideFor = async (email: string): Promise<OrderBonusDecision> => {
+    const window = await ensureWindow(client, email);
+    const testAccount = await clubBonusExclusion(client, { email, window });
+    return decideOrderBonus(window, order.created_at, settings.legacyPendingGetsBonus, testAccount);
+  };
+  let decision = await decideFor(order.email);
+  if (!decision.included && decision.reason !== "test_account" && order.gift_recipient_email) {
+    const gift = await decideFor(order.gift_recipient_email);
     if (gift.included) decision = gift;
   }
 
@@ -565,12 +728,15 @@ export async function runClubBonusTick(now: Date = new Date()): Promise<{ window
   if (!sequence) return { windows, sent: 0 };
   const { clubOfferId } = await catalogIds(pool);
 
-  // Open windows whose last day is at most four days away: every C1-C3 slot.
+  // Open windows whose last day is close enough for any C1-C3 slot (C1 is five
+  // days before). Test accounts never have a date, so they are never here.
   const candidates = await pool.query<WindowRow>(
     `SELECT ${WINDOW_COLUMNS} FROM club_bonus_windows
-      WHERE deadline_at IS NOT NULL AND deadline_at >= $1::timestamptz AND deadline_at <= $1::timestamptz + interval '4 days'
+      WHERE deadline_at IS NOT NULL AND rule <> $3
+        AND deadline_at >= $1::timestamptz
+        AND deadline_at <= $1::timestamptz + make_interval(days => $2::int)
       ORDER BY deadline_at LIMIT 500`,
-    [now]
+    [now, REMINDER_LOOKAHEAD_DAYS, TEST_EXCLUDED_RULE]
   );
 
   let sent = 0;
@@ -589,9 +755,50 @@ export async function runClubBonusTick(now: Date = new Date()): Promise<{ window
   return { windows, sent };
 }
 
+/** Whether a Club order by this person is already paid (fulfilment may still be granting access). */
+async function paidClubOrder(db: Queryable, clubOfferId: number, contactId: number, email: string): Promise<boolean> {
+  const res = await db.query(
+    `SELECT 1 FROM orders o
+      WHERE o.status = 'paid'
+        AND (lower(o.email::text) = $2 OR lower(COALESCE(o.gift_recipient_email, '')) = $2
+             OR o.member_id IN (SELECT m.id FROM members m WHERE m.contact_id = $3))
+        AND (o.offer_id = $1 OR EXISTS (SELECT 1 FROM order_items oi WHERE oi.order_id = o.id AND oi.offer_id = $1))
+      LIMIT 1`,
+    [clubOfferId, email, contactId]
+  );
+  return (res.rowCount ?? 0) > 0;
+}
+
+/**
+ * The last ordinary Club promotion this contact was actually sent (the Club
+ * nurture or another reminder), for the 24-hour spacing check.
+ */
+async function lastClubPromotionAt(db: Queryable, contactId: number): Promise<Date | null> {
+  const res = await db.query<{ at: Date | null }>(
+    `SELECT max(COALESCE(m.sent_at, m.created_at)) AS at
+       FROM email_messages m
+       JOIN email_sequences q ON q.id = m.source_id
+      WHERE m.source_type = 'sequence' AND m.contact_id = $1
+        AND q.slug = ANY($2::text[])
+        AND m.status NOT IN ('failed', 'suppressed')`,
+    [contactId, [...CLUB_PROMOTION_SEQUENCE_SLUGS]]
+  );
+  return res.rows[0]?.at ?? null;
+}
+
+/** Records a reminder that was claimed and deliberately not sent. */
+async function closeClaim(client: PoolClient, window: BonusWindow, key: ReminderKey, outcome: string): Promise<void> {
+  await client.query(
+    `UPDATE club_bonus_reminder_sends SET outcome = $4
+      WHERE window_id = $1 AND reminder = $2 AND deadline_at = $3`,
+    [window.id, key, window.deadlineAt, outcome]
+  );
+  await client.query("COMMIT");
+}
+
 async function sendReminder(
   window: BonusWindow,
-  key: "C1" | "C2" | "C3",
+  key: ReminderKey,
   sequence: { id: number; topic: string },
   clubOfferId: number | null,
   now: Date
@@ -613,8 +820,9 @@ async function sendReminder(
   );
   const contact = contactRes.rows[0];
   if (!contact) return false;
-  // Purchasing removes the subscriber from these reminders.
+  // Purchasing removes the subscriber from these reminders; test accounts never get them.
   if (clubOfferId !== null && (await ownsClub(pool, clubOfferId, contact.id, window.email))) return false;
+  if (await clubBonusExclusion(pool, { email: window.email, contactId: contact.id, window })) return false;
 
   const emailRes = await pool.query<{
     subject: string;
@@ -643,7 +851,45 @@ async function sendReminder(
       await client.query("ROLLBACK");
       return false;
     }
-    const values = {
+
+    // Immediately before sending (her doc: "Check purchase status immediately
+    // before each send"): re-read the saved window (the date in the email is
+    // the one checkout uses), and check purchase, test account and expiry again.
+    const fresh = await client.query<WindowRow>(`SELECT ${WINDOW_COLUMNS} FROM club_bonus_windows WHERE id = $1`, [
+      window.id,
+    ]);
+    const current = toWindow(fresh.rows[0]);
+    if (!current?.deadlineAt || current.deadlineAt.getTime() !== window.deadlineAt.getTime()) {
+      await client.query("ROLLBACK");
+      return false;
+    }
+    const sendNow = new Date(Math.max(now.getTime(), Date.now()));
+    if (!withinBonusWindow(current.deadlineAt, sendNow)) {
+      await closeClaim(client, window, key, "skipped: expired");
+      return false;
+    }
+    if (
+      clubOfferId !== null &&
+      ((await ownsClub(client, clubOfferId, contact.id, window.email)) ||
+        (await paidClubOrder(client, clubOfferId, contact.id, window.email)))
+    ) {
+      await closeClaim(client, window, key, "skipped: purchased");
+      return false;
+    }
+    if (await clubBonusExclusion(client, { email: window.email, contactId: contact.id, window: current })) {
+      await closeClaim(client, window, key, "skipped: test account");
+      return false;
+    }
+    // "If necessary, skip a reminder that cannot meet spacing." The Club
+    // sequence suppresses its own email around a reminder, so this only bites
+    // when something went out off-rhythm (e.g. before the reminders were on).
+    const lastPromotion = await lastClubPromotionAt(client, contact.id);
+    if (lastPromotion && tooClose(lastPromotion, sendNow)) {
+      await closeClaim(client, window, key, "skipped: spacing");
+      return false;
+    }
+
+    const values: Record<string, string> = {
       ...buildMergeValues(
         {
           email: contact.email,
@@ -656,10 +902,19 @@ async function sendReminder(
         mergeLinks(contact.id),
         now
       ),
-      clubBonusDeadline: formatBonusDeadline(window.deadlineAt),
-      clubBonusLink: clubBonusLink(window),
-      clubBonusToken: signClubBonusToken(window.id),
+      clubBonusDeadline: formatBonusDeadline(current.deadlineAt),
+      clubBonusLink: clubBonusLink(current),
+      clubBonusToken: signClubBonusToken(current.id),
+      ...bonusDeadlineMergeValues(current.deadlineAt),
     };
+    // Hard guard: never an unresolved or blank placeholder, never a doc note.
+    const problems = unresolvedPlaceholders([email.subject, email.preview_text ?? "", email.body_md], values);
+    if (problems.length > 0) {
+      // eslint-disable-next-line no-console
+      console.error(`[clubBonus] ${key} for window ${window.id} blocked: ${problems.join("; ")}`);
+      await closeClaim(client, window, key, `blocked: ${problems.join("; ")}`.slice(0, 500));
+      return false;
+    }
     const result = await sendEmail({
       to: contact.email,
       subject: renderTokens(email.subject, values),
@@ -674,7 +929,7 @@ async function sendReminder(
       preheader: renderTokens(email.preview_text ?? "", values),
     });
     await client.query(
-      `UPDATE club_bonus_reminder_sends SET email_message_id = $4, outcome = $5
+      `UPDATE club_bonus_reminder_sends SET email_message_id = $4, outcome = $5, sent_at = now()
         WHERE window_id = $1 AND reminder = $2 AND deadline_at = $3`,
       [window.id, key, window.deadlineAt, result.messageId, result.outcome]
     );

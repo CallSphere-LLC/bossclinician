@@ -14,6 +14,7 @@ const state = vi.hoisted(() => ({
   queries: [] as Array<{ sql: string; params: unknown[] }>,
   skipRules: {} as unknown,
   previewText: "" as string,
+  bodyMd: "Hey {{first_name}}," as string,
   nextEmail: { position: 3, delay_minutes: 2880 } as { position: number; delay_minutes: number } | null,
   ownsRows: [] as Array<{ offer_id: number }>,
   formRows: [] as Array<{ form_id: number }>,
@@ -91,7 +92,7 @@ function answer(sql: string, params: unknown[]) {
           id: 1535,
           position: 2,
           subject: "You can explore private practice while keeping your job",
-          body_md: "Hey {{first_name}},",
+          body_md: state.bodyMd,
           from_name: "",
           from_email: "",
           preview_text: state.previewText,
@@ -119,10 +120,13 @@ vi.mock("../db/pool", () => ({
 vi.mock("../email/provider", () => ({
   mergeLinks: (s: string) => s,
   renderMarkdown: (s: string) => s,
-  renderTokens: (s: string) => s,
+  // The real renderer's token rule (incl. the first_name alias): the send
+  // guard (migration 222) holds an email whose placeholder is left unfilled.
+  renderTokens: (s: string, values: Record<string, string>) =>
+    s.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_m, k: string) => values[/^(firstname|first_name)$/i.test(k) ? "firstName" : k] ?? ""),
   sendEmail: state.sendEmail,
 }));
-vi.mock("../email/mergeValues", () => ({ buildMergeValues: () => ({}) }));
+vi.mock("../email/mergeValues", () => ({ buildMergeValues: () => ({ firstName: "" }) }));
 vi.mock("../jobs/queue", () => ({ PRIORITY: { normal: 5, bulk: 1 }, enqueueMany: vi.fn(async () => 0) }));
 vi.mock("./contacts", () => ({ applyTags: vi.fn(), recordActivity: vi.fn() }));
 vi.mock("./domainEvents", () => ({ publishDomainEvent: state.publishDomainEvent }));
@@ -150,6 +154,17 @@ describe("parseSkipRules", () => {
     expect(hasSkipRules(parseSkipRules({ clubBonusReminderDay: true }))).toBe(true);
     for (const raw of [{ clubBonusReminderDay: "true" }, { clubBonusReminderDay: 1 }, { clubBonusReminderDay: false }]) {
       expect(parseSkipRules(raw).clubBonusReminderDay).toBeUndefined();
+      expect(hasSkipRules(parseSkipRules(raw))).toBe(false);
+    }
+  });
+
+  it("reads which bonus reminder replaces this email (migration 221: Email 8 -> C1, Email 11 -> C2)", () => {
+    const rules = parseSkipRules({ clubBonusReminderDay: true, clubBonusReplaces: "C1" });
+    expect(rules.clubBonusReplaces).toBe("C1");
+    expect(rules.clubBonusReminderDay).toBe(true);
+    expect(hasSkipRules(parseSkipRules({ clubBonusReplaces: "C2" }))).toBe(true);
+    for (const raw of [{ clubBonusReplaces: "c1" }, { clubBonusReplaces: "C4" }, { clubBonusReplaces: 1 }, {}]) {
+      expect(parseSkipRules(raw).clubBonusReplaces).toBeUndefined();
       expect(hasSkipRules(parseSkipRules(raw))).toBe(false);
     }
   });
@@ -233,5 +248,67 @@ describe("sendDueEmail with skip rules", () => {
 
     expect(state.sendEmail).toHaveBeenCalledTimes(1);
     expect(state.queries.some((q) => /FROM access_grants|FROM form_submissions|FROM contact_tags/.test(q.sql))).toBe(false);
+  });
+});
+
+/*
+ * Migration 222 (Yvette 22 Nov 2026, item 3): "Implementation placeholders
+ * should never appear in customer emails." The send guard holds the email.
+ */
+describe("send guard: no unfilled placeholder or team note reaches a subscriber", () => {
+  const now = new Date("2026-11-16T20:00:00Z");
+
+  beforeEach(() => {
+    state.queries = [];
+    state.skipRules = {};
+    state.previewText = "";
+    state.bodyMd = "Hey {{first_name}},";
+    state.nextEmail = { position: 3, delay_minutes: 2880 };
+    state.ownsRows = [];
+    state.formRows = [];
+    state.sendEmail.mockReset();
+    state.sendEmail.mockResolvedValue({ messageId: 1, outcome: "sent", providerMessageId: "x", suppressedReason: "" });
+  });
+
+  const holdUpdate = () =>
+    state.queries.find((q) => /^UPDATE sequence_subscriptions SET next_send_at = \$2/.test(q.sql.replace(/\s+/g, " ").trim()));
+
+  it("fills both Lounge blocks from the seat state at send time", async () => {
+    state.bodyMd = "Hey {{first_name}},\n\n{{lounge_general_pricing_block}}\n\n{{lounge_vip_availability_block}}";
+    const result = await sendDueEmail(77, now);
+    expect(result.outcome).toBe("sent");
+    const sent = state.sendEmail.mock.calls[0][0] as { text: string };
+    expect(sent.text).toContain("General: The first 20 paid General members can join for $197/month or $1,997/year.");
+    expect(sent.text).toContain("VIP: The first six paid VIP members can join for $347/month or $3,497/year.");
+    expect(sent.text).not.toMatch(/\{\{|\}\}/);
+  });
+
+  it("holds an email whose placeholder nobody fills, and sends nothing", async () => {
+    state.bodyMd = "Hey {{first_name}},\n\n{{lounge_vip_block_typo}}";
+    const errors = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const result = await sendDueEmail(77, now);
+    errors.mockRestore();
+    expect(result).toMatchObject({ outcome: "skipped" });
+    expect(result.detail).toContain("unresolved placeholder: {{lounge_vip_block_typo}}");
+    expect(state.sendEmail).not.toHaveBeenCalled();
+    // Held on this email (re-checked later), not advanced past it.
+    expect(holdUpdate()).toBeTruthy();
+    expect(state.queries.some((q) => /SET position = \$2/.test(q.sql))).toBe(false);
+  });
+
+  it("holds an email carrying a team note", async () => {
+    state.bodyMd = "Hey {{first_name}},\n\nTEAM IMPLEMENTATION NOTES — DO NOT SEND";
+    const errors = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const result = await sendDueEmail(77, now);
+    errors.mockRestore();
+    expect(result.outcome).toBe("skipped");
+    expect(result.detail).toMatch(/internal note/);
+    expect(state.sendEmail).not.toHaveBeenCalled();
+  });
+
+  it("still sends an ordinary email whose first name is blank", async () => {
+    const result = await sendDueEmail(77, now);
+    expect(result.outcome).toBe("sent");
+    expect((state.sendEmail.mock.calls[0][0] as { text: string }).text).toBe("Hey ,");
   });
 });

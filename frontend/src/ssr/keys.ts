@@ -16,4 +16,6 @@ export const ssrKeys = {
   courseDetail: (slug: string) => `course:${slug}`,
   /** /lounge: founding/standard phase and VIP seats (GET /api/lounge/pricing). */
   loungePricing: () => "lounge:pricing",
+  /** /upcoming-retreats: listed, not-yet-ended retreats (GET /api/upcoming-retreats). */
+  upcomingRetreats: () => "retreats:upcoming",
 } as const;

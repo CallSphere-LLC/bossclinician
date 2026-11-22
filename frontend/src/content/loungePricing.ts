@@ -81,21 +81,38 @@ export const DEFAULT_LOUNGE_PRICING: LoungePricingStatus = {
 export const VIP_WAITLIST_FORM_SLUG = "lounge-vip-waitlist";
 
 /**
- * The line under each tier's prices, from her rules. Each tier changes on its
- * own limit.
+ * Her five pricing blocks (revised Lounge doc, TEAM IMPLEMENTATION NOTES, 22 Nov
+ * 2026), word for word. The same texts fill masterclass Emails 11-12 at send
+ * time (backend/src/services/loungeSeats.ts LOUNGE_BLOCKS); keep both copies
+ * identical. "Checkout lines must match the applicable block."
+ */
+export const LOUNGE_BLOCKS = {
+  generalFounding:
+    "General: The first 20 paid General members can join for $197/month or $1,997/year. The monthly option has a six-month minimum totaling $1,182, then continues month-to-month. Starting with the 21st paid General member, pricing becomes $247/month or $2,497/year.",
+  generalStandard:
+    "General: Join for $247/month or $2,497/year. The monthly option has a six-month minimum totaling $1,482, then continues month-to-month.",
+  vipFounding:
+    "VIP: The first six paid VIP members can join for $347/month or $3,497/year. The monthly option has a six-month minimum totaling $2,082, then continues month-to-month. Once all six seats are filled, a waitlist opens. Future available seats are $447/month or $4,497/year.",
+  vipFull:
+    "VIP is currently full. Join the VIP waitlist through The Lounge page to hear when a seat becomes available. Future seats are $447/month or $4,497/year. Seats are first come, first served; joining the waitlist does not reserve a place.",
+  vipSeatAvailable:
+    "A VIP seat is available at $447/month or $4,497/year. The monthly option has a six-month minimum totaling $2,682, then continues month-to-month. Available seats are first come, first served.",
+} as const;
+
+/** Her shared line under the blocks: monthly minimum, then month-to-month; annual covers one year. */
+export const LOUNGE_TERMS_LINE =
+  "Monthly plans have a six-month minimum commitment, then continue month-to-month unless canceled. Annual prices cover one year.";
+
+/**
+ * The line under each tier's prices: that tier's block, chosen by its own
+ * paid-seat count (each tier changes on its own limit).
  */
 export function tierMessage(tier: LoungeTierId, status: LoungeTierStatus): string {
   if (tier === "member") {
-    return status.phase === "founding"
-      ? "Founding pricing: the first 20 paid Lounge Members join at $197/month or $1,997/year. Starting with the 21st paid member, pricing increases to $247/month or $2,497/year."
-      : "The 20 founding Lounge Member places are filled. Membership is now $247/month or $2,497/year.";
+    return status.phase === "founding" ? LOUNGE_BLOCKS.generalFounding : LOUNGE_BLOCKS.generalStandard;
   }
-  if (status.phase === "founding") {
-    return "Founding pricing: the first six paid VIP members join at $347/month or $3,497/year. Once all six seats are filled, VIP opens a waitlist.";
-  }
-  return status.waitlist
-    ? "All six VIP seats are filled. Join the VIP waitlist: when a seat becomes available, the next VIP member can join at $447/month or $4,497/year."
-    : "A VIP seat is available. The next VIP member joins at $447/month or $4,497/year.";
+  if (status.phase === "founding") return LOUNGE_BLOCKS.vipFounding;
+  return status.purchasable ? LOUNGE_BLOCKS.vipSeatAvailable : LOUNGE_BLOCKS.vipFull;
 }
 
 /** Shown at checkout to a signed-in founding member renewing while still enrolled. */

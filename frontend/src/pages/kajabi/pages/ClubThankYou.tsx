@@ -85,7 +85,7 @@ export default function ClubThankYou() {
         <li className="resource-item">
           <span className="bonus-label">Training Registration Bonus</span>
           <h3>The Ramp-Up Rate Formula</h3>
-          <p>Use your numbers to explore pricing that supports your practice. Included with your enrollment when you joined within 14 days of your first registration for the free training.</p>
+          <p>Use your numbers to explore pricing that supports your practice. Included with your enrollment when you joined within 14 days of your first registration for the free training. Buyers who registered and purchased with different email addresses can contact <a href="mailto:support@bossclinician.com">support@bossclinician.com</a> for eligibility verification.</p>
         </li>
       </ul>
     </div>

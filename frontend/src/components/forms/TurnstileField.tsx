@@ -148,8 +148,8 @@ export function TurnstileField({ siteKey, onToken, ref }: TurnstileFieldProps) {
       {loadFailed && (
         <p className="text-center text-sm leading-relaxed text-white/70 sm:text-left">
           The security check couldn't load. Please refresh the page, or email{" "}
-          <a className="underline underline-offset-2" href="mailto:bossclinician@gmail.com">
-            bossclinician@gmail.com
+          <a className="underline underline-offset-2" href="mailto:support@bossclinician.com">
+            support@bossclinician.com
           </a>{" "}
           directly.
         </p>

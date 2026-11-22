@@ -237,6 +237,11 @@ export function registerEmailJobs(): void {
   registerHandler("sequence.sendEmail", (payload) => sequenceSendEmail(payload));
   // Sheet row 249 (migration 220): its job_schedules row ships disabled.
   registerHandler("retreatAlumni.enrol", () => enrolRetreatAlumni());
+  // Migration 222: tells the Lounge VIP waitlist when a seat opens. Sends
+  // nothing while the 'lounge-vip-seat-open' sequence is not 'active'.
+  registerHandler("loungeVip.waitlistNotify", async () =>
+    (await import("../services/loungeWaitlist")).runLoungeVipWaitlistTick()
+  );
   registerHandler("broadcast.tick", () => tickBroadcasts());
   // Its own handler, because it never finishes: an "upon registration"
   // campaign keeps sending for as long as people keep registering, so it

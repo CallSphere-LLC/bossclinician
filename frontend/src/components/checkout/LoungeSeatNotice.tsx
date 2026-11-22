@@ -2,6 +2,7 @@ import { GlassCard } from "@/components/luxe/GlassCard";
 import { KajabiForm } from "@/pages/kajabi/pages/shared";
 import {
   CONTINUATION_MESSAGE,
+  LOUNGE_TERMS_LINE,
   VIP_WAITLIST_FORM_SLUG,
   tierIdFor,
   tierMessage,
@@ -16,7 +17,8 @@ import {
 export function LoungeSeatNotice({ slug, seatPricing }: { slug: string; seatPricing: LoungeSeatPricing }) {
   const tier = tierIdFor(slug);
   if (!tier) return null;
-  const text = seatPricing.continuation ? CONTINUATION_MESSAGE : tierMessage(tier, seatPricing);
+  // Her checkout line: the tier's block, then the shared terms sentence (migration 222).
+  const text = seatPricing.continuation ? CONTINUATION_MESSAGE : `${tierMessage(tier, seatPricing)} ${LOUNGE_TERMS_LINE}`;
   return (
     <GlassCard accent={tier === "vip" ? "gold" : "plum"} interactive={false} className="mx-auto max-w-5xl p-4 sm:p-5">
       <p role="note" data-lounge-phase={seatPricing.viewerPhase} className="text-pretty text-sm leading-relaxed text-white">

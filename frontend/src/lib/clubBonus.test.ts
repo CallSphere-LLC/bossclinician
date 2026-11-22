@@ -51,6 +51,13 @@ describe("Club bonus copy", () => {
     );
     expect(JSON.stringify(clubCheckout)).not.toMatch(/72 hours|Included when you enroll/);
   });
+
+  it("sends a buyer whose purchase email differs to support (22 Nov round 2, item 2)", () => {
+    const sentence =
+      "Buyers who registered and purchased with different email addresses can contact support@bossclinician.com for eligibility verification.";
+    expect(clubCheckout.bonuses.find((b) => b.label === RAMP_UP_BONUS_LABEL)?.body).toContain(sentence);
+    expect(club.faq.items.some((item) => item.a === sentence)).toBe(true);
+  });
 });
 
 describe("personalBonusLine", () => {

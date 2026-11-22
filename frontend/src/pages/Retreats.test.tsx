@@ -101,10 +101,8 @@ describe("retreat page, 22 Nov 2026 owner answers (item 4: rooms and travel)", (
   it("answers the travel question with the owner's facts", () => {
     for (const text of [
       "Where and when is the retreat, and how do I get there?",
-      "The retreat is in Ubud, Bali, June 15–20, 2027. Arrival is June 15 and checkout is June 20.",
+      "The retreat is in Ubud, Bali.",
       "Ngurah Rai International Airport, Denpasar (DPS)",
-      "Airport transportation is provided during June 15–20 through designated group transfers.",
-      "Exact pickup windows will be coordinated with guests.",
       "Airfare and travel insurance are not included.",
     ]) expect(html).toContain(text);
   });
@@ -117,5 +115,53 @@ describe("retreat page, 22 Nov 2026 owner answers (item 4: rooms and travel)", (
 
   it("sends no retreat button to the Boardroom application", () => {
     expect(html).not.toMatch(/href="\/apply/);
+  });
+});
+
+/** React escapes apostrophes in text; compare against the page's own encoding. */
+const esc = (text: string) => text.replace(/'/g, "&#x27;").replace(/"/g, "&quot;");
+
+describe("retreat page, second 22 Nov 2026 owner reply (item 4: FAQ wording, item 7: insurance)", () => {
+  const { html, head } = render();
+
+  it("uses her exact dietary, activity, mobility and transportation answers", () => {
+    for (const text of [
+      "Please share dietary preferences, restrictions, and allergies in your pre-retreat questionnaire. We’ll review requests with the villa team and confirm what can be accommodated. For severe allergies, contact retreats@bossclinician.com before booking.",
+      "You’re welcome to opt out of an activity and take personal time. Please let us know so we can coordinate the group’s plans. Contact us about any activity-specific concerns before travel.",
+      "If you have mobility or accessibility needs, please contact retreats@bossclinician.com before booking. We’ll confirm relevant details about the villa, transportation, and planned activities so you can assess whether the retreat meets your needs.",
+      "The retreat runs June 15–20, 2027, with checkout June 20. Airport transportation is provided through designated group transfers during these dates. Final shuttle windows will be coordinated with guests and shared before travel.",
+    ]) expect(html).toContain(esc(text));
+  });
+
+  it("drops the old chef promise and never presents transport as on demand", () => {
+    for (const text of [
+      "Our private villa chef can accommodate most dietary needs",
+      "Exact pickup windows",
+      "on demand",
+      "on-demand",
+      "alternative treatment",
+      "replacement",
+    ]) expect(html).not.toContain(text);
+  });
+
+  it("says travel insurance is strongly recommended, not required", () => {
+    expect(html).toContain("Travel insurance is strongly recommended, not required.");
+    expect(html).not.toMatch(/insurance (is )?(required|mandatory)/i);
+  });
+
+  it("keeps June 15–20, 2027 with checkout June 20 and declares /retreats canonical", () => {
+    expect(html).toContain("June 15–20, 2027");
+    expect(head[0]?.canonicalPath).toBe("/retreats");
+  });
+
+  it("puts the activity and mobility questions straight after the dietary one", () => {
+    const diet = html.indexOf("I have dietary restrictions. Can those be accommodated?");
+    const activity = html.indexOf("Do I have to take part in every activity?");
+    const mobility = html.indexOf("What if I have mobility or accessibility needs?");
+    const flight = html.indexOf("When should I book my flight?");
+    expect(diet).toBeGreaterThan(-1);
+    expect(activity).toBeGreaterThan(diet);
+    expect(mobility).toBeGreaterThan(activity);
+    expect(flight).toBeGreaterThan(mobility);
   });
 });

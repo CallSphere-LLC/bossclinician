@@ -171,7 +171,7 @@ export const HIRING_QUIZ_RESULTS: Record<HiringResultKey, HiringQuizResult> = {
       "Build and document your core systems — intake, scheduling, billing, clinical onboarding",
       "Create a simple referral system that generates consistent new inquiries",
       "Get clear on your financials — know your monthly revenue, expenses, and profit margin",
-      "Start with the free Practice Reset Audit to identify exactly what needs restructuring first",
+      "Start with the free Practice Freedom Audit to identify exactly what needs restructuring first",
     ],
     ctaCopy: "The Boss Clinician Lounge is your next step — a monthly membership for established clinicians ready to strengthen their structure, stabilize their income, and build toward sustainable growth, including a future team.",
     ctaBtn: "Join the Boss Clinician Lounge",

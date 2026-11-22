@@ -40,12 +40,18 @@ export interface AlumniGuest {
 
 /**
  * Guests of a retreat: an active, unexpired grant to the product the retreat's
- * room offers sell (retreats.booking_product_id; Bali: product 70 — falling
- * back to the dashboard product when a retreat has no separate booking product),
- * whose order (when there is one) is not refunded. Members are matched to their
+ * room offers sell (retreats.booking_product_id; Bali: product 70) OR to the
+ * retreat's dashboard product (retreats.product_id; Bali: product 80), whose
+ * order (when there is one) is not refunded. Any grant source counts: a
+ * purchase, an import, or an admin's manual grant (Yvette, round 2 item 6:
+ * "Existing customers granted dashboard access should receive this sequence
+ * after their retreat ends — not immediately when their accounts are added").
+ * Being a guest never sends anything by itself: only enrolRetreatAlumni puts a
+ * guest into the sequence, and only from the retreat's end date. Members are matched to their
  * contact by link or by address, as the rest of the engine does. One row per
- * contact; the most recent grant supplies the purchase stamp, so a refund of
- * that purchase ends the run (migration 197 logic).
+ * contact; the booking grant with an order (else the most recent grant)
+ * supplies the purchase stamp, so a refund of that purchase ends the run
+ * (migration 197 logic). A refunded booking is not revived by a dashboard grant.
  */
 export async function retreatGuests(retreatId: number): Promise<AlumniGuest[]> {
   const res = await pool.query<{
@@ -60,7 +66,7 @@ export async function retreatGuests(retreatId: number): Promise<AlumniGuest[]> {
             ct.id AS contact_id, ct.email::text AS email, ct.first_name,
             ct.email_marketing_status, g.offer_id, o.id AS order_id
        FROM retreats r
-       JOIN access_grants g ON g.product_id = COALESCE(r.booking_product_id, r.product_id)
+       JOIN access_grants g ON g.product_id IN (r.booking_product_id, r.product_id)
        JOIN members m ON m.id = g.member_id
        JOIN LATERAL (
          SELECT c.id, c.email, c.first_name, c.email_marketing_status
@@ -77,7 +83,36 @@ export async function retreatGuests(retreatId: number): Promise<AlumniGuest[]> {
               o.status = 'refunded'
               OR (o.refunded_cents > 0 AND o.refunded_cents >= GREATEST(o.total_cents, o.amount_cents)),
               false)
-      ORDER BY ct.id, g.granted_at DESC NULLS LAST, g.id DESC`,
+        -- A refunded booking is not undone by a dashboard grant: a guest whose
+        -- booking order was refunded is out unless she holds another active,
+        -- unrefunded booking grant (she re-booked).
+        AND NOT (
+              EXISTS (
+                SELECT 1 FROM access_grants rg
+                  JOIN members rm ON rm.id = rg.member_id
+                  JOIN orders ro ON ro.id = rg.order_id
+                 WHERE rg.product_id = r.booking_product_id
+                   AND (rm.contact_id = ct.id OR lower(rm.email::text) = lower(ct.email::text))
+                   AND (ro.status = 'refunded'
+                        OR (ro.refunded_cents > 0 AND ro.refunded_cents >= GREATEST(ro.total_cents, ro.amount_cents))))
+              AND NOT EXISTS (
+                SELECT 1 FROM access_grants bg
+                  JOIN members bm ON bm.id = bg.member_id
+                  LEFT JOIN orders bo ON bo.id = bg.order_id
+                 WHERE bg.product_id = r.booking_product_id
+                   AND bg.status = 'active'
+                   AND (bg.expires_at IS NULL OR bg.expires_at > now())
+                   AND (bm.contact_id = ct.id OR lower(bm.email::text) = lower(ct.email::text))
+                   AND NOT COALESCE(
+                         bo.status = 'refunded'
+                         OR (bo.refunded_cents > 0 AND bo.refunded_cents >= GREATEST(bo.total_cents, bo.amount_cents)),
+                         false)))
+      -- The purchase stamp comes from the booking grant with an order when
+      -- there is one (so a refund of it still ends the run), not from a newer
+      -- manual dashboard grant that has no order.
+      ORDER BY ct.id,
+               COALESCE(g.product_id = r.booking_product_id AND g.order_id IS NOT NULL, false) DESC,
+               g.granted_at DESC NULLS LAST, g.id DESC`,
     [retreatId]
   );
   return res.rows.map((r) => ({
@@ -182,6 +217,8 @@ export interface AlumniPreview {
   settings: { enabled: boolean; nextUrl: string; featuredRetreatId: number | null };
   emails: Array<{
     position: number;
+    /** sequence_emails.enabled: a switched-off email is shown but never sent. */
+    enabled: boolean;
     offsetDays: number | null;
     sendAt: string;
     sendAtLocal: string;
@@ -216,8 +253,11 @@ const SKIP_LABELS: Record<string, string> = {
   bookedFeatured: "guest already booked the featured retreat",
 };
 
+/** The sample reader's first name in owner previews (never a real guest's name). */
+export const ALUMNI_PREVIEW_SAMPLE_NAME = "Alex";
+
 /** Everything the owner needs to approve: dates, rendered emails, who would get them, what is missing. */
-export async function alumniPreview(slug: string, sampleFirstName = "Jasmine"): Promise<AlumniPreview | null> {
+export async function alumniPreview(slug: string, sampleFirstName = ALUMNI_PREVIEW_SAMPLE_NAME): Promise<AlumniPreview | null> {
   const r = await pool.query<{
     id: number;
     slug: string;
@@ -270,7 +310,7 @@ export async function alumniPreview(slug: string, sampleFirstName = "Jasmine"): 
     ...retreatMergeValues({ siteUrl: env.publicSiteUrl, slug: row.slug, title: row.title, nextUrl: settings.nextUrl }),
   };
   if (!values.retreatNextUrl) {
-    gaps.push("Email 4's \"Explore what's next / join first access\" link is not set: Email 4 is held, and skipped if still unset 3 days after its date.");
+    gaps.push("Email 4's \"Explore upcoming retreats\" link override is not an https link: Email 4 is held, and skipped if still unusable 3 days after its date. Clear it to use the permanent /upcoming-retreats page.");
   }
   if (!settings.featuredRetreatId) {
     gaps.push("No featured next retreat is set, so Email 4 cannot yet leave out guests who already booked it.");
@@ -285,9 +325,10 @@ export async function alumniPreview(slug: string, sampleFirstName = "Jasmine"): 
         body_md: string;
         topic: string | null;
         skip_rules: unknown;
+        enabled: boolean;
       }>(
-        `SELECT position, anchor_offset_days, subject, preview_text, body_md, topic, skip_rules
-           FROM sequence_emails WHERE sequence_id = $1 AND enabled ORDER BY position`,
+        `SELECT position, anchor_offset_days, subject, preview_text, body_md, topic, skip_rules, enabled
+           FROM sequence_emails WHERE sequence_id = $1 ORDER BY position`,
         [sequence.id]
       )
     : { rows: [] };
@@ -301,6 +342,7 @@ export async function alumniPreview(slug: string, sampleFirstName = "Jasmine"): 
     const body = renderTokens(e.body_md, values);
     return {
       position: e.position,
+      enabled: e.enabled,
       offsetDays: e.anchor_offset_days,
       sendAt: sendAt ? sendAt.toISOString() : "",
       sendAtLocal: sendAt ? localLabel(sendAt, timezone) : "",
@@ -314,6 +356,12 @@ export async function alumniPreview(slug: string, sampleFirstName = "Jasmine"): 
       html: preheaderHtml(renderTokens(e.preview_text ?? "", values)) + renderMarkdown(body),
     };
   });
+
+  for (const e of emails) {
+    if (!e.enabled) {
+      gaps.push(`Email ${e.position} is switched off: it is not sent, and a guest's run ends after the last switched-on email.`);
+    }
+  }
 
   const enrolledRes = await pool.query<{ contact_id: number }>(
     `SELECT contact_id FROM retreat_alumni_enrolments WHERE retreat_id = $1`,

@@ -400,9 +400,8 @@ function funnelVisitors(funnel: FunnelRow, steps?: FunnelStep[] | null): number 
 /**
  * Where a step's page lives on the public site.
  *
- * A Kajabi funnel's pages kept their Kajabi addresses (the sales page is
- * /profitable-private-practice-leap-accelerator), carried on the step as its
- * path; a funnel built here serves every step from /funnel/<slug>/<step>, the
+ * A Kajabi funnel's pages kept their Kajabi addresses, carried on the step as
+ * its path; a funnel built here serves every step from /funnel/<slug>/<step>, the
  * same address `FunnelPage` builds.
  */
 function stepPagePath(funnel: FunnelRow, step: FunnelStep, index: number): string {

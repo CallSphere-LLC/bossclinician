@@ -13,28 +13,6 @@ import type {
  * stop the owner pressing a button that would be refused.
  */
 
-export const TASK_LABELS: Record<TaskKey, string> = {
-  agreement: "Agreement",
-  guest_profile: "Guest Profile",
-  flight_preferences: "Flight Preferences",
-  travel_insurance: "Travel Insurance",
-  flight_details: "Flight Details",
-  passport: "Passport & Preparation",
-  payments: "Payments",
-  group_call: "Group Call",
-};
-
-export const TASK_ORDER: TaskKey[] = [
-  "agreement",
-  "guest_profile",
-  "flight_preferences",
-  "travel_insurance",
-  "flight_details",
-  "passport",
-  "payments",
-  "group_call",
-];
-
 export const STATUS_TONE: Record<TaskStatus, "neutral" | "blue" | "gold" | "green" | "red"> = {
   not_started: "neutral",
   in_progress: "blue",
@@ -43,9 +21,16 @@ export const STATUS_TONE: Record<TaskStatus, "neutral" | "blue" | "gold" | "gree
   needs_attention: "red",
 };
 
-/** The agreement follows the signed contract record only — never a manual review. */
-export function isReviewable(task: TaskKey): boolean {
-  return task !== "agreement";
+/**
+ * Fixed checklist items the organizer may verify by hand. The agreement follows
+ * its signed contract record only; questionnaires have their own review.
+ */
+export function isReviewable(task: string): task is TaskKey {
+  return task === "passport" || task === "payments" || task === "group_call";
+}
+
+export function roomTypeLabel(room: "private" | "shared" | "unknown" | null): string {
+  return room === "private" ? "Private room" : room === "shared" ? "Shared room" : "Not set";
 }
 
 export const CARD_STATUS_LABEL: Record<OfferCardStatus, string> = {

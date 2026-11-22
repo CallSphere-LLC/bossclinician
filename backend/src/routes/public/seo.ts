@@ -86,6 +86,10 @@ const STATIC_ROUTES: SitemapEntry[] = [
   { loc: "/resources", changefreq: "weekly", priority: "0.7" },
   { loc: "/resource-hub", changefreq: "weekly", priority: "0.7" },
   { loc: "/retreats", changefreq: "monthly", priority: "0.7" },
+  // Migration 223. /retreats/bali-2027 is left out: it is the same page as
+  // /retreats, whose canonical it declares.
+  { loc: "/upcoming-retreats", changefreq: "weekly", priority: "0.6" },
+  { loc: "/retreat-interest", changefreq: "yearly", priority: "0.4" },
   { loc: "/blog", changefreq: "daily", priority: "0.8" },
   { loc: "/contact", changefreq: "yearly", priority: "0.5" },
   { loc: "/practice-quiz", changefreq: "monthly", priority: "0.7" },

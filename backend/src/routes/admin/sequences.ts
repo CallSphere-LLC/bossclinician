@@ -561,13 +561,21 @@ adminSequencesRouter.post(
     // Migration 215: the Club bonus tokens, from the test address's own saved
     // window when it has one, otherwise a sample date, so a test never shows a
     // blank where the deadline goes.
-    if (/\{\{\s*clubBonus/.test(`${row.subject}${row.body_md}`)) {
+    if (/\{\{\s*(clubBonus|bonus_deadline_)/.test(`${row.subject}${row.body_md}`)) {
       const { clubBonusMergeValues } = await import("../../services/clubBonus");
       const own = await clubBonusMergeValues(pool, email);
       Object.assign(values, own, own.clubBonusDeadline ? {} : { clubBonusDeadline: "December 6 (sample)" });
+      // Migration 221: C1-C3's deadline fields, a sample when the test address has no date.
+      if (!own.bonus_deadline_date) {
+        Object.assign(values, {
+          bonus_deadline_date: "December 6, 2026 (sample)",
+          bonus_deadline_time: "11:59 p.m.",
+          bonus_deadline_timezone: "Pacific Time",
+        });
+      }
     }
-    // Migration 214: the Lounge price line, as it would be sent today.
-    if (/\{\{\s*lounge\./.test(`${row.subject}${row.body_md}`)) {
+    // Migrations 214/222: the Lounge price line and blocks, as they would be sent today.
+    if (/\{\{\s*lounge[._]/.test(`${row.subject}${row.body_md}`)) {
       const { loungeMergeValues } = await import("../../services/loungeSeats");
       Object.assign(values, await loungeMergeValues(pool));
     }

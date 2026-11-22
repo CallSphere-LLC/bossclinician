@@ -44,6 +44,7 @@ interface SsrBundle {
     blogPost(slug: string): string;
     courseDetail(slug: string): string;
     loungePricing(): string;
+    upcomingRetreats(): string;
   };
 }
 

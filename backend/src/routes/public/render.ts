@@ -11,6 +11,7 @@ import {
   loadTestimonials,
 } from "../../ssr/loaders";
 import { loungePricingStatus } from "../../services/loungeSeats";
+import { listUpcomingRetreats } from "./retreatsPublic";
 
 /**
  * HTML for the public marketing pages.
@@ -74,6 +75,9 @@ const ROUTES: { path: string; load?: Loader }[] = [
   },
   { path: "/contact" },
   { path: "/retreats" },
+  // Migration 223. Both names are in nginx/site.conf's no-children regex.
+  { path: "/upcoming-retreats", load: async (_req, keys) => ({ [keys.upcomingRetreats()]: await listUpcomingRetreats() }) },
+  { path: "/retreat-interest" },
   { path: "/store" },
   { path: "/club" },
   { path: "/lounge", load: async (_req, keys) => ({ [keys.loungePricing()]: await loungePricingStatus() }) },

@@ -21,6 +21,7 @@ import {
   clubBonusLink,
   decideOrderBonus,
   ensureWindow,
+  isClubBonusTestAccount,
   resetClubBonusCache,
   signClubBonusToken,
   usesClubBonusTokens,
@@ -32,13 +33,19 @@ import {
 const GO_LIVE = new Date("2026-11-22T16:00:00Z");
 
 /** A small in-memory stand-in for the four queries ensureWindow makes. */
-function fakeDb(submissions: Array<{ id: number; email: string; created_at: Date }>) {
+function fakeDb(
+  submissions: Array<{ id: number; email: string; created_at: Date }>,
+  extraSettings: Record<string, unknown> = {}
+) {
   const windows: Array<Record<string, unknown>> = [];
   let nextId = 1;
   const query = vi.fn(async (sql: string, params: unknown[] = []) => {
     const text = sql.replace(/\s+/g, " ").trim();
     if (text.startsWith("SELECT value FROM settings")) {
-      return { rows: [{ value: { goLiveAt: GO_LIVE.toISOString(), registrationFormIds: [532] } }], rowCount: 1 };
+      return {
+        rows: [{ value: { goLiveAt: GO_LIVE.toISOString(), registrationFormIds: [532], ...extraSettings } }],
+        rowCount: 1,
+      };
     }
     if (text.includes("FROM club_bonus_windows WHERE email = $1")) {
       const row = windows.find((w) => w.email === params[0]);
@@ -97,6 +104,20 @@ describe("ensureWindow", () => {
     expect(windowState(window, new Date("2026-12-25T00:00:00Z"))).toBe("pending");
   });
 
+  it("saves a listed test address without a date, as a test account (migration 221)", async () => {
+    const { db } = fakeDb(
+      [{ id: 4, email: "tester@example.com", created_at: new Date("2026-11-25T18:00:00Z") }],
+      { excludedEmails: ["Tester@Example.com"] }
+    );
+    const window = await ensureWindow(db, "tester@example.com");
+    expect(window?.rule).toBe("test_excluded");
+    expect(window?.deadlineAt).toBeNull();
+    expect(decideOrderBonus(window, new Date("2026-11-26T18:00:00Z"), true)).toMatchObject({
+      included: false,
+      reason: "test_account",
+    });
+  });
+
   it("returns null for an address that never registered", async () => {
     const { db } = fakeDb([]);
     expect(await ensureWindow(db, "nobody@example.com")).toBeNull();
@@ -138,6 +159,30 @@ describe("decideOrderBonus", () => {
   });
 });
 
+describe("test accounts (Yvette, 22 Nov round 2, item 1)", () => {
+  const listed = ["yvette@bossclinician.com", "yhowardlcsw@gmail.com", "sagar+pp1107@callsphere.ai", "murosn@nv.ccsd.net"];
+
+  it("never includes the bonus for a test account, even inside an open window or as legacy", () => {
+    expect(decideOrderBonus(OPEN, new Date("2026-12-01T10:00:00-08:00"), true, true)).toEqual({
+      included: false,
+      reason: "test_account",
+      windowId: 11,
+    });
+    const legacyTest = { ...OPEN, deadlineAt: null, rule: "test_excluded" };
+    expect(decideOrderBonus(legacyTest, new Date("2026-11-08T06:08:19Z"), true).included).toBe(false);
+  });
+
+  it("recognises the rule, the list (any case) and the internal flag", () => {
+    expect(isClubBonusTestAccount({ email: "YHowardLCSW@gmail.com" }, listed)).toBe(true);
+    expect(isClubBonusTestAccount({ email: "reader@example.com", rule: "test_excluded" }, [])).toBe(true);
+    expect(isClubBonusTestAccount({ email: "reader@example.com", isInternal: true }, [])).toBe(true);
+    expect(isClubBonusTestAccount({ email: "reader@example.com", rule: "first_registration", isInternal: false }, listed)).toBe(
+      false
+    );
+    expect(isClubBonusTestAccount({ email: "" }, listed)).toBe(false);
+  });
+});
+
 describe("the signed /club link", () => {
   it("round-trips the window id and nothing else", () => {
     const token = signClubBonusToken(11);
@@ -166,5 +211,6 @@ describe("usesClubBonusTokens", () => {
     expect(usesClubBonusTokens("Join The Club by {{clubBonusDeadline}} at 11:59 p.m.")).toBe(true);
     expect(usesClubBonusTokens('<a href="{{ clubBonusLink }}">')).toBe(true);
     expect(usesClubBonusTokens("Hey {{first_name}}", null, undefined)).toBe(false);
+    expect(usesClubBonusTokens("Join by {{bonus_deadline_date}} at {{ bonus_deadline_time }}")).toBe(true);
   });
 });

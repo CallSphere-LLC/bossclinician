@@ -38,7 +38,7 @@ export default function RetreatsAdmin() {
       )}
       {retreats !== null && retreats.length === 0 && (
         <Card>
-          <EmptyState icon={<Plane />} title="No retreats yet" description="Retreat instances are created by a migration for now." />
+          <EmptyState icon={<Plane />} title="No retreats yet" description="Open a retreat and use Duplicate retreat to start a new one." />
         </Card>
       )}
       {retreats !== null && retreats.length > 0 && (

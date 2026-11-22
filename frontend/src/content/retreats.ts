@@ -6,7 +6,9 @@
  * Yvette built it → what's included → why eleven guests → the villa gallery →
  * retreat moments → the pattern → the woman who returns → imagine → reserve →
  * your host → why Bali → what is and is not included → the burnout quiz → the
- * fourteen questions (fifteen since the 22 Nov 2026 travel FAQ).
+ * fourteen questions (seventeen since the 22 Nov 2026 travel FAQ and the second
+ * 22 Nov owner reply, item 4: dietary, activity, mobility and transport answers
+ * in her exact wording; transport is designated group transfers, never on demand).
  *
  * 21 November 2026 website handoff (sheet row 245, section 10): hero,
  * recognition, experience, audience/objections, host story, reservation
@@ -146,7 +148,7 @@ const INCLUSIONS: readonly RetreatInclusion[] = [
   {
     number: "06",
     title: "Airport Transfers & Pre-Trip Call",
-    body: "Airport transportation is provided during June 15–20 through designated group transfers. Exact pickup windows will be coordinated with guests. Plus a group call with Yvette before you land so you arrive already feeling held.",
+    body: "Airport transportation is provided through designated group transfers during June 15–20, 2027. Final shuttle windows will be coordinated with guests and shared before travel. Plus a group call with Yvette before you land so you arrive already feeling held.",
   },
 ];
 
@@ -168,7 +170,10 @@ const COVERAGE: readonly RetreatCoverage[] = [
 
 /**
  * The source's fourteen questions, in its order and wording, plus the 22 Nov
- * 2026 travel question (owner email item 4) after the flight question. The refund policy
+ * 2026 travel question (owner email item 4) after the flight question, and the
+ * activity-participation and mobility questions after the dietary one (second 22 Nov
+ * reply, item 4, her wording verbatim: no replacement activity or treatment is
+ * promised). The refund policy
  * is a financial term: it is the published wording exactly, and the Retreat
  * Terms & Agreement it names has no page of its own here yet, so the link goes
  * to /terms, where the redirect map also sends /retreatagreement.
@@ -192,7 +197,7 @@ const FAQS: readonly RetreatFaq[] = [
   },
   {
     q: "What is not included in my package?",
-    a: "Airfare and travel insurance are not included. Flight costs and routes vary too much from woman to woman for us to build one into the package, so booking your own means you get the best price and schedule for where you are flying from. Travel insurance is strongly recommended. You are welcome to choose any provider that meets your needs, we suggest Trawick International for convenience.",
+    a: "Airfare and travel insurance are not included. Flight costs and routes vary too much from woman to woman for us to build one into the package, so booking your own means you get the best price and schedule for where you are flying from. Travel insurance is strongly recommended, not required. You are welcome to choose any provider that meets your needs, we suggest Trawick International for convenience.",
   },
   {
     q: "What is my room like?",
@@ -221,15 +226,23 @@ const FAQS: readonly RetreatFaq[] = [
   },
   {
     q: "I have dietary restrictions. Can those be accommodated?",
-    a: "Yes. Our private villa chef can accommodate most dietary needs and restrictions. You will receive a form before the retreat to share your specific requirements. If you have severe allergies, please reach out directly so we can discuss the details ahead of time.",
+    a: "Please share dietary preferences, restrictions, and allergies in your pre-retreat questionnaire. We’ll review requests with the villa team and confirm what can be accommodated. For severe allergies, contact retreats@bossclinician.com before booking.",
+  },
+  {
+    q: "Do I have to take part in every activity?",
+    a: "You’re welcome to opt out of an activity and take personal time. Please let us know so we can coordinate the group’s plans. Contact us about any activity-specific concerns before travel.",
+  },
+  {
+    q: "What if I have mobility or accessibility needs?",
+    a: "If you have mobility or accessibility needs, please contact retreats@bossclinician.com before booking. We’ll confirm relevant details about the villa, transportation, and planned activities so you can assess whether the retreat meets your needs.",
   },
   {
     q: "When should I book my flight?",
-    a: "Airfare pricing shifts constantly, so we leave the timing of your purchase entirely up to you. Just know that your flight details are needed when you complete your retreat forms, so plan to have your flight booked before filling those out.",
+    a: "Airfare pricing shifts constantly, so we leave the timing of your purchase entirely up to you. You can complete your retreat profile before you book, then return to your dashboard to add your airline, flight number, and arrival and departure times once your flight is booked.",
   },
   {
     q: "Where and when is the retreat, and how do I get there?",
-    a: "The retreat is in Ubud, Bali, June 15–20, 2027. Arrival is June 15 and checkout is June 20. Fly into Ngurah Rai International Airport, Denpasar (DPS). Airport transportation is provided during June 15–20 through designated group transfers. Exact pickup windows will be coordinated with guests. Airfare and travel insurance are not included.",
+    a: "The retreat is in Ubud, Bali. Fly into Ngurah Rai International Airport, Denpasar (DPS). The retreat runs June 15–20, 2027, with checkout June 20. Airport transportation is provided through designated group transfers during these dates. Final shuttle windows will be coordinated with guests and shared before travel. Airfare and travel insurance are not included.",
   },
   {
     q: "How do I secure my spot?",
@@ -499,7 +512,7 @@ export const retreat = {
     ctaNote: "Choose pay in full or a $500 deposit with monthly payments. New payment plans close February 1, 2027; all balances are due by June 8, 2027.",
     scarcity: `11 GUESTS + YVETTE${DOT}12 PEOPLE TOTAL`,
     insurance:
-      "Travel insurance is strongly recommended. You are welcome to choose any provider that meets your needs. For convenience, you can view options from Trawick International below.",
+      "Travel insurance is strongly recommended, not required. You are welcome to choose any provider that meets your needs. For convenience, you can view options from Trawick International below.",
     insuranceCta: "VIEW TRAVEL INSURANCE OPTIONS",
   },
 

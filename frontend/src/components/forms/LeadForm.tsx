@@ -134,7 +134,7 @@ export function LeadForm({
       const failure = err as { status?: number; message?: string };
       setError(failure.status === 400 && failure.message
         ? failure.message
-        : "Something went wrong submitting your form. Please email bossclinician@gmail.com directly.");
+        : "Something went wrong submitting your form. Please email support@bossclinician.com directly.");
     } finally {
       // Turnstile tokens are single-use; the next attempt needs a fresh one.
       if (captchaActive) turnstile.current?.reset();
@@ -280,7 +280,7 @@ export function LeadForm({
               <circle cx="12" cy="12" r="9.25" />
               <path d="M12 7.5v5.25M12 16.25v.01" />
             </svg>
-            {/* min-w-0 lets a long address (bossclinician@gmail.com) wrap
+            {/* min-w-0 lets a long address (support@bossclinician.com) wrap
                 instead of forcing the card wider than a 360px viewport. */}
             <span className="min-w-0 break-words">{error}</span>
           </motion.p>

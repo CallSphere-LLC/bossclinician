@@ -5,6 +5,7 @@ import { PRIORITY, enqueueMany } from "../jobs/queue";
 import { zonedWallClockToUtc } from "./drip";
 import { applyTags, recordActivity } from "./contacts";
 import { env } from "../config/env";
+import { unsendableReason } from "./emailSendGuard";
 import {
   ANCHOR_HOLD_RECHECK_MINUTES,
   anchoredSendAt,
@@ -289,6 +290,12 @@ export interface EmailSkipRules {
    */
   clubBonusReminderDay?: true;
   /**
+   * Migration 221: this email is REPLACED by that Club bonus reminder for a
+   * subscriber who gets it (Email 8 → C1, Email 11 → C2), while the reminders
+   * are on. Absent unless set. See clubBonusReminderDaySkip.
+   */
+  clubBonusReplaces?: "C1" | "C2" | "C3";
+  /**
    * Migration 214: Lounge tiers ('general' | 'vip') whose founding places,
    * once all taken, skip this email for everyone (masterclass email 12).
    * Absent unless set.
@@ -318,6 +325,9 @@ export function parseSkipRules(raw: unknown): EmailSkipRules {
     submittedFormIds: positiveIds(source.submittedFormIds),
     hasTagIds: positiveIds(source.hasTagIds),
     ...(source.clubBonusReminderDay === true ? { clubBonusReminderDay: true as const } : {}),
+    ...(["C1", "C2", "C3"].includes(source.clubBonusReplaces as string)
+      ? { clubBonusReplaces: source.clubBonusReplaces as "C1" | "C2" | "C3" }
+      : {}),
     ...(loungeTiers(source.loungeFoundingFullTiers).length > 0
       ? { loungeFoundingFullTiers: loungeTiers(source.loungeFoundingFullTiers) }
       : {}),
@@ -328,6 +338,7 @@ export function hasSkipRules(rules: EmailSkipRules): boolean {
   return (
     rules.ownsOfferIds.length + rules.submittedFormIds.length + rules.hasTagIds.length > 0 ||
     rules.clubBonusReminderDay === true ||
+    rules.clubBonusReplaces !== undefined ||
     (rules.loungeFoundingFullTiers?.length ?? 0) > 0
   );
 }
@@ -375,10 +386,10 @@ async function skipReason(
     );
     if (tagged.rows[0]) return `has tag ${tagged.rows[0].tag_id}`;
   }
-  if (rules.clubBonusReminderDay) {
+  if (rules.clubBonusReminderDay || rules.clubBonusReplaces) {
     // Lazy, as publishSequenceEvent's import is: only Club emails pay for it.
     const { clubBonusReminderDaySkipSafe } = await import("./clubBonus");
-    const reason = await clubBonusReminderDaySkipSafe(client, contactId, email);
+    const reason = await clubBonusReminderDaySkipSafe(client, contactId, email, rules.clubBonusReplaces);
     if (reason) return reason;
   }
   if (rules.loungeFoundingFullTiers?.length) {
@@ -1542,11 +1553,13 @@ export async function sendDueEmail(
       const { clubBonusMergeValuesSafe } = await import("./clubBonus");
       Object.assign(values, await clubBonusMergeValuesSafe(client, contact.email));
     }
-    // Migration 214: {{lounge.memberRate}} (masterclass email 11), the Lounge
-    // Member price that is true on the day it is sent.
-    if (/\{\{\s*lounge\./.test(`${email.subject}${email.body_md}${email.preview_text ?? ""}`)) {
-      const { loungeMergeValues } = await import("./loungeSeats");
-      Object.assign(values, await loungeMergeValues(client));
+    // Migrations 214/222: {{lounge.memberRate}}, {{lounge_general_pricing_block}}
+    // and {{lounge_vip_availability_block}} (masterclass emails 11-12), each
+    // tier's price as it stands when the email is sent. A failed read gives no
+    // values, and the send guard below then holds the email.
+    if (/\{\{\s*lounge[._]/.test(`${email.subject}${email.body_md}${email.preview_text ?? ""}`)) {
+      const { loungeMergeValuesSafe } = await import("./loungeSeats");
+      Object.assign(values, await loungeMergeValuesSafe(client));
     }
 
     // A retreat link the email uses but cannot fill (Email 4 before the owner
@@ -1570,6 +1583,28 @@ export async function sendDueEmail(
           contactId: subscription.contact_id,
         };
       }
+    }
+
+    // Migration 222: never send a placeholder nobody filled, or a team note.
+    // The run waits on this email and re-checks later, as the retreat hold does.
+    const unsendable = unsendableReason(
+      [email.subject, email.preview_text ?? "", email.body_md],
+      values,
+      [renderTokens(email.subject, values), renderTokens(email.preview_text ?? "", values), renderTokens(email.body_md, values)]
+    );
+    if (unsendable) {
+      console.error(`[sequences] email ${email.position} of sequence ${subscription.sequence_id} held: ${unsendable}`);
+      await client.query(
+        `UPDATE sequence_subscriptions SET next_send_at = $2, updated_at = now() WHERE id = $1`,
+        [subscription.id, new Date(now.getTime() + ANCHOR_HOLD_RECHECK_MINUTES * 60_000)]
+      );
+      await client.query("COMMIT");
+      return {
+        outcome: "skipped",
+        detail: `on hold — ${unsendable}`,
+        sequenceId: subscription.sequence_id,
+        contactId: subscription.contact_id,
+      };
     }
 
     const result = await sendEmail({

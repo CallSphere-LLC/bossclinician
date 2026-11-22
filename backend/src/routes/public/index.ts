@@ -30,6 +30,7 @@ import { retreatMediaRouter } from "./retreatMedia";
 import { receiptLinkRouter } from "./receiptLink";
 import { bookACallRouter } from "./bookACall";
 import { clubBonusRouter } from "./clubBonus";
+import { retreatsPublicRouter } from "./retreatsPublic";
 
 export const publicRouter = Router();
 
@@ -65,6 +66,8 @@ publicRouter.use(emailPrefsRouter);
 publicRouter.use(verifyRouter);
 // Signed links to a retreat's private Memories gallery (sheet row 248).
 publicRouter.use(retreatMediaRouter);
+// /upcoming-retreats listing and the /retreat-interest sign-up (migration 223).
+publicRouter.use(retreatsPublicRouter);
 // Signed, expiring receipt PDF downloads: see services/receiptLinks.ts.
 publicRouter.use(receiptLinkRouter);
 publicRouter.use(redirectsRouter);

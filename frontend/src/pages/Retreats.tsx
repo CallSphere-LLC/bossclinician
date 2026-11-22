@@ -122,6 +122,9 @@ export default function Retreats() {
       <Seo
         title={r.seo.title}
         description={r.seo.description}
+        // Also served at /retreats/bali-2027 (the destination-and-year address,
+        // App.tsx); /retreats stays the one indexed address for this page.
+        canonicalPath="/retreats"
         image={r.about.photo.src}
         jsonLd={[
           faqPageNode(origin, "/retreats", [...r.faq.questions]),

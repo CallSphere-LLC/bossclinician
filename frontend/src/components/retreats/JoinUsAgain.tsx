@@ -3,6 +3,12 @@ import { safeHref } from "@/lib/safeHref";
 import { BUTTON_OUTLINE, BUTTON_PRIMARY } from "./retreatUi";
 
 /**
+ * Default button on an "interest list" card. Not "first access": nothing is
+ * offered before the public announcement (Yvette, 22 Nov 2026 round 2, item 6).
+ */
+export const INTEREST_LIST_LABEL = "Sign up for retreat updates";
+
+/**
  * "Join Us Again" — only the cards the owner has configured and made visible.
  * Nothing here invents a destination, a date or a price: an unannounced retreat
  * is an interest list, not a checkout.
@@ -47,11 +53,11 @@ export function JoinUsAgain({ intro, cards, readOnly }: { intro: string; cards: 
                     ) : card.status === "interest_list" ? (
                       href ? (
                         <a href={href} className={BUTTON_OUTLINE}>
-                          {card.ctaLabel || "Get first access"}
+                          {card.ctaLabel || INTEREST_LIST_LABEL}
                         </a>
                       ) : (
                         <button type="button" className={BUTTON_OUTLINE} onClick={toInterest}>
-                          {card.ctaLabel || "Get first access"}
+                          {card.ctaLabel || INTEREST_LIST_LABEL}
                         </button>
                       )
                     ) : null}

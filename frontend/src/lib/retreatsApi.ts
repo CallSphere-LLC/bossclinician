@@ -1,6 +1,6 @@
 import { sessionFetch } from "@/lib/adminTransport";
 import { API_BASE } from "@/lib/api";
-import { getAccessToken, memberRequest, MemberApiError } from "@/lib/memberApi";
+import { getAccessToken, memberFetch, memberRequest, MemberApiError } from "@/lib/memberApi";
 
 /**
  * FlourisHealer Retreat Dashboard (sheet row 248, Yvette's item 11; migrations
@@ -53,7 +53,8 @@ export type RetreatSectionId =
   | "join-us-again";
 
 export interface ChecklistItem {
-  key: TaskKey;
+  /** A fixed task, or "questionnaire:<key>" for one of the retreat's questionnaires. */
+  key: TaskKey | `questionnaire:${string}`;
   label: string;
   status: TaskStatus;
   /** One plain sentence under the label, e.g. "Signed November 3, 2026". */
@@ -62,7 +63,107 @@ export interface ChecklistItem {
   reviewNote: string | null;
   updatedAt: string | null;
   /** Where the guest goes to work on it (an anchor on the dashboard). */
-  section: RetreatSectionId;
+  section: RetreatSectionId | `questionnaire-${string}`;
+}
+
+/* ───────────────────────────── questionnaires ──────────────────────────── */
+
+export const QUESTION_TYPES = [
+  "short_text",
+  "long_text",
+  "single_choice",
+  "multiple_choice",
+  "dropdown",
+  "date",
+  "time",
+  "file",
+  "yes_no",
+  "checkbox",
+] as const;
+export type QuestionType = (typeof QUESTION_TYPES)[number];
+
+export const QUESTION_TYPE_LABEL: Record<QuestionType, string> = {
+  short_text: "Short answer",
+  long_text: "Long answer",
+  single_choice: "Single choice",
+  multiple_choice: "Multiple choice (select all that apply)",
+  dropdown: "Dropdown",
+  date: "Date",
+  time: "Time",
+  file: "File or photo upload",
+  yes_no: "Yes / No",
+  checkbox: "Checkbox (permission or acknowledgement)",
+};
+
+export const CHOICE_TYPES: readonly QuestionType[] = ["single_choice", "multiple_choice", "dropdown"];
+
+export type QuestionAudience = "all" | "shared_room" | "private_room";
+
+export const AUDIENCE_LABEL: Record<QuestionAudience, string> = {
+  all: "Every guest",
+  shared_room: "Shared-room guests only",
+  private_room: "Private-room guests only",
+};
+
+export interface QuestionDefinition {
+  id: string;
+  type: QuestionType;
+  label: string;
+  help: string;
+  required: boolean;
+  options: string[];
+  showTo: QuestionAudience;
+  /** Shown only when another question's answer is one of anyOf (empty = has any answer). */
+  showIf: { questionId: string; anyOf: string[] } | null;
+  /** Health or similar: organizer-only and left out of exports unless asked for. */
+  sensitive: boolean;
+}
+
+export interface SectionDefinition {
+  id: string;
+  title: string;
+  description: string;
+  questions: QuestionDefinition[];
+}
+
+export interface QuestionnaireDefinition {
+  intro: string;
+  sections: SectionDefinition[];
+}
+
+/** What a guest is shown: her audience only, tokens already filled in, no "sensitive" flag. */
+export interface GuestQuestion extends Omit<QuestionDefinition, "sensitive"> {}
+
+export interface GuestQuestionnaire {
+  id: number;
+  key: string;
+  title: string;
+  dueDate: string | null;
+  version: number;
+  definition: { intro: string; sections: (Omit<SectionDefinition, "questions"> & { questions: GuestQuestion[] })[] };
+  status: TaskStatus;
+  reviewNote: string | null;
+  response: {
+    state: "none" | "draft" | "submitted";
+    answers: Record<string, unknown>;
+    revision: number;
+    updatedAt: string | null;
+    submittedAt: string | null;
+  };
+  files: QuestionnaireFile[];
+}
+
+export interface QuestionnaireFile {
+  id: number;
+  questionId: string;
+  name: string;
+  mime: string;
+}
+
+export interface RetreatDeadline {
+  label: string;
+  date: string | null;
+  note: string;
 }
 
 export interface ImportantDate {
@@ -128,6 +229,8 @@ export interface PaymentsSummary {
 }
 
 export interface GroupCallView {
+  /** False when this retreat has no pre-trip call. */
+  enabled: boolean;
   confirmed: boolean;
   /** ISO instant, only when confirmed. */
   startsAt: string | null;
@@ -240,14 +343,16 @@ export interface RetreatDashboardData {
     /** True when an agreement is waiting in /contracts for her signature. */
     awaitingSignature: boolean;
   };
-  guestProfile: { url: string; status: TaskStatus };
-  flightTracker: { url: string; status: TaskStatus };
-  flightPreferences: FormResponseView;
+  /** "all" in the owner's blank preview: every question, each marked with who sees it. */
+  audience: "all" | "private" | "shared" | "unknown";
+  questionnaires: GuestQuestionnaire[];
   flightGuidance: { status: "researching" | "recommendations_available" | "booking_encouraged"; note: string };
-  travelInsurance: FormResponseView;
-  passport: { status: TaskStatus };
+  /** Travel insurance guidance (strongly recommended, not required). */
+  insurance: { show: boolean };
+  passport: { enabled: boolean; status: TaskStatus };
   details: {
     inclusions: string[];
+    activities: string[];
     transportNote: string;
     shuttle: { confirmed: boolean; details: string };
     itineraryMd: string;
@@ -325,14 +430,16 @@ const base = (slug: string) => `/member/retreats/${encodeURIComponent(slug)}`;
 export const memberRetreatsApi = {
   mine: () => memberRequest<{ retreats: MyRetreat[] }>("/member/retreats"),
   dashboard: (slug: string) => memberRequest<RetreatDashboardData>(base(slug)),
-  /** Save & Finish Later (submit=false) or a validated submission (submit=true). */
-  saveForm: (slug: string, formKey: FormKey, data: Record<string, unknown>, submit: boolean, revision: number) =>
-    memberRequest<{ response: FormResponseView; fieldErrors?: Record<string, string> }>(
-      `${base(slug)}/forms/${formKey}`,
-      { method: "PUT", body: JSON.stringify({ data, submit, revision }) },
-    ),
-  /** Guest self-report for the Jotform-backed and preparation tasks. Never sets Verified. */
-  reportTask: (slug: string, taskKey: "guest_profile" | "flight_details" | "passport", done: boolean) =>
+  questionnaire: (slug: string, key: string) =>
+    memberRequest<GuestQuestionnaire>(`${base(slug)}/questionnaires/${encodeURIComponent(key)}`),
+  /** Save progress (submit=false) or submit (required questions checked on the server too). */
+  saveQuestionnaire: (slug: string, key: string, answers: Record<string, unknown>, submit: boolean, revision: number) =>
+    memberRequest<GuestQuestionnaire & { fieldErrors?: Record<string, string> }>(`${base(slug)}/questionnaires/${encodeURIComponent(key)}`, {
+      method: "PUT",
+      body: JSON.stringify({ answers, submit, revision }),
+    }),
+  /** Guest self-report for her passport check. Never sets Verified. */
+  reportTask: (slug: string, taskKey: "passport", done: boolean) =>
     memberRequest<{ status: TaskStatus }>(`${base(slug)}/tasks/${taskKey}`, {
       method: "POST",
       body: JSON.stringify({ done }),
@@ -438,6 +545,10 @@ export interface RetreatSettings {
   feedback: { mode: OpenMode; labels: FeedbackLabels };
   interest: { mode: OpenMode };
   joinUsAgain: { mode: OpenMode; intro: string };
+  activities: string[];
+  deadlines: RetreatDeadline[];
+  checklist: { passport: boolean; groupCall: boolean };
+  insurance: { show: boolean };
 }
 
 export interface AdminRetreatDetail extends AdminRetreatSummary {
@@ -451,6 +562,8 @@ export interface AdminRetreatDetail extends AdminRetreatSummary {
   productStatus: string | null;
 }
 
+export type RoomType = "private" | "shared";
+
 export interface AdminGuestRow {
   memberId: number;
   contactId: number | null;
@@ -458,12 +571,61 @@ export interface AdminGuestRow {
   email: string;
   /** True: has the dashboard grant. False: holds only the booking product (not yet given the dashboard). */
   hasDashboardAccess: boolean;
-  checklist: { key: TaskKey; status: TaskStatus }[];
-  coverageStatus: InsuranceCoverage | null;
+  holdsBooking: boolean;
+  hasPassword: boolean;
+  /** Effective room: the organizer's setting, else her paid order's room; "unknown" sees no room-specific question. */
+  roomType: RoomType | "unknown";
+  roomTypeSetByOrganizer: RoomType | null;
+  bookingEmail: string;
+  emailMismatchAccepted: boolean;
+  accessGrantedAt: string | null;
+  accessRemovedAt: string | null;
+  welcomeSentAt: string | null;
+  welcomeSendCount: number;
+  checklist: { key: ChecklistItem["key"]; label: string; status: TaskStatus }[];
   paymentsStatus: "complete" | "incomplete";
   feedbackSubmitted: boolean;
   interest: InterestChoice | null;
   marketingOptIn: boolean | null;
+}
+
+export interface AdminAnswerRow {
+  questionId: string;
+  /** The wording she was shown when she answered (from the stored snapshot). */
+  label: string;
+  section: string;
+  type: QuestionType;
+  sensitive: boolean;
+  askedInVersion: number | null;
+  removedFromQuestionnaire: boolean;
+  value: unknown;
+}
+
+export interface AdminGuestQuestionnaire {
+  id: number;
+  key: string;
+  title: string;
+  archived: boolean;
+  currentVersion: number;
+  status: TaskStatus;
+  state: "none" | "draft" | "submitted";
+  version: number | null;
+  updatedAt: string | null;
+  submittedAt: string | null;
+  reviewNote: string;
+  answers: AdminAnswerRow[];
+  history: { version: number; submittedAt: string; answers: AdminAnswerRow[] }[];
+  files: QuestionnaireFile[];
+}
+
+export interface AdminGuestAccess {
+  roomType: RoomType | null;
+  bookingEmail: string;
+  emailMismatchAccepted: boolean;
+  accessGrantedAt: string | null;
+  accessRemovedAt: string | null;
+  welcomeSentAt: string | null;
+  welcomeSendCount: number;
 }
 
 export interface AdminGuestDetail {
@@ -472,8 +634,10 @@ export interface AdminGuestDetail {
   name: string;
   email: string;
   hasDashboardAccess: boolean;
+  roomType: RoomType | "unknown";
+  access: AdminGuestAccess | null;
   checklist: ChecklistItem[];
-  forms: Record<FormKey, FormResponseView & { history: { data: Record<string, unknown>; submittedAt: string }[] }>;
+  questionnaires: AdminGuestQuestionnaire[];
   agreement: RetreatDashboardData["agreement"] & { assignments: { id: number; status: string; signedAt: string | null }[] };
   payments: PaymentsSummary;
   groupCallRsvp: string | null;
@@ -530,6 +694,49 @@ export interface AdminOfferCard extends Omit<OfferCardView, "booked"> {
   sort: number;
 }
 
+export interface AdminQuestionnaire {
+  id: number;
+  key: string;
+  title: string;
+  inChecklist: boolean;
+  dueDate: string | null;
+  sort: number;
+  archived: boolean;
+  version: number;
+  definition: QuestionnaireDefinition;
+  updatedAt: string;
+  responses: { drafts: number; submitted: number };
+}
+
+export interface AccountMatch {
+  memberId: number;
+  email: string;
+  name: string;
+  status: string;
+  hasPassword: boolean;
+  googleLinked: boolean;
+  holdsBooking: boolean;
+  holdsDashboard: boolean;
+}
+
+export interface AccessEmailPreview {
+  to: string;
+  replyTo: string;
+  subject: string;
+  text: string;
+  html: string;
+  includesPasswordSetup: boolean;
+  /** Reasons it can't be sent yet; empty = ready. */
+  blockers: string[];
+}
+
+/** An admin API error, with the server's `details` (e.g. the email-mismatch facts). */
+export class AdminApiError extends Error {
+  constructor(message: string, public readonly status: number, public readonly details: Record<string, unknown> | null) {
+    super(message);
+  }
+}
+
 export interface AdminAnnouncement extends AnnouncementView {
   published: boolean;
   updatedAt: string;
@@ -540,8 +747,8 @@ async function adminRequest<T>(path: string, init: RequestInit = {}): Promise<T>
   if (!headers.has("Content-Type") && !(init.body instanceof FormData)) headers.set("Content-Type", "application/json");
   const response = await sessionFetch(`${API_BASE}${path}`, { ...init, headers });
   if (!response.ok) {
-    const body = (await response.json().catch(() => ({}))) as { error?: string };
-    throw new Error(body.error || "Something went wrong. Please try again in a moment.");
+    const body = (await response.json().catch(() => ({}))) as { error?: string; details?: Record<string, unknown> };
+    throw new AdminApiError(body.error || "Something went wrong. Please try again in a moment.", response.status, body.details ?? null);
   }
   if (response.status === 204) return undefined as T;
   return (await response.json()) as T;
@@ -558,9 +765,14 @@ export const adminRetreatsApi = {
   ) => adminRequest<AdminRetreatDetail>(adminBase(id), { method: "PUT", body: JSON.stringify(body) }),
   setPublished: (id: number, published: boolean) =>
     adminRequest<AdminRetreatDetail>(`${adminBase(id)}/publish`, { method: "POST", body: JSON.stringify({ published }) }),
-  /** The guest dashboard as a brand-new guest sees it, or (memberId) as that guest sees it — read-only. */
-  preview: (id: number, memberId?: number) =>
-    adminRequest<RetreatDashboardData>(`${adminBase(id)}/preview${memberId ? `?memberId=${memberId}` : ""}`),
+  /**
+   * The guest dashboard as a brand-new guest sees it, or (memberId) as that guest sees it — read-only.
+   * `audience` (blank preview only): "all" questions, or as a private- or shared-room guest.
+   */
+  preview: (id: number, memberId?: number, audience?: "all" | "private" | "shared") =>
+    adminRequest<RetreatDashboardData>(
+      `${adminBase(id)}/preview${memberId ? `?memberId=${memberId}` : audience ? `?audience=${audience}` : ""}`,
+    ),
   previewBySlug: (slug: string) =>
     adminRequest<RetreatDashboardData>(`/admin/retreats/by-slug/${encodeURIComponent(slug)}/preview`),
   previewMemories: (id: number) => adminRequest<MemoriesView>(`${adminBase(id)}/preview/memories`),
@@ -606,4 +818,89 @@ export const adminRetreatsApi = {
       body: JSON.stringify(card),
     }),
   deleteCard: (id: number, cardId: number) => adminRequest<{ ok: true }>(`${adminBase(id)}/cards/${cardId}`, { method: "DELETE" }),
+
+  /* ── questionnaires (migration 224) ── */
+  questionnaires: (id: number) => adminRequest<{ questionnaires: AdminQuestionnaire[] }>(`${adminBase(id)}/questionnaires`),
+  createQuestionnaire: (id: number, title: string) =>
+    adminRequest<{ questionnaires: AdminQuestionnaire[]; id: number }>(`${adminBase(id)}/questionnaires`, {
+      method: "POST",
+      body: JSON.stringify({ title }),
+    }),
+  /** A changed `definition` is saved as a new version; answers already given keep their wording. */
+  updateQuestionnaire: (
+    id: number,
+    questionnaireId: number,
+    body: { title?: string; inChecklist?: boolean; dueDate?: string | null; archived?: boolean; definition?: QuestionnaireDefinition },
+  ) =>
+    adminRequest<{ questionnaires: AdminQuestionnaire[]; version: number; newVersion: boolean }>(`${adminBase(id)}/questionnaires/${questionnaireId}`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
+  reorderQuestionnaires: (id: number, ids: number[]) =>
+    adminRequest<{ questionnaires: AdminQuestionnaire[] }>(`${adminBase(id)}/questionnaires/reorder`, { method: "POST", body: JSON.stringify({ ids }) }),
+  /** Only a questionnaire nobody has answered; otherwise archive it. */
+  deleteQuestionnaire: (id: number, questionnaireId: number) =>
+    adminRequest<{ questionnaires: AdminQuestionnaire[] }>(`${adminBase(id)}/questionnaires/${questionnaireId}`, { method: "DELETE" }),
+  questionnaireVersions: (id: number, questionnaireId: number) =>
+    adminRequest<{ versions: { version: number; definition: QuestionnaireDefinition; createdAt: string; createdBy: string | null }[] }>(
+      `${adminBase(id)}/questionnaires/${questionnaireId}/versions`,
+    ),
+  /** CSV of every guest's answers. Health/sensitive questions only with `sensitive`. */
+  questionnaireCsvUrl: (id: number, questionnaireId: number, sensitive = false) =>
+    `${API_BASE}${adminBase(id)}/questionnaires/${questionnaireId}/responses.csv${sensitive ? "?sensitive=1" : ""}`,
+  reviewQuestionnaire: (id: number, memberId: number, questionnaireId: number, status: "verified" | "needs_attention" | "clear", note: string) =>
+    adminRequest<{ ok: true }>(`${adminBase(id)}/guests/${memberId}/questionnaires/${questionnaireId}/review`, {
+      method: "PUT",
+      body: JSON.stringify({ status, note }),
+    }),
+  questionnaireFileUrl: (id: number, fileId: number) => `${API_BASE}${adminBase(id)}/questionnaire-files/${fileId}`,
+
+  /* ── duplicate ── */
+  duplicate: (
+    id: number,
+    body: { title: string; slug: string; location: string; startDate: string; endDate: string; timezone?: string; airport: string },
+  ) => adminRequest<{ id: number; slug: string }>(`${adminBase(id)}/duplicate`, { method: "POST", body: JSON.stringify(body) }),
+
+  /* ── access ── */
+  lookupAccount: (id: number, email: string) =>
+    adminRequest<{ account: AccountMatch | null }>(`${adminBase(id)}/access/lookup?email=${encodeURIComponent(email)}`),
+  /** Gives the dashboard only: no charge, no payment change, no email, no automation. */
+  grantAccess: (
+    id: number,
+    body: { memberId?: number; email?: string; name?: string; bookingEmail?: string; acceptEmailMismatch?: boolean; roomType?: RoomType | null },
+  ) => adminRequest<{ memberId: number; created: boolean; alreadyHadAccess: boolean }>(`${adminBase(id)}/access`, { method: "POST", body: JSON.stringify(body) }),
+  removeAccess: (id: number, memberId: number) => adminRequest<{ revoked: boolean }>(`${adminBase(id)}/access/${memberId}`, { method: "DELETE" }),
+  setRoomType: (id: number, memberId: number, roomType: RoomType | null) =>
+    adminRequest<{ roomType: RoomType | null }>(`${adminBase(id)}/guests/${memberId}/room-type`, { method: "PUT", body: JSON.stringify({ roomType }) }),
+  accessEmailPreview: (id: number, memberId: number) => adminRequest<AccessEmailPreview>(`${adminBase(id)}/guests/${memberId}/access-email`),
+  sendAccessEmail: (id: number, memberId: number) =>
+    adminRequest<{ sent: boolean; includesPasswordSetup: boolean }>(`${adminBase(id)}/guests/${memberId}/access-email`, {
+      method: "POST",
+      body: JSON.stringify({ confirm: true }),
+    }),
 };
+
+/**
+ * Opens a protected questionnaire file (a guest's photo or PDF) for the
+ * signed-in guest: fetched with her token, shown from a local blob URL.
+ */
+export async function memberQuestionnaireFileUrl(slug: string, key: string, fileId: number): Promise<string> {
+  const response = await memberFetch(`${base(slug)}/questionnaires/${encodeURIComponent(key)}/files/${fileId}`);
+  return URL.createObjectURL(await response.blob());
+}
+
+/** The organizer opening a guest's file (admin session cookie). */
+export async function adminQuestionnaireFileUrl(retreatId: number, fileId: number): Promise<string> {
+  const response = await sessionFetch(adminRetreatsApi.questionnaireFileUrl(retreatId, fileId));
+  if (!response.ok) throw new Error("That file couldn't be opened.");
+  return URL.createObjectURL(await response.blob());
+}
+
+/** Upload one photo or PDF for a "file / photo" question. Returns the file to put in the answers. */
+export async function uploadQuestionnaireFile(slug: string, key: string, questionId: string, file: File): Promise<QuestionnaireFile> {
+  const form = new FormData();
+  form.append("questionId", questionId);
+  form.append("file", file);
+  const response = await memberFetch(`${base(slug)}/questionnaires/${encodeURIComponent(key)}/files`, { method: "POST", body: form });
+  return (await response.json()) as QuestionnaireFile;
+}
