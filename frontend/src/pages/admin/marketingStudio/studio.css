@@ -1,11 +1,11 @@
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,500;0,600;1,500&display=swap');
 /* Scoped copy of the reference Marketing Studio style.css (published version 5). Every rule is prefixed with .ms-root so nothing leaks into the admin console. */
-.ms-root{--navy:#313d5a;--purple:#73628a;--lav:#cbc5ea;--gold:#c9a84c;--ink:#302c3b;--muted:#777182;--paper:#faf9fc}
+.ms-root{--navy:#313d5a;--purple:#73628a;--lav:#cbc5ea;--gold:#c9a84c;--ink:#302c3b;--muted:#6a6475;--line:#8f86a0;--paper:#faf9fc}
 .ms-root *{box-sizing:border-box}
 .ms-root{margin:0;background:var(--paper);color:var(--ink);font:15px 'DM Sans',sans-serif}
 .ms-root button,.ms-root input{font:inherit}
 .ms-root button{cursor:pointer}
-.ms-root button:focus-visible,.ms-root input:focus-visible{outline:3px solid var(--gold);outline-offset:3px}
+.ms-root button:focus-visible,.ms-root input:focus-visible,.ms-root select:focus-visible,.ms-root textarea:focus-visible,.ms-root summary:focus-visible,.ms-root a:focus-visible{outline:3px solid var(--navy);outline-offset:2px;box-shadow:0 0 0 5px #c9a84c66}
 .ms-root .ms-aside{position:fixed;width:240px;height:100vh;background:#fff;border-right:1px solid #eae6f0;padding:35px 24px;display:flex;flex-direction:column}
 .ms-root .brand{font-family:'Playfair Display',serif;font-size:30px;color:var(--navy)}
 .ms-root .eyebrow{font-size:10px;letter-spacing:2.5px;font-weight:700;text-transform:uppercase}
@@ -19,7 +19,7 @@
 .ms-root .ms-header{height:90px;border-bottom:1px solid #e8e4ee;display:flex;justify-content:space-between;align-items:center}
 .ms-root .avatar{display:inline-grid;place-items:center;width:38px;height:38px;border-radius:50%;background:#e9e4f2;color:var(--purple);font-weight:bold;margin-left:12px}
 .ms-root .topright{display:flex;align-items:center;color:var(--muted);font-size:12px}
-.ms-root .tag{display:inline-block;padding:6px 10px;border-radius:5px;font-size:10px;font-weight:700;letter-spacing:1px;background:#f0ebd9;color:#8e722a}
+.ms-root .tag{display:inline-block;padding:6px 10px;border-radius:5px;font-size:10px;font-weight:700;letter-spacing:1px;background:#f0ebd9;color:#6d5a20}
 .ms-root h1,.ms-root h2,.ms-root h3,.ms-root p{margin-top:0}
 .ms-root h1,.ms-root h2,.ms-root .hero h3{font-family:'Playfair Display',serif;font-weight:500}
 .ms-root h1{font-size:38px;margin-bottom:10px}
@@ -64,7 +64,7 @@
 .ms-root .banner{margin-top:28px;border:1px solid #e3dbea;background:#f1edf6;border-radius:12px;padding:23px;display:flex;align-items:center;justify-content:space-between;gap:20px}
 .ms-root .banner h3{font-family:'Playfair Display';font-size:22px;margin-bottom:7px}
 .ms-root .banner p{font-size:12px;color:var(--muted);margin:0}
-.ms-root .notice{font-size:10px;color:#958d9d;letter-spacing:.5px;margin-top:28px}
+.ms-root .notice{font-size:10px;color:var(--muted);letter-spacing:.5px;margin-top:28px}
 .ms-root dialog{border:0;border-radius:16px;padding:34px;max-width:620px;width:calc(100% - 32px);color:var(--ink);box-shadow:0 20px 90px #19132555}
 .ms-root dialog::backdrop{background:#24203488;backdrop-filter:blur(4px)}
 .ms-root dialog h2{margin-top:20px}
@@ -109,13 +109,13 @@
 .ms-root .plannerrow{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:15px 0}
 .ms-root .plannerrow input,.ms-root .plannerrow select{min-width:0;border:1px solid #ded6e8;padding:10px;border-radius:8px}
 .ms-root dialog textarea{height:250px}
-.ms-root .stat{font-size:27px;font-family:'Playfair Display';color:var(--purple)}
+.ms-root .stat{font-size:27px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--purple)}
 @media(max-width:700px){.ms-root .categories{grid-template-columns:repeat(2,1fr)}
 }
 .ms-root .niche{background:white;border:1px solid #e5deed;border-radius:14px;padding:25px;margin:20px 0}
 .ms-root .formgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:18px}
 .ms-root .field{display:block;font-size:12px;font-weight:600;color:var(--purple)}
-.ms-root .field input,.ms-root .field select,.ms-root .field textarea{display:block;width:100%;min-width:0;margin-top:7px;padding:12px;border:1px solid #dfd7e8;border-radius:8px;background:#fff;font:14px/1.5 'DM Sans',sans-serif;color:var(--ink)}
+.ms-root .field input,.ms-root .field select,.ms-root .field textarea{display:block;width:100%;min-width:0;margin-top:7px;padding:12px;border:1px solid var(--line);border-radius:8px;background:#fff;font:14px/1.5 'DM Sans',sans-serif;color:var(--ink)}
 .ms-root .field textarea{height:100px}
 .ms-root .wide{grid-column:1/-1}
 .ms-root .hint{font-size:12px;line-height:1.7;color:var(--muted);font-weight:400}
@@ -147,7 +147,7 @@
 .ms-root .previewlist{max-height:200px;overflow:auto;font-size:12px;line-height:1.8}
 .ms-root .statgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:15px}
 .ms-root .statbox{padding:23px;border:1px solid #e4deeb;border-radius:12px;background:white}
-.ms-root .statbox b{display:block;font:29px 'Playfair Display';margin-bottom:6px;color:var(--purple)}
+.ms-root .statbox b{display:block;font:700 29px 'DM Sans',sans-serif;font-variant-numeric:tabular-nums;margin-bottom:6px;color:var(--purple)}
 .ms-root .thumb{padding:18px;background:#f0eaf7;color:var(--purple);font:20px 'Playfair Display';min-height:70px}
 .ms-root .legacy{font-size:12px;line-height:1.8}
 .ms-root .fit{padding:12px;background:#edf4f1;border-radius:8px;color:#3d6a59;font-size:12px;line-height:1.8}
@@ -172,7 +172,7 @@
 .ms-root.ms-embed .ms-save{display:inline-block;margin-left:8px;font-weight:700}
 .ms-root.ms-embed .ms-save.bad{color:#a12f4b}
 .ms-root .hookedit{float:right;border:0;background:transparent;color:var(--purple);font-size:11px;font-weight:700;margin-right:10px}
-.ms-root .archived{opacity:.6}
+.ms-root .archived{border-style:dashed;background:#f7f5fa}
 @media(max-width:1280px){
 .ms-root.ms-embed{flex-direction:column}
 .ms-root.ms-embed .ms-aside{position:static;width:100%;min-height:0;padding:16px 20px;border-right:0;border-bottom:1px solid #eae6f0}
@@ -189,3 +189,33 @@
 .ms-root.ms-embed .grid{grid-template-columns:1fr}
 .ms-root.ms-embed .ms-header{height:auto;padding:14px 0;flex-wrap:wrap;gap:8px}
 }
+
+/* ---- Messaging-first workflow + accessibility pass (21 Nov 2026) -------
+   Contrast checked to WCAG AA: muted text #6a6475 is 4.8:1 or better on every
+   studio surface; field borders #8f86a0 are 3.4:1 on white; focus is a navy
+   ring with a gold halo (navy 10.8:1 on white). The studio stays a light
+   surface with explicit colours, whatever theme the console around it uses. */
+.ms-root{color-scheme:light}
+.ms-root ::placeholder{color:#6f6880;opacity:1}
+.ms-root ::selection{background:#cbc5ea;color:#302c3b}
+.ms-root input,.ms-root select,.ms-root textarea{accent-color:var(--purple)}
+.ms-root .outline,.ms-root .chip{border-color:var(--line)}
+.ms-root .rowbtns{display:flex;flex-wrap:wrap;gap:4px 16px;margin-top:6px}
+.ms-root .profilecard{background:#f7f5fa;border:1px solid #e4deeb;border-radius:10px;padding:14px 16px;font-size:13px;line-height:1.7;color:var(--ink)}
+.ms-root .profilecard p{margin:6px 0 0}
+.ms-root .profilecard .warning{margin-top:10px}
+.ms-root .pre{white-space:pre-wrap;font-size:13px;line-height:1.7}
+.ms-root .review{margin:18px 0;border:1px solid #e4deeb;border-radius:10px;padding:14px 16px;background:#fff}
+.ms-root .reviewlist{list-style:none;margin:12px 0 0;padding:0;font-size:13px;line-height:1.7}
+.ms-root .reviewlist li{padding:6px 0;border-bottom:1px solid #eeeaf3;color:var(--ink)}
+.ms-root .reviewlist li.ok b{color:#2f6b52}
+.ms-root .reviewlist li.flag b{color:#7a5410}
+.ms-root .routeset{border:1px solid #e4deeb;border-radius:10px;padding:14px 16px;margin:14px 0}
+.ms-root .routeset legend{font-size:12px;font-weight:700;color:var(--navy);padding:0 6px}
+.ms-root details>summary{cursor:pointer}
+.ms-root .checkline input{width:18px;height:18px}
+@media(max-width:700px){
+.ms-root .rowbtns{gap:2px 14px}
+.ms-root .routeset{padding:12px}
+}
+.ms-root dialog .profilecard{margin-top:18px}
