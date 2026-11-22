@@ -153,7 +153,8 @@
 /* A count inside a selected chip sits on the accent, not on the page: it takes
    the chip's own ink, softened, rather than the page's secondary text. Both
    appearances: on Dark the chip is light gold, so see-through white was 2.1:1. */
-.theme-console .bg-brand-gradient :is([class^="text-white/"], [class*=" text-white/"]) {
+:root .theme-console .bg-brand-gradient :is([class^="text-white/"], [class*=" text-white/"]),
+:root[data-console-theme="light"] .theme-console .bg-brand-gradient :is([class^="text-white/"], [class*=" text-white/"]) {
   color: inherit;
   opacity: 0.9;
 }
