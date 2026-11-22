@@ -369,6 +369,7 @@ seoRouter.get("/robots.txt", asyncHandler(async (_req, res) => {
       "Disallow: /admin",
       "Disallow: /account",
       "Disallow: /library",
+      "Disallow: /retreats/dashboard",
       "Disallow: /checkout",
       "Disallow: /login",
       "Disallow: /signup",

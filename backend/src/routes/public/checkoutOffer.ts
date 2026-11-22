@@ -64,6 +64,7 @@ import {
   type CustomFieldDef,
   type OfferRow,
 } from "./offers";
+import { reserveLoungeSeat } from "../../services/loungeSeats";
 
 /**
  * Offer checkout — orders, PaymentIntents and the post-purchase upsell.
@@ -788,7 +789,9 @@ checkoutOfferRouter.post(
 
     const baseOffer = await loadPublishedOffer(req.params.slug);
     if (!baseOffer) throw notFound("Offer not found");
-    const offer = await selectOfferPricing(baseOffer, body.pricingOptionId);
+    // Lounge: the founding or standard price is picked here from the seat count
+    // (services/loungeSeats.ts); a price of the other phase is refused.
+    const offer = await selectOfferPricing(baseOffer, body.pricingOptionId, undefined, { memberId: req.member?.id ?? null });
     if (body.paymentProvider === "paypal") {
       if (!paypalEnabled()) throw serviceUnavailable("PayPal checkout is not available right now. Please pay by card.");
       if ((offer.currency || "usd").toLowerCase() !== "usd") throw badRequest("PayPal checkout supports US dollar offers only. Please pay by card.");
@@ -878,6 +881,15 @@ checkoutOfferRouter.post(
         await markOrderFailed(orderId);
         throw err;
       }
+    }
+
+    // Lounge founding places and VIP seats: reserved before any charge exists,
+    // or a 409 (price just changed / VIP waitlist). A no-op for other offers.
+    try {
+      await reserveLoungeSeat({ orderId, offerSlug: offer.slug, pricePhase: offer.price_phase, email, signedIn: Boolean(req.member) });
+    } catch (err) {
+      await markOrderFailed(orderId);
+      throw err;
     }
 
     const receipt = {

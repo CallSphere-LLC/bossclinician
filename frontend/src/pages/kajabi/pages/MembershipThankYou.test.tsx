@@ -11,7 +11,7 @@ describe("membership onboarding", () => {
     expect(html.match(/class="step"/g)).toHaveLength(5);
     expect(html).toContain('href="/login"');
     expect(html).toContain("two live coaching calls each month");
-    expect(html).toContain("during the current bonus period");
+    expect(html).toContain("within 14 days of your first registration for the free training");
     expect(html).toContain("coaching calls, community access, and bonus materials do not carry NBCC credit");
     expect(html).toContain("/images/kajabi-pages/the-club-ty/yesss.webp");
     expect(html).not.toContain("<iframe");

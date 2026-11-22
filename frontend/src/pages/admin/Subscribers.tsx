@@ -18,7 +18,7 @@ import { DataTable } from "@/pages/admin/ui/DataTable";
 const SOURCE_LABEL: Record<string, string> = {
   footer: "Website footer",
   resources: "Free resources page",
-  "practice-reset-planner": "Practice Reset Planner page",
+  "practice-reset-planner": "Practice Freedom Audit page",
   masterclass: "Free masterclass",
   newsletter: "Newsletter sign-up",
   automation: "Added automatically",

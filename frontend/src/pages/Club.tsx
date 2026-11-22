@@ -21,6 +21,7 @@ import { TestimonialVideo } from "@/components/luxe/TestimonialVideo";
 import { VideoBand } from "@/components/luxe/VideoBand";
 import { RevealGroup, RevealItem } from "@/components/ui/Reveal";
 import { CLUB_JOIN_ROUTE, club } from "@/content/club";
+import { personalBonusLine, useClubBonus, type ClubBonusStatus } from "@/lib/clubBonus";
 import { useEntranceMotion } from "@/hooks/useEntranceMotion";
 import { cn } from "@/lib/cn";
 import { ORGANIZATION_ID, absoluteUrl, faqPageNode } from "@/seo/schema";
@@ -169,6 +170,10 @@ function productNode(origin: string): JsonLdNode {
 
 export default function Club() {
   const { origin } = useHeadContext();
+  // Item 3 (22 Nov): the Ramp-Up bonus as this visitor may see it — their own
+  // date from their email link, the rule for everybody else, nothing once
+  // their own window has closed.
+  const bonus = useClubBonus();
 
   return (
     <>
@@ -207,7 +212,11 @@ export default function Club() {
               {club.hero.cta}
             </LuxeButton>
             <p className="copy-luxe max-w-xl text-pretty text-sm">Includes The Boss Move curriculum, live coaching, community, implementation resources, and core CE training.</p>
-            <LuxePill accent="gold">{club.hero.bonus}</LuxePill>
+            {bonus.state !== "expired" && (
+              <LuxePill accent="gold" className="max-w-xl justify-center text-center leading-[1.7]">
+                {club.hero.bonus}
+              </LuxePill>
+            )}
           </div>
         }
       />
@@ -227,7 +236,7 @@ export default function Club() {
       <PillarsSection />
       <ClubDecisionSection />
       <ClubReadinessSection />
-      <BonusesSection />
+      <BonusesSection status={bonus} />
       <TestimonialsSection />
       <PaceSection />
       <ValueSection />
@@ -561,8 +570,11 @@ function PillarsSection() {
  * card in the page's foil treatment, then quiet rows — rather than twin cards
  * that gave the two bonuses equal weight (sheet row 109).
  */
-function BonusesSection() {
-  const [featured, ...rest] = club.bonuses.items;
+function BonusesSection({ status }: { status: ClubBonusStatus }) {
+  const [rampUp, ...rest] = club.bonuses.items;
+  // A subscriber whose own window has closed is not offered the Ramp-Up bonus;
+  // the remaining bonus keeps its plain row.
+  const featured = status.state === "expired" ? null : rampUp;
 
   return (
     <Section
@@ -576,6 +588,7 @@ function BonusesSection() {
       <SectionTitle title={club.bonuses.title} body={club.bonuses.body} />
 
       <RevealGroup as="ul" className="mx-auto mt-8 sm:mt-10 grid max-w-4xl list-none grid-cols-1 gap-6">
+        {featured && (
         <RevealItem as="li">
           <GlassCard
             as="article"
@@ -605,12 +618,19 @@ function BonusesSection() {
                 {featured.title}
               </h3>
               <p className="copy-luxe mt-4 text-pretty text-[0.95rem]">{featured.body}</p>
+              {featured.body2 && <p className="copy-luxe mt-3 text-pretty text-[0.95rem]">{featured.body2}</p>}
               <p className="mt-6 text-pretty text-xs font-bold uppercase leading-[1.7] tracking-[0.14em] text-gold">
                 {featured.note}
               </p>
+              {status.state === "open" && (
+                <p className="mt-3 text-pretty text-sm font-semibold leading-[1.6] text-white">
+                  {personalBonusLine(status.deadline)}
+                </p>
+              )}
             </div>
           </GlassCard>
         </RevealItem>
+        )}
 
         {rest.map((bonus) => (
           <RevealItem key={bonus.title} as="li">

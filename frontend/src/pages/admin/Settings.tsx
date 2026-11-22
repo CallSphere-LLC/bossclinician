@@ -63,7 +63,7 @@ const SITE_PAGES: { href: string; label: string }[] = [
   { href: "/apply", label: "Application form" },
   { href: "/contact", label: "Contact" },
   { href: "/practice-quiz", label: "Practice quiz" },
-  { href: "/practice-reset-planner", label: "Practice Reset Planner" },
+  { href: "/practice-reset-planner", label: "Practice Freedom Audit" },
   { href: "/privacy-policy", label: "Privacy policy" },
   { href: "/terms", label: "Terms of use" },
   { href: "/disclaimer", label: "Disclaimer" },

@@ -59,15 +59,9 @@ describe("/ceu-terms-boss-clinician (row 239)", () => {
     }
   });
 
-  it("prints every contact address as published, each a mailto link", () => {
+  it("prints the current support address as a mailto link, never the old Boss Builders domain (22 Nov 2026)", () => {
     const { html } = render();
-    for (const email of [
-      "yvette@profitableprivatepractice.com",
-      "admin@profitableprivatepractices.com",
-      "yvette@profitableprivatepractices.com",
-      "support@profitableprivatepractices.com",
-    ]) {
-      expect(html).toContain(`href="mailto:${email}"`);
-    }
+    expect(html).toContain('href="mailto:support@bossclinician.com"');
+    expect(html).not.toContain("profitableprivatepractice");
   });
 });

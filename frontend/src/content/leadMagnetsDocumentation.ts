@@ -511,7 +511,7 @@ export const profileAuditThankYou = {
   help: {
     title: "❓Need help?",
     body: "If you have questions or didn’t receive your intake form, email me at:",
-    email: "yvette@profitableprivatepractices.com",
+    email: "support@bossclinician.com",
   },
   closing: "I’m excited to help you upgrade your directory presence — let’s get you seen by the right clients.",
 } as const;

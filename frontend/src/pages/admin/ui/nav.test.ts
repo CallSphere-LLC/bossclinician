@@ -19,6 +19,8 @@ describe("the sidebar's shape", () => {
       "Courses",
       "Coaching",
       "Contracts",
+      // Added since (row 248): FlourisHealer Retreats
+      "Retreats",
       "Community",
       "Podcasts",
       "Newsletters",
@@ -59,6 +61,8 @@ describe("the sidebar's shape", () => {
       "/admin/courses",
       "/admin/coaching",
       "/admin/contracts",
+      // Added since (row 248): FlourisHealer Retreats
+      "/admin/retreats",
       "/admin/community",
       "/admin/podcasts",
       "/admin/newsletters",

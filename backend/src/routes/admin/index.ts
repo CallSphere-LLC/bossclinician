@@ -34,6 +34,7 @@ import {
   adminSavedTemplatesRouter,
 } from "./sequences";
 import { adminAutomationsV2Router } from "./automationsV2";
+import { adminRetreatAlumniRouter } from "./retreatAlumni";
 import { adminAffiliatesRouter } from "./affiliates";
 import { adminSettingsV2Router } from "./settingsV2";
 import { adminSendingDomainRouter } from "./sendingDomain";
@@ -56,6 +57,8 @@ import { adminPurchasesRouter } from "./purchases";
 import { adminOfferPreviewRouter } from "./offerPreview";
 import { adminVoiceSessionsRouter, adminVoiceRecordingRouter } from "./voiceSessions";
 import { adminEngagementRouter } from "./engagement";
+import { adminRetreatsRouter } from "./retreats";
+import { adminRetreatMediaRouter } from "../public/retreatMedia";
 
 export const adminRouter = Router();
 adminRouter.use(adminCsrf);
@@ -193,6 +196,10 @@ adminRouter.use("/engagement", requireAuth, moduleGate("products"), adminEngagem
 adminRouter.use("/coaching", requireAuth, moduleGate("coaching"), adminCoachingSessionFilesRouter);
 adminRouter.use("/coaching", requireAuth, moduleGate("coaching"), adminCoachingProgramsRouter);
 adminRouter.use("/contracts", requireAuth, moduleGate("coaching"), adminContractsRouter);
+// FlourisHealer retreat organizer (sheet row 248). Holds guests' travel, insurance,
+// payment and feedback records, so the router itself admits only Owner and Admin
+// roles (requireRetreatOrganizer) rather than the products gate Support can pass.
+adminRouter.use("/retreats", requireAuth, adminRetreatsRouter);
 adminRouter.use("/audit-log", requireAuth, requirePermission("admins.view"), adminAuditLogRouter);
 // The concierge's conversations, held to the same permission as the activity
 // log: they carry what customers said in their own words, and the audit of what
@@ -216,6 +223,8 @@ adminRouter.use("/contacts", requireAuth, moduleGate("contacts", ["/bulk/export.
 adminRouter.use("/tags", requireAuth, moduleGate("contacts"), adminTagsRouter);
 adminRouter.use("/segments", requireAuth, moduleGate("contacts"), adminSegmentsRouter);
 adminRouter.use("/sequences", requireAuth, moduleGate("marketing"), adminSequencesRouter);
+// Sheet row 249: post-retreat alumni emails — preview and per-retreat links.
+adminRouter.use("/retreat-alumni", requireAuth, moduleGate("marketing"), adminRetreatAlumniRouter);
 adminRouter.use("/email-templates", requireAuth, moduleGate("marketing"), adminEmailTemplatesRouter);
 // The admin's own reusable templates, distinct from the system store above.
 adminRouter.use("/saved-templates", requireAuth, moduleGate("marketing"), adminSavedTemplatesRouter);
@@ -249,3 +258,6 @@ adminRouter.use("/", adminInviteRouter);
 // cookie-gated URL falls silent part way through. The link is minted by the
 // authenticated route above, names one recording and dies in fifteen minutes.
 adminRouter.use("/", adminVoiceRecordingRouter);
+// Retreat Memories media for the organizer (row 248): the signed link is the
+// credential, for the same <video>-outlives-the-cookie reason as above.
+adminRouter.use("/", adminRetreatMediaRouter);

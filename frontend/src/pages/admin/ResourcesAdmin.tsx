@@ -15,7 +15,7 @@ const RESOURCE_TYPES: CrudChoice[] = [
 ];
 
 const fields: FieldConfig<Resource>[] = [
-  { key: "title", label: "Name", placeholder: "The Practice Reset Planner", wide: true },
+  { key: "title", label: "Name", placeholder: "The Practice Freedom Audit", wide: true },
   {
     key: "description",
     label: "What they'll get",

@@ -42,6 +42,12 @@ export interface CheckoutAcknowledgment {
   active: boolean;
   /** A pricing type this box is for. Absent: every option. */
   appliesTo?: string;
+  /**
+   * Lounge only: the price phase ('founding' | 'standard') this box is for
+   * (services/loungeSeats.ts). Absent: every phase. Filtered on the server, so
+   * the page never shows a box for a price that is not on sale.
+   */
+  pricePhase?: string;
 }
 
 export interface RequirementSettings {
@@ -96,6 +102,7 @@ export function parseAcknowledgments(raw: unknown): CheckoutAcknowledgment[] {
       linkUrl: typeof source.linkUrl === "string" ? source.linkUrl : "",
       active: source.active === true,
       ...(typeof source.appliesTo === "string" && source.appliesTo ? { appliesTo: source.appliesTo } : {}),
+      ...(typeof source.pricePhase === "string" && source.pricePhase ? { pricePhase: source.pricePhase } : {}),
     });
   }
   return out;
@@ -381,7 +388,10 @@ export async function publicCheckoutRequirements(
     if (!requirementsAreOn(requirements)) return null;
     return {
       invitationRequired: requirements.settings.invitationRequired,
-      acknowledgments: activeAcknowledgments(requirements).map(({ key, version, text, linkLabel, linkUrl, appliesTo }) => ({ appliesTo, key, version, text, linkLabel, linkUrl })),
+      acknowledgments: activeAcknowledgments(requirements)
+        // A Lounge box for the other price phase is not shown (no choice carries that phase).
+        .filter((item) => !item.pricePhase || priceChoices.some((choice) => (choice.price_phase ?? null) === item.pricePhase))
+        .map(({ key, version, text, linkLabel, linkUrl, appliesTo }) => ({ appliesTo, key, version, text, linkLabel, linkUrl })),
       agreements: requirements.contracts.map((contract) => ({ contractId: contract.id, title: contract.title, pdfSha256: contract.pdfSha256 })),
       enrollment:
         requirements.contracts.length > 0 || requirements.settings.refundTerms !== "" || requirements.settings.programTerm !== ""
@@ -502,6 +512,7 @@ export async function enforceCheckoutRequirements(input: {
   const acknowledgments: Array<Record<string, unknown>> = [];
   for (const item of activeAcknowledgments(requirements)) {
     if (item.appliesTo && item.appliesTo !== input.offer.pricing_type) continue;
+    if (item.pricePhase && item.pricePhase !== (input.offer.price_phase ?? null)) continue;
     const ticked = input.acknowledgments?.find((entry) => entry.key === item.key);
     if (!ticked) throw badRequest("Please tick each required box to continue.");
     if (ticked.version !== item.version) throw badRequest("The wording of a required box has just changed. Refresh this page, read it again and tick it to continue.");

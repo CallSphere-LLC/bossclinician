@@ -83,9 +83,9 @@ export default function ClubThankYou() {
           <p>Organize your first month into manageable actions.</p>
         </li>
         <li className="resource-item">
-          <span className="bonus-label">Current Enrollment Bonus</span>
+          <span className="bonus-label">Training Registration Bonus</span>
           <h3>The Ramp-Up Rate Formula</h3>
-          <p>Use your numbers to explore pricing that supports your practice. Included for members who enroll during the current bonus period.</p>
+          <p>Use your numbers to explore pricing that supports your practice. Included with your enrollment when you joined within 14 days of your first registration for the free training.</p>
         </li>
       </ul>
     </div>

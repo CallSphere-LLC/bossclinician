@@ -31,6 +31,7 @@ const MEMBER_ROOTS = [
   "/podcasts",
   "/newsletters",
   "/partners/dashboard",
+  "/retreats/dashboard",
 ] as const;
 
 function isUnder(pathname: string, root: string): boolean {

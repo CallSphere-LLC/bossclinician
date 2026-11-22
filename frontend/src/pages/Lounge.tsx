@@ -1,5 +1,5 @@
 import { ProgramFounderVideo } from "@/components/luxe/ProgramFounderVideo";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "motion/react";
 import { Link } from "react-router";
 import { Seo } from "@/components/Seo";
@@ -23,7 +23,18 @@ import { useEntranceMotion } from "@/hooks/useEntranceMotion";
 import { cn } from "@/lib/cn";
 import { ORGANIZATION_ID, absoluteUrl, faqPageNode } from "@/seo/schema";
 import type { JsonLdNode } from "@/seo/types";
-import { useHeadContext } from "@/ssr/context";
+import { useHeadContext, useSsrSeed } from "@/ssr/context";
+import { ssrKeys } from "@/ssr/keys";
+import { KajabiForm } from "@/pages/kajabi/pages/shared";
+import {
+  DEFAULT_LOUNGE_PRICING,
+  LOUNGE_PRICES,
+  VIP_WAITLIST_FORM_SLUG,
+  fetchLoungePricing,
+  tierMessage,
+  type LoungePricingStatus,
+  type LoungeTierId,
+} from "@/content/loungePricing";
 
 /**
  * The Boss Clinician Lounge — `/lounge`, at the path the source site sells it
@@ -132,8 +143,30 @@ const TIER_ROUTE: Record<string, string> = {
   vip: LOUNGE_VIP_ROUTE,
 };
 
+/**
+ * Which founding/standard phase each tier is in (Yvette, 22 Nov 2026, item 1).
+ * Rendered from the server's seed, then re-read on mount so a cached document
+ * never sells a price that has changed.
+ */
+function useLoungePricing(): LoungePricingStatus {
+  const seed = useSsrSeed<LoungePricingStatus>(ssrKeys.loungePricing());
+  const [status, setStatus] = useState<LoungePricingStatus>(() => seed.value ?? DEFAULT_LOUNGE_PRICING);
+  useEffect(() => {
+    let cancelled = false;
+    fetchLoungePricing()
+      .then((next) => { if (!cancelled) setStatus(next); })
+      .catch(() => undefined);
+    return () => { cancelled = true; };
+  }, []);
+  return status;
+}
+
+const statusFor = (pricing: LoungePricingStatus, tier: string) => (tier === "vip" ? pricing.vip : pricing.general);
+const pricesFor = (pricing: LoungePricingStatus, tier: string) =>
+  LOUNGE_PRICES[(tier === "vip" ? "vip" : "member") as LoungeTierId][statusFor(pricing, tier).phase];
+
 /** Both tiers as offers on one product, priced from the strings the page prints. */
-function productNode(origin: string): JsonLdNode {
+function productNode(origin: string, pricing: LoungePricingStatus): JsonLdNode {
   const offers: JsonLdNode[] = [];
   for (const tier of lounge.pricing.tiers) {
     if (!loungeMembershipV2Enabled) {
@@ -141,17 +174,19 @@ function productNode(origin: string): JsonLdNode {
       if (match) offers.push({ "@type": "Offer", name: tier.name.replace(/^★\s*/, ""), description: tier.terms, price: match[1].replace(/,/g, ""), priceCurrency: "USD", url: absoluteUrl(origin, "/lounge"), availability: "https://schema.org/LimitedAvailability", seller: { "@id": `${origin}/${ORGANIZATION_ID}` } });
       continue;
     }
+    const prices = pricesFor(pricing, tier.id);
+    const tierStatus = statusFor(pricing, tier.id);
     for (const mode of ["monthly", "annual"] as const) {
-      const match = /\$([\d,]+)/.exec(mode === "monthly" ? tier.monthlyPrice : tier.annualPrice);
+      const match = /\$([\d,]+)/.exec(mode === "monthly" ? prices.monthlyPrice : prices.annualPrice);
       if (!match) continue;
       offers.push({
       "@type": "Offer",
       name: `${tier.name} — ${mode === "monthly" ? "Monthly" : "Annual"} Membership`,
-      description: mode === "monthly" ? tier.monthlyTerms : `${tier.annualTerms} ${lounge.pricing.annualRenewal}`,
+      description: mode === "monthly" ? prices.monthlyTerms : `${prices.annualTerms} ${lounge.pricing.annualRenewal}`,
       price: match[1].replace(/,/g, ""),
       priceCurrency: "USD",
       url: absoluteUrl(origin, `${TIER_ROUTE[tier.id]}?membership=${mode}`),
-      availability: "https://schema.org/LimitedAvailability",
+      availability: tierStatus.purchasable ? "https://schema.org/LimitedAvailability" : "https://schema.org/SoldOut",
       seller: { "@id": `${origin}/${ORGANIZATION_ID}` },
       });
     }
@@ -170,6 +205,7 @@ function productNode(origin: string): JsonLdNode {
 
 export default function Lounge() {
   const { origin } = useHeadContext();
+  const pricing = useLoungePricing();
 
   return (
     <>
@@ -177,7 +213,7 @@ export default function Lounge() {
         title={lounge.seo.title}
         description="Build a financially secure private practice without relying on a packed caseload. The Lounge helps established clinicians make clearer business decisions."
         image={PORTRAIT}
-        jsonLd={[productNode(origin), faqPageNode(origin, "/lounge", lounge.faq.items)]}
+        jsonLd={[productNode(origin, pricing), faqPageNode(origin, "/lounge", lounge.faq.items)]}
       />
 
       <LuxePageHero
@@ -236,7 +272,7 @@ export default function Lounge() {
       <EvolvesSection />
       <FitSection />
       <CaseStudiesSection />
-      <PricingSection />
+      <PricingSection pricing={pricing} />
       <FounderLetter
         title={lounge.founder.title}
         paragraphs={lounge.founder.paragraphs}
@@ -782,11 +818,11 @@ function CaseStudiesSection() {
 
 /* ── 12 · Two tiers ───────────────────────────────────────────────────── */
 
-function PricingSection() {
-  return loungeMembershipV2Enabled ? <MembershipPricingSection /> : <LegacyPricingSection />;
+function PricingSection({ pricing }: { pricing: LoungePricingStatus }) {
+  return loungeMembershipV2Enabled ? <MembershipPricingSection pricing={pricing} /> : <LegacyPricingSection />;
 }
 
-function MembershipPricingSection() {
+function MembershipPricingSection({ pricing }: { pricing: LoungePricingStatus }) {
   const [plans, setPlans] = useState<Record<string, "monthly" | "annual">>({ member: "monthly", vip: "monthly" });
   return (
     <Section
@@ -807,6 +843,10 @@ function MembershipPricingSection() {
         {lounge.pricing.tiers.map((tier) => {
           const vip = tier.id === "vip";
           const plan = plans[tier.id];
+          // Prices and the line under them follow this tier's own paid-seat count.
+          const prices = pricesFor(pricing, tier.id);
+          const tierStatus = statusFor(pricing, tier.id);
+          const scarcity = tier.scarcity || tierMessage(vip ? "vip" : "member", tierStatus);
 
           return (
             <RevealItem key={tier.id} as="li" className="h-full">
@@ -832,17 +872,17 @@ function MembershipPricingSection() {
                       <label key={mode} className={cn("flex cursor-pointer items-start gap-3 rounded-xl border p-4 text-sm leading-relaxed", plan === mode ? "border-gold bg-gold/10" : "border-white/20")}>
                         <input type="radio" name={`${tier.id}-membership`} checked={plan === mode} onChange={() => setPlans((current) => ({ ...current, [tier.id]: mode }))} className="mt-1 size-4 shrink-0 accent-[#c9a46a] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold" />
                         <span className="min-w-0">
-                          <span className="block font-semibold text-white">{mode === "monthly" ? `Monthly Membership: ${tier.monthlyPrice}` : `Annual Membership: ${tier.annualPrice}`}</span>
-                          <span className="mt-2 block text-orchid">{mode === "monthly" ? tier.monthlyTerms : tier.annualTerms}</span>
+                          <span className="block font-semibold tabular-nums text-white">{mode === "monthly" ? `Monthly Membership: ${prices.monthlyPrice}` : `Annual Membership: ${prices.annualPrice}`}</span>
+                          <span className="mt-2 block text-orchid">{mode === "monthly" ? prices.monthlyTerms : prices.annualTerms}</span>
                         </span>
                       </label>
                     ))}
                   </div>
                 </fieldset>
-                {tier.scarcity && (
-                  <p className="mt-3">
+                {scarcity && (
+                  <p className="mt-3" data-lounge-phase={tierStatus.phase}>
                     <LuxePill accent={vip ? "gold" : "plum"} className="h-auto whitespace-normal text-left leading-[1.6]">
-                      {tier.scarcity}
+                      {scarcity}
                     </LuxePill>
                   </p>
                 )}
@@ -851,14 +891,31 @@ function MembershipPricingSection() {
                 <h4 className="mt-7 text-base font-semibold text-white">{vip ? "Your VIP membership includes everything in Lounge Member, plus:" : "Your membership includes:"}</h4>
                 <MarkedList items={tier.features} variant="check" className="mt-7 flex-1" />
 
-                <LuxeButton
-                  variant={vip ? "foil" : "glass"}
-                  size="lg"
-                  to={`${TIER_ROUTE[tier.id] ?? LOUNGE_MEMBER_ROUTE}?membership=${plan}`}
-                  className="mt-9 min-h-[48px] w-full tracking-[0.16em]"
-                >
-                  {tier.cta}
-                </LuxeButton>
+                {vip && tierStatus.waitlist ? (
+                  <div id="vip-waitlist" className="mt-9">
+                    <h4 className="text-base font-semibold text-white">Join the VIP waitlist</h4>
+                    <KajabiForm
+                      formSlug={VIP_WAITLIST_FORM_SLUG}
+                      fields={[
+                        { key: "first_name", label: "First Name", type: "text", required: true, autoComplete: "given-name", half: true },
+                        { key: "last_name", label: "Last Name", type: "text", autoComplete: "family-name", half: true },
+                        { key: "email", label: "Email", type: "email", required: true, autoComplete: "email" },
+                      ]}
+                      submitLabel="JOIN THE VIP WAITLIST"
+                      successMessage="You’re on the VIP waitlist. We’ll email you when a VIP seat becomes available."
+                      className="mt-5"
+                    />
+                  </div>
+                ) : (
+                  <LuxeButton
+                    variant={vip ? "foil" : "glass"}
+                    size="lg"
+                    to={`${TIER_ROUTE[tier.id] ?? LOUNGE_MEMBER_ROUTE}?membership=${plan}`}
+                    className="mt-9 min-h-[48px] w-full tracking-[0.16em]"
+                  >
+                    {tier.cta}
+                  </LuxeButton>
+                )}
               </GlassCard>
             </RevealItem>
           );

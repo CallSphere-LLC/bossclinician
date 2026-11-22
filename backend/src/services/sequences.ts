@@ -4,6 +4,24 @@ import { mergeLinks, renderMarkdown, renderTokens, sendEmail } from "../email/pr
 import { PRIORITY, enqueueMany } from "../jobs/queue";
 import { zonedWallClockToUtc } from "./drip";
 import { applyTags, recordActivity } from "./contacts";
+import { env } from "../config/env";
+import {
+  ANCHOR_HOLD_RECHECK_MINUTES,
+  anchoredSendAt,
+  firstSendableAnchoredEmail,
+  hasRetreatSkipRules,
+  isAnchorKind,
+  isNotNowInterest,
+  isTooLate,
+  missingRetreatTokens,
+  parseDateText,
+  parseRetreatSkipRules,
+  retreatMergeValues,
+  retreatSkipReason,
+  type RetreatAnchor,
+  type RetreatGuestFacts,
+  type RetreatSkipRules,
+} from "./retreatAnchor";
 
 /**
  * Email sequences: enrolment, the due-work tick, and the arithmetic behind
@@ -216,12 +234,23 @@ interface SequenceRow {
   requires_offer_id: number | null;
   /** Every delayed email goes at this local minute (migration 202). */
   send_at_minute?: number | null;
+  /**
+   * What the emails are timed from (migration 220). NULL/absent: the classic
+   * rule, each delay from the previous email. 'retreat_end': each email's
+   * `anchor_offset_days` after the run's retreat's end date.
+   */
+  anchor_kind?: string | null;
 }
 
 const SEQUENCE_COLUMNS = `id, name, status, topic, skip_weekends,
   send_window_start_minute, send_window_end_minute, use_contact_timezone, timezone,
   exit_on_purchase, exit_tag_id, completion_tag_id, allow_reentry, requires_offer_id,
-  send_at_minute`;
+  send_at_minute, anchor_kind`;
+
+/** Whether this sequence is timed from an event rather than from the previous email. */
+function isAnchored(sequence: SequenceRow): boolean {
+  return isAnchorKind(sequence.anchor_kind ?? null);
+}
 
 function rulesFor(sequence: SequenceRow, contactTimezone: string): SequenceSendRules {
   return {
@@ -253,6 +282,23 @@ export interface EmailSkipRules {
   ownsOfferIds: number[];
   submittedFormIds: number[];
   hasTagIds: number[];
+  /**
+   * Migration 215: skip on the subscriber's Club bonus reminder days (C1-C3)
+   * while those reminders are switched on, so two promotional emails never go
+   * the same day. Absent unless set.
+   */
+  clubBonusReminderDay?: true;
+  /**
+   * Migration 214: Lounge tiers ('general' | 'vip') whose founding places,
+   * once all taken, skip this email for everyone (masterclass email 12).
+   * Absent unless set.
+   */
+  loungeFoundingFullTiers?: Array<"general" | "vip">;
+}
+
+function loungeTiers(value: unknown): Array<"general" | "vip"> {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.filter((v): v is "general" | "vip" => v === "general" || v === "vip"))];
 }
 
 function positiveIds(value: unknown): number[] {
@@ -271,11 +317,19 @@ export function parseSkipRules(raw: unknown): EmailSkipRules {
     ownsOfferIds: positiveIds(source.ownsOfferIds),
     submittedFormIds: positiveIds(source.submittedFormIds),
     hasTagIds: positiveIds(source.hasTagIds),
+    ...(source.clubBonusReminderDay === true ? { clubBonusReminderDay: true as const } : {}),
+    ...(loungeTiers(source.loungeFoundingFullTiers).length > 0
+      ? { loungeFoundingFullTiers: loungeTiers(source.loungeFoundingFullTiers) }
+      : {}),
   };
 }
 
 export function hasSkipRules(rules: EmailSkipRules): boolean {
-  return rules.ownsOfferIds.length + rules.submittedFormIds.length + rules.hasTagIds.length > 0;
+  return (
+    rules.ownsOfferIds.length + rules.submittedFormIds.length + rules.hasTagIds.length > 0 ||
+    rules.clubBonusReminderDay === true ||
+    (rules.loungeFoundingFullTiers?.length ?? 0) > 0
+  );
 }
 
 /**
@@ -321,7 +375,136 @@ async function skipReason(
     );
     if (tagged.rows[0]) return `has tag ${tagged.rows[0].tag_id}`;
   }
+  if (rules.clubBonusReminderDay) {
+    // Lazy, as publishSequenceEvent's import is: only Club emails pay for it.
+    const { clubBonusReminderDaySkipSafe } = await import("./clubBonus");
+    const reason = await clubBonusReminderDaySkipSafe(client, contactId, email);
+    if (reason) return reason;
+  }
+  if (rules.loungeFoundingFullTiers?.length) {
+    const { foundingFull } = await import("./loungeSeats");
+    for (const tier of rules.loungeFoundingFullTiers) {
+      if (await foundingFull(client, tier)) return `lounge ${tier} founding places filled`;
+    }
+  }
   return "";
+}
+
+/* ------------------------------------------- retreat-anchored runs (220) */
+
+/**
+ * The retreat a run is timed from, or null when it is gone or has no readable
+ * end date. `end_date::text` on purpose — see retreatAnchor.ts.
+ */
+export async function loadRetreatAnchor(
+  client: Queryable,
+  retreatId: number
+): Promise<RetreatAnchor | null> {
+  const res = await client.query<{
+    id: number;
+    slug: string;
+    title: string;
+    end_date: string | null;
+    timezone: string | null;
+    published?: boolean | null;
+  }>(
+    `SELECT id, slug, title, end_date::text AS end_date, timezone, published
+       FROM retreats WHERE id = $1`,
+    [retreatId]
+  );
+  const row = res.rows[0];
+  if (!row || !row.end_date || !parseDateText(row.end_date)) return null;
+  return {
+    id: row.id,
+    slug: row.slug,
+    title: row.title,
+    endDate: row.end_date,
+    timezone: row.timezone || "America/Los_Angeles",
+    published: row.published ?? null,
+  };
+}
+
+/** The owner-set "what's next" link for a retreat's alumni; '' when unset. */
+async function retreatNextUrl(client: Queryable, retreatId: number): Promise<string> {
+  const res = await client.query<{ next_url: string | null }>(
+    `SELECT next_url FROM retreat_alumni_settings WHERE retreat_id = $1`,
+    [retreatId]
+  );
+  return res.rows[0]?.next_url ?? "";
+}
+
+/** Only the facts the email's rules ask about are queried. */
+async function retreatGuestFacts(
+  client: Queryable,
+  rules: RetreatSkipRules,
+  retreatId: number,
+  contactId: number,
+  email: string
+): Promise<RetreatGuestFacts> {
+  const facts: RetreatGuestFacts = {
+    feedbackSubmitted: false,
+    interestSet: false,
+    marketingOptedOut: false,
+    bookedFeatured: false,
+  };
+  // The dashboard saves by member, copying the member's contact link (which may
+  // be empty), so a row is the guest's when either the contact or one of her
+  // member accounts — by link or by address — matches.
+  const sameGuest = `(x.contact_id = $2 OR x.member_id IN (
+      SELECT m.id FROM members m WHERE m.contact_id = $2 OR lower(m.email::text) = lower($3)))`;
+  if (rules.feedbackSubmitted) {
+    const res = await client.query(
+      `SELECT 1 FROM retreat_feedback x
+        WHERE x.retreat_id = $1 AND x.submitted_at IS NOT NULL AND ${sameGuest} LIMIT 1`,
+      [retreatId, contactId, email]
+    );
+    facts.feedbackSubmitted = (res.rowCount ?? 0) > 0;
+  }
+  if (rules.interestSet || rules.marketingOptedOut) {
+    // Interest for THIS retreat answers "did they tell us"; a "no more
+    // invitations" on ANY retreat's dashboard is honoured everywhere. A saved
+    // answer without the marketing box ticked is not consent to invitations.
+    const res = await client.query<{ retreat_id: number; interest: string | null; marketing_opt_in: boolean | null }>(
+      `SELECT x.retreat_id, x.interest, x.marketing_opt_in FROM retreat_interest x
+        WHERE $1::int IS NOT NULL AND ${sameGuest}
+        ORDER BY x.updated_at DESC`,
+      [retreatId, contactId, email]
+    );
+    for (const row of res.rows) {
+      if (row.retreat_id === retreatId && (row.interest ?? "").trim() !== "") facts.interestSet = true;
+    }
+    // Her most recent answer decides: a later "yes, invite me" outranks an
+    // older unticked box, and a later "not at this time" outranks an old yes.
+    const latest = res.rows[0];
+    if (latest && (latest.marketing_opt_in === false || isNotNowInterest(latest.interest))) {
+      facts.marketingOptedOut = true;
+    }
+  }
+  if (rules.bookedFeatured) {
+    // "Featured" = the retreat the owner named for this retreat's alumni, or
+    // any visible "Join Us Again" card on this retreat's dashboard that names
+    // the product it sells. Holding live access to either counts as booked.
+    const res = await client.query(
+      `SELECT 1
+         FROM access_grants g
+         JOIN members m ON m.id = g.member_id
+        WHERE g.status = 'active' AND (g.expires_at IS NULL OR g.expires_at > now())
+          AND (m.contact_id = $2 OR lower(m.email::text) = lower($3))
+          AND g.product_id IN (
+                SELECT COALESCE(fr.booking_product_id, fr.product_id)
+                  FROM retreat_alumni_settings st
+                  JOIN retreats fr ON fr.id = st.featured_retreat_id
+                 WHERE st.retreat_id = $1
+                UNION
+                SELECT oc.booked_product_id FROM retreat_offer_cards oc
+                 WHERE oc.retreat_id = $1 AND oc.visible AND oc.booked_product_id IS NOT NULL
+              )
+        LIMIT 1`,
+      [retreatId, contactId, email]
+    );
+    facts.bookedFeatured = (res.rowCount ?? 0) > 0;
+  }
+  return facts;
 }
 
 /* -------------------------------------------------------------- enrolment */
@@ -357,6 +540,12 @@ export async function enrollContact(
      * failing. Omitted, the run is not tied to any purchase.
      */
     source?: { offerId: number | null; orderId: number | null };
+    /**
+     * Migration 220: the retreat an event-anchored sequence is timed from.
+     * Required for an anchored sequence (it is refused without one, never
+     * silently timed from enrolment); ignored by every other sequence.
+     */
+    anchorRetreatId?: number | null;
   } = {}
 ): Promise<EnrollResult> {
   const now = options.now ?? new Date();
@@ -378,12 +567,49 @@ export async function enrollContact(
   const contact = contactRes.rows[0];
   if (!contact) return { subscriptionId: null, outcome: "blocked", reason: "no such contact" };
 
-  const firstRes = await pool.query<{ position: number; delay_minutes: number }>(
-    `SELECT position, delay_minutes FROM sequence_emails
-      WHERE sequence_id = $1 AND enabled AND position >= $2
-      ORDER BY position LIMIT 1`,
-    [sequenceId, options.startAtPosition ?? 0]
-  );
+  // Event-anchored (migration 220): the first email still worth sending, timed
+  // from the retreat's end date. Classic sequences take the unchanged path below.
+  let anchored: { first: { position: number }; sendAt: Date; retreatId: number } | null = null;
+  if (isAnchored(sequence)) {
+    const retreatId = positiveIdOrNull(options.anchorRetreatId ?? null);
+    if (retreatId === null) {
+      return {
+        subscriptionId: null,
+        outcome: "blocked",
+        reason: "this sequence is timed from a retreat's end date and can only be joined for a retreat",
+      };
+    }
+    const retreat = await loadRetreatAnchor(pool, retreatId);
+    if (!retreat) return { subscriptionId: null, outcome: "blocked", reason: "retreat has no end date" };
+    const emailsRes = await pool.query<{ position: number; anchor_offset_days: number | null }>(
+      `SELECT position, anchor_offset_days FROM sequence_emails
+        WHERE sequence_id = $1 AND enabled AND position >= $2
+        ORDER BY position`,
+      [sequenceId, options.startAtPosition ?? 0]
+    );
+    if (emailsRes.rows.length === 0) {
+      return { subscriptionId: null, outcome: "blocked", reason: "sequence has no emails" };
+    }
+    const pick = firstSendableAnchoredEmail(
+      emailsRes.rows.map((r) => ({ position: r.position, anchorOffsetDays: r.anchor_offset_days })),
+      retreat,
+      sequence.send_at_minute ?? null,
+      now
+    );
+    if (!pick) {
+      return { subscriptionId: null, outcome: "blocked", reason: "every email for this retreat is already past" };
+    }
+    anchored = { first: { position: pick.email.position }, sendAt: pick.sendAt, retreatId };
+  }
+
+  const firstRes = anchored
+    ? { rows: [{ position: anchored.first.position, delay_minutes: 0 }] }
+    : await pool.query<{ position: number; delay_minutes: number }>(
+        `SELECT position, delay_minutes FROM sequence_emails
+          WHERE sequence_id = $1 AND enabled AND position >= $2
+          ORDER BY position LIMIT 1`,
+        [sequenceId, options.startAtPosition ?? 0]
+      );
   const first = firstRes.rows[0];
   if (!first) return { subscriptionId: null, outcome: "blocked", reason: "sequence has no emails" };
 
@@ -405,22 +631,25 @@ export async function enrollContact(
     }
   }
 
-  const sendAt = nextSendAt(now, first.delay_minutes, rulesFor(sequence, contact.timezone));
+  const sendAt = anchored
+    ? anchored.sendAt
+    : nextSendAt(now, first.delay_minutes, rulesFor(sequence, contact.timezone));
 
   // A re-entry replaces the purchase stamp too, cleared when this run has none:
   // a second run must never inherit the refund of the purchase that started the
-  // first.
+  // first. The retreat anchor likewise (always NULL for a classic sequence).
   const inserted = await pool.query<{ id: string }>(
     `INSERT INTO sequence_subscriptions
        (sequence_id, contact_id, status, position, next_send_at, entered_at,
-        source_offer_id, source_order_id)
-     VALUES ($1, $2, 'active', $3, $4, now(), $5, $6)
+        source_offer_id, source_order_id, anchor_retreat_id)
+     VALUES ($1, $2, 'active', $3, $4, now(), $5, $6, $7)
      ON CONFLICT (sequence_id, contact_id) DO UPDATE
        SET status = 'active', position = EXCLUDED.position,
            next_send_at = EXCLUDED.next_send_at, exit_reason = '',
            entered_at = now(), completed_at = NULL, updated_at = now(),
            source_offer_id = EXCLUDED.source_offer_id,
-           source_order_id = EXCLUDED.source_order_id
+           source_order_id = EXCLUDED.source_order_id,
+           anchor_retreat_id = EXCLUDED.anchor_retreat_id
      RETURNING id`,
     [
       sequenceId,
@@ -429,6 +658,7 @@ export async function enrollContact(
       sendAt,
       positiveIdOrNull(options.source?.offerId),
       positiveIdOrNull(options.source?.orderId),
+      anchored ? anchored.retreatId : null,
     ]
   );
 
@@ -923,8 +1153,10 @@ export async function sendDueEmail(
       position: number;
       next_send_at: Date | null;
       source_offer_id: number | null;
+      anchor_retreat_id?: number | null;
     }>(
-      `SELECT id, sequence_id, contact_id, status, position, next_send_at, source_offer_id
+      `SELECT id, sequence_id, contact_id, status, position, next_send_at, source_offer_id,
+              anchor_retreat_id
          FROM sequence_subscriptions WHERE id = $1 FOR UPDATE`,
       [subscriptionId]
     );
@@ -1120,8 +1352,12 @@ export async function sendDueEmail(
       from_email: string;
       preview_text: string | null;
       skip_rules: unknown;
+      anchor_offset_days?: number | null;
+      /** Per-email preference topic (migration 220); NULL means the sequence's. */
+      topic?: string | null;
     }>(
-      `SELECT id, position, subject, body_md, from_name, from_email, preview_text, skip_rules
+      `SELECT id, position, subject, body_md, from_name, from_email, preview_text, skip_rules,
+              anchor_offset_days, topic
          FROM sequence_emails
         WHERE sequence_id = $1 AND enabled AND position >= $2
         ORDER BY position LIMIT 1`,
@@ -1140,16 +1376,79 @@ export async function sendDueEmail(
       };
     }
 
-    // Per-email skip rules: nothing is sent and the run moves on, the next email
-    // timed from now on its own delay — never "due at once" because one was
-    // skipped. Only queried when the email has a rule.
-    const skipRules = parseSkipRules(email.skip_rules);
-    const skipped = hasSkipRules(skipRules)
-      ? await skipReason(client, skipRules, subscription.contact_id, contact.email)
-      : "";
-    if (skipped) {
-      const afterRes = await client.query<{ position: number; delay_minutes: number }>(
-        `SELECT position, delay_minutes FROM sequence_emails
+    // Migration 220: a run timed from a retreat's end date. Everything in this
+    // branch is behind `isAnchored`, so a classic sequence issues exactly the
+    // queries it always did.
+    let retreat: RetreatAnchor | null = null;
+    let anchoredDueAt: Date | null = null;
+    if (isAnchored(sequence)) {
+      const retreatId = positiveIdOrNull(subscription.anchor_retreat_id ?? null);
+      retreat = retreatId === null ? null : await loadRetreatAnchor(client, retreatId);
+      if (!retreat) {
+        const reason = retreatId === null ? "no retreat on this run" : "retreat removed or has no end date";
+        await client.query(
+          `UPDATE sequence_subscriptions
+              SET status = 'exited', exit_reason = $2,
+                  next_send_at = NULL, completed_at = now(), updated_at = now()
+            WHERE id = $1`,
+          [subscription.id, reason]
+        );
+        await client.query("COMMIT");
+        await publishSequenceEvent("sequence_unsubscribed", {
+          subscriptionId: subscription.id,
+          sequenceId: subscription.sequence_id,
+          contactId: subscription.contact_id,
+          reason,
+        });
+        return {
+          outcome: "exited",
+          detail: reason,
+          sequenceId: subscription.sequence_id,
+          contactId: subscription.contact_id,
+        };
+      }
+      // Recomputed from the retreat row at send time, so a retreat whose dates
+      // were moved later is waited for rather than mailed on the old date.
+      anchoredDueAt = anchoredSendAt(
+        retreat.endDate,
+        email.anchor_offset_days ?? 0,
+        sequence.send_at_minute ?? null,
+        retreat.timezone
+      );
+      if (anchoredDueAt.getTime() > now.getTime() + 60_000) {
+        await client.query(
+          `UPDATE sequence_subscriptions SET next_send_at = $2, updated_at = now() WHERE id = $1`,
+          [subscription.id, anchoredDueAt]
+        );
+        await client.query("COMMIT");
+        return {
+          outcome: "not_due",
+          detail: "retreat dates changed; rescheduled",
+          sequenceId: subscription.sequence_id,
+          contactId: subscription.contact_id,
+        };
+      }
+    }
+
+    /** When the email after this one goes: from the retreat, or on its own delay from now. */
+    const sendTimeFor = (next: { delay_minutes: number; anchor_offset_days?: number | null }): Date =>
+      retreat
+        ? anchoredSendAt(
+            retreat.endDate,
+            next.anchor_offset_days ?? 0,
+            sequence.send_at_minute ?? null,
+            retreat.timezone
+          )
+        : nextSendAt(now, next.delay_minutes, rulesFor(sequence, contact.timezone));
+
+    /** Sends nothing and moves the run to the next email, or finishes it. */
+    const skipEmail = async (skipped: string): Promise<SendStepResult> => {
+      const afterRes = await client.query<{
+        position: number;
+        delay_minutes: number;
+        anchor_offset_days?: number | null;
+      }>(
+        `SELECT position, delay_minutes, anchor_offset_days FROM sequence_emails
           WHERE sequence_id = $1 AND enabled AND position > $2
           ORDER BY position LIMIT 1`,
         [subscription.sequence_id, email.position]
@@ -1169,11 +1468,7 @@ export async function sendDueEmail(
         `UPDATE sequence_subscriptions
             SET position = $2, next_send_at = $3, updated_at = now()
           WHERE id = $1`,
-        [
-          subscription.id,
-          after.position,
-          nextSendAt(now, after.delay_minutes, rulesFor(sequence, contact.timezone)),
-        ]
+        [subscription.id, after.position, sendTimeFor(after)]
       );
       await client.query("COMMIT");
       return {
@@ -1182,11 +1477,43 @@ export async function sendDueEmail(
         sequenceId: subscription.sequence_id,
         contactId: subscription.contact_id,
       };
+    };
+
+    // An anchored email that could not go within its grace period (sequence
+    // switched on late, a link never filled in) is dropped, not sent weeks late.
+    if (anchoredDueAt && isTooLate(anchoredDueAt, now)) {
+      return await skipEmail(`too late (was due ${anchoredDueAt.toISOString()})`);
+    }
+
+    // Per-email skip rules: nothing is sent and the run moves on, the next email
+    // timed from now on its own delay — never "due at once" because one was
+    // skipped. Only queried when the email has a rule.
+    const skipRules = parseSkipRules(email.skip_rules);
+    const skipped = hasSkipRules(skipRules)
+      ? await skipReason(client, skipRules, subscription.contact_id, contact.email)
+      : "";
+    if (skipped) return await skipEmail(skipped);
+
+    // The retreat rules (feedback given, interest given, invitations declined,
+    // featured retreat already booked) — anchored runs only.
+    if (retreat) {
+      const retreatRules = parseRetreatSkipRules(email.skip_rules);
+      if (hasRetreatSkipRules(retreatRules)) {
+        const facts = await retreatGuestFacts(
+          client,
+          retreatRules,
+          retreat.id,
+          subscription.contact_id,
+          contact.email
+        );
+        const retreatSkipped = retreatSkipReason(retreatRules, facts);
+        if (retreatSkipped) return await skipEmail(retreatSkipped);
+      }
     }
 
     // Every token the composer's picker offers for a sequence. `renderTokens`
     // blanks what it is not given, so a token missing here goes out as nothing.
-    const values = buildMergeValues(
+    const baseValues = buildMergeValues(
       {
         email: contact.email,
         name: contact.name,
@@ -1198,6 +1525,52 @@ export async function sendDueEmail(
       mergeLinks(subscription.contact_id),
       now
     );
+    const values: Record<string, string> = retreat
+      ? {
+          ...baseValues,
+          ...retreatMergeValues({
+            siteUrl: env.publicSiteUrl,
+            slug: retreat.slug,
+            title: retreat.title,
+            nextUrl: await retreatNextUrl(client, retreat.id),
+          }),
+        }
+      : baseValues;
+    // Migration 215: {{clubBonusDeadline}} / {{clubBonusLink}}, the subscriber's
+    // own Ramp-Up bonus date and signed /club link. Only emails using them pay.
+    if (/\{\{\s*clubBonus/.test(`${email.subject}${email.body_md}${email.preview_text ?? ""}`)) {
+      const { clubBonusMergeValuesSafe } = await import("./clubBonus");
+      Object.assign(values, await clubBonusMergeValuesSafe(client, contact.email));
+    }
+    // Migration 214: {{lounge.memberRate}} (masterclass email 11), the Lounge
+    // Member price that is true on the day it is sent.
+    if (/\{\{\s*lounge\./.test(`${email.subject}${email.body_md}${email.preview_text ?? ""}`)) {
+      const { loungeMergeValues } = await import("./loungeSeats");
+      Object.assign(values, await loungeMergeValues(client));
+    }
+
+    // A retreat link the email uses but cannot fill (Email 4 before the owner
+    // sets "what's next") holds the email instead of sending a dead button.
+    // The late limit above drops it if it is never filled in.
+    if (retreat) {
+      const missing = missingRetreatTokens([email.subject, email.preview_text ?? "", email.body_md], values);
+      // Every button opens the retreat dashboard, which answers 404 until the
+      // retreat is published: hold rather than send guests to a dead page.
+      if (retreat.published === false) missing.push("retreat dashboard not published");
+      if (missing.length > 0) {
+        await client.query(
+          `UPDATE sequence_subscriptions SET next_send_at = $2, updated_at = now() WHERE id = $1`,
+          [subscription.id, new Date(now.getTime() + ANCHOR_HOLD_RECHECK_MINUTES * 60_000)]
+        );
+        await client.query("COMMIT");
+        return {
+          outcome: "skipped",
+          detail: `on hold — link not set: ${missing.join(", ")}`,
+          sequenceId: subscription.sequence_id,
+          contactId: subscription.contact_id,
+        };
+      }
+    }
 
     const result = await sendEmail({
       to: contact.email,
@@ -1207,7 +1580,9 @@ export async function sendDueEmail(
       contactId: subscription.contact_id,
       sourceType: "sequence",
       sourceId: subscription.sequence_id,
-      topic: sequence.topic,
+      // Migration 220: an email may name its own preference topic (NULL = the
+      // sequence's). '' means only a full unsubscribe or suppression stops it.
+      topic: email.topic ?? sequence.topic,
       fromName: email.from_name,
       fromEmail: email.from_email,
       preheader: renderTokens(email.preview_text ?? "", values),
@@ -1216,8 +1591,12 @@ export async function sendDueEmail(
     // Advance regardless of a suppression: a contact who has opted out is not
     // going to become eligible for email 4 by being left stuck on email 3, and
     // leaving them due forever makes every tick re-queue them.
-    const nextRes = await client.query<{ position: number; delay_minutes: number }>(
-      `SELECT position, delay_minutes FROM sequence_emails
+    const nextRes = await client.query<{
+      position: number;
+      delay_minutes: number;
+      anchor_offset_days?: number | null;
+    }>(
+      `SELECT position, delay_minutes, anchor_offset_days FROM sequence_emails
         WHERE sequence_id = $1 AND enabled AND position > $2
         ORDER BY position LIMIT 1`,
       [subscription.sequence_id, email.position]
@@ -1239,11 +1618,7 @@ export async function sendDueEmail(
       `UPDATE sequence_subscriptions
           SET position = $2, next_send_at = $3, updated_at = now()
         WHERE id = $1`,
-      [
-        subscription.id,
-        next.position,
-        nextSendAt(now, next.delay_minutes, rulesFor(sequence, contact.timezone)),
-      ]
+      [subscription.id, next.position, sendTimeFor(next)]
     );
 
     await client.query("COMMIT");

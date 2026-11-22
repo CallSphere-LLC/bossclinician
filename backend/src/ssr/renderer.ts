@@ -43,6 +43,7 @@ interface SsrBundle {
     blogList(tag?: string): string;
     blogPost(slug: string): string;
     courseDetail(slug: string): string;
+    loungePricing(): string;
   };
 }
 

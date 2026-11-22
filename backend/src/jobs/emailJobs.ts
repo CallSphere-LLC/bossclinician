@@ -11,6 +11,7 @@ import {
   tickRegistrationCampaigns,
 } from "../services/broadcasts";
 import { sendDueEmail, tickDueSubscriptions } from "../services/sequences";
+import { enrolRetreatAlumni } from "../services/retreatAlumni";
 import { registerHandler } from "./worker";
 import { publishDomainEvent } from "../services/domainEvents";
 
@@ -220,8 +221,22 @@ export async function communityDigest(): Promise<unknown> {
  * shows up as a job failing rather than as work quietly never happening again.
  */
 export function registerEmailJobs(): void {
-  registerHandler("sequence.tick", () => tickDueSubscriptions());
+  registerHandler("sequence.tick", async () => {
+    const result = await tickDueSubscriptions();
+    // Migration 215: save new Club training registrations' bonus windows and
+    // send any C1-C3 reminder due now (nothing is sent while its sequence is
+    // not 'active'). Never fails the tick.
+    await import("../services/clubBonus")
+      .then((m) => m.runClubBonusTick())
+      .catch((err: unknown) => {
+        // eslint-disable-next-line no-console
+        console.error("[clubBonus] tick failed:", err);
+      });
+    return result;
+  });
   registerHandler("sequence.sendEmail", (payload) => sequenceSendEmail(payload));
+  // Sheet row 249 (migration 220): its job_schedules row ships disabled.
+  registerHandler("retreatAlumni.enrol", () => enrolRetreatAlumni());
   registerHandler("broadcast.tick", () => tickBroadcasts());
   // Its own handler, because it never finishes: an "upon registration"
   // campaign keeps sending for as long as people keep registering, so it

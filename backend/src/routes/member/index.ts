@@ -19,6 +19,7 @@ import { memberContractsRouter } from "./contracts";
 import { memberBoardroomAssessmentRouter } from "./boardroomAssessment";
 import { memberToolStateRouter } from "./toolState";
 import { memberNotificationsRouter } from "./notifications";
+import { memberRetreatsRouter } from "./retreats";
 
 /**
  * `/api/member/*` — everything a signed-in customer can do.
@@ -63,6 +64,8 @@ memberRouter.use(memberLessonFormsRouter);
 memberRouter.use(memberToolStateRouter);
 memberRouter.use(memberBoardroomAssessmentRouter);
 memberRouter.use(memberContractsRouter);
+// FlourisHealer retreat dashboards (sheet row 248): /retreats, /retreats/:slug/...
+memberRouter.use(memberRetreatsRouter);
 
 // Publishing serves two sibling surfaces — "/podcasts" and "/newsletters" —
 // plus the "/email-preferences" toggle they share, so like progress above it

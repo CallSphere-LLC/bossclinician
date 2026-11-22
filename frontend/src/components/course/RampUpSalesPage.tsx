@@ -23,7 +23,6 @@ export default function RampUpSalesPage({ course }: { course: CourseDetailRespon
   let html = sourceHtml
     .replaceAll("__RAMP_PRICE__", escapeHtml(price))
     .replaceAll("__RAMP_CHECKOUT__", destination || "#");
-  if (offer?.amountCents !== 9700) html = html.replaceAll("Original Price: $197", "");
   if (course.owned || !destination) {
     const label = course.owned ? "Open your training" : offer?.unavailableReason || "Enrollment is currently unavailable";
     html = html.replace(/<a([^>]*data-ramp-buy="true"[^>]*)>[\s\S]*?<\/a>/g,

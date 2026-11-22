@@ -25,15 +25,14 @@ export default function FullyBookedSalesPage({course}:{course:CourseDetailRespon
   const [playing,setPlaying]=useState(false);
   const offer=course.offers.find(o=>o.slug==="fully-booked-toolkit");
   const price=offer ? priceLabel(offer) : course.priceText;
-  // The comparison comes from the source page's $197 + $247 resources.
-  const sourcePromotion=offer?.amountCents===6700;
+  // 22 Nov 2026 (Yvette, item 5): no "valued at", "$444" or "85% off" lines —
+  // the page shows only the live selling price.
   const buy=()=>course.owned
     ? <LuxeButton to="/library/fully-booked-toolkit" variant="foil">Open your toolkit</LuxeButton>
     : offer?.available
       ? <LuxeButton to={`/checkout/${offer.slug}`} variant="foil">Get the toolkit — {price}</LuxeButton>
       : <p className="text-orchid">{offer?.unavailableReason || "Enrollment is currently unavailable."}</p>;
   return <>
-    {sourcePromotion && <div className="bg-plum px-5 py-3 text-center text-sm font-semibold text-white">Get 85% Off</div>}
     <Section className="pt-12 sm:pt-20">
       <Container>
         <Link to="/courses" className="text-sm font-semibold text-orchid">← The training library</Link>
@@ -63,9 +62,7 @@ export default function FullyBookedSalesPage({course}:{course:CourseDetailRespon
           <GlassCard spotlight={false} interactive={false} className="p-6 lg:sticky lg:top-24">
             <img src={`${root}/bundle.png`} alt="The Fully Booked Therapist Toolkit bundle" className="w-full rounded-xl" />
             <h2 className="mt-5 font-display text-2xl text-ink">Get the complete toolkit</h2>
-            {sourcePromotion && <p className="mt-3 text-orchid">Total resource value: <span className="line-through">$444</span></p>}
             <p className="mt-2 font-display text-4xl text-ink">{price}</p>
-            {sourcePromotion && <p className="mt-2 text-sm text-orchid">85% discount automatically applied.</p>}
             <div className="mt-5">{buy()}</div>
             <p className="mt-4 text-sm text-orchid">All sales are final as this is a digital product.</p>
           </GlassCard>
@@ -86,7 +83,6 @@ export default function FullyBookedSalesPage({course}:{course:CourseDetailRespon
           <GlassCard spotlight={false} interactive={false} className="p-6 sm:p-8">
             <img src={`${root}/profile.png`} alt="From Profile to Profit guide and video tutorial" className="aspect-[4/3] w-full rounded-xl object-contain" loading="lazy" />
             <h3 className="mt-6 font-display text-2xl text-ink">From Profile to Profit</h3>
-            <p className="mt-2 font-semibold text-gold">Total Value: $197</p>
             <p className="mt-4 text-orchid">Get the secrets to a standout therapist profile today!</p>
             <p className="mt-3 text-orchid">Elevate your online presence, attract more clients, and watch your practice thrive.</p>
             <p className="mt-3 text-orchid">Don’t wait — start transforming your profile into a client magnet now!</p>
@@ -96,13 +92,12 @@ export default function FullyBookedSalesPage({course}:{course:CourseDetailRespon
           <GlassCard spotlight={false} interactive={false} className="p-6 sm:p-8">
             <img src={`${root}/consultation.png`} alt="Client Consultation Call Script and video tutorial" className="aspect-[4/3] w-full rounded-xl object-contain" loading="lazy" />
             <h3 className="mt-6 font-display text-2xl text-ink">Client Consultation Call Script</h3>
-            <p className="mt-2 font-semibold text-gold">Total Value: $247</p>
             <p className="mt-4 leading-relaxed text-orchid">This is the exact system I use to ensure my consultation calls are impactful and client-focused. Add the Client Consultation Call Script to your toolkit today, and gain instant access to a resource that will take your calls—and your practice—to the next level!</p>
             <h4 className="mt-5 font-semibold text-ink">Includes:</h4>
             <ul className="mt-3 list-disc space-y-2 pl-5 text-orchid"><li>A proven step-by-step guided script and video tutorial.</li><li>Proven steps to help turn cold calls into paying clients.</li><li>Techniques to help callers understand fit, fees, and payment options.</li></ul>
           </GlassCard>
         </div>
-        <div className="mt-10 text-center"><p className="mb-4 text-lg text-orchid">Total value: $444 · Get the toolkit for {price}</p>{buy()}</div>
+        <div className="mt-10 text-center"><p className="mb-4 text-lg text-orchid">Get the toolkit for {price}</p>{buy()}</div>
       </Container>
     </Section>
     <Section>
@@ -115,7 +110,7 @@ export default function FullyBookedSalesPage({course}:{course:CourseDetailRespon
       <Container className="max-w-4xl text-center">
         <h2 className="font-display text-3xl text-ink">The Fully Booked Therapist Toolkit</h2>
         <img src={`${root}/bundle-offer.png`} alt="Everything included in the Fully Booked Therapist Toolkit" className="mx-auto mt-8 w-full max-w-lg" loading="lazy" />
-        <p className="mt-6 text-2xl font-semibold text-ink">{sourcePromotion ? "Get 85% off" : "Get the toolkit"} {price}</p>
+        <p className="mt-6 text-2xl font-semibold text-ink">Get the toolkit {price}</p>
         <p className="mt-3 text-orchid">All sales are final as this is a digital product.</p>
         <div className="mt-6">{buy()}</div>
         <img src={`${root}/trust-badges.png`} alt="Secure checkout" className="mx-auto mt-6 w-full max-w-sm" loading="lazy" />

@@ -28,7 +28,7 @@ const SOURCE_IN_WORDS: Record<string, string> = {
   footer: "Mailing list (site footer)",
   resources: "Mailing list (Resource Hub)",
   newsletter: "Mailing list",
-  "practice-reset-planner": "Practice Reset Planner mailing list",
+  "practice-reset-planner": "Practice Freedom Audit mailing list",
 };
 
 function sourceInWords(source: string): string {

@@ -10,6 +10,7 @@ import {
   loadResources,
   loadTestimonials,
 } from "../../ssr/loaders";
+import { loungePricingStatus } from "../../services/loungeSeats";
 
 /**
  * HTML for the public marketing pages.
@@ -75,7 +76,7 @@ const ROUTES: { path: string; load?: Loader }[] = [
   { path: "/retreats" },
   { path: "/store" },
   { path: "/club" },
-  { path: "/lounge" },
+  { path: "/lounge", load: async (_req, keys) => ({ [keys.loungePricing()]: await loungePricingStatus() }) },
   // Must ship with the matching name in nginx/site.conf's no-children regex.
   { path: "/boardroom" },
   // The masterclass sign-up page (migration 077). Same rule as /boardroom. Its

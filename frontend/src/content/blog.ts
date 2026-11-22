@@ -60,6 +60,8 @@ Not theory pulled from a textbook. A system built and tested inside a real group
 
 ✔ SOAP and DAP templates, a treatment plan example, and a self-audit checklist, ready to use on your next session
 
+**3.5 Ethics CEUs. Nevada Board Approved.**
+
 If someone asked for your records tomorrow, could you hand them over with confidence?
 
 If a reviewer called today, would your notes answer for you?
@@ -157,6 +159,8 @@ The training is now available as an on-demand replay. In it, you'll learn how to
 ✔ Build a self-audit habit you actually keep
 
 ✔ Walk away with SOAP and DAP templates, a treatment plan example, and a self-audit checklist
+
+**3.5 Ethics CEUs. Nevada Board Approved.**
 
 If no one ever sat you down and taught you this either, what would change for you if someone finally did?
 

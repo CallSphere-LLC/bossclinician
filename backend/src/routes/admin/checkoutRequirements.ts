@@ -135,6 +135,10 @@ adminCheckoutRequirementsRouter.put(
           linkLabel: item.linkLabel,
           linkUrl: item.linkUrl,
           active: item.active,
+          // Not editable here, so kept from the stored box: which payment
+          // type and (Lounge) price phase the box belongs to.
+          ...(before?.appliesTo ? { appliesTo: before.appliesTo } : {}),
+          ...(before?.pricePhase ? { pricePhase: before.pricePhase } : {}),
         };
       });
       const adminId = Number(req.user?.sub) || null;

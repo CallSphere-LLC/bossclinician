@@ -185,6 +185,8 @@ export interface PublicOffer {
   alreadyOwned: boolean;
   /** What the owner requires before payment (QA rows 202-203); null when nothing is on. */
   checkoutRequirements?: CheckoutRequirements | null;
+  /** Lounge only: founding/standard phase, seats and waitlist for this viewer (backend services/loungeSeats.ts). */
+  seatPricing?: import("@/content/loungePricing").LoungeSeatPricing | null;
 }
 
 export interface CheckoutAcknowledgmentView {

@@ -368,10 +368,9 @@ const CE_CONFIDENTIALITY_COMPLAINANT =
 const CE_RECORDS_LEAD =
   "Confidential records of all grievances, the process of resolving the grievance, and the outcome will be kept in locked files of the Owner & Training Development Officer. All applicable written complaints/grievances and the CE Program’s written response to the complaints/grievances are also reported to ";
 
-/* The refund address is printed as …practices.com on Kajabi; its mailto went to
-   …practice.com. The printed address is the one used here — it is the domain
-   every other address on these pages uses. */
-const SUPPORT_EMAIL = "support@profitableprivatepractices.com";
+/* 22 Nov 2026 (Yvette, item 6): every old profitableprivatepractice(s).com
+   contact on these policy pages is replaced by support@bossclinician.com. */
+const SUPPORT_EMAIL = "support@bossclinician.com";
 
 function ceFeesClause(refundDays: number): LegalClause {
   return {
@@ -462,16 +461,16 @@ export const ceuTerms: KajabiLegalDoc = {
             [
               CE_CONCERN,
               {
-                text: "yvette@profitableprivatepractice.com.",
-                href: "mailto:yvette@profitableprivatepractice.com",
+                text: "support@bossclinician.com.",
+                href: "mailto:support@bossclinician.com",
               },
             ],
             CE_GRIEVANCE_NO_GUARANTEE,
             [
               CE_GRIEVANCE_SPEAKER,
               {
-                text: "admin@profitableprivatepractices.com",
-                href: "mailto:admin@profitableprivatepractices.com",
+                text: "support@bossclinician.com",
+                href: "mailto:support@bossclinician.com",
               },
             ],
             CE_GRIEVANCE_WORKSHOP,
@@ -479,8 +478,8 @@ export const ceuTerms: KajabiLegalDoc = {
             [
               CE_INTRO_SOCIAL_WORK,
               {
-                text: "yvette@profitableprivatepractices.com",
-                href: "mailto:yvette@profitableprivatepractices.com",
+                text: "support@bossclinician.com",
+                href: "mailto:support@bossclinician.com",
               },
             ],
           ],
@@ -538,12 +537,12 @@ export const continuingEducation: KajabiLegalDoc = {
         {
           type: "list",
           items: [
-            `${CE_CONCERN}yvette@profitableprivatepractice.com.`,
+            `${CE_CONCERN}support@bossclinician.com.`,
             CE_GRIEVANCE_NO_GUARANTEE,
-            `${CE_GRIEVANCE_SPEAKER}admin@profitableprivatepractices.com`,
+            `${CE_GRIEVANCE_SPEAKER}support@bossclinician.com`,
             CE_GRIEVANCE_WORKSHOP,
             CE_GRIEVANCE_ORG,
-            `${CE_INTRO_SOCIAL_WORK}yvette@profitableprivatepractices.com`,
+            `${CE_INTRO_SOCIAL_WORK}support@bossclinician.com`,
             "ASWB: Boss Clinician has an advisory committee to mediate complaints escalated to formal grievances. The advisory committee will be involved in the resolution of all grievances brought by social workers.",
           ],
         },

@@ -161,7 +161,7 @@ const ARRIVAL_POINTS: Record<string, string> = {
   "work-with-me": "your “work with me” page",
   resources: "your free resources",
   "income-calculator": "your income calculator",
-  "practice-reset-planner": "your practice reset planner",
+  "practice-reset-planner": "your Practice Freedom Audit",
   footer: "the sign-up at the bottom of your site",
   automation: "one of your automations",
 };

@@ -144,6 +144,15 @@ describe("parseSkipRules", () => {
       expect(hasSkipRules(rules)).toBe(false);
     }
   });
+
+  it("reads the Club bonus reminder-day rule only when it is exactly true (migration 215)", () => {
+    expect(parseSkipRules({ clubBonusReminderDay: true }).clubBonusReminderDay).toBe(true);
+    expect(hasSkipRules(parseSkipRules({ clubBonusReminderDay: true }))).toBe(true);
+    for (const raw of [{ clubBonusReminderDay: "true" }, { clubBonusReminderDay: 1 }, { clubBonusReminderDay: false }]) {
+      expect(parseSkipRules(raw).clubBonusReminderDay).toBeUndefined();
+      expect(hasSkipRules(parseSkipRules(raw))).toBe(false);
+    }
+  });
 });
 
 describe("sendDueEmail with skip rules", () => {

@@ -70,6 +70,7 @@ const MEMBER_ROOTS = [
   "/podcasts",
   "/newsletters",
   "/partners/dashboard",
+  "/retreats/dashboard",
 ];
 
 function isPrivate(candidate: string): boolean {

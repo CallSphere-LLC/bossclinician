@@ -15,6 +15,7 @@ import { INCOME_STREAM_KEY } from "./incomeStream";
 import { PtoSetAsideCalculator } from "./PtoSetAsideCalculator";
 import { RampUpRateCalculator } from "./RampUpRateCalculator";
 import { RampUpRateComparison } from "./RampUpRateComparison";
+import { RETREAT_DASHBOARD_KEY, RetreatDashboardTool } from "./RetreatDashboardTool";
 
 /**
  * Interactive tools a lesson can carry, keyed by `course_lessons.tool_key`
@@ -51,6 +52,9 @@ export const LESSON_TOOLS: Record<string, ComponentType> = {
 const LESSON_FORM_PREFIX = "form-";
 
 export function LessonTool({ toolKey, toolConfig }: { toolKey: string | null | undefined; toolConfig?: unknown }) {
+  // Sheet row 248 (migration 218): the FlourisHealer Retreat Dashboard reads its
+  // retreat slug from tool_config, so it is special-cased like the calculator.
+  if (toolKey === RETREAT_DASHBOARD_KEY) return <RetreatDashboardTool toolConfig={toolConfig} />;
   if (toolKey === "custom-calculator") {
     return isCalculatorConfig(toolConfig) ? <CustomCalculator config={toolConfig} /> : null;
   }

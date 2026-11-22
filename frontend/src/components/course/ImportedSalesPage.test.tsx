@@ -33,7 +33,8 @@ describe("imported sales page purchase boundaries", () => {
     const slug="private-practice-starter-suite";
     const source=render(fixture(slug,true,false,2700));
     expect(source).toContain("ONLY $27 TODAY");
-    expect(source).toContain("USUALLY $197");
+    expect(source).not.toContain("USUALLY $197");
+    expect(source).not.toContain("SAVING $170");
     expect(source).toContain('href="/checkout/'+slug+'"');
     expect(source).not.toMatch(/__SOURCE_|resource_redirect\/offers|thrivecart.com|bossclinician\.com\/offers/);
     const live=render(fixture(slug,true,false,3300));
@@ -47,6 +48,14 @@ describe("imported sales page purchase boundaries", () => {
     expect(unavailable).not.toContain('href="/checkout/');
     expect(unavailable).toContain('aria-disabled="true"');
     expect(unavailable).toContain("Start Today With Clarity");
+  });
+  it("drops value and comparison claims and uses the current support address (22 Nov 2026, items 5-6)", () => {
+    for (const slug of [...slugs, "private-practice-starter-suite"]) {
+      const html=render(fixture(slug,true,false,2700));
+      expect(html).not.toMatch(/\$[\d,]+\s?value|Value:\s?\$|Value at \$|Total\sValue|line-through|USUALLY \$|SAVING \$/i);
+      expect(html).not.toContain("profitableprivatepractices.com");
+    }
+    expect(render(fixture("from-profile-to-profit"))).toContain("support@bossclinician.com");
   });
   it("starter suite keeps the owner's source sections and removed bonus", () => {
     const html=render(fixture("private-practice-starter-suite"));

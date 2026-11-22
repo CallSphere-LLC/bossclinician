@@ -20,6 +20,9 @@ export const CLUB_JOIN_ROUTE = "/club/checkout";
 /** The offer /club/checkout sells (offers.slug; migration 089 publishes it). */
 export const CLUB_OFFER_SLUG = "the-club";
 
+/** The Ramp-Up Rate Formula bonus's label on /club and /club/checkout (item 3, 22 Nov). */
+export const RAMP_UP_BONUS_LABEL = "YOUR TRAINING REGISTRATION BONUS";
+
 export const club = {
   seo: {
     title: "Start Your Therapy Private Practice | The Club",
@@ -39,7 +42,10 @@ export const club = {
     ],
     cta: "Explore Club Enrollment Options",
     includes: "Includes The Boss Move + live coaching + community + implementation resources.",
-    bonus: "Enrollment Bonus: Ramp-Up Rate Formula included.",
+    // Yvette, 22 Nov 2026 (item 3): replaces "Enrollment Bonus: Ramp-Up Rate
+    // Formula included." The bonus now has a per-subscriber deadline.
+    bonus:
+      "Your training registration bonus: Join The Club within 14 days of your first registration for the free training to receive the Ramp-Up Rate Formula.",
   },
 
   taught: {
@@ -227,7 +233,10 @@ export const club = {
     body: "A few extra tools to help you move faster once you join — without having to figure everything out from scratch.",
     items: [
       {
-        label: "CURRENT ENROLLMENT BONUS",
+        // Item 3 (22 Nov): her bonus section, word for word. `note` is the rule
+        // every visitor sees; an identified, eligible subscriber also sees
+        // their own date (personalBonusLine in lib/clubBonus.ts).
+        label: RAMP_UP_BONUS_LABEL,
         title: "The Ramp-Up Rate Formula",
         image: {
           src: "/images/club/bonus-ramp-up-rate-formula.jpg",
@@ -235,8 +244,10 @@ export const club = {
           width: 1456,
           height: 819,
         },
-        body: "Set your rates with more confidence from the beginning. Plug in your numbers and see what your fee actually needs to support across a week, month, and year — so you’re not choosing your rate based on fear, guesswork, or what someone else charges.",
-        note: "Included with Club enrollment during the current bonus period.",
+        body: "Starting your practice comes with enough decisions. Your fee does not have to be another number you choose out of fear or by copying someone else.",
+        body2:
+          "Use the Ramp-Up Rate Formula to connect your fee to the income your practice needs to support and the number of clients you want to see.",
+        note: "Join The Club within 14 days of your first registration for the free training to receive this bonus with your enrollment.",
       },
       {
         label: "Bonus 1",
@@ -311,42 +322,42 @@ export const club = {
 
   value: {
     eyebrow: "Let's Talk About The Value",
-    title: "Here's what's included and what it's worth",
+    title: "Here's what's included",
     subtitle: "Six Months of Strategy, Coaching + Implementation Support",
     body: "You're not paying for another course to watch by yourself. You're getting the curriculum, live guidance, resources, and support to actually implement what you're learning while your practice takes shape.",
     items: [
       {
         name: "The Boss Move",
         detail: "5-module private-practice business curriculum + eligible NBCC CE content",
-        worth: "$1,997 value",
+        worth: "",
       },
       {
         name: "12 Live Coaching Calls",
         detail: "Two opportunities each month to get strategy and support from me as you implement",
-        worth: "$3,600 value",
+        worth: "",
       },
       {
         name: "Business-Building Resource Library",
         detail:
           "Checklists, outreach tools, email and letter templates, trackers, and implementation resources",
-        worth: "$497 value",
+        worth: "",
       },
       {
         name: "Marketing + Referral Resources",
         detail:
           "Tools to help you create consistent visibility and client flow without relying on random marketing",
-        worth: "$397 value",
+        worth: "",
       },
       {
         name: "Prepare to Profit Guided Journal",
         detail:
           "Mindset and decision-making support for the fears that show up when you're building something of your own",
-        worth: "$97 value",
+        worth: "",
       },
       {
         name: "Six Months of Community Access",
         detail: "Support from clinicians building alongside you",
-        worth: "$600 value",
+        worth: "",
       },
     ],
   },
@@ -431,6 +442,15 @@ export const club = {
         q: "I’ve never run a business before — can I do this?",
         a: "Yes. Most members start with zero business experience. That is exactly why the Club exists.",
       },
+      // Item 3 (22 Nov): her two bonus FAQs, verbatim.
+      {
+        q: "Does enrollment in The Club close?",
+        a: "The Club remains open for enrollment. The deadline in your training emails applies to the Ramp-Up Rate Formula enrollment bonus.",
+      },
+      {
+        q: "How do I qualify for the Ramp-Up Rate Formula bonus?",
+        a: "Join The Club by the personalized deadline provided after your first registration for the free training. Your deadline is 11:59 p.m. Pacific Time, 14 calendar days after registration. Registering again does not restart your bonus window.",
+      },
     ],
     cta: "SAY LESS.. I'M READY TO JOIN THE CLUB",
   },
@@ -493,7 +513,9 @@ export const clubCheckout = {
       body: "The mindset work that keeps the build moving when fear shows up.",
     },
   ],
-  bonusesTitle: "Plus these bonuses, included when you enroll:",
+  // Item 3 (22 Nov): the Ramp-Up bonus is no longer included with every
+  // enrollment, so the heading no longer says it is.
+  bonusesTitle: "Plus these bonuses:",
   // QA sheet row 111 (19 Oct): the Niche Clarity Accelerator and the Kickstart
   // Call are gone; the First 30 Days Success Planner is Bonus 1 in the owner's
   // words, and the fast action bonus stays.
@@ -504,9 +526,12 @@ export const clubCheckout = {
       body: "Your first month inside The Club already mapped out. Use the planner to stay focused on the right milestones, track your progress, and know what to work on next as you begin building your practice. Designed to help you implement — not just consume more information.",
     },
     {
-      label: "ENROLLMENT BONUS",
-      title: "The Ramp-Up Rate Pricing Formula",
-      body: "Included when you enroll, the complete rate-setting system: the Rate-Setting Blueprint, mindset reset training, Ramp-Up Rate Calculator, Rate Comparison Calculator, and workbook, so you charge with confidence from your very first client. ($197 value, sold separately. Does not carry NBCC credit.)",
+      // Item 3 (22 Nov): her bonus copy. RAMP_UP_BONUS_LABEL marks the entry
+      // the page drops for a subscriber whose window has closed, and under
+      // which it adds an eligible subscriber's own date.
+      label: RAMP_UP_BONUS_LABEL,
+      title: "The Ramp-Up Rate Formula",
+      body: "Starting your practice comes with enough decisions. Your fee does not have to be another number you choose out of fear or by copying someone else. Use the Ramp-Up Rate Formula to connect your fee to the income your practice needs to support and the number of clients you want to see. Join The Club within 14 days of your first registration for the free training to receive this bonus with your enrollment. (Does not carry NBCC credit.)",
     },
   ],
   nbcc: "The Boss Move is approved by NBCC under the program title \"Profitable Private Practices: Training for Clinically-Aligned Private Practices\" for 4 clock hours. Your certificate of completion will carry the approved program title. Boss Clinician, LLC has been approved by NBCC as an Approved Continuing Education Provider, ACEP No. 7998. Programs that do not qualify for NBCC credit are clearly identified. Boss Clinician, LLC is solely responsible for all aspects of the programs. Continuing education credit applies to this course only; coaching calls, community access, and bonus materials do not carry NBCC credit. CE grievance, refund, and cancellation policies are available at www.bossclinician.com/continuing-education-boss-clinician or by request at support@bossclinician.com.",

@@ -43,6 +43,7 @@ import { checkoutButtonStyle } from "@/components/checkout/checkoutStyle";
 import { CheckoutMarkdown } from "@/components/checkout/CheckoutMarkdown";
 import { checkoutPlainText } from "@/components/checkout/checkoutMarkdown";
 import { loungeButtonLabel } from "@/content/loungeRelease";
+import { LoungeSeatNotice, LoungeVipWaitlist } from "@/components/checkout/LoungeSeatNotice";
 import { CheckoutRequirementsPanel, InvitationRequiredNotice, useCheckoutRequirements, usesInvitationGate } from "@/components/checkout/CheckoutRequirements";
 import { isCredentialForYouOffer, NO_GUARANTEE_DISCLAIMER, NO_REFUND_POLICY } from "@/content/credentialForYou";
 
@@ -276,9 +277,12 @@ export function CheckoutExperience({ offer }: { offer: PublicOffer }) {
   }, [mode, amountCents, selectedPricing.currency, siteTheme]);
 
   if (usesInvitationGate(offer, Boolean(preview))) return <InvitationRequiredNotice offerSlug={offer.slug} />;
+  // Lounge VIP with all six seats filled: the waitlist, not a payment form (the server refuses the sale too).
+  if (offer.seatPricing && !offer.seatPricing.purchasable) return <LoungeVipWaitlist seatPricing={offer.seatPricing} />;
 
   return (
     <div className="space-y-5">
+      {offer.seatPricing && <LoungeSeatNotice slug={offer.slug} seatPricing={offer.seatPricing} />}
       {offer.pricingOptions.length > 1 && (
         <GlassCard accent="plum" interactive={false} className="mx-auto max-w-5xl p-4 sm:p-5">
           <fieldset>

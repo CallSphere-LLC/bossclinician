@@ -1130,6 +1130,12 @@ export const MERGEABLE_TABLES = [
   // Row 171 (migration 150): lesson-reminder / replay sends from Analytics →
   // Engagement follow the person, so the survivor's card keeps them.
   "engagement_sends",
+  // 22-Nov (migrations 214/215/219): founding-seat claims, Club bonus windows and
+  // retreat alumni answers belong to the person (none is unique on contact_id).
+  "lounge_seats",
+  "club_bonus_windows",
+  "retreat_feedback",
+  "retreat_interest",
 ] as const;
 
 const mergeSchema = z.object({

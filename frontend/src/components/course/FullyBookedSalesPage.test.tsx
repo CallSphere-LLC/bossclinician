@@ -26,6 +26,11 @@ describe("Fully Booked sales page",()=>{
     expect(html).not.toContain("85%");
     expect(html).not.toContain("$67");
   });
+  it("shows only the selling price, with no value or discount claims (22 Nov 2026, item 5)",()=>{
+    const html=render();
+    expect(html).toContain("$67");
+    for(const text of ["85%","$444","$197","$247","Total Value","Total value","line-through","Discount"]) expect(html).not.toContain(text);
+  });
   it("never directs an owner to buy again",()=>{
     const html=render({...course,owned:true});
     expect(html).toContain('href="/library/fully-booked-toolkit"');

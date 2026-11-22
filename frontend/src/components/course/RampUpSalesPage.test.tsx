@@ -41,4 +41,8 @@ describe("Ramp-Up source reproduction", () => {
     expect(html).toContain("Set a Session Rate Using Your Practice’s Numbers.");
     for (const text of ["$10K", "inevitable", "tax-deductible", "one client at your new rate", "Pays for Itself", "your worth"]) expect(html).not.toContain(text);
   });
+  it("shows the selling price without comparison or discount claims (22 Nov 2026, Yvette item 5)", () => {
+    for (const text of ["Original Price", "Valued at", "line-through"]) expect(html).not.toContain(text);
+    expect(render(fixture())).toContain("Today’s Price: $97");
+  });
 });

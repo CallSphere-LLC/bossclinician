@@ -135,19 +135,21 @@ export const practiceResetAuditTy = {
 
 /* ══ /reset-planner-form ═══════════════════════════════════════════════ */
 
+/* 22 Nov 2026 (Yvette, item 7): this form delivers the Practice Freedom Audit.
+   The URL and the `reset-planner` slug stay so old links and its automation work. */
 export const resetPlannerForm = {
   seo: {
-    title: "Reset Planner Form | Boss Clinician",
+    title: "Practice Freedom Audit Form | Boss Clinician",
     description:
-      "30 days to work less, earn more, and rebuild your practice your way. Get The Practice Reset Planner free.",
+      "Because you don’t need to do more. You need to align what you already have. Get The Practice Freedom Audit free.",
   },
   formSlug: "reset-planner",
-  eyebrow: "Get the Free Planner",
-  title: "Your 30-day reset starts here.",
-  body: "Enter your name and email below and we'll deliver The Practice Reset Planner directly to your inbox — free, instant, and ready to use today.",
-  submit: "RESET MY PRACTICE!",
-  /** Kajabi's form had no thank-you URL; this is the form's own success line (migration 100). */
-  success: "You're in. Watch your inbox — The Practice Reset Planner is on its way.",
+  eyebrow: "Get the Free Audit",
+  title: "Don’t fix everything. Start with the thing making your practice hardest to sustain.",
+  body: "Enter your name and email below and we'll deliver The Practice Freedom Audit directly to your inbox — free, instant, and ready to use today.",
+  submit: "SEND ME THE FREE AUDIT",
+  /** Kajabi's form had no thank-you URL; this is the form's own success line (DB copy: migration 216). */
+  success: "You're in. Watch your inbox — The Practice Freedom Audit is on its way.",
 } as const;
 
 /* ══ /practice-planner ═════════════════════════════════════════════════ */

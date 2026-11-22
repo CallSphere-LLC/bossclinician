@@ -8,6 +8,8 @@ import { buildInstallmentSchedule, type BillingInterval } from "./pricing";
 import { dispatchEvent } from "./webhooksOut";
 import { assignOfferContractsSafely, emailContractsAssigned } from "./offerContracts";
 import { emailSignedAgreementCopies, settleCheckoutAgreementsSafely } from "./checkoutAgreementRecords";
+import { claimLoungeSeatSafely } from "./loungeSeats";
+import { applyClubBonusSafely } from "./clubBonus";
 
 /**
  * Turning a successful payment into everything the customer bought.
@@ -205,6 +207,10 @@ export async function fulfillPayment(input: FulfillPaymentInput): Promise<Fulfil
       );
     }
 
+    // Lounge founding places / VIP seats: the paid member is counted once, here,
+    // in the same transaction as the payment. Never throws (own savepoint).
+    await claimLoungeSeatSafely(client, order.id);
+
     // ON CONFLICT on the payment intent is the second idempotency guard: even
     // if the order row were somehow re-opened, the same charge cannot be
     // recorded as revenue twice.
@@ -297,6 +303,21 @@ export async function fulfillPayment(input: FulfillPaymentInput): Promise<Fulfil
         });
         grantedProductIds.push(item.product_id);
         if (grant.transitionedToActive) activatedProductIds.push(item.product_id);
+      }
+    }
+
+    // The Club's Ramp-Up Rate Formula bonus (migration 215): granted when the
+    // buyer's saved bonus window was open when the order was placed. Its own
+    // savepoint; never throws, never rolls back the payment above.
+    if (accessMemberId) {
+      const bonus = await applyClubBonusSafely(client, {
+        orderId: order.id,
+        offerIds: purchasedOffers.rows.map((row) => row.offer_id),
+        accessMemberId,
+      });
+      if (bonus.grantedProductId !== null) {
+        grantedProductIds.push(bonus.grantedProductId);
+        if (bonus.activated) activatedProductIds.push(bonus.grantedProductId);
       }
     }
 

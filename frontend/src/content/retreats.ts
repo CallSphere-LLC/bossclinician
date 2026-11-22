@@ -6,7 +6,7 @@
  * Yvette built it → what's included → why eleven guests → the villa gallery →
  * retreat moments → the pattern → the woman who returns → imagine → reserve →
  * your host → why Bali → what is and is not included → the burnout quiz → the
- * fourteen questions.
+ * fourteen questions (fifteen since the 22 Nov 2026 travel FAQ).
  *
  * 21 November 2026 website handoff (sheet row 245, section 10): hero,
  * recognition, experience, audience/objections, host story, reservation
@@ -14,7 +14,10 @@
  * inclusions, prices and the 11 + Yvette guest count are unchanged.
  *
  * The 25 October owner update makes the private $5,500 room the public
- * reservation option. The checkout offer and legal terms use the same amount.
+ * reservation option. 22 November 2026 (owner email, item 4): shared rooms are
+ * not available for public booking, so no shared price or option appears on
+ * this page; the travel facts (Ubud, June 15–20, arrival June 15, checkout
+ * June 20, DPS, designated group transfers) use her wording. The checkout offer and legal terms use the same amount.
  * The final payment date and cancellation policy retain the published terms. The separators in the uppercase strips
  * are non-breaking space + middle dot, written as escapes so a later edit
  * cannot silently turn them into ordinary spaces.
@@ -26,7 +29,8 @@
 const DOT = " · ";
 
 /**
- * Public private-room checkout. Shared-room bookings use their separate offer.
+ * Public private-room checkout. The shared-room offer is invitation-only
+ * (migration 217): Yvette arranges it privately, so nothing here links to it.
  * Internal on purpose: no button on this site sends a visitor to Kajabi.
  */
 export const RETREAT_RESERVE_ROUTE = "/checkout/bali-private-room";
@@ -142,14 +146,14 @@ const INCLUSIONS: readonly RetreatInclusion[] = [
   {
     number: "06",
     title: "Airport Transfers & Pre-Trip Call",
-    body: "Luxury transportation to and from DPS included. Plus a group call with Yvette before you land so you arrive already feeling held.",
+    body: "Airport transportation is provided during June 15–20 through designated group transfers. Exact pickup windows will be coordinated with guests. Plus a group call with Yvette before you land so you arrive already feeling held.",
   },
 ];
 
 const COVERAGE: readonly RetreatCoverage[] = [
   {
     label: "NOT INCLUDED",
-    lines: ["Airfare to and from", "I Gusti Ngurah Rai International Airport (DPS)"],
+    lines: ["Airfare to and from", "Ngurah Rai International Airport, Denpasar (DPS)"],
   },
   {
     label: "ALSO NOT INCLUDED",
@@ -158,12 +162,13 @@ const COVERAGE: readonly RetreatCoverage[] = [
   },
   {
     label: "ALWAYS INCLUDED",
-    lines: ["Luxury airport transfers", "are part of every package"],
+    lines: ["Designated group airport transfers", "during June 15–20"],
   },
 ];
 
 /**
- * The source's fourteen questions, in its order and wording. The refund policy
+ * The source's fourteen questions, in its order and wording, plus the 22 Nov
+ * 2026 travel question (owner email item 4) after the flight question. The refund policy
  * is a financial term: it is the published wording exactly, and the Retreat
  * Terms & Agreement it names has no page of its own here yet, so the link goes
  * to /terms, where the redirect map also sends /retreatagreement.
@@ -183,7 +188,7 @@ const FAQS: readonly RetreatFaq[] = [
   },
   {
     q: "What is included in my package?",
-    a: "Your package includes five nights in the villa, all meals, wellness experiences, curated activities, and luxury airport transfers.",
+    a: "Your package includes five nights in the villa, all meals, wellness experiences, curated activities, and designated group airport transfers during June 15–20.",
   },
   {
     q: "What is not included in my package?",
@@ -221,6 +226,10 @@ const FAQS: readonly RetreatFaq[] = [
   {
     q: "When should I book my flight?",
     a: "Airfare pricing shifts constantly, so we leave the timing of your purchase entirely up to you. Just know that your flight details are needed when you complete your retreat forms, so plan to have your flight booked before filling those out.",
+  },
+  {
+    q: "Where and when is the retreat, and how do I get there?",
+    a: "The retreat is in Ubud, Bali, June 15–20, 2027. Arrival is June 15 and checkout is June 20. Fly into Ngurah Rai International Airport, Denpasar (DPS). Airport transportation is provided during June 15–20 through designated group transfers. Exact pickup windows will be coordinated with guests. Airfare and travel insurance are not included.",
   },
   {
     q: "How do I secure my spot?",
@@ -429,7 +438,7 @@ export const retreat = {
       },
       {
         q: "“I want to go, but I need to understand the full cost.”",
-        a: "Wanting the experience and thinking carefully about the money can both be true. Private rooms are $5,500; shared rooms are $4,500 per person. Airfare and travel insurance are additional charges. Review the room options, included experiences, deposit, remaining payment schedule, and cancellation terms together so you can decide whether the trip fits your budget and responsibilities at home.",
+        a: "Wanting the experience and thinking carefully about the money can both be true. Private rooms are $5,500. Airfare and travel insurance are additional charges. Review the room options, included experiences, deposit, remaining payment schedule, and cancellation terms together so you can decide whether the trip fits your budget and responsibilities at home.",
       },
       {
         q: "“Can I bring a friend who works in wellness?”",
@@ -469,7 +478,7 @@ export const retreat = {
       "Your choice of Healing Meditation or Palm Reading and Holy Water Ceremony",
       "Temple tour, Balinese swing, fire show, beach day, photo day, and shared storytelling",
       "A personalized luxury welcome gift",
-      "Luxury airport transfers and a pre-trip group call with Yvette",
+      "Designated group airport transfers during June 15–20 and a pre-trip group call with Yvette",
     ],
     includedNote: "Airfare and travel insurance are not included, see the FAQ below for details.",
     options: [

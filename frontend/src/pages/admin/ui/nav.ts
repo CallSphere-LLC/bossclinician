@@ -81,6 +81,8 @@ export const NAV_GROUPS: NavGroup[] = [
       { to: "/admin/courses", label: "Courses", ready: true },
       { to: "/admin/coaching", label: "Coaching", ready: true },
       { to: "/admin/contracts", label: "Contracts", ready: true },
+      // Row 248: FlourisHealer retreat dashboards (owner/admin only on the server).
+      { to: "/admin/retreats", label: "Retreats", ready: true },
       { to: "/admin/community", label: "Community", ready: true },
       { to: "/admin/podcasts", label: "Podcasts", ready: true },
       { to: "/admin/newsletters", label: "Newsletters", ready: true },

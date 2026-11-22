@@ -7,7 +7,8 @@ import { LuxeButton } from "@/components/luxe/LuxeButton";
 import { Section } from "@/components/luxe/Section";
 import { stripeTestMode } from "@/components/checkout/stripeClient";
 import { useCheckoutPreview } from "@/components/checkout/checkoutPreview";
-import { CLUB_OFFER_SLUG, clubCheckout } from "@/content/club";
+import { CLUB_OFFER_SLUG, RAMP_UP_BONUS_LABEL, clubCheckout } from "@/content/club";
+import { personalBonusLine, useClubBonus } from "@/lib/clubBonus";
 import { commerceApi, commerceErrorMessage, type PublicOffer } from "@/lib/commerceApi";
 import { CheckoutExperience } from "./Checkout";
 
@@ -42,6 +43,15 @@ export default function ClubCheckout() {
   // Under the admin's "Preview checkout" the offer comes from the admin preview
   // endpoint (which also answers while it is a draft) and nothing is bought.
   const preview = useCheckoutPreview();
+  // Item 3 (22 Nov): the Ramp-Up bonus as the server decides it for this
+  // visitor (their signed email link or their session): their own date while
+  // their window is open, gone once it has closed, the rule for everybody else.
+  // The order itself is decided again on the server from the buyer's email at
+  // order time (services/clubBonus.ts), never from what this page shows.
+  const bonusStatus = useClubBonus();
+  const bonuses = clubCheckout.bonuses.filter(
+    (bonus) => bonus.label !== RAMP_UP_BONUS_LABEL || bonusStatus.state !== "expired"
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -188,7 +198,7 @@ export default function ClubCheckout() {
               {clubCheckout.bonusesTitle}
             </h2>
             <ul className="mt-6 space-y-4">
-              {clubCheckout.bonuses.map((bonus) => (
+              {bonuses.map((bonus) => (
                 <li key={bonus.title}>
                   <GlassCard accent="gold" interactive={false} spotlight={false} className="p-5">
                     <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-gold">
@@ -197,6 +207,11 @@ export default function ClubCheckout() {
                     </p>
                     <h3 className="mt-2 font-semibold text-white">{bonus.title}</h3>
                     <p className="copy-luxe mt-2 text-pretty text-sm">{bonus.body}</p>
+                    {bonus.label === RAMP_UP_BONUS_LABEL && bonusStatus.state === "open" && (
+                      <p className="mt-2 text-pretty text-sm font-semibold text-white">
+                        {personalBonusLine(bonusStatus.deadline)}
+                      </p>
+                    )}
                   </GlassCard>
                 </li>
               ))}

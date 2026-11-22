@@ -26,8 +26,10 @@ import { emailWebhookRouter } from "./emailWebhook";
 import { emailPrefsRouter } from "./emailPrefs";
 import { redirectsRouter } from "./redirects";
 import { verifyRouter } from "./verify";
+import { retreatMediaRouter } from "./retreatMedia";
 import { receiptLinkRouter } from "./receiptLink";
 import { bookACallRouter } from "./bookACall";
+import { clubBonusRouter } from "./clubBonus";
 
 export const publicRouter = Router();
 
@@ -54,11 +56,15 @@ publicRouter.use(growthPublicRouter);
 publicRouter.use(assessmentsPublicRouter);
 publicRouter.use(eventsPublicRouter);
 publicRouter.use(bookACallRouter);
+// The Club's Ramp-Up bonus status for /club and /club/checkout (migration 215).
+publicRouter.use(clubBonusRouter);
 publicRouter.use(affiliateTrackingRouter);
 publicRouter.use(affiliateSignupRouter);
 publicRouter.use(emailWebhookRouter);
 publicRouter.use(emailPrefsRouter);
 publicRouter.use(verifyRouter);
+// Signed links to a retreat's private Memories gallery (sheet row 248).
+publicRouter.use(retreatMediaRouter);
 // Signed, expiring receipt PDF downloads: see services/receiptLinks.ts.
 publicRouter.use(receiptLinkRouter);
 publicRouter.use(redirectsRouter);

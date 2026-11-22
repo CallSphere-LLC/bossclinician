@@ -72,6 +72,8 @@ import Reports from "@/pages/admin/Reports";
 import Availability from "@/pages/admin/Availability";
 import MarketingOverview from "@/pages/admin/MarketingOverview";
 import Contracts from "@/pages/admin/Contracts";
+import RetreatsAdmin from "@/pages/admin/retreats/RetreatsAdmin";
+import RetreatAdmin from "@/pages/admin/retreats/RetreatAdmin";
 
 import EmailLog from "@/pages/admin/EmailLog";
 import VideoEngagement from "@/pages/admin/VideoEngagement";
@@ -82,6 +84,8 @@ import { loginPathFor } from "@/pages/admin/adminReturnTo";
 // console should not carry that bundle for the one tab that opens it.
 const CommunityPreview = lazy(() => import("@/pages/admin/CommunityPreview"));
 const CoursePreview = lazy(() => import("@/pages/admin/CoursePreview"));
+// FlourisHealer retreat dashboard, owner preview (row 248): the guest dashboard bundle.
+const RetreatPreview = lazy(() => import("@/pages/admin/retreats/RetreatPreview"));
 // Checkout preview for an offer (any status): outside AdminLayout, it checks sign-in itself.
 const CheckoutPreview = lazy(() => import("@/pages/admin/CheckoutPreview"));
 
@@ -121,6 +125,8 @@ function ProtectedRoutes() {
         <Route path="/media" element={<MediaLibrary />} />
         <Route path="/coaching" element={<Coaching />} />
         <Route path="/contracts" element={<Contracts />} />
+        <Route path="/retreats" element={<RetreatsAdmin />} />
+        <Route path="/retreats/:id" element={<RetreatAdmin />} />
         <Route path="/podcasts" element={<Podcasts />} />
         <Route path="/newsletters" element={<Newsletters />} />
 
@@ -219,7 +225,7 @@ function ProtectedRoutes() {
  * page is the member player in the member's own chrome, and wrapping it in the
  * console's rail and theme would defeat the point of looking at it.
  */
-function CoursePreviewRoute({ community = false }: { community?: boolean }) {
+function CoursePreviewRoute({ community = false, retreat = false }: { community?: boolean; retreat?: boolean }) {
   const { user, loading } = useAuth();
   const location = useLocation();
 
@@ -228,7 +234,7 @@ function CoursePreviewRoute({ community = false }: { community?: boolean }) {
 
   return (
     <Suspense fallback={<LoadingScreen />}>
-      {community ? <CommunityPreview /> : <CoursePreview />}
+      {retreat ? <RetreatPreview /> : community ? <CommunityPreview /> : <CoursePreview />}
     </Suspense>
   );
 }
@@ -248,6 +254,7 @@ export default function AdminApp() {
       <Route path="/community/:id/preview" element={<CoursePreviewRoute community />} />
       <Route path="/courses/:id/preview" element={<CoursePreviewRoute />} />
       <Route path="/courses/:id/preview/lessons/:lessonSlug" element={<CoursePreviewRoute />} />
+      <Route path="/retreats/:id/preview" element={<CoursePreviewRoute retreat />} />
       <Route
         path="/offers/:id/checkout-preview"
         element={

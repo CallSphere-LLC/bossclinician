@@ -15,6 +15,7 @@ vi.mock("../services/broadcasts", () => ({
   tickRegistrationCampaigns: vi.fn(),
 }));
 vi.mock("../services/sequences", () => ({ sendDueEmail: vi.fn(), tickDueSubscriptions: vi.fn() }));
+vi.mock("../services/retreatAlumni", () => ({ enrolRetreatAlumni: vi.fn() }));
 vi.mock("../services/domainEvents", () => ({ publishDomainEvent: vi.fn() }));
 
 import { communityDigest } from "./emailJobs";

@@ -12,7 +12,13 @@ import { KajabiForm, OPT_IN_FIELDS } from "@/pages/kajabi/pages/shared";
 import { resetPlannerForm } from "@/content/kajabiPages";
 
 /**
- * The Practice Reset Planner — the free 30-day lead magnet.
+ * The Practice Freedom Audit — the free lead magnet at /practice-reset-planner.
+ *
+ * 22 Nov 2026 (Yvette, item 7): this resource is the Practice Freedom Audit, not
+ * a "Reset Planner". Every line of copy below is taken from the audit PDF itself
+ * (/downloads/practice-freedom-audit.pdf, the one canonical copy, also linked by
+ * the masterclass). The URL, the `reset-planner` form and its automation keep
+ * their names so existing links and sign-ups keep working.
  *
  * The live page runs promise → planner cover → the four-phase path → who this
  * is for → opt-in, and this rebuild keeps that order and that copy word for
@@ -29,69 +35,68 @@ import { resetPlannerForm } from "@/content/kajabiPages";
 const EASE: [number, number, number, number] = [0.22, 1, 0.36, 1];
 const VIEWPORT = { once: true, margin: "-12% 0px -8% 0px" } as const;
 
-/** Anchor both "GET THE FREE PLANNER" buttons land on. */
+/** Anchor both "GET THE FREE AUDIT" buttons land on (id kept for old links). */
 const OPT_IN_ID = "get-the-free-planner";
 
-/* ── Copy, verbatim from bossclinician.com/practice-reset-planner ─────── */
+/* ── Copy, from the Practice Freedom Audit PDF (updated 22 Nov 2026) ──── */
 
-// Sheet row 245 (21 Nov 2026): no promise of income or schedule results in 30
-// days. The headline's second line and the subhead are the approved wording.
-const HERO_HEADLINE = "The Practice Reset Planner A 30-Day Plan to Review What Your Practice Needs Next.";
+const HERO_HEADLINE =
+  "The Practice Freedom Audit Because you don’t need to do more. You need to align what you already have.";
 
 const HERO_SUBHEAD =
-  "Use the prompts to review your workload, income model, and priorities, then choose changes to test.";
+  "As you move through it, you’ll look at four areas of your practice: Capacity. Income. Dependence. Future Fit.";
 
 const HERO_QUALIFIER =
-  "If your schedule is full but your income still feels inconsistent — or you're exhausted from the pace and not sure how to change it — this planner is your starting point. Not more hustle. A reset.";
+  "Not so you can fix everything today. But so you can see what may be making your current practice difficult to sustain—and identify the first thing that needs your attention.";
 
-const REASSURANCE = "Free download · 30-day guided plan · No fluff · Instant access";
+const REASSURANCE = "Free download · Fillable PDF · Instant access";
 
-const PATH_HEADING = "30 days. A clear path forward.";
+const PATH_HEADING = "Four areas of your practice. Capacity. Income. Dependence. Future Fit.";
 
+/** The audit's four areas, each with the question its page opens on. */
 const PHASES: ReadonlyArray<{ number: string; title: string; body: string }> = [
   {
     number: "1",
-    title: "Audit & Awareness",
-    body: "Get honest about what's working — and what's costing you",
+    title: "Capacity",
+    body: "Could you keep working at this pace for another 10 years?",
   },
   {
     number: "2",
-    title: "Reposition & Redesign",
-    body: "Rebuild around your goals, not your current limits",
+    title: "Income",
+    body: "What happens financially when you work less?",
   },
   {
     number: "3",
-    title: "Build Scalable Income",
-    body: "Stop trading all your time for money",
+    title: "Dependence",
+    body: "What happens if you disappear for seven days?",
   },
   {
     number: "4",
-    title: "Systems & Sustainability",
-    body: "Protect your time, energy, and income long-term",
+    title: "Future Fit",
+    body: "Did you build today’s practice only for today’s version of you?",
   },
 ];
 
-const WHO_HEADING =
-  "This planner is for the clinician who knows something needs to change — and is ready to do something about it.";
+const WHO_HEADING = "You built the practice. Now let’s make sure you can stay in it.";
 
 const WHO_BODY =
-  "Whether you're just starting out, fully booked and burning out, or running a group practice that's grown beyond what you can manage alone — a reset isn't a sign that something went wrong. It's a sign you're ready to build something better. This planner gives you the structure to stop operating in reaction mode and start building a practice that actually works for your life — at any stage.";
+  "I created this audit because there was a time when my practice looked successful from the outside. My caseload was full. I was helping people. I was building a team. I was making money. But underneath all of that, my practice required too much of me to keep working. What I eventually realized was that I didn’t necessarily need another business. I needed to build the one I already had differently. That is what this guide is designed to help you begin doing.";
 
-const OPT_IN_HEADING = "Your 30-day reset starts here.";
+const OPT_IN_HEADING = "Don’t fix everything. Start with the thing making your practice hardest to sustain.";
 
 const OPT_IN_BODY =
-  "Enter your name and email below and we'll deliver The Practice Reset Planner directly to your inbox — free, instant, and ready to use today.";
+  "Enter your name and email below and we'll deliver The Practice Freedom Audit directly to your inbox — free, instant, and ready to use today.";
 
-const OPT_IN_LABEL = "SEND ME THE FREE PLANNER";
+const OPT_IN_LABEL = "SEND ME THE FREE AUDIT";
 
 /**
- * Row 245: what the sign-up sends — the planner email (automation 1364) and
+ * Row 245: what the sign-up sends — the audit email (automation 1364) and
  * nothing recurring. `OptInNote` adds the unsubscribe and privacy-policy link.
  */
-const PRIVACY_NOTE = "You’ll get The Practice Reset Planner by email.";
+const PRIVACY_NOTE = "You’ll get The Practice Freedom Audit by email.";
 
-/** The cover's subtitle, set in type: the headline's approved wording. */
-const COVER_SUBTITLE = "A 30-Day Plan to Review What Your Practice Needs Next";
+/** The cover's subtitle, set in type: the tagline on the audit's own cover. */
+const COVER_SUBTITLE = "Because you don’t need to do more. You need to align what you already have.";
 
 /**
  * Break a headline at its natural turn so the second clause can be set in foil
@@ -105,10 +110,10 @@ function splitOnce(text: string, marker: string): [string, string | undefined] {
   return [text.slice(0, at), text.slice(at + 1)];
 }
 
-const [HERO_TITLE, HERO_ACCENT] = splitOnce(HERO_HEADLINE, " A 30-Day Plan");
-const [PATH_TITLE, PATH_ACCENT] = splitOnce(PATH_HEADING, " A clear path");
-const [WHO_TITLE, WHO_ACCENT] = splitOnce(WHO_HEADING, " and is ready");
-const [OPT_IN_TITLE, OPT_IN_ACCENT] = splitOnce(OPT_IN_HEADING, " starts here.");
+const [HERO_TITLE, HERO_ACCENT] = splitOnce(HERO_HEADLINE, " Because you");
+const [PATH_TITLE, PATH_ACCENT] = splitOnce(PATH_HEADING, " Capacity.");
+const [WHO_TITLE, WHO_ACCENT] = splitOnce(WHO_HEADING, " Now let’s");
+const [OPT_IN_TITLE, OPT_IN_ACCENT] = splitOnce(OPT_IN_HEADING, " Start with");
 
 /** One rise recipe for the page; only the delay changes. */
 function rise(reduce: boolean | null, delay = 0) {
@@ -127,8 +132,8 @@ export default function PracticeResetPlanner() {
   return (
     <>
       <Seo
-        title="Free Practice Reset Planner for Therapists | Boss Clinician"
-        description="30 days to work less, earn more, and rebuild your practice your way. A free step-by-step planner for therapists ready to reclaim their time, income, and energy."
+        title="Free Practice Freedom Audit for Therapists | Boss Clinician"
+        description="Because you don’t need to do more. You need to align what you already have. A free fillable audit of four areas of your practice: Capacity, Income, Dependence and Future Fit."
       />
 
       <HeroBlock />
@@ -261,7 +266,7 @@ function BackArrow() {
 function HeroBlock() {
   return (
     <LuxePageHero
-      eyebrow="FREE 30-DAY PLANNER · BOSS CLINICIAN"
+      eyebrow="FREE AUDIT · BOSS CLINICIAN"
       title={HERO_TITLE}
       titleAccent={HERO_ACCENT}
       tone="violet"
@@ -274,7 +279,7 @@ function HeroBlock() {
       actions={
         <>
           <LuxeButton variant="foil" size="lg" href={`#${OPT_IN_ID}`}>
-            GET THE FREE PLANNER
+            GET THE FREE AUDIT
           </LuxeButton>
 
           <LuxeButton
@@ -296,7 +301,7 @@ function HeroBlock() {
       }
       aside={
         <PlannerCover
-          titleLines={["The Practice Reset Planner"]}
+          titleLines={["The Practice Freedom Audit"]}
           subLines={[COVER_SUBTITLE]}
         />
       }
@@ -305,7 +310,7 @@ function HeroBlock() {
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
-   2 · The 30-day path
+   2 · The four areas
    ══════════════════════════════════════════════════════════════════════════ */
 
 function PathSection() {
@@ -315,11 +320,11 @@ function PathSection() {
       space="md"
       aurora="gold"
       auroraIntensity={0.5}
-      aria-label="What is inside the planner"
+      aria-label="What is inside the audit"
     >
       <SectionTitle
         align="center"
-        eyebrow="THE PRACTICE RESET PLANNER"
+        eyebrow="THE PRACTICE FREEDOM AUDIT"
         title={
           <>
             {PATH_TITLE}{" "}
@@ -330,8 +335,8 @@ function PathSection() {
 
       <div className="mt-10 grid items-start gap-8 lg:grid-cols-[0.78fr_1.22fr] lg:gap-10">
         <PlannerCover
-          titleLines={["The Practice", "Reset Planner"]}
-          subLines={["A 30-Day Plan to Review", "What Your Practice Needs Next"]}
+          titleLines={["The Practice", "Freedom Audit"]}
+          subLines={["Because you don’t need to do more.", "You need to align what you already have."]}
           className="lg:max-w-[23rem]"
         />
 
@@ -378,12 +383,12 @@ function WhoSection() {
       space="md"
       aurora="green"
       auroraIntensity={0.5}
-      aria-label="Who this planner is for"
+      aria-label="Why I created this audit"
       containerClassName="max-w-3xl"
     >
       <SectionTitle
         align="center"
-        eyebrow="WHO THIS IS FOR"
+        eyebrow="WHY I CREATED THIS AUDIT"
         className="mx-auto max-w-3xl"
         titleClassName="text-[1.6rem] sm:text-[2rem] lg:text-[2.4rem]"
         title={
@@ -400,7 +405,7 @@ function WhoSection() {
 
       <motion.div {...rise(reduce, 0.18)} className="mt-10 text-center">
         <LuxeButton variant="foil" size="lg" href={`#${OPT_IN_ID}`}>
-          GET THE FREE PLANNER
+          GET THE FREE AUDIT
         </LuxeButton>
       </motion.div>
     </Section>
@@ -426,7 +431,7 @@ function OptInSection() {
       space="lg"
       aurora="mixed"
       auroraIntensity={0.85}
-      aria-label="Get the free planner"
+      aria-label="Get the free audit"
       containerClassName="max-w-3xl"
       className="scroll-mt-24"
     >
@@ -447,8 +452,8 @@ function OptInSection() {
             {OPT_IN_LABEL}
           </h3>
 
-          {/* Row 245: the planner's own form (`reset-planner`, whose automation
-              emails the planner), not the newsletter box that used to sit here
+          {/* Row 245: the audit's own form (`reset-planner`, whose automation
+              emails the audit), not the newsletter box that used to sit here
               and delivered nothing. Same fields as /reset-planner-form. */}
           <div className="mt-6 text-left">
             <KajabiForm

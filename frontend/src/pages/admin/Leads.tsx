@@ -37,7 +37,7 @@ const SOURCE_LABEL: Record<string, string> = {
   "work-with-me": "Work With Me page",
   "income-calculator": "Income calculator",
   resources: "Free resources page",
-  "practice-reset-planner": "Practice Reset Planner page",
+  "practice-reset-planner": "Practice Freedom Audit page",
   footer: "Website footer",
   automation: "Added automatically",
 };

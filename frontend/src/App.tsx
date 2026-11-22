@@ -53,6 +53,8 @@ const MemberCoachingSession = lazy(() => import("@/pages/member/CoachingSession"
 const MemberPodcasts = lazy(() => import("@/pages/member/Podcasts"));
 const MemberNewsletters = lazy(() => import("@/pages/member/Newsletters"));
 const MemberAffiliatePortal = lazy(() => import("@/pages/member/AffiliatePortal"));
+// Sheet row 248: the private FlourisHealer Retreat Dashboard (and its alumni deep links).
+const MemberRetreatDashboard = lazy(() => import("@/pages/member/RetreatDashboardPage"));
 const Cart = lazy(() => import("@/pages/Cart"));
 const Checkout = lazy(() => import("@/pages/Checkout"));
 const CheckoutUpsell = lazy(() => import("@/pages/CheckoutUpsell"));
@@ -295,6 +297,10 @@ function memberRoutes() {
         <Route path="/podcasts" element={<MemberPodcasts />} />
         <Route path="/partners/dashboard" element={<MemberAffiliatePortal />} />
         <Route path="/newsletters" element={<MemberNewsletters />} />
+        {/* Ranked above the public /retreats page by being more specific. */}
+        <Route path="/retreats/dashboard" element={<MemberRetreatDashboard />} />
+        <Route path="/retreats/dashboard/:slug" element={<MemberRetreatDashboard />} />
+        <Route path="/retreats/dashboard/:slug/:section" element={<MemberRetreatDashboard />} />
       </Route>
     </Route>
   );

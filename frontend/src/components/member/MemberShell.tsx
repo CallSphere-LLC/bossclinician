@@ -11,6 +11,7 @@ import {
   ChevronDown,
   Eye,
   LogOut,
+  Plane,
   Sparkles,
   User,
   Users,
@@ -24,6 +25,7 @@ import { PlayerPreviewBanner } from "@/components/player/playerSource";
 import { NotificationBell } from "@/components/community/NotificationBell";
 import { MemberAvatar } from "@/components/member/MemberAvatar";
 import { cn } from "@/lib/cn";
+import { useMyRetreats } from "@/components/retreats/useMyRetreats";
 
 /**
  * Chrome for every signed-in member page.
@@ -70,6 +72,13 @@ const RAIL: RailLink[] = [
   { to: "/account", label: "Account", icon: User },
 ];
 
+/** The rail with the retreat dashboard placed after Contracts. */
+function withRetreats(links: RailLink[]): RailLink[] {
+  const entry: RailLink = { to: "/retreats/dashboard", label: "FlourisHealer Retreats", icon: Plane };
+  const at = links.findIndex((link) => link.to === "/contracts");
+  return at < 0 ? [...links, entry] : [...links.slice(0, at + 1), entry, ...links.slice(at + 1)];
+}
+
 export { MemberAvatar, memberInitials } from "@/components/member/MemberAvatar";
 
 export function MemberShell({
@@ -84,6 +93,10 @@ export function MemberShell({
   const { member, signOut } = useMember();
   const navigate = useNavigate();
   const location = useLocation();
+  // "FlourisHealer Retreats" appears only for a guest of a published retreat
+  // (sheet row 248); everyone else's rail is unchanged.
+  const myRetreats = useMyRetreats(!preview);
+  const rail = myRetreats.length > 0 ? withRetreats(RAIL) : RAIL;
 
   // The community's "Back" link returns to the last member page outside it
   // (see components/community/communityReturn.ts).
@@ -237,7 +250,7 @@ export function MemberShell({
           className="border-b border-white/[0.06] bg-night-deep/[0.94] backdrop-blur-xl lg:hidden"
         >
           <ul className="flex snap-x gap-1 overflow-x-auto px-3 py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            {RAIL.map((item) => (
+            {rail.map((item) => (
               <li key={item.to} className="snap-start">
                 <NavLink to={item.to} className={mobileLinkClass}>
                   <item.icon aria-hidden className="size-4" />
@@ -260,7 +273,7 @@ export function MemberShell({
             </div>
           ) : (
             <ul className="sticky top-28 flex flex-col gap-1">
-              {RAIL.map((item) => (
+              {rail.map((item) => (
                 <li key={item.to}>
                   <NavLink to={item.to} className={railLinkClass}>
                     {({ isActive }) => (

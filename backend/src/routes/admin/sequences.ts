@@ -18,6 +18,8 @@ import { asyncHandler } from "../../utils/asyncHandler";
 import { rowToCamel, rowsToCamel } from "../../utils/case";
 import { badRequest, notFound } from "../../utils/httpError";
 import { adminTestEmailLimiter } from "../../middleware/rateLimit";
+import { env } from "../../config/env";
+import { retreatMergeValues } from "../../services/retreatAnchor";
 
 /**
  * Sequence administration — mounted at /api/admin/sequences.
@@ -536,6 +538,39 @@ adminSequencesRouter.post(
       },
       mergeLinks(contact?.id ?? null, { preview: true })
     );
+    // Migration 220: a retreat-anchored sequence's {{retreat…}} links, filled
+    // from the most recent retreat so a test shows real buttons, not blanks.
+    const anchor = await pool.query<{ anchor_kind: string | null }>(
+      `SELECT anchor_kind FROM email_sequences WHERE id = $1`,
+      [req.params.id]
+    );
+    if (anchor.rows[0]?.anchor_kind) {
+      const retreat = await pool.query<{ slug: string; title: string; next_url: string }>(
+        `SELECT r.slug, r.title, COALESCE(st.next_url, '') AS next_url
+           FROM retreats r LEFT JOIN retreat_alumni_settings st ON st.retreat_id = r.id
+          ORDER BY r.end_date DESC NULLS LAST, r.id DESC LIMIT 1`
+      );
+      const r = retreat.rows[0];
+      if (r) {
+        Object.assign(
+          values,
+          retreatMergeValues({ siteUrl: env.publicSiteUrl, slug: r.slug, title: r.title, nextUrl: r.next_url })
+        );
+      }
+    }
+    // Migration 215: the Club bonus tokens, from the test address's own saved
+    // window when it has one, otherwise a sample date, so a test never shows a
+    // blank where the deadline goes.
+    if (/\{\{\s*clubBonus/.test(`${row.subject}${row.body_md}`)) {
+      const { clubBonusMergeValues } = await import("../../services/clubBonus");
+      const own = await clubBonusMergeValues(pool, email);
+      Object.assign(values, own, own.clubBonusDeadline ? {} : { clubBonusDeadline: "December 6 (sample)" });
+    }
+    // Migration 214: the Lounge price line, as it would be sent today.
+    if (/\{\{\s*lounge\./.test(`${row.subject}${row.body_md}`)) {
+      const { loungeMergeValues } = await import("../../services/loungeSeats");
+      Object.assign(values, await loungeMergeValues(pool));
+    }
     const body = renderTokens(row.body_md, values);
 
     // Sent as transactional: it is a preview going to the person who wrote it,

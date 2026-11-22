@@ -13,6 +13,14 @@ import { formatAmount } from "../../utils/money";
 import { deadlinePlan } from "../../services/deadlinePlan";
 import { publicCheckoutRequirements } from "../../services/checkoutRequirements";
 import {
+  filterPhasedOptions,
+  loungePricingStatus,
+  seatPricingFor,
+  tierForSlug,
+  type PricePhase,
+  type SeatViewer,
+} from "../../services/loungeSeats";
+import {
   computeOrderTotal,
   paymentPlanTotalCents,
   type BillingInterval,
@@ -72,6 +80,8 @@ export interface OfferRow {
   pricing_option_id?: number | null;
   /** A membership's minimum term in months. Null or absent: none. */
   minimum_months?: number | null;
+  /** Lounge founding/standard price (services/loungeSeats.ts). Null: not phased. */
+  price_phase?: PricePhase | null;
   pricing_label?: string;
   plan_total_cents?: number | null;
   balance_due_by?: string | null;
@@ -165,6 +175,7 @@ export interface OfferPricingOptionRow {
   stripe_product_id: string | null;
   sort: number;
   minimum_months?: number | null;
+  price_phase?: PricePhase | null;
   plan_total_cents?: number | null;
   balance_due_by?: string | null;
   final_installment_cents?: number;
@@ -173,14 +184,21 @@ export interface OfferPricingOptionRow {
 
 const PRICING_OPTION_COLUMNS = `id, offer_id, label, pricing_type, amount_cents, deposit_cents, sales_start_at, sales_end_at,
   min_amount_cents, currency, interval, interval_count, installment_count, minimum_months,
-  trial_days, recommended, active, stripe_price_id, stripe_product_id, sort, plan_total_cents, balance_due_by::text`;
+  trial_days, recommended, active, stripe_price_id, stripe_product_id, sort, plan_total_cents, balance_due_by::text,
+  price_phase`;
 
+/**
+ * The offer's active checkout options. A Lounge offer's options are tagged
+ * founding or standard, and only the phase this viewer may buy is returned
+ * (services/loungeSeats.ts); `viewer` is the signed-in member, if any.
+ */
 export async function loadOfferPricingOptions(
   offerId: number,
   db: Queryable = pool,
+  viewer?: SeatViewer,
 ): Promise<OfferPricingOptionRow[]> {
-  const result = await db.query<OfferPricingOptionRow>(
-    `SELECT ${PRICING_OPTION_COLUMNS}
+  const result = await db.query<OfferPricingOptionRow & { offer_slug?: string }>(
+    `SELECT ${PRICING_OPTION_COLUMNS}, (SELECT slug FROM offers WHERE id = $1) AS offer_slug
        FROM offer_pricing_options
       WHERE offer_id = $1 AND active = true
         AND (sales_start_at IS NULL OR sales_start_at <= now())
@@ -188,7 +206,13 @@ export async function loadOfferPricingOptions(
       ORDER BY sort, id`,
     [offerId],
   );
-  return result.rows.map(option => {
+  const rows = await filterPhasedOptions(
+    result.rows.map(({ offer_slug: _slug, ...option }) => option),
+    result.rows[0]?.offer_slug,
+    viewer,
+    db,
+  );
+  return rows.map(option => {
     if (!option.plan_total_cents || !option.balance_due_by) return option;
     const plan = deadlinePlan(option.plan_total_cents, option.deposit_cents ?? 0, option.balance_due_by, new Date());
     return {...option, amount_cents:plan.amountCents, installment_count:plan.installmentCount,
@@ -216,6 +240,7 @@ function optionOverlay(offer: OfferRow, option: OfferPricingOptionRow): OfferRow
     pricing_option_id: option.id,
     pricing_label: option.label,
     minimum_months: option.minimum_months ?? null,
+    price_phase: option.price_phase ?? null,
     plan_total_cents: option.plan_total_cents,
     balance_due_by: option.balance_due_by,
     final_installment_cents: option.final_installment_cents,
@@ -231,9 +256,24 @@ export async function selectOfferPricing(
   offer: OfferRow,
   pricingOptionId: number | null | undefined,
   db: Queryable = pool,
+  viewer?: SeatViewer,
 ): Promise<OfferRow> {
+  // A Lounge offer is sold only through its phased options, and fails closed:
+  // its own price is the founding annual price and must not stay buyable once
+  // founding closes, nor become buyable if the owner switches the phase's
+  // options off. Unphased rows on it are not sold either.
+  const phased = tierForSlug(offer.slug) !== null;
+  if (pricingOptionId === null && !phased) return { ...offer, pricing_option_id: null };
+  const options = await loadOfferPricingOptions(offer.id, db, viewer);
+  if (phased) {
+    const sellable = options.filter((entry) => entry.price_phase);
+    const chosen = pricingOptionId === undefined
+      ? sellable.find((entry) => entry.recommended) ?? optionDuplicatingBasePrice(offer, sellable) ?? sellable[0]
+      : sellable.find((entry) => entry.id === pricingOptionId);
+    if (!chosen) throw badRequest("That payment option is no longer available. Refresh the page to see the current price.");
+    return optionOverlay(offer, chosen);
+  }
   if (pricingOptionId === null) return { ...offer, pricing_option_id: null };
-  const options = await loadOfferPricingOptions(offer.id, db);
   const option = pricingOptionId === undefined
     ? options.find((entry) => entry.recommended)
     : options.find((entry) => entry.id === pricingOptionId);
@@ -603,6 +643,19 @@ offersRouter.get(
 );
 
 /**
+ * GET /api/lounge/pricing: which phase each Lounge tier is in, founding places
+ * and VIP seats left, and whether VIP is on its waitlist. The same for every
+ * visitor; /lounge renders from it.
+ */
+offersRouter.get(
+  "/lounge/pricing",
+  asyncHandler(async (_req, res) => {
+    res.set("Cache-Control", "no-store");
+    res.json(await loungePricingStatus());
+  })
+);
+
+/**
  * The checkout page's whole view of one offer, shared by the public GET above
  * and the admin's checkout preview, so the preview cannot drift from what a
  * buyer is shown. The caller decides which offers may be viewed at all.
@@ -624,32 +677,40 @@ export async function buildOfferView(
   memberId: number | null,
   requestedOptionId?: number | null
 ): Promise<Record<string, unknown>> {
-  const [products, bumps, upsells, productIds, additionalPricing] = await Promise.all([
+  const viewer: SeatViewer = { memberId };
+  const seatTier = tierForSlug(offer.slug);
+  const [products, bumps, upsells, productIds, additionalPricing, seatPricing] = await Promise.all([
     loadOfferProducts(offer.id),
     loadOfferBumps(offer.id),
     loadUpsells(offer.id),
     offerProductIds(offer.id),
-    loadOfferPricingOptions(offer.id),
+    loadOfferPricingOptions(offer.id, pool, viewer),
+    seatTier ? seatPricingFor(seatTier, viewer) : Promise.resolve(null),
   ]);
+  // The Lounge sells only its phased options (see selectOfferPricing).
+  const phasedOffer = seatTier !== null;
+  const offeredPricing = phasedOffer ? additionalPricing.filter((option) => option.price_phase) : additionalPricing;
   // An option that repeats the offer's own price stands in for it (see
   // optionDuplicatingBasePrice), so the buyer never sees the same price twice.
   // Anything that would have selected the offer's own price — no recommended
   // option, or an old `?option=0` link — selects that option instead; it
   // charges the same amount, and the checkout posts its id.
-  const baseStandIn = optionDuplicatingBasePrice(offer, additionalPricing);
+  const baseStandIn = phasedOffer
+    ? optionDuplicatingBasePrice(offer, offeredPricing) ?? offeredPricing[0]
+    : optionDuplicatingBasePrice(offer, offeredPricing);
   let selectedOffer =
     requestedOptionId === undefined
-      ? await selectOfferPricing(offer, undefined)
-      : await selectOfferPricing(offer, requestedOptionId).catch(() => selectOfferPricing(offer, undefined));
+      ? await selectOfferPricing(offer, undefined, pool, viewer)
+      : await selectOfferPricing(offer, requestedOptionId, pool, viewer).catch(() => selectOfferPricing(offer, undefined, pool, viewer));
   if (baseStandIn && (selectedOffer.pricing_option_id ?? null) === null) {
-    selectedOffer = await selectOfferPricing(offer, baseStandIn.id);
+    selectedOffer = await selectOfferPricing(offer, baseStandIn.id, pool, viewer);
   }
   const priced = toPricedOffer(selectedOffer);
-  const additionalRecommended = additionalPricing.some((option) => option.recommended);
+  const additionalRecommended = offeredPricing.some((option) => option.recommended);
   // QA rows 202-203: null unless the owner has switched something on for this offer.
   const checkoutRequirements = await publicCheckoutRequirements(offer.id, [
-    { ...offer, pricing_option_id: null },
-    ...additionalPricing.map((option) => optionOverlay(offer, option)),
+    ...(phasedOffer ? [] : [{ ...offer, pricing_option_id: null }]),
+    ...offeredPricing.map((option) => optionOverlay(offer, option)),
   ]);
 
   let alreadyOwned = false;
@@ -670,8 +731,8 @@ export async function buildOfferView(
     billing: billingToJson(selectedOffer, priced),
     selectedPricingOptionId: selectedOffer.pricing_option_id ?? null,
     pricingOptions: [
-      ...(baseStandIn ? [] : [pricingOptionJson(offer, null, pricingLabel(offer), !additionalRecommended)]),
-      ...additionalPricing.map((option) => {
+      ...(baseStandIn || phasedOffer ? [] : [pricingOptionJson(offer, null, pricingLabel(offer), !additionalRecommended)]),
+      ...offeredPricing.map((option) => {
         const overlaid = optionOverlay(offer, option);
         return pricingOptionJson(overlaid, option.id, option.label || pricingLabel(overlaid), option.recommended);
       }),
@@ -735,6 +796,8 @@ export async function buildOfferView(
     quote: totalToJson(computeOrderTotal({ offer: priced })),
     alreadyOwned,
     checkoutRequirements,
+    /** Lounge founding/standard phase, seats and waitlist for this viewer; null elsewhere. */
+    seatPricing,
   };
 }
 
@@ -799,7 +862,7 @@ export async function buildOfferQuote(
   /** The preview reports an undeliverable offer in its banner instead of failing the quote. */
   options: { skipDeliverability?: boolean } = {}
 ): Promise<Record<string, unknown>> {
-  const offer = await selectOfferPricing(baseOffer, body.pricingOptionId);
+  const offer = await selectOfferPricing(baseOffer, body.pricingOptionId, pool, { email: memberEmail });
 
   const priced = toPricedOffer(offer);
   const bumpRows = await loadOfferBumps(offer.id);

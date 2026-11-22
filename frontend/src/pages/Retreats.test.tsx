@@ -61,7 +61,7 @@ describe("retreat page, 21 Nov 2026 website handoff (row 245 section 10, row 247
   });
 
   it("keeps the confirmed prices, guest count, dates and agreement route", () => {
-    for (const text of ["$5,500", "$4,500 per person", "11 GUESTS + YVETTE", "June 8, 2027", 'href="/retreatagreement"', 'href="/checkout/bali-private-room"']) {
+    for (const text of ["$5,500", "11 GUESTS + YVETTE", "June 8, 2027", 'href="/retreatagreement"', 'href="/checkout/bali-private-room"']) {
       expect(html).toContain(text);
     }
     expect(html).not.toContain("/retreat-terms");
@@ -85,5 +85,37 @@ describe("retreat page, 21 Nov 2026 website handoff (row 245 section 10, row 247
     expect(html).toMatch(
       /<img class="retreat-founder-photo" src="\/images\/retreat-founder-thailand-portrait\.webp" alt="[^"]+" width="942" height="1670"/,
     );
+  });
+});
+
+describe("retreat page, 22 Nov 2026 owner answers (item 4: rooms and travel)", () => {
+  const { html, head } = render();
+
+  it("offers no public shared-room booking or price", () => {
+    expect(html).not.toContain("$4,500");
+    expect(html).not.toContain("bali-shared-room");
+    expect(html).not.toMatch(/shared rooms are/i);
+    expect(JSON.stringify(head)).not.toContain("4500");
+  });
+
+  it("answers the travel question with the owner's facts", () => {
+    for (const text of [
+      "Where and when is the retreat, and how do I get there?",
+      "The retreat is in Ubud, Bali, June 15–20, 2027. Arrival is June 15 and checkout is June 20.",
+      "Ngurah Rai International Airport, Denpasar (DPS)",
+      "Airport transportation is provided during June 15–20 through designated group transfers.",
+      "Exact pickup windows will be coordinated with guests.",
+      "Airfare and travel insurance are not included.",
+    ]) expect(html).toContain(text);
+  });
+
+  it("never implies unlimited or around-the-clock transport", () => {
+    for (const text of ["Luxury airport transfers", "Luxury transportation to and from DPS", "part of every package", "I Gusti Ngurah Rai"]) {
+      expect(html).not.toContain(text);
+    }
+  });
+
+  it("sends no retreat button to the Boardroom application", () => {
+    expect(html).not.toMatch(/href="\/apply/);
   });
 });

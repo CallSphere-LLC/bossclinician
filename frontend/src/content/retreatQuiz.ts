@@ -15,6 +15,11 @@
  * is The Depleted Pourer, 10 or more The Functional Giver, otherwise The
  * Replenished Woman.
  *
+ * 22 Nov 2026 (owner email item 4): the thank-you page's flight step and the
+ * June 15 / June 20 dates use her travel wording (Ngurah Rai International
+ * Airport, Denpasar (DPS); arrival June 15, checkout June 20; designated group
+ * transfers, pickup windows coordinated with guests).
+ *
  * Kajabi asks for no email here and shows the result straight away. That is
  * kept. Under the result this site adds an optional "email me my result" form,
  * one per result (migration 099), which tags the contact and sends the result.
@@ -183,7 +188,7 @@ export const RETREAT_THANK_YOU = {
     },
     {
       title: "Book Your Flights",
-      body: "Book your flights to I Gusti Ngurah Rai International Airport (DPS), Bali. Aim to arrive on June 15, 2027 and depart on June 20, 2027. Group shuttle transfers are included from the airport.",
+      body: "Book your flights to Ngurah Rai International Airport, Denpasar (DPS). Arrival is June 15, 2027 and checkout is June 20, 2027. Airport transportation is provided during June 15–20 through designated group transfers. Exact pickup windows will be coordinated with guests.",
     },
     {
       title: "Follow & Stay Close",
@@ -194,9 +199,9 @@ export const RETREAT_THANK_YOU = {
   datesHeading: "Important Dates to Save",
   dates: [
     { date: "June 8, 2027", body: "Final payment deadline. All balances must be paid in full by this date or your spot will be forfeited with no refund." },
-    { date: "June 15, 2027", body: "Arrival day. Fly into DPS. Group luxury shuttle to the villa. Your retreat begins." },
+    { date: "June 15, 2027", body: "Arrival day. Fly into DPS. Designated group transfer to the villa. Your retreat begins." },
     { date: "June 15–20", body: "The retreat. Five days of release, restoration, and reconnection in Ubud, Bali." },
-    { date: "June 20, 2027", body: "Departure day. Group shuttle back to DPS. You leave different than you arrived." },
+    { date: "June 20, 2027", body: "Checkout day. Designated group transfer back to DPS. You leave different than you arrived." },
   ],
   quote: "“You have spent years showing up for everyone else. This is your turn to be held.”",
   quoteBy: "— Yvette Howard, LCSW  ·  FlourisHealer Retreats",
