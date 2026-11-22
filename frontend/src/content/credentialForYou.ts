@@ -65,7 +65,7 @@ export interface CredentialService {
 
 export const credentialForYou = {
   seo: {
-    title: "Credentialing Support for Mental Health Providers | Boss Clinician",
+    title: "Insurance Credentialing for Therapists | Boss Clinician",
     description:
       "Credentialing support for therapists and mental health providers. Get help with commercial insurance, Medicare, Medicaid, TRICARE, CAQH, payer follow-up, and enrollment tracking.",
   },
@@ -293,6 +293,9 @@ export const credentialingRequest = {
   },
   eyebrow: "Credential For You",
   title: "Request Credentialing Support",
+  // Sheet row 245, section 11: shown above the form. No response window is promised.
+  intro:
+    "Tell us which providers and payers you need help with. We’ll review the scope and explain the appropriate service or next step. Submitting this form is a request for information; it does not purchase a service.",
   submit: "Request Credentialing Support",
   success: "Thank you. Your credentialing request is in, and we will follow up with you.",
   fields: [

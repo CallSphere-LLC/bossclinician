@@ -6,6 +6,7 @@ import {
   RETREAT_RESERVE_ROUTE,
   RETREAT_QUIZ_URL,
   RETREAT_TRAWICK_URL,
+  RETREAT_CALL_URL,
   type RetreatPhoto,
 } from "@/content/retreats";
 import { faqPageNode } from "@/seo/schema";
@@ -162,23 +163,29 @@ export default function Retreats() {
       <section className="retreat-hero">
         <Photo photo={r.about.photo} eager />
         <div className="retreat-container retreat-hero-copy">
-          <p className="retreat-eyebrow">{r.hero.eyebrow}</p>
+          <p className="retreat-eyebrow">{r.hero.brand}</p>
+          <p className="retreat-triad">{r.hero.tagline}</p>
           <h1>
             {r.hero.title}
             <em>{r.hero.titleAccent}</em>
           </h1>
-          <p className="retreat-triad">{r.hero.triad.join(" ")}</p>
-          <p className="retreat-eyebrow">{r.hero.ledeA}</p>
-          <p className="retreat-hero-lede">For women who are ready to stop being responsible for everything for a few days.</p>
-          <p className="retreat-strip">{r.hero.strip}</p>
+          <p className="retreat-hero-lede">{r.hero.lede}</p>
+          <p className="retreat-strip">{r.hero.when}</p>
           <div className="retreat-actions">
-            <a href="#reserve" className="retreat-button">
-              {r.hero.reserveCta}
-            </a>
-            <a href="#about" className="retreat-button retreat-button-outline">
-              {r.hero.discoverCta}
+            <a href="#about" className="retreat-button">
+              {r.hero.exploreCta}
             </a>
           </div>
+          <p className="retreat-hero-question">
+            <a
+              className="retreat-text-link"
+              href={RETREAT_CALL_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              {r.hero.questionsCta}
+            </a>
+          </p>
         </div>
       </section>
       <div className="retreat-stats" aria-label="Retreat at a glance">
@@ -198,8 +205,7 @@ export default function Retreats() {
               accent={r.about.titleAccent}
             />
             <Copy lines={r.about.body} />
-            <blockquote>{r.about.promise}</blockquote>
-            <p>{r.about.kept}</p>
+            <blockquote>{r.about.pull}</blockquote>
           </div>
           <Photo photo={r.about.photo} />
         </div>
@@ -213,8 +219,10 @@ export default function Retreats() {
           />
           <img
             className="retreat-founder-photo"
-            src="/images/retreat-founder-thailand.jpg"
-            alt="Yvette on a dock in Thailand, headphones and eye mask on, during breathwork"
+            src={r.founder.photo.src}
+            alt={r.founder.photo.alt}
+            width={r.founder.photo.width}
+            height={r.founder.photo.height}
             loading="lazy"
             decoding="async"
           />
@@ -232,7 +240,6 @@ export default function Retreats() {
           </ul>
           <p>A retreat is different.</p>
           <p>The intention is not simply to change locations.</p>
-          <p>The intention is to create enough space for your nervous system, mind, and body to stop being responsible for everyone else.</p>
         </div>
       </Band>
       <Band id="included" light>
@@ -320,40 +327,22 @@ export default function Retreats() {
       <Band>
         <div className="retreat-narrow">
           <Heading
-            eyebrow={r.pattern.eyebrow}
-            title={r.pattern.title}
-            accent={r.pattern.titleAccent}
+            title={r.audience.title}
+            accent={r.audience.titleAccent}
           />
-          <p>{r.pattern.lead}</p>
-          <blockquote>
-            <Copy lines={r.pattern.lines} />
-          </blockquote>
-          <p>{r.pattern.body}</p>
-          <blockquote>
-            <Copy lines={r.pattern.pull} />
-          </blockquote>
-          <h3>{r.pattern.cost}</h3>
-          <p>{r.pattern.costBody}</p>
-          <p>{r.pattern.close}</p>
-        </div>
-      </Band>
-      <Band light>
-        <div className="retreat-narrow">
-          <h2>The woman who returns.</h2>
-          <Copy lines={[r.returns.lead, r.returns.body]} />
-          <p className="retreat-eyebrow">{r.returns.caps}</p>
+          <Copy lines={r.audience.body} />
+          {r.audience.objections.map((item) => (
+            <div className="retreat-objection" key={item.q}>
+              <h3>{item.q}</h3>
+              <p>{item.a}</p>
+            </div>
+          ))}
         </div>
       </Band>
       <Band id="imagine">
         <div className="retreat-narrow retreat-centered">
           <Heading eyebrow={r.imagine.eyebrow} title={r.imagine.title} />
-          {r.imagine.stanzas.map((lines) => (
-            <div className="retreat-stanza" key={lines[0]}>
-              <Copy lines={lines} />
-            </div>
-          ))}
-          <blockquote>{r.imagine.closeA}</blockquote>
-          <p>{r.imagine.closeB}</p>
+          <Copy lines={r.imagine.body} />
           <a href="#reserve" className="retreat-button">
             {r.hero.reserveCta}
           </a>
@@ -367,11 +356,19 @@ export default function Retreats() {
         </div>
       </Band>
       <Band id="reserve" light>
-        <Heading
-          eyebrow={r.reserve.eyebrow}
-          title={r.reserve.title}
-          accent={r.reserve.titleAccent}
-        />
+        <Heading eyebrow={r.reserve.eyebrow} title={r.reserve.title} />
+        <p className="retreat-narrow retreat-centered">
+          {r.reserve.leadA}
+          <a
+            className="retreat-text-link"
+            href={RETREAT_CALL_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            {r.reserve.leadLink}
+          </a>
+          {r.reserve.leadB}
+        </p>
         <p className="retreat-strip">{r.reserve.strip}</p>
         <h3 className="retreat-price">{r.reserve.price}</h3>
         <p className="retreat-centered">{r.reserve.terms}</p>
@@ -483,7 +480,7 @@ export default function Retreats() {
           <p>Start with the FAQs, or schedule a Retreat Interest Call if you still want to talk it through.</p>
           <div className="flex flex-col items-center justify-center gap-3 sm:flex-row sm:gap-4">
             <a className="retreat-button" href="#faq">View FAQs</a>
-            <a className="retreat-button" href="https://tidycal.com/profitwithyvette/retreat" target="_blank" rel="noopener noreferrer">Schedule a Retreat Interest Call</a>
+            <a className="retreat-button" href={RETREAT_CALL_URL} target="_blank" rel="noopener noreferrer">Schedule a Retreat Interest Call</a>
           </div>
         </div>
       </Band>
@@ -497,7 +494,7 @@ export default function Retreats() {
           <p>You do not have to figure that out from a website.</p>
           <p>Schedule a complimentary Retreat Interest Call and talk through your questions before reserving.</p>
           <p>No pressure. No presentation. Just a chance to get the clarity you need to make your decision.</p>
-          <a className="retreat-button" href="https://tidycal.com/profitwithyvette/retreat" target="_blank" rel="noopener noreferrer">Schedule a Retreat Interest Call</a>
+          <a className="retreat-button" href={RETREAT_CALL_URL} target="_blank" rel="noopener noreferrer">Schedule a Retreat Interest Call</a>
         </div>
       </Band>
       <Band id="faq" light>
@@ -521,6 +518,14 @@ export default function Retreats() {
               )}
             </details>
           ))}
+        </div>
+      </Band>
+      <Band>
+        <div className="retreat-narrow retreat-centered">
+          <p className="retreat-closing">{r.closing.body}</p>
+          <a href="#reserve" className="retreat-button">
+            {r.closing.cta}
+          </a>
         </div>
       </Band>
     </div>

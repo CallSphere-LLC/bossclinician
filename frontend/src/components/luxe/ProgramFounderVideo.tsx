@@ -33,7 +33,9 @@ export function ProgramFounderVideo({ program }: { program: "club" | "lounge" })
       <TestimonialVideo src720={`${prefix}-720.mp4`} src540={`${prefix}-540.mp4`} poster={`${prefix}-poster.jpg`} title={`Yvette’s introduction to The ${program === "club" ? "Club" : "Lounge"}`} />
       <div className="mt-7 flex flex-wrap justify-center gap-4">
         <LuxeButton variant="foil" {...(program === "club" ? { to: CLUB_JOIN_ROUTE } : { href: "#join" })}>Join The {program === "club" ? "Club" : "Lounge"}</LuxeButton>
-        {program === "club" && <LuxeButton to="/practicepreptraining">Watch the Free Training</LuxeButton>}
+        {/* Row 245: the page's free-training next step, replacing the newsletter ask. */}
+        {program === "club" && <LuxeButton to="/practicepreptraining">Watch the Free Practice Prep Training</LuxeButton>}
+        {program === "lounge" && <LuxeButton to="/freedom-masterclass">Watch the Free Freedom Masterclass</LuxeButton>}
       </div>
     </Section>
   );

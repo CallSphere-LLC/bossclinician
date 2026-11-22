@@ -47,7 +47,7 @@ export const csf = {
     eyebrow: "For Group Practice Owners Adding Clinicians",
     title: "Stop Rebuilding Your Credentialing Process",
     titleAccent: "Every Time You Hire",
-    lede: "A step-by-step credentialing system for behavioral-health group practice owners who want to get new clinicians enrolled, organized, and moving toward billable status, without having to personally manage every application forever.",
+    lede: "A step-by-step credentialing system for behavioral-health group practice owners who want to get new clinicians organized and moving toward billable status, without having to personally manage every application forever.",
     boldLine: "Use it yourself. Train your admin with it. Build a process your practice can repeat.",
     /** The source's price line, with the figure left for the offer to fill in. */
     terms: "One-Time Payment · Instant Access",

@@ -8,7 +8,7 @@ import { testimonials as fallbackTestimonials } from "@/content/testimonials";
 import { LuxeHero } from "@/components/home/luxe/LuxeHero";
 import { LuxeCredBar } from "@/components/home/luxe/LuxeCredBar";
 import { LuxeThreeThings } from "@/components/home/luxe/LuxeThreeThings";
-import { HomeOpening, HomeCoreBelief, HomeTrust } from "@/components/home/luxe/HomeEditorial";
+import { HomeOpening, HomeCoreBelief, HomeTrust, HomePictureThis, HomeRetreatFeature } from "@/components/home/luxe/HomeEditorial";
 import { LuxeOffers } from "@/components/home/luxe/LuxeOffers";
 import { LuxeMeetYvette } from "@/components/home/luxe/LuxeMeetYvette";
 import { LuxeQuiz } from "@/components/home/luxe/LuxeQuiz";
@@ -35,8 +35,8 @@ export default function Home() {
   return (
     <>
       <Seo
-        title="Build a Private Practice You Can Actually Stay In | Boss Clinician"
-        description="Boss Clinician helps mental health clinicians build, sustain, and lead private practices that support their income, time, and life."
+        title="Private Practice Coaching for Therapists | Boss Clinician"
+        description="Private practice coaching for therapists from Yvette Howard, LCSW: build a practice that pays you consistently and fits the life you actually have."
       />
       <LuxeHero />
       <HomeOpening />
@@ -44,6 +44,8 @@ export default function Home() {
       <HomeCoreBelief />
       <LuxeThreeThings />
       <LuxeOffers />
+      <HomePictureThis />
+      <HomeRetreatFeature />
       <LuxeMeetYvette />
       <HomeTrust />
       <LuxeQuiz />

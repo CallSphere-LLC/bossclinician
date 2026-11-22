@@ -10,6 +10,7 @@ import { GoldRule, Section } from "@/components/luxe/Section";
 import { ApiError, api } from "@/lib/api";
 import { cn } from "@/lib/cn";
 import { contactPage } from "@/content/site";
+import { OptInNote } from "@/pages/kajabi/leadmagnets/parts";
 import {
   PRACTICE_QUIZ_GATE,
   PRACTICE_QUIZ_QUESTIONS,
@@ -476,7 +477,7 @@ export default function PracticeQuizTake() {
                     </LuxeButton>
                   </div>
 
-                  <p className="text-xs leading-relaxed text-orchid-faint">{PRACTICE_QUIZ_GATE.disclaimer}</p>
+                  <OptInNote text={PRACTICE_QUIZ_GATE.disclaimer} className="text-left" />
                 </form>
               </GlassCard>
             )}

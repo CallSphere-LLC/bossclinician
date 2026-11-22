@@ -3,7 +3,7 @@ import { Cta, Prose } from "@/components/home/luxe/ProgramSections";
 import { LuxePageHero } from "@/components/luxe/LuxePageHero";
 import { GoldRule, Section } from "@/components/luxe/Section";
 import { useHashScroll } from "@/hooks/useHashScroll";
-import { BenefitCards, FramedImage, LabelledList, LeadMagnetForm, Rise, SignupCard, type ImageSpec } from "./parts";
+import { BenefitCards, FramedImage, LabelledList, LeadMagnetForm, OptInNote, Rise, SignupCard, type ImageSpec } from "./parts";
 
 /** Every button on her page scrolled to the form block Kajabi called #two-step. */
 const GET_THE_GUIDE = "two-step";
@@ -50,6 +50,7 @@ export function GuideLanding({
   formSlug,
   next,
   mockup,
+  optIn,
 }: {
   content: GuideLandingContent;
   formSlug: string;
@@ -57,6 +58,8 @@ export function GuideLanding({
   next: string;
   /** The kickstart page also shows the guide on a laptop. */
   mockup?: ImageSpec;
+  /** What the sign-up sends, shown under the button (row 245). */
+  optIn?: string;
 }) {
   // Links to …#two-step arrive through the router, which does not scroll to
   // fragments on its own.
@@ -123,7 +126,12 @@ export function GuideLanding({
           </Rise>
           <Rise delay={0.1} className="min-w-0">
             <SignupCard title={c.grab.title} body={c.grab.body}>
-              <LeadMagnetForm slug={formSlug} submitLabel={c.grab.submit} next={next} />
+              <LeadMagnetForm
+                slug={formSlug}
+                submitLabel={c.grab.submit}
+                next={next}
+                note={optIn ? <OptInNote text={optIn} /> : undefined}
+              />
             </SignupCard>
           </Rise>
         </div>

@@ -391,8 +391,8 @@ export function IncomeCalculator() {
         For example — a therapist seeing{" "}
         <strong className="font-semibold text-white">15 clients per week</strong> at{" "}
         <strong className="font-semibold text-white">$175 per session</strong> generates{" "}
-        <strong className="font-semibold text-gold">$126,000 annually</strong>. That's a full-time
-        income seeing about 3 clients per day. Strategy matters more than hours.
+        <strong className="font-semibold text-gold">$126,000</strong> in gross session revenue a
+        year, before expenses and taxes.
       </motion.p>
 
       <motion.div
@@ -477,7 +477,7 @@ export function IncomeCalculator() {
 
             <div aria-live="polite" aria-atomic="true" className="relative text-center">
               <p className="text-[0.72rem] font-bold uppercase tracking-[0.14em] text-gold sm:text-[0.66rem] sm:tracking-[0.22em]">
-                Annual Income Potential
+                Estimated Annual Gross Session Revenue
               </p>
               {/* Clamped rather than fixed: at $400 × 50 × 52 the readout is ten
                   glyphs wide, which overruns a 360px phone at any static size. */}
@@ -499,8 +499,9 @@ export function IncomeCalculator() {
             {/* Design specifies rgba(255,255,255,0.2); raised to orchid-dim for
                 AA contrast. */}
             <p className="relative mt-5 text-center text-[0.88rem] italic leading-relaxed text-orchid-dim">
-              This calculator illustrates potential outcomes. Results depend on your market,
-              niche, and implementation. Nothing is guaranteed.
+              Collected fee × completed paid sessions per week × working weeks. Expenses and
+              taxes are not deducted. This calculator illustrates potential outcomes. Results
+              depend on your market, niche, and implementation. Nothing is guaranteed.
             </p>
           </div>
 

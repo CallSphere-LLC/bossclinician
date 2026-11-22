@@ -72,4 +72,17 @@ describe("imported sales page purchase boundaries", () => {
     expect(doctor).toContain("@keyframes doctor-sales-page-scroll");
     expect(doctor).toContain("prefers-reduced-motion");
   });
+  it("carries the 21 Nov 2026 headlines and drops the named overpromises", () => {
+    const copy: Record<string,{has:string[];not:string[]}> = {
+      "provider-partnership-guide": {has:["Know What to Say When You Reach Out to Referral Partners."],not:["effortlessly","with ease","heavy lifting","your easiest"]},
+      "private-practice-protection-pack": {has:["Editable Forms to Help You Organize Your Practice Paperwork."],not:["FULL COMPLIANCE","lawsuits","legally secure","legally sound","Legally-Sound","Stay Compliant","ensure compliance","for full compliance"]},
+      "from-profile-to-profit": {has:["Write a Directory Profile That Helps the Right Client Recognize Your Support."],not:["autopilot","constant flow","should only do what they know","every single day"]},
+      "private-practice-starter-suite": {has:["Choose Your First Steps Toward Private Practice.","Access the training after purchase."],not:["next 2 minutes","risking their license","losing their income","signing your first paying client","land your first paying clients"]},
+    };
+    for (const [slug,{has,not}] of Object.entries(copy)) {
+      const html=render(fixture(slug,true,false,slug==="private-practice-starter-suite"?2700:9700));
+      for (const text of has) expect(html).toContain(text);
+      for (const text of not) expect(html).not.toContain(text);
+    }
+  });
 });

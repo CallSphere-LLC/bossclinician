@@ -318,9 +318,9 @@ const APPLICATION_STEPS: readonly ApplicationStep[] = [
 
 export const boardroom = {
   seo: {
-    title: "The Boardroom | Boss Clinician",
+    title: "Group Practice Coaching & Leadership | The Boardroom",
     description:
-      "The Boardroom is an application-only, 12-month group mastermind for mental health practice owners building and leading growing practices.",
+      "The Boardroom is an application-only, 12-month group mastermind for mental health practice owners preparing for a first hire or already leading a team.",
     image: "/images/boardroom/boardroom-share.jpg",
   },
 
@@ -338,9 +338,15 @@ export const boardroom = {
   hero: {
     titleLead: "The",
     titleAccent: "Boardroom",
-    tag: "Build a practice that can grow beyond you.",
+    /**
+     * The headline (sheet row 245, 21 Nov 2026). The h1 stays the two-word
+     * wordmark; the headline sits in the tag line under it, where her page put
+     * its promise, so the hero's type and layout are unchanged.
+     */
+    tag: "Build a Team Without Becoming the Answer to Everything",
+    /** The supporting copy under the headline (row 245). */
     intro:
-      "An application-only, 12-month group mastermind for mental health practice owners building and leading growing practices.",
+      "For established mental health practice owners preparing for their first hire or already leading a team. Work through the numbers, responsibilities, and leadership decisions behind a practice that can depend less on you.",
     cta: "Apply for The Boardroom",
     seatNote: "An intimate group of exactly six practice owners.",
     photo: {
@@ -415,16 +421,27 @@ export const boardroom = {
       {
         number: "01",
         title: "You're Ready to Build the Team",
-        body: "Your solo practice is established. Your caseload or capacity has reached the point where doing more yourself is no longer the answer. You're actively preparing to make your first hire and want to build the team correctly from the beginning.",
+        // Row 245: the "Before hiring" entry point.
+        body: "You want to know what the role will cost, what the person will own, and what the practice must have in place before you post the position.",
         close: "You don't want to create systems you'll have to undo later.",
       },
       {
         number: "02",
-        title: "You're Ready to Lead the Team",
-        body: "You've already hired providers or support staff. Now you're navigating payroll, profitability, utilization, compensation, leadership, delegation, systems, and the reality that growth created a whole new set of problems.",
+        // Row 245: the "Already leading" entry point, headed in her words.
+        title: "You Didn't Hire a Team to Become Its Full-Time Help Desk",
+        body: "You can finish a client session and find another list of questions only you can answer. Work on the responsibilities, training, and decision-making that keep bringing everything back to you.",
         close: "You don't just want a bigger practice. You want a better-run one.",
       },
     ],
+  },
+
+  /**
+   * Row 245: the "Picture this" block, placed before the benefits. Moments she
+   * is working toward, not a result every member is promised.
+   */
+  pictureThis: {
+    eyebrow: "Picture this",
+    body: "Your phone stays quiet during a full week off, and the intake, the scheduling conflict, and the billing question all get handled. You open one dashboard and know whether the next hire is affordable. A lead clinician runs the team meeting.",
   },
 
   inside: {
@@ -503,6 +520,9 @@ export const boardroom = {
   fit: {
     eyebrow: "The right room",
     title: "Who The Boardroom Is For",
+    /** Row 245: Yvette's approved "I help" statement, in "you" voice. */
+    iHelp:
+      "For group practice owners carrying a caseload and everyone else’s questions, who want a team that can handle daily operations while they step away.",
     items: [
       "Your solo practice is established and you are actively preparing for your first hire, or you already have a team.",
       "You want to make decisions from your actual numbers instead of guessing.",
@@ -548,6 +568,9 @@ export const boardroom = {
     title: "Now let's build the leadership, numbers, systems, and team around it.",
     body: "Whether your next move is your first hire or figuring out how to lead the team you already have, you don't have to make those decisions alone.",
     cta: "Apply for The Boardroom",
+    /** Row 245: the closing identity line, under the final section. */
+    identity:
+      "This isn’t only about one quiet vacation. It’s about becoming the leader your team can run without.",
   },
 
   application: {

@@ -3,6 +3,7 @@ import { motion } from "motion/react";
 import { Link } from "react-router";
 import { Seo } from "@/components/Seo";
 import { GlassCard } from "@/components/luxe/GlassCard";
+import { TestimonialVideo } from "@/components/luxe/TestimonialVideo";
 import { LuxeButton, LuxePill } from "@/components/luxe/LuxeButton";
 import { LuxePageHero } from "@/components/luxe/LuxePageHero";
 import { GoldRule, Section, SectionTitle } from "@/components/luxe/Section";
@@ -74,6 +75,20 @@ const FEATURED = [
   },
   { label: "Brighter Tomorrow Therapy", href: BRIGHTER_TOMORROW },
 ] as const;
+
+/**
+ * The News 5 segment, added to Featured In by the website handoff of 21 Nov
+ * 2026 (sheet row 245). Hosted on this site, not embedded from Drive; title
+ * and air date confirmed by Yvette. The station is named in text, no logo.
+ */
+const NEWS5 = {
+  station: "News 5",
+  line: "I joined News 5 to talk about breaking the stigma around therapy.",
+  title: "Breaking the Stigma Around Therapy",
+  aired: "Aired November 16, 2026",
+  video: "/videos/about-news5-stigma",
+  captions: "/videos/captions/about-news5-stigma.en.vtt",
+} as const;
 
 const ORIGIN = [
   "I was supposed to stay in my stable part-time job at a dialysis clinic and work for an agency. Follow the safe path. Keep waiting for the right moment to start living my purpose.",
@@ -206,7 +221,7 @@ export default function About() {
           already names /about as Yvette's URL, so the page has no structured
           data left of its own to declare. */}
       <Seo
-        title="About Yvette"
+        title="About Yvette Howard, LCSW | Boss Clinician"
         description="Yvette Howard is an LCSW, group practice owner, doctoral candidate, and Private Practice Strategist helping therapists and clinicians build sustainable, profitable practices."
         image="/images/about/yvette-hero.jpg"
       />
@@ -277,7 +292,40 @@ export default function About() {
                 </a>
               </RevealItem>
             ))}
+            <RevealItem as="li">
+              {/* Text, not the station's logo; jumps to the clip below. */}
+              <a
+                href="#news5"
+                className={cn(
+                  "inline-flex min-h-[44px] items-center rounded-sm px-1 font-display text-[1.05rem] italic text-orchid-dim",
+                  "transition-colors duration-300 hover:text-gold sm:text-[1.15rem]",
+                  "focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-gold",
+                )}
+              >
+                {NEWS5.station}
+              </a>
+            </RevealItem>
           </RevealGroup>
+
+          <div id="news5" className="mx-auto mt-10 max-w-3xl scroll-mt-24">
+            <p className="copy-luxe text-pretty">
+              <span className="font-semibold text-white">{NEWS5.station}:</span> {NEWS5.line}
+            </p>
+            <TestimonialVideo
+              className="mt-6"
+              src720={`${NEWS5.video}-720.mp4`}
+              src540={`${NEWS5.video}-540.mp4`}
+              poster={`${NEWS5.video}-poster.jpg`}
+              captions={NEWS5.captions}
+              title={`${NEWS5.station}: ${NEWS5.title}`}
+            />
+            <p className="mt-4 text-sm text-white/70">
+              <span className="font-semibold text-white/90">{NEWS5.title}</span>
+              <span aria-hidden> · </span>
+              <span className="sr-only">, </span>
+              {NEWS5.aired}
+            </p>
+          </div>
         </div>
       </Section>
 

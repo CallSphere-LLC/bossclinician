@@ -187,8 +187,8 @@ export interface LeadMagnetFormProps {
    * `practiceYears` is this with the key `years_in_practice`.
    */
   question?: { key: string; label: string; options: readonly string[] };
-  /** The consent / privacy line under the button. */
-  note?: string;
+  /** The consent / privacy line under the button (an `OptInNote`, or text). */
+  note?: ReactNode;
   className?: string;
 }
 
@@ -401,8 +401,33 @@ export function LeadMagnetForm({
         )}
       </LuxeButton>
 
-      {note && <p className="text-pretty text-center text-xs leading-relaxed text-orchid-faint">{note}</p>}
+      {typeof note === "string" ? (
+        <p className="text-pretty text-center text-xs leading-relaxed text-orchid-faint">{note}</p>
+      ) : (
+        note
+      )}
     </form>
+  );
+}
+
+/**
+ * The line under a free-resource sign-up (sheet row 245, 21 Nov 2026): what the
+ * person receives and the follow-up emails actually configured for that form,
+ * then the unsubscribe option and a link to the privacy policy. No newsletter
+ * is promised anywhere — Yvette is not committing to one.
+ */
+export function OptInNote({ text, className }: { text: string; className?: string }) {
+  return (
+    <p className={cn("text-pretty text-center text-xs leading-relaxed text-orchid-faint", className)}>
+      {text} You can unsubscribe anytime. See our{" "}
+      <Link
+        to="/privacy-policy"
+        className="underline decoration-white/25 underline-offset-4 transition-colors duration-300 ease-luxe hover:text-gold hover:decoration-gold/60"
+      >
+        Privacy Policy
+      </Link>
+      .
+    </p>
   );
 }
 

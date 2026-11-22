@@ -133,7 +133,8 @@ export const PRACTICE_QUIZ_RESULTS: Record<BuilderType, PracticeQuizResult> = {
       { bold: "Build toward sustainability from the start.", text: "Not just getting clients building a practice you can sustain for years without burning out." },
     ],
     offerName: "Boss Clinician Club",
-    offerDesc: "A 6-month structured coaching program for clinicians who are done guessing and ready to build their foundation the right way. Biweekly coaching calls, monthly growth kits, and a community of clinicians navigating the same season.",
+    // Row 245: each result's offer matches the offer as sold today.
+    offerDesc: "A 6-month coaching program for clinicians starting or restarting a practice, including while still employed: the Boss Move curriculum, two live coaching calls a month, practical resources, and a community of clinicians navigating the same season.",
     offerBtn: "Join the Boss Clinician Club →",
     offerLink: "/club",
     formSlug: "quiz-visionary",
@@ -167,7 +168,7 @@ export const PRACTICE_QUIZ_RESULTS: Record<BuilderType, PracticeQuizResult> = {
       { bold: "Protect your energy with systems.", text: "Automate, delegate, and document. The practice should run even when you're not running it." },
     ],
     offerName: "Boss Clinician Lounge",
-    offerDesc: "A monthly membership for established clinicians who are ready to scale without sacrificing their life. Monthly live coaching, done-for-you strategy resources, and a community of clinicians building at your level. Member and VIP tiers available.",
+    offerDesc: "A membership for clinicians who already own a practice and want more sustainable income, referrals, and workload. A monthly live Strategy Session with Yvette, practical tools and resources, and a community of clinicians building at your level. Member and VIP tiers available.",
     offerBtn: "Join the Boss Clinician Lounge →",
     offerLink: "/lounge",
     formSlug: "quiz-steady",
@@ -184,7 +185,7 @@ export const PRACTICE_QUIZ_RESULTS: Record<BuilderType, PracticeQuizResult> = {
       { bold: "Get into a room with people at your level.", text: "You've outgrown solo clinician communities. You need peers who are also running teams." },
     ],
     offerName: "Boss Clinician Boardroom",
-    offerDesc: "An exclusive annual mastermind for group practice owners who are done doing it alone. Limited to 8–12 members. Monthly strategy sessions, quarterly in-person meetups, Voxer access, and peer accountability with clinicians building at the same level.",
+    offerDesc: "An application-only, 12-month mastermind for established mental health practice owners preparing for their first hire or already leading a team. Exactly six practice owners, four quarterly CEO strategy intensives, check-ins in the other months, and peer accountability with owners making the same decisions.",
     offerBtn: "Apply for the Boardroom →",
     offerLink: "/boardroom",
     formSlug: "quiz-reluctant",
@@ -200,8 +201,13 @@ export const PRACTICE_QUIZ_GATE = {
   lastName: "Last Name",
   email: "Email",
   submit: "GET MY RESULT",
+  /**
+   * Row 245 (21 Nov 2026): what the sign-up sends — the result email, then that
+   * builder type's sequence (489–492). The page adds the unsubscribe option and
+   * the privacy-policy link.
+   */
   disclaimer:
-    "By submitting this form you agree to receive emails from Boss Clinician, LLC. This resource is educational only and is not legal, financial, or clinical advice. You can unsubscribe anytime. See our Privacy Policy and Terms.",
+    "You’ll get your result by email, followed by a short series of emails from Yvette for your practice builder type. This resource is educational only and is not legal, financial, or clinical advice.",
 } as const;
 
 /** The fixed lines of the result screen, from the source's markup. */

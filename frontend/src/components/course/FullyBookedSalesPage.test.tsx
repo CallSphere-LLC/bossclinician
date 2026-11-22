@@ -36,4 +36,10 @@ describe("Fully Booked sales page",()=>{
     expect(html).toContain("Temporarily unavailable");
     expect(html).not.toContain('href="/checkout/fully-booked-toolkit"');
   });
+  it("keeps the 21 Nov 2026 copy free of urgency and guaranteed bookings",()=>{
+    const html=render();
+    expect(html).toContain("Make Your Profile and Consultation Calls Clearer.");
+    expect(html).toContain("Techniques to help callers understand fit, fees, and payment options.");
+    for(const text of ["Limited Time","Flash Sale","one-time offer","effortlessly","eliminate objections","immediate results","fully booked faster"]) expect(html).not.toContain(text);
+  });
 });

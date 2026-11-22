@@ -1,14 +1,27 @@
 import { Link, useLocation } from "react-router";
 import { Container } from "@/components/ui/Container";
 import { Aurora } from "@/components/luxe/Aurora";
-import { footer } from "@/content/site";
-import { SubscribeForm } from "@/components/forms/SubscribeForm";
+import { LuxeButton } from "@/components/luxe/LuxeButton";
+import { footer, type FooterNextStep, type NavMenuFooterLink } from "@/content/site";
 import { cn } from "@/lib/cn";
 import { openCookiePreferences } from "@/lib/consent";
 
 /** Read after a link's text for links that open a new tab. */
 function NewTab() {
   return <span className="sr-only"> (opens in a new tab)</span>;
+}
+
+function FooterNextStepBlock({ step }: { step: FooterNextStep }) {
+  return (
+    <div className="mt-8 max-w-sm">
+      {step.heading && <p className="text-sm font-semibold text-white">{step.heading}</p>}
+      {step.body && <p className="mt-1 text-sm leading-[1.8] text-white/70">{step.body}</p>}
+      <div className={cn("flex flex-col items-start gap-1", (step.heading || step.body) && "mt-4")}>
+        <NextStepLink link={step.primary} primary />
+        {step.secondary && <NextStepLink link={step.secondary} />}
+      </div>
+    </div>
+  );
 }
 
 const columnHeading =
@@ -23,6 +36,35 @@ const columnHeading =
  */
 const columnLink =
   "block py-2.5 text-sm text-white/70 transition-colors duration-300 hover:text-gold focus-visible:rounded-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold";
+
+/**
+ * Where the newsletter signup used to sit (sheet row 245, 21 Nov 2026): a next
+ * step instead of an email field. The Club, Lounge and retreat pages carry
+ * their own button; every other page points to the practice quiz.
+ */
+function nextStepFor(pathname: string): FooterNextStep {
+  const path = pathname.replace(/\/$/, "") || "/";
+  const steps: Record<string, FooterNextStep> = footer.nextStep;
+  return steps[path] ?? footer.nextStep.general;
+}
+
+function NextStepLink({ link, primary }: { link: NavMenuFooterLink; primary?: boolean }) {
+  if (!primary) {
+    return link.to !== undefined ? (
+      <Link to={link.to} className={cn(columnLink, "inline-block")}>{link.label}</Link>
+    ) : (
+      <a href={link.href} target="_blank" rel="noopener noreferrer" className={cn(columnLink, "inline-block")}>
+        {link.label}
+        <NewTab />
+      </a>
+    );
+  }
+  return link.to !== undefined ? (
+    <LuxeButton variant="glass" size="sm" to={link.to}>{link.label}</LuxeButton>
+  ) : (
+    <LuxeButton variant="glass" size="sm" href={link.href}>{link.label}</LuxeButton>
+  );
+}
 
 export function Footer() {
   const { pathname } = useLocation();
@@ -52,9 +94,7 @@ export function Footer() {
           <p className="mt-6 max-w-sm text-sm leading-[1.8] text-white/70">
             {footer.tagline}
           </p>
-          <div className="mt-8 max-w-sm">
-            <SubscribeForm source="footer" dark />
-          </div>
+          <FooterNextStepBlock step={nextStepFor(pathname)} />
         </div>
 
         <div>

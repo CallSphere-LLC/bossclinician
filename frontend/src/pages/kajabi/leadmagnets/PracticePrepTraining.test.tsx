@@ -64,6 +64,14 @@ describe("/practicepreptraining", () => {
       expect(html).toContain(escaped(option));
     }
   });
+
+  it("carries the row 245 copy and says what the sign-up sends", () => {
+    expect(html).toContain(escaped(practicePrepTraining.learn.picture));
+    expect(html).toContain(escaped(practicePrepTraining.closing.body));
+    expect(html).not.toContain("leave agency or platform work with a clearer plan");
+    expect(html).toContain(escaped(practicePrepTraining.signup.optIn));
+    expect(html).toContain('href="/privacy-policy"');
+  });
 });
 
 describe("/preparing-for-pp-video", () => {

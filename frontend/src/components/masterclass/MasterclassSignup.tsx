@@ -196,7 +196,16 @@ export function MasterclassSignup({ className }: { className?: string }) {
         )}
       </LuxeButton>
 
-      <p className="text-center text-xs text-orchid-faint">{copy.register.card.privacy}</p>
+      <p className="text-pretty text-center text-xs leading-relaxed text-orchid-faint">
+        {copy.register.card.privacy} You can unsubscribe anytime. See our{" "}
+        <Link
+          to="/privacy-policy"
+          className="underline decoration-white/25 underline-offset-4 transition-colors duration-300 ease-luxe hover:text-gold hover:decoration-gold/60"
+        >
+          Privacy Policy
+        </Link>
+        .
+      </p>
     </form>
   );
 }

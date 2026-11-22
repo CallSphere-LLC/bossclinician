@@ -45,7 +45,9 @@ const STATS: readonly string[] = [
 
 const CTA_LABEL = "TAKE THE FREE QUIZ →";
 
-const CTA_NOTE = "No email required to start";
+// Row 245: say where the email is asked for — after the six questions,
+// before the result.
+const CTA_NOTE = "No email required to start · Enter your email at the end to see your result";
 
 /**
  * The quiz itself (six questions, the name-and-email step, four results) runs
@@ -104,7 +106,7 @@ export default function PracticeQuiz() {
   return (
     <>
       <Seo
-        title="Practice Set Up Quiz"
+        title="Practice Set Up Quiz for Therapists | Boss Clinician"
         description="Take this free 2-minute quiz to discover what's really standing between you and a private practice that pays you well and find out exactly what to do next."
       />
 

@@ -8,9 +8,9 @@ import type { HeadDescriptor, JsonLdNode, ResolvedHead } from "./types";
  */
 
 /** Matches the `<title>` and description shipped in index.html. */
-export const DEFAULT_TITLE = "Boss Clinician | Private Practice Strategist for Therapists";
+export const DEFAULT_TITLE = "Private Practice Coaching for Therapists | Boss Clinician";
 export const DEFAULT_DESCRIPTION =
-  "Yvette Howard, LCSW helps therapists and clinicians break free from Alma, Headway, Talkspace, and similar platforms to build a profitable, sustainable private practice that's actually theirs.";
+  "Private practice coaching for therapists from Yvette Howard, LCSW: build a practice that pays you consistently and fits the life you actually have.";
 const DEFAULT_IMAGE = "/images/yvette-hero-portrait.jpg";
 const TWITTER_HANDLE = "@bossclinician";
 /** Served by the API (routes/public/seo.ts) at the source site's own feed path. */

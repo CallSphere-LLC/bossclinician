@@ -37,6 +37,14 @@ export interface NavMenu {
 
 export type NavEntry = NavLinkItem | NavMenu;
 
+/** The footer's next-step block (see `footer.nextStep`). */
+export interface FooterNextStep {
+  heading?: string;
+  body?: string;
+  primary: NavMenuFooterLink;
+  secondary?: NavMenuFooterLink;
+}
+
 /** Discriminates a header dropdown from a plain nav link. */
 export function isNavMenu(entry: NavEntry): entry is NavMenu {
   return "items" in entry;
@@ -163,8 +171,36 @@ export const footer = {
     // The one page the header menu no longer carries; the rest of what it
     // dropped (Contact, the quiz, the free resources) is already listed here.
     { label: "Store", to: "/store" },
+    // Website handoff 21 Nov 2026 (sheet row 245): the retreat stays in the
+    // header bar and is also listed here, under its own name.
+    { label: "FlourisHealer Retreats", to: "/retreats" },
     { label: "Contact", to: "/contact" },
   ] satisfies NavLinkItem[],
+  /**
+   * What the footer offers where its newsletter signup used to be. Yvette is
+   * not committing to a recurring newsletter (handoff 21 Nov 2026, sheet row
+   * 245), so the footer points to a next step instead of asking for an email.
+   * `general` is every page's footer; the Club, Lounge and retreat pages get
+   * their own button in the same place.
+   */
+  nextStep: {
+    general: {
+      heading: "Not sure where to start?",
+      body: "Find the next step for your practice.",
+      primary: { label: "Find My Next Step", to: "/practice-quiz" },
+    },
+    "/club": {
+      primary: { label: "Watch the Free Practice Prep Training", to: "/practicepreptraining" },
+    },
+    "/lounge": {
+      primary: { label: "Watch the Free Freedom Masterclass", to: "/freedom-masterclass" },
+    },
+    "/retreats": {
+      // The reservation band on /retreats (pages/Retreats.tsx, id="reserve").
+      primary: { label: "Explore Room Options", href: "#reserve" },
+      secondary: { label: "Talk With Yvette About the Retreat", href: "https://tidycal.com/profitwithyvette/retreat" },
+    },
+  } satisfies Record<string, FooterNextStep>,
   // The source footer's "Free Resources" list as of 15 Oct 2026, under its
   // labels (the two free trainings, then the Resource Hub), followed by the
   // free tools her Resource Hub footer lists, each at its own rebuilt page.
@@ -712,7 +748,7 @@ export const contactPage = {
   },
   billing: {
     title: "I need help with billing or my membership",
-    body: "If you'd like to cancel your subscription membership to the Boss Clinician Lounge membership, you can do this by logging into your account, opening Billing, and selecting Cancel.",
+    body: "If you'd like to cancel your subscription membership to the Boss Clinician Lounge membership, you can do this by logging into your account, opening Billing, and selecting Cancel. Cancellation requests follow the term of the program you purchased.",
     cta: "Go to Billing",
   },
   retreat: {

@@ -35,7 +35,7 @@ export default function Contact() {
   return (
     <>
       <Seo
-        title="Contact Us"
+        title="Contact Boss Clinician | Yvette Howard, LCSW"
         description="Have questions about working with Yvette Howard, LCSW? Reach out to Boss Clinician — private practice strategist for therapists, counselors, and healthcare clinicians."
         image={HERO_PORTRAIT}
       />
@@ -108,7 +108,7 @@ export default function Contact() {
         <SectionTitle
           align="center"
           title="Ask me here"
-          body="Fill this in and it comes straight to me. I read every message myself and you'll hear back within 24 hours."
+          body="Fill this in and it comes straight to me. I read every message myself and you'll hear back."
         />
 
         <RevealGroup className="mx-auto mt-10 max-w-3xl">
@@ -121,7 +121,7 @@ export default function Contact() {
               messageLabel="How can I help?"
               messagePlaceholder="Tell me what you're building, what you're stuck on, or what you'd like to know…"
               successTitle="Message sent."
-              successBody="I read every message myself and you'll hear back from me within 24 hours."
+              successBody="I read every message myself and you'll hear back from me."
             />
           </RevealItem>
         </RevealGroup>

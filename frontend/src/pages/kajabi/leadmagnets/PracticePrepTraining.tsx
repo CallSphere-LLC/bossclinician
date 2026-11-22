@@ -10,7 +10,7 @@ import {
   practicePrepTraining as c,
 } from "@/content/practicePrepTraining";
 import { useHashScroll } from "@/hooks/useHashScroll";
-import { FramedImage, LeadMagnetForm, Rise, SignupCard } from "./parts";
+import { FramedImage, LeadMagnetForm, OptInNote, Rise, SignupCard } from "./parts";
 
 /** Every button on her page jumps to the sign-up, which Kajabi called #register. */
 const REGISTER = "register";
@@ -64,6 +64,7 @@ export default function PracticePrepTraining() {
                 next={PRACTICE_PREP_VIDEO_ROUTE}
                 lastNameLabel="Last Name"
                 question={c.signup.concern}
+                note={<OptInNote text={c.signup.optIn} />}
               />
             </SignupCard>
           </div>
@@ -118,7 +119,10 @@ export default function PracticePrepTraining() {
             </li>
           ))}
         </ol>
-        <Cta label={c.learn.cta} to={toForm} className="mt-12" />
+        <Rise className="mx-auto mt-12 max-w-2xl text-center">
+          <p className="copy-luxe text-pretty text-[1.05rem] italic">{c.learn.picture}</p>
+        </Rise>
+        <Cta label={c.learn.cta} to={toForm} className="mt-10" />
       </Section>
 
       <Section surface="raised" space="lg" aurora="plum" auroraIntensity={0.5} aria-label={c.host.eyebrow} containerClassName="max-w-6xl">

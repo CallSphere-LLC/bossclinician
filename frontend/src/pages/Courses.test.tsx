@@ -56,6 +56,14 @@ describe("Courses catalogue", () => {
     expect(html).not.toContain("bossclinician.com");
   });
 
+  it("leads with the decision headline and states the manifesto only once", () => {
+    const html = renderCourses([COURSE]);
+    expect(html).toContain("Choose the Tool");
+    expect(html).toContain("for the Decision in Front of You.");
+    expect(html).not.toContain("Ready to Start, Grow");
+    expect(html.match(/ditch the overwhelm/gi) ?? []).toHaveLength(1);
+  });
+
   it("still renders the library when a course carries no feature list", () => {
     const html = renderCourses([
       { ...COURSE, features: null },

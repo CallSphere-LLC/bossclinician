@@ -137,7 +137,7 @@ I'm a mom. A business owner. A leader. A therapist. A coach. A doctoral student.
 Follow me on Instagram
 
 ## The Boardroom
-The Boardroom is an application-only, 12-month group mastermind for mental health practice owners: an intimate peer group of exactly six practice owners, guided by Yvette. Joining is an application at /boardroom#apply, then a discovery call, then a private invitation.
+The Boardroom is an application-only, 12-month group mastermind for mental health practice owners: an intimate peer group of exactly six practice owners, guided by Yvette. It is for established mental health practice owners preparing for their first hire or already leading a team. Joining is an application at /boardroom#apply (the old /apply address now goes there), then a discovery call, then a private invitation. Do not promise a reply within 24 hours; Yvette personally reviews each application.
 Included: 4 quarterly CEO strategy intensives (3-4 hours each, with peer hot seats); 8 momentum check-ins (60 minutes each); 2 private 45-minute CEO strategy sessions in the term; 2 guest expert sessions a year, chosen by Boss Clinician; up to 2 voice-note questions a month, with a response targeted within 2 business days; CEO Dashboard, Living Business Plan, Executive Circle and relevant vault resources.
 Done-for-you operations and payer credentialing are not included.
 Never state a price for The Boardroom. Pricing is shared privately with invited applicants; if asked, say so and point to the application.
@@ -146,8 +146,7 @@ For foundational practice-building support explore /club; for established clinic
 
 ## Courses & Digital Resources Library
 
-## Ready to Start, Grow, & Scale Your Private Practice With Confidence?
-It's time to ditch the overwhelm and build the profitable, peaceful, fully aligned practice you’ve been dreaming of.
+## Choose the Tool for the Decision in Front of You.
 > CTA: Explore the Library
 ### Boss Clinician
 ### Mission
@@ -155,66 +154,65 @@ It's time to ditch the overwhelm and build the profitable, peaceful, fully align
 ## Explore the Boss Clinician Training Library →
 Created to help therapists step into their CEO identity, attract aligned clients, and run a practice that feels good and grows consistently.
 ## DIRECTORY MAKEOVER AUDIT
-Make Your Profile Irresistible — Get Seen. Get Chosen. Get Booked.
-A personalized audit that shows you exactly how to transform your Psychology Today or TherapyDen profile into a client-attracting powerhouse.
+Know What to Change in Your Directory Profile.
+A personalized video audit of your Psychology Today, TherapyDen, or other directory profile, with specific feedback you can use to update it. Choose one, two, or three profiles.
 You’ll Get:
-> CTA: Turn My profile into a booking magnet!
 ## FULLY BOOKED TOOLKIT
-Confidence. Consistency. Clients — This Toolkit Gets You Booked.
-You worked hard to become a therapist — now let your practice reflect that. The Fully Booked Toolkit is designed to help you attract consistent clients , streamline systems, and run a thriving practice that fills your schedule without chaos.
+Make Your Profile and Consultation Calls Clearer.
+You worked hard to become a therapist — now let your practice reflect that. The Fully Booked Toolkit brings together two resources: the From Profile to Profit guide and the Client Consultation Call Script.
 Inside You’ll Get:
 > CTA: GET FULLY BOOKED HERE
 ## CREDENTIALING SUCCESS FORMULA
-For Group Practice Owners Who Need Their Team Credentialed ASAP
-A simple, repeatable system to credential your clinicians quickly and cleanly.
+Stop Rebuilding Your Credentialing Process Every Time You Hire
+A step-by-step credentialing system for group practice owners, designed to be repeatable, not owner-dependent. Insurance companies make their own credentialing and network participation decisions.
 Inside you will get:
 > CTA: Grab Credentialing Success Formula
 ## CREDENTIAL WITH CONFIDENCE
-For Solo Therapists Ready to Start Credentialing
-No confusion. No overwhelm. Just clear direction.
+Understand Insurance Enrollment and Ethical Billing, Step by Step.
+For solo therapists ready to start credentialing: learn how to prepare enrollment information, track applications, and review billing practices.
 💛 CAQH made simple so you will finally understand what’s required without confusion.
 💛 I nsurance panels clearly explained so you will know which panels to apply to and why.
-💛 Step-by-step submission guidance so you will credential correctly the first time and avoid delays.
+💛 Step-by-step submission guidance so you will know how to prepare enrollment information and track your applications.
 > CTA: Start Credentialing With Confidence
 ## PRIVATE PRACTICE STARTER SUITE
-A 3-Step Mini Course to Launch Your Private Practice
-Your roadmap for setting up your business legally & confidently.
+Choose Your First Steps Toward Private Practice.
+A 3-step mini course: From Employee to Business Owner, Choosing Your Niche & Business Model, and the First 3 Clients Blueprint.
 > CTA: Start Your Practice Today
 ## 🔥 RAMP-UP RATE FORMULA
-Set Your Rates Like a CEO — Not a Guessing Therapist
-Discover your exact profitable, ethical session rate.
+Set a Session Rate Using Your Practice’s Numbers.
+A step-by-step way to calculate your private pay rate based on your unique numbers, with calculators to play out different pricing scenarios.
 > CTA: Find Your Perfect Rate
 ## PROVIDER PARTNERSHIP GUIDE
-Create Referral Streams That Never Dry Up
-Get the templates, scripts, and workflows to build strong referral relationships with doctors and specialists — consistently sending clients your way.
+Know What to Say When You Reach Out to Referral Partners.
+Get the templates, scripts, and workflows to reach out to doctors and specialists, plus a tracker to turn outreach and follow-up into a repeatable habit.
 > CTA: Build Referral Partnerships
 ## PRIVATE PRACTICE PROTECTION PACK
-Protect Your Practice With Lawyer-Reviewed Forms
-Get everything you need — consent forms, HIPAA documents, policies, telehealth and safety templates — to stay compliant and run your practice like a professional.
+Editable Forms to Help You Organize Your Practice Paperwork.
+Consent forms, HIPAA documents, policies, telehealth and safety templates you can tailor to your practice. Always review them with your legal counsel.
 > CTA: Protect Your Practice
 ## MARKETING MASTERY FOR THERAPISTS
-A Complete Therapist-Friendly Marketing System
-Done-for-you content that helps you get clients consistently.
+Plan Your Next Month of Practice Marketing.
+A 30-day content calendar, checklists, scripts and quick-start guides for marketing your practice.
 > CTA: Master Your Marketing
 ## THERAPIST NICHE CLARITY ACCELERATOR
-Find Your Niche Fast — So Clients Find YOU
-A powerful clarity tool to identify your ideal client & message.
+Explain Who You Help in Words Prospective Clients Recognize.
+A clarity tool with prompts to help you draft a clearer message about who you help.
 > CTA: Find Your Niche Today
 ## RATE NEGOTIATION LETTER TEMPLATE
-Ask for Higher Rates With Ease
-A plug-and-play, therapist-friendly template that helps you request (and often secure) better reimbursement rates.
+Prepare a Clear Reimbursement-Rate Request.
+A plug-and-play, therapist-friendly template that helps you request better reimbursement rates. The payer decides the outcome.
 > CTA: Download the Letter Template
 ## PREPARE TO PROFIT JOURNAL
-A Guided Meditation & Mindset Journal to Release Fear & Step Into CEO Energy
-A 5-step digital journal designed for therapists to ditch self-doubt and step into the confidence needed to start or scale their practice.
+Make Space to Think Through Your Next Practice Decision.
+A 5-step digital journal with reflection and writing prompts for therapists starting or scaling their practice.
 > CTA: Start Shifting Into CEO Energy With the Journal
 ## CLIENT CONSULTATION CALL SCRIPT
 A Complete, Plug-and-Play Script to Guide Your First Client Calls — Confidently & Professionally
 Make your initial consult calls smooth , confident , and conversion-focused . This script helps you structure discovery calls so you can screen for fit, set expectations, and convert inquiries into booked sessions.
-> CTA: Get the Client Consultation Call Script
+> CTA: Get the Consultation Call Script
 ## FROM PROFILE TO PROFIT
-Turn Your Therapist Directory Profile Into Booked Clients
-Stop blending in — make your directory profile stand out , attract your ideal clients , and convert profile views into booked sessions.
+Write a Directory Profile That Helps the Right Client Recognize Your Support.
+A three-paragraph writing formula and step-by-step instructions for your profile on directories such as Psychology Today, TherapyDen, and GoodTherapy.
 > CTA: Transform Your Profile
 ## Follow me @ profitwithyvette
 ### Download the free step-by-step blueprint to get started the right way.
@@ -224,14 +222,14 @@ Stop blending in — make your directory profile stand out , attract your ideal 
 Every resource below was created for one reason — to help therapists and clinicians stop surviving their practice and start running it like a Boss. FIND WHERE YOU ARE AND START THERE.
 ### Because starting a practice shouldn’t feel confusing, overwhelming, or lonely.
 ### Most therapists were never taught how to actually build a profitable, sustainable practice—we were taught how to help people, not run a business.
-This FREE masterclass breaks it all down for you. You’ll learn a simple 4-step framework to start or grow your private practice with more confidence and less chaos. No guesswork. No overwhelm. No piecing together random advice.
-If you want clear direction, a smarter not harder strategy, and a roadmap that helps you avoid the common pitfalls new practice owners face, this masterclass is your first step.
-> CTA: JOIN THE FREE TRAINING
+The free Freedom Masterclass (/freedom-masterclass) is for established practices: “Your practice is established. Your calendar cannot stay this full forever. Watch this free training to see where your income is coming from, what it costs you in time, and what you could change first so you can pay yourself consistently without adding more evenings of sessions.” It includes the complimentary Practice Freedom Audit.
+For therapists starting or restarting a practice, the free Practice Prep Training is at /practicepreptraining.
+> CTA: Watch the Free Masterclass
 ### FREEBIES & RESOURCES
 ### FREE GUIDE
 Want to know if you should take insurance or accept superbills in your practice?
 ### FREE STARTER GUIDE
-Just starting your practice or want to make sure you starter on the right path?
+Just starting your practice or want to make sure you start on the right path?
 ### FREE CHECKLIST:
 Grab my must have profitable practice planner now.
 ## Calculate Your Income Potential…

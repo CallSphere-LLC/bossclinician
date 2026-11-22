@@ -1,8 +1,8 @@
 import { Seo } from "@/components/Seo";
 import { LuxePageHero } from "@/components/luxe/LuxePageHero";
 import { Section } from "@/components/luxe/Section";
-import { FREEBIE_FILES, LEAD_MAGNET_FORMS, marketingStepForm as c } from "@/content/leadMagnets";
-import { LeadMagnetForm, SignupCard } from "./parts";
+import { FREEBIE_FILES, LEAD_MAGNET_FORMS, OPT_IN_NOTES, marketingStepForm as c } from "@/content/leadMagnets";
+import { LeadMagnetForm, OptInNote, SignupCard } from "./parts";
 
 /**
  * /marketing-step-form — the sign-up for the 5-Step Marketing Plan, which the
@@ -29,7 +29,7 @@ export default function MarketingStepForm() {
             lastNameLabel={c.fields.lastName}
             emailLabel={c.fields.email}
             practiceYears={c.fields.practiceYears}
-            note={c.consent}
+            note={<OptInNote text={OPT_IN_NOTES.marketingPlan} />}
             success={{ ...c.success, download: FREEBIE_FILES.marketingPlan }}
           />
         </SignupCard>

@@ -140,7 +140,7 @@ export default function Boardroom() {
             <em>{b.hero.titleAccent}</em>
           </h1>
           <p className="br-hero-tag">{b.hero.tag}</p>
-          <p className="br-hero-intro">An application-only, 12-month mastermind for established mental health practice owners preparing to hire or already leading a team.</p>
+          <p className="br-hero-intro">{b.hero.intro}</p>
           <p>Your decisions now affect more than your own schedule.</p>
           <p>They affect payroll, profitability, team capacity, compensation, systems, culture, and the people depending on you to lead.</p>
           <a className="br-button" href="#apply">
@@ -230,6 +230,12 @@ export default function Boardroom() {
             </article>
           ))}
         </div>
+        {/* Row 245: "Picture this", before the benefits. The section-heading
+            measure with the callout's spacing, so no new styles. */}
+        <div className="br-section-heading br-center-callout br-reveal">
+          <p className="br-eyebrow br-gold">{b.pictureThis.eyebrow}</p>
+          <p>{b.pictureThis.body}</p>
+        </div>
       </section>
 
       <section id="inside" className="br-inside br-section br-dark">
@@ -300,6 +306,7 @@ export default function Boardroom() {
         <div className="br-fit-card br-reveal">
           <p className="br-eyebrow">{b.fit.eyebrow}</p>
           <h2>{b.fit.title}</h2>
+          <p>{b.fit.iHelp}</p>
           <ul>
             {b.fit.items.map((item) => (
               <li key={item}>{item}</li>
@@ -359,6 +366,7 @@ export default function Boardroom() {
         <a className="br-button br-button-dark" href="#apply">
           {b.finalCta.cta}
         </a>
+        <p>{b.finalCta.identity}</p>
       </section>
 
       <section id="apply" className="br-application br-section">

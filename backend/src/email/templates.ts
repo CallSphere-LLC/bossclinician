@@ -221,10 +221,10 @@ export function incomeProjection(projection: {
     ``,
     `Here's the projection you ran on the Boss Clinician income calculator:`,
     ``,
-    `Annual: ${annual}`,
+    `Estimated annual gross session revenue: ${annual}`,
     `Monthly: ${money(projection.monthlyIncome)}`,
     ``,
-    `The math behind it: ${math}.`,
+    `The math behind it: ${math}. Expenses and taxes are not deducted.`,
     `That's ${projection.clientsPerWeek * projection.weeksPerYear} sessions a year.`,
     ``,
     `Change one number and the whole picture moves — raising your rate by $25 a session adds ${money(
@@ -240,10 +240,10 @@ export function incomeProjection(projection: {
     `<p>Hi ${escapeHtml(firstName)},</p>`,
     `<p>Here's the projection you ran on the Boss Clinician income calculator:</p>`,
     `<p>`,
-    `Annual: <strong>${escapeHtml(annual)}</strong><br>`,
+    `Estimated annual gross session revenue: <strong>${escapeHtml(annual)}</strong><br>`,
     `Monthly: ${escapeHtml(money(projection.monthlyIncome))}`,
     `</p>`,
-    `<p>The math behind it: ${escapeHtml(math)}. That's ${
+    `<p>The math behind it: ${escapeHtml(math)}. Expenses and taxes are not deducted. That's ${
       projection.clientsPerWeek * projection.weeksPerYear
     } sessions a year.</p>`,
     `<p>Change one number and the whole picture moves — raising your rate by $25 a session adds ${escapeHtml(

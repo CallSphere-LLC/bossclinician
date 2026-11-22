@@ -24,7 +24,8 @@ export const freedomMasterclass = {
       height: 1440,
     },
     eyebrow: "Free On-Demand Masterclass",
-    title: "The Year My Practice Hit $500K Was the Same Year I Almost",
+    // Row 245: the $500K is labelled as revenue, not owner take-home.
+    title: "The Year My Practice Hit $500K in Revenue Was the Same Year I Almost",
     titleAccent: "Walked Away From It.",
     lede:
       "That is when I learned that a successful practice and a sustainable practice are not always the same thing. And that growing the practice was not the same thing as creating more freedom.",
@@ -35,8 +36,9 @@ export const freedomMasterclass = {
     titleLead: "How to Create a Private Practice That Supports Your",
     titleAccent: "Income, Energy and Future,",
     titleTail: "Without Seeing 25 to 30 Clients Forever",
+    // Row 245: the audience and the training's benefit, above the long story.
     body:
-      "For therapists and psychiatric providers who already built the practice, but do not want their income, schedule, and future to depend on staying clinically maxed out.",
+      "Your practice is established. Your calendar cannot stay this full forever. Watch this free training to see where your income is coming from, what it costs you in time, and what you could change first so you can pay yourself consistently without adding more evenings of sessions.",
     included: "Instant access + complimentary Practice Freedom Audit included",
     card: {
       eyebrow: "Free Instant Access",
@@ -72,7 +74,13 @@ export const freedomMasterclass = {
       chooseOne: "Please choose an answer for each question.",
       submit: "Get Free Access",
       sending: "Saving your seat…",
-      privacy: "Your privacy matters. You can unsubscribe anytime.",
+      /**
+       * Row 245: what the sign-up sends — the masterclass and the audit, then
+       * the "Maxed Out masterclass" sequence (automation 1401). The component
+       * adds the unsubscribe option and the privacy-policy link.
+       */
+      privacy:
+        "You’ll get the masterclass and the Practice Freedom Audit, followed by a series of emails from Yvette about the training and The Lounge.",
       // After a sign-up: the address is confirmed by email before the video.
       confirmTitle: "Check your inbox",
       confirmBody:
@@ -123,7 +131,9 @@ export const freedomMasterclass = {
       },
     ],
     areas:
-      "During the training, we will look at three areas of your practice: The Capacity Multiplier, The Service Design Strategy, and The Clinical Authority Strategy. You do not need to use all three. The goal is to see that “add more clients” is not your only option.",
+      // Row 245: each framework label explained in ordinary words — hers, from
+      // the recording (captions/freedom-masterclass.en.vtt).
+      "During the training, we will look at three areas of your practice: The Capacity Multiplier (whether one clinical hour can serve more than one client), The Service Design Strategy (how your clinical expertise is structured and delivered), and The Clinical Authority Strategy (how your expertise can create value beyond direct client care). You do not need to use all three. The goal is to see that “add more clients” is not your only option.",
     alsoIncluded:
       "Also included: the complimentary Practice Freedom Audit to help you identify where your current practice may be creating the most pressure, so you know what deserves your attention first.",
     cta: "Get Free Access",
@@ -145,14 +155,16 @@ export const freedomMasterclass = {
   host: {
     eyebrow: "Meet your host",
     name: "Yvette Howard",
-    credential: "LCSW · Founder, Boss Clinician Coaching",
+    // Row 245: the public-facing practice name is Brighter Tomorrow.
+    credential: "LCSW · Owner, Brighter Tomorrow · Founder, Boss Clinician Coaching",
     lead: "I built the kind of private practice I once thought would give me freedom.",
     paragraphs: [
       "I opened my practice in 2018, went full-time in 2019, built a full caseload, and eventually grew the business to more than $500,000 in revenue.",
       "From the outside, it looked like success. But the year my practice reached its highest revenue was also the year I seriously questioned whether I wanted to keep doing it. I was working on vacations. Working through time with my son. Carrying too much of the business in my own head and on my own shoulders.",
       "And I kept thinking the answer was somewhere else: another platform, another program, another income stream, maybe even another business.",
       "I did not necessarily need another business. I needed to build the one I already had differently.",
-      "That changed the way I think about private practice. Today I work in my practice about 5 to 8 hours a month. I still see clients, 4 to 5 long-term clients I have worked with for years, by choice, to maintain my clinical skills. Not because the practice depends on it. The income runs without me in the room. That experience changed how I think about private practice, and now I help established clinicians make the practice they already built work better for their income, energy, and future.",
+      // Row 245 (bio, resolved): no client count, visit frequency or hours.
+      "That changed the way I think about private practice. I currently maintain a small clinical caseload to keep my clinical skills current. The income runs without me in the room. That experience changed how I think about private practice, and now I help established clinicians make the practice they already built work better for their income, energy, and future.",
     ],
     proofs: [
       {
@@ -162,7 +174,7 @@ export const freedomMasterclass = {
       {
         label: "I designed",
         body:
-          "a practice that runs without me in the room. I now see 4 to 5 clients a month by choice, not because the income depends on it",
+          "a practice that runs without me in the room. I currently maintain a small clinical caseload to keep my clinical skills current",
       },
       {
         label: "Now I teach",
@@ -266,6 +278,12 @@ export const watchNow = {
       width: 960,
       height: 1309,
     },
+  },
+  /** Row 245: first-hire and team needs are routed to the Boardroom. */
+  boardroom: {
+    lead: "Preparing for your first hire or already leading a team?",
+    label: "Explore The Boardroom.",
+    to: "/boardroom",
   },
   testimonial: {
     quote:

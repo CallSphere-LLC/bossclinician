@@ -122,17 +122,20 @@ export function LuxeHero() {
               {...rise(staticEntrance, 0.24)}
               className="copy-luxe mt-7 max-w-[34rem] text-pretty sm:mt-8 sm:text-[1.04rem] lg:text-[1.08rem]"
             >
-              Boss Clinician helps mental health clinicians build, sustain, and lead private practices
-              that support their income, time, and life, without requiring them to keep adding
-              more just to feel financially secure.
+              Make your practice pay you consistently and fit the life you actually have, whether
+              you’re still employed, running a solo practice, or leading a team.
             </motion.p>
 
             <motion.div
               {...rise(staticEntrance, 0.34)}
               className="mt-9 flex flex-wrap items-center gap-3 sm:mt-8 sm:gap-4"
             >
-              <LuxeButton href="#offers" variant="foil" size="lg">
-                Find Your Path
+              {/* Sheet row 245 (21 Nov 2026): the quiz is the primary action and
+                  the comparison section the secondary one. "Find My Next Step"
+                  always means the quiz; "Find the Support You Need" always
+                  means the Club / Lounge / Boardroom cards. */}
+              <LuxeButton to="/practice-quiz" variant="foil" size="lg">
+                Find My Next Step
                 <svg
                   viewBox="0 0 16 16"
                   aria-hidden
@@ -146,8 +149,9 @@ export function LuxeHero() {
                   <path d="M2.5 8h11M9.5 4l4 4-4 4" />
                 </svg>
               </LuxeButton>
-              {/* One button, as on her current home page (15 Oct): the two
-                  free trainings now sit on the Club and Lounge offer cards. */}
+              <LuxeButton href="#offers" variant="glass" size="lg">
+                Find the Support You Need
+              </LuxeButton>
             </motion.div>
 
             <motion.p

@@ -187,7 +187,8 @@ export default function Club() {
         align="center"
         lede={
           <>
-            <span className="block">For clinicians who are ready to stop researching private practice and start building one with the right foundation.</span>
+            {/* Row 245: her approved “I help” statement, in “you” voice. */}
+            <span className="block">Start your private practice while still covering your bills and planning for the benefits you rely on.</span>
             <span className="mt-5 block">
               Build while you are working.<br />
               Grow intentionally.<br />
@@ -222,6 +223,7 @@ export default function Club() {
       <ClinicianStorySection />
       <PersonasSection />
       <EnterSection />
+      <PictureThisSection />
       <PillarsSection />
       <ClubDecisionSection />
       <ClubReadinessSection />
@@ -319,7 +321,7 @@ function StartSection() {
   );
 }
 
-/* ── 3 · Why you keep holding back ────────────────────────────────────── */
+/* ── 3 · Reliable income, and doing it in the right order ─────────────── */
 
 function HoldingBackSection() {
   const reduce = useEntranceMotion();
@@ -335,7 +337,7 @@ function HoldingBackSection() {
     >
       <SectionTitle title={club.holdingBack.title} />
       <motion.div {...rise(reduce, 0.1)} className="mt-7 sm:mt-8">
-        <Prose paragraphs={club.holdingBack.paragraphs} />
+        <Prose paragraphs={[...club.holdingBack.lead, ...club.holdingBack.paragraphs]} />
         <div className="mt-7"><MarkedList items={[
           "Should I credential directly with insurance or start with a platform like Alma, Headway, Rula, Grow, or Talkspace?",
           "Which payer or platform options actually make sense for the kind of practice I want to build?",
@@ -484,6 +486,23 @@ function EnterSection() {
         <Prose paragraphs={club.enter.paragraphs} />
       </motion.div>
       <Cta label={club.enter.cta} to={JOIN_ANCHOR} className="mt-8 sm:mt-10" />
+    </Section>
+  );
+}
+
+/* ── 6b · Picture this — set the way the Lounge sets its "looks like" card ── */
+
+function PictureThisSection() {
+  const reduce = useEntranceMotion();
+
+  return (
+    <Section surface="raised" space="lg" aria-label={club.pictureThis.title} containerClassName="max-w-3xl">
+      <SectionTitle title={club.pictureThis.title} />
+      <motion.div {...rise(reduce, 0.1)} className="mt-7 sm:mt-8">
+        <GlassCard accent="plum" interactive={false} className="p-7 sm:p-10">
+          <p className="copy-luxe text-pretty">{club.pictureThis.body}</p>
+        </GlassCard>
+      </motion.div>
     </Section>
   );
 }
@@ -845,6 +864,7 @@ function NextMoveSection() {
         />
       </motion.div>
       <Pull className="mt-8 sm:mt-10">{club.nextMove.closing}</Pull>
+      <p className="mx-auto mt-5 max-w-2xl text-balance text-center text-white/85">{club.nextMove.identity}</p>
       <Cta label={club.nextMove.cta} to={JOIN_ANCHOR} className="mt-7 sm:mt-8" />
     </Section>
   );

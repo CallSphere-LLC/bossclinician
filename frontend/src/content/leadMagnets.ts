@@ -40,6 +40,23 @@ export const FREEBIE_FILES = {
 export const KAJABI_CONSENT =
   "Bossclinician.com needs the contact information you provide to us to contact you about our products and services. You may unsubscribe from these communications at anytime. See our privacy policy for terms and conditions and to learn how we protect your data.";
 
+/**
+ * What each free-resource sign-up sends (sheet row 245, 21 Nov 2026): the
+ * resource, then the follow-up emails its form's automation actually sends as
+ * of 21 Nov 2026. Rendered by `OptInNote`, which adds the unsubscribe option
+ * and the privacy-policy link. Change these with the automations.
+ */
+export const OPT_IN_NOTES = {
+  /** marketing-step-form: one email with the plan (automation 10). */
+  marketingPlan:
+    "You’ll get the 5-Step Marketing Plan by email. This resource is educational only and is not legal, financial, or clinical advice.",
+  /** insurance-guide: the guide email plus one follow-up (automations 12, 1433). */
+  insurance: "You’ll get the Insurance vs Superbills guide by email, followed by a follow-up email from Yvette.",
+  /** kickstartguide: the guide email, then the Kick Start Guide sequence. */
+  kickstart:
+    "You’ll get the Private Practice Kickstart Guide by email, followed by a short series of emails from Yvette about starting your practice.",
+} as const;
+
 /** Shown under every "check your inbox" line: the same file, right now. */
 export const DIRECT_DOWNLOAD = {
   label: "Download it now",
@@ -117,8 +134,8 @@ export const fiveStepMarketing = {
     title: "Your marketing plan — in 5 simple steps.",
     body: "Enter your name and email and we'll send the free fillable PDF straight to your inbox.",
     button: "Get the Free Marketing Plan",
-    privacy:
-      "We respect your privacy. No spam — just your guide and occasional strategy content from Boss Clinician.",
+    // Row 245: no "occasional strategy content" — the form sends the plan only.
+    privacy: "We respect your privacy. You’ll get the 5-Step Marketing Plan by email.",
   },
 } as const;
 

@@ -56,7 +56,7 @@ const DESTINATIONS: readonly VoiceDestination[] = [
       "I'm seeing too many clients",
     ],
     narration:
-      "The Lounge is a monthly membership for therapists whose practice already works but who cannot keep working like this. There are two tiers at the founding rate — Member at a hundred and ninety-seven a month, and VIP at three hundred and forty-seven, which puts Yvette's eyes on your practice.",
+      "The Lounge is a monthly membership for therapists whose practice already works but who cannot keep working like this. There are two tiers — Member at a hundred and ninety-seven a month, and VIP at three hundred and forty-seven, which puts Yvette's eyes on your practice.",
     surfaces: PUBLIC,
   },
   {
@@ -222,12 +222,10 @@ const DESTINATIONS: readonly VoiceDestination[] = [
       "apply",
       "the application",
       "the application form",
-      "I want to work with her",
-      "sign me up",
-      "how do I get started",
+      "the Boardroom application",
     ],
     narration:
-      "A letter from Yvette, and then the application form. It asks your name, your email, your phone if you want to give it, and what your biggest challenge in the practice is right now. Yvette reads every application herself and answers within a day.",
+      "The Boardroom application, at the foot of The Boardroom page: for established practice owners preparing for a first hire or already leading a team. Yvette personally reviews each application.",
     surfaces: PUBLIC,
   },
   {
@@ -363,8 +361,8 @@ const TOUR: readonly TourStop[] = [
         say: "That headline is the whole idea. This is not about opening a practice — it is about building one you are still happy to be in five years from now.",
       },
       {
-        focus: "Find Your Path",
-        say: "This button jumps down to the three ways in, which differ by the stage you are at rather than by how much you are willing to spend.",
+        focus: "Find My Next Step",
+        say: "This button opens a two-minute quiz that suggests a next step for your stage. The one beside it, Find the Support You Need, jumps down to the three ways in, which differ by the stage you are at rather than by how much you are willing to spend.",
       },
       {
         focus: "Watch the Free Masterclass",
@@ -398,7 +396,7 @@ const TOUR: readonly TourStop[] = [
       },
       {
         focus: "Choose your path into the Lounge",
-        say: "Two tiers. Member is a hundred and ninety-seven a month, VIP is three hundred and forty-seven and puts Yvette's eyes on your practice. Both are founding rates on limited seats, and the rate you join at is the rate you keep.",
+        say: "Two tiers. Member is a hundred and ninety-seven a month, VIP is three hundred and forty-seven and puts Yvette's eyes on your practice.",
       },
     ],
   },
@@ -408,7 +406,7 @@ const TOUR: readonly TourStop[] = [
       "The mastermind for practice owners making CEO decisions — hiring for the first time, or leading the team they already have.",
     beats: [
       {
-        focus: "Build a practice that can grow beyond you.",
+        focus: "Build a Team Without Becoming the Answer to Everything",
         say: "The Boardroom is the third way in. It is for practice owners whose next decisions are CEO decisions: when to hire, what they can afford, and how to step back without everything falling apart.",
       },
       {
@@ -490,7 +488,7 @@ const TOUR: readonly TourStop[] = [
         say: "Everything free on the site is gathered here, sorted by where your practice is now rather than by what kind of file it is.",
       },
       {
-        focus: "Annual Income Potential",
+        focus: "Estimated Annual Gross Session Revenue",
         say: "The practice calculator is the one to try first. Set your session rate, your clients a week and your working weeks, and it gives you a yearly figure — usually a surprise in one direction or the other.",
       },
     ],
@@ -553,15 +551,11 @@ const TOUR: readonly TourStop[] = [
   },
   {
     destination: "apply",
-    purpose: "The application form — the single front door to the coaching programmes.",
+    purpose: "The Boardroom application, for established practice owners preparing for a first hire or already leading a team.",
     beats: [
       {
-        focus: "Hey my therapist friend!",
-        say: "Worth reading before you fill anything in. It is a letter rather than a sales pitch, and it sets out what applying actually means — a conversation, not a commitment.",
-      },
-      {
-        focus: "Fill out the form below",
-        say: "The form asks your name, your email and what your biggest challenge in the practice is right now. Yvette reads every one herself and answers within a day, so an honest answer gets you a better conversation.",
+        focus: "There are six seats in The Boardroom.",
+        say: "This is the application for The Boardroom. Yvette personally reviews each one, and you do not need to have everything figured out before you apply.",
       },
     ],
   },

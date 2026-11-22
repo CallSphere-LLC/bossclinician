@@ -8,6 +8,11 @@
  * your host → why Bali → what is and is not included → the burnout quiz → the
  * fourteen questions.
  *
+ * 21 November 2026 website handoff (sheet row 245, section 10): hero,
+ * recognition, experience, audience/objections, host story, reservation
+ * lead-in and closing use the approved ready-to-paste copy; dates, venue,
+ * inclusions, prices and the 11 + Yvette guest count are unchanged.
+ *
  * The 25 October owner update makes the private $5,500 room the public
  * reservation option. The checkout offer and legal terms use the same amount.
  * The final payment date and cancellation policy retain the published terms. The separators in the uppercase strips
@@ -28,6 +33,9 @@ export const RETREAT_RESERVE_ROUTE = "/checkout/bali-private-room";
 
 /** The travel insurance provider the page names, by its own link. */
 export const RETREAT_TRAWICK_URL = "https://trawickinternational.com/";
+
+/** Yvette's retreat conversation booking page. */
+export const RETREAT_CALL_URL = "https://tidycal.com/profitwithyvette/retreat";
 
 /**
  * The six-question Burnout Self-Assessment, served by this site at its original
@@ -98,7 +106,7 @@ const INCLUSIONS: readonly RetreatInclusion[] = [
           },
           {
             name: "In-Villa Massages and Spa Day",
-            body: ", traditional Balinese massage and additional restorative spa time, performed by local practitioners, to physically release the tension your job asks your body to carry. No planning or scheduling required on your part.",
+            body: ", traditional Balinese massage and additional restorative spa time, performed by local practitioners. The on-site arrangements described here are organized for you.",
           },
           {
             name: "Cabana Day at the Pool",
@@ -111,11 +119,11 @@ const INCLUSIONS: readonly RetreatInclusion[] = [
         items: [
           {
             name: "Healing Meditation",
-            body: ", a guided stillness practice drawing on Balinese spiritual wisdom, using breath, visualization, and sound to calm the mind and restore energetic harmony.",
+            body: ", a guided stillness practice drawing on Balinese spiritual wisdom, using breath, visualization, and sound.",
           },
           {
             name: "Palm Reading and Holy Water Ceremony",
-            body: ", an intimate cultural experience where a Balinese healer reads the lines of your destiny, followed by a sacred holy water blessing for clarity and protection.",
+            body: ", an intimate cultural experience with a Balinese palm reading, followed by a holy water ceremony.",
           },
         ],
       },
@@ -163,7 +171,7 @@ const COVERAGE: readonly RetreatCoverage[] = [
 const FAQS: readonly RetreatFaq[] = [
   {
     q: "Are CEUs offered at this retreat?",
-    a: "No. And that is intentional. If you have been on retreats before where you still had to work, still had to learn, still had to produce something, this is not that. FlourisHealer Retreats exist for one reason: to give you the experience of receiving. No agenda. No credentials. No content to create. Just you, finally resting.",
+    a: "No. And that is intentional. If you have been on retreats before where you still had to work, still had to learn, still had to produce something, this is not that. FlourisHealer Retreats exist for one reason: to give you the experience of receiving. No professional training agenda. No credentials. No content to create. Just you, finally resting.",
   },
   {
     q: "Who is this retreat designed for?",
@@ -222,22 +230,28 @@ const FAQS: readonly RetreatFaq[] = [
 
 export const retreat = {
   seo: {
-    title: "Release. Restore. Reconnect.",
+    title: "Bali Retreat for Women Therapists | FlourisHealer",
     description:
-      "A luxury wellness retreat in Ubud, Bali for 11 women mental health and wellness professionals, hosted by Yvette. June 15–20, 2027.",
+      "A luxury wellness retreat in Ubud, Bali for women therapists and other mental health and wellness professionals, hosted by Yvette. June 15–20, 2027.",
   },
 
+  /**
+   * 21 Nov 2026 handoff (row 245, section 10). Order is fixed by the developer
+   * note: brand name → tagline → H1 → paragraph → dates and location → Explore
+   * the Retreat → Have Questions? Talk With Yvette. The tagline stays a smaller
+   * line above the H1, never part of it.
+   */
   hero: {
-    eyebrow: `BALI, INDONESIA${DOT}JUNE 15–20, 2027`,
-    title: "You have been taking care of everyone.",
-    titleAccent: "When was the last time someone took care of you?",
-    triad: ["Release.", "Restore.", "Reconnect."],
-    ledeA: "A LUXURY WELLNESS RETREAT FOR WOMEN MENTAL HEALTH AND WELLNESS PROFESSIONALS",
-    ledeB:
-      "BECAUSE THE WOMEN WHO SPEND THEIR LIVES HOLDING SPACE FOR OTHERS DESERVE A SPACE CREATED JUST FOR THEM.",
-    strip: `6 DAYS${DOT}5 NIGHTS${DOT}11 GUESTS + YVETTE${DOT}ONE PRIVATE VILLA IN UBUD, BALI`,
+    brand: "FLOURISHEALER RETREATS",
+    tagline: "Release. Restore. Reconnect.",
+    title: "You Spend Your Days Making Room for Other People.",
+    titleAccent: "This Is Time Set Aside for You.",
+    lede: "A six-day, five-night Bali retreat for women in mental health and wellness who want room to rest, enjoy themselves, and connect beyond the provider role.",
+    when: "June 15–20, 2027 • Ubud, Bali",
+    exploreCta: "Explore the Retreat",
+    questionsCta: "Have Questions? Talk With Yvette",
+    /** The Imagine band's button to the reservation block. */
     reserveCta: "RESERVE YOUR PLACE",
-    discoverCta: "DISCOVER THE EXPERIENCE",
   },
 
   stats: [
@@ -247,23 +261,18 @@ export const retreat = {
     { value: "1", lines: ["PRIVATE", "VILLA"] },
   ],
 
+  /** Recognition (21 Nov handoff, ready-to-paste). */
   about: {
     eyebrow: "THE RETREAT",
-    title: "Designed for the women who hold space for everyone.",
-    titleAccent: "It is time someone held space for you.",
+    title: "Your Last Appointment Ends.",
+    titleAccent: "The Day Still Hasn’t Let Go of You.",
     body: [
-      "You are a mental health professional. You spend your days holding space for others, listening, healing, supporting. You know what rest should look like. You teach it to your clients. And somehow you are still the last person on your own list.",
-      "Everyone sees the successful clinician you have become.",
-      "Very few people see what it takes to keep holding it all together.",
-      "You tell yourself you will rest after the next session block. After the next quarter. After things settle.",
-      "But somehow they never do.",
-      "The retreats you have taken before? More work in a different location. Another CEU. Another credential. Another thing to justify the trip.",
-      "You have never just stopped.",
-      "I built this because I have been exactly where you are. In 2022 I was a clinician, a doctoral student, a business owner, and a mom running completely on empty.",
-      "In 2023 I went on my first retreat. On the last day I made myself a promise.",
+      "Maybe you sit in the car for a few minutes before going inside because you need a moment when nobody needs an answer.",
+      "You spend your workday listening closely, making decisions, and responding to other people’s needs. By the time you have space for yourself, you may not have the energy to decide what would feel good.",
+      "You can explain why rest matters and still feel guilty making room for your own. Even when the people around you support you going, you may find yourself asking whether taking this much time for yourself is selfish.",
+      "And a vacation? Sometimes that becomes another thing you manage—the research, the reservations, the group chat, and the work messages you keep checking while you’re away.",
     ],
-    promise: "One day I am going to create this for other women.",
-    kept: "This is that promise kept.",
+    pull: "You don’t need another assignment about taking care of yourself. You may need time that is actually set aside for it.",
     photo: {
       src: "/images/retreat-villa-aerial.webp",
       alt: "The private Ubud villa from above: a long green pool, sun loungers under palms, and two storeys of glass bedrooms behind them",
@@ -278,20 +287,30 @@ export const retreat = {
     titleAccent: "because I needed it first.",
     body: [
       "In July 2026, I went on a retreat in Thailand. Not for my clients. Not for content. For me.",
-      "I came home feeling more grounded, clear, and rested than I had in a long time. I noticed that the clarity I came home with changed the way I moved through my business, my relationships, and my own clinical work.",
+      "I came home feeling more grounded, clear, and rested than I had in a long time—and that clarity showed up in the decisions I made.",
+      "I redesigned the Boss Clinician logo to reflect the true meaning behind the name. I gained connections with like-minded women who continue to support my businesses. And I experienced the peace of knowing my group practice could keep running—and I could still get paid—while I trusted my team to hold things down without me.",
+      "I also came home with new ways to keep myself grounded and a deeper commitment to taking care of my health. The experience gave me space to think about what I needed and how I wanted to move forward, both personally and as a business owner.",
     ],
-    pull: "That is what I want for you in Bali.",
+    /** Sits where the old “That is what I want for you in Bali” line was. */
+    pull: "That’s part of what inspired the experience I’m creating for you in Bali: space to rest, connect, and hear yourself clearly enough to decide what you want to carry home.",
+    /** 21 Nov handoff r247: whole portrait photo, never cropped. */
+    photo: {
+      src: "/images/retreat-founder-thailand-portrait.webp",
+      alt: "A breathwork session on a seaside deck in Thailand: women lie on blue towels wearing eye masks and headphones while a woman in a patterned kimono stands beside them",
+      width: 942,
+      height: 1670,
+    } satisfies RetreatPhoto,
     close:
       "This is our first FlourisHealer retreat. I am bringing everything I have learned from every retreat I have invested in since 2023, and everything I know about what women in this field actually need to exhale, into six days in Ubud.",
   },
 
   included: {
     eyebrow: "WHAT'S INCLUDED",
-    title: "This is not a training.",
-    titleAccent: "This is a retreat.",
+    title: "Rest, Connection, and an Experience",
+    titleAccent: "Worth Looking Forward To.",
     body: [
-      "You have done the workshops. You have sat through the CEU trainings. You have attended the conferences and come home with a notebook full of strategies and a body that is still exhausted. You do not need more information. You need permission to stop.",
-      "For six days in Bali, someone else plans, cooks, coordinates, and holds the space. Your only responsibility is to receive.",
+      "Five nights at a private villa in Ubud give our group a shared place to settle in. Chef-prepared meals take everyday meal planning off your plate while you are with us. Spa experiences, time by the pool, cultural outings, and shared meals create different ways to enjoy the week.",
+      "Maybe you promised yourself a trip after getting licensed, opening your practice, or reaching a milestone you worked years for. Then the next responsibility arrived, and celebrating yourself got pushed back again. This can be time to enjoy what you have worked toward—with room for rest, new experiences, and connection. You do not need to arrive with a breakthrough to achieve or a business goal to complete.",
     ],
     items: INCLUSIONS,
   },
@@ -305,13 +324,12 @@ export const retreat = {
         title: "Why Only 11 Guests",
         body: [
           "This is not a conference. It is not a room of a hundred people nodding along to a speaker and going home strangers. Eleven guests and Yvette in one private villa means you are not performing for anyone. You are not managing your face. You get to actually be known, by the end of six days, by name and by story, not just by profession.",
-          "Smaller also means safer. The kind of rest we are talking about, the kind where your nervous system actually lets go, does not happen in a crowd. It happens when you know exactly who is in the room with you.",
         ],
       },
       {
         title: "Why This Villa",
         body: [
-          "We chose one private twelve bedroom estate in Ubud on purpose. No hotel staff walking through common areas. No other guests at the pool. No shared spaces with strangers. The entire property, both infinity pools, the yoga shala, the gym, the spa facility, is only for our group of twelve, including me, the entire time we are there.",
+          "We chose one private twelve bedroom estate in Ubud on purpose. No other guests at the pool. No shared spaces with strangers. The entire property, both infinity pools, the yoga shala, the gym, the spa facility, is only for our group of twelve, including me, the entire time we are there.",
           "That privacy is not a luxury detail. It is what makes it possible for you to actually exhale. You cannot fully let your guard down in a space you are sharing with people who do not know what you carry. Here, you do not have to.",
         ],
       },
@@ -368,7 +386,7 @@ export const retreat = {
       {
         caption: "SISTERHOOD",
         src: "/images/retreat-sisterhood.jpg",
-        alt: "Five retreat guests leaning in together for a photograph, all smiling",
+        alt: "Five women leaning in together for a photograph, all smiling",
         width: 1200,
         height: 1599,
       },
@@ -382,68 +400,63 @@ export const retreat = {
     ] satisfies readonly (RetreatPhoto & { caption: string })[],
   },
 
-  pattern: {
-    eyebrow: "THIS IS NOT A VACATION",
-    title: "It is about",
-    titleAccent: "interrupting a pattern.",
-    lead: "The pattern that tells you:",
-    lines: [
-      "“I will go after I get caught up.”",
-      "“I cannot leave my clients.”",
-      "“My practice needs me right now.”",
-      "“I will do something for myself next year.”",
+  /**
+   * Audience and objections (21 Nov handoff, ready-to-paste). Takes the band the
+   * old “interrupting a pattern” narrative held. The old “woman who returns”
+   * band is gone: it promised permanent change and that clients would feel it.
+   */
+  audience: {
+    title: "A Room Full of Women Who Understand the Work—",
+    titleAccent: "Without Making the Whole Week About Work.",
+    body: [
+      "FlourisHealer is for women in mental health and wellness who spend much of their professional lives caring for, guiding, or supporting other people.",
+      "You may be a therapist, a psychiatric provider, or a wellness practitioner. You may work for an organization, own your practice, or be considering your next chapter. You do not need to be a business owner or a Boss Clinician member.",
+      "You can love your work and still want time away from being the person who is always available.",
     ],
-    body: "You help your clients break patterns every week. You know the cost of chronic stress better than almost anyone. And yet here you are. Still waiting. Still last on your own list.",
-    pull: [
-      "Sometimes the hardest part is not leaving for six days.",
-      "It is believing you are allowed to.",
+    objections: [
+      {
+        q: "“I’m interested, but taking time away feels like a lot.”",
+        // The handoff says "described below"; on this page the inclusions sit above this band.
+        a: "That makes sense. For some providers, time away means arranging coverage, adjusting appointments, budgeting for fewer billable hours, or coordinating responsibilities at home. The retreat does not remove those realities. It gives you dates and an experience to plan toward, with a pre-trip group call and the on-site arrangements described above. Review the full cost and travel requirements before deciding.",
+      },
+      {
+        q: "“I would be coming by myself.”",
+        a: "You may have wanted a trip like this for a while, but finding a friend whose schedule lines up has kept it in the group chat. You do not have to arrive with a friend. You can reserve your place and join women with a shared connection to mental health and wellness. The pre-trip group call offers an opportunity to meet before traveling, and shared meals and experiences create ways to get to know one another during the week.",
+      },
+      {
+        q: "“Is this a training or a networking event?”",
+        a: "No CEUs are offered. The retreat is centered on rest, connection, and the Bali experience. There is no business curriculum to complete and no need to make this trip a professional-development project.",
+      },
+      {
+        q: "“I want to go, but I need to understand the full cost.”",
+        a: "Wanting the experience and thinking carefully about the money can both be true. Private rooms are $5,500; shared rooms are $4,500 per person. Airfare and travel insurance are additional charges. Review the room options, included experiences, deposit, remaining payment schedule, and cancellation terms together so you can decide whether the trip fits your budget and responsibilities at home.",
+      },
+      {
+        q: "“Can I bring a friend who works in wellness?”",
+        a: "This retreat welcomes women in mental health and wellness, including therapists and wellness practitioners. You do not need to own a practice or be a Boss Clinician member. If you and a friend are considering attending, review the room options together and ask Yvette about availability and shared-room arrangements before reserving.",
+      },
     ],
-    cost: "What is the cost of never giving yourself permission?",
-    costBody: "To your health. Your relationships. Your clinical presence. Your joy. Your practice.",
-    close: "At some point choosing yourself stops being indulgent. It becomes necessary.",
   },
 
-  returns: {
-    lead: "She returns not because Bali fixed her. She returns because she finally experienced what it feels like to be fully held.",
-    body: "She notices when guilt, not wisdom, is driving her decisions. She no longer believes rest has to be earned. She leads her practice from clarity instead of chronic depletion. She comes home and her clients feel it. Not because she told them. Because something in her is different.",
-    caps: "CARING FOR HERSELF DID NOT WEAKEN HER LEADERSHIP. IT STRENGTHENED IT.",
-  },
-
+  /** Desire and experience (21 Nov handoff, ready-to-paste), in the Imagine band. */
   imagine: {
     eyebrow: "CLOSE YOUR EYES",
-    title: "Imagine ...",
-    stanzas: [
-      [
-        "Stepping off the plane and someone is already waiting for you.",
-        "Holding a sign with your name on it.",
-      ],
-      [
-        "Walking into a villa where everything has been thought of.",
-        "Nothing for you to plan. Nothing for you to manage.",
-      ],
-      [
-        "Waking up with nowhere to rush.",
-        "Breakfast floating toward you in the pool.",
-        "Flower petals on the water.",
-      ],
-      [
-        "Laughing at a dinner table with women who get it.",
-        "Nobody needing anything from you.",
-        "Nothing to hold together.",
-      ],
-      [
-        "And coming home to your practice, your family, your life",
-        "as a woman who finally got poured into.",
-      ],
+    title: "Imagine Having Less to Coordinate Once You Arrive.",
+    body: [
+      "Breakfast is being prepared. Your accommodation is arranged. The group experiences are planned. You have space to enjoy Bali without being responsible for creating everyone else’s experience.",
+      "There is time for a meal you can linger over. A conversation that isn’t a consultation. A new experience you choose because it interests you. A moment when you can notice what you want before moving to the next thing someone needs.",
+      "That is the intention behind FlourisHealer: a hosted retreat where women in mental health and wellness can spend time together as people, beyond their professional roles.",
     ],
-    closeA: "That is not a daydream.",
-    closeB: "That is June 15-20, 2027. And your room is waiting.",
   },
 
   reserve: {
     eyebrow: "11 GUESTS + YVETTE",
-    title: "Stop saying next year.",
-    titleAccent: "Next year is now.",
+    /** Reservation lead-in (21 Nov handoff, ready-to-paste). */
+    title: "Choose the Room Option That Fits Your Trip.",
+    leadA:
+      "Review your accommodation, what is included, the total price, and the payment and cancellation terms before reserving. If you have questions about the experience or traveling with the group, ",
+    leadLink: "schedule a retreat conversation with Yvette",
+    leadB: ".",
     strip: `BALI${DOT}JUNE 15–20, 2027${DOT}LUXURY RETREAT PACKAGE`,
     price: "Private King Suite $5,500 per person",
     terms: `All payments due by June 8, 2027${DOT}See cancellation and refund policy in the FAQ`,
@@ -473,7 +486,7 @@ export const retreat = {
         primary: false,
       },
     ],
-    cta: "RESERVE YOUR PLACE",
+    cta: "Reserve a Private Room",
     ctaNote: "Choose pay in full or a $500 deposit with monthly payments. New payment plans close February 1, 2027; all balances are due by June 8, 2027.",
     scarcity: `11 GUESTS + YVETTE${DOT}12 PEOPLE TOTAL`,
     insurance:
@@ -531,7 +544,7 @@ export const retreat = {
     eyebrow: "STILL ON THE FENCE?",
     title: "Take the Burnout",
     titleAccent: "Self-Assessment",
-    body: "Six honest questions about how you are actually doing, not how you tell everyone you are doing. Two minutes. Just you and the truth. If your cup is running lower than you have been letting on, this is the sign to stop waiting.",
+    body: "Six honest questions about how you are actually doing, not how you tell everyone you are doing. Two minutes. Just you and the truth.",
     cta: "TAKE THE QUIZ",
   },
 
@@ -540,5 +553,14 @@ export const retreat = {
     title: "Everything you",
     titleAccent: "need to know",
     questions: FAQS,
+  },
+
+  /**
+   * Reservation closing (21 Nov handoff). The footer's /retreats next step
+   * (content/site.ts footer.nextStep) carries the Talk With Yvette link.
+   */
+  closing: {
+    body: "You do not have to wait until you have nothing left to make room for yourself. If this experience fits what you need and what you can plan for, we would love to welcome you to Bali.",
+    cta: "Explore Room Options",
   },
 } as const;

@@ -104,7 +104,7 @@ export function LuxeFinalCTA() {
           className="mt-8 flex flex-wrap items-center justify-center gap-4"
         >
           <LuxeButton variant="foil" size="lg" href="#offers">
-            Find Your Path
+            Find the Support You Need
           </LuxeButton>
         </motion.div>
 

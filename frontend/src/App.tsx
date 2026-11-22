@@ -121,7 +121,9 @@ export const PUBLIC_ROUTES: readonly { path: string; Component: RouteComponent }
   // list is a different path and stays behind RequireMember.
   { path: "/podcasts/:slug", Component: PodcastPage },
   { path: "/podcasts/:slug/episodes/:episodeId", Component: PodcastPage },
-  { path: "/apply", Component: lazyRoute(() => import("@/pages/Apply")) },
+  // Row 245 (21 Nov 2026): /apply is the Boardroom application. The permanent
+  // redirect is in nginx/site.conf; this is its client-navigation counterpart.
+  { path: "/apply", Component: lazyRoute(() => import("@/pages/ApplyRedirect")) },
   { path: "/checkout/success", Component: CheckoutSuccessPage },
   { path: "/checkout/paypal/return", Component: PayPalReturnPage },
   { path: "/contact", Component: lazyRoute(() => import("@/pages/Contact")) },

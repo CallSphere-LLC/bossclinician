@@ -32,6 +32,8 @@ describe("approved row 234 media", () => {
       expect(html).not.toMatch(/autoplay|drive.google|<iframe|<video[^>]* src=/i);
       expect(html).toContain(program === "club" ? 'href="/club/checkout"' : 'href="#join"');
       if (program === "club") expect(html).toContain('href="/practicepreptraining"');
+      expect(html).toContain(program === "club" ? "Watch the Free Practice Prep Training" : "Watch the Free Freedom Masterclass");
+      if (program === "lounge") expect(html).toContain('href="/freedom-masterclass"');
     });
   }
 });

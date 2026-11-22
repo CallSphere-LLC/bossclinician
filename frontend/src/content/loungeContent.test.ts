@@ -22,6 +22,19 @@ describe("Lounge release switch", () => {
     );
     expect(lounge.caseStudies.title).toBe("Two practice owners. Two different next steps.");
     expect(lounge.caseStudies.items).toHaveLength(2);
-    expect(lounge.caseStudies.items[0].paragraphs.at(-1)).toContain("reported receiving inquiries");
+    expect(lounge.caseStudies.items[0].paragraphs.at(-1)).toContain("She reported inquiries from the updated profile.");
+  });
+
+  it("carries the row 245 copy and keeps unconfirmed scarcity off the page", () => {
+    expect(lounge.caseStudies.eyebrow).toBe("Examples of working with Yvette");
+    expect(lounge.caseStudies.items[1].attribution).toBe("— Michelle, on working with Yvette");
+    expect(lounge.pictureThis.body).toContain("panic math");
+    expect(lounge.closingIdentity).toBe("This isn’t only about one Thursday off. It’s about running a practice that pays you like an owner.");
+    expect(lounge.hero.banner).toBe("");
+    expect(lounge.pricing.tiers.every((tier) => !tier.scarcity)).toBe(true);
+    expect(lounge.closing.memberNote).toBe("");
+    expect(lounge.closing.vipNote).toBe("");
+    expect(JSON.stringify(lounge)).not.toMatch(/Booked & Bossed|founding (member|VIP) (availability|seats)/i);
+    expect(lounge.faq.items.find((item) => item.q === "Do I have to stop taking insurance?")?.a).toMatch(/^You do not have to stop taking insurance/);
   });
 });

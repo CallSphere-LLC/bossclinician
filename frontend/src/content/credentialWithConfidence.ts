@@ -66,7 +66,7 @@ export const credentialWithConfidence = {
   seo: {
     title: "Credentialing with Confidence | NBCC Approved CE | Boss Clinician",
     description:
-      "A self paced NBCC home study program that walks you through insurance enrollment and ethical billing step by step, so your paperwork is clean, your claims get paid, and your practice stays audit ready.",
+      "A self paced NBCC home study program that walks you through insurance enrollment and ethical billing step by step. Learn how to prepare enrollment information, track applications, and review billing practices.",
   },
 
   /** The bar that runs above everything else on the source page. */
@@ -74,11 +74,11 @@ export const credentialWithConfidence = {
 
   hero: {
     badges: ["NBCC Approved CE Provider", "1.75 Clock Hours"],
-    // One headline on the source; split at the sentence break so the third
-    // sentence can take the foil italic line the hero gives an accent.
-    title: "Get credentialed. Get paid correctly.",
-    titleAccent: "Earn CE hours while you do it.",
-    sub: "A self paced NBCC home study program that walks you through insurance enrollment and ethical billing step by step, so your paperwork is clean, your claims get paid, and your practice stays audit ready.",
+    // Owner's 21 Nov 2026 headline, split so "Step by Step." takes the foil
+    // italic line the hero gives an accent.
+    title: "Understand Insurance Enrollment and Ethical Billing,",
+    titleAccent: "Step by Step.",
+    sub: "A self paced NBCC home study program that walks you through insurance enrollment and ethical billing step by step. Learn how to prepare enrollment information, track applications, and review billing practices.",
     /** The published label is "Start the Program for $27"; the offer supplies the rest. */
     ctaPrefix: "Start the Program for",
     priceNote: "Instant access. Includes your NBCC certificate of completion once you pass the post-test.",

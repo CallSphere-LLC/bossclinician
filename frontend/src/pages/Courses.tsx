@@ -32,11 +32,10 @@ const EASE: [number, number, number, number] = [0.22, 1, 0.36, 1];
 /** Anchor target for the hero's "Explore the Library" action. */
 const LIBRARY_ID = "training-library";
 
-const HERO_HEADLINE = "Ready to Start, Grow, & Scale Your Private Practice With Confidence?";
+const HERO_HEADLINE = "Choose the Tool for the Decision in Front of You.";
 
-const HERO_LEDE =
-  "It's time to ditch the overwhelm and build the profitable, peaceful, fully aligned practice you’ve been dreaming of.";
-
+// The hero used to repeat the manifesto sentence below as its lede; the
+// manifesto band keeps the one remaining copy.
 const MANIFESTO =
   "IT'S TIME TO DITCH THE OVERWHELM AND BUILD THE PROFITABLE, PEACEFUL, FULLY ALIGNED PRACTICE YOU’VE BEEN DREAMING OF.";
 
@@ -58,7 +57,7 @@ function splitOnce(text: string, marker: string): [string, string | undefined] {
   return [text.slice(0, at), text.slice(at + 1)];
 }
 
-const [HERO_TITLE, HERO_ACCENT] = splitOnce(HERO_HEADLINE, " Your Private Practice");
+const [HERO_TITLE, HERO_ACCENT] = splitOnce(HERO_HEADLINE, " for the Decision");
 
 /** Shared grading recipe for the two editorial photographs on this page. */
 const PLATE_GRADE = "brightness-[0.82] contrast-[1.06] saturate-[0.8]";
@@ -89,15 +88,14 @@ export default function Courses() {
   return (
     <>
       <Seo
-        title="COURSES - Boss Clinician"
-        description="Self-paced training for therapists and clinicians building private practices — credentialing, documentation, marketing, rates and systems."
+        title="Private Practice Courses for Therapists | Boss Clinician"
+        description="Self-paced courses and tools for therapists starting a private practice, growing a caseload, setting rates, credentialing and running operations, plus continuing education trainings."
       />
 
       <LuxePageHero
         eyebrow="Courses"
         title={HERO_TITLE}
         titleAccent={HERO_ACCENT}
-        lede={HERO_LEDE}
         tone="violet"
         actions={
           <LuxeButton variant="foil" size="lg" href={`#${LIBRARY_ID}`}>

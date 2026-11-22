@@ -33,7 +33,7 @@ describe("the Boardroom page, server-rendered", () => {
   const { html, head } = render();
 
   it("describes itself with her title and description", () => {
-    expect(head.at(-1)?.title).toBe("The Boardroom | Boss Clinician");
+    expect(head.at(-1)?.title).toBe("Group Practice Coaching & Leadership | The Boardroom");
     expect(head.at(-1)?.description).toBe(boardroom.seo.description);
   });
 
@@ -69,6 +69,20 @@ describe("the Boardroom page, server-rendered", () => {
     expect(html).toContain('class="br-step is-active"');
     expect(html.match(/class="br-step is-active"/g)).toHaveLength(1);
     expect(html).not.toMatch(/form is a preview/i);
+  });
+
+  it("carries the row 245 copy (21 Nov 2026) for both audiences", () => {
+    const text = (s: string) => s.replace(/&/g, "&amp;").replace(/'/g, "&#x27;").replace(/"/g, "&quot;");
+    expect(html).toContain(text(boardroom.hero.tag));
+    expect(html).toContain(text(boardroom.hero.intro));
+    expect(html).toContain(text("You Didn't Hire a Team to Become Its Full-Time Help Desk"));
+    expect(html).toContain(text(boardroom.pathways.paths[0].body));
+    expect(html).toContain(text(boardroom.pictureThis.body));
+    expect(html).toContain(text(boardroom.fit.iHelp));
+    expect(html).toContain(text(boardroom.finalCta.identity));
+    // The picture block sits before the benefits.
+    expect(html.indexOf(text(boardroom.pictureThis.body))).toBeLessThan(html.indexOf('id="inside"'));
+    expect(html).not.toMatch(/within 24 hours/i);
   });
 });
 

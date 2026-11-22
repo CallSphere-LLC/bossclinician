@@ -40,6 +40,10 @@ interface Service {
   to: string;
   image: string;
   accent: Accent;
+  /** Replaces the price line, e.g. for a programme that is by application. */
+  note?: string;
+  /** Replaces the default "Get Started" action label. */
+  cta?: string;
 }
 
 /**
@@ -57,6 +61,8 @@ const SERVICES: readonly Service[] = [
     image:
       "/images/migrated-840e01072ac7.png",
     accent: "gold",
+    note: "Application-only mastermind",
+    cta: "Explore The Boardroom",
   },
   {
     name: "Directory Makeover Audit",
@@ -106,8 +112,8 @@ export default function Store() {
     <>
       {/* Product images remain on their own cards. */}
       <Seo
-        title="Start Your Journey to a Profitable Private Practice"
-        description="Discover how to launch and grow your profitable private therapy practice with expert guidance from Yvette. Get started today!"
+        title="Services & Downloads for Therapists | Boss Clinician Store"
+        description="Explore The Boardroom, an application-only mastermind, see the Directory Makeover Audit service, or get the Rate Negotiation Letter Template download. Self-paced courses are in the Courses library."
         jsonLd={serviceNodes(origin)}
       />
 
@@ -219,7 +225,7 @@ function ServiceCard({ service }: { service: Service }) {
               </span>
             </p>
           ) : (
-            <p className="mt-5 text-sm text-orchid">See current options and prices</p>
+            <p className="mt-5 text-sm text-orchid">{service.note ?? "See current options and prices"}</p>
           )}
 
           <LuxeButton
@@ -228,8 +234,12 @@ function ServiceCard({ service }: { service: Service }) {
             to={service.to}
             className="mt-6 min-h-[44px] w-full tracking-[0.14em]"
           >
-            Get Started
-            <span className="sr-only"> with {service.name}</span>
+            {service.cta ?? (
+              <>
+                Get Started
+                <span className="sr-only"> with {service.name}</span>
+              </>
+            )}
           </LuxeButton>
         </div>
       </div>

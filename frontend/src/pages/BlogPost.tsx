@@ -21,8 +21,24 @@ import { cn } from "@/lib/cn";
 const EASE_LUXE: [number, number, number, number] = [0.22, 1, 0.36, 1];
 const VIEWPORT = { once: true, margin: "-12% 0px -8% 0px" } as const;
 
-/** Where the closing card sends the reader. Unchanged from the source page. */
-const APPLY_ROUTE = "/apply";
+/**
+ * Where the closing card sends the reader (sheet row 245, section 13): a next
+ * step that fits the article instead of one generic application button. The
+ * labels and routes are the owner's approved ones from section 3; an article
+ * not listed gets the site's general "Find My Next Step" quiz.
+ */
+const DEFAULT_NEXT_STEP = { label: "Find My Next Step", to: "/practice-quiz" } as const;
+const NEXT_STEP_BY_SLUG: Readonly<Record<string, { label: string; to: string }>> = {
+  "dont-let-fear-delay-your-private-practice": {
+    label: "Watch the Free Practice Prep Training",
+    to: "/practicepreptraining",
+  },
+  "how-to-stop-seeing-25-clients-a-week-and-still-hit-your-income-goals": {
+    label: "Watch the Free Freedom Masterclass",
+    to: "/freedom-masterclass",
+  },
+};
+const nextStepFor = (slug: string) => NEXT_STEP_BY_SLUG[slug] ?? DEFAULT_NEXT_STEP;
 const BLOG_ROUTE = "/blog";
 
 /** One rise recipe for the page; only the delay changes. */
@@ -128,6 +144,7 @@ export default function BlogPost() {
   }
 
   const { head, accent } = splitHeadline(post.title);
+  const nextStep = nextStepFor(post.slug);
 
   return (
     <>
@@ -246,8 +263,8 @@ export default function BlogPost() {
                 practice you dreamed of.
               </p>
 
-              <LuxeButton variant="foil" size="lg" to={APPLY_ROUTE} className="mt-8">
-                Apply to Work With Yvette
+              <LuxeButton variant="foil" size="lg" to={nextStep.to} className="mt-8">
+                {nextStep.label}
                 <Arrow />
               </LuxeButton>
             </div>

@@ -71,7 +71,6 @@ const ROUTES: { path: string; load?: Loader }[] = [
       [keys.blogPost(req.params.slug)]: await loadBlogPost(req.params.slug),
     }),
   },
-  { path: "/apply" },
   { path: "/contact" },
   { path: "/retreats" },
   { path: "/store" },

@@ -477,11 +477,34 @@ html[data-site-theme] .theme-luxe .retreat-page .retreat-heading {
   }
 }
 
+/* Sheet row 247: the Thailand photo is a tall portrait (942x1670) and must show
+   whole. Width is capped so the full height stays reasonable on desktop;
+   height:auto plus contain overrides the page-wide object-fit: cover. */
 .retreat-founder-photo {
-  width: 100%;
-  max-height: 480px;
-  object-fit: cover;
-  margin: 0 0 2rem;
+  width: min(100%, 440px);
+  height: auto;
+  aspect-ratio: 942 / 1670;
+  object-fit: contain;
+  margin: 0 auto 2rem;
+}
+.retreat-hero-question {
+  margin: 1.4rem 0 0 !important;
+}
+.retreat-hero-question .retreat-text-link {
+  color: var(--retreat-gold);
+}
+.retreat-objection {
+  margin-top: 2.4rem;
+}
+.retreat-objection h3 {
+  font-size: 1.45rem;
+  margin-bottom: 0.8rem;
+}
+.retreat-closing {
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: clamp(1.3rem, 2vw, 1.7rem);
+  line-height: 1.5;
+  margin-bottom: 2rem !important;
 }
 .retreat-inclusion-photo {
   width: 100%;

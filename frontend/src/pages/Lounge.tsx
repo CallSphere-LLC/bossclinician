@@ -199,11 +199,10 @@ export default function Lounge() {
         }
         lede={
           <>
-            <span className="block">Build a financially secure practice without relying on a packed caseload.</span>
+            {/* Row 245: her approved “I help” statement, then the supporting copy. */}
+            <span className="block">Build a plan to pay yourself consistently and make room for time away from sessions, even when your income depends on a packed calendar.</span>
             <span className="mt-5 block">
-              Work fewer days.<br />
-              Make clearer business decisions.<br />
-              Create more room for your life.
+              You built the practice. Now a cancellation can change your week’s income, a day off can create a week of catch-up, or the referrals you need can feel less predictable than you expected. The Lounge helps you look at the numbers, client flow, and routines behind that pressure—and decide what to change first.
             </span>
           </>
         }
@@ -219,8 +218,9 @@ export default function Lounge() {
         }
       />
 
+      <PictureThisSection />
       <LoungePracticeReframe />
-      <FoundingBand />
+      {lounge.hero.banner && <FoundingBand />}
       <GoodNewsSection />
       <LoungeDecisions />
       <PossibleSection />
@@ -264,6 +264,23 @@ function FoundingBand() {
       <p className="mx-auto max-w-3xl text-balance text-center text-[0.78rem] font-semibold uppercase leading-[1.9] tracking-[0.16em] text-gold/90">
         {lounge.hero.banner}
       </p>
+    </Section>
+  );
+}
+
+/* ── Picture this — what members plan toward (row 245) ────────────────── */
+
+function PictureThisSection() {
+  const reduce = useEntranceMotion();
+
+  return (
+    <Section surface="raised" space="lg" aria-label={lounge.pictureThis.title} containerClassName="max-w-3xl">
+      <SectionTitle title={lounge.pictureThis.title} />
+      <motion.div {...rise(reduce, 0.1)} className="mt-10">
+        <GlassCard accent="plum" interactive={false} className="p-7 sm:p-10">
+          <p className="copy-luxe text-pretty">{lounge.pictureThis.body}</p>
+        </GlassCard>
+      </motion.div>
     </Section>
   );
 }
@@ -736,7 +753,7 @@ function FitSection() {
 function CaseStudiesSection() {
   return (
     <Section surface="base" space="lg" aria-label={lounge.caseStudies.title}>
-      <SectionTitle align="center" title={lounge.caseStudies.title} />
+      <SectionTitle align="center" eyebrow={lounge.caseStudies.eyebrow} title={lounge.caseStudies.title} />
       <RevealGroup className="mx-auto mt-12 grid max-w-5xl grid-cols-1 gap-6 lg:grid-cols-2">
         {lounge.caseStudies.items.map((study) => (
           <RevealItem key={study.title} className="h-full">
@@ -746,10 +763,19 @@ function CaseStudiesSection() {
               </h3>
               <GoldRule width="w-10" className="mt-5" />
               <Prose className="mt-6" paragraphs={study.paragraphs} />
+              {study.quote && (
+                <figure className="mt-7 border-t border-white/[0.07] pt-7">
+                  <blockquote className="copy-luxe text-pretty text-[0.95rem] italic">&ldquo;{study.quote}&rdquo;</blockquote>
+                  <figcaption className="mt-4 text-[0.72rem] font-semibold uppercase tracking-[0.16em] text-gold">
+                    {study.attribution}
+                  </figcaption>
+                </figure>
+              )}
             </GlassCard>
           </RevealItem>
         ))}
       </RevealGroup>
+      <Prose className="mx-auto mt-10 max-w-3xl" align="center" paragraphs={[lounge.caseStudies.closing]} />
     </Section>
   );
 }
@@ -813,11 +839,13 @@ function MembershipPricingSection() {
                     ))}
                   </div>
                 </fieldset>
-                <p className="mt-3">
-                  <LuxePill accent={vip ? "gold" : "plum"} className="h-auto whitespace-normal text-left leading-[1.6]">
-                    {tier.scarcity}
-                  </LuxePill>
-                </p>
+                {tier.scarcity && (
+                  <p className="mt-3">
+                    <LuxePill accent={vip ? "gold" : "plum"} className="h-auto whitespace-normal text-left leading-[1.6]">
+                      {tier.scarcity}
+                    </LuxePill>
+                  </p>
+                )}
 
                 <div aria-hidden className="rule-faint mt-7 w-full" />
                 <h4 className="mt-7 text-base font-semibold text-white">{vip ? "Your VIP membership includes everything in Lounge Member, plus:" : "Your membership includes:"}</h4>
@@ -874,6 +902,9 @@ function ClosingSection() {
           {lounge.closing.title}
           <span className="text-foil mt-1.5 block italic">{lounge.closing.titleAccent}</span>
         </h2>
+        <p className="mx-auto mt-6 max-w-2xl text-balance font-display text-[1.2rem] leading-[1.45] text-white sm:text-[1.35rem]">
+          {lounge.closingIdentity}
+        </p>
         <GoldRule className="mx-auto mt-9" />
         <Prose paragraphs={lounge.closing.paragraphs} align="center" className="mx-auto mt-9 max-w-2xl" />
       </motion.div>
@@ -886,13 +917,13 @@ function ClosingSection() {
           <LuxeButton variant="glass" size="lg" to={LOUNGE_MEMBER_ROUTE} className="w-full tracking-[0.16em] sm:w-auto">
             {lounge.pricing.tiers[0].cta}
           </LuxeButton>
-          <p className="copy-luxe mt-4 max-w-xs text-pretty text-xs">{lounge.closing.memberNote}</p>
+          {lounge.closing.memberNote && <p className="copy-luxe mt-4 max-w-xs text-pretty text-xs">{lounge.closing.memberNote}</p>}
         </div>
         <div className="flex flex-1 flex-col items-center">
           <LuxeButton variant="foil" size="lg" to={LOUNGE_VIP_ROUTE} className="w-full tracking-[0.16em] sm:w-auto">
             {lounge.pricing.tiers[1].cta}
           </LuxeButton>
-          <p className="copy-luxe mt-4 max-w-xs text-pretty text-xs">{lounge.closing.vipNote}</p>
+          {lounge.closing.vipNote && <p className="copy-luxe mt-4 max-w-xs text-pretty text-xs">{lounge.closing.vipNote}</p>}
         </div>
       </motion.div>
 

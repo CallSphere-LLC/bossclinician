@@ -18,6 +18,8 @@ interface Offer {
   /** One string per paragraph, verbatim from bossclinician.com. */
   desc: readonly string[];
   audience: string;
+  /** Yvette's approved "I help" statement for the stage, in "you" voice. */
+  help: string;
   cta: string;
   /** Internal route of the offer's own sales page. */
   to: string;
@@ -33,6 +35,9 @@ interface Offer {
 const QUIZ_HREF = "/practice-quiz";
 
 /**
+ * Stage-card introductions, CTAs and "I help" lines as approved in the
+ * website handoff of 21 Nov 2026 (sheet row 245).
+ *
  * Each programme has its own sales page — /club and /lounge, as on the source
  * site, and /boardroom, Yvette's page for the mastermind (its application is at
  * the foot of that page). Copy as on her home page of 15 Oct 2026, which also
@@ -45,11 +50,11 @@ const OFFERS: readonly Offer[] = [
     name: "The Club",
     tagline: "Build a Private Practice You Won’t Have to Undo Later.",
     desc: [
-      "For clinicians who are starting, rebuilding, or building alongside employment and want to make smart decisions about clients, pricing, insurance, systems, and the transition into ownership.",
-      "You do not need to know everything before you start. But the things you skip now often become the things you pay to fix later.",
+      "You want a practice of your own. You also have bills, benefits, and real reasons not to quit without a plan. Build the foundation and work through your next steps with support.",
     ],
     audience: "For: The clinician building or rebuilding",
-    cta: "Explore the Club",
+    help: "Start your private practice while still covering your bills and planning for the benefits you rely on.",
+    cta: "Explore The Club",
     to: "/club",
     secondary: { label: "Watch the Free Training", to: "/practicepreptraining" },
     accent: "green",
@@ -59,11 +64,11 @@ const OFFERS: readonly Offer[] = [
     name: "The Lounge",
     tagline: "Build a Financially Secure Practice Without Relying on a Packed Caseload.",
     desc: [
-      "For established practice owners who already have clients and revenue but are tired of working so hard just to keep the practice feeling safe.",
-      "Inside The Lounge, you learn how to make clearer decisions about caseload, owner pay, payer mix, platform dependence, delegation, time off, and the business model underneath your clinical work.",
+      "You already own the practice. Now you want to understand what needs to change so your income and schedule feel more sustainable.",
     ],
     audience: "For: The Established Practice Owner",
-    cta: "Explore the Lounge",
+    help: "Build a plan to pay yourself consistently and make room for time away from sessions.",
+    cta: "Explore The Lounge",
     to: "/lounge",
     secondary: { label: "Watch the Free Masterclass", to: MASTERCLASS_ROUTE },
     accent: "plum",
@@ -73,11 +78,11 @@ const OFFERS: readonly Offer[] = [
     name: "The Boardroom",
     tagline: "Build a Practice That Can Grow Beyond You.",
     desc: [
-      "For established mental health practice owners actively preparing to hire or already leading a team.",
-      "When your decisions now involve payroll, compensation, profitability, clinician capacity, systems, and leadership, you need a different room.",
+      "You’re preparing to hire, or you already have a team. Make decisions about payroll, capacity, leadership, and delegation with a clearer view of the business.",
     ],
     audience: "For: The Practice Owner Building or Leading a Team",
-    cta: "Apply for The Boardroom",
+    help: "Build a team that can handle daily operations so you can step away.",
+    cta: "Explore The Boardroom",
     to: "/boardroom",
     accent: "gold",
   },
@@ -100,10 +105,10 @@ export function LuxeOffers() {
 
   return (
     <Section
-      // Every "Find Your Path" button on the home page jumps here, as they do on
+      // Every "Find the Support You Need" button on the home page jumps here, as they do on
       // bossclinician.com (#offers). The scroll margin clears the sticky header.
       id="offers"
-      // Where "Find Your Path" lands, and the answer to the question a visitor
+      // Where "Find the Support You Need" lands, and the answer to the question a visitor
       // most often asks out loud: which one of these is mine.
       data-narrate=""
       data-narrate-label="Find the offer built for your stage"
@@ -117,7 +122,7 @@ export function LuxeOffers() {
       <SectionTitle
         align="center"
         eyebrow="Find the Offer Built for Your Stage"
-        title="Wherever you are in your practice, there's a seat at this table."
+        title="Wherever you are in your practice, there’s support for your next step."
       />
 
       {/* Three parallel offers = a list. Capped below lg because the stacked
@@ -187,6 +192,11 @@ export function LuxeOffers() {
                         {paragraph}
                       </p>
                     ))}
+                    {/* The stage's "I help" line (sheet row 245), set apart
+                        from the introduction above it. */}
+                    <p className="text-pretty text-sm font-medium italic leading-relaxed text-white/90">
+                      {offer.help}
+                    </p>
                   </div>
 
                   <div aria-hidden className="rule-faint mt-8 w-full" />

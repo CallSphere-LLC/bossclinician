@@ -86,6 +86,22 @@ describe("the Watch Now page", () => {
     expect(html).not.toContain("suspended");
   });
 
+  it("keeps to the approved bio and says what the sign-up sends (row 245)", () => {
+    const { html } = render("/freedom-masterclass", <FreedomMasterclass />);
+    expect(html).toContain("I currently maintain a small clinical caseload to keep my clinical skills current.");
+    expect(html).not.toMatch(/4 to 5|5 to 8 hours/);
+    expect(html).toContain("Brighter Tomorrow");
+    expect(html).not.toContain("Brighter Tomorrow Counseling Services");
+    expect(html).toContain("$500K in Revenue");
+    expect(html).toContain('href="/privacy-policy"');
+    expect(html).toContain("unsubscribe anytime");
+  });
+
+  it("routes first-hire and team needs to the Boardroom from the watch page (row 245)", () => {
+    const { html } = render("/watch-now", <WatchNow />);
+    expect(html).toContain('href="/boardroom"');
+  });
+
   it("offers the bundled action guide and the Lounge before any setting has loaded", () => {
     const { html } = render("/watch-now", <WatchNow />);
     expect(html).toContain('href="/downloads/practice-freedom-audit.pdf"');

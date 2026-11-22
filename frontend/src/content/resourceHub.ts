@@ -122,7 +122,8 @@ export const avatarSections: AvatarSectionData[] = [
       },
     ],
     cta: {
-      body: "Ready for the full foundation-building experience with live coaching, monthly kits, and a community that actually gets it?",
+      // Row 245: "monthly kits" is not a Club benefit.
+      body: "Ready for the full foundation-building experience with live coaching, practical resources, and a community that actually gets it?",
       label: "Explore the Club",
       to: "/club",
     },

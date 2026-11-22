@@ -22,9 +22,9 @@ export const CLUB_OFFER_SLUG = "the-club";
 
 export const club = {
   seo: {
-    title: "How to Start a Private Practice | Boss Clinician Club",
+    title: "Start Your Therapy Private Practice | The Club",
     description:
-      "Build your private practice with a clear foundation, client-growth strategy, systems, live coaching and support inside The Boss Clinician Club. Build a Private Practice You Won’t Have to Undo Later",
+      "For therapists starting or restarting a private practice, including while still employed: a clear foundation, client-growth strategy, systems, live coaching and support inside The Boss Clinician Club.",
   },
 
   hero: {
@@ -37,7 +37,7 @@ export const club = {
       "A structured 6-month program designed to help practice owners strengthen operations, leadership, growth, and profitability with ongoing coaching and accountability.",
       "Whether you’re starting from scratch, building while employed, or rebuilding after a false start, The Club helps you make smarter decisions now so future-you doesn’t have to come back and fix them later.",
     ],
-    cta: "JOIN THE CLUB",
+    cta: "Explore Club Enrollment Options",
     includes: "Includes The Boss Move + live coaching + community + implementation resources.",
     bonus: "Enrollment Bonus: Ramp-Up Rate Formula included.",
   },
@@ -71,7 +71,14 @@ export const club = {
   },
 
   holdingBack: {
-    title: "You're clinically skilled, you have the license, so why do you keep holding yourself back?",
+    // Row 245 (21 Nov): the "why do you keep holding yourself back?" prompt is
+    // replaced by the reliable-income line and the recognition block.
+    title: "Wanting your own practice does not erase the need for reliable income and benefits.",
+    lead: [
+      "You need a plan you can build alongside the life you already have.",
+      "You’ve picked the business name. You’ve checked that it isn’t taken. You’ve looked into the LLC and the business credit card. And you still haven’t seen a single client.",
+      "You don’t need more motivation. You need to do it in the right order: your funding, your benefits, and your first clients, mapped together.",
+    ],
     paragraphs: [
       "In my years coaching therapists, I have watched this same pattern repeat. You've been taught to be a brilliant clinician, but you've not been taught the business side of having a practice.",
       "The dream of you starting your practice is still there but the fear of doing it wrong feels bigger than the pain of staying where you are.",
@@ -164,17 +171,25 @@ export const club = {
     eyebrow: "A Plan for a Real Practice (Built on Purpose.)",
     title: "Enter the Club:",
     paragraphs: [
-      "A 6-month coaching program built around one goal: helping you create a strong private-practice foundation you can confidently grow from.",
+      // Row 245: the employment-to-ownership transition, in her wording.
+      "You can picture seeing clients in a practice of your own. What keeps stopping you is everything around the clinical work: deciding what to set up first, finding your first clients, and figuring out when the numbers could support a change in employment. The Club gives you six months of education, coaching, and implementation support to work through those decisions.",
       "I’ll support you through the business decisions clinicians are rarely taught — setting up the practice, finding aligned clients, understanding your numbers, creating sustainable systems, and building enough consistency to make your next career decision from a place of choice instead of pressure.",
       "For some members, that next decision is leaving a job. For others, it’s reducing their hours, creating a second income stream, or simply knowing their practice is finally built to last.",
     ],
     cta: "I'M READY FOR THE CLUB",
   },
 
+  /** Row 245: what she is working toward — not a result every member is promised. */
+  pictureThis: {
+    title: "Picture This",
+    body: "You send the email asking to go part-time, and you already know how your bills get covered. Your first client payment lands in your own business account. You make the benefits decision with your real numbers in front of you. You tell your family you own a practice, and there’s a plan behind it.",
+  },
+
   pillars: {
     eyebrow: "What's Inside the Club",
     title: "Five Pillars. Six Months. One Outcome.",
-    body: "Everything you need to build your practice with structure, support, and momentum.",
+    // Row 245: the support-to-result bridge.
+    body: "The Boss Move helps you work through the foundation. Two live coaching calls a month give you a place to bring the decisions you cannot settle alone. The resources and community help you keep implementing, so you can move from collecting information to building your practice deliberately.",
     items: [
       {
         label: "Pillar 01",
@@ -238,7 +253,7 @@ export const club = {
     ],
     closing:
       "The goal isn’t to give you more things to do. It’s to make the next steps easier to follow.",
-    cta: "JOIN THE CLUB",
+    cta: "Explore Club Enrollment Options",
   },
 
   testimonials: {
@@ -342,7 +357,7 @@ export const club = {
       { price: "$397/mo", terms: "for 6 months" },
       { price: "$1,997", terms: "paid in full" },
     ],
-    cta: "JOIN THE CLUB",
+    cta: "Explore Club Enrollment Options",
     note: "You'll receive immediate access to The Club, The Boss Move, your enrollment resources, and your next steps.",
     guarantee: "Protected by the 14-Day Boss Move Guarantee.",
   },
@@ -359,6 +374,8 @@ export const club = {
       "You just need the right next steps, in the right order, with support while you take them.",
     ],
     closing: "Build a Private Practice You Won’t Have to Undo Later.",
+    /** Row 245: the closing identity line, under the final headline. */
+    identity: "This isn’t only about one email to HR. It’s about becoming a therapist who owns her income.",
     cta: "GET ME IN THE CLUB",
   },
 
@@ -435,12 +452,12 @@ export const clubCheckout = {
   seo: {
     title: "Join The Club | Boss Clinician",
     description:
-      "You're one step away from the Club: the 6-month coaching program where therapists build a private practice that replaces their salary, without losing their security to get there.",
+      "You're one step away from the Club: the 6-month coaching program where therapists build a private practice without losing their security to get there.",
   },
   eyebrow: "THE CLUB · SECURE CHECKOUT",
   title: "You're One Step Away From the Club",
   subtitle:
-    "The 6-month coaching program where therapists build a private practice that replaces their salary, without losing their security to get there.",
+    "The 6-month coaching program where therapists build a private practice without losing their security to get there.",
   /** The source's own mockup, already self-hosted for /club. */
   image: {
     src: "/images/club/club-program-mockup.jpg",

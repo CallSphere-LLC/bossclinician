@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useSearchParams } from "react-router";
+import { Link, useSearchParams } from "react-router";
 import { motion } from "motion/react";
 import { Seo } from "@/components/Seo";
 import { ConsentGate } from "@/components/consent/ConsentGate";
@@ -319,6 +319,16 @@ function LoungeSection() {
             >
               {w.lounge.dmLabel}
             </a>
+          </p>
+          {/* Row 245: first-hire and team needs go to the Boardroom, not the Lounge. */}
+          <p className="copy-luxe mt-3 text-sm">
+            {w.boardroom.lead}{" "}
+            <Link
+              to={w.boardroom.to}
+              className="text-orchid underline decoration-white/25 underline-offset-[6px] transition-colors duration-300 ease-luxe hover:text-gold hover:decoration-gold/60"
+            >
+              {w.boardroom.label}
+            </Link>
           </p>
         </motion.div>
 

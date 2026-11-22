@@ -31,7 +31,7 @@ export default function ResourceHub() {
   return (
     <>
       <Seo
-        title="Resource Hub"
+        title="Resource Hub for Therapists | Boss Clinician"
         description="Tools, guides, planners, and quizzes for therapists and clinicians at every stage of private practice. Find your section and take your next step with Boss Clinician."
       />
       <Hero />

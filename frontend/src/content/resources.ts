@@ -29,7 +29,7 @@ export const resources: Resource[] = [
   {
     id: "r-starter-guide",
     slug: "private-practice-starter-guide",
-    title: "Private Practice Starter Guide",
+    title: "Private Practice Kickstart Guide",
     description: "Just starting your practice or want to make sure you start on the right path?",
     image: "/images/8f0e57f6fbb3.jpg",
     ctaLabel: "Download Guide",
@@ -58,7 +58,8 @@ export const resources: Resource[] = [
       "Calculate your income potential — see exactly what your practice could generate based on your session rate and caseload.",
     image: "/images/26729b8c6ec0.png",
     ctaLabel: "Estimate My Income",
-    ctaUrl: "/apply",
+    // Row 245: the calculator is on the Resource Hub; /apply is the Boardroom application.
+    ctaUrl: "/resource-hub",
     kind: "tool",
     sort: 5,
     published: true,

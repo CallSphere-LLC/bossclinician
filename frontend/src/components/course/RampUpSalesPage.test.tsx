@@ -37,4 +37,8 @@ describe("Ramp-Up source reproduction", () => {
     expect(unavailable).toContain('aria-disabled="true"');
     expect(unavailable).not.toContain('href="/checkout/');
   });
+  it("uses the 21 Nov 2026 headline without unsupported loss, burnout, payback or tax claims", () => {
+    expect(html).toContain("Set a Session Rate Using Your Practice’s Numbers.");
+    for (const text of ["$10K", "inevitable", "tax-deductible", "one client at your new rate", "Pays for Itself", "your worth"]) expect(html).not.toContain(text);
+  });
 });

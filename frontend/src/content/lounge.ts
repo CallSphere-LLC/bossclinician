@@ -9,14 +9,16 @@ export const LOUNGE_VIP_ROUTE = "/checkout/the-lounge-vip";
 
 const replacementLounge = {
   seo: {
-    title: "The Lounge | Sustainable Private Practice for Therapists",
+    title: "Sustainable Therapy Practice Growth | The Lounge",
     description:
       "Ongoing business support, resources, training, and community for established clinicians making their practices more sustainable. Choose monthly or annual membership.",
   },
 
   hero: {
-    banner:
-      "Founding Member Pricing · Limited Availability · Keep Your Founding Rate While Your Membership Remains Active",
+    // Row 245: founding-rate and VIP-seat scarcity lines stay off the page
+    // until Yvette confirms availability. Empty strings, not deletions, so the
+    // legacy copy merged underneath cannot show through.
+    banner: "",
     title: "Your practice is working.",
     titleAccent: "But can you keep working like this?",
     lede: [
@@ -24,6 +26,12 @@ const replacementLounge = {
       "Take real time off. Reduce the pressure to stay clinically maxed out. Build systems that don’t depend on you for everything. And make sure your income can support the life you actually want.",
     ],
     cta: "JOIN THE LOUNGE",
+  },
+
+  /** Row 245: what members plan toward — not a promised result. */
+  pictureThis: {
+    title: "Picture This",
+    body: "Two clients discharge, and you don’t spend the weekend doing panic math. You drop the panel that underpays you because you already know what replaces it. Billing goes out during your vacation week, and you’re not the one sending it. You book the long weekend and already know how that month is covered.",
   },
 
   fact: {
@@ -85,8 +93,9 @@ const replacementLounge = {
     curriculumEyebrow: "The Practice Elevation",
     curriculumTitle:
       "The step-by-step curriculum for making the practice you already built more sustainable.",
+    // Row 245: the offer-to-result bridge.
     curriculumBody:
-      "Diagnose what is creating the most pressure in your current model, make smarter decisions about income and capacity, build better systems, and create a practice that can evolve with your life and career.",
+      "You open one dashboard and know what the practice made, what it cost, and what you kept. That starts in the Practice Elevation course, where you work through the model behind your practice. In the monthly Lounge Strategy Session, you bring the decision in front of you, whether it’s a panel, a rate, or your schedule, and leave with a plan to test. The goal is a practice that pays you consistently and leaves room for time away, without filling more of your calendar.",
   },
 
   inside: {
@@ -202,23 +211,32 @@ const replacementLounge = {
     clubLink: { label: "See The Club", to: "/club" },
   },
 
+  // Row 245 (21 Nov): both stories are examples of working with Yvette, not
+  // proof of Lounge participation — labelled that way on the page.
   caseStudies: {
+    eyebrow: "Examples of working with Yvette",
     title: "Two practice owners. Two different next steps.",
     items: [
       {
         title: "Growing a cash-pay practice in a new market",
         paragraphs: [
-          "An established clinician wanted to reach cash-pay clients in a new market while continuing to accept insurance in her existing practice.",
-          "We clarified who she wanted to reach, revised her Psychology Today profile, identified referral partners, and built a 90-day plan around the pace of growth she wanted. By the end of our work together, she reported receiving inquiries through her updated profile.",
+          "My fellow therapist client wanted to reach a new cash-pay audience while continuing to accept insurance. The work focused on clarifying who she wanted to reach, updating her profile, identifying referral partners, and creating a 90-day plan. She reported inquiries from the updated profile. That is why the Lounge starts with the model and message behind your practice: you need to understand what to adjust before adding more marketing tasks.",
         ],
       },
       {
-        title: "Deciding to pause a solo practice",
+        title: "Michelle’s story: A plan for what she needed next",
         paragraphs: [
-          "A solo practice owner wanted more freedom and came to coaching to figure out what to do next. As we talked through what she wanted her days to look like, she decided to pause her practice. We worked on a plan for returning when she’s ready.",
+          "Michelle was drawn to my marketing approach and wanted that kind of support for her own practice. But she was also wrestling with a bigger question: should she keep going or pause? Hearing other people’s disappointment about her stepping back made that decision harder.",
+          "Together, we explored what she needed before deciding what came next for her practice. I provided a pause-and-restructure checklist to organize her next steps, along with website designer and bookkeeper recommendations she chose to use. We worked on putting her ideas into a plan she could move through at a manageable pace.",
+          "During our work together, Michelle gained the confirmation and clarity she needed to pause her practice. From there, I helped her make that transition with a practical plan to organize her next steps, reduce unnecessary expenses, and keep her future ideas in one place for when she was ready.",
         ],
+        quote:
+          "You know your marketing stuff, and you have really good templates that are easily adaptable. You’re very organized. Sometimes I can be very scatterbrained, so having someone else say, ‘Okay, let’s put this down into a plan with somewhat of a timeline’—sometimes I just need somebody to do that for me. I can do it, but I’m not that great at it when I’m in idea-generating mode or burned out.",
+        attribution: "— Michelle, on working with Yvette",
       },
-    ],
+    ] as { title: string; paragraphs: string[]; quote?: string; attribution?: string }[],
+    closing:
+      "Maybe you’re not considering a pause. Maybe you just know that the way your practice runs right now is taking more out of you than you want to keep giving. Inside the Lounge, the monthly Strategy Session, practical tools, and implementation support help you work through what needs to change and put a plan behind your next steps—toward income and a workload that better support your life.",
   },
 
   pricing: {
@@ -233,7 +251,7 @@ const replacementLounge = {
             "annualPrice": "$1,997 for 12 months",
             "monthlyTerms": "Six-month minimum commitment. Your initial six-month commitment totals $1,182. After six months, membership continues month-to-month unless canceled.",
             "annualTerms": "One upfront payment for 12 months of membership. Save $367 compared with paying $197 monthly for 12 months.",
-            "scarcity": "Limited founding-member availability. The monthly rate for new members increases to $247 after founding enrollment closes.",
+            "scarcity": "",
             "features": [
                 "The Practice Elevation signature curriculum: all four modules, video lessons, worksheets, and implementation resources.",
                 "Practice assessment and financial audit tools to help identify your priorities.",
@@ -256,7 +274,7 @@ const replacementLounge = {
             "annualPrice": "$3,497 for 12 months",
             "monthlyTerms": "Six-month minimum commitment. Your initial six-month commitment totals $2,082. After six months, membership continues month-to-month unless canceled.",
             "annualTerms": "One upfront payment for 12 months of VIP membership. Save $667 compared with paying $347 monthly for 12 months.",
-            "scarcity": "Four founding VIP seats are available at this rate.",
+            "scarcity": "",
             "features": [
                 "Everything in Lounge Member, plus personalized feedback and private strategy support.",
                 "Private Strategy Calls: three private 30-minute calls with Yvette during your first six months.",
@@ -340,7 +358,8 @@ const replacementLounge = {
       },
       {
         q: "Do I have to stop taking insurance?",
-        a: "No. The Lounge is not built around one specific payer model. You'll evaluate your rates, insurance panels, private-pay options, platforms, and client mix based on what actually supports your practice.",
+        // Row 245: her objection copy.
+        a: "You do not have to stop taking insurance or become a coach to explore a more sustainable practice. We start with your current services, collected revenue, capacity, and priorities. You also do not need a fully booked calendar to need support.",
       },
     ],
     cta: "STEP INTO THE LOUNGE",
@@ -349,12 +368,14 @@ const replacementLounge = {
   closing: {
     title: "You built the practice.",
     titleAccent: "Now build one you can actually stay in.",
+    /** Row 245: the closing identity line, under the headline. */
+    identity: "This isn’t only about one Thursday off. It’s about running a practice that pays you like an owner.",
     paragraphs: [
       "You don’t need more clients. You need the practice you already built to support your income, energy, life, and future — consistently, sustainably, and on your terms.",
       "The Lounge is where that work happens. In sequence. With a strategist, a community, and a structured curriculum that stays relevant as long as your practice keeps growing.",
     ],
-    memberNote: "Founding rate. Limited seats, then the monthly rate rises to $247.",
-    vipNote: "Four founding VIP seats are available at this rate.",
+    memberNote: "",
+    vipNote: "",
     contact: "Got questions? Unsure? Reach out:",
     email: "support@bossclinician.com",
   },
@@ -368,4 +389,7 @@ export const lounge = {
     : { ...legacyLounge, pricing: { ...replacementLounge.pricing, ...legacyLounge.pricing, tiers: legacyLounge.pricing.tiers.map((tier, index) => ({ ...replacementLounge.pricing.tiers[index], ...tier })) } }),
   // This approved public proof belongs to either pricing presentation.
   caseStudies: replacementLounge.caseStudies,
+  // Row 245 copy, likewise independent of the pricing presentation.
+  pictureThis: replacementLounge.pictureThis,
+  closingIdentity: replacementLounge.closing.identity,
 };

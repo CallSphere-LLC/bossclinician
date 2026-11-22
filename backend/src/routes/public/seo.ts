@@ -88,7 +88,6 @@ const STATIC_ROUTES: SitemapEntry[] = [
   { loc: "/retreats", changefreq: "monthly", priority: "0.7" },
   { loc: "/blog", changefreq: "daily", priority: "0.8" },
   { loc: "/contact", changefreq: "yearly", priority: "0.5" },
-  { loc: "/apply", changefreq: "monthly", priority: "0.7" },
   { loc: "/practice-quiz", changefreq: "monthly", priority: "0.7" },
   { loc: "/practice-reset-planner", changefreq: "monthly", priority: "0.6" },
   { loc: "/terms", changefreq: "yearly", priority: "0.2" },
@@ -117,10 +116,30 @@ seoRouter.get(
           priority: "0.7",
         }),
       },
+      // Two catalogue rows are not courses and do not live under /courses:
+      // nginx 301s /courses/directory-makeover-audit to /services/… and
+      // /courses/rate-negotiation-letter-template to /downloads/… (site.conf).
+      // A sitemap must list the final address, never a redirect, so the service
+      // gets its own block below and the download is left out: /downloads is
+      // Disallowed in robots.txt, and listing a blocked URL is a contradiction
+      // Search Console reports.
       {
-        sql: `SELECT slug, updated_at FROM courses WHERE published = true ORDER BY sort`,
+        sql: `SELECT slug, updated_at FROM courses
+               WHERE published = true
+                 AND slug NOT IN ('rate-negotiation-letter-template', 'directory-makeover-audit')
+               ORDER BY sort`,
         map: (r) => ({
           loc: `${base}/courses/${r.slug as string}`,
+          lastmod: r.updated_at as string,
+          changefreq: "monthly",
+          priority: "0.8",
+        }),
+      },
+      {
+        sql: `SELECT slug, updated_at FROM courses
+               WHERE published = true AND slug = 'directory-makeover-audit'`,
+        map: (r) => ({
+          loc: `${base}/services/${r.slug as string}`,
           lastmod: r.updated_at as string,
           changefreq: "monthly",
           priority: "0.8",

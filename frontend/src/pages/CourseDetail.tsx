@@ -280,7 +280,11 @@ export default function CourseDetail({ slugOverride }: { slugOverride?: string }
                               variant="foil"
                               className="mt-4 w-full"
                             >
-                              {offer.pricingType === "free" ? "Get it free" : "Buy course"}
+                              {offer.pricingType === "free"
+                                ? "Get it free"
+                                : course.slug === "client-consultation-call-script"
+                                  ? "Get the Consultation Call Script"
+                                  : "Buy course"}
                             </LuxeButton> : (
                               <p className="mt-4 text-sm leading-relaxed text-orchid-dim">{offer.unavailableReason}</p>
                             )}

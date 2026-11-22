@@ -1,4 +1,4 @@
-import { LEAD_MAGNET_FORMS, kickstartGuide } from "@/content/leadMagnets";
+import { LEAD_MAGNET_FORMS, OPT_IN_NOTES, kickstartGuide } from "@/content/leadMagnets";
 import { GuideLanding } from "./GuideLanding";
 
 /**
@@ -13,6 +13,7 @@ export default function KickstartGuide() {
       formSlug={LEAD_MAGNET_FORMS.kickstart}
       next="/step-by-step-guide-thank-you-page"
       mockup={kickstartGuide.mockup}
+      optIn={OPT_IN_NOTES.kickstart}
     />
   );
 }

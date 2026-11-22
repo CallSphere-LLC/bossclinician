@@ -1,6 +1,5 @@
 import { motion } from "motion/react";
 import { Seo } from "@/components/Seo";
-import { SubscribeForm } from "@/components/forms/SubscribeForm";
 import { GlassCard, type Accent } from "@/components/luxe/GlassCard";
 import { LuxeButton } from "@/components/luxe/LuxeButton";
 import { LuxePageHero } from "@/components/luxe/LuxePageHero";
@@ -8,6 +7,9 @@ import { GoldRule, Section, SectionTitle } from "@/components/luxe/Section";
 import { RevealGroup, RevealItem } from "@/components/ui/Reveal";
 import { useEntranceMotion } from "@/hooks/useEntranceMotion";
 import { cn } from "@/lib/cn";
+import { OptInNote } from "@/pages/kajabi/leadmagnets/parts";
+import { KajabiForm, OPT_IN_FIELDS } from "@/pages/kajabi/pages/shared";
+import { resetPlannerForm } from "@/content/kajabiPages";
 
 /**
  * The Practice Reset Planner — the free 30-day lead magnet.
@@ -32,9 +34,12 @@ const OPT_IN_ID = "get-the-free-planner";
 
 /* ── Copy, verbatim from bossclinician.com/practice-reset-planner ─────── */
 
-const HERO_HEADLINE = "The Practice Reset Planner Work less. Earn more. Finally.";
+// Sheet row 245 (21 Nov 2026): no promise of income or schedule results in 30
+// days. The headline's second line and the subhead are the approved wording.
+const HERO_HEADLINE = "The Practice Reset Planner A 30-Day Plan to Review What Your Practice Needs Next.";
 
-const HERO_SUBHEAD = "30 days to work less, earn more, and rebuild your practice your way.";
+const HERO_SUBHEAD =
+  "Use the prompts to review your workload, income model, and priorities, then choose changes to test.";
 
 const HERO_QUALIFIER =
   "If your schedule is full but your income still feels inconsistent — or you're exhausted from the pace and not sure how to change it — this planner is your starting point. Not more hustle. A reset.";
@@ -79,8 +84,14 @@ const OPT_IN_BODY =
 
 const OPT_IN_LABEL = "SEND ME THE FREE PLANNER";
 
-const PRIVACY_NOTE =
-  "We respect your privacy. No spam — just your planner and occasional strategy content from Boss Clinician.";
+/**
+ * Row 245: what the sign-up sends — the planner email (automation 1364) and
+ * nothing recurring. `OptInNote` adds the unsubscribe and privacy-policy link.
+ */
+const PRIVACY_NOTE = "You’ll get The Practice Reset Planner by email.";
+
+/** The cover's subtitle, set in type: the headline's approved wording. */
+const COVER_SUBTITLE = "A 30-Day Plan to Review What Your Practice Needs Next";
 
 /**
  * Break a headline at its natural turn so the second clause can be set in foil
@@ -94,7 +105,7 @@ function splitOnce(text: string, marker: string): [string, string | undefined] {
   return [text.slice(0, at), text.slice(at + 1)];
 }
 
-const [HERO_TITLE, HERO_ACCENT] = splitOnce(HERO_HEADLINE, " Work less.");
+const [HERO_TITLE, HERO_ACCENT] = splitOnce(HERO_HEADLINE, " A 30-Day Plan");
 const [PATH_TITLE, PATH_ACCENT] = splitOnce(PATH_HEADING, " A clear path");
 const [WHO_TITLE, WHO_ACCENT] = splitOnce(WHO_HEADING, " and is ready");
 const [OPT_IN_TITLE, OPT_IN_ACCENT] = splitOnce(OPT_IN_HEADING, " starts here.");
@@ -116,7 +127,7 @@ export default function PracticeResetPlanner() {
   return (
     <>
       <Seo
-        title="Practice Reset Planner"
+        title="Free Practice Reset Planner for Therapists | Boss Clinician"
         description="30 days to work less, earn more, and rebuild your practice your way. A free step-by-step planner for therapists ready to reclaim their time, income, and energy."
       />
 
@@ -286,7 +297,7 @@ function HeroBlock() {
       aside={
         <PlannerCover
           titleLines={["The Practice Reset Planner"]}
-          subLines={["30 Days to Work Less, Earn More, and Rebuild Your Practice Your Way"]}
+          subLines={[COVER_SUBTITLE]}
         />
       }
     />
@@ -320,7 +331,7 @@ function PathSection() {
       <div className="mt-10 grid items-start gap-8 lg:grid-cols-[0.78fr_1.22fr] lg:gap-10">
         <PlannerCover
           titleLines={["The Practice", "Reset Planner"]}
-          subLines={["30 Days to Work Less, Earn More,", "and Rebuild Your Practice Your Way"]}
+          subLines={["A 30-Day Plan to Review", "What Your Practice Needs Next"]}
           className="lg:max-w-[23rem]"
         />
 
@@ -436,15 +447,21 @@ function OptInSection() {
             {OPT_IN_LABEL}
           </h3>
 
-          <div className="mt-6 flex justify-center">
-            <SubscribeForm source="practice-reset-planner" dark />
+          {/* Row 245: the planner's own form (`reset-planner`, whose automation
+              emails the planner), not the newsletter box that used to sit here
+              and delivered nothing. Same fields as /reset-planner-form. */}
+          <div className="mt-6 text-left">
+            <KajabiForm
+              formSlug={resetPlannerForm.formSlug}
+              fields={OPT_IN_FIELDS}
+              submitLabel={resetPlannerForm.submit}
+              successMessage={resetPlannerForm.success}
+            />
           </div>
 
           <div aria-hidden className="rule-faint mt-8 w-full" />
 
-          <p className="mt-6 text-pretty text-sm font-light leading-[1.7] text-orchid-faint">
-            {PRIVACY_NOTE}
-          </p>
+          <OptInNote text={PRIVACY_NOTE} className="mt-6 text-sm font-light leading-[1.7]" />
         </GlassCard>
       </motion.div>
     </Section>

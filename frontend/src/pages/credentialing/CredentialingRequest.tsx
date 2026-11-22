@@ -23,7 +23,7 @@ export default function CredentialingRequest() {
     <>
       <Seo title={copy.seo.title} description={copy.seo.description} />
       <Section surface="deep" space="xl" aurora="mixed" auroraIntensity={0.85} aria-label={copy.title} containerClassName="max-w-3xl">
-        <SectionTitle eyebrow={copy.eyebrow} title={copy.title} titleClassName="text-[2rem] sm:text-[2.6rem]" />
+        <SectionTitle eyebrow={copy.eyebrow} title={copy.title} body={copy.intro} titleClassName="text-[2rem] sm:text-[2.6rem]" />
         <GlassCard accent="gold" interactive={false} className="mt-10 p-6 sm:p-9">
           <KajabiForm
             // A new `?service=` is a new starting point for the form.

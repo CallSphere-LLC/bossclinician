@@ -33,7 +33,8 @@ export const practicePrepTraining = {
     eyebrow: "Free on-demand masterclass · For therapists",
     title: "How to Prepare for a",
     titleAccent: "Private Practice of Your Own",
-    lede: "3 strategic moves to help you leave agency or platform work with a clearer plan and greater confidence.",
+    // Row 245 (21 Nov 2026): the subhead.
+    lede: "3 strategic moves to build your own practice while your paycheck still covers the bills, and to know when your numbers say you’re ready to leave.",
     sub: "You want more freedom. You still need security. Start preparing for your next chapter while you have income support.",
     tags: ["Recorded training", "Watch on your schedule"],
     host: "With Yvette Howard, LCSW · Private Practice Strategist",
@@ -43,6 +44,12 @@ export const practicePrepTraining = {
     title: "Get the free masterclass",
     body: "Learn what to plan for, what to build, and how to choose your next step.",
     submit: "I'm ready",
+    /**
+     * Row 245: what the sign-up sends — the training link (automation 1443),
+     * then the "Practice Prep Training → The Club" sequence (1444).
+     */
+    optIn:
+      "You’ll get the training link by email, followed by a short series of emails from Yvette about preparing for a practice of your own and The Club.",
     // Her Kajabi form (2149750481): first name, last name, email, and this.
     concern: {
       key: "biggest_concern",
@@ -84,6 +91,8 @@ export const practicePrepTraining = {
       "How to build income and client flow while you still have support",
       "How to decide when you’re ready to reduce or leave outside work",
     ],
+    /** Row 245: one "Picture this" line, right after the three lessons. */
+    picture: "Imagine sending the email to cut back your hours and already knowing how next month gets paid.",
     cta: "Watch the free masterclass →",
   },
   host: {
@@ -107,7 +116,8 @@ export const practicePrepTraining = {
     eyebrow: "Your practice. Your next chapter.",
     title: "Let’s make your next move",
     titleAccent: "feel more clear.",
-    body: "Learn three strategic moves to help you prepare for a private practice that supports your income, energy, and life.",
+    // Row 245: the closing line.
+    body: "Learn three strategic moves to plan your income, benefits, and first clients before you make your move.",
     cta: "Get the free masterclass →",
     secondary: { label: "Explore the Club", to: "/club" },
   },

@@ -10,21 +10,21 @@ export const blogPosts: BlogPost[] = [
   {
     id: "blog-10",
     slug: "toolkit-before-my-audit-registration-closes-september-25",
-    title: "The Toolkit I Wish I'd Had Before My Audit (Registration Closes September 25)",
+    title: "The Toolkit I Wish I'd Had Before My Audit",
     excerpt:
-      "Registration for The Do's and Don'ts of Clinical Documentation closes September 25th. See the toolkit included, what's inside the live training, and why I built it after my own audit.",
+      "See the toolkit included with The Do's and Don'ts of Clinical Documentation, what's inside the training, and why I built it after my own audit.",
     coverImage: "/images/blog/toolkit-before-my-audit-registration-closes-september-25.webp",
     tags: ["audit readiness", "boss clinician", "clinical documentation", "therapist documentation"],
     author: "Yvette Howard, LCSW",
     readMinutes: 3,
     publishedAt: "2026-09-18",
-    bodyMd: `Most training sends you home with a certificate and a stack of slides you'll never open again.
+    bodyMd: `*Archived post: this was written for the September 25 live training, which has ended. The training is now available as an on-demand replay: [The Do's & Don'ts of Clinical Documentation (On-Demand Replay)](/documentationondemand).*
+
+Most training sends you home with a certificate and a stack of slides you'll never open again.
 
 This one sends you home with notes you can actually use.
 
 That's the whole reason I built it this way.
-
-I get asked almost every time if I'll push the date back. I won't. Not because I'm trying to create pressure, but because the people who show up on September 25 deserve a room that's actually prepared, not one I kept propping the door open for.
 
 ### One Afternoon. No Vague Theory.
 
@@ -33,10 +33,6 @@ No "just document more."
 Real flagged versus approved note examples. A framework you can use in your very next session. A toolkit you keep.
 
 SOAP and DAP templates. A treatment plan example. A self-audit checklist.
-
-📅 **Wednesday, September 25 · 1:00 to 4:30 PM PT · Live on Zoom**
-
-Once the seats are full, or once the live session starts, registration closes.
 
 ### Why This Training Exists
 
@@ -64,19 +60,13 @@ Not theory pulled from a textbook. A system built and tested inside a real group
 
 ✔ SOAP and DAP templates, a treatment plan example, and a self-audit checklist, ready to use on your next session
 
-### The Details
-
-📅 **Wednesday, September 25 · 1:00 to 4:30 PM PT · Live on Zoom · $167**
-
-**3.5 Ethics CEUs. Nevada Board Approved.**
-
 If someone asked for your records tomorrow, could you hand them over with confidence?
 
 If a reviewer called today, would your notes answer for you?
 
 What would it feel like to close your laptop after a session and actually trust what you just wrote?
 
-👉 [**Register before seats close**](/doc-registration)
+👉 [**Watch the on-demand replay**](/documentationondemand)
 `,
   },
   {
@@ -158,9 +148,7 @@ So I built the system I never got. One that means if we're ever audited, subpoen
 
 That system, refined over years of running a real practice with real staff, is what I teach in **The Do's and Don'ts of Clinical Documentation**.
 
-📅 **Wednesday, September 25 · 1:00 to 4:30 PM PT · Live on Zoom**
-
-In this live training, you'll learn how to:
+The training is now available as an on-demand replay. In it, you'll learn how to:
 
 ✔ Document everyday sessions, high risk situations, and telehealth compliance with clarity
 
@@ -170,11 +158,9 @@ In this live training, you'll learn how to:
 
 ✔ Walk away with SOAP and DAP templates, a treatment plan example, and a self-audit checklist
 
-**3.5 Ethics CEUs. Nevada Board Approved.**
-
 If no one ever sat you down and taught you this either, what would change for you if someone finally did?
 
-👉 [**Register here**](/doc-registration)
+👉 [**Watch the on-demand replay**](/documentationondemand)
 `,
   },
   {
@@ -343,8 +329,6 @@ At some point, I had to be honest with myself: I did not need to work harder. I 
 
 Here is what I want you to know up front, because I learned it the hard way: you can earn more and see fewer clients. It requires strategy — not sacrifice. In this post I am going to walk you through exactly how to make that shift.
 
-**You can earn more and see fewer clients. It requires strategy — not sacrifice.**
-
 ## Why Seeing More Clients Is Not the Answer
 
 The traditional private practice model is built around a simple equation: more sessions equal more income. And for a while, that works. But there is a ceiling, and most therapists hit it fast.
@@ -364,8 +348,6 @@ Here is a simple exercise. Take your monthly income goal and divide it by your s
 Now ask yourself, why are you seeing 10 to 15 extra clients you do not need to see to hit your goal? Usually, the answer is one of three things: your rate is too low, your income goal is not clear, or you do not trust that the clients will keep coming. All three of those are fixable.
 
 And do not forget the hidden math. Every session has unpaid hours attached: billing, notes, marketing, and admin. A realistic private practice week is your session count plus all of that. So when you set your real number, you are not just protecting your calendar. You are protecting the hours that make this a business worth owning instead of a job you cannot clock out of.
-
-**Most therapists have never done this math. They just fill their schedule and hope the numbers work out. That is not a strategy — that is survival mode.**
 
 ## Step 2 — Raise Your Rates
 
@@ -432,19 +414,15 @@ You do not have to build a full group practice to use this principle. It can sta
 
 And that word — structure — is everything. You cannot scale on top of a broken structure. The reason my hire worked is that I kept building the systems underneath it. The therapists who hire without structure just trade a clinical headache for an operational one.
 
-**Your caseload does not have to be a fixed weight you carry alone. With structure, it can become an opportunity for someone else — and a release valve for you.**
-
 ## The Real Goal Is Not Just Fewer Sessions
 
 I want to say this clearly because I think it gets lost in conversations about burnout and sustainability.
 
 The goal is not just to see fewer clients. The goal is to build a practice that gives you the financial stability, the time freedom, and the professional fulfillment to actually love what you do again.
 
-I can tell you it is possible because I am living the other side of that 25-to-30-client season I described at the start. Today I see my own clients bi-weekly, three days a week. I pay myself as an employee, on payroll, with consistent pay. I take holidays off. I contribute to my Roth IRA. I have time with my family and the capacity to lead a team and finish my doctorate. The ceiling did not move. I just changed the room I was sitting in.
+I can tell you it is possible because I am living the other side of that 25-to-30-client season I described at the start. I currently maintain a small clinical caseload to keep my clinical skills current. I pay myself as an employee, on payroll, with consistent pay. I take holidays off. I contribute to my Roth IRA. I have time with my family and the capacity to lead a team and finish my doctorate. The ceiling did not move. I just changed the room I was sitting in.
 
 That kind of change requires more than tactical adjustments to your schedule. It requires a clear strategy — one built around your specific income goals, your ideal client, your schedule, and your life. It requires someone who can look at your entire practice, identify what is working and what is not, and help you make the moves that actually move the needle — not just the ones that feel safe.
-
-\\\`\\\`\\\`
 `,
   },
   {
@@ -514,7 +492,7 @@ If money still feels tender for you, that doesn’t mean you’re doing somethin
 
 It doesn’t have to.
 
-If you’re ready to release money guilt and learn how to price your services with clarity and confidence—without abandoning your ethics—I created the [Ramp-Up Revenue Course](/rampedrevenue) to walk you through that process step by step. You deserve a practice that supports you, too.
+If you’re ready to release money guilt and learn how to price your services with clarity and confidence—without abandoning your ethics—I created the [Ramp-Up Rate Formula](/courses/ramp-up-rate-formula) to walk you through that process step by step. You deserve a practice that supports you, too.
 `,
   },
   {
@@ -574,7 +552,7 @@ If your heart just skipped a beat reading this — welcome. You’re not behind.
 
 And you don’t have to do it alone.
 
-If you’re ready to build your practice with strategy, clarity, and support—not hustle and exhaustion—[find the program that fits you](/offer-quiz). This work is meant to be built with intention, not urgency.
+If you’re ready to build your practice with strategy, clarity, and support—not hustle and exhaustion—[watch the free Practice Prep Training](/practicepreptraining). This work is meant to be built with intention, not urgency.
 `,
   },
   {
@@ -691,7 +669,7 @@ It was built from lived experience — my own audit, my group practice, and year
 
 This is about learning how to practice with confidence, not dread.
 
-In this live training, we will cover:
+In this training, we will cover:
 
 - What auditors actually review
 - How to document clearly without over-documenting
@@ -709,11 +687,9 @@ This training was created for you.
 Audit preparedness is not about fear.  
 It’s about freedom.
 
-📅 **Audit Proof Your Practice — Live Training**  
-🗓 **January 30**  
-📍 **Live on Zoom**
+*The January 30 live training has ended. Audit Proof Your Practice is now available on demand.*
 
-**👉 Register here [Protect Your Practice](/courses/private-practice-protection-pack)**
+**👉 [Audit Proof Your Practice (On-Demand Training)](/courses/audit-proof-your-practice-on-demand)**
 
 You don’t have to carry this uncertainty alone.  
 And you don’t have to wait for fear to force clarity.
@@ -776,8 +752,9 @@ Once I learned how to document with intention and clarity, audits stopped feelin
 
 That’s what I teach inside **Audit Proof Your Practice** — not theory, but lived experience.
 
-📅 **January 30, 2026**  
-👉 **Register here:** [Protect Your Practice](/courses/private-practice-protection-pack)
+*The January 30 live training has ended. Audit Proof Your Practice is now available on demand.*
+
+👉 [**Audit Proof Your Practice (On-Demand Training)**](/courses/audit-proof-your-practice-on-demand)
 `,
   },
   {
@@ -859,7 +836,7 @@ Audit readiness is not about anticipating disaster.
 
 It is about practicing with confidence.
 
-This is exactly what I will be teaching inside **Audit Proof Your Practice** on January 30.
+This is exactly what I teach inside **Audit Proof Your Practice**, now available as an [on-demand training](/courses/audit-proof-your-practice-on-demand).
 
 If documentation has ever made you pause or second guess yourself, this training was created with you in mind.
 `,
@@ -945,7 +922,7 @@ Once I had systems, documentation stopped feeling like a liability — and start
 
 ### Why I Created Audit Proof Your Practice
 
-This is why I’m hosting Audit Proof Your Practice on January 30.
+This is why I created Audit Proof Your Practice, now available as an [on-demand training](/courses/audit-proof-your-practice-on-demand).
 
 Not to scare therapists.
 
@@ -953,7 +930,7 @@ Not to overwhelm you.
 
 But to offer the clarity I wish I had before my audit.
 
-In this live training, you’ll learn how to:
+In this training, you’ll learn how to:
 
 ✔ Document just enough — without overdoing it
 

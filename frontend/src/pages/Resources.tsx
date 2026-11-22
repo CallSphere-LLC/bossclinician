@@ -1,7 +1,6 @@
 import { motion } from "motion/react";
 import { useEntranceMotion } from "@/hooks/useEntranceMotion";
 import { Seo } from "@/components/Seo";
-import { SubscribeForm } from "@/components/forms/SubscribeForm";
 import { GlassCard, type Accent } from "@/components/luxe/GlassCard";
 import { LuxeButton, LuxePill } from "@/components/luxe/LuxeButton";
 import { LuxePageHero } from "@/components/luxe/LuxePageHero";
@@ -154,7 +153,9 @@ export default function Resources() {
         )}
       </Section>
 
-      {/* ── Newsletter capture ──────────────────────────────────────────── */}
+      {/* ── The calculator, where the newsletter box used to be ─────────────
+          Row 245 (21 Nov 2026): no general newsletter. The panel keeps its
+          place and its heading, and points to the calculator itself. */}
       <Section
         surface="deep"
         space="lg"
@@ -276,7 +277,7 @@ function ResourceCard({ resource }: { resource: Resource }) {
   );
 }
 
-/* ── Newsletter capture ───────────────────────────────────────────────── */
+/* ── The calculator link ──────────────────────────────────────────────── */
 
 function SubscribePanel() {
   const reduce = useEntranceMotion();
@@ -287,7 +288,7 @@ function SubscribePanel() {
         align="center"
         title="Calculate your income potential"
         titleClassName="text-[1.75rem] sm:text-[2.1rem] lg:text-[2.5rem]"
-        body="What would your practice look like if you actually charged what you're worth? Join the newsletter for the calculator, worksheets, and new resources as they drop."
+        body="What would your practice look like if you actually charged what you're worth? Try the free calculator in the Resource Hub."
       />
 
       <motion.div {...rise(reduce, 0.15)} className="mx-auto mt-8 max-w-xl">
@@ -296,7 +297,9 @@ function SubscribePanel() {
           interactive={false}
           className="flex justify-center p-6 sm:p-8"
         >
-          <SubscribeForm source="resources" dark />
+          <LuxeButton variant="foil" size="md" to="/resource-hub" className="min-h-[44px]">
+            Open the Free Calculator
+          </LuxeButton>
         </GlassCard>
       </motion.div>
     </>

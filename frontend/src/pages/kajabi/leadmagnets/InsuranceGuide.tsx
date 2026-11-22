@@ -1,8 +1,8 @@
 import { Seo } from "@/components/Seo";
 import { LuxePageHero } from "@/components/luxe/LuxePageHero";
 import { GoldRule, Section } from "@/components/luxe/Section";
-import { FREEBIE_FILES, LEAD_MAGNET_FORMS, insuranceGuide as c } from "@/content/leadMagnets";
-import { FramedImage, LeadMagnetForm, Rise, SignupCard } from "./parts";
+import { FREEBIE_FILES, LEAD_MAGNET_FORMS, OPT_IN_NOTES, insuranceGuide as c } from "@/content/leadMagnets";
+import { FramedImage, LeadMagnetForm, OptInNote, Rise, SignupCard } from "./parts";
 
 /**
  * /insurance-guide — the free Insurance vs Superbills guide.
@@ -17,7 +17,7 @@ export default function InsuranceGuide() {
     <LeadMagnetForm
       slug={LEAD_MAGNET_FORMS.insurance}
       submitLabel={c.submit}
-      note={c.consent}
+      note={<OptInNote text={OPT_IN_NOTES.insurance} />}
       success={{ ...c.success, download: FREEBIE_FILES.insurance }}
     />
   );
@@ -50,7 +50,7 @@ export default function InsuranceGuide() {
               <LeadMagnetForm
                 slug={LEAD_MAGNET_FORMS.insurance}
                 submitLabel={c.submit}
-                note={c.consent}
+                note={<OptInNote text={OPT_IN_NOTES.insurance} />}
                 success={{ ...c.success, download: FREEBIE_FILES.insurance }}
               />
             </SignupCard>

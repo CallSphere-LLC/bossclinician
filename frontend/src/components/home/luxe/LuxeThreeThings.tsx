@@ -103,7 +103,7 @@ export function LuxeThreeThings() {
         className="mt-10 flex justify-center sm:mt-10 lg:mt-12"
       >
         <LuxeButton variant="foil" size="lg" href="#offers">
-          Find Your Path
+          Find the Support You Need
         </LuxeButton>
       </motion.div>
     </Section>

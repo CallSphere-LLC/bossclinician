@@ -31,7 +31,7 @@ describe("/credential-for-you", () => {
   const { html, head } = render("/credential-for-you", <CredentialForYou />);
 
   it("uses her page title", () => {
-    expect(head.at(-1)?.title).toBe("Credentialing Support for Mental Health Providers | Boss Clinician");
+    expect(head.at(-1)?.title).toBe("Insurance Credentialing for Therapists | Boss Clinician");
   });
 
   it("sends the three paid services to checkout with her labels, and the rest to the request form", () => {
@@ -104,6 +104,14 @@ describe("the forms", () => {
     expect(html).toMatch(/<option[^>]*value="Medicaid"[^>]*selected|<option[^>]*selected[^>]*value="Medicaid"/);
     const { html: forged } = render("/credentialing-request?service=Free", <CredentialingRequest />);
     expect(forged).not.toContain("Free");
+  });
+
+  it("explains the request before the form, without a response window or a purchase", () => {
+    const { html } = render("/credentialing-request", <CredentialingRequest />);
+    expect(html).toContain("Tell us which providers and payers you need help with. We’ll review the scope and explain the appropriate service or next step.");
+    expect(html).toContain("Submitting this form is a request for information; it does not purchase a service.");
+    expect(html.indexOf("Tell us which providers")).toBeLessThan(html.indexOf("<form"));
+    expect(html).not.toMatch(/within \d+|business days?|24 hours/i);
   });
 
   it("never asks for banking details, an SSN or a date of birth", () => {
