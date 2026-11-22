@@ -52,7 +52,7 @@
  * the attribute itself.
  *
  * The accent darkens to a bronze so gold still reads as text and as a button on
- * white (4.6:1 both ways), and the status colours move to their dark forms.
+ * white and on the cream page (5:1+ both ways; was 4.49:1, under AA), and the status colours move to their dark forms.
  */
 :root[data-console-theme="light"] .theme-console,
 .theme-console[data-console-theme="light"] {
@@ -65,9 +65,9 @@
   --border-strong: #cfc9bd;
   --text-primary: #1b1a1f;
   --text-secondary: #55524c;
-  --text-muted: #7a766e;
-  --accent: #9a6f2a;
-  --accent-hover: #7f5a1f;
+  --text-muted: #6b675f;
+  --accent: #87601f;
+  --accent-hover: #6f4e18;
   --accent-ink: #ffffff;
   --success: #2f7a4f;
   --warning: #8a5a00;
@@ -85,9 +85,9 @@
   --c-lilac-tint: 241 239 235;
   --c-lilac: 85 82 76;
   --c-dark: 27 26 31;
-  --c-plum: 154 111 42;
-  --c-plum-deep: 127 90 31;
-  --c-plum-bright: 154 111 42;
+  --c-plum: 135 96 31;
+  --c-plum-deep: 111 78 24;
+  --c-plum-bright: 135 96 31;
 }
 
 /*
@@ -140,11 +140,22 @@
 :root[data-console-theme="light"] .theme-console :is([class^="text-green-bright"], [class*=" text-green-bright"]) {
   color: var(--success);
 }
+/* Bordered night panels (checkout preview cards, audit-log details, the "dark"
+   button) carry text-ink, which is dark on White: give them the White inset
+   surface. Unbordered night scrims/badges over images stay dark on purpose. */
+:root[data-console-theme="light"] .theme-console [class~="bg-night-deep"][class~="border-hairline"] {
+  background-color: var(--bg-surface-2);
+}
+/* Orchid is a dark-ground lilac (3.9:1 on white); on White it reads as muted text. */
+:root[data-console-theme="light"] .theme-console :is([class~="text-orchid"], [class~="text-orchid-dim"]) {
+  color: var(--text-muted);
+}
 /* A count inside a selected chip sits on the accent, not on the page: it takes
-   the chip's own ink, softened, rather than the page's secondary text. */
-:root[data-console-theme="light"] .theme-console .bg-brand-gradient :is([class^="text-white/"], [class*=" text-white/"]) {
+   the chip's own ink, softened, rather than the page's secondary text. Both
+   appearances: on Dark the chip is light gold, so see-through white was 2.1:1. */
+.theme-console .bg-brand-gradient :is([class^="text-white/"], [class*=" text-white/"]) {
   color: inherit;
-  opacity: 0.8;
+  opacity: 0.9;
 }
 /* Native pickers and option lists follow the ground they sit on. */
 :root[data-console-theme="light"] .theme-console :is(select, input, textarea) {

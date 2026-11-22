@@ -17,11 +17,13 @@
 .ms-root .sidefoot b{color:var(--purple)}
 .ms-root .ms-main{margin-left:240px;padding:0 44px 50px;max-width:1600px}
 .ms-root .ms-header{height:90px;border-bottom:1px solid #e8e4ee;display:flex;justify-content:space-between;align-items:center}
-.ms-root .avatar{display:inline-grid;place-items:center;width:38px;height:38px;border-radius:50%;background:#e9e4f2;color:var(--purple);font-weight:bold;margin-left:12px}
+.ms-root .avatar{display:inline-grid;place-items:center;width:38px;height:38px;border-radius:50%;background:#e9e4f2;color:var(--navy);font-weight:bold;margin-left:12px}
 .ms-root .topright{display:flex;align-items:center;color:var(--muted);font-size:12px}
 .ms-root .tag{display:inline-block;padding:6px 10px;border-radius:5px;font-size:10px;font-weight:700;letter-spacing:1px;background:#f0ebd9;color:#6d5a20}
 .ms-root h1,.ms-root h2,.ms-root h3,.ms-root p{margin-top:0}
 .ms-root h1,.ms-root h2,.ms-root .hero h3{font-family:'Playfair Display',serif;font-weight:500}
+/* The studio is always a light surface: never inherit the admin's dark-theme heading colour. */
+.ms-root h1,.ms-root h2,.ms-root h3,.ms-root h4{color:var(--navy)}
 .ms-root h1{font-size:38px;margin-bottom:10px}
 .ms-root h2{font-size:26px;margin-bottom:9px}
 .ms-root .welcome{padding:32px 0 24px}

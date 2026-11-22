@@ -21,10 +21,17 @@ export function StripeBanner() {
 
   useEffect(() => {
     let cancelled = false;
-    adminApi
-      .stripeStatus()
-      .then((s) => !cancelled && setStatus(s))
-      .catch(() => !cancelled && setStatus({ configured: false }));
+    // A failed status check (session still refreshing, a network blip) says
+    // nothing about Stripe, so it must never claim payments are off: retry
+    // once, then stay silent. Only the server's own answer shows the banner.
+    const load = (attempt: number) =>
+      adminApi
+        .stripeStatus()
+        .then((s) => !cancelled && setStatus(s))
+        .catch(() => {
+          if (!cancelled && attempt < 1) window.setTimeout(() => load(attempt + 1), 2000);
+        });
+    load(0);
     return () => {
       cancelled = true;
     };
