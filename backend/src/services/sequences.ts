@@ -29,7 +29,26 @@ export interface SequenceSendRules {
   windowStartMinute: number | null;
   windowEndMinute: number | null;
   timezone: string;
+  /**
+   * Minutes past midnight in `timezone` that every delayed email goes out at
+   * ("9 a.m. Pacific"). null leaves the delay as an exact duration. A zero
+   * delay is never moved: "immediately" stays immediately. When set, it takes
+   * the place of the send window.
+   */
+  sendAtMinute?: number | null;
 }
+
+/**
+ * How far before `from + delay` a fixed send time may land (rows 243/244/246).
+ *
+ * "Day 1 at 9 a.m." for somebody who registered at 2 p.m. is 9 a.m. tomorrow,
+ * 19 hours on, not 9 a.m. the day after: the send time is the nearest one to
+ * the exact delay, never more than half a day early and never more than half
+ * the delay early. Once a sequence is on its 9 a.m. rhythm every gap is a whole
+ * number of days, so the "24 hours between promotional emails" rule holds from
+ * the second delayed email on.
+ */
+const SEND_AT_MAX_EARLY_MINUTES = 12 * 60;
 
 interface ZonedReading {
   year: number;
@@ -96,6 +115,14 @@ function hasWindow(rules: SequenceSendRules): boolean {
   return rules.windowStartMinute !== null && rules.windowEndMinute !== null;
 }
 
+/** The fixed send minute when it is a real time of day, otherwise null. */
+function fixedSendMinute(rules: SequenceSendRules): number | null {
+  const minute = rules.sendAtMinute;
+  return typeof minute === "number" && Number.isInteger(minute) && minute >= 0 && minute < 1440
+    ? minute
+    : null;
+}
+
 /** Whether a local time-of-day falls inside the window, wrapping past midnight if asked. */
 function insideWindow(minuteOfDay: number, start: number, end: number): boolean {
   return start <= end
@@ -118,11 +145,26 @@ export function nextSendAt(
   delayMinutes: number,
   rules: SequenceSendRules
 ): Date {
-  let candidate = new Date(from.getTime() + Math.max(0, delayMinutes) * 60_000);
+  const delay = Math.max(0, delayMinutes);
+  let candidate = new Date(from.getTime() + delay * 60_000);
+
+  const sendAt = fixedSendMinute(rules);
+  if (sendAt !== null && delay > 0) {
+    const earliest = new Date(
+      candidate.getTime() - Math.min(SEND_AT_MAX_EARLY_MINUTES, delay / 2) * 60_000
+    );
+    const reading = readInZone(earliest, rules.timezone);
+    candidate = atZonedDay(reading, 0, sendAt, rules.timezone);
+    if (candidate.getTime() < earliest.getTime()) {
+      candidate = atZonedDay(reading, 1, sendAt, rules.timezone);
+    }
+  }
 
   const start = rules.windowStartMinute;
   const end = rules.windowEndMinute;
-  const windowed = hasWindow(rules) && start !== null && end !== null;
+  // A fixed send time replaces the window; the weekend rule still applies and,
+  // with no window, keeps the local hour — which is the send time.
+  const windowed = sendAt === null && hasWindow(rules) && start !== null && end !== null;
 
   // Each pass moves the candidate strictly forward by at least a few hours, so
   // the bound is never reached; it exists so a zone or a rule this code has not
@@ -172,11 +214,14 @@ interface SequenceRow {
   allow_reentry: boolean;
   /** Emails only for people who still hold this offer (migration 182). */
   requires_offer_id: number | null;
+  /** Every delayed email goes at this local minute (migration 202). */
+  send_at_minute?: number | null;
 }
 
 const SEQUENCE_COLUMNS = `id, name, status, topic, skip_weekends,
   send_window_start_minute, send_window_end_minute, use_contact_timezone, timezone,
-  exit_on_purchase, exit_tag_id, completion_tag_id, allow_reentry, requires_offer_id`;
+  exit_on_purchase, exit_tag_id, completion_tag_id, allow_reentry, requires_offer_id,
+  send_at_minute`;
 
 function rulesFor(sequence: SequenceRow, contactTimezone: string): SequenceSendRules {
   return {
@@ -185,7 +230,98 @@ function rulesFor(sequence: SequenceRow, contactTimezone: string): SequenceSendR
     windowEndMinute: sequence.send_window_end_minute,
     timezone:
       sequence.use_contact_timezone && contactTimezone ? contactTimezone : sequence.timezone,
+    sendAtMinute: sequence.send_at_minute ?? null,
   };
+}
+
+/* ------------------------------------------------------------ skip rules */
+
+/**
+ * Per-email "skip this one if…" (rows 243, 244, 246; migration 202).
+ *
+ * Stored on `sequence_emails.skip_rules` as
+ * `{ "ownsOfferIds": [..], "submittedFormIds": [..], "hasTagIds": [..] }`.
+ * Any one match skips the email: nothing is sent, and the run moves on to the
+ * next email on that email's own delay, measured from the skip. A downsell is
+ * not sent to somebody who already bought the downsell; a "register for the
+ * training" invitation is not sent to somebody who already registered.
+ *
+ * Unlike an exit, a skip leaves the rest of the sequence in place: a Starter
+ * Suite buyer still gets the Club emails, just not the Starter Suite ones.
+ */
+export interface EmailSkipRules {
+  ownsOfferIds: number[];
+  submittedFormIds: number[];
+  hasTagIds: number[];
+}
+
+function positiveIds(value: unknown): number[] {
+  if (!Array.isArray(value)) return [];
+  const ids = value
+    .map((v) => (typeof v === "string" && /^\d+$/.test(v) ? Number(v) : v))
+    .filter((v): v is number => typeof v === "number" && Number.isInteger(v) && v > 0);
+  return [...new Set(ids)];
+}
+
+/** Reads whatever is in the column; anything it cannot read is "no rule". */
+export function parseSkipRules(raw: unknown): EmailSkipRules {
+  const source: Record<string, unknown> =
+    raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
+  return {
+    ownsOfferIds: positiveIds(source.ownsOfferIds),
+    submittedFormIds: positiveIds(source.submittedFormIds),
+    hasTagIds: positiveIds(source.hasTagIds),
+  };
+}
+
+export function hasSkipRules(rules: EmailSkipRules): boolean {
+  return rules.ownsOfferIds.length + rules.submittedFormIds.length + rules.hasTagIds.length > 0;
+}
+
+/**
+ * Why this contact should not get the email, or '' when they should.
+ *
+ * Offers are matched on the contact link or the address, as `requires_offer_id`
+ * is: a buyer whose member row is not linked to this contact still owns the
+ * offer. Ownership is an active, unexpired grant. Forms are matched on the
+ * contact or the address the submission was made with.
+ */
+async function skipReason(
+  client: Queryable,
+  rules: EmailSkipRules,
+  contactId: number,
+  email: string
+): Promise<string> {
+  if (rules.ownsOfferIds.length > 0) {
+    const owns = await client.query<{ offer_id: number }>(
+      `SELECT g.offer_id FROM access_grants g
+         JOIN members m ON m.id = g.member_id
+        WHERE g.offer_id = ANY($1::int[]) AND g.status = 'active'
+          AND (g.expires_at IS NULL OR g.expires_at > now())
+          AND (m.contact_id = $2 OR lower(m.email::text) = lower($3))
+        LIMIT 1`,
+      [rules.ownsOfferIds, contactId, email]
+    );
+    if (owns.rows[0]) return `owns offer ${owns.rows[0].offer_id}`;
+  }
+  if (rules.submittedFormIds.length > 0) {
+    const submitted = await client.query<{ form_id: number }>(
+      `SELECT form_id FROM form_submissions
+        WHERE form_id = ANY($1::int[])
+          AND (contact_id = $2 OR lower(email::text) = lower($3))
+        LIMIT 1`,
+      [rules.submittedFormIds, contactId, email]
+    );
+    if (submitted.rows[0]) return `submitted form ${submitted.rows[0].form_id}`;
+  }
+  if (rules.hasTagIds.length > 0) {
+    const tagged = await client.query<{ tag_id: number }>(
+      `SELECT tag_id FROM contact_tags WHERE contact_id = $1 AND tag_id = ANY($2::int[]) LIMIT 1`,
+      [contactId, rules.hasTagIds]
+    );
+    if (tagged.rows[0]) return `has tag ${tagged.rows[0].tag_id}`;
+  }
+  return "";
 }
 
 /* -------------------------------------------------------------- enrolment */
@@ -982,8 +1118,10 @@ export async function sendDueEmail(
       body_md: string;
       from_name: string;
       from_email: string;
+      preview_text: string | null;
+      skip_rules: unknown;
     }>(
-      `SELECT id, position, subject, body_md, from_name, from_email
+      `SELECT id, position, subject, body_md, from_name, from_email, preview_text, skip_rules
          FROM sequence_emails
         WHERE sequence_id = $1 AND enabled AND position >= $2
         ORDER BY position LIMIT 1`,
@@ -997,6 +1135,50 @@ export async function sendDueEmail(
       return {
         outcome: "completed",
         detail: "no further emails",
+        sequenceId: subscription.sequence_id,
+        contactId: subscription.contact_id,
+      };
+    }
+
+    // Per-email skip rules: nothing is sent and the run moves on, the next email
+    // timed from now on its own delay — never "due at once" because one was
+    // skipped. Only queried when the email has a rule.
+    const skipRules = parseSkipRules(email.skip_rules);
+    const skipped = hasSkipRules(skipRules)
+      ? await skipReason(client, skipRules, subscription.contact_id, contact.email)
+      : "";
+    if (skipped) {
+      const afterRes = await client.query<{ position: number; delay_minutes: number }>(
+        `SELECT position, delay_minutes FROM sequence_emails
+          WHERE sequence_id = $1 AND enabled AND position > $2
+          ORDER BY position LIMIT 1`,
+        [subscription.sequence_id, email.position]
+      );
+      const after = afterRes.rows[0];
+      if (!after) {
+        await finishSubscription(client, subscription.id, subscription.contact_id, sequence);
+        await client.query("COMMIT");
+        return {
+          outcome: "completed",
+          detail: `last email skipped: ${skipped}`,
+          sequenceId: subscription.sequence_id,
+          contactId: subscription.contact_id,
+        };
+      }
+      await client.query(
+        `UPDATE sequence_subscriptions
+            SET position = $2, next_send_at = $3, updated_at = now()
+          WHERE id = $1`,
+        [
+          subscription.id,
+          after.position,
+          nextSendAt(now, after.delay_minutes, rulesFor(sequence, contact.timezone)),
+        ]
+      );
+      await client.query("COMMIT");
+      return {
+        outcome: "skipped",
+        detail: `email ${email.position} skipped: ${skipped}`,
         sequenceId: subscription.sequence_id,
         contactId: subscription.contact_id,
       };
@@ -1028,6 +1210,7 @@ export async function sendDueEmail(
       topic: sequence.topic,
       fromName: email.from_name,
       fromEmail: email.from_email,
+      preheader: renderTokens(email.preview_text ?? "", values),
     });
 
     // Advance regardless of a suppression: a contact who has opted out is not

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { renderMarkdown } from "./provider";
+import { preheaderHtml, renderMarkdown } from "./provider";
 
 describe("renderMarkdown", () => {
   it("renders the content blocks produced by the email composer", () => {
@@ -24,5 +24,19 @@ describe("renderMarkdown", () => {
     expect(html).not.toContain("<script>");
     expect(html).not.toContain('<img src="javascript:');
     expect(html).not.toContain('<a href="javascript:');
+  });
+});
+
+describe("preheaderHtml", () => {
+  it("hides a sequence email's preview text for the inbox line, escaped", () => {
+    const html = preheaderHtml("You can prepare at a pace <that> fits your life.");
+    expect(html).toContain("display:none");
+    expect(html).toContain("You can prepare at a pace &lt;that&gt; fits your life.");
+    expect(html).not.toContain("<that>");
+  });
+
+  it("adds nothing for empty preview text", () => {
+    expect(preheaderHtml("")).toBe("");
+    expect(preheaderHtml("   ")).toBe("");
   });
 });

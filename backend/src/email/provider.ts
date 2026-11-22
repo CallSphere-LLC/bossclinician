@@ -428,6 +428,19 @@ export function renderTokens(template: string, values: Record<string, string>): 
   });
 }
 
+/**
+ * A hidden preview line for the top of an email's HTML. Same markup the brand
+ * shell uses for transactional mail; capped, escaped, never visible in the body.
+ */
+export function preheaderHtml(text: string): string {
+  const line = text.replace(/\s+/g, " ").trim().slice(0, 200);
+  if (!line) return "";
+  return (
+    `<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;mso-hide:all;">` +
+    `${escapeHtml(line)}</div>`
+  );
+}
+
 /* -------------------------------------------------------------------- send */
 
 export type EmailSourceType =
@@ -453,6 +466,11 @@ export interface SendEmailInput {
   fromName?: string;
   fromEmail?: string;
   replyTo?: string;
+  /**
+   * The inbox preview line (a sequence email's "preview text"). Rendered as a
+   * hidden first element of the HTML; empty leaves the client to pick one.
+   */
+  preheader?: string;
 }
 
 export type SendOutcome = "sent" | "suppressed";
@@ -717,6 +735,10 @@ export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult>
       `style="max-width:220px;height:auto;display:block;border:0"></div>` +
       html;
   }
+
+  // First in the HTML, ahead of the logo, so it is what the inbox shows.
+  const preheader = (input.preheader ?? "").trim();
+  if (preheader) html = preheaderHtml(preheader) + html;
 
   if (isMarketing) {
     if (input.contactId === null || input.contactId === undefined) {

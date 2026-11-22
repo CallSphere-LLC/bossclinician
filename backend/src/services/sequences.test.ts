@@ -142,4 +142,87 @@ describe("nextSendAt", () => {
       expect(iso(result)).toBe("2026-06-01T16:00:00.000Z");
     });
   });
+
+  /*
+   * Rows 243, 244 and 246 (migration 202): "send at 9 a.m. Pacific". Every
+   * delayed email goes at the fixed local time nearest the exact delay — never
+   * more than 12 hours early — and an immediate email stays immediate.
+   */
+  describe("a fixed send time", () => {
+    const nineAmPacific: SequenceSendRules = {
+      ...plain,
+      timezone: "America/Los_Angeles",
+      sendAtMinute: 9 * 60,
+    };
+
+    it("never holds back an immediate email", () => {
+      // 2pm in Los Angeles: the training-access email goes now, not at 9am.
+      expect(iso(nextSendAt(new Date("2026-06-01T21:00:00Z"), 0, nineAmPacific))).toBe(
+        "2026-06-01T21:00:00.000Z"
+      );
+    });
+
+    it("sends 'day 1' at 9am the next morning after an afternoon sign-up", () => {
+      expect(iso(nextSendAt(new Date("2026-06-01T21:00:00Z"), 1440, nineAmPacific))).toBe(
+        "2026-06-02T16:00:00.000Z"
+      );
+    });
+
+    it("keeps a daily rhythm at 9am even though the previous send ran a few minutes late", () => {
+      // Sent at 09:03; tomorrow's goes at 09:00, not 09:03 and not the day after.
+      expect(iso(nextSendAt(new Date("2026-06-01T16:03:00Z"), 1440, nineAmPacific))).toBe(
+        "2026-06-02T16:00:00.000Z"
+      );
+      expect(iso(nextSendAt(new Date("2026-06-01T16:05:00Z"), 2880, nineAmPacific))).toBe(
+        "2026-06-03T16:00:00.000Z"
+      );
+    });
+
+    it("is never more than 12 hours early: a late-night sign-up waits a day longer", () => {
+      // 23:00 in Los Angeles; 9am tomorrow would be only 10 hours on.
+      expect(iso(nextSendAt(new Date("2026-06-02T06:00:00Z"), 1440, nineAmPacific))).toBe(
+        "2026-06-03T16:00:00.000Z"
+      );
+    });
+
+    it("never gives a short delay less than half of it", () => {
+      // 09:03 plus an hour: 9am the next day, not 9am today (already past).
+      expect(iso(nextSendAt(new Date("2026-06-01T16:03:00Z"), 60, nineAmPacific))).toBe(
+        "2026-06-02T16:00:00.000Z"
+      );
+    });
+
+    it("stays at 9am local across the autumn and spring clock changes", () => {
+      // 1 November 2026: 9am PST is 17:00 UTC (it was 16:00 the day before).
+      expect(iso(nextSendAt(new Date("2026-10-31T16:02:00Z"), 1440, nineAmPacific))).toBe(
+        "2026-11-01T17:00:00.000Z"
+      );
+      // 8 March 2026: 9am PDT is 16:00 UTC (it was 17:00 the day before).
+      expect(iso(nextSendAt(new Date("2026-03-07T17:02:00Z"), 1440, nineAmPacific))).toBe(
+        "2026-03-08T16:00:00.000Z"
+      );
+    });
+
+    it("takes the place of a send window, and composes with weekdays-only", () => {
+      expect(
+        iso(
+          nextSendAt(new Date("2026-06-01T16:03:00Z"), 1440, {
+            ...nineAmPacific,
+            windowStartMinute: 10 * 60,
+            windowEndMinute: 11 * 60,
+          })
+        )
+      ).toBe("2026-06-02T16:00:00.000Z");
+      // Friday 09:02 plus a day is Saturday 9am, so Monday 9am.
+      expect(
+        iso(nextSendAt(new Date("2026-06-05T16:02:00Z"), 1440, { ...nineAmPacific, skipWeekends: true }))
+      ).toBe("2026-06-08T16:00:00.000Z");
+    });
+
+    it("is off when unset, leaving the exact delay", () => {
+      expect(
+        iso(nextSendAt(new Date("2026-06-01T16:03:00Z"), 1440, { ...nineAmPacific, sendAtMinute: null }))
+      ).toBe("2026-06-02T16:03:00.000Z");
+    });
+  });
 });

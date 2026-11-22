@@ -72,7 +72,8 @@ describeDb("Practice Prep to Club sequence", () => {
     await db.client.query("UPDATE sequence_emails SET preview_text='Owner edit' WHERE sequence_id=$1 AND position=1",[sequenceId]);
     await db.client.query(migration);
     const emails=(await db.client.query("SELECT position,delay_minutes,preview_text FROM sequence_emails WHERE sequence_id=$1 ORDER BY position",[sequenceId])).rows;
-    expect(emails.map(r=>r.delay_minutes)).toEqual([1440,1440,2880,2880,2880]);
+    // Migration 202 (row 243): her 17 emails, as gaps from the previous one.
+    expect(emails.map(r=>r.delay_minutes/1440)).toEqual([0,1,2,1,2,1,1,1,1,1,2,2,2,2,3,3,3]);
     expect(emails[0].preview_text).toBe("Owner edit");
     expect((await db.client.query("SELECT count(*)::int n FROM automations WHERE name='Practice Prep Training → The Club'")).rows[0].n).toBe(1);
   });
@@ -83,7 +84,8 @@ describeDb("Practice Prep to Club sequence", () => {
     await signup(c);
     const first=await subscription(c);
     expect(first.status).toBe("active");
-    expect(new Date(first.next_send_at).getTime()-Date.now()).toBeGreaterThan(23*3600000);
+    // Email 1 is the training itself: due straight away (migration 202).
+    expect(new Date(first.next_send_at).getTime()).toBeLessThanOrEqual(Date.now()+60000);
     await signup(c);
     expect((await subscription(c)).id).toBe(first.id);
     expect((await sequences.enrollContact(sequenceId,c.id)).outcome).toBe("already_enrolled");
@@ -96,7 +98,12 @@ describeDb("Practice Prep to Club sequence", () => {
     expect(result.outcome).toBe("sent");
     expect(sent.messages.length).toBe(before+1);
     expect((await subscription(c)).position).toBe(2);
-    expect(sent.messages.at(-1).subject).toBe("Your next step after Practice Prep");
+    expect(sent.messages.at(-1).subject).toBe("Your private practice training is ready");
+    // Email 2 goes at 9 a.m. Pacific, between 12 and 36 hours on.
+    const next=new Date((await subscription(c)).next_send_at);
+    const hours=(next.getTime()-Date.now())/3600000;
+    expect(hours).toBeGreaterThan(11.9); expect(hours).toBeLessThan(36.1);
+    expect(new Intl.DateTimeFormat("en-US",{timeZone:"America/Los_Angeles",hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).format(next)).toBe("09:00");
   });
   it("honors opt-outs without transmitting a message", async () => {
     const c=await contact("opted_out"); await signup(c); const sub=await subscription(c);

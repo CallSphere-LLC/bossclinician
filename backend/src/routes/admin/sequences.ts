@@ -372,8 +372,10 @@ adminSequencesRouter.post(
         body_md: string;
         from_name: string;
         from_email: string;
+        skip_rules: unknown;
       }>(
-        `SELECT position, delay_minutes, subject, preview_text, body_md, from_name, from_email
+        `SELECT position, delay_minutes, subject, preview_text, body_md, from_name, from_email,
+                skip_rules
            FROM sequence_emails
           WHERE id = $2 AND sequence_id = $1
           FOR UPDATE`,
@@ -401,8 +403,8 @@ adminSequencesRouter.post(
       const copy = await client.query(
         `INSERT INTO sequence_emails
            (sequence_id, position, delay_minutes, subject, preview_text, body_md,
-            from_name, from_email, enabled)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, false)
+            from_name, from_email, enabled, skip_rules)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, false, COALESCE($9::jsonb, '{}'::jsonb))
          RETURNING *`,
         [
           req.params.id,
@@ -413,6 +415,8 @@ adminSequencesRouter.post(
           source.body_md,
           source.from_name,
           source.from_email,
+          // Skip rules (migration 202) travel with the copy.
+          JSON.stringify(source.skip_rules ?? {}),
         ]
       );
 
