@@ -301,7 +301,7 @@ services:
     # the command below is checked against one binary's option table, and
     # coturn has removed options in a minor release before (4.18 refuses to
     # start on 4.6's --no-tlsv1_1). Re-check the command on every bump.
-    image: coturn/coturn:4.18.0-r0-alpine
+    image: coturn/coturn:4.19.2-r0-alpine
     restart: unless-stopped
     logging: *logging
     security_opt: ["no-new-privileges:true"]
