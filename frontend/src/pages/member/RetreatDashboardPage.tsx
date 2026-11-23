@@ -26,6 +26,7 @@ import {
 
 const SUPPORT = "retreats@bossclinician.com";
 const SECTION_LINKS: Record<string, RetreatSectionId> = {
+  payments: "payments",
   memories: "memories",
   feedback: "feedback",
   interest: "interest",

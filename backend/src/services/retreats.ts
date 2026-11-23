@@ -15,6 +15,7 @@ import {
   type RoomType,
   type WordingContext,
 } from "./retreatQuestionnaires";
+import type { BalancePlanView } from "./retreatBalancePlans";
 
 /**
  * FlourisHealer Retreat Dashboard (sheet row 248, Yvette's item 11; migrations
@@ -1308,6 +1309,11 @@ export async function buildDashboard(retreat: RetreatRow, memberId: number | nul
     },
     preparationMd: renderWording(settings.preparationMd, ctx),
     payments,
+    // Card on file + monthly charges (migration 230). Always null from here:
+    // the routes that serve a real guest fill it in from
+    // services/retreatBalancePlans.ts, which this module must not import (it
+    // would pull Stripe into every caller of the dashboard builder).
+    balancePlan: null as BalancePlanView | null,
     groupCall: !settings.checklist.groupCall
       ? { enabled: false, confirmed: false, startsAt: null, timezone: null, joinUrl: null, notes: "", rsvp: null }
       : groupCallConfirmed

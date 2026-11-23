@@ -1346,7 +1346,7 @@ async function startPaymentPlan(input: {
  *    `status <> 'paid'` on the installment means a concurrent or replayed
  *    delivery updates nothing rather than eating the customer's next payment.
  */
-async function advancePaymentPlan(input: {
+export async function advancePaymentPlan(input: {
   stripeSubscriptionId: string;
   /**
    * The idempotency key for this credit.
@@ -1378,6 +1378,26 @@ async function advancePaymentPlan(input: {
     const plan = planRes.rows[0];
     if (!plan) {
       await client.query("ROLLBACK");
+      return;
+    }
+
+    // This invoice has already been credited to this plan. Asked before the
+    // overcharge test below, because a retreat balance plan is credited from
+    // two places (services/retreatBalancePlans.ts reconciles the opening
+    // invoice as soon as it has written the plan, and invoice.paid arrives on
+    // its own clock): whichever comes second must be a quiet no-op, and on a
+    // plan that the first credit completed it used to look like a charge past
+    // the end of the plan and page the owner. The later caller is usually the
+    // one that knows the ledger row, so that is filled in if it was missing.
+    const credited = await client.query<{ id: number }>(
+      `UPDATE payment_plan_installments
+          SET transaction_id = COALESCE(transaction_id, $3)
+        WHERE payment_plan_id = $1 AND stripe_invoice_id = $2
+        RETURNING id`,
+      [plan.id, input.stripeInvoiceId, input.transactionId]
+    );
+    if (credited.rows[0]) {
+      await client.query("COMMIT");
       return;
     }
 
@@ -1463,6 +1483,19 @@ async function advancePaymentPlan(input: {
         stripeSubscriptionId: input.stripeSubscriptionId,
       }),
     });
+  }
+
+  // A retreat balance plan (migration 230) is cancelled at Stripe the moment
+  // its final instalment is credited, rather than left to `cancel_at` a month
+  // later. Imported lazily: that service imports this module. It decides for
+  // itself whether the plan is one of its own, and it never throws.
+  if (completedPlan !== null && completedPlan.order_id === null && completedPlan.offer_id === null) {
+    try {
+      const { onLinkedPlanCompleted } = await import("../../services/retreatBalancePlans");
+      await onLinkedPlanCompleted(completedPlan.id);
+    } catch (err) {
+      console.error(`[stripe] plan ${completedPlan.id}: completion follow-up failed:`, err);
+    }
   }
 
   if (completedPlan !== null && completedPlan.email) {
@@ -1848,6 +1881,19 @@ async function handleInvoicePaymentFailed(invoice: Stripe.Invoice): Promise<void
   const subscriptionId =
     !isPlan && stripeSubscriptionId ? await localSubscriptionId(stripeSubscriptionId) : null;
 
+  // A plan's invoice with no plan row and no order behind it is the declined
+  // FIRST charge of a retreat balance plan (services/retreatBalancePlans.ts
+  // creates that subscription with `error_if_incomplete`, so Stripe discards
+  // the subscription and the invoice with it). There is nothing here to dun:
+  // the guest has already been told, on the page or by that service's own
+  // email, and the payment-failed email below would send her a link to an
+  // invoice that no longer exists. Every checkout plan names its order in the
+  // metadata, and a renewal always finds its plan row, so neither reaches this.
+  if (isPlan && plan === null && order === null && meta.orderId === undefined) {
+    log(`invoice ${invoice.id} failed for a plan with no order and no plan row; nothing to dun`);
+    return;
+  }
+
   // Which decline this is. Stripe is the authority on how many times it has
   // tried, and every count here is raised to that number rather than
   // incremented: `+ 1` is not idempotent, and a handler that throws after the
@@ -2132,7 +2178,11 @@ export async function endPaymentPlanAccess(input: {
   // Fire-and-forget, as everywhere else here: the entitlement decision is
   // committed, and an SMTP outage must not turn it into a retried webhook that
   // starts the whole sequence again.
-  if (plan.email) {
+  // Not for a plan with no order and no offer (a retreat balance plan): that
+  // email says "your access has been paused", and nothing was revoked. Those
+  // guests are written to by services/retreatBalancePlans.ts instead, with the
+  // link to add a card again. The owner's alert below is still sent.
+  if (plan.email && !(plan.order_id === null && plan.offer_id === null)) {
     void sendMail({
       to: plan.email,
       ...paymentPlanDefaulted({

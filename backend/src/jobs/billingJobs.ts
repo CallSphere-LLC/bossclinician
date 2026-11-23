@@ -197,4 +197,12 @@ export function registerBillingJobs(): void {
   registerHandler("billing.reminders", () => sweepBillingReminders());
   // Retries on the owner's schedule; a no-op while Stripe does the retrying.
   registerHandler("billing.dunning", () => sweepDunning());
+  // Hourly (schedule 'retreat-balance-start', migration 230): starts retreat
+  // balance plans on their first charge date (Pacific) and keeps them in step
+  // with their subscriptions. Imported lazily so this module's tests, which
+  // mock the database, do not load the Stripe webhook behind that service.
+  registerHandler("retreatBalance.start", async () => {
+    const { runRetreatBalanceJob } = await import("../services/retreatBalancePlans");
+    return runRetreatBalanceJob();
+  });
 }

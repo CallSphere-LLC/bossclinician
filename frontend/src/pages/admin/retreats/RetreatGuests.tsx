@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router";
-import { Eye, KeyRound, Mail, ShieldCheck, UserPlus, Users } from "lucide-react";
+import { CreditCard, Eye, KeyRound, Mail, ShieldCheck, UserPlus, Users } from "lucide-react";
 import { toast } from "sonner";
 import {
   AdminApiError,
@@ -34,6 +34,7 @@ import {
   Textarea,
   chipRowStyles,
 } from "@/pages/admin/ui/primitives";
+import { BalancePlanBadge, RetreatBalancePlanModal, useBalancePlans } from "./RetreatBalancePlan";
 import { STATUS_TONE, isReviewable, roomTypeLabel } from "./retreatAdminRules";
 
 type Filter = "all" | "access" | "booking_only" | "needs_follow_up";
@@ -57,6 +58,10 @@ export function RetreatGuests({ retreatId }: { retreatId: number }) {
   const [openId, setOpenId] = useState<number | null>(null);
   const [emailFor, setEmailFor] = useState<AdminGuestRow | null>(null);
   const [confirm, confirmDialog] = useConfirm();
+  // Payment plans (card on file + automatic monthly charges): one load for the retreat, looked up per guest.
+  const balancePlans = useBalancePlans(retreatId);
+  const [planForId, setPlanForId] = useState<number | null>(null);
+  const planGuest = planForId === null ? null : (guests ?? []).find((g) => g.memberId === planForId) ?? null;
 
   const load = useCallback(async () => {
     try {
@@ -124,6 +129,7 @@ export function RetreatGuests({ retreatId }: { retreatId: number }) {
     <div className="space-y-5">
       {confirmDialog}
       {error && <ErrorNotice message={error} />}
+      {balancePlans.error && <ErrorNotice message={`Payment plans: ${balancePlans.error}`} />}
       <GrantAccessCard retreatId={retreatId} onGranted={() => void load()} confirm={confirm} />
 
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -201,6 +207,11 @@ export function RetreatGuests({ retreatId }: { retreatId: number }) {
                       ) : (
                         <span className="text-xs text-ink-soft">Not recorded on this site (e.g. billed in Kajabi)</span>
                       )}
+                      {!balancePlans.error && (
+                        <div className="mt-1.5">
+                          <BalancePlanBadge plan={balancePlans.byMember?.get(g.memberId)} loading={balancePlans.byMember === null} />
+                        </div>
+                      )}
                     </td>
                     <td className="px-3 py-3 text-xs text-ink-soft">
                       {g.welcomeSentAt ? (
@@ -215,6 +226,9 @@ export function RetreatGuests({ retreatId }: { retreatId: number }) {
                     <td className="px-3 py-3">
                       <div className="flex flex-col items-stretch gap-1.5">
                         <Button size="sm" variant="secondary" onClick={() => setOpenId(g.memberId)}>Open</Button>
+                        <Button size="sm" variant="secondary" disabled={balancePlans.byMember === null} onClick={() => setPlanForId(g.memberId)}>
+                          <CreditCard aria-hidden /> {balancePlans.byMember?.has(g.memberId) ? "Payment plan" : "Set up payments"}
+                        </Button>
                         {g.hasDashboardAccess ? (
                           <>
                             <Button size="sm" variant="secondary" onClick={() => setEmailFor(g)}><Mail aria-hidden /> Access email</Button>
@@ -236,6 +250,15 @@ export function RetreatGuests({ retreatId }: { retreatId: number }) {
         <GuestDetailModal retreatId={retreatId} memberId={openId} onClose={() => { setOpenId(null); void load(); }} />
       )}
       {emailFor && <AccessEmailModal retreatId={retreatId} guest={emailFor} onClose={() => { setEmailFor(null); void load(); }} />}
+      {planGuest && (
+        <RetreatBalancePlanModal
+          retreatId={retreatId}
+          guest={planGuest}
+          plan={balancePlans.byMember?.get(planGuest.memberId) ?? null}
+          onChanged={balancePlans.reload}
+          onClose={() => setPlanForId(null)}
+        />
+      )}
     </div>
   );
 }

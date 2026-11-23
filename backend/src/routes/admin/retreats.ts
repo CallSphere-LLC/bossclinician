@@ -36,6 +36,8 @@ import {
 } from "../../services/retreats";
 import { storeStagedMemory } from "../member/retreats";
 import { adminRetreatExtrasRouter } from "./retreatExtras";
+import { adminRetreatBalancePlansRouter } from "./retreatBalancePlans";
+import { loadGuestBalancePlan } from "../../services/retreatBalancePlans";
 import { loadGuestAccessRecords } from "../../services/retreatAccess";
 import { guestRoomType, loadQuestionnaires, loadResponses, responseStatus, type SnapshotEntry } from "../../services/retreatQuestionnaires";
 
@@ -63,6 +65,8 @@ export function requireRetreatOrganizer(req: Request, _res: Response, next: Next
 adminRetreatsRouter.use(requireRetreatOrganizer);
 // Questionnaires, duplicate, access and the access email (migration 224) — owner/admin only, like everything here.
 adminRetreatsRouter.use(adminRetreatExtrasRouter);
+// Guest balance plans: card on file + monthly charges (migration 230) — owner/admin only as well.
+adminRetreatsRouter.use(adminRetreatBalancePlansRouter);
 
 function adminId(req: Request): number {
   return Number(req.user?.sub);
@@ -281,7 +285,10 @@ adminRetreatsRouter.get(
     const memberId = memberIdParam(req.query.memberId);
     await assertRetreatPerson(retreat, memberId);
     await recordAdminAction({ req, action: "retreat.guest.preview", entityType: "retreat_guest", entityId: `${retreat.id}:${memberId}` });
-    res.json(await buildDashboard(retreat, memberId, { preview: true }));
+    const dashboard = await buildDashboard(retreat, memberId, { preview: true });
+    // What she sees in Payments, read-only here: the card routes are member-only.
+    const balancePlan = await loadGuestBalancePlan(retreat, memberId).catch(() => null);
+    res.json({ ...dashboard, balancePlan });
   }),
 );
 

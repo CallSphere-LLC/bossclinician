@@ -28,9 +28,21 @@ vi.mock("@/lib/memberApi", () => ({
 }));
 vi.mock("@/lib/adminTransport", () => ({ sessionFetch: mock.sessionFetch }));
 vi.mock("@/lib/api", () => ({ API_BASE: "/api" }));
+// The balance plan's card form: Stripe is never loaded or called from a test.
+vi.mock("@/components/checkout/stripeClient", () => ({
+  getStripe: () => null,
+  stripeConfigured: () => true,
+  appearanceForTheme: () => ({}),
+}));
+vi.mock("@stripe/react-stripe-js", () => ({
+  Elements: ({ children }: { children: unknown }) => children,
+  PaymentElement: () => null,
+  useStripe: () => null,
+  useElements: () => null,
+}));
 
 import { RetreatDashboard } from "./RetreatDashboard";
-import type { GuestQuestionnaire, RetreatDashboardData } from "@/lib/retreatsApi";
+import type { BalancePlanView, GuestQuestionnaire, RetreatDashboardData } from "@/lib/retreatsApi";
 
 const PROFILE: GuestQuestionnaire = {
   id: 1,
@@ -115,6 +127,7 @@ function fixture(overrides: Partial<RetreatDashboardData> = {}): RetreatDashboar
       installments: [],
       roomLabel: null,
     },
+    balancePlan: null,
     groupCall: { enabled: true, confirmed: false, startsAt: null, timezone: null, joinUrl: null, notes: "", rsvp: null },
     announcements: [],
     memories: { available: false, uploadsOpen: false },
@@ -151,9 +164,196 @@ function render(data: RetreatDashboardData, preview = false) {
   );
 }
 
+const AUTHORIZATION = "I authorize Boss Clinician to charge my card $1,000.00 each month for 4 payments, starting December 1, 2026.";
+
+/** A guest who paid $1,500.00 through Kajabi and owes $4,000.00 in four monthly payments. */
+function balancePlan(overrides: Partial<BalancePlanView> = {}): BalancePlanView {
+  return {
+    state: "open",
+    currency: "usd",
+    agreedTotalCents: 550000,
+    discountCents: 50000,
+    discountNote: "Early booking thank you",
+    priorPaidCents: 150000,
+    paidHereCents: 0,
+    remainingCents: 400000,
+    installmentCents: 100000,
+    installmentCount: 4,
+    schedule: [
+      { sequence: 1, amountCents: 100000, dueDate: "2026-12-01", status: "scheduled" },
+      { sequence: 2, amountCents: 100000, dueDate: "2027-01-01", status: "scheduled" },
+      { sequence: 3, amountCents: 100000, dueDate: "2027-02-01", status: "scheduled" },
+      { sequence: 4, amountCents: 100000, dueDate: "2027-03-01", status: "scheduled" },
+    ],
+    firstChargeDate: "2026-12-01",
+    finalDueDate: "2027-05-01",
+    chargesToday: false,
+    card: null,
+    authorizationText: AUTHORIZATION,
+    problem: "",
+    ...overrides,
+  };
+}
+
+const VISA = { brand: "visa", last4: "4242" };
+
+/** The words a guest reads: tags removed, the few entities React writes turned back. */
+function textOf(html: string): string {
+  return html
+    .replace(/<[^>]+>/g, "")
+    .replace(/&quot;/g, '"')
+    .replace(/&#x27;/g, "'")
+    .replace(/&amp;/g, "&");
+}
+
+/** Only the Payments section, so nothing from another section can satisfy an assertion. */
+function paymentsSection(html: string): string {
+  const start = html.indexOf('<section id="payments"');
+  const end = html.indexOf("</section>", start);
+  expect(start).toBeGreaterThan(-1);
+  return html.slice(start, end);
+}
+
+/** Kajabi-billed guests have no order on this site, so the old summary would say "contact us". */
+function kajabiGuest(plan: BalancePlanView | null, overrides: Partial<RetreatDashboardData> = {}): RetreatDashboardData {
+  const data = fixture({ balancePlan: plan, ...overrides });
+  data.payments = { ...data.payments, status: "incomplete", agreedCents: null, paidCents: null, balanceCents: null, nextPayment: null };
+  return data;
+}
+
 beforeEach(() => {
   mock.memberRequest.mockReset();
   mock.sessionFetch.mockReset();
+});
+
+describe("RetreatDashboard balance plan", () => {
+  it("keeps the old payments summary when there is no balance plan", () => {
+    const complete = paymentsSection(render(fixture({ balancePlan: null })));
+    expect(complete).toContain("Amount paid");
+    expect(complete).toContain("Balance due");
+    expect(complete).toContain("$5,500.00");
+    expect(complete).not.toContain("Add your card");
+
+    const withoutField = fixture();
+    delete withoutField.balancePlan;
+    expect(paymentsSection(render(withoutField))).toContain("Balance due");
+
+    const incomplete = paymentsSection(render(kajabiGuest(null)));
+    expect(incomplete).toContain("Contact us about your payment schedule");
+    expect(incomplete).not.toContain("Add your card");
+  });
+
+  it("open: shows the figures, the schedule and an 'Add your card' button instead of 'contact us'", () => {
+    const html = paymentsSection(render(kajabiGuest(balancePlan())));
+    const text = textOf(html);
+    expect(text).not.toContain("Contact us about your payment schedule");
+    expect(text).not.toContain("Balance due");
+
+    expect(html).toMatch(/Agreed retreat price<\/dt><dd class="[^"]*font-body font-bold tabular-nums[^"]*">\$5,500\.00</);
+    expect(html).toMatch(/Discount \(already included\)<\/dt><dd[^>]*>\$500\.00<\/dd><dd[^>]*>Early booking thank you</);
+    expect(html).toMatch(/Paid so far<\/dt><dd[^>]*>\$1,500\.00</);
+    expect(html).toMatch(/Balance remaining<\/dt><dd[^>]*>\$4,000\.00</);
+    expect(html).toMatch(/Monthly payments<\/dt><dd[^>]*>\$1,000\.00 × 4 payments</);
+    expect(html).toMatch(/Final payment deadline<\/dt><dd[^>]*>May 1, 2027</);
+
+    expect(html).toContain("Payment schedule</caption>");
+    for (const due of ["December 1, 2026", "January 1, 2027", "February 1, 2027", "March 1, 2027"]) expect(text).toContain(due);
+    expect(html.match(/>Scheduled</g)).toHaveLength(4);
+
+    expect(text).toContain("Your first payment of $1,000.00 will be charged on December 1, 2026");
+    expect(html).toMatch(/<button[^>]*>Add your card<\/button>/);
+    // The card form and its agreement appear only after she asks for them.
+    expect(html).not.toContain(AUTHORIZATION);
+    expect(html).not.toContain('role="alert"');
+    expect(mock.memberRequest).not.toHaveBeenCalled();
+  });
+
+  it("open: leaves out the discount line when there is no discount, and says when the first payment is taken today", () => {
+    const html = paymentsSection(render(kajabiGuest(balancePlan({ discountCents: 0, discountNote: "", chargesToday: true }))));
+    expect(html).not.toContain("Discount");
+    expect(textOf(html)).toContain("Your first payment of $1,000.00 is charged today, as soon as you save your card.");
+  });
+
+  it("open: shows the last card problem as an alert above the form", () => {
+    const html = paymentsSection(render(kajabiGuest(balancePlan({ problem: "Your card was declined. Please add a card again." }))));
+    expect(html).toMatch(/role="alert"[^>]*>Your card was declined\. Please add a card again\.</);
+    expect(html.indexOf("Your card was declined.")).toBeLessThan(html.indexOf(">Add your card</button>"));
+  });
+
+  it("card on file: names the card and the first payment, with no form", () => {
+    const html = paymentsSection(render(kajabiGuest(balancePlan({ state: "card_on_file", card: VISA }))));
+    const text = textOf(html);
+    expect(text).toContain("Card on file: Visa ending 4242. Your first payment of $1,000.00 will be charged on December 1, 2026.");
+    expect(html).toContain("Payment schedule</caption>");
+    expect(html).toMatch(/Balance remaining<\/dt><dd[^>]*>\$4,000\.00</);
+    expect(html).not.toContain("<button");
+  });
+
+  it("billing: shows the card, the next payment, paid and scheduled marks, and a link to update the card", () => {
+    const plan = balancePlan({ state: "billing", card: VISA, paidHereCents: 100000, remainingCents: 300000 });
+    plan.schedule[0] = { ...plan.schedule[0], status: "paid" };
+    const html = paymentsSection(render(kajabiGuest(plan)));
+    const text = textOf(html);
+    expect(text).toContain("Card on file: Visa ending 4242.");
+    expect(text).toContain("Your next payment of $1,000.00 will be charged on January 1, 2027.");
+    expect(html).toMatch(/Paid so far<\/dt><dd[^>]*>\$2,500\.00</);
+    expect(html).toMatch(/Balance remaining<\/dt><dd[^>]*>\$3,000\.00</);
+    expect(html.match(/>Paid</g)).toHaveLength(1);
+    expect(html.match(/>Scheduled</g)).toHaveLength(3);
+    expect(html).toMatch(/<a[^>]*href="\/account\/billing"[^>]*>Update your card<\/a>/);
+    expect(html).not.toContain('role="alert"');
+    expect(html).not.toContain("<button");
+  });
+
+  it("past due: alerts that the last payment did not go through, with a button-styled link to update the card", () => {
+    const plan = balancePlan({ state: "past_due", card: VISA, paidHereCents: 100000, remainingCents: 300000 });
+    plan.schedule[0] = { ...plan.schedule[0], status: "paid" };
+    plan.schedule[1] = { ...plan.schedule[1], status: "failed" };
+    const html = paymentsSection(render(kajabiGuest(plan)));
+    expect(html).toMatch(/role="alert"[^>]*><p>Your last payment did not go through\./);
+    expect(html).toMatch(/<a[^>]*href="\/account\/billing"[^>]*>Update your card<\/a>/);
+    expect(html).toMatch(/<a(?=[^>]*class="[^"]*bg-gold)(?=[^>]*href="\/account\/billing")[^>]*>Update your card<\/a>/);
+    expect(html).toContain(">Did not go through<");
+    expect(textOf(html)).toContain("Card on file: Visa ending 4242.");
+    expect(textOf(html)).not.toContain("Your next payment of");
+  });
+
+  it("completed: thanks her and shows nothing left to pay", () => {
+    const plan = balancePlan({ state: "completed", card: VISA, paidHereCents: 400000, remainingCents: 0 });
+    plan.schedule = plan.schedule.map((row) => ({ ...row, status: "paid" as const }));
+    const html = paymentsSection(render(kajabiGuest(plan)));
+    expect(textOf(html)).toContain("Paid in full. Thank you.");
+    expect(html).toMatch(/Balance remaining<\/dt><dd[^>]*>\$0\.00</);
+    expect(html).toMatch(/Paid so far<\/dt><dd[^>]*>\$5,500\.00</);
+    expect(html).not.toContain("Monthly payments");
+    expect(html.match(/>Paid</g)).toHaveLength(4);
+    expect(html).not.toContain("<button");
+  });
+
+  it("in the owner's preview shows the plan read-only: no button, no card form, no request", () => {
+    const html = paymentsSection(render(kajabiGuest(balancePlan(), { preview: true }), true));
+    const text = textOf(html);
+    expect(html).toMatch(/Balance remaining<\/dt><dd[^>]*>\$4,000\.00</);
+    expect(html).toContain("Payment schedule</caption>");
+    expect(text).toContain("Preview only.");
+    expect(text).toContain(AUTHORIZATION);
+    expect(html).not.toContain("<button");
+    expect(html).not.toContain("<form");
+    expect(html).not.toContain('type="checkbox"');
+    expect(mock.memberRequest).not.toHaveBeenCalled();
+    expect(mock.sessionFetch).not.toHaveBeenCalled();
+  });
+
+  it("never sets a figure in the display serif or uses an em dash in the plan's own wording", () => {
+    for (const state of ["open", "card_on_file", "billing", "past_due", "completed"] as const) {
+      const section = paymentsSection(render(kajabiGuest(balancePlan({ state, card: state === "open" ? null : VISA }))));
+      // Everything after the section's own (serif) heading.
+      const html = section.slice(section.indexOf("</h2>"));
+      expect(html).toContain("tabular-nums");
+      expect(html).not.toContain("font-display");
+      expect(textOf(html)).not.toContain("—");
+    }
+  });
 });
 
 describe("RetreatDashboard", () => {

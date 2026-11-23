@@ -24,6 +24,7 @@ import {
   Section,
   errorMessage,
 } from "./retreatUi";
+import { BalancePlanPanel } from "./BalancePlanPanel";
 import { RetreatChecklist } from "./RetreatChecklist";
 import { TravelInsuranceGuidance } from "./TravelInsuranceForm";
 import { QuestionnaireForm } from "./QuestionnaireForm";
@@ -247,7 +248,18 @@ export function RetreatDashboard({ data, slug, preview, onReload, focusSection }
 
       {/* ── Payments ───────────────────────────────────────────────── */}
       <Section id="payments" title="Payments" status={data.checklist.find((c) => c.key === "payments")?.status}>
-        <PaymentsPanel data={data} />
+        {data.balancePlan ? (
+          <BalancePlanPanel
+            plan={data.balancePlan}
+            slug={slug}
+            supportEmail={data.supportEmail}
+            roomLabel={data.payments.roomLabel}
+            readOnly={readOnly}
+            onReload={onReload}
+          />
+        ) : (
+          <PaymentsPanel data={data} />
+        )}
       </Section>
 
       {/* ── Guest Connection & Group Call ──────────────────────────── */}

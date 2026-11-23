@@ -1,3 +1,4 @@
+import type Stripe from "stripe";
 import { pool } from "../db/pool";
 import { stripe } from "../stripe/client";
 import { recoverPaidInvoice } from "./dunning";
@@ -50,6 +51,53 @@ const idOf = (value: string | { id: string } | null | undefined): string | null 
   typeof value === "string" ? value : (value?.id ?? null);
 
 /**
+ * A retreat balance plan keeps its own note of the card it charges (the id for
+ * a plan whose first charge is still ahead, and the brand and last four digits
+ * the guest's retreat dashboard shows). Once the member has replaced her card,
+ * that note is moved to the new card, so the dashboard names the card that is
+ * really charged and a plan still waiting for its first charge date uses it.
+ *
+ * Only plans of this member under this Stripe customer that hold a card
+ * (`card_on_file`, `billing`) are touched. Never throws: the new card is
+ * already the default everywhere by the time this runs, and a failure here
+ * must not turn a saved card into an error on the billing page.
+ */
+async function moveRetreatBalancePlansToCard(
+  memberId: number,
+  customerId: string,
+  method: string | Stripe.PaymentMethod | null,
+  paymentMethodId: string
+): Promise<void> {
+  try {
+    const plans = await pool.query<{ id: number }>(
+      `SELECT id FROM retreat_balance_plans
+        WHERE member_id = $1 AND stripe_customer_id = $2 AND status IN ('card_on_file','billing')`,
+      [memberId, customerId]
+    );
+    if (plans.rows.length === 0) return;
+
+    let card = typeof method === "object" && method !== null ? (method.card ?? null) : null;
+    if (card === null) card = (await stripe().paymentMethods.retrieve(paymentMethodId)).card ?? null;
+
+    // The status is checked again in the write: a plan that left these states
+    // since the read (declined, cancelled) has had its card cleared on purpose.
+    await pool.query(
+      `UPDATE retreat_balance_plans
+          SET stripe_payment_method_id = $3, card_brand = $4, card_last4 = $5, updated_at = now()
+        WHERE id = ANY($6::int[]) AND member_id = $1 AND stripe_customer_id = $2
+          AND status IN ('card_on_file','billing')`,
+      [memberId, customerId, paymentMethodId, card?.brand ?? "", card?.last4 ?? "", plans.rows.map((row) => row.id)]
+    );
+  } catch (err) {
+    // eslint-disable-next-line no-console
+    console.error(
+      `[billing-portal] member ${memberId}: could not move the retreat balance plan to the new card:`,
+      err instanceof Error ? err.message : err
+    );
+  }
+}
+
+/**
  * Makes the card from a completed SetupIntent the one everything charges, and
  * tries any overdue invoice on it straight away.
  *
@@ -58,7 +106,9 @@ const idOf = (value: string | { id: string } | null | undefined): string | null 
  * session is refused exactly as a made-up one is.
  */
 export async function adoptSavedCard(memberId: number, setupIntentId: string): Promise<CardAdoption> {
-  const intent = await stripe().setupIntents.retrieve(setupIntentId);
+  // Expanded so the card's brand and last four digits come with it (used for
+  // retreat balance plans below) without a second request.
+  const intent = await stripe().setupIntents.retrieve(setupIntentId, { expand: ["payment_method"] });
   const customerId = idOf(intent.customer);
   const owned = await memberCustomerIds(memberId);
 
@@ -101,6 +151,10 @@ export async function adoptSavedCard(memberId: number, setupIntentId: string): P
     );
     updated += 1;
   }
+
+  // After the subscriptions, so the card a retreat plan names is the card its
+  // subscription now charges.
+  await moveRetreatBalancePlansToCard(memberId, customerId, intent.payment_method, paymentMethodId);
 
   const overdue = await pool.query<{ stripe_invoice_id: string }>(
     `SELECT DISTINCT i.stripe_invoice_id

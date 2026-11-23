@@ -509,7 +509,7 @@ function CourseHome({ course, productSlug }: { course: CourseOutlineData; produc
           <img
             src={course.image}
             alt=""
-            className="aspect-[21/9] w-full object-cover"
+            className="aspect-[21/9] w-full bg-[#f7f2ea] object-cover"
             loading="lazy"
           />
         )}

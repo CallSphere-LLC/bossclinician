@@ -229,6 +229,48 @@ export interface PaymentsSummary {
   roomLabel: string | null;
 }
 
+export type BalancePlanState = "open" | "card_on_file" | "billing" | "past_due" | "completed";
+
+export interface BalancePlanScheduleRow {
+  sequence: number;
+  amountCents: number;
+  /** YYYY-MM-DD. */
+  dueDate: string;
+  status: "scheduled" | "paid" | "failed" | "skipped";
+}
+
+/**
+ * A guest's balance plan (migration 230): the owner sets the numbers, the guest
+ * adds a card and agrees to the schedule, and the balance is then charged
+ * monthly. Absent or null when the owner has not opened one for this guest.
+ */
+export interface BalancePlanView {
+  state: BalancePlanState;
+  currency: string;
+  /** The room price after any discount. */
+  agreedTotalCents: number;
+  /** Display only; already subtracted from agreedTotalCents. */
+  discountCents: number;
+  discountNote: string;
+  /** Paid before this plan (for example through Kajabi). */
+  priorPaidCents: number;
+  paidHereCents: number;
+  remainingCents: number;
+  installmentCents: number;
+  installmentCount: number;
+  /** Real instalments once billing; before that a projection from the first charge date. */
+  schedule: BalancePlanScheduleRow[];
+  firstChargeDate: string;
+  finalDueDate: string | null;
+  /** True when confirming now would charge the first payment immediately. */
+  chargesToday: boolean;
+  card: { brand: string; last4: string } | null;
+  /** The exact consent sentence the guest must tick, built by the server from the numbers. */
+  authorizationText: string;
+  /** The last card problem while the plan is open, else "". */
+  problem: string;
+}
+
 export interface GroupCallView {
   /** False when this retreat has no pre-trip call. */
   enabled: boolean;
@@ -360,6 +402,8 @@ export interface RetreatDashboardData {
   };
   preparationMd: string;
   payments: PaymentsSummary;
+  /** Null or absent: no balance plan is open for this guest, so the summary above is shown as before. */
+  balancePlan?: BalancePlanView | null;
   groupCall: GroupCallView;
   announcements: AnnouncementView[];
   memories: { available: boolean; uploadsOpen: boolean };
@@ -447,6 +491,31 @@ export const memberRetreatsApi = {
     }),
   rsvp: (slug: string, rsvp: "yes" | "no" | "maybe") =>
     memberRequest<{ rsvp: string }>(`${base(slug)}/group-call/rsvp`, { method: "POST", body: JSON.stringify({ rsvp }) }),
+  /**
+   * Starts card collection for an open balance plan. Each call makes a new
+   * Stripe SetupIntent. `balancePlan` is the plan as it stands at that moment:
+   * the card form, the schedule and the consent sentence are shown from it,
+   * not from the earlier dashboard load.
+   */
+  balancePlanSetupIntent: (slug: string) =>
+    memberRequest<{ clientSecret: string; balancePlan: BalancePlanView }>(`${base(slug)}/balance-plan/setup-intent`, {
+      method: "POST",
+      body: JSON.stringify({}),
+    }),
+  /**
+   * Saves the card from a succeeded SetupIntent and records the guest's agreement
+   * to the schedule. `authorizationText` is the consent sentence exactly as it
+   * was displayed to her. Charges the first payment now when it is already due
+   * (`charged`). A declined card answers 402 with a sentence for the guest.
+   * 409 carries `details.code`: "schedule_changed" (the sentence shown is no
+   * longer the plan's; start again) or "setup_pending" (the bank has not
+   * finished; send the same SetupIntent again).
+   */
+  balancePlanConfirm: (slug: string, setupIntentId: string, authorizationText: string) =>
+    memberRequest<{ balancePlan: BalancePlanView; charged: boolean }>(`${base(slug)}/balance-plan/confirm`, {
+      method: "POST",
+      body: JSON.stringify({ setupIntentId, agreed: true, authorizationText }),
+    }),
   memories: (slug: string) => memberRequest<MemoriesView>(`${base(slug)}/memories`),
   deleteMemory: (slug: string, id: number) =>
     memberRequest<{ ok: true }>(`${base(slug)}/memories/${id}`, { method: "DELETE" }),

@@ -13,6 +13,8 @@ import { partsDir } from "../../services/mediaStorage";
 import { protectedRef, uploadPath } from "../../services/signedUrls";
 import { finishStagedMedia, persistStagedMedia, removeStoredMedia, usesS3Media } from "../../services/objectStorage";
 import { memberRetreatQuestionnairesRouter } from "./retreatQuestionnaires";
+import { memberRetreatBalancePlansRouter } from "./retreatBalancePlans";
+import { loadGuestBalancePlan } from "../../services/retreatBalancePlans";
 import {
   MEDIA_SELECT,
   SELF_REPORTED_TASKS,
@@ -92,9 +94,21 @@ memberRetreatsRouter.get(
     const memberId = memberIdOf(req);
     const retreat = await loadGuestRetreat(memberId, String(req.params.slug));
     noStore(res);
-    res.json(await buildDashboard(retreat, memberId, { preview: false }));
+    const dashboard = await buildDashboard(retreat, memberId, { preview: false });
+    // The balance plan (migration 230) is null unless the owner has opened one
+    // for this guest. A failure reading it must not take the dashboard down.
+    const balancePlan = await loadGuestBalancePlan(retreat, memberId).catch((err: unknown) => {
+      console.error(`[retreat-balance] could not load the balance plan for member ${memberId}:`, err);
+      return null;
+    });
+    res.json({ ...dashboard, balancePlan });
   }),
 );
+
+/* ───────────────────────────── balance plan ───────────────────────────── */
+
+// Card on file + automatic monthly charges for a guest's remaining balance.
+memberRetreatsRouter.use(memberRetreatBalancePlansRouter);
 
 /* ───────────────────────────── questionnaires ─────────────────────────── */
 
