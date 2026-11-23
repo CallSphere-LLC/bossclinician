@@ -129,10 +129,7 @@ function RetreatScreen({ slug, focusSection }: { slug: string; focusSection?: Re
           <div className="flex flex-col gap-3">
             <p role="alert" className="text-sm font-medium text-red-400">{error.message}</p>
             {error.missing ? (
-              <p className="text-sm text-orchid">
-                If you've booked a retreat and expected to see it here, email{" "}
-                <a className={LINK} href={`mailto:${SUPPORT}`}>{SUPPORT}</a>.
-              </p>
+              <MissingRetreatAccessHelp />
             ) : (
               <div>
                 <button type="button" className={BUTTON_OUTLINE} onClick={() => setAttempt((n) => n + 1)}>
@@ -146,6 +143,22 @@ function RetreatScreen({ slug, focusSection }: { slug: string; focusSection?: Re
       </div>
       {data && <RetreatDashboard data={data} slug={slug} onReload={reload} focusSection={focusSection} />}
     </MemberShell>
+  );
+}
+
+export function MissingRetreatAccessHelp() {
+  return (
+    <div className="flex flex-col gap-2">
+      <p className="text-sm text-orchid">
+        If you booked with a different email than you use to sign in, email{" "}
+        <a className={LINK} href={`mailto:${SUPPORT}`}>{SUPPORT}</a>{" "}
+        for help verifying your booking and restoring access.
+      </p>
+      <p className="text-sm text-orchid">
+        If you expected to see a retreat dashboard here, contact us at{" "}
+        <a className={LINK} href={`mailto:${SUPPORT}`}>{SUPPORT}</a>.
+      </p>
+    </div>
   );
 }
 

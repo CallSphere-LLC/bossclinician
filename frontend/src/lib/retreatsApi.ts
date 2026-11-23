@@ -47,6 +47,7 @@ export type RetreatSectionId =
   | "payments"
   | "guest-connection"
   | "messages"
+  | "access-help"
   | "memories"
   | "feedback"
   | "interest"

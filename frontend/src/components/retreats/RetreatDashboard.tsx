@@ -276,6 +276,20 @@ export function RetreatDashboard({ data, slug, preview, onReload, focusSection }
         )}
       </Section>
 
+      {/* ── Account access help ───────────────────────────────────── */}
+      <Section id="access-help" title="Account Access FAQ">
+        <details className="rounded-xl border border-white/10 px-4 py-3">
+          <summary className="cursor-pointer font-semibold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-gold">
+            I booked with a different email than I use to sign in. What should I do?
+          </summary>
+          <p className="mt-3">
+            Email{" "}
+            <a className={LINK} href="mailto:retreats@bossclinician.com">retreats@bossclinician.com</a>
+            {" "}for help verifying your booking and restoring access to your retreat dashboard.
+          </p>
+        </details>
+      </Section>
+
       {/* ── After the retreat ──────────────────────────────────────── */}
       {showPost(data.memories.available) && (
         <Section id="memories" title="Retreat Memories" tag={data.memories.available ? undefined : HIDDEN_TAG}>

@@ -168,6 +168,14 @@ describe("RetreatDashboard", () => {
     expect(html).toContain("mailto:retreats@bossclinician.com");
   });
 
+  it("shows the email mismatch FAQ for guests who have retreat dashboard access", () => {
+    const html = render(fixture());
+    expect(html).toContain("Account Access FAQ");
+    expect(html).toContain("I booked with a different email than I use to sign in. What should I do?");
+    expect(html).toContain("help verifying your booking and restoring access to your retreat dashboard.");
+    expect(html).toContain("mailto:retreats@bossclinician.com");
+  });
+
   it("shows figures from complete payment records in the body font", () => {
     const html = render(fixture());
     expect(html).toContain("$5,500.00");
@@ -246,5 +254,12 @@ describe("RetreatDashboard", () => {
     expect(html).not.toContain("Retreat Memories");
     expect(html).not.toContain("Your Reflection");
     expect(html).not.toContain("Join Us Again");
+  });
+
+  it("preserves the future-retreat signup section when it is enabled", () => {
+    const html = render(fixture({ joinUsAgain: { available: true, intro: "Keep in touch", cards: [] } }));
+    expect(html).toContain("Join Us Again");
+    expect(html).toContain("Keep in touch");
+    expect(html).toContain("Keep me posted on future retreats");
   });
 });
