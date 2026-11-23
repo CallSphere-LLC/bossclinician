@@ -56,7 +56,8 @@ describe("Club bonus copy", () => {
     const sentence =
       "Buyers who registered and purchased with different email addresses can contact support@bossclinician.com for eligibility verification.";
     expect(clubCheckout.bonuses.find((b) => b.label === RAMP_UP_BONUS_LABEL)?.body).toContain(sentence);
-    expect(club.faq.items.some((item) => item.a === sentence)).toBe(true);
+    // 23 Nov 2026 item 13: the FAQ answer is now her own wording.
+    expect(club.faq.items.some((item) => item.a.startsWith("Yes—if your purchase meets the bonus requirements") && item.a.includes("support@bossclinician.com"))).toBe(true);
   });
 });
 

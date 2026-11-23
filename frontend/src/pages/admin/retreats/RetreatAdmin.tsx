@@ -360,12 +360,12 @@ function SettingsTab({ detail, onSaved }: { detail: AdminRetreatDetail; onSaved:
             value={s.flightGuidance.status}
             onChange={(e) => patch("flightGuidance", { ...s.flightGuidance, status: e.target.value as RetreatSettings["flightGuidance"]["status"] })}
           >
-            <option value="researching">Researching</option>
+            <option value="researching">Book when ready (flight info to follow)</option>
             <option value="recommendations_available">Recommendations available</option>
             <option value="booking_encouraged">Booking encouraged</option>
           </Select>
         </Field>
-        <Field label="Flight guidance note" hint="Make no airfare or route promises">
+        <Field label="Flight guidance note" hint="Add flight information here when you have it. Make no airfare or route promises">
           <Textarea rows={3} value={s.flightGuidance.note} onChange={(e) => patch("flightGuidance", { ...s.flightGuidance, note: e.target.value })} />
         </Field>
         <Field label="Airport transportation note" className="sm:col-span-2">

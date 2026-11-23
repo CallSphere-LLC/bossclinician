@@ -318,7 +318,9 @@ function ShuttleWindows({ data }: { data: RetreatDashboardData }) {
 }
 
 const FLIGHT_GUIDANCE: Record<RetreatDashboardData["flightGuidance"]["status"], string> = {
-  researching: "We're researching flight options — please hold off on booking for now.",
+  // Yvette, 23 Nov 2026 (item 4): no "hold off" instruction.
+  researching:
+    "You’re welcome to book your flights when you find an option that works for you. If you haven’t found a flight yet, I’ll share flight information to help with your planning.",
   recommendations_available: "Flight recommendations are available.",
   booking_encouraged: "You can go ahead and book your flights.",
 };

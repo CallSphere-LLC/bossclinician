@@ -139,6 +139,23 @@ export interface EnrolSweepResult {
   detail: string;
 }
 
+/**
+ * Contacts never put into the alumni sequence, whatever they hold (Yvette,
+ * 23 Nov 2026 item 7: "exclude my account from the guest alumni email sequence
+ * while keeping my access to review and manage the retreat dashboard").
+ * settings.retreat_alumni.excludedEmails (migration 229), lower-cased. Their
+ * grants and dashboard access are untouched; contacts.is_internal is not used.
+ */
+export async function alumniExcludedEmails(): Promise<Set<string>> {
+  const r = await pool.query<{ value: { excludedEmails?: unknown } | null }>(
+    `SELECT value FROM settings WHERE key = 'retreat_alumni'`
+  );
+  const raw = r.rows[0]?.value?.excludedEmails;
+  return new Set(
+    Array.isArray(raw) ? raw.filter((e): e is string => typeof e === "string").map((e) => e.trim().toLowerCase()) : []
+  );
+}
+
 /** The hourly job `retreatAlumni.enrol`. Does nothing while the sequence is not active. */
 export async function enrolRetreatAlumni(now: Date = new Date()): Promise<EnrolSweepResult> {
   const sequence = await alumniSequence();
@@ -161,10 +178,12 @@ export async function enrolRetreatAlumni(now: Date = new Date()): Promise<EnrolS
     [now, ENROL_WINDOW_DAYS]
   );
 
+  const excluded = await alumniExcludedEmails();
   let enrolled = 0;
   for (const retreat of retreats.rows) {
     const guests = await retreatGuests(retreat.id);
     for (const guest of guests) {
+      if (excluded.has(guest.email.trim().toLowerCase())) continue;
       const seen = await pool.query(
         `SELECT 1 FROM retreat_alumni_enrolments WHERE retreat_id = $1 AND contact_id = $2`,
         [retreat.id, guest.contactId]
@@ -368,7 +387,10 @@ export async function alumniPreview(slug: string, sampleFirstName = ALUMNI_PREVI
     [row.id]
   );
   const enrolledIds = new Set(enrolledRes.rows.map((x) => x.contact_id));
-  const guests = row.product_id ? await retreatGuests(row.id) : [];
+  const excludedAlumni = await alumniExcludedEmails();
+  const guests = (row.product_id ? await retreatGuests(row.id) : []).filter(
+    (g) => !excludedAlumni.has(g.email.trim().toLowerCase())
+  );
   for (const g of guests) {
     if (g.marketingStatus && !["subscribed", "unconfirmed"].includes(g.marketingStatus)) {
       gaps.push(`${g.email} is '${g.marketingStatus}': they will get none of the four emails.`);

@@ -454,7 +454,7 @@ export const club = {
       // Round 2 (22 Nov, item 2): her sentence for a different purchase email.
       {
         q: "I registered and purchased with different email addresses. Can I still receive the bonus?",
-        a: "Buyers who registered and purchased with different email addresses can contact support@bossclinician.com for eligibility verification.",
+        a: "Yes—if your purchase meets the bonus requirements and was completed within your original 14-day eligibility window. Email support@bossclinician.com with the email addresses you used to register and purchase so we can verify eligibility and help with access.",
       },
     ],
     cta: "SAY LESS.. I'M READY TO JOIN THE CLUB",

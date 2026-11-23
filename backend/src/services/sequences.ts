@@ -1562,6 +1562,13 @@ export async function sendDueEmail(
       Object.assign(values, await loungeMergeValuesSafe(client));
     }
 
+    // Migration 228: {{retreat_room_*}} in the Retreat Deposit email, from the
+    // guest's confirmed room (shared-room lines only for shared-room guests).
+    if (/\{\{\s*retreat_room_/.test(`${email.subject}${email.body_md}${email.preview_text ?? ""}`)) {
+      const { retreatRoomMergeValuesSafe } = await import("./retreatRoomBlock");
+      Object.assign(values, await retreatRoomMergeValuesSafe(client, contact.email));
+    }
+
     // A retreat link the email uses but cannot fill (Email 4 before the owner
     // sets "what's next") holds the email instead of sending a dead button.
     // The late limit above drops it if it is never filled in.
