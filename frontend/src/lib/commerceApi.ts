@@ -17,6 +17,7 @@ import type { CartSelection } from "./cart";
  */
 
 import { MemberApiError, memberRequest } from "@/lib/memberApi";
+import type { CountdownStatus, OfferDeadlineInfo } from "@/lib/countdown";
 
 const API_BASE = (import.meta.env.VITE_API_BASE as string | undefined) ?? "/api";
 
@@ -187,6 +188,11 @@ export interface PublicOffer {
   checkoutRequirements?: CheckoutRequirements | null;
   /** Lounge only: founding/standard phase, seats and waitlist for this viewer (backend services/loungeSeats.ts). */
   seatPricing?: import("@/content/loungePricing").LoungeSeatPricing | null;
+  /**
+   * When this sale closes: the offer's own deadline, the same for every price
+   * option. Null or absent when the offer has none. Sheet row 250.
+   */
+  deadline?: OfferDeadlineInfo | null;
 }
 
 export interface CheckoutAcknowledgmentView {
@@ -354,16 +360,125 @@ async function publicGet<T>(path: string): Promise<T> {
   return (await res.json()) as T;
 }
 
+/* ── Sale deadlines ─────────────────────────────────────────────────────── */
+
+/**
+ * Where an offer's sale stands right now: its deadline, whether it has closed
+ * and where visitors go once it has. Public and never cached, because the
+ * answer changes at the deadline. Rejects with a 404 for an unknown offer.
+ */
+export async function fetchCountdownStatus(slug: string): Promise<CountdownStatus> {
+  const res = await fetch(`${API_BASE}/countdown/${encodeURIComponent(slug)}/status`, {
+    cache: "no-store",
+  });
+  if (!res.ok) throw await publicError(res);
+  return (await res.json()) as CountdownStatus;
+}
+
+/**
+ * The offer's sale has ended (HTTP 410, `code: "offer_closed"`).
+ *
+ * `redirectTo` is the site path the owner chose for latecomers, usually the
+ * regular-price offer's checkout, or '' when there is nowhere to send them.
+ */
+export class OfferClosedError extends Error {
+  // A plain Error rather than a MemberApiError subclass: a subclass would read
+  // that class while this module loads, which breaks any test that stubs the
+  // member client without it.
+  readonly status = 410;
+  redirectTo: string;
+  constructor(message: string, redirectTo: string) {
+    super(message);
+    this.name = "OfferClosedError";
+    this.redirectTo = redirectTo;
+  }
+}
+
+/** True for any "this sale has ended" refusal, with or without a destination. */
+export function isOfferClosed(err: unknown): boolean {
+  return err instanceof OfferClosedError || (err instanceof MemberApiError && err.status === 410);
+}
+
+/**
+ * Only a path on this site: one leading slash, never `//host` or `/\host`,
+ * which a browser would read as another website.
+ */
+export function sitePath(value: unknown): string {
+  return typeof value === "string" && /^\/(?![/\\])[^\s\\]*$/.test(value) ? value : "";
+}
+
+/**
+ * The destination a "sale has ended" refusal carries in its `details`
+ * (`{ code: "offer_closed", redirectTo }`, which the server sends on every 410
+ * and the shared request client keeps on `MemberApiError.details`).
+ *
+ * A string, possibly '', when the refusal is that one: '' is a complete answer
+ * meaning the owner named nowhere to go. `null` when the details are missing
+ * or are some other refusal's, so the caller knows it has not been told.
+ */
+export function closedDetailsRedirect(details: unknown): string | null {
+  if (typeof details !== "object" || details === null) return null;
+  const { code, redirectTo } = details as { code?: unknown; redirectTo?: unknown };
+  if (code !== "offer_closed") return null;
+  return sitePath(redirectTo);
+}
+
+/** Where a closed offer sends its visitors; '' when the refusal named nowhere. */
+export function closedRedirect(err: unknown): string {
+  if (err instanceof OfferClosedError) return err.redirectTo;
+  // A 410 that reached the page unwrapped (the cart's quote) still says where.
+  if (err instanceof MemberApiError && err.status === 410) return closedDetailsRedirect(err.details) ?? "";
+  return "";
+}
+
+/**
+ * Turns a 410 into an `OfferClosedError` that knows where to send the visitor.
+ *
+ * The destination is read from the refusal itself: the server answers
+ * `details: { code: "offer_closed", redirectTo }` and the shared request
+ * client keeps `details` on the error, so no second request is needed. Only a
+ * 410 that arrives without those details (an older server, a proxy's own 410)
+ * falls back to asking the countdown status for `afterCloseUrl`; if that read
+ * fails too the visitor simply sees the "offer has ended" message.
+ */
+async function closedOffer(slug: string, err: MemberApiError): Promise<OfferClosedError> {
+  let redirectTo = closedDetailsRedirect(err.details);
+  if (redirectTo === null) {
+    try {
+      redirectTo = sitePath((await fetchCountdownStatus(slug)).afterCloseUrl);
+    } catch {
+      // No destination is a complete answer.
+      redirectTo = "";
+    }
+  }
+  return new OfferClosedError(err.message || "This offer has ended.", redirectTo);
+}
+
+async function withClosedOffer<T>(slug: string, call: Promise<T>): Promise<T> {
+  try {
+    return await call;
+  } catch (err) {
+    if (err instanceof MemberApiError && err.status === 410) throw await closedOffer(slug, err);
+    throw err;
+  }
+}
+
 /* ── Calls ──────────────────────────────────────────────────────────────── */
 
 export const commerceApi = {
-  /** The sales side of an offer: price, order-form fields, bumps and upsells. */
+  /**
+   * The sales side of an offer: price, order-form fields, bumps and upsells.
+   * Rejects with `OfferClosedError` once the offer's sale deadline has passed.
+   */
   getOffer: (slug: string, option?: string | null) =>
-    memberRequest<PublicOffer>(
-      `/offers/${encodeURIComponent(slug)}${
-        // `?option=` from a shared checkout link: which price starts selected.
-        option && /^\d{1,9}$/.test(option) ? `?option=${option}` : ""
-      }`,
+    withClosedOffer(
+      slug,
+      memberRequest<PublicOffer>(
+        `/offers/${encodeURIComponent(slug)}${
+          // `?option=` from a shared checkout link: which price starts selected.
+          option && /^\d{1,9}$/.test(option) ? `?option=${option}` : ""
+        }`,
+      ),
     ),
 
   /**
@@ -383,12 +498,16 @@ export const commerceApi = {
    * Opens the order and returns whatever Stripe needs to collect the money.
    *
    * The order is written `pending`; nothing has been paid when this resolves.
+   * Rejects with `OfferClosedError` when the sale ended before the order began.
    */
   createCheckout: (slug: string, input: CheckoutInput) =>
-    memberRequest<CheckoutResult>(`/checkout/offer/${encodeURIComponent(slug)}`, {
-      method: "POST",
-      body: JSON.stringify(input),
-    }),
+    withClosedOffer(
+      slug,
+      memberRequest<CheckoutResult>(`/checkout/offer/${encodeURIComponent(slug)}`, {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
+    ),
   /** Whether to offer PayPal at all; nothing about the credentials. */
   paypalConfig: () => memberRequest<{enabled:boolean; environment:"sandbox"|"live"|null}>("/checkout/paypal/config"),
   capturePayPal: (orderId:number, orderToken:string, paypalOrderId:string) =>

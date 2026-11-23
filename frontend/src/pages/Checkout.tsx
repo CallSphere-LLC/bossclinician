@@ -1,6 +1,6 @@
 import { addToCart, writeCart } from "@/lib/cart";
-import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
-import { Link, useNavigate, useParams } from "react-router";
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { Link, useLocation, useNavigate, useParams } from "react-router";
 import { Elements, ExpressCheckoutElement, PaymentElement, useElements, useStripe } from "@stripe/react-stripe-js";
 import type { StripeElementsOptions, StripeExpressCheckoutElementConfirmEvent } from "@stripe/stripe-js";
 import { motion, useReducedMotion } from "motion/react";
@@ -28,9 +28,13 @@ import { useOfferQuote } from "@/components/checkout/useOfferQuote";
 import { PREVIEW_CART_NOTICE, PREVIEW_SUBMIT_NOTICE, useCheckoutPreview } from "@/components/checkout/checkoutPreview";
 import { useMember } from "@/hooks/useMember";
 import { useSiteTheme } from "@/lib/siteTheme";
+import { OfferCountdown } from "@/components/countdown/OfferCountdown";
+import type { OfferDeadlineInfo } from "@/lib/countdown";
 import {
+  closedRedirect,
   commerceApi,
   commerceErrorMessage,
+  isOfferClosed,
   type CheckoutInput,
   type CheckoutResult,
   type PublicOffer,
@@ -74,31 +78,193 @@ const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
  */
 export default function Checkout() {
   const { offerSlug = "" } = useParams<{ offerSlug: string }>();
+  const navigate = useNavigate();
+  const location = useLocation();
   const [offer, setOffer] = useState<PublicOffer | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+
+  /* ---- sale deadline (sheet row 250) ---- */
+
+  // The offer's own deadline: one clock for the whole offer, the same whichever
+  // price option is chosen (a price option's own closing date never moves it).
+  // Held beside `offer` because it is stamped with when it arrived, so the
+  // timer compares the server's clock with the right moment on this device
+  // even if the banner mounts later. When the countdown reaches zero and the
+  // server says the sale is still on, the whole offer is replaced with the
+  // fresh answer (see `deadlineReached`), not only this.
+  const [saleClock, setSaleClock] = useState<{ deadline: OfferDeadlineInfo | null; receivedAtMs: number }>({
+    deadline: null,
+    receivedAtMs: 0,
+  });
+  const deadline = saleClock.deadline;
+  const setDeadline = useCallback(
+    (next: OfferDeadlineInfo | null) => setSaleClock({ deadline: next, receivedAtMs: Date.now() }),
+    [],
+  );
+  // The sale is over and there is nowhere to send the visitor.
+  const [ended, setEnded] = useState(false);
+  // True from the moment an order is being opened: that buyer started before
+  // the deadline and is allowed to finish paying, so the page stays put.
+  const orderInFlight = useRef(false);
+  // The countdown reached zero while a submit was running, so the check waited.
+  const expiryDeferred = useRef(false);
+  // How many times each deadline has been checked at zero, so it cannot loop.
+  const expiryChecks = useRef<{ endsAt: string; count: number }>({ endsAt: "", count: 0 });
+  const recheckTimer = useRef<number | undefined>(undefined);
+  // One line carried over by the redirect from an offer that has just ended.
+  const arrivalNotice = (location.state as { notice?: unknown } | null)?.notice;
+
+  // Read through refs so the callbacks below keep one identity for the life of
+  // the page: the load effect depends on them and must only re-run for a new offer.
+  const navigateRef = useRef(navigate);
+  const slugRef = useRef(offerSlug);
+  // How many closed offers in a row sent the visitor on to reach this page.
+  const closedHops = Number((location.state as { closedHops?: unknown } | null)?.closedHops) || 0;
+  const closedHopsRef = useRef(closedHops);
+  useEffect(() => {
+    navigateRef.current = navigate;
+    slugRef.current = offerSlug;
+    closedHopsRef.current = closedHops;
+  });
+
+  const offerClosed = useCallback((redirectTo: string) => {
+    const target = redirectTo.split(/[?#]/)[0];
+    // A destination that is this very page would only bounce the visitor back
+    // into the same refusal, so it counts as no destination. So does a chain of
+    // closed offers that point at one another: after a few hops it stops here.
+    if (redirectTo && target !== window.location.pathname && closedHopsRef.current < MAX_CLOSED_HOPS) {
+      navigateRef.current(redirectTo, {
+        replace: true,
+        state: { notice: OFFER_ENDED_NOTICE, closedHops: closedHopsRef.current + 1 },
+      });
+      return;
+    }
+    setEnded(true);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
     setOffer(null);
     setLoadError(null);
+    setDeadline(null);
+    setEnded(false);
+    orderInFlight.current = false;
+    expiryDeferred.current = false;
 
     commerceApi
       .getOffer(offerSlug, new URLSearchParams(window.location.search).get("option"))
       .then((result) => {
-        if (!cancelled) setOffer(result);
+        if (cancelled) return;
+        setOffer(result);
+        setDeadline(result.deadline ?? null);
       })
       .catch((err: unknown) => {
-        if (!cancelled) {
-          setLoadError(
-            commerceErrorMessage(err, "We couldn't open this checkout. Please try again.")
-          );
+        if (cancelled) return;
+        if (isOfferClosed(err)) {
+          offerClosed(closedRedirect(err));
+          return;
         }
+        setLoadError(
+          commerceErrorMessage(err, "We couldn't open this checkout. Please try again.")
+        );
       });
 
     return () => {
       cancelled = true;
+      window.clearTimeout(recheckTimer.current);
     };
-  }, [offerSlug]);
+  }, [offerSlug, offerClosed, setDeadline]);
+
+  /**
+   * The countdown reached zero: ask the server, quietly, whether the sale has
+   * really closed. The form stays mounted while it asks, so a card half typed
+   * is not thrown away on the strength of a browser timer.
+   */
+  const deadlineReached = useCallback(() => {
+    const endsAt = deadline?.endsAt ?? "";
+    if (expiryChecks.current.endsAt !== endsAt) expiryChecks.current = { endsAt, count: 0 };
+    if (orderInFlight.current) {
+      // Looked at again by the form if that submit ends without an order.
+      expiryDeferred.current = true;
+      return;
+    }
+    expiryDeferred.current = false;
+    if (expiryChecks.current.count >= 2) return;
+    expiryChecks.current.count += 1;
+    const slug = offerSlug;
+
+    commerceApi
+      .getOffer(slug, new URLSearchParams(window.location.search).get("option"))
+      .then((fresh) => {
+        if (slug !== slugRef.current || orderInFlight.current) return;
+        // The whole offer, not only its deadline: whatever else changed at that
+        // moment (a price option that closed, a price the owner edited) reaches
+        // the form too. What the buyer has typed is the form's own state and
+        // stays; if the chosen price is gone the form moves to the first left.
+        setOffer(fresh);
+        const next = fresh.deadline ?? null;
+        if (next?.endsAt !== endsAt) {
+          // The owner extended or removed the deadline: carry on with the new one.
+          setDeadline(next);
+          return;
+        }
+        // Same deadline: the clock is left as it is. Stamping it again would
+        // start the timer over at zero and use up the checks below.
+        // Still open by the server's clock, which is the one that counts. One
+        // more look a few seconds on; after that the server's own refusal of a
+        // late order is the backstop.
+        window.clearTimeout(recheckTimer.current);
+        recheckTimer.current = window.setTimeout(deadlineReached, 5000);
+      })
+      .catch((err: unknown) => {
+        if (slug !== slugRef.current || orderInFlight.current) return;
+        if (isOfferClosed(err)) offerClosed(closedRedirect(err));
+        // Any other failure changes nothing on a page that is still usable.
+      });
+  }, [deadline?.endsAt, offerClosed, offerSlug, setDeadline]);
+
+  const sale = useMemo<CheckoutSale>(
+    () => ({
+      deadline,
+      deadlineReceivedAtMs: saleClock.receivedAtMs,
+      onExpire: deadlineReached,
+      onClosed: offerClosed,
+      orderInFlight,
+      expiryDeferred,
+    }),
+    [deadline, saleClock.receivedAtMs, deadlineReached, offerClosed],
+  );
+
+  if (ended) {
+    return (
+      <>
+        <Seo title="Offer ended - Boss Clinician" />
+        <CheckoutShell>
+          <GlassCard
+            accent="plum"
+            interactive={false}
+            className="mx-auto max-w-xl px-6 py-10 text-center sm:px-10"
+          >
+            <h1 className="font-display text-[1.8rem] leading-tight text-white">
+              This offer has ended
+            </h1>
+            <p className="copy-luxe mt-4">
+              The sale for this offer has closed, so it can no longer be bought here. Everything
+              available right now is in the store.
+            </p>
+            <div className="mt-8 flex flex-wrap justify-center gap-4">
+              <LuxeButton variant="foil" to="/store" className="min-h-[44px]">
+                Visit the store
+              </LuxeButton>
+              <LuxeButton variant="outline" to="/contact" className="min-h-[44px]">
+                Get in touch
+              </LuxeButton>
+            </div>
+          </GlassCard>
+        </CheckoutShell>
+      </>
+    );
+  }
 
   if (loadError !== null) {
     return (
@@ -155,10 +321,42 @@ export default function Checkout() {
         description={checkoutPlainText(offer.description).slice(0, 160) || `Complete your order for ${offer.title}.`}
       />
       <CheckoutShell>
-        <CheckoutExperience offer={offer} />
+        {typeof arrivalNotice === "string" && arrivalNotice !== "" && (
+          <div role="status" className="mx-auto mb-5 max-w-5xl">
+            <Notice tone="gold">{arrivalNotice}</Notice>
+          </div>
+        )}
+        <CheckoutExperience offer={offer} sale={sale} />
       </CheckoutShell>
     </>
   );
+}
+
+/** Shown on the page a visitor is sent to when the offer they opened has closed. */
+const OFFER_ENDED_NOTICE = "That offer has ended. Here is the current offer.";
+/** Closed offers pointing at each other must not bounce a visitor for ever. */
+const MAX_CLOSED_HOPS = 2;
+
+/**
+ * What `/checkout/:offerSlug` hands the form so a sale deadline can be acted on.
+ *
+ * Only that page passes it. The cart, the Club checkout and the admin preview
+ * mount `CheckoutExperience` without it and behave exactly as they did: the
+ * banner is drawn if their offer carries a deadline, and nothing redirects.
+ */
+export interface CheckoutSale {
+  /** The deadline to count down to, kept current by the page. */
+  deadline: OfferDeadlineInfo | null;
+  /** `Date.now()` when that deadline reached this browser. */
+  deadlineReceivedAtMs: number;
+  /** The countdown reached zero. */
+  onExpire: () => void;
+  /** The server refused a new order because the sale has ended. */
+  onClosed: (redirectTo: string) => void;
+  /** Set while an order is being opened or has been opened on this page. */
+  orderInFlight: { current: boolean };
+  /** Set when zero was reached during a submit, so the check is owed. */
+  expiryDeferred: { current: boolean };
 }
 
 export function CheckoutShell({ children }: { children: ReactNode }) {
@@ -216,7 +414,9 @@ function elementsModeFor(offer: PublicOffer): ElementsMode {
  * option, and the form needs `useStripe`/`useElements`, which only exist inside
  * `Elements`.
  */
-export function CheckoutExperience({ offer }: { offer: PublicOffer }) {
+export function CheckoutExperience({ offer, sale }: { offer: PublicOffer; sale?: CheckoutSale }) {
+  // The page's own copy of the deadline when it keeps one, else the offer's.
+  const saleDeadline = sale ? sale.deadline : (offer.deadline ?? null);
   const [pricingOptionId, setPricingOptionId] = useState<number | null>(() => {
     // /lounge sends ?membership=monthly|annual so the buyer lands on what they picked.
     const wanted = typeof window === "undefined" ? null : new URLSearchParams(window.location.search).get("membership");
@@ -240,7 +440,12 @@ export function CheckoutExperience({ offer }: { offer: PublicOffer }) {
   // theme toggle repaints the card field without remounting (and emptying) it.
   const siteTheme = useSiteTheme();
 
-  useEffect(() => setAmountCents(selectedPricing.quote.totalCents), [selectedPricing]);
+  // Keyed on the option and its list total, not on the object: the page hands
+  // over a fresh offer when a sale countdown reaches zero, and an unchanged
+  // price must not put the list total back over a couponed one.
+  const selectedPricingId = selectedPricing.id;
+  const selectedListTotalCents = selectedPricing.quote.totalCents;
+  useEffect(() => setAmountCents(selectedListTotalCents), [selectedPricingId, selectedListTotalCents]);
 
   function choosePricingOption(option: PublicPricingOption) {
     setAmountCents(option.quote.totalCents);
@@ -282,6 +487,16 @@ export function CheckoutExperience({ offer }: { offer: PublicOffer }) {
 
   return (
     <div className="space-y-5">
+      {/* Mounted whenever there is a deadline, even with the banner switched
+          off (it then draws nothing), so reaching zero is still noticed. */}
+      {saleDeadline && (
+        <OfferCountdown
+          deadline={saleDeadline}
+          receivedAtMs={sale?.deadlineReceivedAtMs}
+          onExpire={sale?.onExpire}
+          className="mx-auto max-w-5xl"
+        />
+      )}
       {offer.seatPricing && <LoungeSeatNotice slug={offer.slug} seatPricing={offer.seatPricing} />}
       {offer.pricingOptions.length > 1 && (
         <GlassCard accent="plum" interactive={false} className="mx-auto max-w-5xl p-4 sm:p-5">
@@ -289,7 +504,10 @@ export function CheckoutExperience({ offer }: { offer: PublicOffer }) {
             <legend className="px-1 text-sm font-semibold text-white">Choose your option</legend>
             <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
               {offer.pricingOptions.map((option) => {
-                const selected = option.id === pricingOptionId;
+                // The price the form is charging. A refreshed offer may no longer
+                // list the one first chosen (it closed on its own date); the form
+                // has then moved to the first one left, and so does this mark.
+                const selected = option.id === selectedPricing.id;
                 return (
                   <label key={option.id ?? "base"} className={cn(
                     "flex min-h-16 cursor-pointer items-center gap-3 rounded-xl border px-4 py-3 transition-colors",
@@ -325,7 +543,7 @@ export function CheckoutExperience({ offer }: { offer: PublicOffer }) {
         </GlassCard>
       )}
       <Elements key={`${pricingOptionId ?? "base"}:${mode}`} stripe={stripePromise} options={options}>
-        <CheckoutForm offer={pricedOffer} pricingOption={selectedPricing} mode={mode} onAmountChange={setAmountCents} />
+        <CheckoutForm offer={pricedOffer} pricingOption={selectedPricing} mode={mode} onAmountChange={setAmountCents} sale={sale} />
       </Elements>
     </div>
   );
@@ -338,9 +556,10 @@ interface CheckoutFormProps {
   pricingOption: PublicPricingOption;
   mode: ElementsMode;
   onAmountChange: (cents: number) => void;
+  sale?: CheckoutSale;
 }
 
-function CheckoutForm({ offer, pricingOption, mode, onAmountChange }: CheckoutFormProps) {
+function CheckoutForm({ offer, pricingOption, mode, onAmountChange, sale }: CheckoutFormProps) {
   const navigate = useNavigate();
   const stripe = useStripe();
   const elements = useElements();
@@ -596,6 +815,9 @@ function CheckoutForm({ offer, pricingOption, mode, onAmountChange }: CheckoutFo
     captureEmail();
 
     setSubmitting(true);
+    // An order is being opened: if the sale deadline passes from here on, this
+    // buyer is left to finish rather than being sent away mid-payment.
+    if (sale) sale.orderInFlight.current = true;
     try {
       if (paymentRequired && provider === "stripe") {
         if (!stripe || !elements) {
@@ -709,10 +931,26 @@ function CheckoutForm({ offer, pricingOption, mode, onAmountChange }: CheckoutFo
       }
       finish(checkout);
     } catch (err) {
+      // The sale closed before this order could be opened. Nothing was charged:
+      // the server refuses before it creates anything. On the offer's own page
+      // the visitor goes where a latecomer goes; the cart keeps its inline error.
+      if (sale && !offer.cartItems && opened.current === null && isOfferClosed(err)) {
+        sale.orderInFlight.current = false;
+        sale.expiryDeferred.current = false;
+        sale.onClosed(closedRedirect(err));
+        return;
+      }
       setPaymentError(commerceErrorMessage(err));
     } finally {
       wallet?.paymentFailed({ reason: "fail" });
       setSubmitting(false);
+      // Stays set once an order exists, so its buyer can retry a declined card.
+      if (sale) {
+        sale.orderInFlight.current = opened.current !== null;
+        // The deadline passed during a submit that opened no order (a card
+        // field error, say): run the check that waited for it.
+        if (opened.current === null && sale.expiryDeferred.current) sale.onExpire();
+      }
     }
   }
 

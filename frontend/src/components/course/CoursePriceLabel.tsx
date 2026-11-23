@@ -40,6 +40,11 @@ export interface CourseOffer {
   intervalCount: number;
   installmentCount: number | null;
   checkoutHeadline: string;
+  /**
+   * When this offer's sale closes, whether it already has and where its button
+   * then leads; null or absent when it has no deadline.
+   */
+  deadline?: import("@/lib/countdown").CourseOfferDeadlineInfo | null;
 }
 
 /** What `GET /api/courses/:slug` answers with, and what the SSR payload seeds. */

@@ -14,7 +14,10 @@ vi.mock("../../services/paymentLinks", () => ({
   deactivateRepricedPaymentLinks: (...args: unknown[]) => deactivateRepricedPaymentLinks(...(args as [])),
   listOfferPaymentLinks: vi.fn(async () => []),
   paymentLinkSupport: vi.fn(() => ({ supported: true })),
+  SALE_DEADLINE_LINK_REASON: "This offer has a sale deadline.",
+  SALE_ENDED_LINK_REASON: "This offer's sale has ended.",
 }));
+vi.mock("../../services/siteTime", () => ({ siteTimeZone: vi.fn(async () => "America/Los_Angeles") }));
 vi.mock("../../services/settings", () => ({
   readSetting: vi.fn(async (key: string) =>
     key === "notifications"
@@ -231,5 +234,129 @@ describe("PUT /admin/offers/:id/notifications", () => {
     expect(body.recoveryMode).toBe("custom");
     expect(body.recoveryOverrides).toEqual({ hours0: 0.5, subject0: "ZZ Come back" });
     expect(body.defaults.notifyEmail).toBe("owner@example.test");
+  });
+});
+
+/** Sale deadline and countdown (migration 231, QA row 250). */
+describe("PUT /admin/offers/:id sale deadline", () => {
+  const oneTime = {
+    ...legacyPlan,
+    pricing_type: "one_time",
+    interval: null,
+    installment_count: null,
+    trial_days: 0,
+    sales_end_at: null,
+    after_close_offer_id: null,
+    after_close_path: "",
+    show_countdown: true,
+  };
+  const END = "2026-12-05T07:59:00.000Z";
+
+  beforeEach(() => {
+    query.mockReset();
+    deactivateRepricedPaymentLinks.mockClear();
+  });
+
+  it("saves the deadline, the fallback page and the countdown switch, and retires Stripe payment links", async () => {
+    query.mockResolvedValueOnce({ rows: [oneTime] });
+    query.mockResolvedValueOnce({ rows: [{ ...oneTime, sales_end_at: END, after_close_path: "/store", show_countdown: false }] });
+    const { error, body } = await put("7", { salesEndAt: "2026-12-04T23:59:00-08:00", afterClosePath: " /store ", showCountdown: false });
+    expect(error).toBeUndefined();
+    const [sql, params] = query.mock.calls[1] as [string, unknown[]];
+    expect(sql).toMatch(/sales_end_at\s+= \$33/);
+    expect(sql).toMatch(/show_countdown\s+= \$36/);
+    expect(params.slice(32, 36)).toEqual([END, null, "/store", false]);
+    expect(body).toMatchObject({ salesEndAt: END, afterClosePath: "/store", showCountdown: false, afterCloseOfferId: null });
+    // A Stripe-hosted link would keep selling after the deadline.
+    expect(deactivateRepricedPaymentLinks).toHaveBeenCalledWith(7, "all");
+  });
+
+  it("leaves the deadline alone when the edit does not mention it", async () => {
+    const withDeadline = { ...oneTime, sales_end_at: END, after_close_offer_id: 9, after_close_path: "/store", show_countdown: false };
+    query.mockResolvedValueOnce({ rows: [withDeadline] });
+    query.mockResolvedValueOnce({ rows: [{ ...withDeadline, internal_title: "x" }] });
+    const { error } = await put("7", { internalTitle: "x" });
+    expect(error).toBeUndefined();
+    expect(query).toHaveBeenCalledTimes(2);
+    expect((query.mock.calls[1] as [string, unknown[]])[1].slice(32, 36)).toEqual([END, 9, "/store", false]);
+    expect(deactivateRepricedPaymentLinks).not.toHaveBeenCalled();
+  });
+
+  it("clears the deadline with null", async () => {
+    query.mockResolvedValueOnce({ rows: [{ ...oneTime, sales_end_at: END }] });
+    query.mockResolvedValueOnce({ rows: [oneTime] });
+    const { error } = await put("7", { salesEndAt: null });
+    expect(error).toBeUndefined();
+    expect((query.mock.calls[1] as [string, unknown[]])[1][32]).toBeNull();
+    expect(deactivateRepricedPaymentLinks).not.toHaveBeenCalled();
+  });
+
+  it("refuses a date with no time zone on it", async () => {
+    const { error } = await put("7", { salesEndAt: "2026-12-04T23:59" });
+    expect(error?.status).toBe(400);
+    expect(query).not.toHaveBeenCalled();
+  });
+
+  it("refuses a destination on another website", async () => {
+    for (const afterClosePath of ["https://evil.example/x", "//evil.example", "/\\evil.example", "store"]) {
+      query.mockReset();
+      query.mockResolvedValueOnce({ rows: [oneTime] });
+      const { error } = await put("7", { afterClosePath });
+      expect(error?.status).toBe(400);
+      expect(error?.details?.fieldErrors?.afterClosePath?.[0]).toMatch(/page on this site/);
+      expect(query).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it("refuses the offer's own checkout as the destination", async () => {
+    query.mockResolvedValueOnce({ rows: [oneTime] });
+    const { error } = await put("7", { afterClosePath: "/checkout/reset-plan" });
+    expect(error?.details?.fieldErrors?.afterClosePath?.[0]).toMatch(/own checkout/);
+  });
+
+  it("refuses the offer itself as the fallback offer", async () => {
+    query.mockResolvedValueOnce({ rows: [oneTime] });
+    const { error } = await put("7", { afterCloseOfferId: 7 });
+    expect(error?.status).toBe(400);
+    expect(error?.details?.fieldErrors?.afterCloseOfferId?.[0]).toMatch(/itself/);
+    expect(query).toHaveBeenCalledTimes(1);
+  });
+
+  it("refuses a fallback offer that does not exist", async () => {
+    query.mockResolvedValueOnce({ rows: [oneTime] });
+    query.mockResolvedValueOnce({ rows: [] });
+    const { error } = await put("7", { afterCloseOfferId: 99 });
+    expect(error?.details?.fieldErrors?.afterCloseOfferId?.[0]).toMatch(/no longer exists/);
+  });
+
+  it("saves a fallback offer that exists", async () => {
+    query.mockResolvedValueOnce({ rows: [oneTime] });
+    query.mockResolvedValueOnce({ rows: [{ "?column?": 1 }] });
+    query.mockResolvedValueOnce({ rows: [{ ...oneTime, after_close_offer_id: 9 }] });
+    const { error, body } = await put("7", { afterCloseOfferId: 9 });
+    expect(error).toBeUndefined();
+    expect((query.mock.calls[2] as [string, unknown[]])[1][33]).toBe(9);
+    expect((body as { afterCloseOfferId: number }).afterCloseOfferId).toBe(9);
+  });
+});
+
+describe("GET /admin/offers sale deadline", () => {
+  beforeEach(() => {
+    query.mockReset();
+  });
+
+  it("lists each offer's deadline with the label a customer is shown", async () => {
+    query.mockResolvedValueOnce({
+      rows: [
+        { ...legacyPlan, id: 8, sales_end_at: new Date("2026-12-05T07:59:00.000Z"), after_close_offer_id: 7, after_close_path: "", show_countdown: true, purchase_count: 0, products: [] },
+        { ...legacyPlan, sales_end_at: null, after_close_offer_id: null, after_close_path: "", show_countdown: true, purchase_count: 0, products: [] },
+      ],
+    });
+    const { error, body } = await list({ status: "published" });
+    expect(error).toBeUndefined();
+    expect(String(query.mock.calls[0][0])).toMatch(/o\.sales_end_at, o\.after_close_offer_id, o\.after_close_path, o\.show_countdown/);
+    const rows = body as Array<Record<string, unknown>>;
+    expect(rows[0]).toMatchObject({ id: 8, slug: "reset-plan", salesEndLabel: "Friday, December 4 at 11:59 PM PST", afterCloseOfferId: 7, showCountdown: true });
+    expect(rows[1]).toMatchObject({ salesEndAt: null, salesEndLabel: "", saleClosed: false });
   });
 });

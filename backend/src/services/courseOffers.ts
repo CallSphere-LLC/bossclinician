@@ -1,6 +1,7 @@
 import { pool } from "../db/pool";
 import { assertOfferDeliverable } from "./downloadReadiness";
 import { HttpError } from "../utils/httpError";
+import { offerDeadlinesByIds, type OfferDeadline } from "./offerDeadline";
 
 /** One extra way to pay for an offer, as a sales page quotes it on a button. */
 export interface PublicCoursePricingOption {
@@ -56,6 +57,35 @@ async function loadPricingOptions(offerIds: number[]): Promise<Map<number, Publi
   return byOffer;
 }
 
+/**
+ * An offer's sale deadline as the course sales page reads it, or null when the
+ * offer has none. `closed` and `afterCloseUrl` are here as well as the timer:
+ * once the sale has ended the page's button for that offer leads to
+ * `afterCloseUrl`, not to a checkout that will refuse the order. A closed
+ * offer with nowhere to send people is not listed at all (see
+ * `loadPublicCourseOffers`).
+ */
+export interface PublicCourseOfferDeadline {
+  endsAt: string;
+  endsLabel: string;
+  serverNow: string;
+  showCountdown: boolean;
+  closed: boolean;
+  afterCloseUrl: string;
+}
+
+function courseOfferDeadline(deadline: OfferDeadline | undefined): PublicCourseOfferDeadline | null {
+  if (!deadline || deadline.endsAt === null) return null;
+  return {
+    endsAt: deadline.endsAt,
+    endsLabel: deadline.endsLabel,
+    serverNow: deadline.serverNow,
+    showCountdown: deadline.showCountdown,
+    closed: deadline.closed,
+    afterCloseUrl: deadline.afterCloseUrl,
+  };
+}
+
 /** One offer/readiness contract for direct SSR loads and client navigation. */
 export async function loadPublicCourseOffers(courseId: number) {
   const offers = await pool.query(
@@ -68,7 +98,10 @@ export async function loadPublicCourseOffers(courseId: number) {
       ORDER BY o.amount_cents`,
     [courseId],
   );
-  const [readiness, pricingOptions] = await Promise.all([
+  const [deadlines, readiness, pricingOptions] = await Promise.all([
+    // Sale deadline (migration 231): the sales page shows the timer above the
+    // buy buttons, and once the sale has ended sends the buttons elsewhere.
+    offerDeadlinesByIds(offers.rows.map((offer) => offer.id)),
     Promise.all(offers.rows.map(async (offer) => {
       try {
         await assertOfferDeliverable(offer.id);
@@ -82,7 +115,7 @@ export async function loadPublicCourseOffers(courseId: number) {
     })),
     loadPricingOptions(offers.rows.map((offer) => offer.id)),
   ]);
-  return offers.rows.map((offer, index) => ({
+  const listed = offers.rows.map((offer, index) => ({
     ...readiness[index],
     slug: offer.slug,
     title: offer.title,
@@ -95,5 +128,11 @@ export async function loadPublicCourseOffers(courseId: number) {
     installmentCount: offer.installment_count,
     checkoutHeadline: offer.checkout_headline,
     pricingOptions: pricingOptions.get(offer.id) ?? [],
+    deadline: courseOfferDeadline(deadlines.get(offer.id)),
   }));
+  // A sale that has ended and names nowhere to go has nothing to offer: its
+  // price can no longer be paid and its button would have no destination. One
+  // that does name a destination stays, so the page can send visitors there.
+  // Filtered after the map because `readiness` is lined up with `offers.rows`.
+  return listed.filter((offer) => !(offer.deadline?.closed && offer.deadline.afterCloseUrl === ""));
 }

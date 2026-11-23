@@ -9,6 +9,7 @@ import type Stripe from "stripe";
 import type { PoolClient } from "pg";
 import { pool } from "../../db/pool";
 import { assertOfferDeliverable } from "../../services/downloadReadiness";
+import { assertOfferOpen, offerClosedHandler, offerDeadline } from "../../services/offerDeadline";
 import {
   checkoutRequirementFields,
   enforceCheckoutRequirements,
@@ -559,6 +560,10 @@ interface PendingOrder {
  * otherwise both read `redeemed` below the cap and both be let through.
  */
 async function createPendingOrder(input: PendingOrderInput): Promise<PendingOrder> {
+  // Sale deadline (migration 231): the last check before a NEW order is
+  // written, for the checkout and the one-click upsell alike. An order that
+  // already exists never comes through here, so it can still finish paying.
+  await assertOfferOpen(input.offer.id);
   const client: PoolClient = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -789,6 +794,9 @@ checkoutOfferRouter.post(
 
     const baseOffer = await loadPublishedOffer(req.params.slug);
     if (!baseOffer) throw notFound("Offer not found");
+    // Sale deadline: refused before anything is validated, recorded or charged.
+    // 410 { error: "This offer has ended.", code: "offer_closed", redirectTo }.
+    await assertOfferOpen(baseOffer.id);
     // Lounge: the founding or standard price is picked here from the seat count
     // (services/loungeSeats.ts); a price of the other phase is refused.
     const offer = await selectOfferPricing(baseOffer, body.pricingOptionId, undefined, { memberId: req.member?.id ?? null });
@@ -1286,6 +1294,14 @@ checkoutOfferRouter.get("/checkout/recover/:token", abandonedLimiter, asyncHandl
   const slug = await followRecoveryLink(String(req.params.token));
   if (!slug) throw notFound("This reminder link is no longer available");
   res.setHeader("Cache-Control", "no-store");
+  // A reminder sent before the sale ended must not walk somebody back into a
+  // closed checkout: they go where the owner sends everyone else. With no
+  // destination set, the checkout page itself says the offer has ended.
+  const deadline = await offerDeadline(slug);
+  if (deadline?.closed && deadline.afterCloseUrl) {
+    res.redirect(303, deadline.afterCloseUrl);
+    return;
+  }
   res.redirect(303, `/checkout/${encodeURIComponent(slug)}`);
 }));
 
@@ -1805,3 +1821,6 @@ checkoutOfferRouter.get(
     });
   })
 );
+
+/** A closed offer answers `{ error, code: "offer_closed", redirectTo }` (services/offerDeadline.ts). */
+checkoutOfferRouter.use(offerClosedHandler);

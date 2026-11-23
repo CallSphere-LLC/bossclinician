@@ -1,6 +1,9 @@
 import type { MouseEvent } from "react";
 import { useNavigate } from "react-router";
 import { priceLabel, type CourseDetailResponse } from "./CoursePriceLabel";
+import { OfferCountdown } from "@/components/countdown/OfferCountdown";
+import { afterClosePath, saleClosed } from "@/lib/countdown";
+import { CLOSED_OFFER_LABEL } from "./salesPage";
 import doctorHtml from "@/content/doctor/source.html?raw";
 import protectionHtml from "@/content/protection/source.html?raw";
 import profileHtml from "@/content/profile/source.html?raw";
@@ -34,15 +37,22 @@ export default function ImportedSalesPage({ course }: { course: CourseDetailResp
   const page = pages[course.slug];
   if (!page) return null;
   const offer = course.offers.find(o => o.slug === course.slug);
+  // Sale deadline (sheet row 250): once the sale has ended the buy buttons lead
+  // to where the owner sends latecomers, or nowhere when she named no page. The
+  // checkout itself would refuse the order.
+  const ended = !course.owned && !!offer?.available && saleClosed(offer.deadline);
   const destination = course.owned ? `/library/${encodeURIComponent(course.slug)}`
+    : ended ? afterClosePath(offer?.deadline)
     : offer?.available ? `/checkout/${encodeURIComponent(offer.slug)}` : "";
   let html = page.html.replaceAll("__SOURCE_PRICE__", escapeHtml(offer ? priceLabel(offer) : course.priceText))
     .replaceAll("__SOURCE_CHECKOUT__", destination || "#");
   if (page.sourceAmountCents !== undefined && offer?.amountCents !== page.sourceAmountCents) {
     html = html.replace(/<(h[1-6]|p|div)\b[^>]*\bdata-source-compare="true"[^>]*>[\s\S]*?<\/\1>/g, "");
   }
-  if (course.owned || !destination) {
-    const label = course.owned ? "Open your training" : offer?.unavailableReason || "Enrollment is currently unavailable";
+  if (course.owned || ended || !destination) {
+    const label = course.owned ? "Open your training"
+      : ended ? (destination ? CLOSED_OFFER_LABEL : "This offer has ended")
+      : offer?.unavailableReason || "Enrollment is currently unavailable";
     html = html.replace(/<a([^>]*data-source-buy="true"[^>]*)>[\s\S]*?<\/a>/g,
       (_, attributes: string) => `<a${attributes}${destination ? "" : ' aria-disabled="true" tabindex="-1"'}>${escapeHtml(label)}</a>`);
   }
@@ -74,5 +84,20 @@ export default function ImportedSalesPage({ course }: { course: CourseDetailResp
     event.preventDefault();
     if (destination) navigate(destination);
   }
-  return <div className={page.className} onClick={onClick} dangerouslySetInnerHTML={{ __html: html }} />;
+  const body = <div className={page.className} onClick={onClick} dangerouslySetInnerHTML={{ __html: html }} />;
+  // The sale deadline sits in its own strip above the captured page (and so
+  // above every buy button on it), outside the page's div: that div's scoped
+  // styles and click handling stay exactly as they were. A course with no
+  // deadline renders the same markup as before.
+  // An ended sale shows no timer: its buttons already say where to go instead.
+  const deadline = !course.owned && !ended && offer?.available && offer.deadline?.showCountdown ? offer.deadline : null;
+  if (!deadline || !offer) return body;
+  return (
+    <>
+      <div className="bg-night-deep px-4 py-4 sm:px-6">
+        <OfferCountdown slug={offer.slug} deadline={deadline} className="mx-auto max-w-3xl" />
+      </div>
+      {body}
+    </>
+  );
 }

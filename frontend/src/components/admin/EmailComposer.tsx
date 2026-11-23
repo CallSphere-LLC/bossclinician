@@ -19,10 +19,14 @@ import {
   Pilcrow,
   Save,
   Smartphone,
+  Timer,
   Trash2,
   type LucideIcon,
 } from "lucide-react";
 import { Button, selectStyles } from "@/pages/admin/ui/primitives";
+import { Modal } from "@/pages/admin/ui/Dialog";
+import { formatSiteDeadline, useSiteTimeZone } from "@/pages/admin/ui/siteTime";
+import { adminCommerceApi, offerDeadlineLabel, offersWithCountdown, type Offer } from "@/lib/adminCommerceApi";
 import MediaPickerDialog from "@/components/admin/MediaPickerDialog";
 import type { MediaAsset, MergeTag, MergeTagSource, SavedEmailTemplate } from "@/types/admin";
 import { adminApi } from "@/lib/api";
@@ -184,6 +188,124 @@ export function previewEmailTokens(value: string): string {
   });
 }
 
+/* ── Countdown timer ────────────────────────────────────────────────────── */
+
+/** Size of the timer picture the site draws for emails. */
+export const COUNTDOWN_IMAGE = { width: 600, height: 120 } as const;
+
+/**
+ * The site's address, but only when it is a secure one. Email pictures are
+ * only kept when their address starts with https, so anything else (a test
+ * machine, say) is refused here rather than leaving a hole in the email.
+ */
+export function httpsOrigin(candidate: string): string | null {
+  const trimmed = candidate.trim().replace(/\/+$/, "");
+  return /^https:\/\/[^/\s?#]+$/i.test(trimmed) ? trimmed : null;
+}
+
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+/**
+ * The block the "Countdown timer" button adds: the timer picture, linked, and
+ * a line of plain words underneath.
+ *
+ * The addresses are written out in full on purpose. A `{{token}}` here would
+ * hold the whole email back at send time. The line of words is not optional
+ * either: it is what a reader sees when their email hides pictures, and what
+ * the plain-text copy of the email says.
+ */
+export function countdownEmailHtml(origin: string, slug: string, label: string): string {
+  const base = `${origin.replace(/\/+$/, "")}/api/countdown/${encodeURIComponent(slug)}`;
+  const ends = escapeHtml(label);
+  const { width, height } = COUNTDOWN_IMAGE;
+  return (
+    `<p><a href="${base}/go"><img src="${base}.gif" width="${width}" height="${height}" alt="Offer ends ${ends}"></a></p>` +
+    `<p>Offer ends ${ends}.</p>`
+  );
+}
+
+/** The offers a timer can be added for, each as a button. Mounted only while the picker is open. */
+function CountdownOfferList({ onChoose }: { onChoose: (offer: Offer, label: string) => void }) {
+  const timeZone = useSiteTimeZone();
+  // `undefined` while the list is on its way, `null` when it could not be read.
+  const [offers, setOffers] = useState<Offer[] | null | undefined>(undefined);
+
+  useEffect(() => {
+    let current = true;
+    adminCommerceApi
+      .offerList()
+      .then((list) => {
+        if (current) setOffers(offersWithCountdown(list, Date.now()));
+      })
+      .catch(() => {
+        if (current) setOffers(null);
+      });
+    return () => {
+      current = false;
+    };
+  }, []);
+
+  if (offers === undefined) return <p className="text-sm text-ink-soft">Finding your offers…</p>;
+  if (offers === null) {
+    return (
+      <p className="text-sm font-medium text-red-300" role="alert">
+        We couldn't load your offers. Close this and try again.
+      </p>
+    );
+  }
+  if (offers.length === 0) {
+    return (
+      <div className="space-y-2 text-sm text-ink-soft">
+        <p className="font-semibold text-ink">None of your live offers has a sale ending soon.</p>
+        <p>
+          A timer needs a deadline to count down to. Open the offer, go to its Price tab, and under
+          “Sale deadline and countdown” choose when the sale ends. Save it, make sure the offer is live,
+          then come back and press Countdown timer again.
+        </p>
+        <p>
+          <a className="font-semibold text-ink underline" href="/admin/offers" target="_blank" rel="noreferrer">
+            Open your offers in a new tab
+          </a>
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      {offers.map((offer) => {
+        // The server's own words for the deadline, so the email's line and the
+        // picture's description match the customer's page exactly. Worked out
+        // here only for a row that came without them.
+        const label = offerDeadlineLabel(offer, (salesEndAt) => formatSiteDeadline(salesEndAt, timeZone));
+        return (
+          <button
+            key={offer.id}
+            type="button"
+            onClick={() => onChoose(offer, label)}
+            className="flex w-full flex-col items-start gap-0.5 rounded-xl border border-hairline bg-white/[0.02] px-4 py-3 text-left transition-colors hover:border-white/25"
+          >
+            <span className="text-sm font-semibold text-ink">{offer.title}</span>
+            <span className="text-xs text-ink-soft">
+              Ends <span className="font-bold tabular-nums text-ink">{label}</span>
+            </span>
+          </button>
+        );
+      })}
+      <p className="pt-1 text-xs text-ink-soft">
+        The timer shows the time left at the moment each person opens the email. A line with the end
+        date is added under it for readers whose email hides pictures.
+      </p>
+    </div>
+  );
+}
+
 /** The library's order: by name, as the server lists it. */
 function sortTemplates(rows: SavedEmailTemplate[]): SavedEmailTemplate[] {
   return [...rows].sort((a, b) => a.name.localeCompare(b.name));
@@ -214,6 +336,7 @@ export default function EmailComposer({
   const ref = useRef<RichEmailHandle>(null);
   const [preview, setPreview] = useState(false);
   const [choosingImage, setChoosingImage] = useState(false);
+  const [choosingCountdown, setChoosingCountdown] = useState(false);
   /**
    * 3.11. Which width the preview is shown at. Not a media query — the point is
    * to see the DESKTOP layout on a desktop and the phone layout beside it,
@@ -319,6 +442,17 @@ export default function EmailComposer({
     image.src = url;
     image.alt = asset.title || asset.originalName || "Image";
     ref.current?.insert(image.outerHTML);
+  }
+
+  function addCountdown(offer: Offer, label: string) {
+    const origin = httpsOrigin(publicSiteUrl(""));
+    if (!origin || !label) {
+      toast.error("The countdown timer can only be added from your live site.");
+      return;
+    }
+    ref.current?.insert(countdownEmailHtml(origin, offer.slug, label));
+    setChoosingCountdown(false);
+    toast.success("Countdown timer added.");
   }
 
   return (
@@ -592,6 +726,18 @@ export default function EmailComposer({
         ))}
         {!preview && <Button type="button" variant="secondary" size="sm" onClick={() => setChoosingImage(true)}><Image />Image / GIF</Button>}
         {!preview && (
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            title="Add a timer that counts down to the end of an offer's sale"
+            onClick={() => setChoosingCountdown(true)}
+          >
+            <Timer />
+            Countdown timer
+          </Button>
+        )}
+        {!preview && (
           <label className="ml-1">
             <span className="sr-only">Add a content block</span>
             <select
@@ -718,6 +864,14 @@ export default function EmailComposer({
       )}
     </div>
     <MediaPickerDialog open={choosingImage} onOpenChange={setChoosingImage} onSelect={addImage} />
+    <Modal
+      open={choosingCountdown}
+      onOpenChange={setChoosingCountdown}
+      title="Add a countdown timer"
+      description="Choose the offer whose sale is ending. The timer counts down to that offer's deadline."
+    >
+      <CountdownOfferList onChoose={addCountdown} />
+    </Modal>
     </>
   );
 }

@@ -5,8 +5,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  * request here reaches Stripe (the account is live) or a database.
  */
 
-const { query, connect, pricesCreate, linksCreate, linksUpdate, loadPublishedOfferById, selectOfferPricing } =
+const { query, connect, pricesCreate, linksCreate, linksUpdate, loadPublishedOfferById, selectOfferPricing, offerDeadline } =
   vi.hoisted(() => ({
+    offerDeadline: vi.fn(),
     query: vi.fn(),
     connect: vi.fn(),
     pricesCreate: vi.fn(),
@@ -27,6 +28,8 @@ vi.mock("./settings", () => ({ readSetting: vi.fn(async () => ({ statementDescri
 vi.mock("./paymentRules", () => ({ cleanStatementDescriptor: () => undefined }));
 vi.mock("./downloadReadiness", () => ({ assertOfferDeliverable: vi.fn(async () => undefined) }));
 vi.mock("../routes/public/offers", () => ({ loadPublishedOfferById, selectOfferPricing }));
+// The sale deadline has its own tests (services/offerDeadline.test.ts).
+vi.mock("./offerDeadline", () => ({ offerDeadline }));
 
 import {
   createOfferPaymentLink,
@@ -81,7 +84,9 @@ function run(sql: string, params: unknown[] = []) {
 beforeEach(() => {
   statements = [];
   responder = () => ({ rows: [] });
-  for (const fn of [pricesCreate, linksCreate, linksUpdate, loadPublishedOfferById, selectOfferPricing]) fn.mockReset();
+  for (const fn of [pricesCreate, linksCreate, linksUpdate, loadPublishedOfferById, selectOfferPricing, offerDeadline]) fn.mockReset();
+  // No sale deadline unless a test sets one.
+  offerDeadline.mockResolvedValue(null);
   query.mockImplementation(run);
   connect.mockImplementation(async () => ({ query: run, release: () => undefined }));
   loadPublishedOfferById.mockResolvedValue(OFFER);
@@ -152,6 +157,31 @@ describe("createOfferPaymentLink", () => {
     responder = (sql) => (sql.includes("SELECT 1 FROM offers") ? { rows: [{ "?column?": 1 }] } : { rows: [] });
     await expect(createOfferPaymentLink({ offerId: 42, pricingOptionId: null, createdBy: "" })).rejects.toThrow(/Publish this offer first/);
     expect(pricesCreate).not.toHaveBeenCalled();
+  });
+
+  it("refuses an offer whose sale has ended without calling Stripe", async () => {
+    offerDeadline.mockResolvedValue({ endsAt: "2026-12-05T07:59:00.000Z", closed: true });
+    await expect(createOfferPaymentLink({ offerId: 42, pricingOptionId: null, createdBy: "" })).rejects.toThrow(/sale has ended/);
+    expect(pricesCreate).not.toHaveBeenCalled();
+    expect(linksCreate).not.toHaveBeenCalled();
+  });
+
+  it("refuses an offer with a sale deadline still ahead, because Stripe would keep selling after it", async () => {
+    offerDeadline.mockResolvedValue({ endsAt: "2099-12-05T07:59:00.000Z", closed: false });
+    await expect(createOfferPaymentLink({ offerId: 42, pricingOptionId: null, createdBy: "" })).rejects.toThrow(/sale deadline/);
+    expect(pricesCreate).not.toHaveBeenCalled();
+    expect(linksCreate).not.toHaveBeenCalled();
+  });
+
+  it("still makes a link for an offer with no deadline", async () => {
+    offerDeadline.mockResolvedValue({ endsAt: null, closed: false });
+    responder = (sql) => {
+      if (sql.includes("INSERT INTO offer_payment_links")) return { rows: [{ id: 1, url: "https://buy.stripe.com/test_abc" }] };
+      if (sql.includes("COUNT(*)::int AS n")) return { rows: [{ n: 0 }] };
+      return { rows: [] };
+    };
+    await createOfferPaymentLink({ offerId: 42, pricingOptionId: null, createdBy: "" });
+    expect(linksCreate).toHaveBeenCalledTimes(1);
   });
 });
 

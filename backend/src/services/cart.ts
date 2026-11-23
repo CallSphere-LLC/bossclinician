@@ -2,6 +2,7 @@ import { z } from "zod";
 import type { PoolClient } from "pg";
 import { pool } from "../db/pool";
 import { assertOfferDeliverable } from "./downloadReadiness";
+import { assertOfferOpen } from "./offerDeadline";
 import { badRequest, notFound } from "../utils/httpError";
 import { validateCoupon, type ValidatedCoupon } from "./coupons";
 import { computeOrderTotal, couponDiscountCents, taxCents, type OrderTotal } from "./pricing";
@@ -25,6 +26,8 @@ export async function priceCart(input:CartInput, db:DB=pool):Promise<{total:Orde
   for(const item of input.items) {
     const base = await loadPublishedOffer(item.slug,db);
     if(!base) throw notFound("An item in your cart is no longer available. Remove it and try again.");
+    // Sale deadline (migration 231): a closed sale is not priced or sold from a cart either.
+    await assertOfferOpen(base.id,`${base.title} is no longer on sale. Remove it from your cart and try again.`);
     const offer = await selectOfferPricing(base,item.pricingOptionId,db);
     await assertOfferDeliverable(offer.id,item.bumpProductIds??[],db);
     if(!["one_time","free"].includes(offer.pricing_type)) throw badRequest(`${offer.title} needs its own checkout. Carts combine one-time purchases.`);

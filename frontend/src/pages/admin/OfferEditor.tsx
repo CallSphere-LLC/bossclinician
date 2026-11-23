@@ -95,6 +95,7 @@ import OfferNotificationsTab from "@/pages/admin/OfferNotificationsTab";
 import OfferPaymentLinks from "@/pages/admin/OfferPaymentLinks";
 import OfferContractsTab from "@/pages/admin/OfferContractsTab";
 import OfferCheckoutRequirements from "@/pages/admin/OfferCheckoutRequirements";
+import OfferDeadlineCard, { offerDeadlineErrors } from "@/pages/admin/OfferDeadlineCard";
 
 /**
  * The offer editor — one screen, six questions, in the order she'd ask them:
@@ -144,6 +145,10 @@ function blankDraft(): OfferDraft {
     allowGifting: true,
     showInCart: true,
     welcomeNextSteps: "",
+    salesEndAt: null,
+    afterCloseOfferId: null,
+    afterClosePath: "",
+    showCountdown: true,
   };
 }
 
@@ -175,6 +180,10 @@ function draftFrom(offer: OfferDetail): OfferDraft {
     allowGifting: offer.allowGifting !== false,
     showInCart: offer.showInCart !== false,
     welcomeNextSteps: offer.welcomeNextSteps,
+    salesEndAt: offer.salesEndAt ?? null,
+    afterCloseOfferId: offer.afterCloseOfferId ?? null,
+    afterClosePath: offer.afterClosePath ?? "",
+    showCountdown: offer.showCountdown !== false,
   };
 }
 
@@ -243,6 +252,10 @@ const FIELD_TAB: Record<string, TabKey> = {
   intervalCount: "price",
   installmentCount: "price",
   trialDays: "price",
+  salesEndAt: "price",
+  afterCloseOfferId: "price",
+  afterClosePath: "price",
+  showCountdown: "price",
   collectTax: "form",
   collectAddress: "form",
   collectPhone: "form",
@@ -554,6 +567,13 @@ export default function OfferEditor() {
       toast.error(Object.values(pricingErrors)[0]);
       return false;
     }
+    const deadlineErrors = offerDeadlineErrors(draft, { id: offerId, slug: offer?.slug });
+    if (Object.keys(deadlineErrors).length > 0) {
+      setErrors(deadlineErrors);
+      setTab("price");
+      toast.error(Object.values(deadlineErrors)[0]);
+      return false;
+    }
 
     setSaving(true);
     try {
@@ -822,7 +842,7 @@ export default function OfferEditor() {
             />
           </Tabs.Content>
 
-          <Tabs.Content value="price">
+          <Tabs.Content value="price" className="space-y-5">
             <PriceTab
               draft={draft}
               errors={errors}
@@ -842,6 +862,13 @@ export default function OfferEditor() {
               offer={offer}
               onChanged={() => void refresh()}
               confirm={confirm}
+            />
+            <OfferDeadlineCard
+              draft={draft}
+              errors={errors}
+              update={update}
+              offer={offer}
+              offers={allOffers}
             />
           </Tabs.Content>
 

@@ -11,6 +11,8 @@ import { LuxePageHero } from "@/components/luxe/LuxePageHero";
 import { GoldRule, Section } from "@/components/luxe/Section";
 import { ApiError, api } from "@/lib/api";
 import { cn } from "@/lib/cn";
+import { splitCountdownBlocks } from "@/lib/countdown";
+import { OfferCountdown } from "@/components/countdown/OfferCountdown";
 import { contactPage } from "@/content/site";
 import NotFound from "@/pages/NotFound";
 import type { PublicFunnel, PublicFunnelStep } from "@/types";
@@ -207,13 +209,30 @@ export default function FunnelPage() {
           transition={{ duration: 0.6, ease: EASE }}
         >
           <GlassCard accent="gold" interactive={false} className="p-6 sm:p-8">
-            {step.bodyMd && (
-              // Admin-authored Markdown, so the column is proofed the same way
-              // the blog body is: words break rather than widen the page.
-              <div className="prose-boss break-words [&_table]:block [&_table]:overflow-x-auto">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{step.bodyMd}</ReactMarkdown>
-              </div>
-            )}
+            {/* A line that reads `{countdown offer-slug}` is the owner asking for
+                that offer's sale timer at that spot; the body is split there and
+                every other stretch is rendered as Markdown exactly as before. */}
+            {step.bodyMd &&
+              splitCountdownBlocks(step.bodyMd).map((block, i) =>
+                block.kind === "countdown" ? (
+                  <OfferCountdown
+                    key={`countdown-${i}-${block.slug}`}
+                    slug={block.slug}
+                    ignoreToggle
+                    align="center"
+                    className="my-6 first:mt-0 last:mb-0"
+                  />
+                ) : (
+                  // Admin-authored Markdown, so the column is proofed the same way
+                  // the blog body is: words break rather than widen the page.
+                  <div
+                    key={`markdown-${i}`}
+                    className="prose-boss break-words [&_table]:block [&_table]:overflow-x-auto"
+                  >
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{block.text}</ReactMarkdown>
+                  </div>
+                ),
+              )}
 
             {step.stepType === "opt_in" ? (
               <div className={cn("flex flex-col items-center gap-4", step.bodyMd && "mt-8")}>

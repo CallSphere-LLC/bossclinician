@@ -157,6 +157,131 @@ export function siteZoneName(timeZone = zone, at: Date = new Date()): string {
   return name || timeZone;
 }
 
+/* ------------------------------------------- typing a time on the site clock */
+
+const WALL_DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
+const WALL_TIME = /^(\d{2}):(\d{2})(?::\d{2})?$/;
+const DAY_MS = 86_400_000;
+
+/** Date.UTC, minus its habit of reading the years 0 to 99 as 1900 to 1999. */
+function utcMs(year: number, month: number, day: number, hour: number, minute: number, second = 0): number {
+  const at = new Date(0);
+  at.setUTCFullYear(year, month - 1, day);
+  at.setUTCHours(hour, minute, second, 0);
+  return at.getTime();
+}
+
+/** What the clock on the wall in `timeZone` reads at `at`, written as if it were UTC. */
+function wallClockMs(at: Date, timeZone: string): number {
+  const p = partsOf(at, {
+    timeZone,
+    hourCycle: "h23",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+  return utcMs(
+    Number(p.year),
+    Number(p.month),
+    Number(p.day),
+    // Some engines print midnight as 24 even when asked for h23.
+    Number(p.hour) % 24,
+    Number(p.minute),
+    Number(p.second),
+  );
+}
+
+/** How far the zone's clock is ahead of UTC at `ms` (negative west of Greenwich). */
+function zoneOffsetMs(ms: number, timeZone: string): number {
+  const whole = Math.floor(ms / 1000) * 1000;
+  return wallClockMs(new Date(whole), timeZone) - whole;
+}
+
+/**
+ * A date and a time typed on the SITE's clock → the instant, as an ISO string.
+ *
+ *   siteWallTimeToIso("2026-12-04", "23:59", "America/Los_Angeles")
+ *     → "2026-12-05T07:59:00.000Z"
+ *
+ * The viewer's own zone never enters into it: an assistant in New York who
+ * types 11:59 PM sets 11:59 PM Pacific, which is what the customer is told.
+ *
+ * Clock changes:
+ *  - an hour that happens twice (1:30 AM on the autumn change) means the FIRST
+ *    time it comes round, so a deadline never lands later than it reads;
+ *  - an hour that never happens (2:30 AM on the spring change) moves forward
+ *    by the size of the jump, to 3:30 AM, the way a phone's clock does.
+ *
+ * Null when either box holds something that is not a real date or time.
+ */
+export function siteWallTimeToIso(dateStr: string, timeStr: string, timeZone = zone): string | null {
+  const d = WALL_DATE.exec((dateStr ?? "").trim());
+  const t = WALL_TIME.exec((timeStr ?? "").trim());
+  if (!d || !t || !validZone(timeZone)) return null;
+  const [year, month, day] = [Number(d[1]), Number(d[2]), Number(d[3])];
+  const [hour, minute] = [Number(t[1]), Number(t[2])];
+  if (year < 1 || month < 1 || month > 12 || day < 1 || hour > 23 || minute > 59) return null;
+
+  const guess = utcMs(year, month, day, hour, minute);
+  // February 31 would otherwise roll quietly into March.
+  const check = new Date(guess);
+  if (check.getUTCMonth() !== month - 1 || check.getUTCDate() !== day) return null;
+
+  // The zone's offset on either side of any clock change near this time. A day
+  // each way is wider than any zone's offset, and narrower than the gap
+  // between two changes.
+  const before = guess - zoneOffsetMs(guess - DAY_MS, timeZone);
+  const after = guess - zoneOffsetMs(guess + DAY_MS, timeZone);
+  const real = [before, after].filter((candidate) => wallClockMs(new Date(candidate), timeZone) === guess);
+  const instant = real.length > 0 ? Math.min(...real) : before;
+  return new Date(instant).toISOString();
+}
+
+/**
+ * An instant → the date and time the SITE's clock reads, in the shapes the
+ * browser's date and time boxes take: `{ date: "2026-12-04", time: "23:59" }`.
+ * Null when there is nothing (or nothing readable) stored.
+ */
+export function isoToSiteWallTime(
+  iso: string | null | undefined,
+  timeZone = zone,
+): { date: string; time: string } | null {
+  const at = parseStamp(iso);
+  if (!at || !validZone(timeZone)) return null;
+  const wall = new Date(wallClockMs(at, timeZone));
+  const two = (n: number) => String(n).padStart(2, "0");
+  const year = wall.getUTCFullYear();
+  if (year < 1 || year > 9999) return null;
+  return {
+    date: `${String(year).padStart(4, "0")}-${two(wall.getUTCMonth() + 1)}-${two(wall.getUTCDate())}`,
+    time: `${two(wall.getUTCHours())}:${two(wall.getUTCMinutes())}`,
+  };
+}
+
+/**
+ * "Friday, December 4 at 11:59 PM PST": a deadline the way customers are told
+ * it, on the site's clock with the zone named. Built from parts so the wording
+ * and spacing are the same in every browser. Empty when there is no deadline.
+ */
+export function formatSiteDeadline(value: string | null | undefined, timeZone = zone): string {
+  const at = parseStamp(value);
+  if (!at) return "";
+  const p = partsOf(at, {
+    timeZone,
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+    timeZoneName: "short",
+  });
+  return `${p.weekday}, ${p.month} ${p.day} at ${p.hour}:${p.minute} ${p.dayPeriod} ${p.timeZoneName}`;
+}
+
 /**
  * The formatters bound to the site's zone, re-rendering when it loads.
  *
@@ -171,5 +296,6 @@ export function useSiteTime() {
     date: (value: string | null | undefined) => formatSiteDate(value, timeZone),
     dateTime: (value: string | null | undefined) => formatSiteDateTime(value, timeZone),
     dateTimeLong: (value: string | null | undefined) => formatSiteDateTimeLong(value, timeZone),
+    deadline: (value: string | null | undefined) => formatSiteDeadline(value, timeZone),
   };
 }

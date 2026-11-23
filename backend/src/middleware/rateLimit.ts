@@ -276,13 +276,29 @@ const within = (path: string, prefix: string): boolean =>
   path === prefix || path.startsWith(`${prefix}/`);
 
 /**
- * Which bucket a request counts against, or null for the two paths the
+ * The email countdown picture: `/api/countdown/<offer>.gif` and the same
+ * address without the extension. Exactly one path segment after the prefix, so
+ * `/api/countdown/<offer>/status` and `/go` stay in the public bucket.
+ */
+const COUNTDOWN_IMAGE_PATH = /^\/api\/countdown\/[^/]+\/?$/;
+
+/**
+ * Which bucket a request counts against, or null for the three paths the
  * backstop leaves alone: `/api/health`, which the deploy's health gate polls
  * through the public URL — a flood must not also fail the gate and roll back a
- * good release — and `/uploads`, static files that never touch the database.
+ * good release — `/uploads`, static files that never touch the database, and
+ * the countdown picture in sent emails. That last one is fetched once per open
+ * by every recipient of a broadcast, all from the one address production sees
+ * (see the sizing note above), so counting it would let a successful send
+ * throttle the checkout it is advertising. For a real offer it is cheap by
+ * construction: the route looks up and draws once per offer per second and
+ * serves that to everyone (routes/public/countdown.ts). What is left unlimited
+ * is one small indexed lookup per second for each distinct well-formed address
+ * that names no offer; a malformed address never reaches the database.
  */
 export function rateLimitSurface(path: string): RateLimitSurface | null {
   if (path === "/api/health" || within(path, "/uploads")) return null;
+  if (COUNTDOWN_IMAGE_PATH.test(path)) return null;
   if (within(path, "/api/admin")) return "admin";
   if (within(path, "/api/member") || within(path, "/api/auth") || within(path, "/account")) {
     return "member";

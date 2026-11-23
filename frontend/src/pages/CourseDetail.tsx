@@ -24,7 +24,9 @@ import CourseSalesPage from "@/components/course/CourseSalesPage";
 import ImportedSalesPage, { hasImportedSalesPage } from "@/components/course/ImportedSalesPage";
 import RampUpSalesPage from "@/components/course/RampUpSalesPage";
 import FullyBookedSalesPage from "@/components/course/FullyBookedSalesPage";
-import { parseSalesPage } from "@/components/course/salesPage";
+import { CLOSED_OFFER_LABEL, parseSalesPage } from "@/components/course/salesPage";
+import { OfferCountdown } from "@/components/countdown/OfferCountdown";
+import { afterClosePath, saleClosed, timedOffer } from "@/lib/countdown";
 
 /**
  * The sales page for one course.
@@ -146,12 +148,26 @@ export default function CourseDetail({ slugOverride }: { slugOverride?: string }
   const hasCurriculum = lessons > 0;
   const features = Array.isArray(course.features) ? (course.features as string[]) : [];
 
+  // Sale deadline (sheet row 250), for the catalogue layout's buy panel. An
+  // offer whose sale has ended is not sold here: its row becomes one button to
+  // where the owner sends latecomers, unless an offer still on sale already
+  // leads there. All of it is read from the server's answer, never from this
+  // device's clock, so the server render and the first paint agree.
+  const openOffers = course.offers.filter((offer) => !saleClosed(offer.deadline));
+  const afterCloseLinks = Array.from(
+    new Set(course.offers.filter((offer) => offer.available).map((offer) => afterClosePath(offer.deadline))),
+  ).filter(
+    (path) => path !== "" && !openOffers.some((offer) => offer.available && `/checkout/${offer.slug}` === path),
+  );
+  const timed = timedOffer(course.offers);
+
   const schemaInput = {
     title: course.title,
     description: course.description || course.subtitle,
     slug: course.slug,
     image: course.image,
-    offers: course.offers,
+    // A price whose sale has ended is not a price anyone can pay.
+    offers: openOffers,
     totalMinutes: minutes,
   };
 
@@ -267,9 +283,15 @@ export default function CourseDetail({ slugOverride }: { slugOverride?: string }
                           Open it
                         </LuxeButton>
                       </>
-                    ) : course.offers.length > 0 ? (
+                    ) : openOffers.length + afterCloseLinks.length > 0 ? (
                       <div className="space-y-5">
-                        {course.offers.map((offer) => (
+                        {/* The sale deadline, above the prices it applies to. The
+                            server render is the plain "Offer ends ..." sentence; the
+                            ticking boxes come from a fresh read after mount. */}
+                        {timed && (
+                          <OfferCountdown slug={timed.slug} deadline={timed.deadline} align="center" />
+                        )}
+                        {openOffers.map((offer) => (
                           <div key={offer.slug} className="border-b border-hairline pb-5 last:border-0 last:pb-0">
                             <p className="font-display text-2xl text-ink">{priceLabel(offer)}</p>
                             {offer.checkoutHeadline && (
@@ -288,6 +310,16 @@ export default function CourseDetail({ slugOverride }: { slugOverride?: string }
                             </LuxeButton> : (
                               <p className="mt-4 text-sm leading-relaxed text-orchid-dim">{offer.unavailableReason}</p>
                             )}
+                          </div>
+                        ))}
+                        {/* A sale that has ended: no price (it can no longer be
+                            paid), only the way on to the current offer. */}
+                        {afterCloseLinks.map((path) => (
+                          <div key={path} className="border-b border-hairline pb-5 last:border-0 last:pb-0">
+                            <p className="text-sm leading-relaxed text-orchid">That sale has ended.</p>
+                            <LuxeButton to={path} variant="foil" className="mt-4 w-full">
+                              {CLOSED_OFFER_LABEL}
+                            </LuxeButton>
                           </div>
                         ))}
                       </div>

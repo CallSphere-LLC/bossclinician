@@ -314,6 +314,17 @@ export interface Offer {
   allowGifting?: boolean;
   showInCart?: boolean;
   welcomeNextSteps: string;
+  /** When this offer stops taking NEW orders (ISO instant). null = no deadline. */
+  salesEndAt?: string | null;
+  /** The offer visitors are sent to once this one has ended. Never itself. */
+  afterCloseOfferId?: number | null;
+  /** Or a page on this site ("/store"). '' = none. Used when no offer is chosen. */
+  afterClosePath?: string;
+  /** Whether the ticking timer shows on the checkout and sales page. */
+  showCountdown?: boolean;
+  /** Offers list rows only: the deadline as customers are shown it, and whether it has passed by the server clock. */
+  salesEndLabel?: string;
+  saleClosed?: boolean;
   createdAt: string;
   updatedAt: string;
   /** Settled orders only — a started checkout is not a sale. */
@@ -414,6 +425,79 @@ export interface OfferInput {
   allowGifting?: boolean;
   showInCart?: boolean;
   welcomeNextSteps: string;
+  salesEndAt?: string | null;
+  afterCloseOfferId?: number | null;
+  afterClosePath?: string;
+  showCountdown?: boolean;
+  /**
+   * `salesEndAt` in the site's time zone, as the customer is shown it
+   * ("Friday, December 4 at 11:59 PM PST"); '' when there is no deadline. On
+   * each row of the offers list only.
+   */
+  salesEndLabel?: string;
+  /** The deadline had passed by the server's clock when the list was read. On each row of the offers list only. */
+  saleClosed?: boolean;
+}
+
+/* ── Sale deadline and countdown ────────────────────────────────────────── */
+
+/** The line that shows an offer's live timer on a funnel page. */
+export function countdownPageLine(slug: string): string {
+  return `{countdown ${slug}}`;
+}
+
+/**
+ * The offers a countdown can be made for right now: live, with a deadline that
+ * has not passed yet, soonest first. A draft has no public timer, and a sale
+ * that has already ended has nothing left to count.
+ *
+ * Whether a sale has ended is the server's call (`saleClosed` on each row of
+ * the offers list), the same answer the customer's timer gets. `now`, this
+ * device's clock, is only the fallback for a row that came without it.
+ */
+export function offersWithCountdown<T extends Pick<Offer, "status" | "salesEndAt" | "saleClosed">>(
+  offers: T[],
+  now: number,
+): T[] {
+  const endsAt = (offer: T) => (offer.salesEndAt ? Date.parse(offer.salesEndAt) : Number.NaN);
+  const open = (offer: T) => {
+    const end = endsAt(offer);
+    // The server says "not closed" for an offer with no deadline too, so a real deadline is still required.
+    if (!Number.isFinite(end)) return false;
+    return typeof offer.saleClosed === "boolean" ? !offer.saleClosed : end > now;
+  };
+  return offers
+    .filter((offer) => offer.status === "published" && open(offer))
+    .sort((a, b) => endsAt(a) - endsAt(b));
+}
+
+/**
+ * The words for an offer's deadline in the email timer and the pickers: the
+ * server's own label when the row carries one, so the email says exactly what
+ * the customer's page says. `fallback` works it out here for a row without it.
+ */
+export function offerDeadlineLabel(
+  offer: Pick<Offer, "salesEndAt" | "salesEndLabel">,
+  fallback: (salesEndAt: string | null | undefined) => string,
+): string {
+  const label = typeof offer.salesEndLabel === "string" ? offer.salesEndLabel.trim() : "";
+  return label || fallback(offer.salesEndAt);
+}
+
+/**
+ * Puts `line` on a line of its own after the line the cursor is on, with a
+ * blank line either side so the text around it stays its own paragraph.
+ * Returns the new text and where the cursor should sit afterwards.
+ */
+export function insertOnOwnLine(value: string, at: number, line: string): { value: string; caret: number } {
+  const from = Math.min(Math.max(0, at), value.length);
+  const lineEnd = value.indexOf("\n", from);
+  const cut = lineEnd === -1 ? value.length : lineEnd;
+  const before = value.slice(0, cut).replace(/\n+$/, "");
+  const after = value.slice(cut).replace(/^\n+/, "");
+  const head = before ? `${before}\n\n` : "";
+  const tail = after ? `\n\n${after}` : "\n";
+  return { value: `${head}${line}${tail}`, caret: head.length + line.length };
 }
 
 export interface BumpInput {

@@ -13,6 +13,15 @@ import { formatAmount } from "../../utils/money";
 import { deadlinePlan } from "../../services/deadlinePlan";
 import { publicCheckoutRequirements } from "../../services/checkoutRequirements";
 import {
+  OfferClosedError,
+  assertOfferOpen,
+  offerClosedHandler,
+  offerDeadline,
+  publicDeadline,
+  type OfferDeadline,
+} from "../../services/offerDeadline";
+import { siteTimeZone } from "../../services/siteTime";
+import {
   filterPhasedOptions,
   loungePricingStatus,
   seatPricingFor,
@@ -637,8 +646,18 @@ offersRouter.get(
   asyncHandler(async (req, res) => {
     const offer = await loadPublishedOffer(req.params.slug);
     if (!offer) throw notFound("Offer not found");
+    // Sale deadline (migration 231): a closed offer answers 410 with where to
+    // send the visitor; an open one carries the timer the page counts down to.
+    const deadline = await offerDeadline(offer.id);
+    if (deadline?.closed) throw new OfferClosedError(deadline.afterCloseUrl);
     await assertOfferDeliverable(offer.id);
-    res.json(await buildOfferView(offer, req.member?.id ?? null, requestedPricingOption(req.query.option)));
+    const view = await buildOfferView(offer, req.member?.id ?? null, requestedPricingOption(req.query.option), {
+      deadline,
+      timeZone: await siteTimeZone(),
+    });
+    // The answer changes the moment the deadline passes, so it is never held.
+    if (view.deadline) res.set("Cache-Control", "no-store");
+    res.json(view);
   })
 );
 
@@ -675,7 +694,12 @@ export function requestedPricingOption(raw: unknown): number | null | undefined 
 export async function buildOfferView(
   offer: OfferRow,
   memberId: number | null,
-  requestedOptionId?: number | null
+  requestedOptionId?: number | null,
+  /**
+   * The offer's sale deadline, loaded by the caller (the public GET). Left out,
+   * the view carries `deadline: null`; nothing is looked up here.
+   */
+  sale?: { deadline: OfferDeadline | null; timeZone: string },
 ): Promise<Record<string, unknown>> {
   const viewer: SeatViewer = { memberId };
   const seatTier = tierForSlug(offer.slug);
@@ -798,6 +822,12 @@ export async function buildOfferView(
     checkoutRequirements,
     /** Lounge founding/standard phase, seats and waitlist for this viewer; null elsewhere. */
     seatPricing,
+    /**
+     * `{ endsAt, endsLabel, serverNow, showCountdown }` or null: the offer's
+     * own sale deadline. The selected price's closing time never moves it, so
+     * the timer is the same whichever way to pay is chosen.
+     */
+    deadline: sale ? publicDeadline(sale.deadline, selectedOffer.sales_end_at, sale.timeZone) : null,
   };
 }
 
@@ -846,6 +876,8 @@ offersRouter.post(
 
     const baseOffer = await loadPublishedOffer(req.params.slug);
     if (!baseOffer) throw notFound("Offer not found");
+    // A closed sale is not quoted: 410 { error, code: "offer_closed", redirectTo }.
+    await assertOfferOpen(baseOffer.id);
     res.json(await buildOfferQuote(baseOffer, body, req.member?.email ?? null));
   })
 );
@@ -908,3 +940,6 @@ export async function buildOfferQuote(
     ...totalToJson(total),
   };
 }
+
+/** A closed offer answers `{ error, code: "offer_closed", redirectTo }` (services/offerDeadline.ts). */
+offersRouter.use(offerClosedHandler);

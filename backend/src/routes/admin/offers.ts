@@ -12,12 +12,21 @@ import { readSetting } from "../../services/settings";
 import { env } from "../../config/env";
 import { grantOfferAccess, revokeOfferAccess } from "../../services/access";
 import {
+  SALE_DEADLINE_LINK_REASON,
   createOfferPaymentLink,
   deactivateOfferPaymentLink,
   deactivateRepricedPaymentLinks,
   listOfferPaymentLinks,
   paymentLinkSupport,
 } from "../../services/paymentLinks";
+import {
+  deadlinePassed,
+  formatEndsLabel,
+  offerCheckoutPath,
+  offerDeadline,
+  safeSitePath,
+} from "../../services/offerDeadline";
+import { siteTimeZone } from "../../services/siteTime";
 import type { BillingInterval, PricingType } from "../../services/pricing";
 import {
   bumpCreateSchema,
@@ -65,7 +74,12 @@ type OfferRow = {
   amount_cents: number;
   deposit_cents: number;
   sales_start_at?: string | null;
+  /** The offer's sale deadline (migration 231). Null: no deadline. */
   sales_end_at?: string | null;
+  /** Where visitors go once the sale has ended: another offer, or a path on this site. */
+  after_close_offer_id?: number | null;
+  after_close_path?: string;
+  show_countdown?: boolean;
   min_amount_cents: number;
   interval: BillingInterval | null;
   interval_count: number;
@@ -122,7 +136,115 @@ const OFFER_COLUMNS = `o.id, o.title, o.internal_title, o.slug, o.status, o.desc
        o.collect_address, o.collect_phone, o.custom_fields, o.terms_url, o.require_terms,
        o.redirect_url, o.thank_you_page_id, o.access_expires_after_days,
        o.send_welcome_email, o.welcome_next_steps, o.allow_gifting, o.show_in_cart,
-       o.stripe_price_id, o.stripe_product_id, o.created_at, o.updated_at`;
+       o.stripe_price_id, o.stripe_product_id, o.created_at, o.updated_at,
+       o.sales_end_at, o.after_close_offer_id, o.after_close_path, o.show_countdown`;
+
+/* ------------------------------------------------- sale deadline (mig. 231) */
+
+/**
+ * The offer's "Sale deadline and countdown" card. Parsed here, beside the
+ * shared offer schema (validation/commerceSchemas.ts), which strips keys it
+ * does not know: `salesEndAt`, `afterCloseOfferId`, `afterClosePath` and
+ * `showCountdown`. Absent means unchanged; null or '' clears.
+ *
+ * `salesEndAt` must name an exact instant (ISO with "Z" or an offset). The
+ * editor works in the site time zone and sends the instant; a bare
+ * "2026-12-04T23:59" would be read in the server's zone, which is nobody's.
+ */
+const saleDeadlineSchema = z.object({
+  salesEndAt: z
+    .union([z.string().trim().max(64), z.null()])
+    .optional()
+    .transform((value, ctx) => {
+      if (value === undefined) return undefined;
+      if (value === null || value === "") return null;
+      const instant = new Date(value);
+      if (!/(Z|[+-]\d{2}:?\d{2})$/i.test(value) || Number.isNaN(instant.getTime())) {
+        ctx.addIssue({ code: "custom", message: "Enter the date and time the sale ends." });
+        return z.NEVER;
+      }
+      return instant.toISOString();
+    }),
+  afterCloseOfferId: z.number().int().positive().nullable().optional(),
+  afterClosePath: z.string().trim().max(500).optional(),
+  showCountdown: z.boolean().optional(),
+});
+type SaleDeadlinePatch = z.infer<typeof saleDeadlineSchema>;
+
+function parseSaleDeadline(body: unknown): SaleDeadlinePatch {
+  const source = (body ?? {}) as Record<string, unknown>;
+  const parsed = saleDeadlineSchema.safeParse({
+    salesEndAt: source.salesEndAt,
+    afterCloseOfferId: source.afterCloseOfferId,
+    afterClosePath: source.afterClosePath,
+    showCountdown: source.showCountdown,
+  });
+  if (!parsed.success) throw badRequest("Invalid payload", parsed.error.flatten());
+  return parsed.data;
+}
+
+/**
+ * Where visitors go after the sale: a page on this site or another offer,
+ * never another website and never the offer itself. `offer` is null on create,
+ * when there is no id or saved slug to compare against yet.
+ */
+async function assertSaleDeadlineValid(
+  patch: SaleDeadlinePatch,
+  offer: { id: number; slug: string } | null,
+  slug: string,
+): Promise<void> {
+  const path = patch.afterClosePath;
+  if (path !== undefined && path !== "") {
+    if (safeSitePath(path) !== path) {
+      throw issueError({
+        field: "afterClosePath",
+        message: 'Enter a page on this site, starting with "/" (for example /store). Links to other websites are not allowed here.',
+      });
+    }
+    const ownCheckouts = [slug, offer?.slug].filter(Boolean).flatMap((own) => [`/checkout/${own}`, offerCheckoutPath(own as string)]);
+    if (ownCheckouts.includes(path.split(/[?#]/)[0])) {
+      throw issueError({
+        field: "afterClosePath",
+        message: "That is this offer's own checkout, which will be closed. Choose a different page.",
+      });
+    }
+  }
+  const fallbackId = patch.afterCloseOfferId;
+  if (fallbackId !== undefined && fallbackId !== null) {
+    if (offer && fallbackId === offer.id) {
+      throw issueError({
+        field: "afterCloseOfferId",
+        message: "An offer cannot send visitors to itself once it ends. Choose a different offer.",
+      });
+    }
+    const found = await pool.query(`SELECT 1 FROM offers WHERE id = $1`, [fallbackId]);
+    if ((found.rows ?? []).length === 0) {
+      throw issueError({ field: "afterCloseOfferId", message: "That offer no longer exists. Choose a different one." });
+    }
+  }
+}
+
+function instantOrNull(value: string | Date | null | undefined): Date | null {
+  if (value === null || value === undefined || value === "") return null;
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+/**
+ * `salesEndLabel` ("Friday, December 4 at 11:59 PM PST", site time zone, ''
+ * when none) and `saleClosed` beside each offer's raw `salesEndAt`, so the
+ * list, the offer pickers and the email composer's countdown button all print
+ * the same words the customer is shown.
+ */
+async function withSaleLabels<T extends Record<string, unknown>>(rows: T[]): Promise<(T & { salesEndLabel: string; saleClosed: boolean })[]> {
+  // The zone is only looked up when some offer actually has a deadline.
+  const timeZone = rows.some((row) => instantOrNull(row.salesEndAt as string | Date | null)) ? await siteTimeZone() : "";
+  const now = new Date();
+  return rows.map((row) => {
+    const end = instantOrNull(row.salesEndAt as string | Date | null);
+    return { ...row, salesEndLabel: end ? formatEndsLabel(end, timeZone) : "", saleClosed: deadlinePassed(end, now) };
+  });
+}
 
 /**
  * Only orders that settled. A pending row is a checkout somebody started, and
@@ -321,7 +443,10 @@ adminOffersRouter.get(
       params,
     );
 
-    res.json(rowsToCamel(result.rows));
+    // Each row carries salesEndAt, afterCloseOfferId, afterClosePath and
+    // showCountdown, plus salesEndLabel and saleClosed: `?status=published` is
+    // the list the "after it ends" picker and the email countdown picker read.
+    res.json(await withSaleLabels(rowsToCamel(result.rows)));
   }),
 );
 
@@ -365,11 +490,28 @@ adminOffersRouter.get(
       ),
     ]);
 
+    // Sale deadline card (migration 231): the deadline as a customer is shown
+    // it, the fallback offer's name for the picker, and the zone the "Sale
+    // ends" field is entered and displayed in.
+    const fallbackId = (offer as OfferRow).after_close_offer_id ?? null;
+    const [saleDeadline, afterCloseOffer, timeZone] = await Promise.all([
+      offerDeadline(id, { anyStatus: true }),
+      fallbackId === null
+        ? Promise.resolve(null)
+        : pool
+            .query(`SELECT id, slug, title, status, sales_end_at FROM offers WHERE id = $1`, [fallbackId])
+            .then((found) => (found.rows[0] ? rowToCamel(found.rows[0]) : null)),
+      siteTimeZone(),
+    ]);
+
     res.json({
       ...rowToCamel(offer),
       bumps: rowsToCamel(bumps.rows),
       upsells: rowsToCamel(upsells.rows),
       pricingOptions: rowsToCamel(pricingOptions.rows),
+      saleDeadline,
+      afterCloseOffer,
+      siteTimeZone: timeZone,
       ...(await paymentLinksJson(id, offer as OfferRow, pricingOptions.rows as PricingOptionRow[])),
     });
   }),
@@ -555,8 +697,10 @@ adminOffersRouter.post(
     const parsed = offerCreateSchema.safeParse(req.body);
     if (!parsed.success) throw badRequest("Invalid payload", parsed.error.flatten());
     const data = parsed.data;
+    const sale = parseSaleDeadline(req.body);
 
     await assertThankYouPageExists(data.thankYouPageId);
+    await assertSaleDeadlineValid(sale, null, data.slug);
 
     let created: OfferRow | undefined;
     try {
@@ -567,9 +711,11 @@ adminOffersRouter.post(
             installment_count, trial_days, collect_tax, collect_address, collect_phone,
             custom_fields, terms_url, require_terms, redirect_url, thank_you_page_id,
             access_expires_after_days, stripe_price_id, stripe_product_id,
-            send_welcome_email, welcome_next_steps, allow_gifting, internal_title, deposit_cents, show_in_cart)
+            send_welcome_email, welcome_next_steps, allow_gifting, internal_title, deposit_cents, show_in_cart,
+            sales_end_at, after_close_offer_id, after_close_path, show_countdown)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16,
-                 $17, $18::jsonb, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31)
+                 $17, $18::jsonb, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31,
+                 $32, $33, $34, $35)
          RETURNING ${OFFER_COLUMNS}`,
         [
           data.title,
@@ -603,6 +749,10 @@ adminOffersRouter.post(
           data.internalTitle,
           data.depositCents,
           data.showInCart,
+          sale.salesEndAt ?? null,
+          sale.afterCloseOfferId ?? null,
+          sale.afterClosePath ?? "",
+          sale.showCountdown ?? true,
         ],
       );
       created = result.rows[0];
@@ -638,8 +788,10 @@ adminOffersRouter.put(
     const parsed = offerUpdateSchema.safeParse(req.body);
     if (!parsed.success) throw badRequest("Invalid payload", parsed.error.flatten());
     const patch = parsed.data;
+    const sale = parseSaleDeadline(req.body);
 
     const before = await loadOffer(id);
+    await assertSaleDeadlineValid(sale, { id, slug: before.slug }, patched(patch.slug, before.slug));
 
     // Validated against the row the edit produces, not the fields it carries:
     // switching a one-time offer to a payment plan sends `pricingType` alone, and
@@ -754,6 +906,10 @@ adminOffersRouter.put(
                 internal_title            = $30,
                 deposit_cents             = $31,
                 show_in_cart              = $32,
+                sales_end_at              = $33,
+                after_close_offer_id      = $34,
+                after_close_path          = $35,
+                show_countdown            = $36,
                 updated_at                = now()
           WHERE o.id = $28
          RETURNING ${OFFER_COLUMNS}`,
@@ -790,6 +946,10 @@ adminOffersRouter.put(
           patched(patch.internalTitle, before.internal_title),
           pricing.depositCents,
           patched(patch.showInCart, before.show_in_cart),
+          sale.salesEndAt === undefined ? before.sales_end_at ?? null : sale.salesEndAt,
+          sale.afterCloseOfferId === undefined ? before.after_close_offer_id ?? null : sale.afterCloseOfferId,
+          sale.afterClosePath === undefined ? before.after_close_path ?? "" : sale.afterClosePath,
+          sale.showCountdown === undefined ? before.show_countdown ?? true : sale.showCountdown,
         ],
       );
       after = result.rows[0];
@@ -813,7 +973,14 @@ adminOffersRouter.put(
     // retires the link selling the old one, a new currency retires every price's
     // link (the options were repriced above), and an offer taken off sale stops
     // selling through Stripe as well as through the checkout.
-    if (currency !== before.currency || (before.status === "published" && after.status !== "published")) {
+    //
+    // A sale deadline does the same (migration 231): Stripe's page never asks
+    // this server whether the sale is still on, so a live link would keep
+    // taking money after the deadline. Setting or moving the deadline switches
+    // off every link on the offer, and no new one can be made while it has one
+    // (createOfferPaymentLink).
+    const deadlineSet = sale.salesEndAt !== undefined && sale.salesEndAt !== null;
+    if (deadlineSet || currency !== before.currency || (before.status === "published" && after.status !== "published")) {
       await deactivateRepricedPaymentLinks(id, "all");
     } else if (repriced) {
       await deactivateRepricedPaymentLinks(id, null);
@@ -1259,7 +1426,7 @@ adminOffersRouter.delete(
  */
 async function paymentLinksJson(
   offerId: number,
-  offer: Pick<OfferRow, "pricing_type" | "amount_cents" | "currency" | "status">,
+  offer: Pick<OfferRow, "pricing_type" | "amount_cents" | "currency" | "status" | "sales_end_at">,
   options: Pick<PricingOptionRow, "id" | "label" | "pricing_type" | "amount_cents" | "currency" | "active">[],
 ): Promise<{ paymentLinks: unknown[]; paymentLinkPrices: unknown[] }> {
   const links = await listOfferPaymentLinks(offerId);
@@ -1297,6 +1464,9 @@ async function paymentLinksJson(
       const support = paymentLinkSupport(price);
       const blocked = !support.supported
         ? support.reason
+        : // A Stripe link cannot close on a deadline (createOfferPaymentLink refuses too).
+          instantOrNull(offer.sales_end_at) !== null
+          ? SALE_DEADLINE_LINK_REASON
         : offer.status !== "published"
           ? "Publish this offer first."
           : !price.active
@@ -1308,9 +1478,11 @@ async function paymentLinksJson(
         supported: blocked === null,
         reason: blocked,
         link: live ? rowToCamel(live) : null,
-        // A link that could not be switched off when the price changed.
+        // A link that could not be switched off when the price changed, or
+        // when the offer was given a sale deadline (it would outlive it).
         outOfDate: live
-          ? live.amount_cents !== price.amount_cents ||
+          ? instantOrNull(offer.sales_end_at) !== null ||
+            live.amount_cents !== price.amount_cents ||
             live.currency !== (price.currency || "usd") ||
             live.pricing_type !== price.pricing_type
           : false,

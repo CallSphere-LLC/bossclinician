@@ -11,6 +11,8 @@ import { Container } from "@/components/ui/Container";
 import { useEntranceMotion } from "@/hooks/useEntranceMotion";
 import { cn } from "@/lib/cn";
 import { stripeTestMode } from "@/lib/paymentMode";
+import { OfferCountdown } from "@/components/countdown/OfferCountdown";
+import { timedOffer } from "@/lib/countdown";
 import { safeHref } from "@/lib/safeHref";
 import type { CourseDetailResponse } from "@/components/course/CoursePriceLabel";
 import {
@@ -93,6 +95,10 @@ function RichText({ text }: { text: string }) {
 function BuyButtons({ course, align = "left" }: { course: CourseDetailResponse; align?: "left" | "center" }) {
   const buttons = salesButtons(course.offers as SalesOffer[]);
   const unavailable = course.offers.find((offer) => !offer.available);
+  // The purchasable offer whose sale closes first, when the owner shows a
+  // timer. An offer whose sale has already ended is never the one chosen; its
+  // button (from `salesButtons`) leads to the owner's "after it ends" page.
+  const timed = timedOffer(course.offers);
   const justify = align === "center" ? "items-center text-center" : "items-start";
 
   return (
@@ -111,10 +117,23 @@ function BuyButtons({ course, align = "left" }: { course: CourseDetailResponse; 
           </LuxeButton>
         </>
       ) : buttons.length > 0 ? (
-        // Stacked, one width: the labels name what each price includes and run
-        // long ("Educational Access — $57 | No CE Credit"), so side by side
-        // they wrap unevenly at most widths. A grid sized to the widest label
-        // keeps the pair reading as a matched choice.
+        <>
+        {/* The sale deadline, above the prices it applies to. The server render
+            is the plain "Offer ends ..." sentence; the ticking boxes come from a
+            fresh read after the page has mounted, because this page's own copy
+            of the server clock can be minutes old by the time it is read. */}
+        {timed && (
+          <OfferCountdown
+            slug={timed.slug}
+            deadline={timed.deadline}
+            align={align}
+            className={align === "center" ? "sm:w-auto" : "sm:w-max sm:max-w-full"}
+          />
+        )}
+        {/* Stacked, one width: the labels name what each price includes and run
+            long ("Educational Access — $57 | No CE Credit"), so side by side
+            they wrap unevenly at most widths. A grid sized to the widest label
+            keeps the pair reading as a matched choice. */}
         <div className="grid w-full gap-3 sm:w-max sm:max-w-full">
           {buttons.map((button) => (
             <LuxeButton
@@ -128,6 +147,7 @@ function BuyButtons({ course, align = "left" }: { course: CourseDetailResponse; 
             </LuxeButton>
           ))}
         </div>
+        </>
       ) : unavailable ? (
         <p className="copy-luxe max-w-md text-pretty text-sm">{unavailable.unavailableReason}</p>
       ) : (

@@ -7,12 +7,31 @@ import {Section} from "@/components/luxe/Section";
 import {Layout} from "@/components/layout/Layout";
 import {GlassCard} from "@/components/luxe/GlassCard";
 import {CheckoutExperience} from "./Checkout";
-import {commerceApi,type PublicOffer,type OfferQuote} from "@/lib/commerceApi";
+import {commerceApi,isOfferClosed,type PublicOffer,type OfferQuote} from "@/lib/commerceApi";
 import {memberRequest} from "@/lib/memberApi";
 import {readCart,writeCart,type CartSelection} from "@/lib/cart";
 import {formatCurrency} from "@/lib/format";
 
 type CatalogOffer={slug:string;title:string;description:string;thumbnailUrl:string;amountCents:number;currency:string};
+/** One cart item that could not be loaded, and why. */
+type ItemFailure={slug:string;err:unknown};
+const GENERIC_ENDED="This offer has ended.";
+/**
+ * What to tell the shopper when the cart could not be loaded.
+ *
+ * The cart's own quote names the item by its title ("Early Bird Bundle is no
+ * longer on sale. Remove it from your cart and try again."), so its words win.
+ * When only the item's own page refused, the item is named by its web address,
+ * which is also what its row in the cart shows next to "Remove".
+ */
+function cartLoadMessage(item:ItemFailure|null,quoteErr:unknown):string{
+  const quoteMessage=quoteErr instanceof Error?quoteErr.message:"";
+  if(quoteMessage&&quoteMessage!==GENERIC_ENDED)return quoteMessage;
+  if((item&&isOfferClosed(item.err))||quoteMessage===GENERIC_ENDED){
+    return item?`"${item.slug}" is no longer on sale. Remove it from your cart and try again.`:"An item in your cart is no longer on sale. Remove it and try again.";
+  }
+  return item?.err instanceof Error&&item.err.message?item.err.message:"Could not load your cart.";
+}
 export default function Cart(){
   const [checkoutSettings,setCheckoutSettings]=useState<Record<string,unknown>>({});
   useEffect(()=>{api.settings().then(settings=>setCheckoutSettings((settings.checkout??{}) as Record<string,unknown>)).catch(()=>{});},[]);
@@ -35,9 +54,27 @@ export default function Cart(){
     let cancelled=false;setError("");setQuote(null);setOffers([]);
     if(!items.length){setPending(false);return;}
     setPending(true);
-    Promise.all([Promise.all(items.map(item=>commerceApi.getOffer(item.slug))),commerceApi.quote(items[0].slug,{cartItems:items})])
-      .then(([loaded,total])=>{if(!cancelled){setOffers(loaded);setQuote(total);}})
-      .catch(err=>{if(!cancelled)setError(err instanceof Error?err.message:"Could not load your cart.");})
+    // Each item's load is tagged with its slug and both calls are allowed to
+    // finish, so a refusal can say WHICH item it is about (sheet row 250: an
+    // item whose sale has ended used to answer only "This offer has ended.").
+    Promise.all([
+      Promise.all(items.map(item=>commerceApi.getOffer(item.slug).then(
+        (offer):{offer:PublicOffer|null;failure:ItemFailure|null}=>({offer,failure:null}),
+        (err:unknown):{offer:PublicOffer|null;failure:ItemFailure|null}=>({offer:null,failure:{slug:item.slug,err}}),
+      ))),
+      commerceApi.quote(items[0].slug,{cartItems:items}).then(
+        (total):{total:OfferQuote|null;err:unknown}=>({total,err:undefined}),
+        (err:unknown):{total:OfferQuote|null;err:unknown}=>({total:null,err}),
+      ),
+    ])
+      .then(([loaded,priced])=>{
+        if(cancelled)return;
+        const failure=loaded.find(entry=>entry.failure)?.failure??null;
+        const ready=loaded.flatMap(entry=>entry.offer?[entry.offer]:[]);
+        if(!failure&&priced.total){setOffers(ready);setQuote(priced.total);return;}
+        setError(cartLoadMessage(failure,priced.err));
+      })
+      .catch(()=>{if(!cancelled)setError("Could not load your cart.");})
       .finally(()=>{if(!cancelled)setPending(false);});
     return()=>{cancelled=true;};
   },[key]);

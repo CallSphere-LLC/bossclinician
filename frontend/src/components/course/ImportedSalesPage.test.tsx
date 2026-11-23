@@ -23,6 +23,27 @@ describe("imported sales page purchase boundaries", () => {
       expect(unavailable).toContain('aria-disabled="true"');
     });
   }
+  it("reroutes the buy buttons once the sale has ended, and stills them when there is nowhere to go", () => {
+    const slug = slugs[0];
+    const withDeadline = (closed: boolean, afterCloseUrl: string) => ({
+      slug, owned: false, priceText: "$97",
+      offers: [{ slug, available: true, amountCents: 9700, currency: "usd", pricingType: "one_time",
+        deadline: { endsAt: "2026-12-05T07:59:00.000Z", endsLabel: "Friday, December 4 at 11:59 PM PST",
+          serverNow: "2026-12-01T20:00:00.000Z", showCountdown: true, closed, afterCloseUrl } }],
+    }) as CourseDetailResponse;
+    const open = render(withDeadline(false, "/checkout/full-price"));
+    expect(open).toContain('href="/checkout/' + slug + '"');
+    expect(open).toContain("Friday, December 4 at 11:59 PM PST");
+    const moved = render(withDeadline(true, "/checkout/full-price"));
+    expect(moved).not.toContain('href="/checkout/' + slug + '"');
+    expect(moved).toContain('href="/checkout/full-price"');
+    expect(moved).toContain("See the current offer");
+    expect(moved).not.toContain("Friday, December 4 at 11:59 PM PST");
+    const over = render(withDeadline(true, ""));
+    expect(over).not.toContain('href="/checkout/');
+    expect(over).toContain('aria-disabled="true"');
+    expect(over).toContain("This offer has ended");
+  });
   it("offers Profile to Profit only as one payment", () => {
     const html=render(fixture(slugs[2]));
     expect(html).not.toContain("2 MONTHLY PAYMENTS");

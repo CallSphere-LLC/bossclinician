@@ -38,6 +38,12 @@ function reminderDue(settings: Record<string, unknown>, step: number, ageHours: 
   const hours = Number(settings[`hours${step}`]), age = Number(ageHours);
   return age >= hours && age < hours + MAX_LATE_HOURS;
 }
+/**
+ * The offer's sale deadline (migration 231) has not passed. A reminder to come
+ * back and finish checking out is never sent for a sale that has ended: the
+ * link would lead to a checkout that refuses the order.
+ */
+const OFFER_SALE_OPEN = `(o.sales_end_at IS NULL OR o.sales_end_at > now())`;
 /** Sent in the last PERSON_GAP_HOURS to this address; citext, so case never splits a person. */
 const REMINDED_RECENTLY = `SELECT 1 FROM checkout_reminders r JOIN abandoned_checkouts p ON p.id = r.abandoned_checkout_id
   WHERE r.sent_at > now() - interval '${PERSON_GAP_HOURS} hours'`;
@@ -95,6 +101,7 @@ export async function sweepAbandonedCheckouts(): Promise<{ queued: number }> {
             EXISTS (${REMINDED_RECENTLY} AND p.email = a.email) AS reminded_recently
        FROM abandoned_checkouts a JOIN offers o ON o.id = a.offer_id
       WHERE a.recovered_at IS NULL AND a.stopped_at IS NULL AND a.emails_sent < 4 AND o.recovery_enabled
+        AND ${OFFER_SALE_OPEN}
         AND a.updated_at > now() - interval '${MAX_DELAY_HOURS + MAX_LATE_HOURS} hours'
       ORDER BY a.updated_at DESC LIMIT 500`);
   let queued = 0;
@@ -139,9 +146,15 @@ export async function checkoutRecoveryEmail(payload: Record<string, unknown>): P
     await client.query(`SELECT pg_advisory_xact_lock(hashtext('checkout-recovery'), hashtext(lower($1::text)))`, [initial.rows[0].email]);
     const rows = await client.query(`SELECT a.*, o.title AS offer_title, o.status AS offer_status,
       o.recovery_enabled, o.recovery_mode, o.recovery_overrides,
+      ${OFFER_SALE_OPEN} AS offer_sale_open,
       EXTRACT(EPOCH FROM (now() - a.updated_at))/3600 AS age_hours
       FROM abandoned_checkouts a JOIN offers o ON o.id=a.offer_id WHERE a.id=$1 FOR UPDATE OF a`, [id]);
     const cart = rows.rows[0];
+    // The sale ended between the sweep queueing this and now: nothing is sent,
+    // and no step is used up, so the reminders resume if the owner reopens it.
+    if (cart && cart.offer_sale_open === false) {
+      await client.query("COMMIT"); return {skipped: "offer sale has ended"};
+    }
     // Re-resolved under the lock: the offer's setup may have changed since the sweep queued this.
     const settings = cart ? effectiveRecoverySettings(global, cart) : null;
     if (!cart || !settings || cart.recovered_at || cart.stopped_at || cart.offer_status !== "published" || nextStep(settings, cart.emails_sent) !== step || !reminderDue(settings, step, cart.age_hours)) {

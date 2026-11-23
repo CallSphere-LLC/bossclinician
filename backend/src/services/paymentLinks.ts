@@ -7,6 +7,7 @@ import { offerHasRequirements } from "./checkoutRequirements";
 import { readSetting } from "./settings";
 import { cleanStatementDescriptor } from "./paymentRules";
 import { assertOfferDeliverable } from "./downloadReadiness";
+import { offerDeadline } from "./offerDeadline";
 import {
   loadPublishedOfferById,
   selectOfferPricing,
@@ -48,6 +49,12 @@ export type PaymentLinkRow = {
   created_at: string;
   deactivated_at: string | null;
 };
+
+/** Why an offer with a sale deadline has no Stripe payment link, in the owner's words. */
+export const SALE_DEADLINE_LINK_REASON =
+  "This offer has a sale deadline, and a Stripe payment link would keep selling after it. Share the checkout link instead: it closes on time.";
+export const SALE_ENDED_LINK_REASON =
+  "This offer's sale has ended, so a payment link can't be made for it. Change or clear the sale deadline first.";
 
 /** Metadata key marking a session as ours, on the link and on the payment. */
 export const PAYMENT_LINK_SOURCE = "payment_link";
@@ -205,6 +212,14 @@ export async function createOfferPaymentLink(input: {
     if (exists.rowCount === 0) throw notFound("Offer not found");
     throw badRequest("Publish this offer first — a payment link sells it straight away.");
   }
+  // Sale deadline (migration 231). A Payment Link is a stripe.com page: it never
+  // asks this server whether the sale is still on, so it would keep taking
+  // money after the deadline. No link is made for an offer whose sale has
+  // ended, or for one that has a deadline at all; the admin offer routes switch
+  // off the live links when a deadline is set (routes/admin/offers.ts).
+  const deadline = await offerDeadline(base.id);
+  if (deadline?.closed) throw badRequest(SALE_ENDED_LINK_REASON);
+  if (deadline?.endsAt) throw badRequest(SALE_DEADLINE_LINK_REASON);
   const offer = await selectOfferPricing(base, input.pricingOptionId);
 
   const support = paymentLinkSupport(offer);

@@ -12,6 +12,7 @@
  * checkout charges.
  */
 import { money, priceLabel, type CourseOffer } from "@/components/course/CoursePriceLabel";
+import { afterClosePath, saleClosed } from "@/lib/countdown";
 
 /* ── Stored shape ─────────────────────────────────────────────────────── */
 
@@ -197,6 +198,9 @@ export interface SalesButton {
 
 const sameCurrency = (a: string, b: string) => (a || "usd").toLowerCase() === (b || "usd").toLowerCase();
 
+/** What the button of an offer whose sale has ended says. It leads to the owner's "after it ends" page. */
+export const CLOSED_OFFER_LABEL = "See the current offer";
+
 /**
  * One button per way to pay, across the course's purchasable offers.
  *
@@ -208,12 +212,24 @@ const sameCurrency = (a: string, b: string) => (a || "usd").toLowerCase() === (b
  *
  * A label that does not already state its price gets it appended from the
  * charged amount, so no button can be a price-free promise.
+ *
+ * An offer whose sale has ended (sheet row 250) is the exception on both
+ * counts: its checkout would refuse the order, so it gets a single button to
+ * where the owner sends latecomers, with no price on it (that price can no
+ * longer be paid) and no `?option=`. With nowhere to send them it gets no
+ * button, and none either when another button already leads to the same place.
  */
 export function salesButtons(offers: readonly SalesOffer[]): SalesButton[] {
   const buttons: (SalesButton & { recommended: boolean })[] = [];
+  const closed: (SalesButton & { recommended: boolean })[] = [];
 
   for (const offer of offers) {
     if (!offer.available) continue;
+    if (saleClosed(offer.deadline)) {
+      const to = afterClosePath(offer.deadline);
+      if (to) closed.push({ key: `${offer.slug}:closed`, label: CLOSED_OFFER_LABEL, to, primary: false, recommended: false });
+      continue;
+    }
     const base = `/checkout/${encodeURIComponent(offer.slug)}`;
     const options = offer.pricingOptions ?? [];
 
@@ -257,6 +273,14 @@ export function salesButtons(offers: readonly SalesOffer[]): SalesButton[] {
         recommended: option.recommended,
       });
     }
+  }
+
+  // After the open offers, and only for a destination no button reaches yet.
+  // Compared without `?option=`: an offer whose prices are all labelled options
+  // has no bare checkout button, but its option buttons lead to the same place.
+  const page = (to: string) => to.split("?")[0];
+  for (const button of closed) {
+    if (!buttons.some((b) => page(b.to) === page(button.to))) buttons.push(button);
   }
 
   const primary = Math.max(0, buttons.findIndex((b) => b.recommended));

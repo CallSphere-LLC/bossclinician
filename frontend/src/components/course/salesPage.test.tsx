@@ -75,6 +75,58 @@ describe("salesButtons", () => {
   it("offers nothing to buy on an offer that cannot be delivered", () => {
     expect(salesButtons([offer({ available: false, unavailableReason: "Not ready" })])).toEqual([]);
   });
+
+  const deadline = (over: Partial<NonNullable<SalesOffer["deadline"]>> = {}): NonNullable<SalesOffer["deadline"]> => ({
+    endsAt: "2026-12-05T07:59:00.000Z",
+    endsLabel: "Friday, December 4 at 11:59 PM PST",
+    serverNow: "2026-12-01T20:00:00.000Z",
+    showCountdown: true,
+    closed: false,
+    afterCloseUrl: "",
+    ...over,
+  });
+
+  it("keeps the checkout buttons of an offer whose sale is still on", () => {
+    expect(salesButtons([offer({ deadline: deadline({ afterCloseUrl: "/checkout/full-price" }) })]).map((b) => b.to)).toEqual([
+      "/checkout/audit-proof-your-practice-on-demand-free",
+    ]);
+  });
+
+  it("sends an ended sale's button to where the owner points latecomers, with no price and no option", () => {
+    const buttons = salesButtons([
+      offer({
+        deadline: deadline({ closed: true, afterCloseUrl: "/checkout/full-price" }),
+        pricingOptions: [option({ id: 41, label: "Training + CE Credit — $77", recommended: true })],
+      }),
+    ]);
+    expect(buttons).toEqual([
+      {
+        key: "audit-proof-your-practice-on-demand-free:closed",
+        label: "See the current offer",
+        to: "/checkout/full-price",
+        primary: true,
+      },
+    ]);
+  });
+
+  it("offers no button for an ended sale with nowhere to go, or with a destination off this site", () => {
+    expect(salesButtons([offer({ deadline: deadline({ closed: true }) })])).toEqual([]);
+    expect(salesButtons([offer({ deadline: deadline({ closed: true, afterCloseUrl: "//evil.example" }) })])).toEqual([]);
+  });
+
+  it("does not repeat a button when the ended sale points at an offer already listed", () => {
+    const buttons = salesButtons([
+      offer({ slug: "early-bird", amountCents: 4700, deadline: deadline({ closed: true, afterCloseUrl: "/checkout/full-price" }) }),
+      offer({ slug: "full-price" }),
+    ]);
+    expect(buttons.map((b) => [b.label, b.to])).toEqual([["Register — $77", "/checkout/full-price"]]);
+    // The same when the regular offer's only buttons are its labelled options.
+    const optionsOnly = salesButtons([
+      offer({ slug: "early-bird", amountCents: 4700, deadline: deadline({ closed: true, afterCloseUrl: "/checkout/full-price" }) }),
+      offer({ slug: "full-price", pricingOptions: [option({ id: 41, label: "Training + CE Credit — $77", recommended: true })] }),
+    ]);
+    expect(optionsOnly.map((b) => b.to)).toEqual(["/checkout/full-price?option=41"]);
+  });
 });
 
 describe("parseInline", () => {
@@ -178,5 +230,29 @@ describe("CourseSalesPage", () => {
     const html = render(course([offer()], true));
     expect(html).toContain('href="/library"');
     expect(html).not.toContain("/checkout/");
+  });
+
+  const saleDeadline = (over: Partial<NonNullable<SalesOffer["deadline"]>> = {}): NonNullable<SalesOffer["deadline"]> => ({
+    endsAt: "2026-12-05T07:59:00.000Z",
+    endsLabel: "Friday, December 4 at 11:59 PM PST",
+    serverNow: "2026-12-01T20:00:00.000Z",
+    showCountdown: true,
+    closed: false,
+    afterCloseUrl: "/checkout/full-price",
+    ...over,
+  });
+
+  it("shows the sale deadline above the buttons while the sale is on", () => {
+    const html = render(course([offer({ deadline: saleDeadline() })]));
+    expect(html).toContain("Friday, December 4 at 11:59 PM PST");
+    expect(html).toContain('href="/checkout/audit-proof-your-practice-on-demand-free"');
+  });
+
+  it("drops the timer and reroutes the buttons once the sale has ended", () => {
+    const html = render(course([offer({ deadline: saleDeadline({ closed: true }) })]));
+    expect(html).not.toContain("Friday, December 4 at 11:59 PM PST");
+    expect(html).not.toContain("/checkout/audit-proof-your-practice-on-demand-free");
+    expect(html.match(/href="\/checkout\/full-price"/g)).toHaveLength(2);
+    expect(html).toContain("See the current offer");
   });
 });

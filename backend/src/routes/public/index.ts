@@ -31,6 +31,7 @@ import { receiptLinkRouter } from "./receiptLink";
 import { bookACallRouter } from "./bookACall";
 import { clubBonusRouter } from "./clubBonus";
 import { retreatsPublicRouter } from "./retreatsPublic";
+import { countdownRouter } from "./countdown";
 
 export const publicRouter = Router();
 
@@ -49,6 +50,8 @@ publicRouter.use(communityLiveStreamRouter);
 publicRouter.use(checkoutRouter);
 publicRouter.use(offersRouter);
 publicRouter.use(checkoutOfferRouter);
+// Sale countdown: the email timer GIF, its link and the on-page status (sheet row 250).
+publicRouter.use(countdownRouter);
 publicRouter.use(checkoutRequirementsRouter);
 publicRouter.use(cartRouter);
 publicRouter.use(stripeWebhookRouter);

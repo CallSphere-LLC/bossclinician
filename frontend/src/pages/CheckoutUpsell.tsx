@@ -15,7 +15,7 @@ import {
 import { getStripe } from "@/components/checkout/stripeClient";
 import { CheckoutMarkdown } from "@/components/checkout/CheckoutMarkdown";
 import { checkoutPlainText } from "@/components/checkout/checkoutMarkdown";
-import { commerceApi, commerceErrorMessage, type PublicOffer } from "@/lib/commerceApi";
+import { commerceApi, commerceErrorMessage, isOfferClosed, type PublicOffer } from "@/lib/commerceApi";
 import { formatCurrency } from "@/lib/format";
 
 const EASE_LUXE: [number, number, number, number] = [0.22, 1, 0.36, 1];
@@ -51,6 +51,8 @@ export default function CheckoutUpsell() {
 
   const [offer, setOffer] = useState<PublicOffer | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  /** The purchased offer's sale has since closed, so it can no longer be read. */
+  const [parentClosed, setParentClosed] = useState(false);
 
   /** Whether the first order has actually been paid, per the webhook. */
   const [settled, setSettled] = useState(false);
@@ -69,9 +71,15 @@ export default function CheckoutUpsell() {
         if (!cancelled) setOffer(result);
       })
       .catch((err: unknown) => {
-        if (!cancelled) {
-          setLoadError(commerceErrorMessage(err, "We couldn't load this offer."));
+        if (cancelled) return;
+        // The offer's sale deadline passed after this buyer paid. They are not
+        // a latecomer to turn away: the extras are simply over, so they go
+        // straight to their receipt, never to the "offer has ended" page.
+        if (isOfferClosed(err)) {
+          setParentClosed(true);
+          return;
         }
+        setLoadError(commerceErrorMessage(err, "We couldn't load this offer."));
       });
     return () => {
       cancelled = true;
@@ -139,7 +147,7 @@ export default function CheckoutUpsell() {
 
   // A step that does not exist is not an error the customer should read about;
   // it just means the flow is over.
-  const missingStep = offer !== null && upsell === null;
+  const missingStep = (offer !== null && upsell === null) || parentClosed;
   useEffect(() => {
     if (missingStep) finishFlow();
   }, [missingStep, finishFlow]);
@@ -186,6 +194,12 @@ export default function CheckoutUpsell() {
       setAdded(true);
       advanceTimer.current = window.setTimeout(goNext, 900);
     } catch (err) {
+      // The extra's own sale has ended. Nothing was charged, and there is
+      // nothing for the buyer to fix, so the flow moves on.
+      if (isOfferClosed(err)) {
+        goNext();
+        return;
+      }
       setError(commerceErrorMessage(err, "We couldn't add that to your order."));
     } finally {
       setBusy(false);

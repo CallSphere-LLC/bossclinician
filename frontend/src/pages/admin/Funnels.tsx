@@ -28,12 +28,21 @@ import {
   Pencil,
   Plus,
   Split,
+  Timer,
   Trash2,
   TrendingUp,
 } from "lucide-react";
 import { toast } from "sonner";
 import { adminApi } from "@/lib/api";
-import { adminCommerceApi, type Offer } from "@/lib/adminCommerceApi";
+import {
+  adminCommerceApi,
+  countdownPageLine,
+  insertOnOwnLine,
+  offerDeadlineLabel,
+  offersWithCountdown,
+  type Offer,
+} from "@/lib/adminCommerceApi";
+import { useSiteTime } from "@/pages/admin/ui/siteTime";
 import type { Funnel, FunnelStep } from "@/types/admin";
 import { cn } from "@/lib/cn";
 import { formatNumber } from "@/lib/format";
@@ -355,6 +364,96 @@ function FormattingToolbar({
         <Link2 />
         Link
       </Button>
+    </div>
+  );
+}
+
+/**
+ * "Add countdown": pick an offer whose sale has a deadline, and its timer line
+ * is written into the body on a line of its own. She never has to know the
+ * line's spelling, or the offer's web address.
+ */
+function CountdownInsert({
+  offers,
+  preferredOfferId,
+  textareaRef,
+  onChange,
+}: {
+  offers: Offer[];
+  /** The funnel's own offer, offered first when it has a deadline. */
+  preferredOfferId?: number | null;
+  textareaRef: RefObject<HTMLTextAreaElement | null>;
+  onChange: (value: string) => void;
+}) {
+  const time = useSiteTime();
+  const [open, setOpen] = useState(false);
+  const [picked, setPicked] = useState("");
+  const [now] = useState(() => Date.now());
+
+  const choices = offersWithCountdown(offers, now);
+  const fallback = choices.find((offer) => offer.id === preferredOfferId) ?? choices[0];
+  const slug = choices.some((offer) => offer.slug === picked) ? picked : (fallback?.slug ?? "");
+
+  function add() {
+    const el = textareaRef.current;
+    if (!el || !slug) return;
+    const next = insertOnOwnLine(el.value, el.selectionEnd, countdownPageLine(slug));
+    onChange(next.value);
+    setOpen(false);
+    window.requestAnimationFrame(() => {
+      el.focus();
+      el.setSelectionRange(next.caret, next.caret);
+    });
+  }
+
+  return (
+    <div className="mb-1.5">
+      <Button
+        type="button"
+        variant="secondary"
+        size="sm"
+        aria-expanded={open}
+        onClick={() => setOpen((current) => !current)}
+      >
+        <Timer />
+        Add countdown
+      </Button>
+      {open && (
+        <div className="mt-1.5 rounded-xl border border-hairline bg-white/[0.02] p-3">
+          {choices.length === 0 ? (
+            <p className="text-sm text-ink-soft">
+              None of your live offers has a sale ending soon. Open the offer, go to its Price tab,
+              and under “Sale deadline and countdown” choose when the sale ends. Then come back here.
+            </p>
+          ) : (
+            <div className="flex flex-wrap items-end gap-2">
+              <label className="min-w-0 flex-1">
+                <span className="mb-1.5 block text-[0.8rem] font-semibold text-ink">
+                  Count down to the end of which offer?
+                </span>
+                <select
+                  value={slug}
+                  onChange={(event) => setPicked(event.target.value)}
+                  className={selectStyles}
+                >
+                  {choices.map((offer) => (
+                    <option key={offer.id} value={offer.slug}>
+                      {offer.title} (ends {offerDeadlineLabel(offer, time.deadline)})
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <Button type="button" size="sm" className="h-11" onClick={add}>
+                Add to this page
+              </Button>
+              <p className="basis-full text-xs text-ink-soft">
+                This adds a short line in curly brackets to the text. Leave that line as it is: on the
+                page, visitors see a live timer in its place.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -1380,6 +1479,12 @@ export default function Funnels() {
             </Field>
             <Field label="Body" className="sm:col-span-2">
               <FormattingToolbar
+                textareaRef={bodyRef}
+                onChange={(value) => setStepDraft((d) => ({ ...d, bodyMd: value }))}
+              />
+              <CountdownInsert
+                offers={offers}
+                preferredOfferId={active?.offerId}
                 textareaRef={bodyRef}
                 onChange={(value) => setStepDraft((d) => ({ ...d, bodyMd: value }))}
               />
