@@ -135,12 +135,16 @@ async function instalmentReminders(days: number): Promise<number> {
   if (days <= 0) return 0;
   const candidates = await pool.query<ReminderRow>(
     `SELECT i.id, pp.email, COALESCE(NULLIF(m.name,''), split_part(pp.email,'@',1)) AS name,
-            COALESCE(NULLIF(o.title,''), 'your payment plan') AS plan_name,
+            -- A retreat balance plan (migration 230) has no offer: it is named
+            -- for its retreat. NULL || text is NULL, so a shop plan falls through.
+            COALESCE(NULLIF(o.title,''), NULLIF(r.title,'') || ' balance', 'your payment plan') AS plan_name,
             i.amount_cents, pp.currency, i.due_at
        FROM payment_plan_installments i
        JOIN payment_plans pp ON pp.id = i.payment_plan_id
        LEFT JOIN members m ON m.id = pp.member_id
        LEFT JOIN offers o ON o.id = pp.offer_id
+       LEFT JOIN retreat_balance_plans rbp ON rbp.id = pp.retreat_balance_plan_id
+       LEFT JOIN retreats r ON r.id = rbp.retreat_id
       WHERE i.status = 'scheduled' AND pp.status = 'active' AND pp.email <> ''
         AND i.due_at > now()
         AND i.due_at <= now() + make_interval(days => $1)

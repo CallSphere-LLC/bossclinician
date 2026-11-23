@@ -145,6 +145,8 @@ const offerMetadataSchema = z.object({
     .refine((n) => n >= 0)
     .optional()
     .catch(undefined),
+  /** Set on a retreat balance plan's subscription (services/retreatBalancePlans.ts). */
+  retreatBalancePlanId: metadataId,
 });
 
 type OfferMetadata = z.infer<typeof offerMetadataSchema>;
@@ -954,10 +956,13 @@ interface PlanRow {
   installments_paid: number;
   currency: string;
   status: string;
+  /** Set when the plan bills a retreat balance (migration 230); null for a shop plan. */
+  retreat_balance_plan_id?: number | null;
 }
 
 const PLAN_COLUMNS = `id, order_id, offer_id, member_id, email, installment_cents,
-                      installment_count, installments_paid, currency, status`;
+                      installment_count, installments_paid, currency, status,
+                      retreat_balance_plan_id`;
 
 async function loadPlan(stripeSubscriptionId: string): Promise<PlanRow | null> {
   const res = await pool.query<PlanRow>(
@@ -1146,6 +1151,45 @@ async function sendRecurringReceipt(
     return;
   }
   const to = invoice.customer_email ?? order?.email ?? plan?.email ?? "";
+
+  // A retreat balance payment gets the retreat's own receipt: no order number,
+  // no library link. Recognised by the plan row, or, when invoice.paid beat the
+  // plan row here, by the subscription metadata. The service is imported lazily
+  // (it imports this module). Anything going wrong falls through to the
+  // ordinary receipt below, which is otherwise untouched.
+  const retreatBalancePlanId =
+    order === null
+      ? (plan?.retreat_balance_plan_id ?? invoiceMetadata(invoice).retreatBalancePlanId ?? null)
+      : null;
+  if (retreatBalancePlanId != null) {
+    try {
+      const { retreatReceiptMail } = await import("../../services/retreatBalancePlans");
+      const mail = await retreatReceiptMail({
+        retreatBalancePlanId,
+        paymentPlanId: plan?.id ?? null,
+        stripeInvoiceId: invoice.id,
+        stripeCustomerId: idOf(invoice.customer),
+        collectedCents,
+        paidAt: toDate(invoice.status_transitions?.paid_at) ?? toDate(invoice.created) ?? new Date(),
+      });
+      const recipient = to || mail?.to || "";
+      if (mail && recipient) {
+        await sendMail({
+          topic: "retreat_balance_receipt",
+          memberId: mail.memberId,
+          to: recipient,
+          subject: mail.subject,
+          text: mail.text,
+          html: mail.html,
+          ...(mail.replyTo ? { replyTo: mail.replyTo } : {}),
+        });
+        return;
+      }
+    } catch (error) {
+      console.error(`[stripe] retreat receipt for ${invoice.id} failed; sending the ordinary receipt:`, error);
+    }
+  }
+
   if (!to) return;
   const title = order ? describe(order) : "Your payment";
   const fallback = purchaseReceipt({
@@ -1501,18 +1545,38 @@ export async function advancePaymentPlan(input: {
   if (completedPlan !== null && completedPlan.email) {
     const order = completedPlan.order_id ? await loadOrderById(completedPlan.order_id) : null;
     const paidToDate = await planPaidToDate(completedPlan.id);
+    // A retreat balance has nothing "to keep" in a library: its own wording,
+    // or the ordinary email if that cannot be built.
+    let retreatContent: { subject: string; text: string; html: string; replyTo?: string } | null = null;
+    if (completedPlan.retreat_balance_plan_id != null) {
+      try {
+        const { retreatCompletedMail } = await import("../../services/retreatBalancePlans");
+        const mail = await retreatCompletedMail(completedPlan.id);
+        if (mail) {
+          retreatContent = {
+            subject: mail.subject,
+            text: mail.text,
+            html: mail.html,
+            ...(mail.replyTo ? { replyTo: mail.replyTo } : {}),
+          };
+        }
+      } catch (err) {
+        console.error(`[stripe] plan ${completedPlan.id}: retreat paid-in-full email failed; sending the ordinary one:`, err);
+      }
+    }
     void sendMail({
       topic: "payment_plan_completed",
       sourceId: completedPlan.order_id ?? null,
       memberId: completedPlan.member_id ?? null,
       to: completedPlan.email,
-      ...paymentPlanCompleted({
-        buyerName: order?.billing_name ?? "",
-        description: order ? describe(order) : "your payment plan",
-        installmentCount: completedPlan.installment_count,
-        totalPaidCents: paidToDate,
-        currency: completedPlan.currency,
-      }),
+      ...(retreatContent ??
+        paymentPlanCompleted({
+          buyerName: order?.billing_name ?? "",
+          description: order ? describe(order) : "your payment plan",
+          installmentCount: completedPlan.installment_count,
+          totalPaidCents: paidToDate,
+          currency: completedPlan.currency,
+        })),
     });
 
     // Paying off an instalment plan is the end of a months-long relationship
@@ -1983,22 +2047,49 @@ async function handleInvoicePaymentFailed(invoice: Stripe.Invoice): Promise<void
 
   const buyerEmail = invoice.customer_email ?? order?.email ?? plan?.email ?? "";
   if (buyerEmail) {
+    // A retreat balance instalment is not "your subscription": its own wording,
+    // with the billing page as the place to update the card. The ordinary
+    // email goes out instead if that cannot be built.
+    let retreatContent: { subject: string; text: string; html: string; replyTo?: string } | null = null;
+    if (order === null && plan !== null && plan.retreat_balance_plan_id != null) {
+      try {
+        const { retreatPaymentFailedMail } = await import("../../services/retreatBalancePlans");
+        const mail = await retreatPaymentFailedMail({
+          paymentPlanId: plan.id,
+          amountCents: invoice.amount_due,
+          currency: invoice.currency,
+          attempt,
+          nextAttemptAt,
+        });
+        if (mail) {
+          retreatContent = {
+            subject: mail.subject,
+            text: mail.text,
+            html: mail.html,
+            ...(mail.replyTo ? { replyTo: mail.replyTo } : {}),
+          };
+        }
+      } catch (err) {
+        console.error(`[stripe] invoice ${invoice.id}: retreat payment-failed email could not be built; sending the ordinary one:`, err);
+      }
+    }
     void sendMail({
       topic: "payment_failed",
       sourceId: order?.id ?? plan?.order_id ?? null,
       memberId: order?.member_id ?? plan?.member_id ?? null,
       to: buyerEmail,
-      ...paymentFailedDunning({
-        buyerName: order?.billing_name ?? "",
-        description: order ? describe(order) : "your subscription",
-        amountCents: invoice.amount_due,
-        currency: invoice.currency,
-        attempt,
-        payInvoiceUrl: invoice.hosted_invoice_url ?? "",
-        // The date worked out above, not Stripe's: with this site retrying,
-        // Stripe's is empty and the email used to say no retry was coming.
-        nextAttemptAt,
-      }),
+      ...(retreatContent ??
+        paymentFailedDunning({
+          buyerName: order?.billing_name ?? "",
+          description: order ? describe(order) : "your subscription",
+          amountCents: invoice.amount_due,
+          currency: invoice.currency,
+          attempt,
+          payInvoiceUrl: invoice.hosted_invoice_url ?? "",
+          // The date worked out above, not Stripe's: with this site retrying,
+          // Stripe's is empty and the email used to say no retry was coming.
+          nextAttemptAt,
+        })),
     });
   }
 
@@ -2581,6 +2672,35 @@ async function handleChargeRefunded(charge: Stripe.Charge): Promise<void> {
       transaction = matching.rows[0];
       await pool.query(`UPDATE transactions SET stripe_payment_intent_id=$2,stripe_charge_id=$3 WHERE id=$1 AND stripe_payment_intent_id IS NULL`,
         [transaction.id, paymentIntentId, charge.id]);
+    }
+  }
+
+  // A payment with no order may be a retreat balance instalment. That service
+  // records the refund in the ledger and tells the owner; it changes nothing
+  // about the guest's schedule, decides for itself whether the payment is one
+  // of its own, and never throws. Imported lazily: it imports this module.
+  if (transaction && transaction.order_id === null) {
+    try {
+      const { onBalancePaymentRefunded } = await import("../../services/retreatBalancePlans");
+      const handled = await onBalancePaymentRefunded({
+        transactionId: transaction.id,
+        chargeId: charge.id,
+        chargeAmountCents: charge.amount,
+        amountRefundedCents: charge.amount_refunded,
+        currency: charge.currency,
+        refunds: (charge.refunds?.data ?? []).map((refund) => ({
+          id: refund.id,
+          amountCents: refund.amount,
+          currency: refund.currency,
+          reason: refund.reason ?? "",
+        })),
+      });
+      if (handled) {
+        log(`charge ${charge.id} refunded ${charge.amount_refunded} of ${charge.amount}: a retreat balance payment`);
+        return;
+      }
+    } catch (err) {
+      console.error(`[stripe] charge ${charge.id}: retreat balance refund follow-up failed:`, err);
     }
   }
 

@@ -1,8 +1,17 @@
 import { describe, expect, it } from "vitest";
 import {
+  RETREAT_EMAIL_SIGNATURE,
   addMonthsToDate,
   buildAuthorizationText,
+  buildBalanceCompletedEmail,
+  buildBalancePaymentFailedEmail,
+  buildBalanceReceiptEmail,
   buildCardProblemEmail,
+  buildRefundOwnerNote,
+  cardLabel,
+  greetingFor,
+  retreatEmailHtml,
+  retreatEmailText,
   buildOwnerNotice,
   buildRequestEmail,
   buildSchedule,
@@ -421,5 +430,206 @@ describe("emails", () => {
     expect(notice.text).toContain("Maya Lee (maya@example.com)");
     expect(notice.text).toContain("4 monthly payments of $500.00 ($2,000.00 in total), December 5, 2026 to March 5, 2027");
     expect(notice.text).toContain("visa ending 4242");
+  });
+});
+
+describe("the shared email frame", () => {
+  const shell = {
+    preheader: "Preview <line>",
+    heading: "Payment received",
+    greeting: greetingFor("Maya"),
+    paragraphs: ["First paragraph.", "Second & last."],
+    rows: [{ label: "Amount paid", value: "$5.00" }],
+    button: { label: "View my retreat payments", url: "https://example.test/p?a=1&b=2" },
+    footnote: "Keep this email.",
+    supportEmail: "hello@example.com",
+  };
+
+  it("greets by first name and falls back to there", () => {
+    expect(greetingFor(" Sagar ")).toBe("Hi Sagar,");
+    expect(greetingFor("")).toBe("Hi there,");
+  });
+
+  it("is a complete, table-based document with the hidden preheader first", () => {
+    const html = retreatEmailHtml(shell);
+    expect(html.startsWith("<!doctype html>")).toBe(true);
+    expect(html).toContain('data-bc-shell="1"');
+    expect(html).toContain("max-width:600px");
+    expect(html).not.toContain("<style");
+    expect(html).not.toContain("<link");
+    expect(html.indexOf("display:none")).toBeLessThan(html.indexOf("<table"));
+    expect(html).toContain("Preview &lt;line&gt;");
+    expect(html).toContain("Second &amp; last.");
+    expect(html).toContain('href="https://example.test/p?a=1&amp;b=2"');
+    expect(html).toContain('bgcolor="#b8913f"');
+    expect(html).toContain("border-radius:6px");
+    expect(html).toContain("#2a1a3e");
+    expect(html).toContain("#f6f1ea");
+    expect(html).toContain("Georgia");
+  });
+
+  it("signs with the logo, the assistant, Yvette and the support line", () => {
+    const html = retreatEmailHtml(shell);
+    expect(html).toMatch(/<img src="https?:\/\/[^"]+\/images\/boss-clinician-logo\.png" width="120" alt="Boss Clinician" style="display:block;border:0">/);
+    expect(html).toContain("Boss Clinician AI Assistant");
+    expect(html).toContain("On behalf of Yvette Howard, LCSW");
+    expect(html).toContain('<a href="https://www.bossclinician.com"');
+    expect(html).toContain("Questions? Reply to this email or write to");
+    expect(html).toContain("mailto:hello@example.com");
+    expect(html).toContain("You are receiving this because of your FlourisHealer retreat booking with Boss Clinician.");
+    expect(html).not.toContain(EM_DASH);
+  });
+
+  it("carries the same information in the text part and ends with the signature", () => {
+    const text = retreatEmailText(shell);
+    for (const piece of ["Hi Maya,", "First paragraph.", "Second & last.", "Amount paid: $5.00", "View my retreat payments: https://example.test/p?a=1&b=2", "Keep this email.", "Questions? Reply to this email or write to hello@example.com."]) {
+      expect(text).toContain(piece);
+    }
+    expect(RETREAT_EMAIL_SIGNATURE).toBe("Boss Clinician AI Assistant, on behalf of Yvette Howard, LCSW");
+    expect(text.endsWith(RETREAT_EMAIL_SIGNATURE)).toBe(true);
+    expect(text).not.toContain(EM_DASH);
+  });
+
+  it("gives the owner the same frame without the guest's lines", () => {
+    const html = retreatEmailHtml({ ...shell, variant: "owner" });
+    const text = retreatEmailText({ ...shell, variant: "owner" });
+    expect(html).not.toContain("FlourisHealer");
+    expect(html).not.toContain("Questions?");
+    expect(text).not.toContain("Questions?");
+    expect(text.endsWith(RETREAT_EMAIL_SIGNATURE)).toBe(true);
+  });
+
+  it("frames every guest email", () => {
+    const request = buildRequestEmail({
+      firstName: "Maya", retreatTitle: "Bali 2027", currency: "usd", agreedTotalCents: 550000, paidSoFarCents: 350000,
+      remainingCents: 200000, installmentCents: 50000, installmentCount: 4, firstChargeDate: "2026-12-05",
+      chargesWhenAdded: false, url: "https://example.test/p", supportEmail: "",
+    });
+    const problem = buildCardProblemEmail({ firstName: "Maya", retreatTitle: "Bali 2027", problem: "Declined.", url: "https://example.test/p", supportEmail: "" });
+    for (const email of [request, problem]) {
+      expect(email.html).toContain('data-bc-shell="1"');
+      expect(email.html).toContain("Boss Clinician AI Assistant");
+      expect(email.text.endsWith(RETREAT_EMAIL_SIGNATURE)).toBe(true);
+    }
+  });
+});
+
+describe("balance payment receipt", () => {
+  const base = {
+    firstName: "Sagar",
+    retreatTitle: "Bali 2027",
+    currency: "usd",
+    amountCents: 500,
+    sequence: 1,
+    installmentCount: 2,
+    paidSoFarCents: 500,
+    remainingCents: 500,
+    next: { date: "2026-12-23", amountCents: 500 },
+    card: "Visa ending 4242",
+    url: "https://www.bossclinician.com/retreats/dashboard/bali-2027/payments",
+    supportEmail: "hello@example.com",
+  };
+
+  it("reads like a retreat receipt, with no order number and no library", () => {
+    const email = buildBalanceReceiptEmail(base);
+    expect(email.subject).toBe("Your retreat payment receipt: $5.00");
+    for (const piece of [
+      "Hi Sagar,",
+      "Bali 2027: balance payment 1 of 2",
+      "  Retreat: Bali 2027",
+      "  Payment: 1 of 2",
+      "  Amount paid: $5.00",
+      "  Paid so far: $5.00",
+      "  Balance remaining: $5.00",
+      "  Next payment: December 23, 2026 ($5.00)",
+      "  Card: Visa ending 4242",
+      "$5.00 remains on your balance, and your next payment of $5.00 is scheduled for December 23, 2026.",
+      "View my retreat payments: https://www.bossclinician.com/retreats/dashboard/bali-2027/payments",
+    ]) {
+      expect(email.text).toContain(piece);
+    }
+    expect(email.html).toContain("Payment received");
+    expect(email.html).toContain('href="https://www.bossclinician.com/retreats/dashboard/bali-2027/payments"');
+    const all = `${email.subject}${email.text}${email.html}`;
+    expect(all).not.toContain(EM_DASH);
+    expect(all).not.toMatch(/order #/i);
+    expect(all).not.toContain("/library");
+  });
+
+  it("says the balance is paid in full on the last payment", () => {
+    const email = buildBalanceReceiptEmail({ ...base, sequence: 2, paidSoFarCents: 1000, remainingCents: 0, next: null });
+    expect(email.text).toContain("Your balance is now paid in full.");
+    expect(email.text).toContain("  Next payment: None. Your balance is paid in full.");
+    expect(email.text).toContain("  Balance remaining: $0.00");
+  });
+
+  it("says none scheduled when money is owed but nothing will be charged (a cancelled plan)", () => {
+    const email = buildBalanceReceiptEmail({ ...base, next: null, card: "" });
+    expect(email.text).toContain("  Next payment: None scheduled");
+    expect(email.text).toContain("No further payment is scheduled at the moment.");
+    expect(email.text).not.toContain("paid in full");
+    expect(email.text).not.toContain("Card:");
+  });
+
+  it("labels the card", () => {
+    expect(cardLabel("visa", "4242")).toBe("Visa ending 4242");
+    expect(cardLabel("", "4242")).toBe("Card ending 4242");
+    expect(cardLabel("visa", null)).toBe("");
+  });
+});
+
+describe("other balance emails", () => {
+  it("says paid in full with thanks, the dashboard link and no library", () => {
+    const email = buildBalanceCompletedEmail({
+      firstName: "Maya", retreatTitle: "Bali 2027", currency: "usd", totalPaidCents: 550000,
+      url: "https://www.bossclinician.com/retreats/dashboard/bali-2027", supportEmail: "",
+    });
+    expect(email.subject).toBe("Your Bali 2027 balance is paid in full");
+    expect(email.text).toContain("Your balance for Bali 2027 is paid in full");
+    expect(email.text).toContain("Thank you");
+    expect(email.text).toContain("  Total paid: $5,500.00");
+    expect(email.html).toContain('href="https://www.bossclinician.com/retreats/dashboard/bali-2027"');
+    const all = `${email.subject}${email.text}${email.html}`;
+    expect(all).not.toContain("yours to keep");
+    expect(all).not.toContain("/library");
+    expect(all).not.toContain(EM_DASH);
+  });
+
+  it("calls a declined instalment a retreat balance payment and links to billing", () => {
+    const input = {
+      firstName: "Maya", retreatTitle: "Bali 2027", currency: "usd", amountCents: 50000, attempt: 2,
+      nextAttemptDate: "2026-12-01", url: "https://www.bossclinician.com/account/billing", supportEmail: "",
+    };
+    const email = buildBalancePaymentFailedEmail(input);
+    expect(email.subject).toBe("Your retreat balance payment did not go through");
+    expect(email.text).toContain("Your retreat balance payment of $500.00 for Bali 2027 was declined (attempt 2).");
+    expect(email.text).toContain("We will try again on December 1, 2026.");
+    expect(email.text).toContain("Update my card: https://www.bossclinician.com/account/billing");
+    const last = buildBalancePaymentFailedEmail({ ...input, attempt: 1, nextAttemptDate: null });
+    expect(last.subject).toBe("Action needed: your retreat balance payment of $500.00");
+    expect(last.text).toContain("This was the last automatic attempt");
+    expect(last.text).not.toContain("(attempt");
+    const all = `${email.subject}${email.text}${email.html}${last.subject}${last.text}${last.html}`;
+    expect(all).not.toContain("your subscription");
+    expect(all).not.toContain(EM_DASH);
+  });
+
+  it("tells the owner a balance payment was refunded and the schedule was left alone", () => {
+    const note = buildRefundOwnerNote({
+      guestName: "Maya Lee", guestEmail: "maya@example.com", retreatTitle: "Bali 2027", currency: "usd",
+      refundedCents: 500, chargeId: "ch_1", recorded: true, isTest: false,
+    });
+    expect(note.subject).toBe("Retreat balance payment refunded: $5.00 (Bali 2027)");
+    expect(note.text).toContain("Guest: Maya Lee (maya@example.com)");
+    expect(note.text).toContain("Stripe charge: ch_1");
+    expect(note.text).toContain("recorded in the payments ledger");
+    expect(note.text).toContain("was not changed automatically");
+    const failed = buildRefundOwnerNote({
+      guestName: "", guestEmail: "maya@example.com", retreatTitle: "Bali 2027", currency: "usd",
+      refundedCents: 500, chargeId: "ch_1", recorded: false, isTest: true,
+    });
+    expect(failed.text).toContain("could NOT be recorded");
+    expect(failed.text).toContain("(test plan)");
+    expect(`${note.text}${failed.text}`).not.toContain(EM_DASH);
   });
 });

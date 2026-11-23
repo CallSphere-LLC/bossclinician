@@ -542,7 +542,165 @@ export function paymentsUrl(retreat: Pick<RetreatRow, "slug">): string {
   return `${siteUrl()}/retreats/dashboard/${retreat.slug}/payments`;
 }
 
-const link = (href: string, label: string) => `<a href="${escapeHtml(href)}">${escapeHtml(label)}</a>`;
+/** The guest's retreat dashboard (its home section). */
+export function dashboardUrl(retreat: Pick<RetreatRow, "slug">): string {
+  return `${siteUrl()}/retreats/dashboard/${retreat.slug}`;
+}
+
+/* The one frame every retreat balance email arrives in. Email rules, not web
+ * rules: tables for layout, inline styles, web-safe fonts, 600px, no background
+ * images. It is a complete document, so the mailer's own brand frame
+ * (email/brandShell.ts) passes it through untouched. */
+
+const BRAND_SITE = "https://www.bossclinician.com";
+const SIGNATURE_NAME = "Boss Clinician AI Assistant";
+const SIGNATURE_BEHALF = "Yvette Howard, LCSW";
+/** The last line of every plain-text part. */
+export const RETREAT_EMAIL_SIGNATURE = `${SIGNATURE_NAME}, on behalf of ${SIGNATURE_BEHALF}`;
+const GUEST_FOOTER = "You are receiving this because of your FlourisHealer retreat booking with Boss Clinician.";
+const OWNER_FOOTER = "Sent to you as the owner of Boss Clinician.";
+
+const INK = "#2a1a3e";
+const SOFT = "#5b5068";
+const MUTED = "#857c8f";
+const GOLD = "#b8913f";
+const LINK = "#76501b";
+const PAGE = "#f6f1ea";
+const CARD = "#ffffff";
+const HAIRLINE = "#e8e0d4";
+const SERIF = "Georgia, 'Times New Roman', Times, serif";
+const SANS = "Arial, Helvetica, sans-serif";
+
+export interface RetreatEmailShell {
+  /** The inbox preview line. Hidden in the message itself. */
+  preheader: string;
+  heading: string;
+  /** The whole greeting line, e.g. "Hi Maya," (see `greetingFor`). */
+  greeting: string;
+  paragraphs: string[];
+  /** A two-column summary: label on the left, value on the right. */
+  rows?: { label: string; value: string }[];
+  button?: { label: string; url: string };
+  /** Smaller print under the button. */
+  footnote?: string;
+  supportEmail: string;
+  /** "owner" drops the guest's support line and footer. Default is the guest's. */
+  variant?: "guest" | "owner";
+}
+
+/** "Hi Maya," or "Hi there," when the first name is not known. */
+export function greetingFor(firstName: string): string {
+  return `Hi ${firstName.trim() || "there"},`;
+}
+
+/** The logo in the signature, served by this site (so staging shows its own). */
+export function retreatEmailLogoUrl(): string {
+  return `${siteUrl()}/images/boss-clinician-logo.png`;
+}
+
+function supportLine(supportEmail: string): string {
+  return supportEmail ? `Questions? Reply to this email or write to ${supportEmail}.` : `Questions? Reply to this email.`;
+}
+
+/** The HTML part of a retreat balance email. Every value is escaped here. */
+export function retreatEmailHtml(input: RetreatEmailShell): string {
+  const owner = input.variant === "owner";
+  const rows = input.rows ?? [];
+  const paragraph = (text: string) =>
+    `<p style="margin:0 0 16px;font-family:${SANS};font-size:16px;line-height:1.6;color:${INK};">${escapeHtml(text)}</p>`;
+  const summary =
+    rows.length === 0
+      ? ""
+      : `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:8px 0 8px;border-top:1px solid ${HAIRLINE};">` +
+        rows
+          .map(
+            (row) =>
+              `<tr>` +
+              `<td valign="top" style="padding:11px 12px 11px 0;border-bottom:1px solid ${HAIRLINE};font-family:${SANS};font-size:14px;line-height:1.4;color:${SOFT};">${escapeHtml(row.label)}</td>` +
+              `<td valign="top" align="right" style="padding:11px 0;border-bottom:1px solid ${HAIRLINE};font-family:${SANS};font-size:15px;line-height:1.4;font-weight:bold;font-variant-numeric:tabular-nums;color:${INK};text-align:right;">${escapeHtml(row.value)}</td>` +
+              `</tr>`,
+          )
+          .join("") +
+        `</table>`;
+  const button = input.button
+    ? `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:24px 0 8px;"><tr>` +
+      `<td align="center" bgcolor="${GOLD}" style="background-color:${GOLD};border-radius:6px;padding:14px 28px;">` +
+      `<a href="${escapeHtml(input.button.url)}" target="_blank" style="display:inline-block;font-family:${SANS};font-size:16px;line-height:1.2;font-weight:bold;color:${INK};text-decoration:none;border-radius:6px;">${escapeHtml(input.button.label)}</a>` +
+      `</td></tr></table>`
+    : "";
+  const footnote = input.footnote
+    ? `<p style="margin:16px 0 0;font-family:${SANS};font-size:13px;line-height:1.6;color:${SOFT};">${escapeHtml(input.footnote)}</p>`
+    : "";
+  const support = owner
+    ? ""
+    : input.supportEmail
+      ? `<br>Questions? Reply to this email or write to <a href="mailto:${escapeHtml(input.supportEmail)}" style="color:${LINK};">${escapeHtml(input.supportEmail)}</a>.`
+      : `<br>Questions? Reply to this email.`;
+  const signature =
+    `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:30px 0 0;"><tr>` +
+    `<td width="120" valign="top" style="width:120px;padding:20px 16px 0 0;border-top:1px solid ${GOLD};">` +
+    `<img src="${escapeHtml(retreatEmailLogoUrl())}" width="120" alt="Boss Clinician" style="display:block;border:0">` +
+    `</td>` +
+    `<td valign="top" style="padding:20px 0 0;border-top:1px solid ${GOLD};font-family:${SANS};font-size:13px;line-height:1.6;color:${SOFT};">` +
+    `<strong style="font-size:14px;color:${INK};">${escapeHtml(SIGNATURE_NAME)}</strong>` +
+    `<br>On behalf of ${escapeHtml(SIGNATURE_BEHALF)}` +
+    `<br>Boss Clinician &middot; <a href="${BRAND_SITE}" style="color:${LINK};">bossclinician.com</a>` +
+    support +
+    `</td></tr></table>`;
+
+  return [
+    `<!doctype html>`,
+    `<html lang="en" data-bc-shell="1">`,
+    `<head>`,
+    `<meta charset="utf-8">`,
+    `<meta name="viewport" content="width=device-width, initial-scale=1">`,
+    `<meta name="color-scheme" content="light">`,
+    `<meta name="supported-color-schemes" content="light">`,
+    `<title>${escapeHtml(input.heading)}</title>`,
+    `</head>`,
+    `<body style="margin:0;padding:0;background-color:${PAGE};-webkit-text-size-adjust:100%;">`,
+    `<div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;mso-hide:all;">${escapeHtml(input.preheader)}</div>`,
+    `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="${PAGE}" style="background-color:${PAGE};">`,
+    `<tr><td align="center" style="padding:28px 12px 32px;">`,
+    `<table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:600px;">`,
+    `<tr><td bgcolor="${CARD}" style="background-color:${CARD};border:1px solid ${HAIRLINE};border-radius:10px;padding:32px 28px 28px;">`,
+    `<h1 style="margin:0 0 14px;font-family:${SERIF};font-size:26px;line-height:1.25;font-weight:normal;color:${INK};">${escapeHtml(input.heading)}</h1>`,
+    `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 22px;"><tr><td width="56" height="3" bgcolor="${GOLD}" style="width:56px;height:3px;line-height:3px;font-size:0;background-color:${GOLD};">&nbsp;</td></tr></table>`,
+    paragraph(input.greeting),
+    ...input.paragraphs.map(paragraph),
+    summary,
+    button,
+    footnote,
+    signature,
+    `</td></tr>`,
+    `<tr><td align="center" style="padding:18px 16px 0;font-family:${SANS};font-size:12px;line-height:1.6;color:${MUTED};">${escapeHtml(owner ? OWNER_FOOTER : GUEST_FOOTER)}</td></tr>`,
+    `</table>`,
+    `</td></tr>`,
+    `</table>`,
+    `</body>`,
+    `</html>`,
+  ]
+    .filter((line) => line !== "")
+    .join("\n");
+}
+
+/** The plain-text part: the same information, ending with the same signature. */
+export function retreatEmailText(input: RetreatEmailShell): string {
+  const owner = input.variant === "owner";
+  const rows = input.rows ?? [];
+  const lines: string[] = [input.greeting, ``];
+  for (const text of input.paragraphs) lines.push(text, ``);
+  if (rows.length > 0) lines.push(...rows.map((row) => `  ${row.label}: ${row.value}`), ``);
+  if (input.button) lines.push(`${input.button.label}: ${input.button.url}`, ``);
+  if (input.footnote) lines.push(input.footnote, ``);
+  if (!owner) lines.push(supportLine(input.supportEmail));
+  lines.push(BRAND_SITE, ``, RETREAT_EMAIL_SIGNATURE);
+  return lines.join("\n");
+}
+
+function retreatEmail(subject: string, shell: RetreatEmailShell): BalanceEmail {
+  return { subject, text: retreatEmailText(shell), html: retreatEmailHtml(shell) };
+}
 
 /** The owner's "please add your card" email. Sent only by her explicit action. */
 export function buildRequestEmail(input: {
@@ -559,7 +717,6 @@ export function buildRequestEmail(input: {
   url: string;
   supportEmail: string;
 }): BalanceEmail {
-  const name = input.firstName.trim() || "there";
   const money = (amount: number) => formatAmount(amount, input.currency);
   const plan =
     input.installmentCount === 1
@@ -568,45 +725,25 @@ export function buildRequestEmail(input: {
   const first = input.chargesWhenAdded
     ? `The first payment is charged when you add your card, and you will see the full schedule before you agree to it.`
     : `The first payment is charged on ${longDate(input.firstChargeDate)}, and you will see the full schedule before you agree to it.`;
-  const lines = [
-    `Your payments for ${input.retreatTitle} are moving to your retreat dashboard, so the remaining balance can be paid automatically from a card you choose.`,
-    `Here is where things stand:`,
-  ];
-  const facts = [
-    `Agreed total: ${money(input.agreedTotalCents)}`,
-    `Paid so far: ${money(input.paidSoFarCents)}`,
-    `Remaining balance: ${money(input.remainingCents)}`,
-    `Your plan: ${plan}`,
-  ];
-  const closing = [
-    first,
-    `Your card is stored securely by Stripe, our payment processor. We never see or keep the card number.`,
-    `If anything here does not look right, or you have a question, just reply to this email${input.supportEmail ? ` or write to ${input.supportEmail}` : ""}.`,
-  ];
-  const subject = `Add your card for your ${input.retreatTitle} balance`;
-  const text = [
-    `Hi ${name},`,
-    ``,
-    lines[0],
-    ``,
-    lines[1],
-    ...facts.map((fact) => `  ${fact}`),
-    ``,
-    `Add your card here: ${input.url}`,
-    ``,
-    ...closing.flatMap((line) => [line, ``]),
-    `Yvette`,
-  ].join("\n");
-  const html = [
-    `<p>Hi ${escapeHtml(name)},</p>`,
-    `<p>${escapeHtml(lines[0])}</p>`,
-    `<p>${escapeHtml(lines[1])}</p>`,
-    `<ul>${facts.map((fact) => `<li>${escapeHtml(fact)}</li>`).join("")}</ul>`,
-    `<p>${link(input.url, "Add your card")}</p>`,
-    ...closing.map((line) => `<p>${escapeHtml(line)}</p>`),
-    `<p>Yvette</p>`,
-  ].join("\n");
-  return { subject, text, html };
+  const intro = `Your payments for ${input.retreatTitle} are moving to your retreat dashboard, so the remaining balance can be paid automatically from a card you choose.`;
+  return retreatEmail(`Add your card for your ${input.retreatTitle} balance`, {
+    preheader: `Add a card on your retreat dashboard so your ${input.retreatTitle} balance is paid automatically.`,
+    heading: "Add your card",
+    greeting: greetingFor(input.firstName),
+    paragraphs: [intro, first, `Here is where things stand:`],
+    rows: [
+      { label: "Retreat", value: input.retreatTitle },
+      { label: "Agreed total", value: money(input.agreedTotalCents) },
+      { label: "Paid so far", value: money(input.paidSoFarCents) },
+      { label: "Remaining balance", value: money(input.remainingCents) },
+      { label: "Your plan", value: plan },
+    ],
+    button: { label: "Add your card", url: input.url },
+    footnote:
+      `Your card is stored securely by Stripe, our payment processor. We never see or keep the card number. ` +
+      `If anything here does not look right, just reply to this email.`,
+    supportEmail: input.supportEmail,
+  });
 }
 
 /** Tells the guest a charge did not go through and how to put it right. */
@@ -617,23 +754,18 @@ export function buildCardProblemEmail(input: {
   url: string;
   supportEmail: string;
 }): BalanceEmail {
-  const name = input.firstName.trim() || "there";
-  const body = [
-    `We tried to charge the card you saved for your ${input.retreatTitle} balance and the payment did not go through.`,
-    input.problem,
-    `Nothing else has changed, and your place is not affected by this message. Please add a card again so your payments can continue.`,
-  ];
-  const closing = `If you have any questions, just reply to this email${input.supportEmail ? ` or write to ${input.supportEmail}` : ""}.`;
-  const subject = `Your ${input.retreatTitle} payment did not go through`;
-  const text = [`Hi ${name},`, ``, ...body.flatMap((line) => [line, ``]), `Add your card here: ${input.url}`, ``, closing, ``, `Yvette`].join("\n");
-  const html = [
-    `<p>Hi ${escapeHtml(name)},</p>`,
-    ...body.map((line) => `<p>${escapeHtml(line)}</p>`),
-    `<p>${link(input.url, "Add your card")}</p>`,
-    `<p>${escapeHtml(closing)}</p>`,
-    `<p>Yvette</p>`,
-  ].join("\n");
-  return { subject, text, html };
+  return retreatEmail(`Your ${input.retreatTitle} payment did not go through`, {
+    preheader: `Please add a card again so your ${input.retreatTitle} payments can continue.`,
+    heading: "Your payment did not go through",
+    greeting: greetingFor(input.firstName),
+    paragraphs: [
+      `We tried to charge the card you saved for your ${input.retreatTitle} balance and the payment did not go through.`,
+      input.problem,
+      `Nothing else has changed, and your place is not affected by this message. Please add a card again so your payments can continue.`,
+    ],
+    button: { label: "Add your card", url: input.url },
+    supportEmail: input.supportEmail,
+  });
 }
 
 /** The owner's short "card on file" notice. */
@@ -651,19 +783,191 @@ export function buildOwnerNotice(input: {
   const money = formatAmount(input.installmentCents, input.currency);
   const total = formatAmount(input.installmentCents * input.installmentCount, input.currency);
   const who = input.guestName ? `${input.guestName} (${input.guestEmail})` : input.guestEmail;
-  const rows = [
-    `Guest: ${who}`,
-    `Retreat: ${input.retreatTitle}`,
-    `Card: ${input.card}`,
-    input.installmentCount === 1
-      ? `Schedule: one payment of ${money} on ${longDate(input.firstChargeDate)}`
-      : `Schedule: ${input.installmentCount} monthly payments of ${money} (${total} in total), ${longDate(input.firstChargeDate)} to ${longDate(input.lastChargeDate)}`,
-  ];
   const intro = `A retreat guest has added a card and agreed to her balance payment schedule. The charges run automatically from here.`;
+  return retreatEmail(`Card on file: ${input.guestName || input.guestEmail} (${input.retreatTitle} balance)`, {
+    variant: "owner",
+    preheader: intro,
+    heading: "Card on file",
+    greeting: "Hello,",
+    paragraphs: [intro],
+    rows: [
+      { label: "Guest", value: who },
+      { label: "Retreat", value: input.retreatTitle },
+      { label: "Card", value: input.card },
+      {
+        label: "Schedule",
+        value:
+          input.installmentCount === 1
+            ? `one payment of ${money} on ${longDate(input.firstChargeDate)}`
+            : `${input.installmentCount} monthly payments of ${money} (${total} in total), ${longDate(input.firstChargeDate)} to ${longDate(input.lastChargeDate)}`,
+      },
+    ],
+    supportEmail: "",
+  });
+}
+
+/** "Visa ending 4242", or "" when no card is on record. */
+export function cardLabel(brand: string | null | undefined, last4: string | null | undefined): string {
+  if (!last4) return "";
+  const name = (brand ?? "").trim();
+  return `${name ? name.charAt(0).toUpperCase() + name.slice(1) : "Card"} ending ${last4}`;
+}
+
+export interface BalanceReceiptInput {
+  firstName: string;
+  retreatTitle: string;
+  currency: string;
+  /** What this payment collected. */
+  amountCents: number;
+  /** This payment's place in the schedule: N of M. */
+  sequence: number;
+  installmentCount: number;
+  /** Everything paid toward the retreat, this payment included. */
+  paidSoFarCents: number;
+  /** What is still owed after this payment. */
+  remainingCents: number;
+  /** The next scheduled charge, or null when none is scheduled. */
+  next: { date: string; amountCents: number } | null;
+  /** "Visa ending 4242", or "" when not known. */
+  card: string;
+  url: string;
+  supportEmail: string;
+}
+
+/** The receipt for one balance payment. Never mentions an order or the library. */
+export function buildBalanceReceiptEmail(input: BalanceReceiptInput): BalanceEmail {
+  const money = (amount: number) => formatAmount(amount, input.currency);
+  const amount = money(input.amountCents);
+  const position = `${input.sequence} of ${input.installmentCount}`;
+  const lineTitle = `${input.retreatTitle}: balance payment ${position}`;
+  const paidInFull = input.remainingCents <= 0;
+  const status = paidInFull
+    ? `Your balance is now paid in full.`
+    : input.next
+      ? `${money(input.remainingCents)} remains on your balance, and your next payment of ${money(input.next.amountCents)} is scheduled for ${longDate(input.next.date)}.`
+      : `${money(input.remainingCents)} remains on your balance. No further payment is scheduled at the moment.`;
+  const nextValue = paidInFull
+    ? `None. Your balance is paid in full.`
+    : input.next
+      ? `${longDate(input.next.date)} (${money(input.next.amountCents)})`
+      : `None scheduled`;
+  return retreatEmail(`Your retreat payment receipt: ${amount}`, {
+    preheader: `${lineTitle}. ${status}`,
+    heading: "Payment received",
+    greeting: greetingFor(input.firstName),
+    paragraphs: [`Thank you. We received your payment of ${amount} for ${lineTitle}.`, status],
+    rows: [
+      { label: "Retreat", value: input.retreatTitle },
+      { label: "Payment", value: position },
+      { label: "Amount paid", value: amount },
+      { label: "Paid so far", value: money(input.paidSoFarCents) },
+      { label: "Balance remaining", value: money(Math.max(0, input.remainingCents)) },
+      { label: "Next payment", value: nextValue },
+      ...(input.card ? [{ label: "Card", value: input.card }] : []),
+    ],
+    button: { label: "View my retreat payments", url: input.url },
+    footnote: `Keep this email for your records.`,
+    supportEmail: input.supportEmail,
+  });
+}
+
+/** Sent when the last balance payment clears. */
+export function buildBalanceCompletedEmail(input: {
+  firstName: string;
+  retreatTitle: string;
+  currency: string;
+  /** Everything paid toward the retreat. 0 leaves the figure out. */
+  totalPaidCents: number;
+  url: string;
+  supportEmail: string;
+}): BalanceEmail {
+  return retreatEmail(`Your ${input.retreatTitle} balance is paid in full`, {
+    preheader: `Your balance for ${input.retreatTitle} is paid in full. No further charges will be made.`,
+    heading: "Paid in full",
+    greeting: greetingFor(input.firstName),
+    paragraphs: [
+      `That was your final payment. Your balance for ${input.retreatTitle} is paid in full, and no further charges will be made to your card.`,
+      `Thank you for completing your payments.`,
+    ],
+    rows: [
+      { label: "Retreat", value: input.retreatTitle },
+      ...(input.totalPaidCents > 0 ? [{ label: "Total paid", value: formatAmount(input.totalPaidCents, input.currency) }] : []),
+      { label: "Balance remaining", value: formatAmount(0, input.currency) },
+    ],
+    button: { label: "Open my retreat dashboard", url: input.url },
+    supportEmail: input.supportEmail,
+  });
+}
+
+/** Sent when a balance instalment (not the first one) is declined. */
+export function buildBalancePaymentFailedEmail(input: {
+  firstName: string;
+  retreatTitle: string;
+  currency: string;
+  amountCents: number;
+  /** How many attempts have failed, this one included. */
+  attempt: number;
+  /** YYYY-MM-DD of the next automatic attempt, or null when there will be none. */
+  nextAttemptDate: string | null;
+  /** Where the card is updated: /account/billing. */
+  url: string;
+  supportEmail: string;
+}): BalanceEmail {
+  const amount = formatAmount(input.amountCents, input.currency);
+  const last = input.nextAttemptDate === null;
+  const when = input.nextAttemptDate
+    ? `We will try again on ${longDate(input.nextAttemptDate)}. You can update your card now so that attempt goes through.`
+    : `This was the last automatic attempt, so nothing more will be tried. Please update your card to make this payment.`;
+  return retreatEmail(
+    last ? `Action needed: your retreat balance payment of ${amount}` : `Your retreat balance payment did not go through`,
+    {
+      preheader: `Your retreat balance payment of ${amount} was declined. Please update your card.`,
+      heading: "Your payment did not go through",
+      greeting: greetingFor(input.firstName),
+      paragraphs: [
+        `Your retreat balance payment of ${amount} for ${input.retreatTitle} was declined${input.attempt > 1 ? ` (attempt ${input.attempt})` : ""}.`,
+        `Most often this is a card that has expired or been replaced.`,
+        when,
+      ],
+      rows: [
+        { label: "Retreat", value: input.retreatTitle },
+        { label: "Amount due", value: amount },
+      ],
+      button: { label: "Update my card", url: input.url },
+      supportEmail: input.supportEmail,
+    },
+  );
+}
+
+/** The owner's short plain note about a refunded balance payment. */
+export function buildRefundOwnerNote(input: {
+  guestName: string;
+  guestEmail: string;
+  retreatTitle: string;
+  currency: string;
+  refundedCents: number;
+  chargeId: string;
+  /** False when the refund could not be written to the ledger. */
+  recorded: boolean;
+  isTest: boolean;
+}): { subject: string; text: string } {
+  const amount = formatAmount(input.refundedCents, input.currency);
+  const who = input.guestName && input.guestEmail ? `${input.guestName} (${input.guestEmail})` : input.guestName || input.guestEmail || "(unknown guest)";
   return {
-    subject: `Card on file: ${input.guestName || input.guestEmail} (${input.retreatTitle} balance)`,
-    text: [intro, ``, ...rows].join("\n"),
-    html: [`<p>${escapeHtml(intro)}</p>`, `<ul>${rows.map((row) => `<li>${escapeHtml(row)}</li>`).join("")}</ul>`].join("\n"),
+    subject: `Retreat balance payment refunded: ${amount} (${input.retreatTitle})`,
+    text: [
+      `A retreat balance payment was refunded in Stripe.`,
+      ``,
+      `Guest: ${who}`,
+      `Retreat: ${input.retreatTitle}${input.isTest ? " (test plan)" : ""}`,
+      `Refunded: ${amount}`,
+      `Stripe charge: ${input.chargeId}`,
+      ``,
+      input.recorded
+        ? `The refund is recorded in the payments ledger.`
+        : `The refund could NOT be recorded in the payments ledger. Please check the server log.`,
+      `The guest's payment schedule was not changed automatically: the instalment still shows as paid and her balance is unchanged. If she should pay this amount again, please adjust her plan.`,
+    ].join("\n"),
   };
 }
 
@@ -1977,6 +2281,315 @@ export async function runRetreatBalanceJob(now: Date = new Date()): Promise<{
   );
 
   return result;
+}
+
+/* ─────────────────── emails the Stripe webhook asks for ────────────────── */
+
+/** A composed email with its recipient. Nothing here sends. */
+export interface RetreatMail extends BalanceEmail {
+  to: string;
+  memberId: number;
+  replyTo?: string;
+}
+
+/** What one payment looks like on its receipt, before any wording. */
+interface ReceiptFacts {
+  /** The linked payment plan the payment belongs to, when it is written down. */
+  plan: LinkedPlan | null;
+  sequence: number;
+  amountCents: number;
+  /** Whether `linked` already shows this payment as a paid instalment. */
+  counted: boolean;
+  paidAt: Date;
+}
+
+async function composeReceipt(row: BalancePlanRow, linked: LinkedPlan[], facts: ReceiptFacts): Promise<RetreatMail | null> {
+  const retreat = await findRetreat(row.retreat_id);
+  if (!retreat) return null;
+  const member = await memberFacts(row.member_id);
+  const paidHere = paidHereCents(linked) + (facts.counted ? 0 : facts.amountCents);
+  const remaining = remainingOf(row, paidHere);
+  const count = facts.plan && facts.plan.installments.length > 0 ? facts.plan.installments.length : row.installment_count;
+
+  let next: { date: string; amountCents: number } | null = null;
+  // Only a plan that is billing has a next charge: a cancelled, reopened or
+  // completed balance plan has nothing scheduled, whatever its rows still say.
+  if (remaining > 0 && row.status === "billing") {
+    if (facts.plan) {
+      // A cancelled plan keeps its unpaid rows as `scheduled`; only a live plan
+      // will really charge them.
+      if (facts.plan.status === "active" || facts.plan.status === "past_due") {
+        const upcoming = facts.plan.installments.find((item) => item.sequence > facts.sequence && item.status !== "paid");
+        if (upcoming?.due_at) next = { date: pacificDate(new Date(upcoming.due_at)), amountCents: upcoming.amount_cents };
+      }
+    } else if (facts.sequence < count) {
+      // The opening invoice, before the plan is written down: Stripe bills the
+      // next one a month after this one.
+      next = { date: addMonthsToDate(pacificDate(facts.paidAt), 1), amountCents: row.installment_cents };
+    }
+  }
+
+  const supportEmail = supportEmailOf(retreat);
+  const email = buildBalanceReceiptEmail({
+    firstName: member.firstName,
+    retreatTitle: retreat.title,
+    currency: row.currency,
+    amountCents: facts.amountCents,
+    sequence: facts.sequence,
+    installmentCount: Math.max(count, facts.sequence),
+    paidSoFarCents: row.prior_paid_cents + paidHere,
+    remainingCents: remaining,
+    next,
+    card: cardLabel(row.card_brand, row.card_last4),
+    url: paymentsUrl(retreat),
+    supportEmail,
+  });
+  return { ...email, to: member.email, memberId: row.member_id, ...(supportEmail ? { replyTo: supportEmail } : {}) };
+}
+
+/**
+ * The receipt for a balance payment the webhook has just recorded, or null when
+ * this is not a balance plan's payment (the webhook then sends its own receipt).
+ *
+ * The webhook sends the receipt BEFORE it advances the plan, and the opening
+ * invoice can arrive before the plan row exists at all, so the instalments may
+ * or may not show this payment yet. The one fact that settles it is whether an
+ * instalment already carries this invoice's id.
+ */
+export async function retreatReceiptMail(input: {
+  retreatBalancePlanId: number;
+  /** The payment_plans row the invoice belongs to, when it exists already. */
+  paymentPlanId: number | null;
+  stripeInvoiceId: string;
+  stripeCustomerId: string | null;
+  collectedCents: number;
+  paidAt: Date;
+}): Promise<RetreatMail | null> {
+  const row = await findPlanById(input.retreatBalancePlanId);
+  if (!row) return null;
+  // The id comes from Stripe metadata this server wrote; the customer must
+  // still be the one pinned on the plan.
+  if (input.stripeCustomerId && row.stripe_customer_id && input.stripeCustomerId !== row.stripe_customer_id) return null;
+  const linked = await loadLinkedFor(row.id);
+  const credited = await pool.query<{ payment_plan_id: number; sequence: number }>(
+    `SELECT payment_plan_id, sequence FROM payment_plan_installments WHERE stripe_invoice_id = $1 LIMIT 1`,
+    [input.stripeInvoiceId],
+  );
+  const done = credited.rows[0];
+  if (done) {
+    const plan = linked.find((item) => item.id === done.payment_plan_id) ?? null;
+    if (!plan) return null; // credited to a plan that is not this balance plan's
+    return composeReceipt(row, linked, { plan, sequence: done.sequence, amountCents: input.collectedCents, counted: true, paidAt: input.paidAt });
+  }
+  const plan = input.paymentPlanId !== null ? (linked.find((item) => item.id === input.paymentPlanId) ?? null) : null;
+  if (input.paymentPlanId !== null && !plan) return null;
+  const paidBefore = plan ? plan.installments.filter((item) => item.status === "paid").length : 0;
+  return composeReceipt(row, linked, { plan, sequence: paidBefore + 1, amountCents: input.collectedCents, counted: false, paidAt: input.paidAt });
+}
+
+/**
+ * The receipt for the most recent paid instalment of a balance plan, exactly
+ * as the webhook would word it today. Sends nothing: for a one-off script that
+ * needs to send a receipt again. Works on a plan in any state (a cancelled
+ * plan's receipt says no further payment is scheduled). Null when the plan
+ * does not exist or has no paid instalment.
+ */
+export async function buildTestReceiptEmail(retreatBalancePlanId: number): Promise<RetreatMail | null> {
+  const row = await findPlanById(retreatBalancePlanId);
+  if (!row) return null;
+  const linked = await loadLinkedFor(row.id);
+  let latest: { plan: LinkedPlan; item: LinkedInstallment; at: number } | null = null;
+  for (const plan of linked) {
+    for (const item of plan.installments) {
+      if (item.status !== "paid") continue;
+      const at = new Date(item.paid_at ?? item.due_at ?? plan.created_at).getTime();
+      if (latest === null || at >= latest.at) latest = { plan, item, at };
+    }
+  }
+  if (latest === null) return null;
+  return composeReceipt(row, linked, {
+    plan: latest.plan,
+    sequence: latest.item.sequence,
+    amountCents: latest.item.amount_cents,
+    counted: true,
+    paidAt: new Date(latest.at),
+  });
+}
+
+async function balancePlanOfPaymentPlan(paymentPlanId: number): Promise<BalancePlanRow | null> {
+  const res = await pool.query<{ retreat_balance_plan_id: number | null }>(
+    `SELECT retreat_balance_plan_id FROM payment_plans WHERE id = $1`,
+    [paymentPlanId],
+  );
+  const id = res.rows[0]?.retreat_balance_plan_id ?? null;
+  return id === null ? null : findPlanById(id);
+}
+
+/** The "paid in full" email for a completed payment plan, or null when it is not a balance plan's. */
+export async function retreatCompletedMail(paymentPlanId: number): Promise<RetreatMail | null> {
+  const row = await balancePlanOfPaymentPlan(paymentPlanId);
+  if (!row) return null;
+  const retreat = await findRetreat(row.retreat_id);
+  if (!retreat) return null;
+  const member = await memberFacts(row.member_id);
+  const supportEmail = supportEmailOf(retreat);
+  const email = buildBalanceCompletedEmail({
+    firstName: member.firstName,
+    retreatTitle: retreat.title,
+    currency: row.currency,
+    totalPaidCents: row.prior_paid_cents + paidHereCents(await loadLinkedFor(row.id)),
+    url: dashboardUrl(retreat),
+    supportEmail,
+  });
+  return { ...email, to: member.email, memberId: row.member_id, ...(supportEmail ? { replyTo: supportEmail } : {}) };
+}
+
+/** The declined-instalment email for a payment plan, or null when it is not a balance plan's. */
+export async function retreatPaymentFailedMail(input: {
+  paymentPlanId: number;
+  amountCents: number;
+  currency: string;
+  attempt: number;
+  nextAttemptAt: Date | null;
+}): Promise<RetreatMail | null> {
+  const row = await balancePlanOfPaymentPlan(input.paymentPlanId);
+  if (!row) return null;
+  const retreat = await findRetreat(row.retreat_id);
+  if (!retreat) return null;
+  const member = await memberFacts(row.member_id);
+  const supportEmail = supportEmailOf(retreat);
+  const email = buildBalancePaymentFailedEmail({
+    firstName: member.firstName,
+    retreatTitle: retreat.title,
+    currency: input.currency,
+    amountCents: input.amountCents,
+    attempt: input.attempt,
+    nextAttemptDate: input.nextAttemptAt ? pacificDate(input.nextAttemptAt) : null,
+    url: `${siteUrl()}/account/billing`,
+    supportEmail,
+  });
+  return { ...email, to: member.email, memberId: row.member_id, ...(supportEmail ? { replyTo: supportEmail } : {}) };
+}
+
+/**
+ * A refund Stripe reports on a charge whose ledger row has no order. When that
+ * row is a retreat balance payment, the refund is written to `refunds` and the
+ * ledger the way an order's refund is (services/fulfillment.ts `recordRefund`,
+ * minus everything that touches an order), and the owner is told.
+ *
+ * Deliberately NOT touched: the instalment, the payment plan and the balance
+ * plan. The guest's dashboard still shows the payment as made; what happens to
+ * her schedule is the owner's decision.
+ *
+ * Returns whether the charge was a balance payment. Never throws.
+ */
+export async function onBalancePaymentRefunded(input: {
+  transactionId: number;
+  chargeId: string;
+  chargeAmountCents: number;
+  amountRefundedCents: number;
+  currency: string;
+  /** Stripe's itemised refunds on the charge; may be empty. */
+  refunds: { id: string; amountCents: number; currency: string; reason: string }[];
+}): Promise<boolean> {
+  let owned: { retreat_balance_plan_id: number; member_id: number | null; email: string } | undefined;
+  try {
+    const found = await pool.query<{ retreat_balance_plan_id: number; member_id: number | null; email: string }>(
+      `SELECT pp.retreat_balance_plan_id, pp.member_id, pp.email
+         FROM payment_plan_installments i
+         JOIN payment_plans pp ON pp.id = i.payment_plan_id
+        WHERE i.transaction_id = $1 AND pp.retreat_balance_plan_id IS NOT NULL
+        LIMIT 1`,
+      [input.transactionId],
+    );
+    owned = found.rows[0];
+  } catch (err) {
+    logError(`charge ${input.chargeId}: could not look up the refunded payment`, err);
+    return false;
+  }
+  if (!owned) return false;
+
+  let recordedCents = 0;
+  let ledgerFailed = false;
+  try {
+    const client: PoolClient = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      let entries = input.refunds.map((refund) => ({
+        key: refund.id,
+        amountCents: refund.amountCents,
+        currency: refund.currency || input.currency,
+        reason: refund.reason,
+      }));
+      if (entries.length === 0 && input.amountRefundedCents > 0) {
+        // Stripe did not itemise: record what the charge's running total says
+        // is not written down yet, under the same key the order path uses.
+        const already = await client.query<{ cents: number }>(
+          `SELECT COALESCE(SUM(amount_cents), 0)::int AS cents FROM refunds WHERE transaction_id = $1`,
+          [input.transactionId],
+        );
+        const outstanding = input.amountRefundedCents - (already.rows[0]?.cents ?? 0);
+        if (outstanding > 0) {
+          entries = [{ key: `${input.chargeId}:refunded:${input.amountRefundedCents}`, amountCents: outstanding, currency: input.currency, reason: "" }];
+        }
+      }
+      for (const entry of entries) {
+        // The unique Stripe refund id makes a second delivery a no-op.
+        const inserted = await client.query<{ id: number }>(
+          `INSERT INTO refunds
+             (order_id, transaction_id, amount_cents, currency, reason, revoked_access, stripe_refund_id, created_by_email)
+           VALUES (NULL, $1, $2, $3, $4, false, $5, 'stripe')
+           ON CONFLICT DO NOTHING
+           RETURNING id`,
+          [input.transactionId, entry.amountCents, entry.currency, entry.reason.slice(0, 500), entry.key],
+        );
+        if (!inserted.rows[0]) continue;
+        await client.query(
+          `INSERT INTO transactions
+             (order_id, member_id, email, kind, status, amount_cents, currency, occurred_at)
+           VALUES (NULL, $1, $2, 'refund', 'succeeded', $3, $4, now())`,
+          [owned.member_id, owned.email, entry.amountCents, entry.currency],
+        );
+        recordedCents += entry.amountCents;
+      }
+      if (input.amountRefundedCents >= input.chargeAmountCents) {
+        await client.query(`UPDATE transactions SET status = 'refunded' WHERE id = $1 AND kind = 'payment'`, [input.transactionId]);
+      }
+      await client.query("COMMIT");
+    } catch (err) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      throw err;
+    } finally {
+      client.release();
+    }
+  } catch (err) {
+    ledgerFailed = true;
+    recordedCents = 0;
+    logError(`charge ${input.chargeId}: refund of a balance payment could not be recorded`, err);
+  }
+
+  // Only for a refund seen for the first time, so a redelivery stays quiet.
+  if (recordedCents <= 0 && !ledgerFailed) return true;
+  try {
+    const row = await findPlanById(owned.retreat_balance_plan_id);
+    const retreat = row ? await findRetreat(row.retreat_id) : null;
+    const member = owned.member_id !== null ? await memberFacts(owned.member_id) : { email: owned.email, name: "", firstName: "" };
+    const note = buildRefundOwnerNote({
+      guestName: member.name,
+      guestEmail: member.email || owned.email,
+      retreatTitle: retreat?.title ?? "a retreat",
+      currency: input.currency,
+      refundedCents: ledgerFailed ? input.amountRefundedCents : recordedCents,
+      chargeId: input.chargeId,
+      recorded: !ledgerFailed,
+      isTest: row?.is_test ?? false,
+    });
+    await alertOwner(note.subject, note.text);
+    log(`plan ${owned.retreat_balance_plan_id}: charge ${input.chargeId} refunded; ${ledgerFailed ? "NOT recorded" : `recorded ${recordedCents}`}, owner told, schedule untouched`);
+  } catch (err) {
+    logError(`charge ${input.chargeId}: owner note about the refund failed`, err);
+  }
+  return true;
 }
 
 /* ──────────────────────────────── admin ───────────────────────────────── */
