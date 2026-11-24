@@ -45,6 +45,3 @@ backend/tsconfig.tsbuildinfo
 api_keys_paypal_.txt
 STRIPE_API.txt
 backend/uploads-protected/
-
-# Private CI scanner output
-.ci-reports/

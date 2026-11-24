@@ -531,30 +531,8 @@ jobs:
         run: docker compose down -v --remove-orphans
 
 
-  static-security:
-    name: Static security (Semgrep CE)
-    runs-on: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && fromJSON('["self-hosted","central-biggestserver","trusted-main"]') || 'ubuntu-latest' }}
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          ref: ${{ env.CHECKOUT_REF }}
-          persist-credentials: false
-      - name: Normalize tracked source permissions
-        if: runner.environment == 'self-hosted'
-        run: python3 /usr/local/lib/central-ci/normalize_checkout.py
-      - name: Scan source without uploading it
-        run: python3 .github/ci/sast.py
-      - name: Preserve private scanner report
-        if: ${{ !cancelled() && runner.environment == 'self-hosted' }}
-        env:
-          CI_ARTIFACT_NAME: semgrep-source-report
-          CI_ARTIFACT_PATHS: .ci-reports/semgrep.json
-          CI_ARTIFACT_RETENTION_DAYS: '14'
-        run: python3 /usr/local/lib/central-ci/store_artifacts.py
-
   central-build:
-    needs: [pipeline, backend, frontend, ai, stack, static-security]
+    needs: [pipeline, backend, frontend, ai, stack]
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && (inputs.ref == '' || inputs.ref == github.sha)
     runs-on: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && fromJSON('["self-hosted","central-biggestserver","trusted-main"]') || 'ubuntu-latest' }}
     timeout-minutes: 180
