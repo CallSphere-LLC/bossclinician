@@ -26,7 +26,8 @@ for name in ('backend', 'ai'):
         q.update({'sslmode': 'verify-full', 'sslrootcert': '/etc/bossclinician/pg-ca/ca.crt'})
         env['DATABASE_URL'] = urllib.parse.urlunsplit((u.scheme, u.netloc, u.path, urllib.parse.urlencode(q), u.fragment))
         env['AI_BASE_URL'] = 'http://ai:8000'
-        env['APP_RELEASE'] = release
+        # The immutable image owns its release identity; a reused Secret must not override it.
+        env.pop('APP_RELEASE', None)
         if media_state is not None: env.update(media_state['environment'])
     apply({'apiVersion': 'v1', 'kind': 'Secret', 'metadata': {'name': f'boss-{name}-env-{release}', 'namespace': ns}, 'immutable': True, 'type': 'Opaque', 'stringData': env})
 
