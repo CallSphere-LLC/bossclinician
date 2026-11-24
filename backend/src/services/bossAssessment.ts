@@ -21,6 +21,7 @@ import { plainText } from "../utils/plainText";
  * bossAssessment.test.ts fails if the two drift apart.
  */
 
+const NL = String.fromCharCode(10);
 export const BOSS_ASSESSMENT_FORM_SLUG = "boss-assessment";
 
 /** What the delivery log calls this email, and what the send caps below count. */
@@ -33,7 +34,6 @@ const MAX_SENDS_PER_ADDRESS_PER_DAY = 3;
 const MAX_SENDS_PER_DAY = 500;
 
 const MAX_FIRST_NAME_CHARS = 40;
-const MAX_GREETING_CHARS = 30;
 const MAX_COMMITMENT_CHARS = 2000;
 
 interface BlockerArea {
@@ -101,9 +101,66 @@ export const BOSS_ASSESSMENT_AREAS: readonly BlockerArea[] = [
 export const BOSS_ASSESSMENT_DISCLAIMER =
   "Scores are self-reported reflection tools, not a validated diagnostic measure or financial audit. Each domain has two responses from 1 to 5, so scores range from 2 to 10. Your highest score identifies the blocker to consider first. Ties are shown together.";
 
-const BOARDROOM_COPY =
-  "The Boss Clinician Boardroom is an executive advisory experience for practice owners ready to strengthen leadership, profitability, systems, and the structure behind the business.";
-const BOARDROOM_FINE_PRINT = "Applying does not guarantee acceptance.";
+/**
+ * The A0 result blocks (Group Practice Assessment Email Sequence doc), one per
+ * area key. Every highest-scoring area gets its block, ties included.
+ */
+const RESULT_BLOCKS: Record<string, readonly string[]> = {
+  leadership_dependency: [
+    "You may be the person everyone checks with, even when the decision could reasonably be handled by someone else.",
+    "Start with one question that keeps coming back to you. Write down who should own it, what they can decide, and when they need to involve you. Then discuss it with that person.",
+    "The aim is to help your team move forward with clear boundaries, so an ordinary decision doesn’t have to wait until your next break between sessions.",
+  ],
+  broken_pay_structure: [
+    "This label points to questions about owner pay; it doesn’t prove that your compensation model is broken.",
+    "Pull together what the practice collected, what went to payroll and overhead, and what you paid yourself. Review those numbers alongside your tax planning and cash needs with your financial professional.",
+    "Start by seeing what’s happening. That gives you a clearer basis for decisions than hoping the next busy month will feel different.",
+  ],
+  missing_systems: [
+    "Some of the practice may still run on information only you know.",
+    "Choose one recurring process, such as intake, billing, or onboarding, and capture its steps, responsible person, and what to do when something goes off track.",
+    "Have the person using it walk through it with you. The goal is a process someone can actually follow, so you’re not explaining it from the beginning every time.",
+  ],
+  team_misalignment: [
+    "Your answers suggest it may be useful to revisit expectations with your team. That doesn’t mean your clinicians don’t care.",
+    "Pick one place where expectations feel unclear. Ask what the team understands, where they’re getting stuck, and what support is missing. Then agree on the responsibility and how you’ll follow up.",
+    "A specific conversation gives you more to work with than wondering why people aren’t doing what you thought was understood.",
+  ],
+  no_exit_strategy: [
+    "In this assessment, “exit” includes being able to step away temporarily. It doesn’t mean you need to sell or close your practice.",
+    "Imagine you were unavailable for a week. Which routine tasks would stop or come back to you?",
+    "Choose one and outline the owner, backup, and escalation plan. That gives you a practical starting point for time away that doesn’t depend on checking your phone all day.",
+  ],
+};
+
+export const BOSS_ASSESSMENT_EMAIL_SUBJECT = "Your practice assessment results + where to start";
+export const BOSS_ASSESSMENT_EMAIL_PREVIEW = "One area to look at first, without adding five projects to your week.";
+
+const CLOSING_LINES = [
+  "You don’t need to turn these results into five new projects. If more than one area tied, choose one recurring situation to start with.",
+  "This is a snapshot of your answers, not a diagnosis or a review of your finances. A highest score is relative to your other scores; it doesn’t automatically mean something is seriously wrong.",
+  "What’s one thing you’d like to stop carrying by yourself? Hit reply and tell me.",
+];
+
+/**
+ * True only for a result that is whole: five area scores of 2 to 10, a total
+ * that adds up, and highest areas that really are the highest. Anything else is
+ * held rather than mailed with invented or missing numbers.
+ */
+export function isCompleteBossAssessmentResult(result: BossAssessmentResult | null | undefined): result is BossAssessmentResult {
+  if (!result || !Array.isArray(result.totals) || !Array.isArray(result.leaders)) return false;
+  if (result.totals.length !== BOSS_ASSESSMENT_AREAS.length) return false;
+  if (!result.totals.every((t) => Number.isInteger(t) && t >= 2 && t <= 10)) return false;
+  if (result.sum !== result.totals.reduce((a, b) => a + b, 0)) return false;
+  const max = Math.max(...result.totals);
+  const expected = result.totals.flatMap((t, i) => (t === max ? [i] : []));
+  return expected.length === result.leaders.length && expected.every((i, n) => result.leaders[n] === i);
+}
+
+function joinNames(names: string[]): string {
+  if (names.length <= 1) return names.join("");
+  return `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+}
 
 export interface BossAssessmentResult {
   /** The five areas' scores, 2 to 10, in the order of BOSS_ASSESSMENT_AREAS. */
@@ -196,75 +253,58 @@ export function readBossAssessmentSubmission(raw: unknown): BossAssessmentSubmis
 }
 
 /**
- * The results email. Takes the name and the computed result and nothing else, so
- * nothing else a visitor sent can end up in it. The greeting uses only the first
- * word of the name, which leaves no room for a sentence.
+ * The results email (A0 in the Group Practice Assessment Email Sequence doc).
+ * Takes the computed result and nothing else, so nothing a visitor typed can end
+ * up in it; the greeting is the doc's "Hey!", not the name. Returns null for an
+ * incomplete result, which is then held rather than sent. No buttons or links.
  */
 export function bossAssessmentEmail(input: {
   firstName: string;
   result: BossAssessmentResult;
   siteUrl: string;
-}): { subject: string; text: string; html: string } {
+}): { subject: string; preheader: string; text: string; html: string } | null {
   const { result } = input;
-  const greeting = (input.firstName.split(" ")[0] ?? "").slice(0, MAX_GREETING_CHARS);
+  if (!isCompleteBossAssessmentResult(result)) return null;
   const leaders = result.leaders.map((i) => BOSS_ASSESSMENT_AREAS[i]);
-  const priority = leaders.map((area) => area.title).join(" + ");
-  const priorityText = leaders.map((area) => area.description).join(" ");
-  const nextAction = `Try this first: ${leaders.map((area) => area.action).join(" ")}`;
-  const boardroomUrl = `${input.siteUrl}/boardroom`;
+  const highest = joinNames(leaders.map((area) => area.title));
+  const intro = `Here are your results from “Are You Running Your Practice, or Is It Running You?”`;
+  const explain = `Higher scores mean you reported these situations more often. Your highest-scoring area or areas: ${highest}.`;
+  const blocks = leaders.map((area) => RESULT_BLOCKS[area.key] ?? []);
 
   const text = [
-    `Hi ${greeting},`,
+    `Hey!`,
     ``,
-    `Here are your results from the group practice self-assessment, "Are You Running Your Practice—or Is It Running You?"`,
+    intro,
     ``,
-    `Total blocker score: ${result.sum} / 50`,
-    result.tierTitle,
-    result.tierText,
+    `Your total score: ${result.sum} / 50`,
     ``,
-    `Your five blockers`,
-    ...BOSS_ASSESSMENT_AREAS.map((area, i) => `${area.title}: ${result.totals[i]}/10`),
+    ...BOSS_ASSESSMENT_AREAS.map((area, i) => `${area.title}: ${result.totals[i]} / 10`),
     ``,
-    `Your starting point: ${priority}`,
-    priorityText,
-    nextAction,
+    explain,
     ``,
-    BOSS_ASSESSMENT_DISCLAIMER,
-    ``,
-    `You don't have to lead alone.`,
-    BOARDROOM_COPY,
-    `Explore The Boardroom: ${boardroomUrl}`,
-    BOARDROOM_FINE_PRINT,
-    ``,
-    `To your success,`,
+    ...blocks.flatMap((block) => block.flatMap((line) => [line, ``])),
+    ...CLOSING_LINES.flatMap((line) => [line, ``]),
     `Yvette`,
-  ].join("\n");
+  ].join(NL);
 
   const scoreRows = BOSS_ASSESSMENT_AREAS.map(
     (area, i) =>
       `<tr><td style="padding:6px 16px 6px 0">${escapeHtml(area.title)}</td>` +
-      `<td style="padding:6px 0;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap">${result.totals[i]}/10</td></tr>`,
+      `<td style="padding:6px 0;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap">${result.totals[i]} / 10</td></tr>`,
   ).join("");
 
   const html = [
-    `<p>Hi ${escapeHtml(greeting)},</p>`,
-    `<p>Here are your results from the group practice self-assessment, “Are You Running Your Practice—or Is It Running You?”</p>`,
-    `<p>Total blocker score: <strong style="font-variant-numeric:tabular-nums">${result.sum} / 50</strong><br>`,
-    `<strong>${escapeHtml(result.tierTitle)}</strong><br>`,
-    `${escapeHtml(result.tierText)}</p>`,
-    `<p><strong>Your five blockers</strong></p>`,
+    `<p>Hey!</p>`,
+    `<p>${escapeHtml(intro)}</p>`,
+    `<p>Your total score: <strong style="font-variant-numeric:tabular-nums">${result.sum} / 50</strong></p>`,
     `<table role="presentation" cellpadding="0" cellspacing="0">${scoreRows}</table>`,
-    `<p><strong>Your starting point: ${escapeHtml(priority)}</strong><br>`,
-    `${escapeHtml(priorityText)}</p>`,
-    `<p><strong>${escapeHtml(nextAction)}</strong></p>`,
-    `<p style="font-size:13px">${escapeHtml(BOSS_ASSESSMENT_DISCLAIMER)}</p>`,
-    `<p><strong>You don't have to lead alone.</strong><br>${escapeHtml(BOARDROOM_COPY)}</p>`,
-    `<p><a href="${escapeHtml(boardroomUrl)}">Explore The Boardroom</a><br>`,
-    `<span style="font-size:13px">${escapeHtml(BOARDROOM_FINE_PRINT)}</span></p>`,
-    `<p>To your success,<br>Yvette</p>`,
-  ].join("\n");
+    `<p>${escapeHtml(explain)}</p>`,
+    ...blocks.flatMap((block) => block.map((line) => `<p>${escapeHtml(line)}</p>`)),
+    ...CLOSING_LINES.map((line) => `<p>${escapeHtml(line)}</p>`),
+    `<p>Yvette</p>`,
+  ].join(NL);
 
-  return { subject: "Your Group Practice Self-Assessment results", text, html };
+  return { subject: BOSS_ASSESSMENT_EMAIL_SUBJECT, preheader: BOSS_ASSESSMENT_EMAIL_PREVIEW, text, html };
 }
 
 /**
@@ -323,9 +363,17 @@ export async function sendBossAssessmentResults(input: {
     return false;
   }
 
+  const email = bossAssessmentEmail({ firstName: input.firstName, result: input.result, siteUrl: env.publicSiteUrl });
+  if (!email) {
+    // Held, not sent: never mail missing or invented scores.
+    // eslint-disable-next-line no-console
+    console.error(`[boss-assessment] result email held for submission ${input.submissionId}: incomplete result data`);
+    return false;
+  }
+
   const outcome = await sendMail({
     to: input.email,
-    ...bossAssessmentEmail({ firstName: input.firstName, result: input.result, siteUrl: env.publicSiteUrl }),
+    ...email,
     topic: BOSS_ASSESSMENT_EMAIL_TOPIC,
     sourceId: input.submissionId,
     contactId: input.contactId,

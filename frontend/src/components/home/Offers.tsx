@@ -46,7 +46,7 @@ const offers: Offer[] = [
     tag: "Membership",
     tagColor: "plum",
     name: "Boss Clinician Lounge",
-    desc: "For the fully booked clinician who has hit the income ceiling, is exhausted from splitting rates with platforms, and needs a real strategy — not more content — to scale sustainably without working more hours.",
+    desc: "For the practice owner who has hit an income ceiling (no full caseload required), is exhausted from splitting rates with platforms, and needs a real strategy — not more content — to scale sustainably without working more hours.",
     forWho: "For: The Maxed Out Clinician — established but capped",
     ctaLabel: "Join the Lounge",
     to: "/lounge",

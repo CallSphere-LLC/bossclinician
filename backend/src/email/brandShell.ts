@@ -95,6 +95,8 @@ export interface BrandShellInput {
   subject: string;
   /** The plain-text body; its first real sentence becomes the preview line. */
   text?: string;
+  /** An explicit preview line; wins over the one taken from `text`. */
+  preheader?: string;
   /** Falls back to the production origin, so a caller with a thin env still sends. */
   siteUrl?: string;
 }
@@ -105,7 +107,7 @@ export function brandEmailHtml(input: BrandShellInput): string {
   const site = (input.siteUrl || "https://www.bossclinician.com").replace(/\/+$/, "");
   const host = site.replace(/^https?:\/\//i, "");
   const body = styleBody(promoteLoneLinks(input.html));
-  const preheader = escapeText(preheaderFrom(input.text ?? ""));
+  const preheader = escapeText(input.preheader?.trim() || preheaderFrom(input.text ?? ""));
 
   return `<!doctype html>
 <html lang="en" data-bc-shell="1">

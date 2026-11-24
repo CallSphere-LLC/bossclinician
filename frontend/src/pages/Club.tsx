@@ -942,6 +942,7 @@ function ClubDecisionSection() {
         ]} />
       </GlassCard>
       <Prose className="mt-7" paragraphs={[
+        "We briefly discuss credentialing considerations as you plan your practice. For in-depth instruction, Credential with Confidence is available as a separate purchase.",
         "You will not leave with a carbon-copy practice.",
         "You will understand how to make decisions for yours.",
       ]} />

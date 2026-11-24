@@ -419,12 +419,12 @@ export const club = {
       },
       {
         q: "What if I fill my caseload before the 6 months are up?",
-        a: "Yesss!!! That's exactly the energy this program is built for. But finishing the Boss Move doesn't mean you're finished needing support. You might still be second-guessing your website at 11pm, or white-knuckling the mindset part more than anyone can see. That's normal, and your full 6 months of coaching and community stay yours through the end of your term either way. The Club is an on-ramp, not a room you wait in. When your practice is running, the Lounge is your next room, where fully booked clinicians restructure their rates, income, and systems. Finish early, keep building through your term, and your seat is waiting. Make your boss move in the Club. Elevate your practice in the Lounge.",
+        a: "Yesss!!! That's exactly the energy this program is built for. But finishing the Boss Move doesn't mean you're finished needing support. You might still be second-guessing your website at 11pm, or white-knuckling the mindset part more than anyone can see. That's normal, and your full 6 months of coaching and community stay yours through the end of your term either way. The Club is an on-ramp, not a room you wait in. When your practice is running, the Lounge is your next room, where practice owners strengthen their rates, income, and systems. You do not need a full caseload to join. Finish early, keep building through your term, and your seat is waiting. Make your boss move in the Club. Elevate your practice in the Lounge.",
         link: { label: "Explore the Lounge", to: "/lounge" },
       },
       {
-        q: "Does this cover insurance credentialing and billing?",
-        a: "Great question! This program does not cover insurance credentialing or billing, because those topics deserve a much more in-depth, step-by-step approach. That’s exactly why I created my Credential with Confidence training — it walks you through the process of getting credentialed effectively and confidently.",
+        q: "Does The Club cover insurance credentialing and billing?",
+        a: "We briefly discuss credentialing as part of planning your practice, but The Club does not provide in-depth, step-by-step credentialing or billing training. If you want more detailed support, you can purchase my Credential with Confidence training separately.",
         link: {
           label: "Credential with Confidence training",
           to: "/courses/credential-with-confidence",

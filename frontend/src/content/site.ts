@@ -698,7 +698,7 @@ export const contactPage = {
         title: "The Lounge — Sustain It",
         body: "For established clinicians whose practice is already working — but requires more time, energy, or clinical output than they want to maintain long-term.",
         bestFit:
-          "Best fit if: you’re full or nearly full and asking, “How do I make the practice I already built work better for my life?”",
+          "Best fit if: you already own a practice (no full caseload required) and are asking, “How do I make the practice I already built work better for my life?”",
         cta: "LEARN ABOUT THE LOUNGE",
         to: "/lounge",
       },

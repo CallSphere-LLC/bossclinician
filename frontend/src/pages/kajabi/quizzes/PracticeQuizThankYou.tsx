@@ -32,7 +32,7 @@ const COPY = {
   deeperTitle: "Find the right Boss Clinician offer for where you are right now",
   offers: [
     { tag: "6-Month Coaching Program", name: "Boss Clinician Club", body: "Just starting or rebuilding from agency or platform work", to: "/club", accent: "green" },
-    { tag: "Monthly Membership", name: "Boss Clinician Lounge", body: "Fully booked but income-capped or burning out", to: "/lounge", accent: "plum" },
+    { tag: "Monthly Membership", name: "Boss Clinician Lounge", body: "Practice owners who want steadier income and a workload they can sustain. No full caseload required", to: "/lounge", accent: "plum" },
     { tag: "Annual Mastermind", name: "Boss Clinician Boardroom", body: "Running a group practice and done doing it alone", to: "/boardroom", accent: "gold" },
   ] as const satisfies readonly { tag: string; name: string; body: string; to: string; accent: Accent }[],
   quizLead: "Not sure which offer fits?",

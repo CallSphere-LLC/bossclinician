@@ -87,7 +87,7 @@ const replacementLounge = {
   stepInto: {
     eyebrow: "step into...",
     title: "The Lounge",
-    lead: "A structured membership for established clinicians who have built the caseload — and are ready to make the practice itself more sustainable.",
+    lead: "A structured membership for clinicians who already own a practice and want more consistent income, stronger referral systems, and a workload they can sustain. You do not need a full caseload to join.",
     body: "You’re a mental health clinician with an established practice, and you want more say over what you earn, how many appointments you take, and when your workday ends.",
     cta: "LET'S ELEVATE MY PRACTICE",
     curriculumEyebrow: "The Practice Elevation",
@@ -193,7 +193,7 @@ const replacementLounge = {
     forTitle: "This is for you if...",
     forItems: [
       "You are a licensed therapist or psychiatric nurse practitioner who has been in private practice long enough to know the business is working — but not necessarily working for you.",
-      "Your caseload is full or nearly full, and you are seeing more clients than you want to maintain long-term.",
+      "You want more consistent income, stronger referral systems, or a workload you can sustain long-term. You do not need a full caseload to join.",
       "Your income still depends heavily on keeping your clinical volume high, making it hard to reduce your schedule or take meaningful time off.",
       "You are still carrying too much of the business yourself — billing, admin, scheduling, decisions, or day-to-day problem solving.",
       "You are questioning whether your current practice model can support the next season of your life, energy, or career.",
@@ -203,7 +203,7 @@ const replacementLounge = {
     notTitle: "This is not for you if...",
     notItems: [
       "You are starting or rebuilding your practice foundation. The Club is the better starting point.",
-      "Your main problem is getting enough clients. The Lounge is for clinicians who already have the caseload and need to make the practice itself work better.",
+      "Your main problem is getting enough clients. The Lounge is for clinicians who already own a practice and want the practice itself to work better.",
       "You are looking for someone to run your marketing, create your content, or manage your social media for you.",
       "You are not willing to look honestly at your numbers, workload, systems, and business decisions.",
       "You want a quick fix without making changes to the way your practice is structured.",

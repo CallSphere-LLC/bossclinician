@@ -114,34 +114,61 @@ describe("readBossAssessmentSubmission", () => {
 describe("bossAssessmentEmail", () => {
   const render = (overrides: Record<string, unknown> = {}) => {
     const read = submission(overrides);
-    return bossAssessmentEmail({ firstName: read.firstName, result: read.result, siteUrl: "https://site.test" });
+    const email = bossAssessmentEmail({ firstName: read.firstName, result: read.result, siteUrl: "https://site.test" });
+    if (!email) throw new Error("expected an email");
+    return email;
   };
 
-  it("carries the score, the result and the starting point", () => {
-    const { text, html } = render();
+  it("is the A0 email: subject, preview, total, five scores and the highest area", () => {
+    const { subject, preheader, text, html } = render();
+    expect(subject).toBe("Your practice assessment results + where to start");
+    expect(preheader).toBe("One area to look at first, without adding five projects to your week.");
+    expect(text.startsWith("Hey!")).toBe(true);
     for (const body of [text, html]) {
       expect(body).toContain("30 / 50");
-      expect(body).toContain("Focus on your top priorities");
       expect(body).toContain("Leadership Dependency");
-      expect(body).toContain("10/10");
-      expect(body).toContain("https://site.test/boardroom");
+      expect(body).toContain("10 / 10");
+      expect(body).toContain("Your highest-scoring area or areas: Leadership Dependency.");
+      expect(body).toContain("You may be the person everyone checks with");
+      expect(body).toContain("Hit reply and tell me.");
+      expect(body).not.toContain("Some of the practice may still run on information only you know.");
+      expect(body).not.toContain("—");
     }
   });
 
-  it("never mails the commitment box or anything else the client wrote", () => {
+  it("has no buttons or links", () => {
+    const { text, html } = render();
+    expect(html).not.toContain("<a ");
+    expect(text).not.toMatch(/https?:\/\//);
+  });
+
+  it("includes every tied highest block", () => {
+    const read = submission();
+    const result = scoreBossAssessment([5, 5, 1, 1, 5, 5, 1, 1, 1, 1]);
+    const email = bossAssessmentEmail({ firstName: read.firstName, result, siteUrl: "https://site.test" });
+    expect(email?.text).toContain("Leadership Dependency and Missing Systems.");
+    expect(email?.text).toContain("You may be the person everyone checks with");
+    expect(email?.text).toContain("Some of the practice may still run on information only you know.");
+  });
+
+  it("holds an incomplete result instead of mailing invented numbers", () => {
+    const read = submission();
+    const broken = { ...read.result, totals: [10, 6] };
+    expect(bossAssessmentEmail({ firstName: read.firstName, result: broken, siteUrl: "https://site.test" })).toBeNull();
+  });
+
+  it("never mails the commitment box, the name or anything else the client wrote", () => {
     const { subject, text, html } = render({
+      first_name: "Free Money Now",
       commitment: "CLICK https://evil.example FOR FREE MONEY",
       tier: "CLICK https://evil.example",
     });
-    expect(`${subject}\n${text}\n${html}`).not.toContain("evil.example");
-    expect(`${subject}\n${text}\n${html}`).not.toContain("FREE MONEY");
-  });
-
-  it("greets by the first word only and keeps the name out of the subject", () => {
-    const { subject, text } = render({ first_name: "Free Money Now" });
-    expect(text.startsWith("Hi Free,")).toBe(true);
-    expect(text).not.toContain("Money");
-    expect(subject).not.toContain("Free");
+    const all = `${subject}
+${text}
+${html}`;
+    expect(all).not.toContain("evil.example");
+    expect(all).not.toContain("FREE MONEY");
+    expect(all).not.toContain("Money");
   });
 });
 

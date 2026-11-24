@@ -118,6 +118,7 @@ describe("what counts as a finished step", () => {
     });
     expect(describeActionProblem("fire_webhook", { url: "https://example.com/hook" })).toBeNull();
     expect(describeActionProblem("send_email", { subject: "Hello", bodyMd: "Hi there" })).toBeNull();
+    expect(describeActionProblem("send_email", { subject: "Hello", bodyMd: "Hi there", previewText: "Preview" })).toBeNull();
     expect(describeActionProblem("create_task", { title: "Call them" })).toBeNull();
     expect(describeActionProblem("wait", { days: 3 })).toBeNull();
   });

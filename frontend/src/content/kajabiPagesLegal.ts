@@ -615,7 +615,7 @@ export const retreatAgreement: KajabiLegalDoc = {
       blocks: [
         {
           type: "p",
-          text: "Release. Restore. Reconnect. is a five-day luxury healing retreat designed exclusively for women in healthcare and wellness. The retreat takes place June 15–20, 2027 at a private villa estate in Ubud, Bali, Indonesia and is hosted by Yvette Howard, LCSW, founder of Boss Clinician, LLC.",
+          text: "Release. Restore. Reconnect. is a six-day, five-night luxury healing retreat designed exclusively for women in healthcare and wellness. The retreat takes place June 15–20, 2027 at a private villa estate in Ubud, Bali, Indonesia and is hosted by Yvette Howard, LCSW, founder of Boss Clinician, LLC.",
         },
         {
           type: "p",

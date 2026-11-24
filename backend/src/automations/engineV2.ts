@@ -549,6 +549,8 @@ const sendEmailConfig = z.object({
   fromName: z.string().default(""),
   fromEmail: z.string().default(""),
   topic: z.string().default("marketing"),
+  /** The inbox preview line. Empty: the first real sentence of the body is used. */
+  previewText: z.string().default(""),
 });
 
 const sequenceConfig = z.object({
@@ -757,6 +759,7 @@ async function performAction(
         subject: renderTokens(parsed.data.subject, values),
         text: body,
         html: renderMarkdown(body),
+        preheader: renderTokens(parsed.data.previewText, values).trim() || undefined,
         contactId,
         sourceType: "automation",
         sourceId: automationId,

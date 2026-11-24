@@ -57,6 +57,8 @@ export interface SendMailInput {
   subject: string;
   text: string;
   html?: string;
+  /** The inbox preview line. Left out, the first real sentence of `text` is used. */
+  preheader?: string;
   /** Calendar invitations, so a booking lands in the reader's diary in one click. */
   attachments?: MailAttachment[];
   /** Overrides SMTP_FROM — a marketing send uses the owner's configured identity. */
@@ -254,6 +256,7 @@ export async function sendMail(input: SendMailInput): Promise<SendMailOutcome> {
         html: input.html ?? textToParagraphs(input.text),
         subject: input.subject,
         text: input.text,
+        preheader: input.preheader,
         siteUrl: env.publicSiteUrl,
       }),
     });
