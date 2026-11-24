@@ -1,3 +1,4 @@
+import { PracticeStageSelect } from "./PracticeStageSelect";
 import { useId, useRef, useState, type FormEvent, type ReactElement } from "react";
 import { Link } from "react-router";
 import { motion, useReducedMotion } from "motion/react";
@@ -390,6 +391,7 @@ function EmailCard({
   const [firstName, setFirstName] = useState("");
   const [email, setEmail] = useState("");
   const [consent, setConsent] = useState(false);
+  const [practiceStage, setPracticeStage] = useState("");
   const [sending, setSending] = useState(false);
   const [sentTo, setSentTo] = useState<string | null>(null);
   const [notSent, setNotSent] = useState(false);
@@ -415,7 +417,7 @@ function EmailCard({
     try {
       const reply = await api.submitForm(
         A.formSlug,
-        { first_name: first, email: address, answers, marketing_consent: consent, commitment },
+        { first_name: first, email: address, answers, marketing_consent: consent, commitment, ...(practiceStage ? { practice_stage: practiceStage } : {}) },
         address,
         honeypot(),
       );
@@ -476,6 +478,7 @@ function EmailCard({
                 className="min-h-[44px]"
               />
             </div>
+            <PracticeStageSelect value={practiceStage} onChange={setPracticeStage} />
             <label className="flex cursor-pointer items-start gap-3 text-sm leading-relaxed text-white/85">
               <input
                 type="checkbox"

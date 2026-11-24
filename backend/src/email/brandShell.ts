@@ -99,10 +99,15 @@ export interface BrandShellInput {
   preheader?: string;
   /** Falls back to the production origin, so a caller with a thin env still sends. */
   siteUrl?: string;
+  /** A data table inside otherwise unframed content is not its own email layout. */
+  tableIsContent?: boolean;
+  /** Explain a requested result without implying the recipient has an account. */
+  receiptReason?: string;
 }
 
 export function brandEmailHtml(input: BrandShellInput): string {
-  if (isAlreadyLaidOut(input.html)) return input.html;
+  if (/<html[\s>]|<body[\s>]|data-bc-shell/i.test(input.html) ||
+      (!input.tableIsContent && isAlreadyLaidOut(input.html))) return input.html;
 
   const site = (input.siteUrl || "https://www.bossclinician.com").replace(/\/+$/, "");
   const host = site.replace(/^https?:\/\//i, "");
@@ -147,7 +152,7 @@ ${body}
     </td></tr>
 
     <tr><td align="center" style="padding:26px 20px 0;font-family:${SANS};font-size:12px;line-height:1.7;color:${MUTED};">
-      You are receiving this because of your account at
+      ${input.receiptReason ? escapeText(input.receiptReason) : "You are receiving this because of your account at"}
       <a href="${escapeAttr(site)}" style="color:${MUTED};text-decoration:underline;">${escapeText(host)}</a>.<br>
       Replies to this email reach a real person.
       <div style="padding-top:14px;font-family:${SERIF};font-size:13px;font-style:italic;color:${GOLD_DEEP};">Boss Clinician &middot; Private practice strategy for therapists</div>

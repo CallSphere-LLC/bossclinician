@@ -49,6 +49,7 @@ export function unresolvedTokens(templates: ReadonlyArray<string | null | undefi
 export function renderedProblem(rendered: ReadonlyArray<string | null | undefined>): string {
   for (const text of rendered) {
     if (!text) continue;
+    if (/\[BOARDROOM_WALKTHROUGH_URL\]/.test(text)) return "Boardroom walkthrough URL is missing";
     if (/\{\{|\}\}|\{%|%\}/.test(text)) return "placeholder left in the email";
     const note = INTERNAL_NOTE.exec(text);
     if (note) return `internal note in the email ("${note[0]}")`;

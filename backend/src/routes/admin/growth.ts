@@ -809,7 +809,7 @@ adminGrowthRouter.get(
   "/funnels/:id/steps",
   asyncHandler(async (req, res) => {
     const result = await pool.query(
-      "SELECT * FROM funnel_steps WHERE funnel_id = $1 ORDER BY sort, id",
+      "SELECT s.*, (SELECT count(*)::int FROM funnel_subscription_conversions c WHERE c.step_id = s.id) AS completed_subscriptions FROM funnel_steps s WHERE s.funnel_id = $1 ORDER BY s.sort, s.id",
       [req.params.id],
     );
     res.json(rowsToCamel(result.rows));
@@ -941,7 +941,7 @@ adminGrowthRouter.get(
       `SELECT f.*,
               (SELECT count(*)::int FROM funnel_steps s WHERE s.funnel_id = f.id) AS step_count,
               (SELECT COALESCE(sum(s.views), 0)::int FROM funnel_steps s WHERE s.funnel_id = f.id) AS step_views,
-              (SELECT COALESCE(sum(s.conversions), 0)::int FROM funnel_steps s WHERE s.funnel_id = f.id) AS step_conversions
+              (SELECT count(*)::int FROM funnel_subscription_conversions c JOIN funnel_steps s ON s.id = c.step_id WHERE s.funnel_id = f.id) AS completed_subscriptions
          FROM funnels f
         ORDER BY f.updated_at DESC, f.id DESC`,
     );
@@ -1212,7 +1212,7 @@ adminGrowthRouter.get(
     const result = await pool.query(
       `SELECT f.id, f.name, f.kind,
               COALESCE(SUM(s.views), 0)::int       AS views,
-              COALESCE(SUM(s.conversions), 0)::int AS conversions,
+              (SELECT count(*)::int FROM funnel_subscription_conversions c JOIN funnel_steps cs ON cs.id = c.step_id WHERE cs.funnel_id = f.id) AS conversions,
               COUNT(s.id)::int                     AS step_count
          FROM funnels f LEFT JOIN funnel_steps s ON s.funnel_id = f.id
         GROUP BY f.id, f.name, f.kind

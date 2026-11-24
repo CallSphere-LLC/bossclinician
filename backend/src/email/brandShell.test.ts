@@ -49,6 +49,16 @@ describe("brandEmailHtml", () => {
     expect(html).toContain("&lt;script&gt;x&lt;/script&gt;");
     expect(html).toContain("A &lt;b&gt;bold&lt;/b&gt; claim");
   });
+
+  it("frames an explicitly identified content table once while preserving existing full documents", () => {
+    const content = '<p>Hey!</p><table aria-label="Scores"><tr><td>10 / 10</td></tr></table>';
+    const framed = brandEmailHtml({ html: content, subject: "Results", tableIsContent: true, receiptReason: "You requested results from" });
+    expect(framed).toContain('data-bc-shell="1"');
+    expect(framed).toContain('max-width:600px');
+    expect(framed).toContain('aria-label="Scores"');
+    expect(framed).toContain("You requested results from");
+    expect(brandEmailHtml({ html: framed, subject: "Results", tableIsContent: true })).toBe(framed);
+  });
 });
 
 describe("preheaderFrom", () => {

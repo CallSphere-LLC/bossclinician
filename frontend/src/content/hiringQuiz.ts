@@ -233,7 +233,7 @@ export const HIRE_FORM = {
   },
   submit: "I WANT TO KNOW IF I AM READY!",
   disclaimer:
-    "By submitting this form you agree to receive emails from Boss Clinician, LLC. This resource is educational only and is not legal, financial, or clinical advice. You can unsubscribe anytime. See our Privacy Policy and Terms.",
+    "We will email your quiz results. Marketing emails are optional. This resource is educational only and is not legal, financial, or clinical advice. You can unsubscribe anytime. See our Privacy Policy and Terms.",
   formSlug: "hire-form",
 } as const;
 

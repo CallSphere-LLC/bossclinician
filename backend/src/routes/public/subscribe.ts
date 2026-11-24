@@ -17,6 +17,7 @@ import {
 import { publishDomainEvent } from "../../services/domainEvents";
 import { notifyOwnerOfOptIn } from "../../services/ownerOptInNotification";
 import { enrollContact } from "../../services/sequences";
+import { saveAcceptedSubscription } from "../../services/funnelSubscriptions";
 
 export const subscribeRouter = Router();
 
@@ -88,19 +89,13 @@ subscribeRouter.post(
   asyncHandler(async (req, res) => {
     const parsed = subscribeSchema.safeParse(req.body);
     if (!parsed.success) throw badRequest("Invalid subscribe payload", parsed.error.flatten());
-    const { email, source } = parsed.data;
+    const { email, source, funnelStepId } = parsed.data;
     const validation = await validateCollectedEmail(email);
     if (!validation.accepted) throw badRequest(validation.reason || "Please check your email address.");
 
     // `prior` reads the row as it was before this statement, so the owner hears
     // about a new sign-up or a new place, not the same box being filled in twice.
-    const subscriber = await pool.query<{ id: number; prior_source: string | null }>(
-      `WITH prior AS (SELECT source FROM subscribers WHERE email = $1)
-       INSERT INTO subscribers (email, source) VALUES ($1, $2)
-       ON CONFLICT (email) DO UPDATE SET source = EXCLUDED.source
-       RETURNING id, (SELECT source FROM prior) AS prior_source`,
-      [email, source]
-    );
+    const subscriber = await saveAcceptedSubscription(pool, { email, source, funnelStepId });
 
     // Where they signed up and from which address is the record that has to
     // exist if anybody ever asks why they were mailed.
@@ -111,7 +106,7 @@ subscribeRouter.post(
       consentIp: req.ip ?? "",
     });
     const contactId = contact.id;
-    await linkContact("subscriber", subscriber.rows[0].id, contactId);
+    await linkContact("subscriber", subscriber.id, contactId);
     await recordActivity({
       contactId,
       kind: "subscribed",
@@ -138,7 +133,7 @@ subscribeRouter.post(
     const { subject, text, html } = subscriberWelcome(email);
     void sendMail({ to: email, subject, text, html });
 
-    if (subscriber.rows[0].prior_source !== source) {
+    if (subscriber.prior_source !== source) {
       notifyOwnerOfOptIn({ what: sourceInWords(source), email });
     }
 

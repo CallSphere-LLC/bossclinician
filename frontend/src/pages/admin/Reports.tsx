@@ -258,7 +258,7 @@ export default function Reports() {
         <Card>
           <CardHeader
             title="Signup journey"
-            subtitle="How many people who land on a journey make it all the way through"
+            subtitle="Accepted subscriptions, counted once per person and opt-in step"
             icon={<Split className="size-4" />}
           />
           {failed.has("funnels") ? (
@@ -292,7 +292,7 @@ export default function Reports() {
                       ) : (
                         <>
                           <span className="font-bold tabular-nums text-lg text-plum">{rate}%</span>
-                          <p className="text-[0.65rem] text-ink-soft">made it to the end</p>
+                          <p className="text-[0.65rem] text-ink-soft">completed subscriptions per view</p>
                         </>
                       )}
                     </div>

@@ -187,10 +187,10 @@ export const api = {
       method: "POST",
       body: JSON.stringify(payload),
     }),
-  subscribe: (email: string, source: string) =>
+  subscribe: (email: string, source: string, funnelStepId?: number) =>
     request<{ ok: true }>("/subscribe", {
       method: "POST",
-      body: JSON.stringify({ email, source }),
+      body: JSON.stringify({ email, source, funnelStepId }),
     }),
   /** Reading a form counts as a view server-side; that is what the opt-in rate is measured against. */
   publicForm: (slug: string) => request<PublicForm>(`/forms/${encodeURIComponent(slug)}`),
@@ -211,7 +211,7 @@ export const api = {
   /** Reading a funnel does not count a view — the step counters do, below. */
   publicFunnel: (slug: string) => request<PublicFunnel>(`/funnels/${encodeURIComponent(slug)}`),
   /** Step counters behind the funnel report. Fire-and-forget: 204, no body. */
-  funnelStepEvent: (stepId: number, event: "view" | "convert") =>
+  funnelStepEvent: (stepId: number, event: "view" | "click" | "convert") =>
     request<void>(`/funnels/steps/${stepId}/${event}`, { method: "POST" }),
   chat: (sessionId: string | null, message: string) =>
     request<ChatResponse>("/chat", {

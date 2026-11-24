@@ -3,6 +3,7 @@ import { env } from "../config/env";
 import { pool } from "../db/pool";
 import { sendMail } from "../email/mailer";
 import { escapeHtml } from "../email/templates";
+import { brandEmailHtml } from "../email/brandShell";
 import { plainText } from "../utils/plainText";
 
 /**
@@ -193,6 +194,7 @@ const submissionSchema = z.object({
   email: z.string().trim().email().max(254),
   answers: z.array(z.number().int().min(1).max(5)).length(BOSS_ASSESSMENT_AREAS.length * 2),
   marketing_consent: z.boolean().optional(),
+  practice_stage: z.enum(["not_launched", "first_hire", "existing_team"]).optional(),
   commitment: z.string().max(MAX_COMMITMENT_CHARS).optional(),
 });
 
@@ -237,6 +239,7 @@ export function readBossAssessmentSubmission(raw: unknown): BossAssessmentSubmis
     first_name: firstName,
     email,
     marketing_consent: marketingConsent,
+    ...(parsed.data.practice_stage ? { practice_stage: parsed.data.practice_stage } : {}),
     total: result.sum,
     tier: result.tierTitle,
     highest_blockers: result.leaders.map((i) => BOSS_ASSESSMENT_AREAS[i].title).join(", "),
@@ -256,7 +259,7 @@ export function readBossAssessmentSubmission(raw: unknown): BossAssessmentSubmis
  * The results email (A0 in the Group Practice Assessment Email Sequence doc).
  * Takes the computed result and nothing else, so nothing a visitor typed can end
  * up in it; the greeting is the doc's "Hey!", not the name. Returns null for an
- * incomplete result, which is then held rather than sent. No buttons or links.
+ * incomplete result, which is then held rather than sent. No promotional buttons or links.
  */
 export function bossAssessmentEmail(input: {
   firstName: string;
@@ -289,22 +292,33 @@ export function bossAssessmentEmail(input: {
 
   const scoreRows = BOSS_ASSESSMENT_AREAS.map(
     (area, i) =>
-      `<tr><td style="padding:6px 16px 6px 0">${escapeHtml(area.title)}</td>` +
-      `<td style="padding:6px 0;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap">${result.totals[i]} / 10</td></tr>`,
+      `<tr><th scope="row" style="padding:12px 16px;text-align:left;font-weight:400;border-bottom:1px solid #e9e2d8">${escapeHtml(area.title)}</th>` +
+      `<td style="padding:12px 16px;text-align:right;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap;border-bottom:1px solid #e9e2d8">${result.totals[i]} / 10</td></tr>`,
   ).join("");
 
   const html = [
     `<p>Hey!</p>`,
     `<p>${escapeHtml(intro)}</p>`,
     `<p>Your total score: <strong style="font-variant-numeric:tabular-nums">${result.sum} / 50</strong></p>`,
-    `<table role="presentation" cellpadding="0" cellspacing="0">${scoreRows}</table>`,
+    `<table aria-label="Assessment area scores" width="100%" cellpadding="0" cellspacing="0" style="width:100%;margin:0 0 24px;border-collapse:collapse;background-color:#f6f2ec;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.5;color:#1e1828">${scoreRows}</table>`,
     `<p>${escapeHtml(explain)}</p>`,
     ...blocks.flatMap((block) => block.map((line) => `<p>${escapeHtml(line)}</p>`)),
     ...CLOSING_LINES.map((line) => `<p>${escapeHtml(line)}</p>`),
     `<p>Yvette</p>`,
   ].join(NL);
 
-  return { subject: BOSS_ASSESSMENT_EMAIL_SUBJECT, preheader: BOSS_ASSESSMENT_EMAIL_PREVIEW, text, html };
+  return {
+    subject: BOSS_ASSESSMENT_EMAIL_SUBJECT,
+    preheader: BOSS_ASSESSMENT_EMAIL_PREVIEW,
+    text,
+    html: brandEmailHtml({
+      html, text, subject: BOSS_ASSESSMENT_EMAIL_SUBJECT,
+      preheader: BOSS_ASSESSMENT_EMAIL_PREVIEW,
+      siteUrl: input.siteUrl,
+      tableIsContent: true,
+      receiptReason: "You requested your practice assessment results from",
+    }),
+  };
 }
 
 /**

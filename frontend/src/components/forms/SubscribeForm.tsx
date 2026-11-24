@@ -6,13 +6,15 @@ import { cn } from "@/lib/cn";
 interface SubscribeFormProps {
   source: string;
   dark?: boolean;
+  funnelStepId?: number;
   placeholder?: string;
-  /** Fired once the address is stored — the funnel page counts it as a conversion. */
+  /** Fired after the server accepts the subscription and records any eligible conversion. */
   onSuccess?: () => void;
 }
 
 export function SubscribeForm({
   source,
+  funnelStepId,
   dark,
   placeholder = "Your email address",
   onSuccess,
@@ -27,7 +29,7 @@ export function SubscribeForm({
     setStatus("loading");
     setError("");
     try {
-      await api.subscribe(email.trim(), source);
+      await api.subscribe(email.trim(), source, funnelStepId);
       setStatus("success");
       setEmail("");
       onSuccess?.();

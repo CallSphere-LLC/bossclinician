@@ -49,6 +49,7 @@ export const leadSchema = z.object({
 export const subscribeSchema = z.object({
   email: z.string().email().max(320),
   source: z.string().max(100).default("newsletter"),
+  funnelStepId: z.number().int().positive().optional(),
 });
 
 export const chatSchema = z.object({

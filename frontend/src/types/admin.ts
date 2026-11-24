@@ -679,6 +679,8 @@ export interface FunnelStep {
   sort: number;
   views: number;
   conversions: number;
+  completedSubscriptions?: number;
+  clicks?: number;
 }
 
 export interface Automation {

@@ -136,10 +136,15 @@ describe("bossAssessmentEmail", () => {
     }
   });
 
-  it("has no buttons or links", () => {
+  it("uses the standard frame without adding promotional buttons or links", () => {
     const { text, html } = render();
-    expect(html).not.toContain("<a ");
+    expect([...html.matchAll(/href="([^"]+)"/g)].map((m) => m[1])).toEqual(["https://site.test", "https://site.test"]);
     expect(text).not.toMatch(/https?:\/\//);
+    expect(html).toContain('max-width:600px');
+    expect(html).toContain('font-size:16px');
+    expect(html).toContain('aria-label="Assessment area scores"');
+    expect(html.match(/data-bc-shell="1"/g)).toHaveLength(1);
+    expect(html).toContain("You requested your practice assessment results from");
   });
 
   it("includes every tied highest block", () => {

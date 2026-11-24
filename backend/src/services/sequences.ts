@@ -1,3 +1,4 @@
+import { sendRequestedLegacyQuizResult } from "./hiringQuizResults";
 import { pool } from "../db/pool";
 import { buildMergeValues } from "../email/mergeValues";
 import { mergeLinks, renderMarkdown, renderTokens, sendEmail } from "../email/provider";
@@ -241,12 +242,15 @@ interface SequenceRow {
    * `anchor_offset_days` after the run's retreat's end date.
    */
   anchor_kind?: string | null;
+  completion_anchored?: boolean;
+  sales_family?: string | null;
+  sales_start_position?: number;
 }
 
 const SEQUENCE_COLUMNS = `id, name, status, topic, skip_weekends,
   send_window_start_minute, send_window_end_minute, use_contact_timezone, timezone,
   exit_on_purchase, exit_tag_id, completion_tag_id, allow_reentry, requires_offer_id,
-  send_at_minute, anchor_kind`;
+  send_at_minute, anchor_kind, completion_anchored, sales_family, sales_start_position`;
 
 /** Whether this sequence is timed from an event rather than from the previous email. */
 function isAnchored(sequence: SequenceRow): boolean {
@@ -536,7 +540,30 @@ export interface EnrollResult {
  * sequence a second time" is a decision about a run that has already ended, and
  * the answer is usually no.
  */
-export async function enrollContact(
+export async function enrollContact(sequenceId: number, contactId: number, options: Parameters<typeof enrollContactUnlocked>[2] = {}): Promise<EnrollResult> {
+  const q = (await pool.query<{sales_family: string | null; sales_start_position: number}>("SELECT sales_family, sales_start_position FROM email_sequences WHERE id=$1", [sequenceId])).rows[0];
+  if (!q?.sales_family) return enrollContactUnlocked(sequenceId,contactId,options);
+  const client = await pool.connect();
+  let result: EnrollResult;
+  try {
+    await client.query("BEGIN");
+    await client.query("SELECT pg_advisory_xact_lock(236, $1)", [contactId]);
+    const c = (await client.query<{email_marketing_status:string}>("SELECT email_marketing_status FROM contacts WHERE id=$1", [contactId])).rows[0];
+    if ((options.startAtPosition ?? 0) >= q.sales_start_position && c?.email_marketing_status !== "subscribed") result = {subscriptionId:null,outcome:"blocked",reason:"marketing consent absent or suppressed"};
+    else {
+      result = await enrollContactUnlocked(sequenceId,contactId,options,client);
+      if (result.outcome === "enrolled" && (options.startAtPosition ?? 0) >= q.sales_start_position) await client.query(`UPDATE sequence_subscriptions s SET status='exited',next_send_at=NULL,exit_reason='Another sales sequence started',updated_at=now() FROM email_sequences q WHERE q.id=s.sequence_id AND q.sales_family IS NOT NULL AND s.position>=q.sales_start_position AND s.contact_id=$1 AND s.sequence_id<>$2 AND s.status IN ('active','paused')`,[contactId,sequenceId]);
+    }
+    await client.query("COMMIT");
+  } catch(error) { await client.query("ROLLBACK"); throw error; } finally { client.release(); }
+  if(result.outcome === "enrolled") {
+    await recordActivity({contactId,kind:"sequence_started",title:"Started a sales followup sequence",body:options.reason ?? "",subjectType:"sequence",subjectId:String(sequenceId)});
+    await publishSequenceEvent("sequence_subscribed",{subscriptionId:String(result.subscriptionId),sequenceId,contactId,reason:options.reason ?? ""});
+  }
+  return result;
+}
+
+async function enrollContactUnlocked(
   sequenceId: number,
   contactId: number,
   options: {
@@ -557,11 +584,13 @@ export async function enrollContact(
      * silently timed from enrolment); ignored by every other sequence.
      */
     anchorRetreatId?: number | null;
-  } = {}
+  } = {},
+  transactionClient?: import("pg").PoolClient
 ): Promise<EnrollResult> {
   const now = options.now ?? new Date();
+  const db = transactionClient ?? pool;
 
-  const sequenceRes = await pool.query<SequenceRow>(
+  const sequenceRes = await db.query<SequenceRow>(
     `SELECT ${SEQUENCE_COLUMNS} FROM email_sequences WHERE id = $1`,
     [sequenceId]
   );
@@ -571,7 +600,7 @@ export async function enrollContact(
     return { subscriptionId: null, outcome: "blocked", reason: "sequence is not active" };
   }
 
-  const contactRes = await pool.query<{ timezone: string }>(
+  const contactRes = await db.query<{ timezone: string }>(
     `SELECT timezone FROM contacts WHERE id = $1`,
     [contactId]
   );
@@ -590,9 +619,9 @@ export async function enrollContact(
         reason: "this sequence is timed from a retreat's end date and can only be joined for a retreat",
       };
     }
-    const retreat = await loadRetreatAnchor(pool, retreatId);
+    const retreat = await loadRetreatAnchor(db, retreatId);
     if (!retreat) return { subscriptionId: null, outcome: "blocked", reason: "retreat has no end date" };
-    const emailsRes = await pool.query<{ position: number; anchor_offset_days: number | null }>(
+    const emailsRes = await db.query<{ position: number; anchor_offset_days: number | null }>(
       `SELECT position, anchor_offset_days FROM sequence_emails
         WHERE sequence_id = $1 AND enabled AND position >= $2
         ORDER BY position`,
@@ -615,7 +644,7 @@ export async function enrollContact(
 
   const firstRes = anchored
     ? { rows: [{ position: anchored.first.position, delay_minutes: 0 }] }
-    : await pool.query<{ position: number; delay_minutes: number }>(
+    : await db.query<{ position: number; delay_minutes: number }>(
         `SELECT position, delay_minutes FROM sequence_emails
           WHERE sequence_id = $1 AND enabled AND position >= $2
           ORDER BY position LIMIT 1`,
@@ -624,7 +653,7 @@ export async function enrollContact(
   const first = firstRes.rows[0];
   if (!first) return { subscriptionId: null, outcome: "blocked", reason: "sequence has no emails" };
 
-  const existingRes = await pool.query<{ id: string; status: string }>(
+  const existingRes = await db.query<{ id: string; status: string }>(
     `SELECT id, status FROM sequence_subscriptions WHERE sequence_id = $1 AND contact_id = $2`,
     [sequenceId, contactId]
   );
@@ -649,7 +678,7 @@ export async function enrollContact(
   // A re-entry replaces the purchase stamp too, cleared when this run has none:
   // a second run must never inherit the refund of the purchase that started the
   // first. The retreat anchor likewise (always NULL for a classic sequence).
-  const inserted = await pool.query<{ id: string }>(
+  const inserted = await db.query<{ id: string }>(
     `INSERT INTO sequence_subscriptions
        (sequence_id, contact_id, status, position, next_send_at, entered_at,
         source_offer_id, source_order_id, anchor_retreat_id)
@@ -679,7 +708,7 @@ export async function enrollContact(
   // 228). Same dedupe key as the tick, so the tick cannot queue it a second
   // time, and sendDueEmail re-checks next_send_at under the row lock. Never
   // fails the enrolment: the tick still picks it up if this cannot be queued.
-  if (sendAt.getTime() <= now.getTime()) {
+  if (!transactionClient && sendAt.getTime() <= now.getTime()) {
     const subscriptionId = inserted.rows[0].id;
     await enqueueMany([
       {
@@ -694,6 +723,7 @@ export async function enrollContact(
     });
   }
 
+  if (!transactionClient) {
   await recordActivity({
     contactId,
     kind: "sequence_started",
@@ -710,6 +740,7 @@ export async function enrollContact(
     reason: options.reason ?? "",
   });
 
+  }
   return { subscriptionId: Number(inserted.rows[0].id), outcome: "enrolled", reason: "" };
 }
 
@@ -1156,6 +1187,7 @@ export async function sendDueEmail(
   try {
     await client.query("BEGIN");
 
+    await client.query(`SELECT pg_advisory_xact_lock(236,s.contact_id) FROM sequence_subscriptions s JOIN email_sequences q ON q.id=s.sequence_id WHERE s.id=$1 AND q.sales_family IS NOT NULL`,[subscriptionId]);
     const subRes = await client.query<{
       id: string;
       sequence_id: number;
@@ -1165,9 +1197,10 @@ export async function sendDueEmail(
       next_send_at: Date | null;
       source_offer_id: number | null;
       anchor_retreat_id?: number | null;
+      entered_at: Date;
     }>(
       `SELECT id, sequence_id, contact_id, status, position, next_send_at, source_offer_id,
-              anchor_retreat_id
+              anchor_retreat_id, entered_at
          FROM sequence_subscriptions WHERE id = $1 FOR UPDATE`,
       [subscriptionId]
     );
@@ -1450,7 +1483,7 @@ export async function sendDueEmail(
             sequence.send_at_minute ?? null,
             retreat.timezone
           )
-        : nextSendAt(now, next.delay_minutes, rulesFor(sequence, contact.timezone));
+        : nextSendAt(sequence.completion_anchored ? subscription.entered_at : now, next.delay_minutes, rulesFor(sequence, contact.timezone));
 
     /** Sends nothing and moves the run to the next email, or finishes it. */
     const skipEmail = async (skipped: string): Promise<SendStepResult> => {
@@ -1614,13 +1647,40 @@ export async function sendDueEmail(
       };
     }
 
-    const result = await sendEmail({
+    if (sequence.sales_family && email.position >= (sequence.sales_start_position ?? 0)) {
+      const stopped = sequence.completion_anchored && (await client.query(`SELECT 1 WHERE
+        EXISTS (SELECT 1 FROM sequence_exclude_forms x JOIN form_submissions f ON f.form_id=x.form_id WHERE x.sequence_id=$1 AND f.contact_id=$2)
+        OR EXISTS (SELECT 1 FROM sequence_exclude_offers x JOIN access_grants g ON g.offer_id=x.offer_id JOIN members m ON m.id=g.member_id WHERE x.sequence_id=$1 AND g.status='active' AND (g.expires_at IS NULL OR g.expires_at>$3) AND (m.contact_id=$2 OR lower(m.email::text)=lower($4)))`,[subscription.sequence_id,subscription.contact_id,now,contact.email])).rows[0];
+      if (stopped) {
+        await client.query("UPDATE sequence_subscriptions SET status='exited',next_send_at=NULL,exit_reason='Promoted offer already held or application/registration submitted',updated_at=now() WHERE id=$1",[subscription.id]);
+        await client.query("COMMIT");
+        return {outcome:"exited",detail:"Promoted offer held or exit form submitted",sequenceId:subscription.sequence_id,contactId:subscription.contact_id};
+      }
+      if (contact.email_marketing_status !== "subscribed") {
+        await client.query("UPDATE sequence_subscriptions SET status='exited',next_send_at=NULL,exit_reason='Marketing consent absent or suppressed',updated_at=now() WHERE id=$1",[subscription.id]);
+        await client.query("COMMIT");
+        return {outcome:"suppressed",detail:"marketing consent absent or suppressed",sequenceId:subscription.sequence_id,contactId:subscription.contact_id};
+      }
+      const competing=(await client.query(`SELECT 1 FROM sequence_subscriptions s JOIN email_sequences q ON q.id=s.sequence_id WHERE s.contact_id=$1 AND s.id<>$2 AND s.status IN ('active','paused') AND q.sales_family IS NOT NULL AND s.position>=q.sales_start_position LIMIT 1`,[subscription.contact_id,subscription.id])).rows[0];
+      if (competing) {
+        await client.query("UPDATE sequence_subscriptions SET status='exited',next_send_at=NULL,exit_reason='Another active sales sequence',updated_at=now() WHERE id=$1",[subscription.id]);
+        await client.query("COMMIT");
+        return {outcome:"exited",detail:"Another active sales sequence",sequenceId:subscription.sequence_id,contactId:subscription.contact_id};
+      }
+      const today=(await client.query(`SELECT 1 FROM quiz_followup_state WHERE contact_id=$1 AND (last_sales_sent_at AT TIME ZONE 'America/Los_Angeles')::date=($2::timestamptz AT TIME ZONE 'America/Los_Angeles')::date`,[subscription.contact_id,now])).rows[0];
+      if (today) {
+        await client.query("UPDATE sequence_subscriptions SET next_send_at=$2,updated_at=now() WHERE id=$1",[subscription.id,new Date(now.getTime()+24*60*60*1000)]);
+        await client.query("COMMIT");
+        return {outcome:"not_due",detail:"one sales email per day",sequenceId:subscription.sequence_id,contactId:subscription.contact_id};
+      }
+    }
+    const deliveryInput = {
       to: contact.email,
       subject: renderTokens(email.subject, values),
       text: renderTokens(email.body_md, values),
       html: renderMarkdown(renderTokens(email.body_md, values)),
       contactId: subscription.contact_id,
-      sourceType: "sequence",
+      sourceType: "sequence" as const,
       sourceId: subscription.sequence_id,
       // Migration 220: an email may name its own preference topic (NULL = the
       // sequence's). '' means only a full unsubscribe or suppression stops it.
@@ -1628,7 +1688,12 @@ export async function sendDueEmail(
       fromName: email.from_name,
       fromEmail: email.from_email,
       preheader: renderTokens(email.preview_text ?? "", values),
-    });
+    };
+    const result = sequence.sales_family === "legacy_quiz" && email.position < (sequence.sales_start_position ?? 0)
+      ? await sendRequestedLegacyQuizResult(deliveryInput)
+      : await sendEmail(deliveryInput);
+
+    if (sequence.sales_family && email.position >= (sequence.sales_start_position ?? 0) && result.outcome === "sent") await client.query(`INSERT INTO quiz_followup_state(contact_id,last_sales_sent_at) VALUES($1,$2) ON CONFLICT(contact_id) DO UPDATE SET last_sales_sent_at=EXCLUDED.last_sales_sent_at`,[subscription.contact_id,now]);
 
     // Advance regardless of a suppression: a contact who has opted out is not
     // going to become eligible for email 4 by being left stuck on email 3, and
@@ -1645,6 +1710,16 @@ export async function sendDueEmail(
     );
     const next = nextRes.rows[0];
 
+    // A legacy quiz's independently requested result is delivered even when
+    // another sales sequence owns the contact. Do not then start a second nurture.
+    if (next && sequence.sales_family && email.position < (sequence.sales_start_position ?? 0) && next.position >= (sequence.sales_start_position ?? 0)) {
+      const another = (await client.query(`SELECT 1 FROM sequence_subscriptions s JOIN email_sequences q ON q.id=s.sequence_id WHERE s.contact_id=$1 AND s.id<>$2 AND s.status IN ('active','paused') AND q.sales_family IS NOT NULL AND s.position>=q.sales_start_position LIMIT 1`,[subscription.contact_id,subscription.id])).rows[0];
+      if (another) {
+        await client.query("UPDATE sequence_subscriptions SET status='exited',next_send_at=NULL,exit_reason='Requested result delivered; another sales sequence remains active',updated_at=now() WHERE id=$1",[subscription.id]);
+        await client.query("COMMIT");
+        return {outcome:"completed",detail:"Result delivered without starting duplicate nurture",sequenceId:subscription.sequence_id,contactId:subscription.contact_id};
+      }
+    }
     if (!next) {
       await finishSubscription(client, subscription.id, subscription.contact_id, sequence);
       await client.query("COMMIT");

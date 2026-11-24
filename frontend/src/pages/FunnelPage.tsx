@@ -108,9 +108,8 @@ export default function FunnelPage() {
   // Arriving at a new step re-arms the opt-in — one funnel can ask twice.
   useEffect(() => setOptedIn(false), [index]);
 
-  const convert = useCallback(() => {
-    if (!step) return;
-    void api.funnelStepEvent(step.id, "convert").catch(() => undefined);
+  const recordClick = useCallback(() => {
+    if (step) void api.funnelStepEvent(step.id, "click").catch(() => undefined);
   }, [step]);
 
   if (loadError) {
@@ -241,10 +240,10 @@ export default function FunnelPage() {
                     fires the same welcome mail it does everywhere else. */}
                 <SubscribeForm
                   source={`funnel:${funnel.slug}`}
+                  funnelStepId={step.id}
                   dark
                   placeholder="Your email address"
                   onSuccess={() => {
-                    convert();
                     setOptedIn(true);
                   }}
                 />
@@ -269,7 +268,7 @@ export default function FunnelPage() {
                       href={step.ctaUrl}
                       target="_blank"
                       rel="noreferrer"
-                      onClick={convert}
+                      onClick={recordClick}
                       className="min-h-[44px]"
                     >
                       {ctaLabel}
@@ -279,7 +278,7 @@ export default function FunnelPage() {
                       variant="foil"
                       size="md"
                       to={step.ctaUrl}
-                      onClick={convert}
+                      onClick={recordClick}
                       className="min-h-[44px]"
                     >
                       {ctaLabel}
@@ -291,7 +290,7 @@ export default function FunnelPage() {
                       variant="foil"
                       size="md"
                       to={stepPath(funnel.slug, next, index + 1)}
-                      onClick={convert}
+                      onClick={recordClick}
                       className="min-h-[44px]"
                     >
                       {ctaLabel}

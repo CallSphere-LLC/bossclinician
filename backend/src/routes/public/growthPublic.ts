@@ -1,3 +1,4 @@
+import { routeQuizFollowup } from "../../services/quizFollowups";
 import { finishStagedMedia, usesS3Media, removeStoredMedia } from "../../services/objectStorage";
 import fs from "fs";
 import { Router, type Request } from "express";
@@ -981,8 +982,8 @@ growthPublicRouter.post(
     const contactId = contactRecord?.id ?? null;
 
     // Ahead of the tags and events below, which can start marketing automations.
-    if (bossAssessment && contactRecord) {
-      const { marketingConsent } = bossAssessment;
+    if (contactRecord && (bossAssessment || form.slug === "hire-form" || form.slug.startsWith("hiring-quiz-"))) {
+      const marketingConsent = bossAssessment?.marketingConsent ?? data.marketing_consent === true;
       await afterSubmission(`the marketing consent on ${form.slug}`, () =>
         applyBossAssessmentConsent(contactRecord.id, contactRecord.created, marketingConsent),
       );
@@ -1159,6 +1160,9 @@ growthPublicRouter.post(
       resultsEmailed = sent === true;
     }
 
+    if (contactId !== null) await afterSubmission(`quiz followup routing for ${submissionId}`, () =>
+      routeQuizFollowup(contactId, form.slug, data));
+
     res.status(201).json({
       ok: true,
       message: form.success_message,
@@ -1298,7 +1302,12 @@ growthPublicRouter.post(
     const id = Number(req.params.id);
     if (!Number.isInteger(id) || id <= 0) throw badRequest("Invalid step id");
 
-    const column = req.params.event === "convert" ? "conversions" : "views";
+    // Old clients may still post convert after a successful subscribe. Keep
+    // their response compatible, but only the accepted server subscription
+    // may create an authoritative conversion (funnelSubscriptions.ts).
+    if (req.params.event === "convert") { res.status(204).end(); return; }
+    if (req.params.event !== "view" && req.params.event !== "click") throw badRequest("Invalid step event");
+    const column = req.params.event === "click" ? "clicks" : "views";
     const result = await pool.query(
       `UPDATE funnel_steps SET ${column} = ${column} + 1 WHERE id = $1`,
       [id],

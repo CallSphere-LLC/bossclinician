@@ -1,0 +1,30 @@
+{
+  "source_baseline": "ebff5e16447e780fb48e205b91c355e35e7e9f89",
+  "status": "source_verified_not_yet_released",
+  "migration": 237,
+  "tests": {
+    "integration": 6,
+    "http_boundary": 4,
+    "all_passed": true,
+    "backend_typecheck": true,
+    "frontend_typecheck": true
+  },
+  "coverage": [
+    "concurrent and sequential replay",
+    "email case normalization",
+    "distinct subscribers",
+    "published funnel/source/opt-in validation",
+    "ordinary subscribers without step",
+    "blocked spam",
+    "invalid step ID",
+    "failure sends no email",
+    "atomic rollback",
+    "legacy counts remain separate"
+  ],
+  "data_contract": "IDs-only unique(step_id,subscriber_id), no email/name/IP in analytics ledger",
+  "clicks": "separate clicks counter; legacy convert no-op204",
+  "historic_counts": "preserved without declaring historical clicks verified subscriptions",
+  "production_mutations_from_tests": false,
+  "mail_sent_from_tests": false,
+  "test_database": "disposable local-only Postgres fixture; fake credentials, nonroot, read-only container, caps dropped"
+}

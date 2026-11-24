@@ -896,7 +896,7 @@ export default function Funnels() {
   }
 
   const totalViews = (steps ?? []).reduce((s, x) => s + x.views, 0);
-  const totalConversions = (steps ?? []).reduce((s, x) => s + x.conversions, 0);
+  const totalConversions = (steps ?? []).reduce((s, x) => s + (x.completedSubscriptions ?? 0), 0);
   const activeOffer = active?.offerId ? offers.find((offer) => offer.id === active.offerId) : undefined;
 
   /**
@@ -1096,7 +1096,7 @@ export default function Funnels() {
             </Card>
             <Card className="p-5">
               <p className="text-[0.7rem] font-semibold uppercase tracking-wide text-ink-soft">
-                People who went on
+                Completed subscriptions
               </p>
               <p className="mt-2 font-bold tabular-nums text-[1.6rem] leading-none text-ink">
                 {formatNumber(totalConversions)}
@@ -1104,7 +1104,7 @@ export default function Funnels() {
             </Card>
             <Card className="p-5">
               <p className="text-[0.7rem] font-semibold uppercase tracking-wide text-ink-soft">
-                How many went on
+                Subscription rate
               </p>
               <p className="mt-2 font-bold tabular-nums text-[1.6rem] leading-none text-plum">
                 {totalViews > 0
@@ -1112,7 +1112,7 @@ export default function Funnels() {
                   : "None yet"}
               </p>
               <p className="mt-1.5 text-[0.7rem] text-ink-soft">
-                Out of everyone who saw a page.
+                Completed opt-ins per page view, counted once per subscriber and step. Historical click counters are excluded.
               </p>
             </Card>
           </div>
@@ -1153,7 +1153,7 @@ export default function Funnels() {
                 {steps.map((step, i) => {
                   const rate =
                     step.views > 0
-                      ? Math.round((step.conversions / step.views) * 1000) / 10
+                      ? Math.round(((step.completedSubscriptions ?? 0) / step.views) * 1000) / 10
                       : null;
                   const path = stepPagePath(active, step, i);
                   return (
@@ -1185,9 +1185,9 @@ export default function Funnels() {
                             </span>{" "}
                             views ·{" "}
                             <span className="font-bold tabular-nums text-ink">
-                              {formatNumber(step.conversions)}
+                              {formatNumber((step.completedSubscriptions ?? 0))}
                             </span>{" "}
-                            went on
+                            subscribed / {formatNumber(step.clicks ?? 0)} clicks
                           </p>
                           {rate !== null && (
                             <p className="flex items-center justify-end gap-1 text-sm font-bold tabular-nums text-green">

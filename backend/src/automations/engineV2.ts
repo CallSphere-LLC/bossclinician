@@ -1,3 +1,4 @@
+import { sendHiringQuizAutomationResult } from "../services/hiringQuizResults";
 import crypto from "crypto";
 import { z } from "zod";
 import { env } from "../config/env";
@@ -753,6 +754,11 @@ async function performAction(
       const body = canonicalizeEmailLinks(renderTokens(parsed.data.bodyMd, values));
 
       if (isTest) return { log: `Email: would send "${parsed.data.subject}"`, stop: false };
+
+      if (context.trigger === "form_submitted") {
+        const requested = await sendHiringQuizAutomationResult({automationId,formId:context.subjectId,email:context.email,contactId,eventKey:context.eventKey});
+        if (requested !== null) return {log:requested ? `Requested hiring result sent to ${context.email}` : "Requested hiring result held by suppression or cap",stop:false,blocked:!requested};
+      }
 
       const result = await sendEmail({
         to: context.email,

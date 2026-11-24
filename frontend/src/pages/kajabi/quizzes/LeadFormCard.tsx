@@ -1,3 +1,4 @@
+import { PracticeStageSelect } from "./PracticeStageSelect";
 import { useId, useState, type FormEvent, type ReactNode } from "react";
 import { useHoneypot } from "@/components/forms/useHoneypot";
 import { GlassCard } from "@/components/luxe/GlassCard";
@@ -49,6 +50,8 @@ export function LeadFormCard({
   const [email, setEmail] = useState("");
   const [choices, setChoices] = useState<Record<string, string>>({});
   const [sending, setSending] = useState(false);
+  const [practiceStage, setPracticeStage] = useState("");
+  const [marketingConsent, setMarketingConsent] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -76,7 +79,7 @@ export function LeadFormCard({
     try {
       await api.submitForm(
         formSlug,
-        { first_name: first, last_name: last, email: address, ...choices },
+        { first_name: first, last_name: last, email: address, ...choices, practice_stage: practiceStage, marketing_consent: marketingConsent },
         address,
         honeypot(),
       );
@@ -160,6 +163,11 @@ export function LeadFormCard({
           </LuxeSelect>
         ))}
 
+        <PracticeStageSelect value={practiceStage} onChange={setPracticeStage} />
+        <label className="flex items-start gap-3 text-sm text-white/85">
+          <input type="checkbox" name="marketing_consent" checked={marketingConsent} onChange={e => setMarketingConsent(e.target.checked)} className="mt-1 h-4 w-4" />
+          <span>Also send me relevant practice-building emails. I can unsubscribe anytime.</span>
+        </label>
         {error && <FormError id={errorId}>{error}</FormError>}
 
         <LuxeButton variant="foil" size="md" type="submit" disabled={sending} className="min-h-[44px] w-full">
