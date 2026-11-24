@@ -95,6 +95,17 @@ class WorkflowContractTests(unittest.TestCase):
         self.assertEqual(len(integration), 1)
         self.assertIn("TEST_DATABASE_URL", integration[0]["env"])
 
+    def test_service_options_are_single_line_and_preserve_health_checks(self):
+        for path in sorted(WORKFLOWS.glob("*.y*ml")):
+            for name, job in load(path).get("jobs", {}).items():
+                for service in job.get("services", {}).values():
+                    options = service.get("options", "")
+                    self.assertNotRegex(options, r"[\r\n]", f"{path.name}: {name}")
+        options = self.ci["jobs"]["backend"]["services"]["postgres"]["options"]
+        for flag in ('--health-cmd "pg_isready -U boss"', '--health-interval 5s',
+                     '--health-timeout 5s', '--health-retries 20'):
+            self.assertIn(flag, options)
+
     def test_stack_job_checks_the_release_it_built(self):
         job = self.ci["jobs"]["stack"]
         self.assertEqual(job["env"]["APP_RELEASE"], "${{ inputs.ref || github.sha }}")
