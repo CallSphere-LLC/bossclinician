@@ -88,12 +88,13 @@ describeDb("Club bonus (integration)", () => {
        ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value`,
       [JSON.stringify({ fromName: "Yvette at Boss Clinician", fromEmail: "yvette@bossclinician.callsphere.site", address: "ZZ Test Address" })]
     );
-    // Migration 221 shipped the reminders OFF, the four test addresses listed
-    // and no existing registrant eligible.
+    // Current migration chain retains the internal test addresses but migration
+    // 229 restores the real opted-out registrant without extending her window.
     const settings = (await db.client.query(`SELECT value FROM settings WHERE key = 'club_bonus'`)).rows[0].value;
     expect(settings.excludedEmails).toEqual(
-      expect.arrayContaining(["yvette@bossclinician.com", "yhowardlcsw@gmail.com", "sagar+pp1107@callsphere.ai", "murosn@nv.ccsd.net"])
+      expect.arrayContaining(["yvette@bossclinician.com", "yhowardlcsw@gmail.com", "sagar+pp1107@callsphere.ai"])
     );
+    expect(settings.excludedEmails).not.toContain("murosn@nv.ccsd.net");
     expect(settings.legacyPendingGetsBonus).toBe(false);
     expect((await db.client.query(`SELECT status FROM email_sequences WHERE slug = 'club-bonus-reminders'`)).rows[0].status).toBe(
       "draft"

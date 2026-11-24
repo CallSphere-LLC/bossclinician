@@ -88,9 +88,9 @@ describeDb("Lounge founding rules, migration 222 (integration)", () => {
     await db.client.query(`DELETE FROM access_grants WHERE product_id = $1`, [productId]);
   });
 
-  it("migration 222 switched LOUNGE26 off and shipped the waitlist notice as a draft", async () => {
+  it("current migrations keep LOUNGE26 off and activate the approved waitlist notice", async () => {
     const seq = await db.client.query(`SELECT status FROM email_sequences WHERE slug = 'lounge-vip-seat-open'`);
-    expect(seq.rows[0]?.status).toBe("draft");
+    expect(seq.rows[0]?.status).toBe("active");
     const job = await db.client.query(`SELECT kind, enabled FROM job_schedules WHERE name = 'lounge-vip-waitlist-notify'`);
     expect(job.rows[0]).toMatchObject({ kind: "loungeVip.waitlistNotify" });
     const coupon = await db.client.query(`SELECT active FROM coupons WHERE upper(code::text) = 'LOUNGE26'`);
@@ -160,6 +160,8 @@ describeDb("Lounge founding rules, migration 222 (integration)", () => {
   });
 
   it("waitlist notice: records an opening while OFF, notifies once per opening when ON, and closes when full", async () => {
+    // Explicitly exercise the disabled branch; migration 229 activates the real notice.
+    await db.client.query(`UPDATE email_sequences SET status = 'draft' WHERE slug = 'lounge-vip-seat-open'`);
     const tag = await db.client.query(`SELECT id FROM tags WHERE slug = 'lounge-vip-waitlist'`);
     const tagId = tag.rows[0]?.id
       ?? (await db.client.query(`INSERT INTO tags (name, slug) VALUES ('Lounge VIP Waitlist', 'lounge-vip-waitlist') RETURNING id`)).rows[0].id;
@@ -197,7 +199,7 @@ describeDb("Lounge founding rules, migration 222 (integration)", () => {
       expect(rows.rows[0].closed_at).not.toBeNull();
       expect(rows.rows[0].waitlisted).toBe(1);
     } finally {
-      await db.client.query(`UPDATE email_sequences SET status = 'draft' WHERE slug = 'lounge-vip-seat-open'`);
+      await db.client.query(`UPDATE email_sequences SET status = 'active' WHERE slug = 'lounge-vip-seat-open'`);
     }
   });
 });
