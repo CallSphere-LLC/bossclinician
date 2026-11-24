@@ -102,7 +102,12 @@ const plural = (count: number, one: string, many: string) =>
 export function sequenceSpan(sequence: Pick<SequenceSummary, "emailCount"> & {
   enabledEmailCount?: number;
   totalDelayMinutes?: number;
+  slug?: string;
 }): string {
+  // These disabled templates are intentionally sent only by the personal-deadline dispatcher.
+  if (sequence.slug === "club-bonus-reminders" && sequence.emailCount > 0) {
+    return `${plural(sequence.emailCount, "reminder", "reminders")} scheduled by personal deadline`;
+  }
   const count = sequence.enabledEmailCount ?? sequence.emailCount;
   const minutes = Math.max(0, sequence.totalDelayMinutes ?? 0);
   if (count === 0) {

@@ -42,6 +42,15 @@ const sequence = (over: Partial<SequenceSummary>): SequenceSummary => ({
 });
 
 describe("A3 — broadcasts and sequences in one list", () => {
+  it("describes the Club's disabled templates as personal-deadline reminders", () => {
+    expect(sequenceSpan(sequence({ slug: "club-bonus-reminders", emailCount: 3, enabledEmailCount: 0 })))
+      .toBe("3 reminders scheduled by personal deadline");
+  });
+  it("does not label ordinary disabled templates as scheduled reminders", () => {
+    expect(sequenceSpan(sequence({ slug: "ordinary-sequence", emailCount: 3, enabledEmailCount: 0 })))
+      .toBe("3 emails, all switched off");
+  });
+
   it("reads a sequence inline the way Kajabi does: N emails over D days", () => {
     expect(sequenceSpan(sequence({}))).toBe("6 emails over 11 days");
     expect(sequenceSpan(sequence({ enabledEmailCount: 1, totalDelayMinutes: 1440 }))).toBe("1 email over 1 day");
