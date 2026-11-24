@@ -3,7 +3,7 @@
 # Security updates are switched on for the repository and need no config; this
 # file adds routine weekly version updates. Minor and patch bumps are grouped so
 # an ordinary week is one pull request per ecosystem. Every pull request runs
-# the full CI suite (including dependency review and the CodeQL gate), and
+# the full CI suite (including dependency review and the Semgrep CE source gate), and
 # nothing reaches production until it is merged to main.
 #
 # At most two open version-update pull requests per ecosystem. CI runs on

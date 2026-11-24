@@ -176,7 +176,7 @@ if __name__ == "__main__":
 class CentralReleaseContractTests(unittest.TestCase):
     def test_release_requires_all_suites_and_explicit_activation(self):
         jobs=load(WORKFLOWS / "ci.yml")["jobs"]
-        self.assertEqual(set(jobs["central-build"]["needs"]), {"pipeline", "backend", "frontend", "ai", "stack"})
+        self.assertEqual(set(jobs["central-build"]["needs"]), {"pipeline", "backend", "frontend", "ai", "stack", "static-security"})
         self.assertEqual(jobs["central-deploy"]["needs"], "central-build")
         self.assertIn("CENTRAL_DEPLOY_ENABLED", jobs["central-deploy"]["if"])
         self.assertIn("inputs.ref == github.sha", jobs["central-deploy"]["if"])
