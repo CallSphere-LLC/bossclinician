@@ -75,6 +75,9 @@ const ROUTES: { path: string; load?: Loader }[] = [
   },
   { path: "/contact" },
   { path: "/retreats" },
+  // Render the public agreement before hydration so its full text is present
+  // for readers/crawlers and the footer does not jump below it on first load.
+  { path: "/retreatagreement" },
   // Migration 223. Both names are in nginx/site.conf's no-children regex.
   { path: "/upcoming-retreats", load: async (_req, keys) => ({ [keys.upcomingRetreats()]: await listUpcomingRetreats() }) },
   { path: "/retreat-interest" },
