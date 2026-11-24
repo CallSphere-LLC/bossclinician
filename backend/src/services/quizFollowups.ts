@@ -1,5 +1,9 @@
 import { pool } from "../db/pool";
 
+/** Old cached forms retain their prior contract during the backend-first handoff. */
+export function hasExplicitHiringConsent(slug: string, raw: Record<string, unknown>): boolean {
+  return (slug === "hire-form" || ["hiring-quiz-ready","hiring-quiz-almost","hiring-quiz-not-yet"].includes(slug)) && Object.hasOwn(raw,"marketing_consent");
+}
 export type PracticeStage = "not_launched" | "first_hire" | "existing_team";
 export function practiceStage(value: unknown): PracticeStage | null {
   return value === "not_launched" || value === "first_hire" || value === "existing_team" ? value : null;

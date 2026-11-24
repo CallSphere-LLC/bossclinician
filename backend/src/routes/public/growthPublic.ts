@@ -1,4 +1,4 @@
-import { routeQuizFollowup } from "../../services/quizFollowups";
+import { hasExplicitHiringConsent, routeQuizFollowup } from "../../services/quizFollowups";
 import { finishStagedMedia, usesS3Media, removeStoredMedia } from "../../services/objectStorage";
 import fs from "fs";
 import { Router, type Request } from "express";
@@ -982,7 +982,7 @@ growthPublicRouter.post(
     const contactId = contactRecord?.id ?? null;
 
     // Ahead of the tags and events below, which can start marketing automations.
-    if (contactRecord && (bossAssessment || form.slug === "hire-form" || form.slug.startsWith("hiring-quiz-"))) {
+    if (contactRecord && (bossAssessment || hasExplicitHiringConsent(form.slug, typed))) {
       const marketingConsent = bossAssessment?.marketingConsent ?? data.marketing_consent === true;
       await afterSubmission(`the marketing consent on ${form.slug}`, () =>
         applyBossAssessmentConsent(contactRecord.id, contactRecord.created, marketingConsent),

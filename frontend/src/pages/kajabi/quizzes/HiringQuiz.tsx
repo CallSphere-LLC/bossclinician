@@ -203,6 +203,7 @@ export default function HiringQuiz() {
     return {
       result: HIRING_QUIZ_RESULTS[key].label,
       score: `${total} of ${HIRING_QUIZ_MAX_SCORE}`,
+      marketing_consent: false, // Only affects a newly created fallback contact; never revokes prior consent.
       ...answersAsData(HIRING_QUIZ_QUESTIONS, picks),
     };
   }

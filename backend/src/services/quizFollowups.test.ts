@@ -1,8 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { followupChoice, practiceStage } from "./quizFollowups";
+import { followupChoice, practiceStage, hasExplicitHiringConsent } from "./quizFollowups";
 import { renderedProblem } from "./emailSendGuard";
 
 describe("quiz sales routing", () => {
+ it("distinguishes an old cached consent contract from an explicit unchecked new form", () => {
+   expect(hasExplicitHiringConsent("hire-form",{})).toBe(false);
+   expect(hasExplicitHiringConsent("hire-form",{marketing_consent:false})).toBe(true);
+   expect(hasExplicitHiringConsent("hiring-quiz-ready",{marketing_consent:false})).toBe(true);
+   expect(hasExplicitHiringConsent("unrelated",{marketing_consent:true})).toBe(false);
+ });
  it("uses only an explicitly confirmed stage", () => {
    expect(practiceStage("not_launched")).toBe("not_launched");
    expect(practiceStage("first_hire")).toBe("first_hire");
