@@ -180,7 +180,10 @@ describeDb("Club bonus (integration)", () => {
     beforeAll(async () => {
       reader = await person(registered);
       buyer = await person(registered);
-      tester = await person(registered, { email: "murosn@nv.ccsd.net" });
+      // Keep the excluded participant synthetic: migration 229 restored the
+      // former real registrant, so that address is no longer a test account.
+      tester = await person(registered);
+      await db.client.query(`UPDATE contacts SET is_internal = true WHERE id = $1`, [tester.contactId]);
       await bonus.syncWindows(pool);
       await db.client.query(`UPDATE email_sequences SET status = 'active' WHERE slug = 'club-bonus-reminders'`);
     });
