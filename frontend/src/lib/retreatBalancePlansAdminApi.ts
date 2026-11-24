@@ -35,8 +35,22 @@ export interface AdminBalancePlan {
   discountNote: string;
   /** Paid before this plan, outside this site (Kajabi). */
   priorPaidCents: number;
+  /** The regular monthly amount. */
   installmentCents: number;
+  /** The TOTAL number of payments, the larger last ones included. */
   installmentCount: number;
+  /**
+   * Larger last payments: each of the LAST `stepUpCount` payments is
+   * `stepUpCents` instead of `installmentCents`. Both 0 (or absent, from a
+   * server that predates them) on a plan of equal payments.
+   */
+  stepUpCents?: number;
+  stepUpCount?: number;
+  /**
+   * When the card processor confirmed the larger last payments on the running
+   * charges. Null (or absent) until then, and always for a plan without them.
+   */
+  scheduleInstalledAt?: string | null;
   /** YYYY-MM-DD */
   firstChargeOn: string;
   /** YYYY-MM-DD */
@@ -69,8 +83,14 @@ export interface BalancePlanInput {
   discountCents: number;
   discountNote: string;
   priorPaidCents: number;
+  /** The regular monthly amount. */
   installmentCents: number;
+  /** The total number of payments. */
   installmentCount: number;
+  /** Amount of each of the last `stepUpCount` payments. 0 when every payment is the same. */
+  stepUpCents: number;
+  /** How many of the last payments are larger. 0 when every payment is the same. */
+  stepUpCount: number;
   firstChargeOn: string;
   finalDueOn: string | null;
   isTest: boolean;

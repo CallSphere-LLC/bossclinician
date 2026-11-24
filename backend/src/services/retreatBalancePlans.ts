@@ -42,7 +42,10 @@ import { normaliseSettings, type RetreatRow } from "./retreats";
  *  4. A plan never collects more than `installment_count` payments: the
  *     subscription is created with `cancel_at`, it is cancelled explicitly the
  *     moment the final instalment is credited, and the hourly job cancels any
- *     finished plan's subscription that is somehow still alive.
+ *     finished plan's subscription that is somehow still alive. A stepped plan
+ *     (larger last payments, migration 232) adds a subscription schedule that
+ *     ends, cancelling, at the same moment; installing it never removes the
+ *     end date the subscription was created with.
  *  5. A guest only ever sees sentences written here. Stripe's own error text
  *     goes to the server log.
  */
@@ -63,8 +66,17 @@ export interface BalancePlanRow {
   discount_note: string;
   prior_paid_cents: number;
   carried_paid_cents: number;
+  /** The regular amount: what each of the first payments is. */
   installment_cents: number;
+  /** The TOTAL number of payments, the larger last ones included. */
   installment_count: number;
+  /** The amount of each of the LAST `step_up_count` payments. 0 = no step-up. */
+  step_up_cents: number;
+  step_up_count: number;
+  /** When Stripe confirmed the schedule that carries the larger phase. */
+  schedule_installed_at: Date | null;
+  /** When the owner was last told that schedule is not installed. */
+  schedule_alerted_at: Date | null;
   first_charge_on: string;
   final_due_on: string | null;
   currency: string;
@@ -91,6 +103,7 @@ export interface BalancePlanRow {
 /** `::text` on the dates: a pg DATE read as a JS Date shifts by the server's zone. */
 const PLAN_COLUMNS = `id, retreat_id, member_id, agreed_total_cents, discount_cents, discount_note,
   prior_paid_cents, carried_paid_cents, installment_cents, installment_count,
+  step_up_cents, step_up_count, schedule_installed_at, schedule_alerted_at,
   first_charge_on::text AS first_charge_on, final_due_on::text AS final_due_on, currency, status, is_test,
   stripe_customer_id, stripe_payment_method_id, card_brand, card_last4, authorized_at, authorization_text,
   authorized_ip, card_added_at, billing_started_at, billing_attempts, subscription_ended_at,
@@ -130,8 +143,12 @@ export interface BalancePlanView {
   priorPaidCents: number;
   paidHereCents: number;
   remainingCents: number;
+  /** The regular amount. Amounts are rendered from `schedule`, never multiplied. */
   installmentCents: number;
   installmentCount: number;
+  /** The amount of each of the last `stepUpCount` payments; 0 and 0 when every payment is the same. */
+  stepUpCents: number;
+  stepUpCount: number;
   schedule: ScheduleRow[];
   firstChargeDate: string;
   finalDueDate: string | null;
@@ -148,6 +165,8 @@ export interface PlanInput {
   priorPaidCents: number;
   installmentCents: number;
   installmentCount: number;
+  stepUpCents: number;
+  stepUpCount: number;
   firstChargeOn: string;
   finalDueOn: string | null;
   isTest: boolean;
@@ -217,27 +236,84 @@ export function effectiveFirstCharge(firstChargeOn: string, today: string): stri
   return firstChargeOn > today ? firstChargeOn : today;
 }
 
-/** The schedule a plan would follow if the card were confirmed today. */
-export function projectSchedule(input: {
-  firstChargeOn: string;
-  today: string;
+/**
+ * The numbers that say what each payment is: `installmentCount` payments in
+ * all, the first ones at `installmentCents` and the LAST `stepUpCount` at
+ * `stepUpCents`. A plan with no step-up has 0 and 0 (or leaves them out).
+ */
+export interface PlanAmounts {
   installmentCents: number;
   installmentCount: number;
-  /** Sequence of the first projected row (after any payments already made). */
-  startSequence?: number;
-}): ScheduleRow[] {
+  stepUpCents?: number;
+  stepUpCount?: number;
+}
+
+/** How many of the last payments are larger. 0 unless both step-up numbers are set. */
+export function stepUpCountOf(plan: PlanAmounts): number {
+  const count = plan.stepUpCount ?? 0;
+  const amount = plan.stepUpCents ?? 0;
+  return count > 0 && amount > 0 ? Math.min(count, plan.installmentCount) : 0;
+}
+
+/**
+ * The amount of every payment, in order. The one place that decides which
+ * payments are the larger ones: the instalment rows, the projection, the
+ * consent sentence and the Stripe phases are all built from it.
+ */
+export function installmentAmounts(plan: PlanAmounts): number[] {
+  const stepped = stepUpCountOf(plan);
+  const regular = plan.installmentCount - stepped;
+  const amounts: number[] = [];
+  for (let n = 0; n < plan.installmentCount; n += 1) {
+    amounts.push(n < regular ? plan.installmentCents : (plan.stepUpCents ?? 0));
+  }
+  return amounts;
+}
+
+/** Everything the plan will charge from here. */
+export function planTotalCents(plan: PlanAmounts): number {
+  return installmentAmounts(plan).reduce((sum, amount) => sum + amount, 0);
+}
+
+const paymentsOf = (count: number, amount: string): string => `${count} ${count === 1 ? "payment" : "payments"} of ${amount}`;
+
+/** "4 payments of $400.00, then 2 payments of $600.00". For a stepped plan only. */
+export function describeSteppedPayments(plan: PlanAmounts, currency: string): string {
+  const stepped = stepUpCountOf(plan);
+  return (
+    `${paymentsOf(plan.installmentCount - stepped, formatAmount(plan.installmentCents, currency))}, ` +
+    `then ${paymentsOf(stepped, formatAmount(plan.stepUpCents ?? 0, currency))}`
+  );
+}
+
+function amountsOfRow(
+  row: Pick<BalancePlanRow, "installment_cents" | "installment_count" | "step_up_cents" | "step_up_count">,
+): Required<PlanAmounts> {
+  return {
+    installmentCents: row.installment_cents,
+    installmentCount: row.installment_count,
+    stepUpCents: row.step_up_cents ?? 0,
+    stepUpCount: row.step_up_count ?? 0,
+  };
+}
+
+/** The schedule a plan would follow if the card were confirmed today. */
+export function projectSchedule(
+  input: PlanAmounts & {
+    firstChargeOn: string;
+    today: string;
+    /** Sequence of the first projected row (after any payments already made). */
+    startSequence?: number;
+  },
+): ScheduleRow[] {
   const start = effectiveFirstCharge(input.firstChargeOn, input.today);
   const offset = input.startSequence ?? 1;
-  const rows: ScheduleRow[] = [];
-  for (let n = 0; n < input.installmentCount; n += 1) {
-    rows.push({
-      sequence: offset + n,
-      amountCents: input.installmentCents,
-      dueDate: addMonthsToDate(start, n),
-      status: "scheduled",
-    });
-  }
-  return rows;
+  return installmentAmounts(input).map((amountCents, n) => ({
+    sequence: offset + n,
+    amountCents,
+    dueDate: addMonthsToDate(start, n),
+    status: "scheduled" as const,
+  }));
 }
 
 /**
@@ -248,6 +324,8 @@ export function buildAuthorizationText(input: {
   retreatTitle: string;
   installmentCents: number;
   installmentCount: number;
+  stepUpCents?: number;
+  stepUpCount?: number;
   currency: string;
   firstChargeOn: string;
   today: string;
@@ -258,6 +336,18 @@ export function buildAuthorizationText(input: {
   const last = addMonthsToDate(first, input.installmentCount - 1);
   const today = first === input.today;
   const what = `my balance for ${input.retreatTitle}`;
+  // A stepped plan has its own sentence. Everything below this block is the
+  // sentence of a plan with equal payments, and stays exactly as it was.
+  if (stepUpCountOf(input) > 0) {
+    const steppedTotal = formatAmount(planTotalCents(input), input.currency);
+    return (
+      `I authorize Boss Clinician to charge the card I am adding for ${input.installmentCount} monthly payments toward ${what}: ` +
+      `${describeSteppedPayments(input, input.currency)}, ${steppedTotal} in total. ` +
+      (today ? `The first payment is charged today, ${longDate(first)}, ` : `The first payment is charged on ${longDate(first)}, `) +
+      `and the last on ${longDate(last)}. Each payment is charged automatically on its date, ` +
+      `and the charges stop once ${steppedTotal} has been paid.`
+    );
+  }
   if (input.installmentCount === 1) {
     return (
       `I authorize Boss Clinician to charge the card I am adding for one payment of ${amount} toward ${what}. ` +
@@ -291,6 +381,8 @@ const planInputSchema = z.object({
   priorPaidCents: cents(MAX_CENTS, 0).default(0),
   installmentCents: cents(MAX_CENTS, 1),
   installmentCount: z.number().int().min(1).max(36),
+  stepUpCents: cents(MAX_CENTS, 0).default(0),
+  stepUpCount: z.number().int().min(0).max(36).default(0),
   firstChargeOn: z.string(),
   finalDueOn: z.string().nullable().optional(),
   isTest: z.boolean().default(false),
@@ -313,7 +405,7 @@ export function validatePlanInput(
   // nearly always a slipped digit, and the owner should be told which rule.
   if (typeof raw === "object" && raw !== null) {
     const typed = raw as Record<string, unknown>;
-    for (const key of ["agreedTotalCents", "discountCents", "priorPaidCents", "installmentCents"]) {
+    for (const key of ["agreedTotalCents", "discountCents", "priorPaidCents", "installmentCents", "stepUpCents"]) {
       const value = typed[key];
       if (typeof value === "number" && value > MAX_CENTS) {
         return { ok: false, error: `Each amount must be ${money(MAX_CENTS)} or less. Please check for extra digits.` };
@@ -333,8 +425,44 @@ export function validatePlanInput(
   if (balance <= 0) {
     return { ok: false, error: `Nothing is left to charge: the agreed total (${money(v.agreedTotalCents)}) is already covered by what has been paid.` };
   }
+  // Larger last payments: both numbers or neither, at least one regular
+  // payment first, and a larger payment that really is larger. The table
+  // enforces the same rules (migration 232).
+  if ((v.stepUpCount === 0) !== (v.stepUpCents === 0)) {
+    return {
+      ok: false,
+      error: "To make the last payments larger, enter both the larger payment amount and how many of the last payments use it.",
+    };
+  }
+  const stepped = v.stepUpCount > 0;
+  if (stepped && v.stepUpCount >= v.installmentCount) {
+    return {
+      ok: false,
+      error:
+        `The number of larger payments (${v.stepUpCount}) must be less than the number of payments (${v.installmentCount}), ` +
+        `so at least one payment is at the regular amount.`,
+    };
+  }
+  if (stepped && v.stepUpCents <= v.installmentCents) {
+    return {
+      ok: false,
+      error: `The larger payment amount (${money(v.stepUpCents)}) must be more than the regular monthly payment (${money(v.installmentCents)}).`,
+    };
+  }
+  if (stepped) {
+    const regularCount = v.installmentCount - v.stepUpCount;
+    const steppedTotal = v.installmentCents * regularCount + v.stepUpCents * v.stepUpCount;
+    if (balance !== steppedTotal) {
+      return {
+        ok: false,
+        error:
+          `The balance (${money(balance)}) must equal the regular payments plus the larger ones. ` +
+          `${money(v.installmentCents)} x ${regularCount} plus ${money(v.stepUpCents)} x ${v.stepUpCount} is ${money(steppedTotal)}.`,
+      };
+    }
+  }
   const scheduled = v.installmentCents * v.installmentCount;
-  if (balance !== scheduled) {
+  if (!stepped && balance !== scheduled) {
     return {
       ok: false,
       error:
@@ -360,11 +488,133 @@ export function validatePlanInput(
       priorPaidCents: v.priorPaidCents,
       installmentCents: v.installmentCents,
       installmentCount: v.installmentCount,
+      stepUpCents: v.stepUpCents,
+      stepUpCount: v.stepUpCount,
       firstChargeOn: v.firstChargeOn,
       finalDueOn,
       isTest: v.isTest,
     },
   };
+}
+
+/**
+ * What a plan's numbers become when it is handed back to the guest after a
+ * default: the unpaid instalments keep their own amounts, in order.
+ *
+ *   all one amount            -> that amount, no step-up
+ *   a lower then a higher one -> regular = the lower, step-up = the higher with its count
+ *
+ * Null when the rows cannot be written as such a plan (nothing unpaid, more
+ * than two amounts, a larger payment before a smaller one, more than 36): the
+ * caller then returns the plan to the owner as a draft.
+ */
+export function planAmountsFromUnpaid(unpaidAmounts: number[]): Required<PlanAmounts> | null {
+  if (unpaidAmounts.length === 0 || unpaidAmounts.length > 36) return null;
+  if (unpaidAmounts.some((amount) => !Number.isInteger(amount) || amount <= 0)) return null;
+  const lower = Math.min(...unpaidAmounts);
+  const higher = Math.max(...unpaidAmounts);
+  if (lower === higher) {
+    return { installmentCents: lower, installmentCount: unpaidAmounts.length, stepUpCents: 0, stepUpCount: 0 };
+  }
+  const firstHigher = unpaidAmounts.indexOf(higher);
+  for (let n = 0; n < unpaidAmounts.length; n += 1) {
+    if (unpaidAmounts[n] !== (n < firstHigher ? lower : higher)) return null;
+  }
+  return {
+    installmentCents: lower,
+    installmentCount: unpaidAmounts.length,
+    stepUpCents: higher,
+    stepUpCount: unpaidAmounts.length - firstHigher,
+  };
+}
+
+/** Unix seconds of `months` calendar months after a subscription's billing anchor. */
+function monthsAfterAnchor(anchorUnix: number, months: number): number {
+  return Math.floor(addInterval(new Date(anchorUnix * 1000), "month", months).getTime() / 1000);
+}
+
+export interface StepUpPhasePlan {
+  /** Where the regular phase ends and the larger one starts: the first larger payment's date. */
+  stepStart: number;
+  /** Where the larger phase, and with it all billing, ends: one month after the last payment. */
+  end: number;
+  regular: { start: number; end: number; unitAmount: number; payments: number };
+  stepUp: { start: number; end: number; unitAmount: number; payments: number };
+}
+
+export type StepUpPhases =
+  | { ok: true; phases: StepUpPhasePlan }
+  | { ok: false; reason: "not_stepped" }
+  /** The boundaries are still given, so a schedule installed earlier can be recognised. */
+  | { ok: false; reason: "too_late"; stepStart: number; end: number };
+
+/**
+ * The two phases of a stepped plan's subscription schedule, in unix seconds,
+ * measured from the subscription's billing anchor (the moment of the first
+ * charge). Stripe raises one invoice at the start of every monthly period, so:
+ *
+ *   regular phase  [anchor, anchor + (count - N) months)   payments 1 .. count - N
+ *   larger phase   [anchor + (count - N) months, anchor + count months)   the last N payments
+ *
+ * and the schedule ends, cancelling the subscription, at anchor + count months,
+ * the instant a payment after the last one would otherwise have been raised.
+ *
+ * `too_late` when the first larger payment's date has already arrived: that
+ * invoice has been raised at the regular amount and a phase cannot start in
+ * the past, so nothing is installed and the owner must be told.
+ */
+export function stepUpPhases(input: PlanAmounts & { anchorUnix: number; phaseStartUnix: number; nowUnix: number }): StepUpPhases {
+  const stepped = stepUpCountOf(input);
+  if (stepped <= 0 || stepped >= input.installmentCount) return { ok: false, reason: "not_stepped" };
+  const regularPayments = input.installmentCount - stepped;
+  const stepStart = monthsAfterAnchor(input.anchorUnix, regularPayments);
+  const end = monthsAfterAnchor(input.anchorUnix, input.installmentCount);
+  if (input.nowUnix >= stepStart || input.phaseStartUnix >= stepStart) return { ok: false, reason: "too_late", stepStart, end };
+  return {
+    ok: true,
+    phases: {
+      stepStart,
+      end,
+      regular: { start: input.phaseStartUnix, end: stepStart, unitAmount: input.installmentCents, payments: regularPayments },
+      stepUp: { start: stepStart, end, unitAmount: input.stepUpCents ?? 0, payments: stepped },
+    },
+  };
+}
+
+/** The parts of a Stripe subscription schedule that prove the larger phase is in place. */
+export interface ScheduleShape {
+  end_behavior?: string | null;
+  status?: string | null;
+  phases?: { start_date: number; end_date: number }[] | null;
+}
+
+/**
+ * Whether a schedule Stripe returned IS the stepped plan: it cancels at its
+ * end, and its last two phases sit on exactly the expected boundaries. (Stripe
+ * keeps phases that have already finished in the list, so only the last two
+ * are compared.) The larger phase's amount is checked separately, against the
+ * price Stripe holds.
+ */
+export function scheduleCarriesStepUp(schedule: ScheduleShape, expected: Pick<StepUpPhasePlan, "stepStart" | "end">): boolean {
+  if (schedule.end_behavior !== "cancel") return false;
+  if (schedule.status === "canceled" || schedule.status === "released" || schedule.status === "completed") return false;
+  const phases = schedule.phases ?? [];
+  if (phases.length < 2) return false;
+  const regular = phases[phases.length - 2];
+  const stepUp = phases[phases.length - 1];
+  return regular.end_date === expected.stepStart && stepUp.start_date === expected.stepStart && stepUp.end_date === expected.end;
+}
+
+/**
+ * Whether the owner should be told now that a stepped plan's schedule is not
+ * installed: on the first failure, then once a day, and on every run from
+ * three days before the first larger payment (and after it).
+ */
+export function stepUpAlertDue(input: { now: Date; lastAlertedAt: Date | null; firstStepUpDueAt: Date | null }): boolean {
+  if (input.lastAlertedAt === null) return true;
+  const now = input.now.getTime();
+  if (input.firstStepUpDueAt !== null && now >= new Date(input.firstStepUpDueAt).getTime() - 3 * 86_400_000) return true;
+  return now - new Date(input.lastAlertedAt).getTime() >= 86_400_000;
 }
 
 /**
@@ -421,6 +671,8 @@ export function buildSchedule(input: {
   firstChargeOn: string;
   installmentCents: number;
   installmentCount: number;
+  stepUpCents?: number;
+  stepUpCount?: number;
   today: string;
 }): ScheduleRow[] {
   const real = (row: LinkedInstallment): Omit<ScheduleRow, "sequence"> => ({
@@ -443,6 +695,8 @@ export function buildSchedule(input: {
         today: input.today,
         installmentCents: input.installmentCents,
         installmentCount: input.installmentCount,
+        stepUpCents: input.stepUpCents ?? 0,
+        stepUpCount: input.stepUpCount ?? 0,
       }).map(({ amountCents, dueDate, status }) => ({ amountCents, dueDate, status })),
     );
   }
@@ -712,6 +966,8 @@ export function buildRequestEmail(input: {
   remainingCents: number;
   installmentCents: number;
   installmentCount: number;
+  stepUpCents?: number;
+  stepUpCount?: number;
   firstChargeDate: string;
   chargesWhenAdded: boolean;
   url: string;
@@ -719,9 +975,11 @@ export function buildRequestEmail(input: {
 }): BalanceEmail {
   const money = (amount: number) => formatAmount(amount, input.currency);
   const plan =
-    input.installmentCount === 1
-      ? `one payment of ${money(input.installmentCents)}`
-      : `${input.installmentCount} monthly payments of ${money(input.installmentCents)}`;
+    stepUpCountOf(input) > 0
+      ? `${input.installmentCount} monthly payments: ${describeSteppedPayments(input, input.currency)}`
+      : input.installmentCount === 1
+        ? `one payment of ${money(input.installmentCents)}`
+        : `${input.installmentCount} monthly payments of ${money(input.installmentCents)}`;
   const first = input.chargesWhenAdded
     ? `The first payment is charged when you add your card, and you will see the full schedule before you agree to it.`
     : `The first payment is charged on ${longDate(input.firstChargeDate)}, and you will see the full schedule before you agree to it.`;
@@ -776,12 +1034,15 @@ export function buildOwnerNotice(input: {
   currency: string;
   installmentCents: number;
   installmentCount: number;
+  stepUpCents?: number;
+  stepUpCount?: number;
   firstChargeDate: string;
   lastChargeDate: string;
   card: string;
 }): BalanceEmail {
   const money = formatAmount(input.installmentCents, input.currency);
-  const total = formatAmount(input.installmentCents * input.installmentCount, input.currency);
+  const stepped = stepUpCountOf(input) > 0;
+  const total = formatAmount(stepped ? planTotalCents(input) : input.installmentCents * input.installmentCount, input.currency);
   const who = input.guestName ? `${input.guestName} (${input.guestEmail})` : input.guestEmail;
   const intro = `A retreat guest has added a card and agreed to her balance payment schedule. The charges run automatically from here.`;
   return retreatEmail(`Card on file: ${input.guestName || input.guestEmail} (${input.retreatTitle} balance)`, {
@@ -796,8 +1057,9 @@ export function buildOwnerNotice(input: {
       { label: "Card", value: input.card },
       {
         label: "Schedule",
-        value:
-          input.installmentCount === 1
+        value: stepped
+          ? `${input.installmentCount} monthly payments: ${describeSteppedPayments(input, input.currency)} (${total} in total), ${longDate(input.firstChargeDate)} to ${longDate(input.lastChargeDate)}`
+          : input.installmentCount === 1
             ? `one payment of ${money} on ${longDate(input.firstChargeDate)}`
             : `${input.installmentCount} monthly payments of ${money} (${total} in total), ${longDate(input.firstChargeDate)} to ${longDate(input.lastChargeDate)}`,
       },
@@ -1101,8 +1363,7 @@ function guestView(row: BalancePlanRow, linked: LinkedPlan[], retreatTitle: stri
     linked,
     current,
     firstChargeOn: row.first_charge_on,
-    installmentCents: row.installment_cents,
-    installmentCount: row.installment_count,
+    ...amountsOfRow(row),
     today,
   });
   const firstUnpaid = schedule.find((item) => item.status !== "paid");
@@ -1118,6 +1379,8 @@ function guestView(row: BalancePlanRow, linked: LinkedPlan[], retreatTitle: stri
     remainingCents: remainingOf(row, paidHere),
     installmentCents: row.installment_cents,
     installmentCount: row.installment_count,
+    stepUpCents: row.step_up_cents ?? 0,
+    stepUpCount: row.step_up_count ?? 0,
     schedule,
     firstChargeDate: preBilling
       ? effectiveFirstCharge(row.first_charge_on, today)
@@ -1129,8 +1392,7 @@ function guestView(row: BalancePlanRow, linked: LinkedPlan[], retreatTitle: stri
       row.status === "open"
         ? buildAuthorizationText({
             retreatTitle,
-            installmentCents: row.installment_cents,
-            installmentCount: row.installment_count,
+            ...amountsOfRow(row),
             currency: row.currency,
             firstChargeOn: row.first_charge_on,
             today,
@@ -1159,6 +1421,9 @@ function adminJson(row: BalancePlanRow, linked: LinkedPlan[], member: { name: st
     carriedPaidCents: row.carried_paid_cents,
     installmentCents: row.installment_cents,
     installmentCount: row.installment_count,
+    stepUpCents: row.step_up_cents ?? 0,
+    stepUpCount: row.step_up_count ?? 0,
+    scheduleInstalledAt: iso(row.schedule_installed_at ?? null),
     firstChargeOn: row.first_charge_on,
     finalDueOn: row.final_due_on,
     currency: row.currency,
@@ -1189,8 +1454,7 @@ function adminJson(row: BalancePlanRow, linked: LinkedPlan[], member: { name: st
       linked,
       current,
       firstChargeOn: row.first_charge_on,
-      installmentCents: row.installment_cents,
-      installmentCount: row.installment_count,
+      ...amountsOfRow(row),
       today,
     }),
   };
@@ -1209,8 +1473,28 @@ const LIVE_SUBSCRIPTION_STATUSES = new Set(["active", "past_due", "unpaid", "tri
  * invoice: ending a plan must never produce a charge or a credit of its own.
  */
 async function cancelSubscriptionIfLive(stripeSubscriptionId: string): Promise<boolean> {
-  const sub = await stripe().subscriptions.retrieve(stripeSubscriptionId);
+  let sub = await stripe().subscriptions.retrieve(stripeSubscriptionId);
   if (!LIVE_SUBSCRIPTION_STATUSES.has(sub.status)) return false;
+  // A stepped plan's subscription is managed by a subscription schedule
+  // (migration 232). Cancelling the schedule ends the schedule AND its
+  // subscription in one call. It is never released first: a released
+  // subscription has no end date at all, and if the cancel after it failed the
+  // card would be billed every month with nothing left to stop it.
+  const scheduleId = idOf(sub.schedule);
+  if (scheduleId) {
+    const schedule = await stripe().subscriptionSchedules.retrieve(scheduleId);
+    if (schedule.status === "active" || schedule.status === "not_started") {
+      await stripe().subscriptionSchedules.cancel(
+        scheduleId,
+        { invoice_now: false, prorate: false },
+        { idempotencyKey: `retreat-balance-cancel-schedule-${scheduleId}-${hourBucket()}` },
+      );
+    }
+    // Confirmed, not assumed: whatever the schedule did, the subscription
+    // itself must be over before anyone is told it is.
+    sub = await stripe().subscriptions.retrieve(stripeSubscriptionId);
+    if (!LIVE_SUBSCRIPTION_STATUSES.has(sub.status)) return true;
+  }
   await stripe().subscriptions.cancel(
     stripeSubscriptionId,
     { prorate: false, invoice_now: false },
@@ -1449,8 +1733,7 @@ export async function loadGuestBalancePlan(
 function currentAuthorizationText(row: BalancePlanRow, retreatTitle: string, today: string): string {
   return buildAuthorizationText({
     retreatTitle,
-    installmentCents: row.installment_cents,
-    installmentCount: row.installment_count,
+    ...amountsOfRow(row),
     currency: row.currency,
     firstChargeOn: row.first_charge_on,
     today,
@@ -1529,8 +1812,7 @@ async function notifyOwnerOfCard(row: BalancePlanRow, retreat: RetreatFacts, mem
       guestEmail: member.email,
       retreatTitle: retreat.title,
       currency: row.currency,
-      installmentCents: row.installment_cents,
-      installmentCount: row.installment_count,
+      ...amountsOfRow(row),
       firstChargeDate: first,
       lastChargeDate: addMonthsToDate(first, row.installment_count - 1),
       card: `${row.card_brand || "card"} ending ${row.card_last4 ?? ""}`.trim(),
@@ -1632,6 +1914,7 @@ export async function confirmBalancePlanCard(input: {
           AND installment_cents = $8 AND installment_count = $9
           AND first_charge_on = $10::date AND agreed_total_cents = $11
           AND prior_paid_cents = $12 AND carried_paid_cents = $13
+          AND step_up_cents = $14 AND step_up_count = $15
         RETURNING ${PLAN_COLUMNS}`,
       [
         row.id,
@@ -1647,6 +1930,8 @@ export async function confirmBalancePlanCard(input: {
         row.agreed_total_cents,
         row.prior_paid_cents,
         row.carried_paid_cents,
+        row.step_up_cents ?? 0,
+        row.step_up_count ?? 0,
       ],
     );
     if (!saved.rows[0]) {
@@ -1810,12 +2095,16 @@ async function recordSubscription(row: BalancePlanRow, sub: Stripe.Subscription,
       }
       planId = existing.rows[0].id;
     }
+    // Each instalment carries its own amount: the regular one for the first
+    // payments, the larger one for the last `step_up_count` (migration 232).
+    // `payment_plans.installment_cents` above stays the regular amount.
+    const amounts = installmentAmounts(amountsOfRow(row));
     for (let n = 1; n <= row.installment_count; n += 1) {
       await client.query(
         `INSERT INTO payment_plan_installments (payment_plan_id, sequence, amount_cents, due_at, status)
          VALUES ($1, $2, $3, $4, 'scheduled')
          ON CONFLICT (payment_plan_id, sequence) DO NOTHING`,
-        [planId, n, row.installment_cents, addInterval(startAt, "month", n - 1)],
+        [planId, n, amounts[n - 1] ?? row.installment_cents, addInterval(startAt, "month", n - 1)],
       );
     }
     await client.query("COMMIT");
@@ -1895,6 +2184,322 @@ async function reconcilePaidInvoices(row: BalancePlanRow, paymentPlanId: number,
   }
 }
 
+/* ─────────────── larger last payments: the Stripe schedule ────────────── */
+
+const STEP_UP_MARKER = "retreatBalanceStepUp";
+
+type StepUpInstall =
+  | { status: "installed" }
+  /** Nothing to do: not a stepped plan, already confirmed, or the subscription is over. */
+  | { status: "not_needed" }
+  | { status: "failed"; reason: string; tooLate: boolean };
+
+const priceIdOf = (price: string | { id: string } | null | undefined): string | null => idOf(price);
+
+/**
+ * Puts the larger last payments in place at Stripe for a stepped plan, and
+ * stamps `schedule_installed_at` only once Stripe's own answer shows them.
+ *
+ * The subscription already exists and has taken its first payment; nothing
+ * here creates a charge, and nothing here can undo or repeat one. The
+ * subscription is handed to a subscription schedule (the same approach as
+ * services/deadlineStripe.ts) with two phases measured from its billing anchor:
+ * the regular amount until the first larger payment's date, then the larger
+ * amount until one month after the last payment, where the schedule ends and
+ * cancels the subscription.
+ *
+ * `cancel_at` on the subscription is never cleared by this code. If Stripe
+ * will not turn the subscription into a schedule, the install fails with the
+ * subscription exactly as it was, still ending on its original `cancel_at`.
+ *
+ * Safe to repeat: an existing schedule is reused, and one that already carries
+ * the two phases is only confirmed. Throws on a Stripe failure.
+ */
+async function installStepUpSchedule(row: BalancePlanRow, stripeSubscriptionId: string): Promise<StepUpInstall> {
+  const amounts = amountsOfRow(row);
+  if (stepUpCountOf(amounts) === 0 || row.schedule_installed_at) return { status: "not_needed" };
+  const sub = await stripe().subscriptions.retrieve(stripeSubscriptionId);
+  if (!LIVE_SUBSCRIPTION_STATUSES.has(sub.status)) return { status: "not_needed" };
+  let outcome: StepUpInstall;
+  try {
+    outcome = await writeStepUpPhases(row, sub, amounts);
+  } catch (err) {
+    await keepOriginalEnd(row, sub);
+    throw err;
+  }
+  if (outcome.status === "failed") await keepOriginalEnd(row, sub);
+  return outcome;
+}
+
+/**
+ * After an install that did not finish: makes sure the subscription still has
+ * an end. `sub` is the subscription as it was BEFORE the attempt.
+ *
+ * Nothing to do while the subscription still carries a `cancel_at`, or its
+ * schedule ends by cancelling. Only if the attempt left it with neither (a
+ * schedule that would hand the subscription back to bill every month, and no
+ * end date) is the schedule released and the original `cancel_at` put back.
+ * Never throws; if it cannot be put back the owner is told at once. Behind it
+ * the subscription is still cancelled the moment the final instalment is
+ * credited, and by the hourly job after that.
+ */
+async function keepOriginalEnd(row: BalancePlanRow, sub: Stripe.Subscription): Promise<void> {
+  // The end it was created with; or, if an earlier attempt already lost that
+  // and could not put it back, the same moment worked out from the plan: one
+  // month after the last payment.
+  const endAt: number = sub.cancel_at ?? monthsAfterAnchor(sub.billing_cycle_anchor, row.installment_count);
+  if (endAt <= Math.floor(Date.now() / 1000)) return;
+  const endIso = new Date(endAt * 1000).toISOString();
+  try {
+    const api = stripe();
+    const fresh = await api.subscriptions.retrieve(sub.id);
+    if (!LIVE_SUBSCRIPTION_STATUSES.has(fresh.status) || fresh.cancel_at != null) return;
+    const scheduleId = idOf(fresh.schedule);
+    if (scheduleId) {
+      const schedule = await api.subscriptionSchedules.retrieve(scheduleId);
+      if (schedule.end_behavior === "cancel") return;
+      if (schedule.status === "active" || schedule.status === "not_started") {
+        await api.subscriptionSchedules.release(scheduleId, {}, { idempotencyKey: `retreat-balance-release-${scheduleId}-${hourBucket()}` });
+      }
+    }
+    await api.subscriptions.update(
+      sub.id,
+      { cancel_at: endAt, proration_behavior: "none" },
+      { idempotencyKey: `retreat-balance-restore-end-${sub.id}-${hourBucket()}` },
+    );
+    log(`plan ${row.id}: subscription ${sub.id} had lost its end date during a schedule attempt; restored to ${endIso}`);
+  } catch (err) {
+    logError(`plan ${row.id}: subscription ${sub.id} may have NO end date after a failed schedule attempt`, err);
+    await alertOwner(
+      `Retreat balance plan ${row.id}: please check the subscription's end date in Stripe`,
+      `Setting up the larger last payments for retreat balance plan ${row.id} (member ${row.member_id}) did not finish, and the server could not confirm that ` +
+        `subscription ${sub.id} still has an end date. It should end on ${endIso.slice(0, 10)}. ` +
+        `The server still cancels the subscription when the final payment is recorded, but please check it in Stripe.`,
+    );
+  }
+}
+
+/** The Stripe half of `installStepUpSchedule`, for a live subscription already read. */
+async function writeStepUpPhases(row: BalancePlanRow, sub: Stripe.Subscription, amounts: Required<PlanAmounts>): Promise<StepUpInstall> {
+  const api = stripe();
+  const fail = (reason: string, tooLate = false): StepUpInstall => ({ status: "failed", reason, tooLate });
+
+  // Only ever this plan's own subscription, with the one item it was created with.
+  if (sub.metadata?.retreatBalancePlanId !== String(row.id)) return fail(`subscription ${sub.id} does not belong to this plan`);
+  const item = sub.items.data[0];
+  if (sub.items.data.length !== 1 || !item) return fail(`subscription ${sub.id} does not have exactly one item`);
+  const product = idOf(item.price.product as string | { id: string } | null);
+  if (!product) return fail(`subscription ${sub.id} has no product`);
+
+  const existingId = idOf(sub.schedule);
+  let schedule = existingId
+    ? await api.subscriptionSchedules.retrieve(existingId)
+    : await api.subscriptionSchedules.create(
+        { from_subscription: sub.id },
+        // The hour is part of every key here, as elsewhere in this file, so a
+        // failed attempt is not replayed from Stripe's idempotency cache.
+        { idempotencyKey: `retreat-balance-schedule-${sub.id}-${hourBucket()}` },
+      );
+
+  const phaseStart = schedule.current_phase?.start_date ?? schedule.phases[0]?.start_date ?? sub.start_date;
+  const planned = stepUpPhases({
+    ...amounts,
+    anchorUnix: sub.billing_cycle_anchor,
+    phaseStartUnix: phaseStart,
+    nowUnix: Math.floor(Date.now() / 1000),
+  });
+  let expected: { stepStart: number; end: number };
+  if (planned.ok) expected = { stepStart: planned.phases.stepStart, end: planned.phases.end };
+  else if (planned.reason === "too_late") expected = { stepStart: planned.stepStart, end: planned.end };
+  else return { status: "not_needed" };
+
+  if (!scheduleCarriesStepUp(schedule, expected)) {
+    if (!planned.ok) {
+      return fail(
+        `the first larger payment's date (${pacificDate(new Date(expected.stepStart * 1000))}) has already arrived, so the larger amount can no longer be scheduled`,
+        true,
+      );
+    }
+    if (item.price.unit_amount !== row.installment_cents) {
+      return fail(`subscription ${sub.id} bills ${item.price.unit_amount} per month, not the plan's regular ${row.installment_cents}`);
+    }
+    const { regular, stepUp } = planned.phases;
+    // Each phase restates the subscription's description and the metadata the
+    // webhook reads to find the plan, so entering a phase changes the amount
+    // and nothing else. The card is deliberately NOT pinned on a phase: a
+    // phase would put it back on the subscription when it starts, undoing a
+    // card the guest replaced in between. Without one, Stripe charges the
+    // customer's default card, which the confirm step and the billing page's
+    // card replacement (services/billingPortal.ts) both keep current.
+    const carried: Pick<Stripe.SubscriptionScheduleUpdateParams.Phase, "description" | "metadata"> = {
+      ...(sub.description ? { description: sub.description } : {}),
+      metadata: { ...(sub.metadata ?? {}) },
+    };
+    const priceData = (unitAmount: number) => ({
+      currency: item.price.currency,
+      product,
+      unit_amount: unitAmount,
+      recurring: { interval: "month" as const, interval_count: 1 },
+    });
+    const phasesWith = (
+      regularItem: NonNullable<Stripe.SubscriptionScheduleUpdateParams.Phase["items"]>[number],
+    ): Stripe.SubscriptionScheduleUpdateParams.Phase[] => [
+      { ...carried, start_date: regular.start, end_date: regular.end, items: [regularItem], proration_behavior: "none" },
+      {
+        ...carried,
+        start_date: stepUp.start,
+        end_date: stepUp.end,
+        items: [{ price_data: priceData(stepUp.unitAmount), quantity: 1 }],
+        proration_behavior: "none",
+      },
+    ];
+    const update = (phases: Stripe.SubscriptionScheduleUpdateParams.Phase[], variant: string) =>
+      api.subscriptionSchedules.update(
+        schedule.id,
+        {
+          end_behavior: "cancel",
+          phases,
+          proration_behavior: "none",
+          metadata: { [STEP_UP_MARKER]: String(row.id), retreatBalancePlanId: String(row.id) },
+        },
+        { idempotencyKey: `retreat-balance-phases-${variant}-${schedule.id}-${hourBucket()}` },
+      );
+    try {
+      // First choice: the regular phase keeps the very price the subscription
+      // is already billing, so the running subscription is not touched at all.
+      schedule = await update(phasesWith({ price: item.price.id, quantity: 1 }), "a");
+    } catch (err) {
+      if ((err as StripeErrorLike).type !== "StripeInvalidRequestError") throw err;
+      // That price was made inline with the subscription, and Stripe may not
+      // accept it by id in a phase. The same amount stated again as price data
+      // bills identically (no proration, same monthly interval).
+      logError(`plan ${row.id}: schedule ${schedule.id} refused the existing price; trying the same amount as price data`, err);
+      schedule = await update(phasesWith({ price_data: priceData(regular.unitAmount), quantity: 1 }), "b");
+    }
+    if (!scheduleCarriesStepUp(schedule, expected)) {
+      return fail(`Stripe's answer for schedule ${schedule.id} does not show the two phases ending with a cancellation`);
+    }
+  }
+
+  // The amount of the larger phase, read back from the price Stripe holds.
+  const lastPhase = schedule.phases[schedule.phases.length - 1];
+  const lastPriceId = priceIdOf(lastPhase?.items?.[0]?.price as string | { id: string } | null | undefined);
+  if (!lastPriceId) return fail(`schedule ${schedule.id} has no price on its last phase`);
+  const lastPrice = await api.prices.retrieve(lastPriceId);
+  if (lastPrice.unit_amount !== row.step_up_cents || lastPrice.currency !== row.currency.toLowerCase()) {
+    return fail(`schedule ${schedule.id} bills ${lastPrice.unit_amount} ${lastPrice.currency} in its last phase, not ${row.step_up_cents} ${row.currency}`);
+  }
+
+  const stamped = await pool.query(
+    `UPDATE retreat_balance_plans
+        SET schedule_installed_at = now(), schedule_alerted_at = NULL, updated_at = now()
+      WHERE id = $1 AND status = 'billing' AND schedule_installed_at IS NULL
+        AND step_up_cents = $2 AND step_up_count = $3 AND installment_count = $4
+      RETURNING id`,
+    [row.id, row.step_up_cents, row.step_up_count, row.installment_count],
+  );
+  if (!stamped.rows[0]) return { status: "not_needed" };
+  log(
+    `plan ${row.id}: schedule ${schedule.id} confirmed on subscription ${sub.id}: ${row.installment_count - row.step_up_count} x ${row.installment_cents}, ` +
+      `then ${row.step_up_count} x ${row.step_up_cents} from ${new Date(expected.stepStart * 1000).toISOString()}, ending ${new Date(expected.end * 1000).toISOString()}`,
+  );
+  return { status: "installed" };
+}
+
+/**
+ * Installs a stepped plan's schedule and, when it cannot be confirmed, tells
+ * the owner: on the first failure, then once a day, and on every run from
+ * three days before the first larger payment. Never throws: the payment that
+ * started the plan is already recorded when this runs, and the hourly job
+ * calls it again until Stripe confirms.
+ *
+ * Returns whether the schedule is confirmed now.
+ */
+async function ensureStepUpSchedule(
+  row: BalancePlanRow,
+  stripeSubscriptionId: string,
+  firstStepUpDueAt: Date | null,
+  now: Date = new Date(),
+): Promise<boolean> {
+  if (stepUpCountOf(amountsOfRow(row)) === 0 || row.schedule_installed_at) return false;
+  let reason: string;
+  let tooLate = false;
+  try {
+    const outcome = await installStepUpSchedule(row, stripeSubscriptionId);
+    if (outcome.status === "installed") return true;
+    if (outcome.status === "not_needed") return false;
+    reason = outcome.reason;
+    tooLate = outcome.tooLate;
+    logError(`plan ${row.id}: larger last payments NOT set up on subscription ${stripeSubscriptionId}`, reason);
+  } catch (err) {
+    reason = `Stripe said: ${String((err as StripeErrorLike).message ?? (err instanceof Error ? err.message : err)).slice(0, 300)}`;
+    logError(`plan ${row.id}: larger last payments could not be set up on subscription ${stripeSubscriptionId} (will retry)`, err);
+  }
+  try {
+    if (!stepUpAlertDue({ now, lastAlertedAt: row.schedule_alerted_at ?? null, firstStepUpDueAt })) return false;
+    const [member, retreat] = await Promise.all([memberFacts(row.member_id), findRetreat(row.retreat_id)]);
+    const money = (amount: number) => formatAmount(amount, row.currency);
+    const who = member.name ? `${member.name} (${member.email})` : member.email || `member ${row.member_id}`;
+    const when = firstStepUpDueAt ? longDate(pacificDate(new Date(firstStepUpDueAt))) : "the first larger payment's date";
+    await alertOwner(
+      `Retreat balance plan ${row.id}: the larger last payments are NOT set up`,
+      [
+        `The payment plan for ${who}${retreat ? ` (${retreat.title})` : ""} is ${describeSteppedPayments(amountsOfRow(row), row.currency)}.`,
+        `The card processor has not confirmed the larger payments. ${reason}.`,
+        ``,
+        tooLate
+          ? `The first larger payment was due on ${when}. A payment taken since then was charged at the regular ${money(row.installment_cents)} instead of ${money(row.step_up_cents)}, and the rest will be too. The plan needs to be put right by hand in Stripe (subscription ${stripeSubscriptionId}).`
+          : `Until this is fixed, the payment on ${when} would be charged at the regular ${money(row.installment_cents)} instead of ${money(row.step_up_cents)}. It is tried again every hour.`,
+        `The number of payments is not affected: the charges still stop after payment ${row.installment_count}.`,
+      ].join("\n"),
+    );
+    await pool.query(`UPDATE retreat_balance_plans SET schedule_alerted_at = now() WHERE id = $1 AND schedule_installed_at IS NULL`, [row.id]);
+  } catch (err) {
+    logError(`plan ${row.id}: alert about the missing schedule failed`, err);
+  }
+  return false;
+}
+
+/**
+ * Called by the Stripe webhook when a balance plan's paid invoice is not the
+ * amount its instalment row expected. The money is recorded exactly as Stripe
+ * reported it before this runs; this only makes sure the owner hears about it.
+ * Quiet for any plan that is not a retreat balance plan. Never throws.
+ */
+export async function onInstallmentAmountMismatch(input: {
+  paymentPlanId: number;
+  sequence: number;
+  expectedCents: number;
+  actualCents: number;
+  currency: string;
+  stripeInvoiceId: string;
+}): Promise<void> {
+  try {
+    if (input.expectedCents === input.actualCents) return;
+    const row = await balancePlanOfPaymentPlan(input.paymentPlanId);
+    if (!row) return;
+    const [member, retreat] = await Promise.all([memberFacts(row.member_id), findRetreat(row.retreat_id)]);
+    const money = (amount: number) => formatAmount(amount, input.currency || row.currency);
+    const who = member.name ? `${member.name} (${member.email})` : member.email || `member ${row.member_id}`;
+    logError(
+      `plan ${row.id}: instalment ${input.sequence} expected ${input.expectedCents} but invoice ${input.stripeInvoiceId} collected ${input.actualCents}`,
+      "amount mismatch",
+    );
+    await alertOwner(
+      `Retreat balance plan ${row.id}: a payment was not the expected amount`,
+      [
+        `Payment ${input.sequence} of the plan for ${who}${retreat ? ` (${retreat.title})` : ""}${row.is_test ? " (test plan)" : ""} was expected to be ${money(input.expectedCents)}.`,
+        `Stripe collected ${money(input.actualCents)} (invoice ${input.stripeInvoiceId}).`,
+        ``,
+        `The payment is recorded in the ledger as Stripe reported it, and the instalment is marked paid. ` +
+          `Her schedule still shows the expected amount for that payment, so her balance may be ${money(Math.abs(input.expectedCents - input.actualCents))} ${input.actualCents < input.expectedCents ? "short" : "over"}. Please check the plan in Stripe.`,
+      ].join("\n"),
+    );
+  } catch (err) {
+    logError(`payment plan ${input.paymentPlanId}: amount mismatch alert failed`, err);
+  }
+}
+
 /** After a subscription exists at Stripe: write it down, credit what it has collected. */
 async function settleSubscription(row: BalancePlanRow, sub: Stripe.Subscription, retreat: RetreatFacts | null): Promise<{ charged: boolean }> {
   const member = await memberFacts(row.member_id);
@@ -1918,6 +2523,15 @@ async function settleSubscription(row: BalancePlanRow, sub: Stripe.Subscription,
   // The owner cancelled while the subscription was being created. The payment
   // is recorded above; the subscription must not live on.
   const latest = await findPlanById(row.id);
+  // A stepped plan: put the larger last payments in place at Stripe. A separate
+  // step on purpose, after the charge is taken and written down. It never
+  // throws, and its failure changes nothing above: the plan stays `billing`,
+  // the subscription keeps its original end date, and the hourly job tries
+  // again until Stripe confirms.
+  if (latest && latest.status === "billing" && plan?.status !== "completed" && stepUpCountOf(amountsOfRow(latest)) > 0) {
+    const startAt = new Date((sub.start_date ?? sub.created) * 1000);
+    await ensureStepUpSchedule(latest, sub.id, addInterval(startAt, "month", latest.installment_count - latest.step_up_count));
+  }
   if (latest && latest.status === "canceled") {
     try {
       await cancelSubscriptionIfLive(sub.id);
@@ -2007,7 +2621,10 @@ export async function startBalancePlanBilling(
   const claimed = await pool.query<BalancePlanRow>(
     `UPDATE retreat_balance_plans
         SET status = 'billing', billing_started_at = now(),
-            billing_attempts = billing_attempts + 1, updated_at = now()
+            billing_attempts = billing_attempts + 1,
+            -- A new subscription needs its own schedule confirmed (migration 232).
+            schedule_installed_at = NULL, schedule_alerted_at = NULL,
+            updated_at = now()
       WHERE id = $1 AND status = 'card_on_file' AND authorized_at IS NOT NULL
         AND stripe_payment_method_id IS NOT NULL AND stripe_customer_id IS NOT NULL
         AND first_charge_on <= $2::date
@@ -2110,14 +2727,23 @@ async function syncBalancePlan(row: BalancePlanRow, linked: LinkedPlan[], known:
     );
     return done.rows[0] ?? row;
   }
-  // Every instalment is the same amount, so what is left always divides. If a
-  // record was ever edited by hand so that it does not, the plan goes back to
-  // the owner as a draft instead of being offered to the guest with odd numbers.
-  const divides = remaining % row.installment_cents === 0 && remaining / row.installment_cents <= 36;
+  // The unpaid instalments keep their own amounts (migration 232): all one
+  // amount becomes a plain plan of that amount, a lower amount followed by a
+  // higher one becomes a stepped plan. They must add up to exactly what is
+  // still owed. If a record was ever edited by hand so that they do not, the
+  // plan goes back to the owner as a draft (one payment of what is owed)
+  // instead of being offered to the guest with odd numbers.
+  const stopped = currentLinkedPlan(row, linked);
+  const unpaid = (stopped?.installments ?? []).filter((item) => item.status !== "paid").map((item) => item.amount_cents);
+  const recomputed = planAmountsFromUnpaid(unpaid);
+  const rebuilt = recomputed !== null && planTotalCents(recomputed) === remaining ? recomputed : null;
+  const divides = rebuilt !== null;
   const problem = "We could not charge your card and the payments stopped. Please add a card again to continue.";
   const reopened = await pool.query<BalancePlanRow>(
     `UPDATE retreat_balance_plans
         SET status = $2, installment_cents = $3, installment_count = $4, carried_paid_cents = $5,
+            step_up_cents = $7, step_up_count = $8,
+            schedule_installed_at = NULL, schedule_alerted_at = NULL,
             stripe_payment_method_id = NULL, card_brand = NULL, card_last4 = NULL,
             authorized_at = NULL, authorization_text = '', authorized_ip = '',
             card_added_at = NULL, billing_started_at = NULL, owner_notified_at = NULL,
@@ -2126,11 +2752,13 @@ async function syncBalancePlan(row: BalancePlanRow, linked: LinkedPlan[], known:
       RETURNING ${PLAN_COLUMNS}`,
     [
       row.id,
-      divides ? "open" : "draft",
-      divides ? row.installment_cents : remaining,
-      divides ? remaining / row.installment_cents : 1,
+      rebuilt ? "open" : "draft",
+      rebuilt ? rebuilt.installmentCents : remaining,
+      rebuilt ? rebuilt.installmentCount : 1,
       paidHere,
       problem,
+      rebuilt ? rebuilt.stepUpCents : 0,
+      rebuilt ? rebuilt.stepUpCount : 0,
     ],
   );
   const next = reopened.rows[0];
@@ -2148,7 +2776,9 @@ async function syncBalancePlan(row: BalancePlanRow, linked: LinkedPlan[], known:
  *   c. repair a plan stuck `billing` with nothing recorded (a crash mid-start);
  *   d. start billing for `card_on_file` plans whose first charge date (Pacific)
  *      has arrived;
- *   e. link invoices and transactions the webhook wrote before the plan existed.
+ *   e. link invoices and transactions the webhook wrote before the plan existed;
+ *   f. (run before d) for a stepped plan whose larger last payments Stripe has
+ *      not confirmed, try the schedule again and alert the owner when due.
  * One plan's failure never stops the others.
  */
 export async function runRetreatBalanceJob(now: Date = new Date()): Promise<{
@@ -2157,8 +2787,10 @@ export async function runRetreatBalanceJob(now: Date = new Date()): Promise<{
   failed: number;
   synced: number;
   repaired: number;
+  schedulesInstalled: number;
+  schedulesPending: number;
 }> {
-  const result = { started: 0, declined: 0, failed: 0, synced: 0, repaired: 0 };
+  const result = { started: 0, declined: 0, failed: 0, synced: 0, repaired: 0, schedulesInstalled: 0, schedulesPending: 0 };
   if (!stripeEnabled()) return result;
 
   // a.
@@ -2243,6 +2875,28 @@ export async function runRetreatBalanceJob(now: Date = new Date()): Promise<{
     }
   }
 
+  // f. Before d, so a plan started in this very run (which has just tried its
+  // own schedule) is not tried, or alerted about, twice in one hour.
+  try {
+    const unconfirmed = await pool.query<BalancePlanRow>(
+      `SELECT ${PLAN_COLUMNS} FROM retreat_balance_plans
+        WHERE status = 'billing' AND step_up_count > 0 AND schedule_installed_at IS NULL
+        ORDER BY id`,
+    );
+    const linkedUnconfirmed = await loadLinkedPlans(unconfirmed.rows.map((row) => row.id));
+    for (const row of unconfirmed.rows) {
+      const current = currentLinkedPlan(row, linkedUnconfirmed.get(row.id) ?? []);
+      if (!current?.stripe_subscription_id || (current.status !== "active" && current.status !== "past_due")) continue;
+      const firstStepUp = current.installments.find((item) => item.sequence === row.installment_count - row.step_up_count + 1);
+      const installed = await ensureStepUpSchedule(row, current.stripe_subscription_id, firstStepUp?.due_at ?? null, now);
+      if (installed) result.schedulesInstalled += 1;
+      else result.schedulesPending += 1;
+    }
+  } catch (err) {
+    result.failed += 1;
+    logError("hourly check of the larger last payments failed", err);
+  }
+
   // d.
   const due = await pool.query<{ id: number }>(
     `SELECT id FROM retreat_balance_plans
@@ -2324,8 +2978,10 @@ async function composeReceipt(row: BalancePlanRow, linked: LinkedPlan[], facts: 
       }
     } else if (facts.sequence < count) {
       // The opening invoice, before the plan is written down: Stripe bills the
-      // next one a month after this one.
-      next = { date: addMonthsToDate(pacificDate(facts.paidAt), 1), amountCents: row.installment_cents };
+      // next one a month after this one, at that payment's own amount (the
+      // second payment is already a larger one when only the first is regular).
+      const amounts = installmentAmounts(amountsOfRow(row));
+      next = { date: addMonthsToDate(pacificDate(facts.paidAt), 1), amountCents: amounts[facts.sequence] ?? row.installment_cents };
     }
   }
 
@@ -2705,6 +3361,8 @@ export async function upsertBalancePlan(retreat: RetreatRow, memberId: number, r
             SET agreed_total_cents = $2, discount_cents = $3, discount_note = $4, prior_paid_cents = $5,
                 installment_cents = $6, installment_count = $7, first_charge_on = $8::date,
                 final_due_on = $9::date, is_test = $10, carried_paid_cents = $11,
+                step_up_cents = $12, step_up_count = $13,
+                schedule_installed_at = NULL, schedule_alerted_at = NULL,
                 status = CASE WHEN status = 'canceled' THEN 'draft' ELSE status END,
                 stripe_payment_method_id = NULL, card_brand = NULL, card_last4 = NULL,
                 authorized_at = NULL, authorization_text = '', authorized_ip = '',
@@ -2714,17 +3372,18 @@ export async function upsertBalancePlan(retreat: RetreatRow, memberId: number, r
                 updated_at = now()
           WHERE id = $1
           RETURNING ${PLAN_COLUMNS}`,
-        [current.id, v.agreedTotalCents, v.discountCents, v.discountNote, v.priorPaidCents, v.installmentCents, v.installmentCount, v.firstChargeOn, v.finalDueOn, v.isTest, carried],
+        [current.id, v.agreedTotalCents, v.discountCents, v.discountNote, v.priorPaidCents, v.installmentCents, v.installmentCount, v.firstChargeOn, v.finalDueOn, v.isTest, carried, v.stepUpCents, v.stepUpCount],
       );
       saved = updated.rows[0];
     } else {
       const inserted = await client.query<BalancePlanRow>(
         `INSERT INTO retreat_balance_plans
            (retreat_id, member_id, agreed_total_cents, discount_cents, discount_note, prior_paid_cents,
-            installment_cents, installment_count, first_charge_on, final_due_on, is_test)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::date, $10::date, $11)
+            installment_cents, installment_count, first_charge_on, final_due_on, is_test,
+            step_up_cents, step_up_count)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::date, $10::date, $11, $12, $13)
          RETURNING ${PLAN_COLUMNS}`,
-        [retreat.id, memberId, v.agreedTotalCents, v.discountCents, v.discountNote, v.priorPaidCents, v.installmentCents, v.installmentCount, v.firstChargeOn, v.finalDueOn, v.isTest],
+        [retreat.id, memberId, v.agreedTotalCents, v.discountCents, v.discountNote, v.priorPaidCents, v.installmentCents, v.installmentCount, v.firstChargeOn, v.finalDueOn, v.isTest, v.stepUpCents, v.stepUpCount],
       );
       saved = inserted.rows[0];
     }
@@ -2765,8 +3424,7 @@ export async function openBalancePlan(retreat: RetreatRow, memberId: number): Pr
       discountCents: row.discount_cents,
       discountNote: row.discount_note,
       priorPaidCents: row.prior_paid_cents,
-      installmentCents: row.installment_cents,
-      installmentCount: row.installment_count,
+      ...amountsOfRow(row),
       firstChargeOn: row.first_charge_on,
       finalDueOn: row.final_due_on,
       isTest: row.is_test,
@@ -2850,8 +3508,7 @@ async function requestEmailContext(retreat: RetreatRow, memberId: number): Promi
     agreedTotalCents: row.agreed_total_cents,
     paidSoFarCents: row.prior_paid_cents + paidHere,
     remainingCents: remainingOf(row, paidHere),
-    installmentCents: row.installment_cents,
-    installmentCount: row.installment_count,
+    ...amountsOfRow(row),
     firstChargeDate: effectiveFirstCharge(row.first_charge_on, today),
     chargesWhenAdded: row.first_charge_on <= today,
     url: paymentsUrl(retreat),

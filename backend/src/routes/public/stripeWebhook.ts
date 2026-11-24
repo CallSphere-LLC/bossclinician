@@ -1409,6 +1409,8 @@ export async function advancePaymentPlan(input: {
   const client: PoolClient = await pool.connect();
   let completedPlan: PlanRow | null = null;
   let overcharged: PlanRow | null = null;
+  // Set only for a retreat balance plan's instalment that was just credited.
+  let creditedBalanceInstalment: { paymentPlanId: number; sequence: number; expectedCents: number } | null = null;
 
   try {
     await client.query("BEGIN");
@@ -1450,7 +1452,7 @@ export async function advancePaymentPlan(input: {
       await client.query("ROLLBACK");
       overcharged = plan;
     } else {
-      const marked = await client.query<{ id: number }>(
+      const marked = await client.query<{ id: number; amount_cents: number }>(
         `UPDATE payment_plan_installments
             SET status = 'paid',
                 paid_at = $3,
@@ -1465,7 +1467,7 @@ export async function advancePaymentPlan(input: {
               SELECT 1 FROM payment_plan_installments prior
                WHERE prior.stripe_invoice_id = $5
             )
-          RETURNING id`,
+          RETURNING id, amount_cents`,
         [plan.id, nextSequence, input.paidAt, input.transactionId, input.stripeInvoiceId]
       );
 
@@ -1503,6 +1505,13 @@ export async function advancePaymentPlan(input: {
           }`
         );
         if (isFinal) completedPlan = plan;
+        if (plan.retreat_balance_plan_id != null) {
+          creditedBalanceInstalment = {
+            paymentPlanId: plan.id,
+            sequence: nextSequence,
+            expectedCents: Number(marked.rows[0].amount_cents),
+          };
+        }
       }
     }
   } catch (err) {
@@ -1529,6 +1538,14 @@ export async function advancePaymentPlan(input: {
     });
   }
 
+  // A retreat balance plan's instalments carry their own amounts (the last
+  // ones can be larger, migration 232). The payment above is recorded exactly
+  // as Stripe reported it; when that is not the amount the instalment
+  // expected, the owner is told rather than the difference passing as correct.
+  // After the commit, imported lazily, and never allowed to throw into the
+  // money path: the credit is already written.
+  const mismatch = creditedBalanceInstalment as { paymentPlanId: number; sequence: number; expectedCents: number } | null;
+
   // A retreat balance plan (migration 230) is cancelled at Stripe the moment
   // its final instalment is credited, rather than left to `cancel_at` a month
   // later. Imported lazily: that service imports this module. It decides for
@@ -1539,6 +1556,23 @@ export async function advancePaymentPlan(input: {
       await onLinkedPlanCompleted(completedPlan.id);
     } catch (err) {
       console.error(`[stripe] plan ${completedPlan.id}: completion follow-up failed:`, err);
+    }
+  }
+
+  // After the cancellation above, so an alert email never delays it.
+  if (mismatch !== null && Number.isFinite(mismatch.expectedCents) && mismatch.expectedCents !== input.amountCents) {
+    try {
+      const { onInstallmentAmountMismatch } = await import("../../services/retreatBalancePlans");
+      await onInstallmentAmountMismatch({
+        paymentPlanId: mismatch.paymentPlanId,
+        sequence: mismatch.sequence,
+        expectedCents: mismatch.expectedCents,
+        actualCents: input.amountCents,
+        currency: input.currency,
+        stripeInvoiceId: input.stripeInvoiceId,
+      });
+    } catch (err) {
+      console.error(`[stripe] plan ${mismatch.paymentPlanId}: amount mismatch alert failed:`, err);
     }
   }
 

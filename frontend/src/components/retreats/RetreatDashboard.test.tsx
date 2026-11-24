@@ -195,6 +195,41 @@ function balancePlan(overrides: Partial<BalancePlanView> = {}): BalancePlanView 
   };
 }
 
+const STEPPED_AUTHORIZATION =
+  "I authorize Boss Clinician to charge the card I am adding for 6 monthly payments toward my balance for FlourisHealer Bali 2027: " +
+  "4 payments of $400.00, then 2 payments of $600.00, $2,800.00 in total.";
+
+/**
+ * A guest who paid $1,500.00 through Kajabi and owes $2,800.00 as four payments
+ * of $400.00 and then two of $600.00, with the first `paid` payments already made.
+ */
+function steppedBalancePlan(paid = 0, overrides: Partial<BalancePlanView> = {}): BalancePlanView {
+  const due = ["2026-12-12", "2027-01-12", "2027-02-12", "2027-03-12", "2027-04-12", "2027-05-12"];
+  const paidCents = Math.min(paid, 4) * 40000 + Math.max(0, paid - 4) * 60000;
+  return balancePlan({
+    agreedTotalCents: 430000,
+    discountCents: 0,
+    discountNote: "",
+    priorPaidCents: 150000,
+    paidHereCents: paidCents,
+    remainingCents: 280000 - paidCents,
+    installmentCents: 40000,
+    installmentCount: 6,
+    stepUpCents: 60000,
+    stepUpCount: 2,
+    schedule: due.map((dueDate, index) => ({
+      sequence: index + 1,
+      amountCents: index < 4 ? 40000 : 60000,
+      dueDate,
+      status: index < paid ? ("paid" as const) : ("scheduled" as const),
+    })),
+    firstChargeDate: "2026-12-12",
+    finalDueDate: "2027-06-08",
+    authorizationText: STEPPED_AUTHORIZATION,
+    ...overrides,
+  });
+}
+
 const VISA = { brand: "visa", last4: "4242" };
 
 /** The words a guest reads: tags removed, the few entities React writes turned back. */
@@ -328,6 +363,65 @@ describe("RetreatDashboard balance plan", () => {
     expect(html).not.toContain("Monthly payments");
     expect(html.match(/>Paid</g)).toHaveLength(4);
     expect(html).not.toContain("<button");
+  });
+
+  it("open, larger last payments: lists both amounts and names the first row's amount as the first payment", () => {
+    const html = paymentsSection(render(kajabiGuest(steppedBalancePlan())));
+    const text = textOf(html);
+    expect(html).toMatch(/Monthly payments<\/dt><dd[^>]*>4 payments of \$400\.00, then 2 payments of \$600\.00</);
+    expect(html).not.toContain("$400.00 ×");
+    expect(html).toMatch(/Balance remaining<\/dt><dd[^>]*>\$2,800\.00</);
+    expect(html).toMatch(/Final payment deadline<\/dt><dd[^>]*>June 8, 2027</);
+    expect(text).toContain("Your first payment of $400.00 will be charged on December 12, 2026");
+    expect(text).not.toContain("Your first payment of $600.00");
+    // Each row of the schedule carries its own amount.
+    expect(html.match(/>\$400\.00<\/td>/g)).toHaveLength(4);
+    expect(html.match(/>\$600\.00<\/td>/g)).toHaveLength(2);
+    expect(html).toMatch(/<button[^>]*>Add your card<\/button>/);
+
+    const today = textOf(paymentsSection(render(kajabiGuest(steppedBalancePlan(0, { chargesToday: true })))));
+    expect(today).toContain("Your first payment of $400.00 is charged today, as soon as you save your card.");
+  });
+
+  it("card on file, larger last payments: names the first row's amount", () => {
+    const text = textOf(paymentsSection(render(kajabiGuest(steppedBalancePlan(0, { state: "card_on_file", card: VISA })))));
+    expect(text).toContain("Card on file: Visa ending 4242. Your first payment of $400.00 will be charged on December 12, 2026.");
+    expect(text).toContain("4 payments of $400.00, then 2 payments of $600.00");
+  });
+
+  it("billing, larger last payments, 4 of 6 paid: the next payment and the figure show the larger amount", () => {
+    const html = paymentsSection(render(kajabiGuest(steppedBalancePlan(4, { state: "billing", card: VISA }))));
+    const text = textOf(html);
+    expect(text).toContain("Your next payment of $600.00 will be charged on April 12, 2027.");
+    expect(text).not.toContain("Your next payment of $400.00");
+    expect(html).toMatch(/Monthly payments<\/dt><dd[^>]*>2 payments of \$600\.00</);
+    expect(html).not.toContain("$400.00 ×");
+    expect(html).toMatch(/Paid so far<\/dt><dd[^>]*>\$3,100\.00</);
+    expect(html).toMatch(/Balance remaining<\/dt><dd[^>]*>\$1,200\.00</);
+    expect(html.match(/>Paid</g)).toHaveLength(4);
+    expect(html.match(/>Scheduled</g)).toHaveLength(2);
+  });
+
+  it("billing, larger last payments, 1 of 6 paid: the next payment is still the regular amount", () => {
+    const html = paymentsSection(render(kajabiGuest(steppedBalancePlan(1, { state: "billing", card: VISA }))));
+    expect(textOf(html)).toContain("Your next payment of $400.00 will be charged on January 12, 2027.");
+    expect(html).toMatch(/Monthly payments<\/dt><dd[^>]*>3 payments of \$400\.00, then 2 payments of \$600\.00</);
+  });
+
+  it("reads larger last payments from the schedule when an older server sends no step-up fields", () => {
+    const plan = steppedBalancePlan();
+    delete plan.stepUpCents;
+    delete plan.stepUpCount;
+    const html = paymentsSection(render(kajabiGuest(plan)));
+    expect(html).toMatch(/Monthly payments<\/dt><dd[^>]*>4 payments of \$400\.00, then 2 payments of \$600\.00</);
+  });
+
+  it("keeps the figure as it was for a plan whose payments are all the same, step-up fields or not", () => {
+    for (const plan of [balancePlan(), balancePlan({ stepUpCents: 0, stepUpCount: 0 })]) {
+      const html = paymentsSection(render(kajabiGuest(plan)));
+      expect(html).toMatch(/Monthly payments<\/dt><dd[^>]*>\$1,000\.00 × 4 payments</);
+      expect(html).not.toContain("payments of");
+    }
   });
 
   it("in the owner's preview shows the plan read-only: no button, no card form, no request", () => {

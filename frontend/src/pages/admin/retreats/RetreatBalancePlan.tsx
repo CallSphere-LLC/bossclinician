@@ -1,4 +1,4 @@
-import { forwardRef, useCallback, useEffect, useMemo, useState, type InputHTMLAttributes } from "react";
+import { forwardRef, useCallback, useEffect, useId, useMemo, useState, type InputHTMLAttributes } from "react";
 import { Eye, EyeOff, Mail } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/cn";
@@ -14,10 +14,12 @@ import { Badge, Button, ErrorNotice, Field, Input, Skeleton, type BadgeProps } f
 import {
   centsToDollarInput,
   checkBalancePlan,
+  fitToDeadline,
   formFromPlan,
   formatLongDate,
   formatMoney,
   isEditableState,
+  isSteppedPlan,
   paidProgress,
   parseDollarsToCents,
   planChip,
@@ -26,13 +28,15 @@ import {
   todayInPacific,
   type BalancePlanField,
   type BalancePlanForm,
+  type DeadlineFit,
 } from "./retreatBalancePlanRules";
 
 /**
  * Payment plans on the retreat Guests screen: the status chip in each guest's
  * row and the editor the owner opens from it.
  *
- * A plan is the balance a guest still owes, split into equal monthly payments
+ * A plan is the balance a guest still owes, split into monthly payments
+ * (all equal, or with the last few larger so it is paid off by a deadline)
  * charged automatically to a card the guest adds herself. The owner sets the
  * numbers here; the guest sees nothing until the plan is opened for her, and
  * nothing is charged until she adds a card and agrees to the schedule.
@@ -162,17 +166,55 @@ export function RetreatBalancePlanModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the saved content, not the object
   }, [savedKey]);
   const dirty = editable && !sameForm(form, saved);
+  const today = todayInPacific();
   const check = useMemo(
-    () => checkBalancePlan(form, { paidHereCents: plan?.paidHereCents ?? 0, today: todayInPacific(), currency }),
-    [form, plan?.paidHereCents, currency],
+    () => checkBalancePlan(form, { paidHereCents: plan?.paidHereCents ?? 0, today, currency }),
+    [form, plan?.paidHereCents, today, currency],
   );
+  /** What "Fit to the deadline" would set, worked out from the same balance and dates the check uses. */
+  const fit = useMemo(
+    () =>
+      fitToDeadline({
+        balanceCents: check.balanceCents,
+        installmentCents: check.installmentCents,
+        firstChargeOn: form.firstChargeOn,
+        finalDueOn: form.finalDueOn,
+        today,
+      }),
+    [check.balanceCents, check.installmentCents, form.firstChargeOn, form.finalDueOn, today],
+  );
+  /** True when the boxes already hold exactly what "Fit to the deadline" would set. */
+  const fitApplied =
+    fit !== null &&
+    ((fit.kind === "even" && !check.stepUp && check.installmentCount === fit.count) ||
+      (fit.kind === "stepped" &&
+        check.stepUp &&
+        check.installmentCount === fit.count &&
+        check.stepUpCount === fit.stepUpCount &&
+        check.stepUpCents === fit.stepUpCents));
+  const canFit = fit !== null && (fit.kind === "even" || fit.kind === "stepped") && !fitApplied;
+  const stepUpHintId = useId();
+  const stepUpFieldsId = useId();
 
   const set = <K extends keyof BalancePlanForm>(key: K, value: BalancePlanForm[K]) => {
     setForm((current) => ({ ...current, [key]: value }));
     setActionError("");
   };
+  /** Fills the number of payments and the larger last payments so the plan is paid off by the deadline. */
+  const applyFit = () => {
+    if (!fit || (fit.kind !== "even" && fit.kind !== "stepped")) return;
+    const stepped = fit.kind === "stepped" ? fit : null;
+    setForm((current) => ({
+      ...current,
+      installmentCount: String(fit.count),
+      stepUp: stepped !== null,
+      stepUpAmount: stepped ? centsToDollarInput(stepped.stepUpCents) : current.stepUpAmount,
+      stepUpCount: stepped ? String(stepped.stepUpCount) : current.stepUpCount,
+    }));
+    setActionError("");
+  };
   /** Leaving a dollar box tidies what was typed: "1500" becomes "1,500.00". */
-  const tidyMoney = (key: "agreedTotal" | "discount" | "priorPaid" | "installment") => {
+  const tidyMoney = (key: "agreedTotal" | "discount" | "priorPaid" | "installment" | "stepUpAmount") => {
     const cents = parseDollarsToCents(form[key]);
     if (cents !== null) setForm((current) => ({ ...current, [key]: centsToDollarInput(cents) }));
   };
@@ -218,10 +260,12 @@ export function RetreatBalancePlanModal({
     if (needsSave && (!check.valid || !toSave)) return;
     const count = toSave ? toSave.installmentCount : (plan?.installmentCount ?? 0);
     const amount = toSave ? toSave.installmentCents : (plan?.installmentCents ?? 0);
+    const largerAmount = toSave ? toSave.stepUpCents : (plan?.stepUpCents ?? 0);
+    const largerCount = toSave ? toSave.stepUpCount : (plan?.stepUpCount ?? 0);
     const ok = await confirm({
       title: `Open this payment plan for ${who}?`,
       description:
-        `She will see the plan of ${planSentence(count, amount, currency)} and a form to add her card on her retreat dashboard. ` +
+        `She will see the plan of ${planSentence(count, amount, currency, largerAmount, largerCount)} and a form to add her card on her retreat dashboard. ` +
         "Nothing is charged until she adds a card and agrees to the schedule. No email is sent by this step.",
       confirmLabel: "Open for guest",
     });
@@ -410,12 +454,56 @@ export function RetreatBalancePlanModal({
                   {suggestionNote(check, currency)}
                 </p>
               </div>
+              <div className="space-y-3 sm:col-span-2">
+                <label className="flex min-h-10 cursor-pointer items-center gap-3 text-sm text-ink">
+                  <input
+                    type="checkbox"
+                    className="size-4 accent-[var(--accent,#d4af37)]"
+                    checked={form.stepUp}
+                    aria-describedby={stepUpHintId}
+                    aria-controls={form.stepUp ? stepUpFieldsId : undefined}
+                    onChange={(e) => set("stepUp", e.target.checked)}
+                  />
+                  Make the last payments larger
+                </label>
+                <p id={stepUpHintId} className="-mt-2 text-xs text-ink-soft">
+                  Use this when the regular amount will not clear the balance by the deadline. The first payments stay at the monthly amount and the last ones are larger.
+                </p>
+                {form.stepUp && (
+                  <div id={stepUpFieldsId} className="grid gap-4 sm:grid-cols-2">
+                    <Field label="Larger payment amount" hint="More than the monthly payment" error={fieldError("stepUpAmount")}>
+                      <MoneyInput value={form.stepUpAmount} onChange={(e) => set("stepUpAmount", e.target.value)} onBlur={() => tidyMoney("stepUpAmount")} />
+                    </Field>
+                    <Field
+                      label="How many of the last payments"
+                      hint={check.installmentCount !== null && check.installmentCount > 2 ? `1 to ${check.installmentCount - 1}` : undefined}
+                      error={fieldError("stepUpCount")}
+                    >
+                      <Input
+                        inputMode="numeric"
+                        autoComplete="off"
+                        className={numberStyles}
+                        value={form.stepUpCount}
+                        onChange={(e) => set("stepUpCount", e.target.value)}
+                      />
+                    </Field>
+                  </div>
+                )}
+              </div>
               <Field label="First charge date" error={fieldError("firstChargeOn")}>
                 <Input type="date" className={numberStyles} value={form.firstChargeOn} onChange={(e) => set("firstChargeOn", e.target.value)} />
               </Field>
               <Field label="Final payment deadline" hint="Optional" error={fieldError("finalDueOn")}>
                 <Input type="date" className={numberStyles} value={form.finalDueOn} onChange={(e) => set("finalDueOn", e.target.value)} />
               </Field>
+              <div className="flex flex-wrap items-center gap-3 sm:col-span-2">
+                <Button variant="secondary" size="sm" disabled={!canFit} onClick={applyFit}>
+                  Fit to the deadline
+                </Button>
+                <p className="min-w-[12rem] flex-1 text-xs text-ink-soft" aria-live="polite">
+                  {fitNote(fit, fitApplied, check, currency)}
+                </p>
+              </div>
               <label className="flex min-h-10 cursor-pointer items-center gap-3 text-sm text-ink sm:col-span-2">
                 <input
                   type="checkbox"
@@ -444,7 +532,9 @@ export function RetreatBalancePlanModal({
                 <dd className={cn(numberStyles, "text-ink")}>{check.balanceCents !== null ? formatMoney(check.balanceCents, currency) : "Not set"}</dd>
                 <dt className="text-ink-soft">Plan</dt>
                 <dd className={cn(numberStyles, "text-ink")}>
-                  {check.installmentCents !== null && check.installmentCount !== null ? planSentence(check.installmentCount, check.installmentCents, currency) : "Not set"}
+                  {check.installmentCents !== null && check.installmentCount !== null && check.stepUpReady
+                    ? planSentence(check.installmentCount, check.installmentCents, currency, check.stepUpCents, check.stepUpCount)
+                    : "Not set"}
                 </dd>
                 <dt className="text-ink-soft">Last payment</dt>
                 <dd className={cn(numberStyles, "text-ink")}>{check.lastPaymentDate ? formatLongDate(check.lastPaymentDate) : "Not set"}</dd>
@@ -466,6 +556,11 @@ export function RetreatBalancePlanModal({
                 <div className="mt-3">
                   <p className="text-xs font-semibold text-ink">{check.startsLate ? "Payment dates (earliest possible, if she adds her card today)" : "Payment dates"}</p>
                   <ScheduleList rows={check.schedule.map((row) => ({ ...row, mark: null }))} currency={currency} />
+                  {check.deadlineIsClose && check.firstPaymentDate && (
+                    <p className="mt-2 text-xs text-ink-soft">
+                      If she adds her card after <span className={numberStyles}>{formatLongDate(check.firstPaymentDate)}</span>, every payment moves later by the same number of days.
+                    </p>
+                  )}
                 </div>
               )}
             </section>
@@ -531,11 +626,49 @@ function suggestionNote(check: ReturnType<typeof checkBalancePlan>, currency: st
   if (check.balanceCents === null || check.balanceCents <= 0 || check.installmentCents === null) {
     return "Enter the price and the monthly payment, and this works out how many payments clear the balance.";
   }
+  if (check.stepUp) {
+    // Same equation as Save: regular x (count - N) + larger x N.
+    if (check.suggestedCount === null) {
+      return "With the larger last payments as entered, no number of payments (up to 36) clears the balance exactly. Change an amount, or use Fit to the deadline.";
+    }
+    if (check.suggestedCount === check.installmentCount && check.stepUpReady) return "The number of payments clears the balance exactly.";
+    return `${planSentence(check.suggestedCount, check.installmentCents, currency, check.typedStepUpCents ?? 0, check.typedStepUpCount ?? 0)} clears the balance exactly.`;
+  }
   if (check.suggestedCount === null) {
-    return `${formatMoney(check.balanceCents, currency)} does not divide evenly into payments of ${formatMoney(check.installmentCents, currency)} (within 36 payments). Every payment must be the same amount, so try a different monthly payment.`;
+    return `${formatMoney(check.balanceCents, currency)} does not divide evenly into payments of ${formatMoney(check.installmentCents, currency)} (within 36 payments). Try a different monthly payment, or make the last payments larger.`;
   }
   if (check.suggestedCount === check.installmentCount) return "The number of payments clears the balance exactly.";
   return `${planSentence(check.suggestedCount, check.installmentCents, currency)} clears the balance exactly.`;
+}
+
+/** What "Fit to the deadline" would do, in a sentence, before and after it is pressed. */
+function fitNote(fit: DeadlineFit | null, applied: boolean, check: ReturnType<typeof checkBalancePlan>, currency: string): string {
+  if (fit === null || check.installmentCents === null) {
+    return "Enter the price, the monthly payment, the first charge date and the final payment deadline, and this works out a plan that is paid off in time.";
+  }
+  switch (fit.kind) {
+    case "no-dates":
+      return "No payment date falls on or before the final payment deadline. Choose a later deadline or an earlier first charge date.";
+    case "too-much":
+      return "The monthly payment is more than the balance. Lower the monthly payment.";
+    case "raise":
+      // One date before the deadline: time is the problem. Otherwise the balance is under two monthly payments.
+      return fit.datesThatFit === 1
+        ? "Only 1 monthly payment date fits on or before the deadline, so the balance cannot be cleared in time at this monthly payment. The monthly payment must be raised."
+        : "The balance is less than two monthly payments, so there are no last payments to make larger. The monthly payment must be raised to the whole balance, or changed so it divides the balance.";
+    case "even":
+      return applied
+        ? "This plan is paid off by the deadline at the regular monthly payment. No larger payments are needed."
+        : `${planSentence(fit.count, check.installmentCents, currency)} is paid off by the deadline. No larger payments are needed.`;
+    case "stepped": {
+      const dates = `${fit.datesThatFit} monthly payment dates fit on or before the deadline`;
+      return applied
+        ? `${dates}, and this plan uses them to clear the balance in time.`
+        : `${dates}: ${planSentence(fit.count, check.installmentCents, currency, fit.stepUpCents, fit.stepUpCount)}.`;
+    }
+    default:
+      return "";
+  }
 }
 
 /** A dollar box. Takes the id and error wiring `Field` hands to its child. */
@@ -578,6 +711,11 @@ function LockedPlan({ plan, state }: { plan: AdminBalancePlan; state: BalancePla
   const card = cardLabel(plan);
   const schedule = Array.isArray(plan.schedule) ? plan.schedule : [];
   const money = (cents: number) => formatMoney(cents, currency);
+  const stepUpCents = plan.stepUpCents ?? 0;
+  const stepUpCount = plan.stepUpCount ?? 0;
+  const stepped = isSteppedPlan(plan.installmentCount, stepUpCents, stepUpCount);
+  /** While charges are running (a failed payment included), say whether the larger last payments are in place. */
+  const charging = state === "billing" || state === "past_due";
 
   return (
     <>
@@ -585,6 +723,20 @@ function LockedPlan({ plan, state }: { plan: AdminBalancePlan; state: BalancePla
         <p className="rounded-xl border border-hairline bg-white/[0.03] p-3 text-xs text-ink-soft">
           These numbers are locked because the guest has a card on file and agreed to exactly this schedule. They can no longer be changed here.
         </p>
+      )}
+
+      {charging && stepped && plan.scheduleInstalledAt && (
+        <p role="status" className="text-xs text-ink-soft">Larger final payments are set up with the card processor.</p>
+      )}
+      {charging && stepped && !plan.scheduleInstalledAt && (
+        <div role="alert" className="rounded-xl border border-gold/40 bg-gold/[0.08] p-3 text-xs text-gold">
+          <p className="font-semibold">Larger final payments are not set up with the card processor yet</p>
+          <p className="mt-1">
+            The regular monthly payments are charged as planned. This site tries again every hour to set up the last{" "}
+            <span className={numberStyles}>{stepUpCount}</span> larger {stepUpCount === 1 ? "payment" : "payments"}, and sends an alert if it still cannot.
+            This message goes away once they are in place.
+          </p>
+        </div>
       )}
 
       <section className="rounded-xl border border-hairline p-4" aria-label="Plan numbers">
@@ -608,7 +760,7 @@ function LockedPlan({ plan, state }: { plan: AdminBalancePlan; state: BalancePla
           <dt className="text-ink-soft">Still to pay</dt>
           <dd className={cn(numberStyles, "text-ink")}>{money(plan.remainingCents)}</dd>
           <dt className="text-ink-soft">Plan</dt>
-          <dd className={cn(numberStyles, "text-ink")}>{planSentence(plan.installmentCount, plan.installmentCents, currency)}</dd>
+          <dd className={cn(numberStyles, "text-ink")}>{planSentence(plan.installmentCount, plan.installmentCents, currency, stepUpCents, stepUpCount)}</dd>
           <dt className="text-ink-soft">Payments made</dt>
           <dd className={cn(numberStyles, "text-ink")}>{paid} of {count}</dd>
           <dt className="text-ink-soft">First charge date</dt>

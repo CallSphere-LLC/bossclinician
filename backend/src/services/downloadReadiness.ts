@@ -21,7 +21,10 @@ export async function assertProductsDeliverable(productIds: number[], db: DB = p
        WHERE p.kind='course' AND NOT EXISTS (
          SELECT 1 FROM course_modules m JOIN course_lessons l ON l.module_id=m.id
          WHERE m.course_id=p.course_id AND l.published=true
-           AND (length(trim(l.body_md))>0 OR l.video_url<>'' OR l.audio_url<>'' OR l.attachment_url<>'' OR l.embed_html<>'')
+           -- A tool lesson (the retreat dashboard, an assessment) has no body:
+           -- the tool itself is the content.
+           AND (length(trim(l.body_md))>0 OR l.video_url<>'' OR l.audio_url<>'' OR l.attachment_url<>'' OR l.embed_html<>''
+                OR length(trim(COALESCE(l.tool_key,'')))>0)
        )`, [productIds],
   );
   if (courses.rows.length) throw serviceUnavailable(`Enrollment for ${courses.rows[0].title} will open when its course materials are ready.`);

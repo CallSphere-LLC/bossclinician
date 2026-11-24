@@ -18,7 +18,15 @@ import {
   cardFailureOf,
   currentLinkedPlan,
   deriveState,
+  describeSteppedPayments,
   effectiveFirstCharge,
+  installmentAmounts,
+  planAmountsFromUnpaid,
+  planTotalCents,
+  scheduleCarriesStepUp,
+  stepUpAlertDue,
+  stepUpCountOf,
+  stepUpPhases,
   guestCardMessage,
   isIsoDate,
   longDate,
@@ -126,6 +134,157 @@ describe("schedule projection", () => {
     expect(total.reduce((sum, row) => sum + row.amountCents, 0)).toBe(166500);
     expect(total[1].dueDate).toBe("2027-02-28");
   });
+
+  it("gives the last payments their larger amount, row by row", () => {
+    const sharon = { installmentCents: 40000, installmentCount: 6, stepUpCents: 60000, stepUpCount: 2 };
+    const rows = projectSchedule({ firstChargeOn: "2026-12-12", today: "2026-11-23", ...sharon });
+    expect(rows.map((row) => row.amountCents)).toEqual([40000, 40000, 40000, 40000, 60000, 60000]);
+    expect(rows.map((row) => row.dueDate)).toEqual(["2026-12-12", "2027-01-12", "2027-02-12", "2027-03-12", "2027-04-12", "2027-05-12"]);
+    expect(rows.reduce((sum, row) => sum + row.amountCents, 0)).toBe(280000);
+    expect(installmentAmounts(sharon)).toEqual([40000, 40000, 40000, 40000, 60000, 60000]);
+    expect(planTotalCents(sharon)).toBe(280000);
+    // Only the first payment regular: the second is already a larger one.
+    expect(installmentAmounts({ installmentCents: 10000, installmentCount: 3, stepUpCents: 25000, stepUpCount: 2 })).toEqual([10000, 25000, 25000]);
+  });
+
+  it("treats a missing or half-filled step-up as no step-up", () => {
+    expect(installmentAmounts({ installmentCents: 50000, installmentCount: 3 })).toEqual([50000, 50000, 50000]);
+    expect(installmentAmounts({ installmentCents: 50000, installmentCount: 3, stepUpCents: 0, stepUpCount: 0 })).toEqual([50000, 50000, 50000]);
+    expect(installmentAmounts({ installmentCents: 50000, installmentCount: 3, stepUpCents: 90000, stepUpCount: 0 })).toEqual([50000, 50000, 50000]);
+    expect(stepUpCountOf({ installmentCents: 50000, installmentCount: 3, stepUpCents: 0, stepUpCount: 2 })).toBe(0);
+    expect(planTotalCents({ installmentCents: 50000, installmentCount: 3 })).toBe(150000);
+  });
+
+  it("words a stepped plan in one phrase, singular where it is one payment", () => {
+    expect(describeSteppedPayments({ installmentCents: 40000, installmentCount: 6, stepUpCents: 60000, stepUpCount: 2 }, "usd")).toBe(
+      "4 payments of $400.00, then 2 payments of $600.00",
+    );
+    expect(describeSteppedPayments({ installmentCents: 40000, installmentCount: 2, stepUpCents: 60000, stepUpCount: 1 }, "usd")).toBe(
+      "1 payment of $400.00, then 1 payment of $600.00",
+    );
+  });
+});
+
+describe("reopening after a default", () => {
+  it("keeps one amount as a plain plan", () => {
+    expect(planAmountsFromUnpaid([50000, 50000, 50000])).toEqual({ installmentCents: 50000, installmentCount: 3, stepUpCents: 0, stepUpCount: 0 });
+    // Only the larger payments were left: they become the regular amount.
+    expect(planAmountsFromUnpaid([60000, 60000])).toEqual({ installmentCents: 60000, installmentCount: 2, stepUpCents: 0, stepUpCount: 0 });
+    expect(planAmountsFromUnpaid([60000])).toEqual({ installmentCents: 60000, installmentCount: 1, stepUpCents: 0, stepUpCount: 0 });
+  });
+
+  it("keeps a lower then a higher amount as a stepped plan", () => {
+    const rebuilt = planAmountsFromUnpaid([40000, 40000, 40000, 60000, 60000]);
+    expect(rebuilt).toEqual({ installmentCents: 40000, installmentCount: 5, stepUpCents: 60000, stepUpCount: 2 });
+    expect(planAmountsFromUnpaid([40000, 60000, 60000])).toEqual({ installmentCents: 40000, installmentCount: 3, stepUpCents: 60000, stepUpCount: 2 });
+  });
+
+  it("always satisfies the table's rules when it answers", () => {
+    for (const unpaid of [[40000, 60000], [40000, 40000, 60000], [25000, 25000, 25000, 25000, 50000, 50000], [70000]]) {
+      const rebuilt = planAmountsFromUnpaid(unpaid);
+      expect(rebuilt).not.toBeNull();
+      if (!rebuilt) continue;
+      // The balance equation, with the unpaid rows as the balance.
+      expect(planTotalCents(rebuilt)).toBe(unpaid.reduce((sum, amount) => sum + amount, 0));
+      expect(installmentAmounts(rebuilt)).toEqual(unpaid);
+      expect(rebuilt.stepUpCount).toBeLessThan(rebuilt.installmentCount);
+      expect(rebuilt.stepUpCount === 0).toBe(rebuilt.stepUpCents === 0);
+      if (rebuilt.stepUpCount > 0) expect(rebuilt.stepUpCents).toBeGreaterThan(rebuilt.installmentCents);
+    }
+  });
+
+  it("answers null for rows that are not such a plan, so the owner gets a draft", () => {
+    expect(planAmountsFromUnpaid([])).toBeNull();
+    expect(planAmountsFromUnpaid([40000, 50000, 60000])).toBeNull();
+    expect(planAmountsFromUnpaid([60000, 40000])).toBeNull();
+    expect(planAmountsFromUnpaid([40000, 60000, 40000])).toBeNull();
+    expect(planAmountsFromUnpaid([40000, 0])).toBeNull();
+    expect(planAmountsFromUnpaid(new Array(37).fill(10000))).toBeNull();
+  });
+});
+
+describe("the Stripe phases of a stepped plan", () => {
+  // First charge (the billing anchor) on 12 December 2026 at 18:00 UTC.
+  const anchor = Date.UTC(2026, 11, 12, 18, 0, 0) / 1000;
+  const unix = (isoText: string) => Date.parse(isoText) / 1000;
+  const sharon = { installmentCents: 40000, installmentCount: 6, stepUpCents: 60000, stepUpCount: 2 };
+
+  it("puts the regular phase first and the larger phase on the last payments", () => {
+    const planned = stepUpPhases({ ...sharon, anchorUnix: anchor, phaseStartUnix: anchor, nowUnix: anchor + 60 });
+    expect(planned.ok).toBe(true);
+    if (!planned.ok) return;
+    const { regular, stepUp, stepStart, end } = planned.phases;
+    expect(regular).toEqual({ start: anchor, end: unix("2027-04-12T18:00:00Z"), unitAmount: 40000, payments: 4 });
+    expect(stepUp).toEqual({ start: unix("2027-04-12T18:00:00Z"), end: unix("2027-06-12T18:00:00Z"), unitAmount: 60000, payments: 2 });
+    expect(stepStart).toBe(regular.end);
+    expect(end).toBe(stepUp.end);
+    // The money the two phases bill is the plan's total, and nothing bills after the end.
+    expect(regular.payments * regular.unitAmount + stepUp.payments * stepUp.unitAmount).toBe(planTotalCents(sharon));
+    expect(regular.payments + stepUp.payments).toBe(sharon.installmentCount);
+  });
+
+  it("ends one month after the last payment, where a further payment would have been raised", () => {
+    const planned = stepUpPhases({ ...sharon, anchorUnix: anchor, phaseStartUnix: anchor, nowUnix: anchor });
+    if (!planned.ok) throw new Error("expected phases");
+    // Payments fall on the anchor + 0..5 months; the end is anchor + 6 months.
+    expect(new Date(planned.phases.end * 1000).toISOString()).toBe("2027-06-12T18:00:00.000Z");
+  });
+
+  it("clamps to the month's last day the way Stripe bills an anchor on the 31st", () => {
+    const january = Date.UTC(2027, 0, 31, 12, 0, 0) / 1000;
+    const planned = stepUpPhases({ installmentCents: 10000, installmentCount: 3, stepUpCents: 20000, stepUpCount: 2, anchorUnix: january, phaseStartUnix: january, nowUnix: january });
+    if (!planned.ok) throw new Error("expected phases");
+    expect(new Date(planned.phases.stepStart * 1000).toISOString()).toBe("2027-02-28T12:00:00.000Z");
+    expect(new Date(planned.phases.end * 1000).toISOString()).toBe("2027-04-30T12:00:00.000Z");
+    expect(planned.phases.regular.payments).toBe(1);
+    expect(planned.phases.stepUp.payments).toBe(2);
+  });
+
+  it("has nothing to install for a plan with equal payments or a single payment", () => {
+    expect(stepUpPhases({ installmentCents: 50000, installmentCount: 4, anchorUnix: anchor, phaseStartUnix: anchor, nowUnix: anchor })).toEqual({ ok: false, reason: "not_stepped" });
+    expect(stepUpPhases({ installmentCents: 50000, installmentCount: 1, stepUpCents: 0, stepUpCount: 0, anchorUnix: anchor, phaseStartUnix: anchor, nowUnix: anchor })).toEqual({ ok: false, reason: "not_stepped" });
+    // Never a plan with no regular payment, whatever a row says.
+    expect(stepUpPhases({ installmentCents: 50000, installmentCount: 1, stepUpCents: 90000, stepUpCount: 1, anchorUnix: anchor, phaseStartUnix: anchor, nowUnix: anchor }).ok).toBe(false);
+  });
+
+  it("refuses once the first larger payment's date has arrived, and still says where the boundaries are", () => {
+    const stepStart = unix("2027-04-12T18:00:00Z");
+    const before = stepUpPhases({ ...sharon, anchorUnix: anchor, phaseStartUnix: anchor, nowUnix: stepStart - 1 });
+    expect(before.ok).toBe(true);
+    const at = stepUpPhases({ ...sharon, anchorUnix: anchor, phaseStartUnix: anchor, nowUnix: stepStart });
+    expect(at).toEqual({ ok: false, reason: "too_late", stepStart, end: unix("2027-06-12T18:00:00Z") });
+  });
+
+  it("recognises the schedule only when it cancels at the end on the expected boundaries", () => {
+    const expected = { stepStart: unix("2027-04-12T18:00:00Z"), end: unix("2027-06-12T18:00:00Z") };
+    const phases = [
+      { start_date: anchor, end_date: expected.stepStart },
+      { start_date: expected.stepStart, end_date: expected.end },
+    ];
+    expect(scheduleCarriesStepUp({ end_behavior: "cancel", status: "active", phases }, expected)).toBe(true);
+    // What `from_subscription` gives before the phases are written: one phase, released at its end.
+    expect(scheduleCarriesStepUp({ end_behavior: "release", status: "active", phases: [{ start_date: anchor, end_date: anchor + 2_678_400 }] }, expected)).toBe(false);
+    expect(scheduleCarriesStepUp({ end_behavior: "release", status: "active", phases }, expected)).toBe(false);
+    expect(scheduleCarriesStepUp({ end_behavior: "cancel", status: "canceled", phases }, expected)).toBe(false);
+    expect(scheduleCarriesStepUp({ end_behavior: "cancel", status: "active", phases: [phases[0], { start_date: expected.stepStart, end_date: expected.end + 1 }] }, expected)).toBe(false);
+    expect(scheduleCarriesStepUp({ end_behavior: "cancel", status: "active", phases: [{ start_date: anchor, end_date: expected.stepStart + 5 }, phases[1]] }, expected)).toBe(false);
+    expect(scheduleCarriesStepUp({ end_behavior: "cancel", status: "active", phases: [] }, expected)).toBe(false);
+  });
+
+  it("alerts on the first failure, then daily, and every run from three days before the first larger payment", () => {
+    const due = new Date("2027-04-12T18:00:00Z");
+    const hour = 3_600_000;
+    const now = new Date("2026-12-12T19:00:00Z");
+    expect(stepUpAlertDue({ now, lastAlertedAt: null, firstStepUpDueAt: due })).toBe(true);
+    expect(stepUpAlertDue({ now, lastAlertedAt: new Date(now.getTime() - hour), firstStepUpDueAt: due })).toBe(false);
+    expect(stepUpAlertDue({ now, lastAlertedAt: new Date(now.getTime() - 23 * hour), firstStepUpDueAt: due })).toBe(false);
+    expect(stepUpAlertDue({ now, lastAlertedAt: new Date(now.getTime() - 24 * hour), firstStepUpDueAt: due })).toBe(true);
+    const close = new Date(due.getTime() - 3 * 24 * hour);
+    expect(stepUpAlertDue({ now: close, lastAlertedAt: new Date(close.getTime() - hour), firstStepUpDueAt: due })).toBe(true);
+    expect(stepUpAlertDue({ now: new Date(close.getTime() - hour), lastAlertedAt: new Date(close.getTime() - 2 * hour), firstStepUpDueAt: due })).toBe(false);
+    expect(stepUpAlertDue({ now: new Date(due.getTime() + hour), lastAlertedAt: new Date(due.getTime()), firstStepUpDueAt: due })).toBe(true);
+    expect(stepUpAlertDue({ now, lastAlertedAt: new Date(now.getTime() - hour), firstStepUpDueAt: null })).toBe(false);
+  });
 });
 
 describe("authorization text", () => {
@@ -160,6 +319,60 @@ describe("authorization text", () => {
     expect(buildAuthorizationText({ ...base, installmentCount: 1, firstChargeOn: "2026-11-01" })).not.toContain(EM_DASH);
   });
 
+  it("keeps the sentence of a plan with equal payments exactly as it was", () => {
+    const expected =
+      "I authorize Boss Clinician to charge the card I am adding for 4 monthly payments of $500.00, $2,000.00 in total, " +
+      "toward my balance for Bali 2027. The first payment is charged automatically on December 5, 2026, and the last on March 5, 2027. " +
+      "Each payment is charged automatically on its date, and the charges stop once $2,000.00 has been paid.";
+    expect(buildAuthorizationText({ ...base, firstChargeOn: "2026-12-05" })).toBe(expected);
+    // The step-up fields at zero (how every existing plan is stored) change nothing.
+    expect(buildAuthorizationText({ ...base, firstChargeOn: "2026-12-05", stepUpCents: 0, stepUpCount: 0 })).toBe(expected);
+    expect(termsFingerprint(buildAuthorizationText({ ...base, firstChargeOn: "2026-12-05", stepUpCents: 0, stepUpCount: 0 }))).toBe(termsFingerprint(expected));
+  });
+
+  it("words a stepped plan with both amounts, the true total and both end dates", () => {
+    const text = buildAuthorizationText({
+      retreatTitle: "FlourisHealer Bali 2027",
+      installmentCents: 40000,
+      installmentCount: 6,
+      stepUpCents: 60000,
+      stepUpCount: 2,
+      currency: "usd",
+      firstChargeOn: "2026-12-12",
+      today: "2026-11-23",
+    });
+    expect(text).toBe(
+      "I authorize Boss Clinician to charge the card I am adding for 6 monthly payments toward my balance for FlourisHealer Bali 2027: " +
+        "4 payments of $400.00, then 2 payments of $600.00, $2,800.00 in total. " +
+        "The first payment is charged on December 12, 2026, and the last on May 12, 2027. " +
+        "Each payment is charged automatically on its date, and the charges stop once $2,800.00 has been paid.",
+    );
+    expect(text).not.toContain(EM_DASH);
+  });
+
+  it("says a stepped plan's first payment is charged today when it is due", () => {
+    const text = buildAuthorizationText({
+      ...base,
+      installmentCents: 25000,
+      installmentCount: 6,
+      stepUpCents: 50000,
+      stepUpCount: 2,
+      firstChargeOn: "2026-11-01",
+    });
+    expect(text).toContain("4 payments of $250.00, then 2 payments of $500.00, $2,000.00 in total.");
+    expect(text).toContain("The first payment is charged today, November 23, 2026, and the last on April 23, 2027.");
+    expect(text).toContain("the charges stop once $2,000.00 has been paid.");
+  });
+
+  it("gives a stepped plan a different fingerprint from the same plan without the step", () => {
+    const plain = buildAuthorizationText({ ...base, installmentCount: 6, firstChargeOn: "2026-12-05" });
+    const stepped = buildAuthorizationText({ ...base, installmentCount: 6, stepUpCents: 60000, stepUpCount: 2, firstChargeOn: "2026-12-05" });
+    const larger = buildAuthorizationText({ ...base, installmentCount: 6, stepUpCents: 60001, stepUpCount: 2, firstChargeOn: "2026-12-05" });
+    const more = buildAuthorizationText({ ...base, installmentCount: 6, stepUpCents: 60000, stepUpCount: 3, firstChargeOn: "2026-12-05" });
+    const prints = [plain, stepped, larger, more].map(termsFingerprint);
+    expect(new Set(prints).size).toBe(4);
+  });
+
   it("fingerprints the exact sentence", () => {
     const a = buildAuthorizationText({ ...base, firstChargeOn: "2026-12-05" });
     const b = buildAuthorizationText({ ...base, firstChargeOn: "2026-12-05", installmentCents: 50001 });
@@ -186,7 +399,101 @@ describe("plan validation", () => {
   it("accepts a balance that divides evenly", () => {
     const result = validatePlanInput(good, context);
     expect(result.ok).toBe(true);
-    if (result.ok) expect(result.value).toEqual(good);
+    // A plan saved without the step-up fields has none: 0 and 0.
+    if (result.ok) expect(result.value).toEqual({ ...good, stepUpCents: 0, stepUpCount: 0 });
+  });
+
+  // Sharon: $2,800 still to pay = 4 x $400 + 2 x $600, December to May.
+  const sharon = {
+    ...good,
+    agreedTotalCents: 630000,
+    priorPaidCents: 350000,
+    installmentCents: 40000,
+    installmentCount: 6,
+    stepUpCents: 60000,
+    stepUpCount: 2,
+    firstChargeOn: "2026-12-12",
+    finalDueOn: "2027-06-08",
+  };
+
+  it("accepts larger last payments that clear the balance exactly", () => {
+    const result = validatePlanInput(sharon, context);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.value.stepUpCents).toBe(60000);
+      expect(result.value.stepUpCount).toBe(2);
+      expect(result.value.installmentCents).toBe(40000);
+      expect(result.value.installmentCount).toBe(6);
+    }
+    // Norma: $2,000 = 4 x $250 + 2 x $500.
+    expect(
+      validatePlanInput(
+        { ...sharon, agreedTotalCents: 200000, priorPaidCents: 0, installmentCents: 25000, stepUpCents: 50000, firstChargeOn: "2026-12-21" },
+        context,
+      ).ok,
+    ).toBe(true);
+  });
+
+  it("refuses a step-up count that leaves no regular payment", () => {
+    for (const stepUpCount of [6, 7]) {
+      const result = validatePlanInput({ ...sharon, stepUpCount }, context);
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(result.error).toContain(`The number of larger payments (${stepUpCount}) must be less than the number of payments (6)`);
+      }
+    }
+    // So a single payment can never be stepped.
+    const single = validatePlanInput({ ...sharon, installmentCount: 1, installmentCents: 280000, stepUpCents: 300000, stepUpCount: 1 }, context);
+    expect(single.ok).toBe(false);
+    if (!single.ok) expect(single.error).toContain("must be less than the number of payments (1)");
+  });
+
+  it("refuses a larger payment that is not larger", () => {
+    for (const stepUpCents of [40000, 39999]) {
+      const result = validatePlanInput({ ...sharon, stepUpCents }, context);
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.error).toContain("must be more than the regular monthly payment ($400.00)");
+    }
+  });
+
+  it("refuses a stepped balance that does not add up, and says the numbers", () => {
+    const result = validatePlanInput({ ...sharon, stepUpCents: 80000 }, context);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).toContain("The balance ($2,800.00) must equal the regular payments plus the larger ones.");
+      expect(result.error).toContain("$400.00 x 4 plus $800.00 x 2 is $3,200.00.");
+    }
+    // The unstepped sentence is not used for a stepped plan, and the other way round.
+    const plain = validatePlanInput({ ...sharon, stepUpCents: 0, stepUpCount: 0 }, context);
+    expect(plain.ok).toBe(false);
+    if (!plain.ok) expect(plain.error).toContain("$400.00 x 6 is $2,400.00");
+  });
+
+  it("refuses half a step-up: an amount with no count, or a count with no amount", () => {
+    for (const half of [{ stepUpCents: 60000, stepUpCount: 0 }, { stepUpCents: 0, stepUpCount: 2 }]) {
+      const result = validatePlanInput({ ...sharon, ...half }, context);
+      expect(result.ok).toBe(false);
+      if (!result.ok) expect(result.error).toContain("enter both the larger payment amount and how many");
+    }
+    expect(validatePlanInput({ ...sharon, stepUpCount: 1.5 }, context).ok).toBe(false);
+    expect(validatePlanInput({ ...sharon, stepUpCents: -1 }, context).ok).toBe(false);
+    const over = validatePlanInput({ ...sharon, stepUpCents: 10_000_001 }, context);
+    expect(over.ok).toBe(false);
+    if (!over.ok) expect(over.error).toContain("$100,000.00 or less");
+  });
+
+  it("measures a stepped plan's last payment against the final due date", () => {
+    // 12 Dec + 5 months = 12 May 2027.
+    expect(validatePlanInput({ ...sharon, finalDueOn: "2027-05-12" }, context).ok).toBe(true);
+    const late = validatePlanInput({ ...sharon, finalDueOn: "2027-05-11" }, context);
+    expect(late.ok).toBe(false);
+    if (!late.ok) expect(late.error).toContain("May 12, 2027");
+  });
+
+  it("counts what was already collected here for a stepped plan too", () => {
+    // $400 collected by an earlier subscription: 3 x $400 + 2 x $600 remains.
+    expect(validatePlanInput({ ...sharon, installmentCount: 5 }, { ...context, carriedPaidCents: 40000 }).ok).toBe(true);
+    expect(validatePlanInput(sharon, { ...context, carriedPaidCents: 40000 }).ok).toBe(false);
   });
 
   it("refuses a balance that is not the monthly amount times the count", () => {
@@ -316,6 +623,50 @@ describe("schedule and paid-here totals", () => {
     expect(rows.slice(1).map((row) => row.dueDate)).toEqual(["2027-04-02", "2027-05-02", "2027-06-02"]);
   });
 
+  it("projects a stepped plan with each row's own amount before billing", () => {
+    const rows = buildSchedule({
+      status: "open",
+      linked: [],
+      current: null,
+      firstChargeOn: "2026-12-12",
+      installmentCents: 40000,
+      installmentCount: 6,
+      stepUpCents: 60000,
+      stepUpCount: 2,
+      today: "2026-11-23",
+    });
+    expect(rows.map((row) => row.amountCents)).toEqual([40000, 40000, 40000, 40000, 60000, 60000]);
+    expect(rows[5].dueDate).toBe("2027-05-12");
+  });
+
+  it("shows a stepped plan's real instalments, larger amounts included, once billing", () => {
+    const at = (month: number) => new Date(Date.UTC(2026, 11 + month, 12, 20));
+    const current = linkedPlan({
+      id: 1,
+      installments: [40000, 40000, 40000, 40000, 60000, 60000].map((amount, n) => ({
+        sequence: n + 1,
+        amount_cents: amount,
+        due_at: at(n),
+        paid_at: n === 0 ? at(0) : null,
+        status: n === 0 ? "paid" : "scheduled",
+      })),
+    });
+    const rows = buildSchedule({
+      status: "billing",
+      linked: [current],
+      current,
+      firstChargeOn: "2026-12-12",
+      installmentCents: 40000,
+      installmentCount: 6,
+      stepUpCents: 60000,
+      stepUpCount: 2,
+      today: "2026-12-20",
+    });
+    expect(rows.map((row) => row.amountCents)).toEqual([40000, 40000, 40000, 40000, 60000, 60000]);
+    expect(rows.map((row) => row.status)).toEqual(["paid", "scheduled", "scheduled", "scheduled", "scheduled", "scheduled"]);
+    expect(paidHereCents([current])).toBe(40000);
+  });
+
   it("shows only what was paid on a cancelled plan", () => {
     const stopped = linkedPlan({ id: 1, status: "canceled", paid: 2, unpaid: 2 });
     const rows = buildSchedule({
@@ -430,6 +781,43 @@ describe("emails", () => {
     expect(notice.text).toContain("Maya Lee (maya@example.com)");
     expect(notice.text).toContain("4 monthly payments of $500.00 ($2,000.00 in total), December 5, 2026 to March 5, 2027");
     expect(notice.text).toContain("visa ending 4242");
+  });
+
+  it("states both amounts of a stepped plan in the request and the owner notice", () => {
+    const stepped = { installmentCents: 40000, installmentCount: 6, stepUpCents: 60000, stepUpCount: 2 };
+    const email = buildRequestEmail({
+      firstName: "Sharon",
+      retreatTitle: "Bali 2027",
+      currency: "usd",
+      agreedTotalCents: 630000,
+      paidSoFarCents: 350000,
+      remainingCents: 280000,
+      ...stepped,
+      firstChargeDate: "2026-12-12",
+      chargesWhenAdded: false,
+      url: "https://example.test/p",
+      supportEmail: "",
+    });
+    expect(email.text).toContain("Your plan: 6 monthly payments: 4 payments of $400.00, then 2 payments of $600.00");
+    expect(email.html).toContain("4 payments of $400.00, then 2 payments of $600.00");
+    expect(email.text).not.toContain("6 monthly payments of $400.00");
+    expect(`${email.subject}${email.text}${email.html}`).not.toContain(EM_DASH);
+
+    const notice = buildOwnerNotice({
+      guestName: "Sharon Doe",
+      guestEmail: "sharon@example.com",
+      retreatTitle: "Bali 2027",
+      currency: "usd",
+      ...stepped,
+      firstChargeDate: "2026-12-12",
+      lastChargeDate: "2027-05-12",
+      card: "visa ending 4242",
+    });
+    expect(notice.text).toContain(
+      "6 monthly payments: 4 payments of $400.00, then 2 payments of $600.00 ($2,800.00 in total), December 12, 2026 to May 12, 2027",
+    );
+    expect(notice.text).not.toContain("$2,400.00");
+    expect(`${notice.subject}${notice.text}${notice.html}`).not.toContain(EM_DASH);
   });
 });
 
@@ -554,6 +942,23 @@ describe("balance payment receipt", () => {
     expect(all).not.toContain(EM_DASH);
     expect(all).not.toMatch(/order #/i);
     expect(all).not.toContain("/library");
+  });
+
+  it("shows the next payment's own amount when it is a larger one", () => {
+    // Payment 4 of Sharon's plan: $400 paid now, the next one is the first $600.
+    const email = buildBalanceReceiptEmail({
+      ...base,
+      amountCents: 40000,
+      sequence: 4,
+      installmentCount: 6,
+      paidSoFarCents: 510000,
+      remainingCents: 120000,
+      next: { date: "2027-04-12", amountCents: 60000 },
+    });
+    expect(email.text).toContain("  Payment: 4 of 6");
+    expect(email.text).toContain("  Amount paid: $400.00");
+    expect(email.text).toContain("  Next payment: April 12, 2027 ($600.00)");
+    expect(email.text).toContain("your next payment of $600.00 is scheduled for April 12, 2027");
   });
 
   it("says the balance is paid in full on the last payment", () => {

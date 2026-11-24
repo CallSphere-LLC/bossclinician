@@ -54,6 +54,8 @@ function auditState(plan: AdminBalancePlan) {
     priorPaidCents: plan.priorPaidCents,
     installmentCents: plan.installmentCents,
     installmentCount: plan.installmentCount,
+    stepUpCents: plan.stepUpCents,
+    stepUpCount: plan.stepUpCount,
     firstChargeOn: plan.firstChargeOn,
     finalDueOn: plan.finalDueOn,
     isTest: plan.isTest,

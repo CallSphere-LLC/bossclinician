@@ -101,6 +101,67 @@ export function nextScheduledPayment(plan: BalancePlanView): BalancePlanSchedule
   return plan.schedule.find((row) => row.status === "scheduled") ?? null;
 }
 
+/** A payment still owed: not yet taken, or tried and not gone through. */
+const stillOwed = (row: BalancePlanScheduleRow) => row.status === "scheduled" || row.status === "failed";
+
+/**
+ * The payments still owed, as runs of the same amount in the order they fall
+ * due: a plan with larger last payments gives [4 of $400.00, 2 of $600.00].
+ * Read from the schedule rows, so it stays right after some payments are made
+ * and after a plan is reopened.
+ */
+export function owedPaymentRuns(plan: BalancePlanView): { amountCents: number; count: number }[] {
+  const runs: { amountCents: number; count: number }[] = [];
+  for (const row of plan.schedule) {
+    if (!stillOwed(row)) continue;
+    const last = runs[runs.length - 1];
+    if (last && last.amountCents === row.amountCents) last.count += 1;
+    else runs.push({ amountCents: row.amountCents, count: 1 });
+  }
+  return runs;
+}
+
+/**
+ * The "Monthly payments" figure. A plan whose payments are all the regular
+ * amount reads as it always has ("$250.00 × 6 payments"). A plan with larger
+ * last payments lists what is still owed from the schedule rows:
+ * "4 payments of $400.00, then 2 payments of $600.00".
+ */
+export function monthlyPaymentsLabel(plan: BalancePlanView): string {
+  const money = (cents: number) => formatCents(cents, plan.currency);
+  const payments = (count: number) => (count === 1 ? "payment" : "payments");
+  const stepUpCents = plan.stepUpCents ?? 0;
+  const stepUpCount = plan.stepUpCount ?? 0;
+
+  let runs = owedPaymentRuns(plan);
+  const even = stepUpCount <= 0 && (runs.length === 0 || (runs.length === 1 && runs[0]?.amountCents === plan.installmentCents));
+  if (even) return `${money(plan.installmentCents)} × ${plan.installmentCount} ${payments(plan.installmentCount)}`;
+
+  // No rows to read (should not happen for a plan with larger last payments): the plan's own numbers.
+  if (runs.length === 0) {
+    const regularCount = Math.max(0, plan.installmentCount - stepUpCount);
+    runs = [
+      { amountCents: plan.installmentCents, count: regularCount },
+      { amountCents: stepUpCents, count: stepUpCount },
+    ].filter((run) => run.count > 0);
+  }
+  return runs.map((run) => `${run.count} ${payments(run.count)} of ${money(run.amountCents)}`).join(", then ");
+}
+
+/**
+ * The amount of the payment taken when the card was saved. `agreed` is the plan
+ * she was shown; `saved` is the server's answer. The payment taken is the first
+ * one that was not yet paid in the plan she agreed to, read at the same place
+ * in the saved schedule: payments made under an earlier subscription come
+ * first in both, and in the saved one that row may already be marked paid.
+ */
+export function firstPaymentCents(agreed: BalancePlanView, saved: BalancePlanView): number {
+  const index = agreed.schedule.findIndex((row) => row.status !== "paid");
+  const agreedRow = index >= 0 ? agreed.schedule[index] : undefined;
+  const savedRow = index >= 0 ? saved.schedule[index] : undefined;
+  return savedRow?.amountCents ?? agreedRow?.amountCents ?? saved.installmentCents;
+}
+
 /** "visa" → "Visa". Stripe sends card brands in lower case. */
 export function cardBrandLabel(brand: string): string {
   const known: Record<string, string> = {
@@ -298,8 +359,9 @@ export function BalancePlanPanel({ plan, slug, supportEmail, roomLabel, readOnly
   function handleConfirmed(result: { balancePlan: BalancePlanView; charged: boolean }) {
     setConfirmed(result.balancePlan);
     setFresh(null);
-    // The amount of the plan the server has just saved, which is the one charged.
-    setNotice({ charged: result.charged, amount: formatCents(result.balancePlan.installmentCents, result.balancePlan.currency) });
+    // The amount of the payment just taken, from its own row in the plan the
+    // server has just saved (`view` is still the plan she agreed to here).
+    setNotice({ charged: result.charged, amount: formatCents(firstPaymentCents(view, result.balancePlan), result.balancePlan.currency) });
     onReload?.();
   }
 
@@ -432,10 +494,7 @@ function PlanFigures({ plan, roomLabel }: { plan: BalancePlanView; roomLabel: st
       <Figure label="Paid so far" value={money(plan.priorPaidCents + plan.paidHereCents)} />
       <Figure label="Balance remaining" value={money(plan.remainingCents)} />
       {plan.state !== "completed" && plan.installmentCount > 0 && (
-        <Figure
-          label="Monthly payments"
-          value={`${money(plan.installmentCents)} × ${plan.installmentCount} ${plan.installmentCount === 1 ? "payment" : "payments"}`}
-        />
+        <Figure label="Monthly payments" value={monthlyPaymentsLabel(plan)} />
       )}
       {plan.finalDueDate && <Figure label="Final payment deadline" value={formatRetreatDate(plan.finalDueDate)} />}
     </dl>

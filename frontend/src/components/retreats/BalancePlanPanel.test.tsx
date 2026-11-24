@@ -47,6 +47,9 @@ import {
   balancePlanReturnUrl,
   cardBrandLabel,
   confirmBalancePlanCard,
+  firstPaymentCents,
+  monthlyPaymentsLabel,
+  owedPaymentRuns,
   setupIntentIdFromSecret,
   submitBalancePlanCard,
 } from "./BalancePlanPanel";
@@ -81,6 +84,36 @@ function plan(overrides: Partial<BalancePlanView> = {}): BalancePlanView {
     problem: "",
     ...overrides,
   };
+}
+
+const STEPPED_AUTHORIZATION =
+  "I authorize Boss Clinician to charge the card I am adding for 6 monthly payments toward my balance for FlourisHealer Bali 2027: " +
+  "4 payments of $400.00, then 2 payments of $600.00, $2,800.00 in total.";
+
+/** A balance of $2,800.00 paid as 4 x $400.00 and then 2 x $600.00, with the first `paid` payments already made. */
+function steppedPlan(paid = 0, overrides: Partial<BalancePlanView> = {}): BalancePlanView {
+  const due = ["2026-12-12", "2027-01-12", "2027-02-12", "2027-03-12", "2027-04-12", "2027-05-12"];
+  const paidCents = Math.min(paid, 4) * 40000 + Math.max(0, paid - 4) * 60000;
+  return plan({
+    agreedTotalCents: 430000,
+    priorPaidCents: 150000,
+    paidHereCents: paidCents,
+    remainingCents: 280000 - paidCents,
+    installmentCents: 40000,
+    installmentCount: 6,
+    stepUpCents: 60000,
+    stepUpCount: 2,
+    schedule: due.map((dueDate, index) => ({
+      sequence: index + 1,
+      amountCents: index < 4 ? 40000 : 60000,
+      dueDate,
+      status: index < paid ? ("paid" as const) : ("scheduled" as const),
+    })),
+    firstChargeDate: "2026-12-12",
+    finalDueDate: "2027-06-08",
+    authorizationText: STEPPED_AUTHORIZATION,
+    ...overrides,
+  });
 }
 
 const RETURN_URL = "https://bossclinician.com/retreats/dashboard/bali-2027/payments";
@@ -213,6 +246,103 @@ describe("the card fields", () => {
   it("names the first payment on the button when it is charged today", () => {
     const html = render(plan({ chargesToday: true }));
     expect(html).toMatch(/<button[^>]*type="submit"[^>]*>Save card and pay \$1,000\.00 now<\/button>/);
+  });
+
+  it("names the first row's amount on the button for a plan with larger last payments", () => {
+    const html = render(steppedPlan(0, { chargesToday: true }));
+    expect(html).toMatch(/<button[^>]*type="submit"[^>]*>Save card and pay \$400\.00 now<\/button>/);
+    expect(html).not.toContain("$600.00 now");
+    expect(html).toContain(`<span>${STEPPED_AUTHORIZATION}</span>`);
+  });
+
+  it("takes the button amount from the first unpaid row, not from the regular amount, after a reopen", () => {
+    // Reopened with only the two larger payments left: the regular amount on the plan is not what is charged.
+    const reopened = steppedPlan(4, { chargesToday: true });
+    expect(render(reopened)).toMatch(/<button[^>]*type="submit"[^>]*>Save card and pay \$600\.00 now<\/button>/);
+  });
+
+  it("falls back to the regular amount on the button only when there is no schedule", () => {
+    const html = render(plan({ chargesToday: true, schedule: [] }));
+    expect(html).toMatch(/<button[^>]*type="submit"[^>]*>Save card and pay \$1,000\.00 now<\/button>/);
+  });
+});
+
+describe("the 'Monthly payments' figure", () => {
+  it("is unchanged for a plan whose payments are all the same", () => {
+    expect(monthlyPaymentsLabel(plan())).toBe("$1,000.00 × 4 payments");
+    expect(monthlyPaymentsLabel(plan({ stepUpCents: 0, stepUpCount: 0 }))).toBe("$1,000.00 × 4 payments");
+    expect(monthlyPaymentsLabel(plan({ installmentCount: 1, schedule: plan().schedule.slice(0, 1) }))).toBe("$1,000.00 × 1 payment");
+    // Still the plan's own count once some payments are made, as before.
+    const billing = plan({ state: "billing" });
+    billing.schedule[0] = { ...billing.schedule[0], status: "paid" };
+    expect(monthlyPaymentsLabel(billing)).toBe("$1,000.00 × 4 payments");
+    // And with no schedule at all.
+    expect(monthlyPaymentsLabel(plan({ schedule: [] }))).toBe("$1,000.00 × 4 payments");
+  });
+
+  it("lists the regular payments and then the larger last ones", () => {
+    expect(owedPaymentRuns(steppedPlan())).toEqual([
+      { amountCents: 40000, count: 4 },
+      { amountCents: 60000, count: 2 },
+    ]);
+    expect(monthlyPaymentsLabel(steppedPlan())).toBe("4 payments of $400.00, then 2 payments of $600.00");
+  });
+
+  it("counts only the payments still owed, from the schedule rows", () => {
+    expect(monthlyPaymentsLabel(steppedPlan(1, { state: "billing" }))).toBe("3 payments of $400.00, then 2 payments of $600.00");
+    expect(monthlyPaymentsLabel(steppedPlan(3, { state: "billing" }))).toBe("1 payment of $400.00, then 2 payments of $600.00");
+    expect(monthlyPaymentsLabel(steppedPlan(4, { state: "billing" }))).toBe("2 payments of $600.00");
+    expect(monthlyPaymentsLabel(steppedPlan(5, { state: "billing" }))).toBe("1 payment of $600.00");
+    // A payment that did not go through is still owed.
+    const pastDue = steppedPlan(4, { state: "past_due" });
+    pastDue.schedule[4] = { ...pastDue.schedule[4], status: "failed" };
+    expect(monthlyPaymentsLabel(pastDue)).toBe("2 payments of $600.00");
+  });
+
+  it("reads a stepped schedule even when an older server sends no step-up fields", () => {
+    const older = steppedPlan();
+    delete older.stepUpCents;
+    delete older.stepUpCount;
+    expect(monthlyPaymentsLabel(older)).toBe("4 payments of $400.00, then 2 payments of $600.00");
+  });
+
+  it("lists more than two amounts in the order they fall due", () => {
+    const three = steppedPlan();
+    three.schedule[5] = { ...three.schedule[5], amountCents: 70000 };
+    expect(monthlyPaymentsLabel(three)).toBe("4 payments of $400.00, then 1 payment of $600.00, then 1 payment of $700.00");
+  });
+
+  it("uses the plan's own numbers for a stepped plan that has no schedule rows", () => {
+    expect(monthlyPaymentsLabel(steppedPlan(0, { schedule: [] }))).toBe("4 payments of $400.00, then 2 payments of $600.00");
+  });
+});
+
+describe("the amount named once the card is saved and the first payment taken", () => {
+  it("is the first row's amount whether or not that row is marked paid yet", () => {
+    const agreed = steppedPlan();
+    expect(firstPaymentCents(agreed, steppedPlan(1, { state: "billing" }))).toBe(40000);
+    expect(firstPaymentCents(agreed, steppedPlan(0, { state: "billing" }))).toBe(40000);
+  });
+
+  it("is not the second payment's amount on a plan with one regular payment", () => {
+    const oneThenLarger = (paid: number) => {
+      const view = steppedPlan(paid, { stepUpCount: 5 });
+      view.schedule = view.schedule.map((row, index) => ({ ...row, amountCents: index === 0 ? 40000 : 48000 }));
+      return view;
+    };
+    // The saved plan already shows payment 1 as paid; its first scheduled row is a larger one.
+    expect(firstPaymentCents(oneThenLarger(0), oneThenLarger(1))).toBe(40000);
+  });
+
+  it("skips payments made under an earlier subscription", () => {
+    // Reopened after four payments: the payment taken now is the fifth row, a larger one.
+    expect(firstPaymentCents(steppedPlan(4), steppedPlan(5, { state: "billing" }))).toBe(60000);
+    expect(firstPaymentCents(steppedPlan(4), steppedPlan(4, { state: "billing" }))).toBe(60000);
+  });
+
+  it("falls back to the row she agreed to, then to the regular amount", () => {
+    expect(firstPaymentCents(steppedPlan(4), steppedPlan(0, { schedule: [] }))).toBe(60000);
+    expect(firstPaymentCents(plan({ schedule: [] }), plan({ schedule: [] }))).toBe(100000);
   });
 });
 

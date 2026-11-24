@@ -256,8 +256,13 @@ export interface BalancePlanView {
   priorPaidCents: number;
   paidHereCents: number;
   remainingCents: number;
+  /** The regular monthly amount. Amounts shown to the guest come from `schedule`, never from this times a count. */
   installmentCents: number;
   installmentCount: number;
+  /** The amount of each of the LAST `stepUpCount` payments; 0 or absent (an older server) when every payment is the same. */
+  stepUpCents?: number;
+  /** How many final payments use `stepUpCents`; 0 or absent when every payment is the same. */
+  stepUpCount?: number;
   /** Real instalments once billing; before that a projection from the first charge date. */
   schedule: BalancePlanScheduleRow[];
   firstChargeDate: string;

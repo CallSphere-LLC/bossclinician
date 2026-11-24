@@ -147,27 +147,160 @@ export interface ProjectedPayment {
  * the FIRST date, not from the one before it, so a plan that starts on the 31st
  * goes Jan 31, Feb 28, Mar 31 and does not drift to the 28th for good.
  */
-export function projectSchedule(firstChargeOn: string, count: number, amountCents: number): ProjectedPayment[] {
+export function projectSchedule(firstChargeOn: string, count: number, amountCents: number, stepUpCents = 0, stepUpCount = 0): ProjectedPayment[] {
   if (!isIsoDate(firstChargeOn) || !Number.isInteger(count) || count < 1 || count > MAX_INSTALLMENT_COUNT) return [];
+  const stepped = isSteppedPlan(count, stepUpCents, stepUpCount);
   return Array.from({ length: count }, (_, i) => ({
     sequence: i + 1,
-    amountCents,
+    // The LAST `stepUpCount` payments are the larger ones.
+    amountCents: stepped && i >= count - stepUpCount ? stepUpCents : amountCents,
     dueDate: addMonthsClamped(firstChargeOn, i),
   }));
+}
+
+/**
+ * True when the last payments really are larger: a larger amount, for at least
+ * one payment, with at least one regular payment before them. Anything else is
+ * read as a plain plan of equal payments.
+ */
+export function isSteppedPlan(count: number, stepUpCents: number | null | undefined, stepUpCount: number | null | undefined): boolean {
+  const cents = stepUpCents ?? 0;
+  const last = stepUpCount ?? 0;
+  return Number.isInteger(cents) && Number.isInteger(last) && cents > 0 && last > 0 && last < count;
+}
+
+/**
+ * What the whole plan adds up to: regular x (count - N) + larger x N. With no
+ * larger payments (N = 0) that is simply regular x count. This is the one
+ * equation the balance is checked against, here and on the server.
+ */
+export function planTotalCents(count: number, installmentCents: number, stepUpCents = 0, stepUpCount = 0): number {
+  if (!isSteppedPlan(count, stepUpCents, stepUpCount)) return installmentCents * count;
+  return installmentCents * (count - stepUpCount) + stepUpCents * stepUpCount;
 }
 
 /**
  * How many monthly payments clear the balance exactly, or null when the balance
  * does not divide evenly (there is no odd final payment) or the answer is
  * outside 1 to 36.
+ *
+ * With larger last payments (`stepUpCount` of them at `stepUpCents`), it is the
+ * total number of payments for which regular x (count - N) + larger x N equals
+ * the balance, with at least one regular payment first.
  */
-export function suggestInstallmentCount(balanceCents: number | null, installmentCents: number | null): number | null {
+export function suggestInstallmentCount(balanceCents: number | null, installmentCents: number | null, stepUpCents = 0, stepUpCount = 0): number | null {
   if (balanceCents === null || installmentCents === null) return null;
   if (!Number.isInteger(balanceCents) || !Number.isInteger(installmentCents)) return null;
   if (balanceCents <= 0 || installmentCents <= 0) return null;
+  if (stepUpCount > 0 || stepUpCents > 0) {
+    if (!Number.isInteger(stepUpCents) || !Number.isInteger(stepUpCount)) return null;
+    if (stepUpCount < 1 || stepUpCents <= installmentCents) return null;
+    const regularPart = balanceCents - stepUpCents * stepUpCount;
+    if (regularPart <= 0 || regularPart % installmentCents !== 0) return null;
+    const total = regularPart / installmentCents + stepUpCount;
+    return total <= MAX_INSTALLMENT_COUNT ? total : null;
+  }
   if (balanceCents % installmentCents !== 0) return null;
   const count = balanceCents / installmentCents;
   return count >= 1 && count <= MAX_INSTALLMENT_COUNT ? count : null;
+}
+
+/* ───────────────────────────── fit to the deadline ─────────────────────── */
+
+/** Whole days from one date to a later one (negative when `to` is earlier). Null unless both are real dates. */
+export function daysBetween(fromIso: string, toIsoDate: string): number | null {
+  const from = parseIsoDate(fromIso);
+  const to = parseIsoDate(toIsoDate);
+  if (!from || !to) return null;
+  const ms = Date.UTC(to.year, to.month - 1, to.day) - Date.UTC(from.year, from.month - 1, from.day);
+  return Math.round(ms / 86_400_000);
+}
+
+/**
+ * How many monthly payment dates, counted from `firstChargeOn`, fall on or
+ * before the deadline. Never more than 36, the most a plan can have.
+ */
+export function countPaymentDatesByDeadline(firstChargeOn: string, finalDueOn: string): number {
+  if (!isIsoDate(firstChargeOn) || !isIsoDate(finalDueOn)) return 0;
+  let count = 0;
+  while (count < MAX_INSTALLMENT_COUNT && addMonthsClamped(firstChargeOn, count) <= finalDueOn) count += 1;
+  return count;
+}
+
+export interface DeadlineFitInput {
+  balanceCents: number | null;
+  /** The regular monthly amount. */
+  installmentCents: number | null;
+  firstChargeOn: string;
+  finalDueOn: string;
+  /** YYYY-MM-DD in Pacific time. A first charge date that has passed is counted from this day, as everywhere else. */
+  today?: string;
+}
+
+export type DeadlineFit =
+  /** The regular amount alone clears the balance in time: `count` equal payments, nothing larger. */
+  | { kind: "even"; count: number; datesThatFit: number }
+  /** `count` payments in all; the last `stepUpCount` of them are `stepUpCents` each. */
+  | { kind: "stepped"; count: number; stepUpCount: number; stepUpCents: number; datesThatFit: number }
+  /** It cannot be paid off in time at this monthly amount: the monthly amount must be raised. */
+  | { kind: "raise"; datesThatFit: number }
+  /** The monthly amount is more than the whole balance. */
+  | { kind: "too-much"; datesThatFit: number }
+  /** No payment date falls on or before the deadline. */
+  | { kind: "no-dates" };
+
+/**
+ * Works out a plan that is paid off by the final deadline while keeping the
+ * guest's regular monthly amount for as long as possible.
+ *
+ * 1. Count the monthly dates that fall on or before the deadline, from the
+ *    later of the first charge date and today.
+ * 2. If the regular amount alone clears the balance exactly within that many
+ *    payments, that is the answer and nothing is made larger.
+ * 3. Otherwise the last N payments are made larger, by one single amount, so
+ *    that regular x (count - N) + larger x N is the balance to the cent. A
+ *    whole-dollar larger amount is preferred over one with cents. The increase
+ *    is spread over 2 payments when it can be ("the last few payments"), then
+ *    3 and so on; a single larger payment is used only when nothing else works.
+ *
+ * When the regular amount would finish early but does not divide the balance
+ * evenly, fewer payments are used (the larger amount can never be smaller than
+ * the regular one). Null while a number or a date is still missing.
+ */
+export function fitToDeadline(input: DeadlineFitInput): DeadlineFit | null {
+  const balance = input.balanceCents;
+  const regular = input.installmentCents;
+  if (balance === null || regular === null) return null;
+  if (!Number.isInteger(balance) || !Number.isInteger(regular) || balance <= 0 || regular <= 0) return null;
+  if (!isIsoDate(input.firstChargeOn) || !isIsoDate(input.finalDueOn)) return null;
+
+  const today = input.today && isIsoDate(input.today) ? input.today : "";
+  const start = today && input.firstChargeOn < today ? today : input.firstChargeOn;
+  const datesThatFit = countPaymentDatesByDeadline(start, input.finalDueOn);
+  if (datesThatFit === 0) return { kind: "no-dates" };
+
+  const regularPayments = Math.floor(balance / regular);
+  if (regularPayments === 0) return { kind: "too-much", datesThatFit };
+  const count = Math.min(datesThatFit, regularPayments);
+  if (regular * count === balance) return { kind: "even", count, datesThatFit };
+  // One payment cannot be split into a regular part and a larger part.
+  if (count < 2) return { kind: "raise", datesThatFit };
+
+  // Two larger payments first, then three and so on; one on its own comes last.
+  const order: number[] = [];
+  for (let n = 2; n <= count - 1; n += 1) order.push(n);
+  order.push(1);
+  for (const wholeDollars of [true, false]) {
+    for (const n of order) {
+      const forLarger = balance - regular * (count - n);
+      if (forLarger % n !== 0) continue;
+      const larger = forLarger / n;
+      if (larger <= regular || larger > MAX_AMOUNT_CENTS) continue;
+      if (wholeDollars && larger % 100 !== 0) continue;
+      return { kind: "stepped", count, stepUpCount: n, stepUpCents: larger, datesThatFit };
+    }
+  }
+  return { kind: "raise", datesThatFit };
 }
 
 /* ──────────────────────────────── the form ─────────────────────────────── */
@@ -183,9 +316,24 @@ export interface BalancePlanForm {
   firstChargeOn: string;
   finalDueOn: string;
   isTest: boolean;
+  /** "Make the last payments larger" is ticked. While it is not, the two boxes below are ignored. */
+  stepUp: boolean;
+  /** Larger payment amount, in dollars as typed. */
+  stepUpAmount: string;
+  /** How many of the last payments are the larger amount. */
+  stepUpCount: string;
 }
 
-export type BalancePlanField = "agreedTotal" | "discount" | "priorPaid" | "installment" | "installmentCount" | "firstChargeOn" | "finalDueOn";
+export type BalancePlanField =
+  | "agreedTotal"
+  | "discount"
+  | "priorPaid"
+  | "installment"
+  | "installmentCount"
+  | "stepUpAmount"
+  | "stepUpCount"
+  | "firstChargeOn"
+  | "finalDueOn";
 
 export const EMPTY_BALANCE_PLAN_FORM: BalancePlanForm = {
   agreedTotal: "",
@@ -197,10 +345,17 @@ export const EMPTY_BALANCE_PLAN_FORM: BalancePlanForm = {
   firstChargeOn: "",
   finalDueOn: "",
   isTest: false,
+  stepUp: false,
+  stepUpAmount: "",
+  stepUpCount: "",
 };
 
 export function formFromPlan(plan: AdminBalancePlan | null | undefined): BalancePlanForm {
   if (!plan) return { ...EMPTY_BALANCE_PLAN_FORM };
+  // An answer from before larger last payments existed has neither field: no larger payments.
+  const stepUpCents = plan.stepUpCents ?? 0;
+  const stepUpCount = plan.stepUpCount ?? 0;
+  const stepped = stepUpCents > 0 && stepUpCount > 0;
   return {
     agreedTotal: centsToDollarInput(plan.agreedTotalCents),
     discount: plan.discountCents > 0 ? centsToDollarInput(plan.discountCents) : "",
@@ -211,12 +366,18 @@ export function formFromPlan(plan: AdminBalancePlan | null | undefined): Balance
     firstChargeOn: isoDay(plan.firstChargeOn),
     finalDueOn: isoDay(plan.finalDueOn),
     isTest: Boolean(plan.isTest),
+    stepUp: stepped,
+    stepUpAmount: stepped ? centsToDollarInput(stepUpCents) : "",
+    stepUpCount: stepped ? String(stepUpCount) : "",
   };
 }
 
 export function sameForm(a: BalancePlanForm, b: BalancePlanForm): boolean {
   const money = (v: string) => parseDollarsToCents(v) ?? v.trim();
+  // Unticked is "no larger payments" whatever is left in the two hidden boxes.
+  const step = (f: BalancePlanForm) => (f.stepUp ? `${money(f.stepUpAmount)}|${f.stepUpCount.trim()}` : "off");
   return (
+    step(a) === step(b) &&
     money(a.agreedTotal) === money(b.agreedTotal) &&
     (parseDollarsToCents(a.discount) ?? 0) === (parseDollarsToCents(b.discount) ?? 0) &&
     a.discountNote.trim() === b.discountNote.trim() &&
@@ -249,13 +410,34 @@ export interface BalancePlanCheck {
   balanceCents: number | null;
   installmentCents: number | null;
   installmentCount: number | null;
-  /** Monthly payment x number of payments. */
+  /** True when "Make the last payments larger" is ticked. */
+  stepUp: boolean;
+  /** The larger amount and how many of the last payments use it. Both 0 unless ticked and both boxes are usable. */
+  stepUpCents: number;
+  stepUpCount: number;
+  /** False while larger payments are ticked but their two boxes are not both usable yet. True otherwise. */
+  stepUpReady: boolean;
+  /**
+   * The larger amount and the number of larger payments as typed, before the
+   * number is checked against the number of payments. They are what
+   * `suggestedCount` is worked out from. Null when unticked or not usable.
+   */
+  typedStepUpCents: number | null;
+  typedStepUpCount: number | null;
+  /** Monthly payment x number of payments, or regular x (count - N) + larger x N with larger last payments. */
   plannedTotalCents: number | null;
-  /** The dates to show and to check against the deadline. Counted from today when the first charge date has passed. */
+  /** The dates to show, each with its own amount. Counted from today when the first charge date has passed. */
   schedule: ProjectedPayment[];
+  /** The date of the first payment in `schedule` terms: the later of the first charge date and today. */
+  firstPaymentDate: string;
   lastPaymentDate: string;
   /** True when the first charge date has passed, so `schedule` is counted from today. */
   startsLate: boolean;
+  /**
+   * True when the last payment meets the final deadline with 31 days or fewer
+   * to spare, so a guest who adds her card late could push it past the deadline.
+   */
+  deadlineIsClose: boolean;
   /** The count that would clear the balance exactly, when there is one. */
   suggestedCount: number | null;
 }
@@ -279,8 +461,18 @@ function readCount(text: string): { value: number | null; error: string } {
 
 const paymentsWord = (n: number) => (n === 1 ? "1 payment" : `${n} payments`);
 
-/** "5 payments of $600.00 = $3,000.00" */
-export function planSentence(count: number, installmentCents: number, currency = "usd"): string {
+/**
+ * "5 payments of $600.00 = $3,000.00", or with larger last payments
+ * "4 payments of $400.00, then 2 payments of $600.00 = $2,800.00".
+ */
+export function planSentence(count: number, installmentCents: number, currency = "usd", stepUpCents = 0, stepUpCount = 0): string {
+  if (isSteppedPlan(count, stepUpCents, stepUpCount)) {
+    return (
+      `${paymentsWord(count - stepUpCount)} of ${formatMoney(installmentCents, currency)}, then ` +
+      `${paymentsWord(stepUpCount)} of ${formatMoney(stepUpCents, currency)} = ` +
+      formatMoney(planTotalCents(count, installmentCents, stepUpCents, stepUpCount), currency)
+    );
+  }
   return `${paymentsWord(count)} of ${formatMoney(installmentCents, currency)} = ${formatMoney(count * installmentCents, currency)}`;
 }
 
@@ -296,7 +488,7 @@ export function checkBalancePlan(form: BalancePlanForm, options: BalancePlanChec
   const problems: string[] = [];
   const warnings: string[] = [];
 
-  const money = (field: "agreedTotal" | "discount" | "priorPaid" | "installment", label: string, required: boolean): number | null => {
+  const money = (field: "agreedTotal" | "discount" | "priorPaid" | "installment" | "stepUpAmount", label: string, required: boolean): number | null => {
     const text = form[field];
     const problem = dollarInputProblem(text);
     if (problem) {
@@ -322,6 +514,45 @@ export function checkBalancePlan(form: BalancePlanForm, options: BalancePlanChec
   if (count.error) fieldErrors.installmentCount = count.error;
   else if (count.value === null) missing.push("Number of payments");
 
+  // Larger last payments. The same three rules the server enforces:
+  //   1. the larger amount is more than the regular monthly amount;
+  //   2. the number of larger payments is at least 1 and less than the number
+  //      of payments (at least one regular payment comes first);
+  //   3. regular x (count - N) + larger x N is the balance (checked below).
+  // Unticked, the two boxes are ignored and 0 / 0 is sent.
+  const stepUp = form.stepUp;
+  /** The larger amount, once it is more than the monthly amount (or the monthly amount is not known yet). */
+  let larger: number | null = null;
+  /** How many larger payments, as typed: a whole number of 1 or more. Checked against the count separately. */
+  let largerCount: number | null = null;
+  /** True once `largerCount` is also less than the number of payments. */
+  let largerCountFits = false;
+  if (stepUp) {
+    const typedLarger = money("stepUpAmount", "Larger payment amount", true);
+    if (typedLarger !== null) {
+      if (typedLarger === 0) fieldErrors.stepUpAmount = "The larger payment must be more than 0.";
+      else if (installment !== null && installment > 0 && typedLarger <= installment) {
+        fieldErrors.stepUpAmount = `The larger payment must be more than the monthly payment of ${formatMoney(installment, currency)}.`;
+      } else larger = typedLarger;
+    }
+
+    const typedCount = form.stepUpCount.trim();
+    const most = count.value !== null ? count.value - 1 : MAX_INSTALLMENT_COUNT - 1;
+    const range =
+      most === 1 ? "Enter 1. With 2 payments, only the last one can be larger." : `Enter a whole number from 1 to ${most}. At least one payment must stay at the monthly amount.`;
+    const wholeNumber = /^\d+$/.test(typedCount) ? Number(typedCount) : null;
+    // Kept even when it is too many for the number of payments typed so far,
+    // so "Suggest number of payments" can still offer a count that works.
+    if (wholeNumber !== null && wholeNumber >= 1 && wholeNumber <= MAX_INSTALLMENT_COUNT - 1) largerCount = wholeNumber;
+    if (typedCount === "") missing.push("How many of the last payments");
+    else if (count.value === 1) fieldErrors.stepUpCount = "A plan with 1 payment cannot have larger last payments. Use 2 or more payments.";
+    else if (largerCount === null || largerCount > most) fieldErrors.stepUpCount = range;
+    else largerCountFits = count.value !== null;
+  }
+  const stepUpReady = !stepUp || (larger !== null && largerCount !== null && largerCountFits);
+  const stepUpCents = stepUp && stepUpReady && larger !== null ? larger : 0;
+  const stepUpCount = stepUp && stepUpReady && largerCount !== null ? largerCount : 0;
+
   let first = "";
   if (form.firstChargeOn.trim() === "") missing.push("First charge date");
   else if (!isIsoDate(form.firstChargeOn)) fieldErrors.firstChargeOn = "Choose a date from the calendar.";
@@ -346,12 +577,20 @@ export function checkBalancePlan(form: BalancePlanForm, options: BalancePlanChec
     }
   }
 
-  const planned = installmentOk !== null && count.value !== null ? installmentOk * count.value : null;
+  // One equation everywhere: regular x (count - N) + larger x N, where N is 0
+  // without larger payments. Not worked out while the larger-payment boxes are
+  // still incomplete, so a half-typed plan is never called "short".
+  const planned =
+    installmentOk !== null && count.value !== null && stepUpReady ? planTotalCents(count.value, installmentOk, stepUpCents, stepUpCount) : null;
   if (balance !== null && balance > 0 && planned !== null && installmentOk !== null && count.value !== null && planned !== balance) {
     const gap = Math.abs(balance - planned);
     problems.push(
-      `The balance is ${formatMoney(balance, currency)}, but ${paymentsWord(count.value)} of ${formatMoney(installmentOk, currency)} come to ${formatMoney(planned, currency)}. ` +
-        `That is ${formatMoney(gap, currency)} ${planned < balance ? "short" : "too much"}. The two must match exactly, so change the monthly payment or the number of payments.`,
+      stepUpCount > 0
+        ? `The balance is ${formatMoney(balance, currency)}, but ${paymentsWord(count.value - stepUpCount)} of ${formatMoney(installmentOk, currency)} and ` +
+            `${paymentsWord(stepUpCount)} of ${formatMoney(stepUpCents, currency)} come to ${formatMoney(planned, currency)}. ` +
+            `That is ${formatMoney(gap, currency)} ${planned < balance ? "short" : "too much"}. The two must match exactly, so change an amount or the number of payments.`
+        : `The balance is ${formatMoney(balance, currency)}, but ${paymentsWord(count.value)} of ${formatMoney(installmentOk, currency)} come to ${formatMoney(planned, currency)}. ` +
+            `That is ${formatMoney(gap, currency)} ${planned < balance ? "short" : "too much"}. The two must match exactly, so change the monthly payment or the number of payments.`,
     );
   }
 
@@ -364,8 +603,13 @@ export function checkBalancePlan(form: BalancePlanForm, options: BalancePlanChec
   const today = options.today && isIsoDate(options.today) ? options.today : "";
   const startsLate = Boolean(first && today && first < today);
   const effectiveFirst = startsLate ? today : first;
-  const schedule = effectiveFirst && count.value !== null && installmentOk !== null ? projectSchedule(effectiveFirst, count.value, installmentOk) : [];
-  const lastPaymentDate = schedule[schedule.length - 1]?.dueDate ?? "";
+  const dates = effectiveFirst && count.value !== null && installmentOk !== null ? projectSchedule(effectiveFirst, count.value, installmentOk, stepUpCents, stepUpCount) : [];
+  const firstPaymentDate = dates[0]?.dueDate ?? "";
+  const lastPaymentDate = dates[dates.length - 1]?.dueDate ?? "";
+  // The dates do not depend on the amounts, so the deadline is still checked
+  // while the larger-payment boxes are incomplete. The list itself is held
+  // back until then: it would show amounts that are not the plan.
+  const schedule = stepUpReady ? dates : [];
 
   // The rule the server enforces, on the same dates: the last payment, counted
   // from max(first charge date, today), must not fall after the deadline. It
@@ -388,9 +632,23 @@ export function checkBalancePlan(form: BalancePlanForm, options: BalancePlanChec
     );
   }
 
-  const suggestedCount = balance !== null ? suggestInstallmentCount(balance, installmentOk) : null;
+  // Plain information for a deadline that is met, but only just: the dates
+  // move later by a day for every day the guest waits past the first one.
+  const spare = lastPaymentDate && deadline && lastPaymentDate <= deadline ? daysBetween(lastPaymentDate, deadline) : null;
+  const deadlineIsClose = spare !== null && spare >= 0 && spare <= 31;
 
-  const valid = Object.keys(fieldErrors).length === 0 && missing.length === 0 && problems.length === 0;
+  // With larger payments ticked, the suggestion uses the same equation: the
+  // count for which regular x (count - N) + larger x N is the balance.
+  const suggestedCount =
+    balance === null
+      ? null
+      : !stepUp
+        ? suggestInstallmentCount(balance, installmentOk)
+        : larger !== null && largerCount !== null
+          ? suggestInstallmentCount(balance, installmentOk, larger, largerCount)
+          : null;
+
+  const valid = Object.keys(fieldErrors).length === 0 && missing.length === 0 && problems.length === 0 && stepUpReady;
   const input: BalancePlanInput | null =
     valid && agreedOk !== null && installmentOk !== null && count.value !== null && discount !== null && prior !== null && first
       ? {
@@ -400,6 +658,8 @@ export function checkBalancePlan(form: BalancePlanForm, options: BalancePlanChec
           priorPaidCents: prior,
           installmentCents: installmentOk,
           installmentCount: count.value,
+          stepUpCents,
+          stepUpCount,
           firstChargeOn: first,
           finalDueOn: deadline || null,
           isTest: form.isTest,
@@ -418,10 +678,18 @@ export function checkBalancePlan(form: BalancePlanForm, options: BalancePlanChec
     balanceCents: balance,
     installmentCents: installmentOk,
     installmentCount: count.value,
+    stepUp,
+    stepUpCents,
+    stepUpCount,
+    stepUpReady,
+    typedStepUpCents: larger,
+    typedStepUpCount: largerCount,
     plannedTotalCents: planned,
     schedule,
+    firstPaymentDate,
     lastPaymentDate,
     startsLate,
+    deadlineIsClose,
     suggestedCount,
   };
 }
