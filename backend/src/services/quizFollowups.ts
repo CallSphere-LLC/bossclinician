@@ -20,6 +20,7 @@ export async function routeQuizFollowup(contactId: number, formSlug: string, raw
   const hiring = ({ "hiring-quiz-ready": "quiz-hiring-ready", "hiring-quiz-almost": "quiz-hiring-almost", "hiring-quiz-not-yet": "quiz-hiring-not-yet" } as Record<string, string>)[formSlug];
   const assessment = formSlug === "boss-assessment";
   if (!hiring && !assessment) return;
+  if (hiring && !hasExplicitHiringConsent(formSlug,raw)) return; // Cached old forms receive results only.
   const client = await pool.connect();
   try {
     await client.query("BEGIN");

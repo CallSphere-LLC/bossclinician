@@ -1161,7 +1161,7 @@ growthPublicRouter.post(
     }
 
     if (contactId !== null) await afterSubmission(`quiz followup routing for ${submissionId}`, () =>
-      routeQuizFollowup(contactId, form.slug, data));
+      routeQuizFollowup(contactId, form.slug, { ...data, ...(hasExplicitHiringConsent(form.slug, typed) ? { marketing_consent: typed.marketing_consent } : {}) }));
 
     res.status(201).json({
       ok: true,
