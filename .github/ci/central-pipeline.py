@@ -12,6 +12,7 @@ import hashlib
 import shutil
 import time
 import uuid
+import signal
 
 
 def safe_name(value):
@@ -91,13 +92,22 @@ def execute_checks(profile, root, revision, run, contexts):
     app = safe_name(profile['app'])
     if not re.fullmatch('[0-9a-f]{40}', revision):
         raise ValueError('A full Git commit SHA is required')
-    images = []
     for check in profile.get('checks', []):
         print('CHECK:', check['name'], flush=True)
         directory = local_path(root, check.get('directory', '.'))
         run(['docker', 'run', '--rm', '-v', f'{root}:/repo', '-w', '/repo/'+str(directory.relative_to(root)),
              '-e', 'CI=true', '-e', 'NEXT_TELEMETRY_DISABLED=1', '-e', 'AWS_EC2_METADATA_DISABLED=true',
              check['image'], 'sh', '-ec', check['command']], check=True)
+    if profile.get('public_database'):
+        from public_build import public_database
+        with public_database(root, revision, run) as database_url_file:
+            return execute_builds(profile, root, revision, run, contexts, database_url_file)
+    return execute_builds(profile, root, revision, run, contexts)
+
+
+def execute_builds(profile, root, revision, run, contexts, database_url_file=None):
+    app = safe_name(profile['app'])
+    images = []
     for build in profile['builds']:
         name = safe_name(build['name'])
         context = local_path(root, build['context'])
@@ -114,6 +124,10 @@ def execute_checks(profile, root, revision, run, contexts):
             command += ['--build-arg', key+'='+str(value).replace('{revision}', revision)]
         for named in build.get('named_contexts', []):
             command += ['--build-context', f'{named}={contexts[named]}']
+        if build.get('public_database'):
+            if database_url_file is None:
+                raise ValueError('A published-content build database is required')
+            command += ['--network', 'host', '--secret', 'id=db_url,src='+str(database_url_file)]
         run([*command, str(context)], check=True)
         images.append(tag)
         if build.get('runtime_check'):
@@ -148,6 +162,9 @@ def execute_checks(profile, root, revision, run, contexts):
 
 
 def main():
+    def interrupted(signum, frame):
+        raise KeyboardInterrupt('CI job interrupted')
+    signal.signal(signal.SIGTERM, interrupted)
     parser = argparse.ArgumentParser()
     parser.add_argument('profile')
     parser.add_argument('--deploy-only', action='store_true')
@@ -191,8 +208,9 @@ def deploy(profile, root, revision):
         raise ValueError('No verified baseline revision is configured')
     subprocess.run(['git', 'merge-base', '--is-ancestor', baseline, revision], cwd=root, check=True)
     changed = subprocess.check_output(['git', 'diff', '--name-only', baseline, revision], cwd=root, text=True).splitlines()
-    protected = ('db/', 'deploy/', 'k8s/', 'ai/migrations/', 'scripts/migrate')
-    if any(name.startswith(protected) for name in changed):
+    protected_directories = {'db', 'migrations', 'prisma', 'deploy', 'k8s', 'infra'}
+    if any(protected_directories.intersection(Path(name).parts)
+           or name.startswith('scripts/migrate') for name in changed):
         raise ValueError('Schema or deployment configuration changed; a migration-aware release is required')
     images = [f"central-ci/{profile['app']}-{build['name']}:{revision}" for build in profile['builds']]
     producer = subprocess.Popen(['docker', 'save', *images], stdout=subprocess.PIPE)
