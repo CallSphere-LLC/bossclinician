@@ -424,6 +424,7 @@ export default function SequenceEditor() {
   if (!sequence) return <Skeleton className="h-96 rounded-2xl" />;
 
   const isOn = sequence.status === "active";
+  const isClubBonus = sequence.slug === "club-bonus-reminders";
   const statsFor = (emailId: number): SequenceEmailStats | undefined =>
     stats.find((row) => row.id === emailId);
   // A zone set elsewhere (the site default, say) that is not in the short
@@ -459,7 +460,16 @@ export default function SequenceEditor() {
         }
       />
 
-      {!isOn && (
+      {isClubBonus && (
+        <Card className="border-gold/30 p-4">
+          <p className="text-sm text-ink-soft">
+            <strong className="text-ink">Club bonus reminders are {isOn ? "on" : "off"}.</strong>{" "}
+            Use {isOn ? "Pause sending" : "Start sending"} above to change this. Reminders
+            are scheduled for 9 a.m. Pacific based on each person's bonus deadline.
+          </p>
+        </Card>
+      )}
+      {!isOn && !isClubBonus && (
         <Card className="border-gold/30 p-4">
           <p className="text-sm text-ink-soft">
             This sequence is paused, so nobody is being added and no emails are going out. Press
@@ -521,7 +531,7 @@ export default function SequenceEditor() {
       <Card>
         <CardHeader
           title="The emails"
-          subtitle="In the order they go out. The wait on each one is counted from the email before it."
+          subtitle={isClubBonus ? "Automatically timed from each registrant’s bonus deadline." : "In the order they go out. The wait on each one is counted from the email before it."}
           icon={<Mail />}
           action={
             <Button size="sm" onClick={() => setEditing({ ...BLANK_EMAIL })}>
@@ -577,11 +587,15 @@ export default function SequenceEditor() {
                       <p className="font-display text-base text-ink">
                         {email.subject || "No subject yet"}
                       </p>
-                      {!email.enabled && <Badge tone="slate">Turned off</Badge>}
+                      {isClubBonus && email.position >= 1 && email.position <= 3 ? (
+                        <Badge tone={isOn ? "green" : "slate"}>{isOn ? "Automatic" : "Paused"}</Badge>
+                      ) : !email.enabled && <Badge tone="slate">Turned off</Badge>}
                     </div>
                     <p className="mt-1 flex items-center gap-1.5 text-sm text-ink-soft">
                       <Clock className="size-3.5" />
-                      {index === 0
+                      {isClubBonus && email.position >= 1 && email.position <= 3
+                        ? ["5 days before the deadline", "2 days before the deadline", "On the deadline day"][email.position - 1] + " at 9 a.m. Pacific"
+                        : index === 0
                         ? email.delayMinutes === 0
                           ? "Goes out as soon as somebody joins"
                           : `Goes out ${describeWait(email.delayMinutes)} after somebody joins`
@@ -651,7 +665,7 @@ export default function SequenceEditor() {
 
       {/* ------------------------------------------------------ sending rules */}
 
-      <Card>
+      {!isClubBonus && <Card>
         <CardHeader
           title="When these can go out"
           subtitle="Nothing is ever sent early — an email that comes due outside these hours waits for the next slot."
@@ -785,7 +799,7 @@ export default function SequenceEditor() {
             </span>
           </label>
         </div>
-      </Card>
+      </Card>}
 
       {/* ---------------------------------------------------- specific stops */}
 
