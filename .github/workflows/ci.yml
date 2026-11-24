@@ -188,7 +188,7 @@ jobs:
 
         ports:
 
-          - 5432:5432
+          - 5432/tcp
 
         options: >-
 
@@ -243,7 +243,7 @@ jobs:
 
         env:
 
-          TEST_DATABASE_URL: postgres://boss:ci@localhost:5432/postgres
+          TEST_DATABASE_URL: postgres://boss:ci@localhost:${{ job.services.postgres.ports['5432'] }}/postgres
 
           JWT_SECRET: integration-test-secret
 
