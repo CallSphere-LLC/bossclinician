@@ -43,7 +43,7 @@ describe("/ceu-terms-boss-clinician (row 239)", () => {
       "strict conformance with Nevada State Board of MFT/LPC and Social Work.",
       "Confidentiality of Participant Information:",
       "Grievance Procedure:",
-      "If the grievance concerns [name of organization] in a specific regard",
+      "If the grievance concerns Boss Clinician, LLC in a specific regard",
       "The social work consultant is Yvette Howard Email is ",
       "Confidentiality:",
       "locked files of the Owner &amp; Training Development Officer",
@@ -57,6 +57,7 @@ describe("/ceu-terms-boss-clinician (row 239)", () => {
     ]) {
       expect(html).toContain(text);
     }
+    expect(html).not.toContain("[name of organization]");
   });
 
   it("prints the current support address as a mailto link, never the old Boss Builders domain (22 Nov 2026)", () => {

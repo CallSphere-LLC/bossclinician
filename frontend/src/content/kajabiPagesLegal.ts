@@ -357,7 +357,7 @@ const CE_GRIEVANCE_WORKSHOP =
   "If the grievance concerns a live workshop offering, its content, level of presentation, or the facilities in which the workshop was offered, the CE Provider will mediate and will be the final arbitrator. If the participant requests action, the CE Provider will consider the complaint, make any necessary decisions, and respond within a reasonable time.";
 
 const CE_GRIEVANCE_ORG =
-  "If the grievance concerns [name of organization] in a specific regard, please contact the CE Provider to resolve.";
+  "If the grievance concerns Boss Clinician, LLC in a specific regard, please contact the CE Provider to resolve.";
 
 const CE_CONCERN =
   "If a participant or potential participant would like to express a concern about Boss Clinician, LLC or a continuing education program provided by Boss Clinician, LLC, the individual may contact the CE Provider by email at ";
