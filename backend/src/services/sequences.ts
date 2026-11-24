@@ -557,6 +557,8 @@ export async function enrollContact(sequenceId: number, contactId: number, optio
     await client.query("COMMIT");
   } catch(error) { await client.query("ROLLBACK"); throw error; } finally { client.release(); }
   if(result.outcome === "enrolled") {
+    const due=(await pool.query<{position:number;next_send_at:Date|null}>("SELECT position,next_send_at FROM sequence_subscriptions WHERE id=$1",[result.subscriptionId])).rows[0];
+    if(due?.next_send_at && due.next_send_at.getTime()<=(options.now??new Date()).getTime()) await enqueueMany([{kind:"sequence.sendEmail",payload:{subscriptionId:result.subscriptionId},priority:PRIORITY.normal,dedupeKey:`sequence-send:${result.subscriptionId}:${due.position}`}]).catch((error:unknown)=>console.error("[sequences] immediate sales result not queued",error));
     await recordActivity({contactId,kind:"sequence_started",title:"Started a sales followup sequence",body:options.reason ?? "",subjectType:"sequence",subjectId:String(sequenceId)});
     await publishSequenceEvent("sequence_subscribed",{subscriptionId:String(result.subscriptionId),sequenceId,contactId,reason:options.reason ?? ""});
   }

@@ -110,4 +110,11 @@ vi.mock("../email/provider",async original=>({...await original<typeof import(".
   const id=await contact();await route(id,"hiring-quiz-ready",{practice_stage:"first_hire"});expect(await subs(id)).toHaveLength(0);
  });
 
+ it("queues a newly enrolled immediate legacy result after its transaction commits",async()=>{
+  const id=await contact("never_subscribed");const q=(await db.client.query("SELECT id FROM email_sequences WHERE slug='fixture-quiz'")).rows[0].id;
+  const {enrollContact}=await import("./sequences");const result=await enrollContact(q,id);
+  expect(result.outcome).toBe("enrolled");
+  expect((await db.client.query("SELECT count(*)::int n FROM jobs WHERE kind='sequence.sendEmail' AND payload->>'subscriptionId'=$1",[String(result.subscriptionId)])).rows[0].n).toBe(1);
+ });
+
 });
