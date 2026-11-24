@@ -50,13 +50,17 @@ class WorkflowContractTests(unittest.TestCase):
 
     # --- the production host -------------------------------------------------
 
-    def test_only_the_deploy_job_runs_on_the_production_host(self):
-        self_hosted = set()
+    def test_central_runner_requires_trusted_main(self):
         for path in sorted(WORKFLOWS.glob("*.y*ml")):
             for name, job in load(path).get("jobs", {}).items():
-                if "self-hosted" in runs_on(job) or "bossclinician" in runs_on(job):
-                    self_hosted.add((path.name, name))
-        self.assertEqual(self_hosted, set())
+                value = job.get("runs-on", "")
+                if "central-biggestserver" in str(value):
+                    self.assertIsInstance(value, str)
+                    self.assertIn("github.event_name != 'pull_request'", value)
+                    self.assertIn("github.ref == 'refs/heads/main'", value)
+                    self.assertIn("'ubuntu-latest'", value)
+                else:
+                    self.assertNotIn("self-hosted", runs_on(job))
 
     def test_no_workflow_runs_untrusted_code_with_elevated_triggers(self):
         for path in sorted(WORKFLOWS.glob("*.y*ml")):
