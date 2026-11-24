@@ -1,0 +1,54 @@
+{
+  "app": "bossclinician",
+  "checks": [],
+  "builds": [
+    {
+      "name": "backend",
+      "context": ".",
+      "dockerfile": "backend/Dockerfile",
+      "target": "api",
+      "arguments": {
+        "APP_RELEASE": "{revision}",
+        "VITE_API_BASE": "/api",
+        "VITE_STRIPE_PUBLISHABLE_KEY": "pk_live_51PJSdOFXM7aVDtPLrb7E5QB3yBFb0bMIdHYrildrqMMotpuygiWHJcq9Mubiy9BHU2Rs9yQ4dvXxbqAsckK1xbDX00C6uA9C76"
+      },
+      "named_contexts": [
+        "aws_identity_helper"
+      ]
+    },
+    {
+      "name": "frontend",
+      "context": ".",
+      "dockerfile": "backend/Dockerfile",
+      "target": "web",
+      "arguments": {
+        "APP_RELEASE": "{revision}",
+        "VITE_API_BASE": "/api",
+        "VITE_STRIPE_PUBLISHABLE_KEY": "pk_live_51PJSdOFXM7aVDtPLrb7E5QB3yBFb0bMIdHYrildrqMMotpuygiWHJcq9Mubiy9BHU2Rs9yQ4dvXxbqAsckK1xbDX00C6uA9C76"
+      },
+      "named_contexts": [
+        "aws_identity_helper"
+      ]
+    },
+    {
+      "name": "ai",
+      "context": "ai",
+      "dockerfile": "ai/Dockerfile"
+    },
+    {
+      "name": "gateway",
+      "context": ".",
+      "dockerfile": "k8s/gateway.Dockerfile"
+    }
+  ],
+  "deployment": {
+    "app": "bossclinician",
+    "host": "ci-server-64gbRam"
+  },
+  "named_contexts": {
+    "aws_identity_helper": {
+      "source": "/usr/local/lib/bossclinician/aws-helper-runtime",
+      "pins": ".github/ci/aws-helper-pins.json"
+    }
+  }
+}

@@ -105,7 +105,7 @@ class WorkflowContractTests(unittest.TestCase):
     def test_deploy_workflow_has_no_automatic_trigger(self):
         self.assertEqual(set(self.deploy["on"]), {"workflow_dispatch"})
 
-    def test_no_workflow_can_deploy_to_production(self):
+    def test_no_workflow_invokes_unrestricted_cluster_commands(self):
         for path in sorted(WORKFLOWS.glob("*.y*ml")):
             for job in load(path).get("jobs", {}).values():
                 self.assertNotIn("self-hosted", runs_on(job))
@@ -171,3 +171,12 @@ class ComposeContractTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CentralReleaseContractTests(unittest.TestCase):
+    def test_release_requires_all_suites_and_explicit_activation(self):
+        jobs=load(WORKFLOWS / "ci.yml")["jobs"]
+        self.assertEqual(set(jobs["central-build"]["needs"]), {"pipeline", "backend", "frontend", "ai", "stack"})
+        self.assertEqual(jobs["central-deploy"]["needs"], "central-build")
+        self.assertIn("CENTRAL_DEPLOY_ENABLED", jobs["central-deploy"]["if"])
+        self.assertIn("inputs.ref == github.sha", jobs["central-deploy"]["if"])

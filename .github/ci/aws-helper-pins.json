@@ -1,0 +1,24 @@
+{
+  "files": {
+    "aws_signing_helper": {
+      "sha256": "453f75b2cceee0231f8ef856a9e990dbe956e2a80ac0670914b4a209f377339b",
+      "bytes": 12114008
+    },
+    "ld-linux-x86-64.so.2": {
+      "sha256": "bda779ea9e9ad234f60315477d7cfd0bdde861cd8ddd9df8cdaf62f18c4cec14",
+      "bytes": 254864
+    },
+    "libc.so.6": {
+      "sha256": "85e64f97e348786a8fb4d9f3d52fec289e2fb86bba20f0731dfe61990525e0f7",
+      "bytes": 2190608
+    },
+    "libresolv.so.2": {
+      "sha256": "6b99ecf94bcb81732ed1e81615084a5cfe7383eb89ce83106fa51077409ce609",
+      "bytes": 68104
+    },
+    "credential-helper": {
+      "sha256": "31a22fd8a6a7350dbc8fd044483fe1513b5fd695690d45ecf3d18283a7cbefcd",
+      "bytes": 239
+    }
+  }
+}
