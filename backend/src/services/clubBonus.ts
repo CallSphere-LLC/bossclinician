@@ -841,7 +841,11 @@ async function sendReminder(
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    // The ledger row is the lock: a second tick waits here, then finds it.
+    // Share the contact lock used by sales-sequence enrollment and delivery.
+    // Claim it before the reminder ledger so another sales sender cannot race
+    // the checks below or read the global marker before this send commits.
+    await client.query("SELECT pg_advisory_xact_lock(236, $1)", [contact.id]);
+    // The ledger row also makes repeated ticks for this reminder idempotent.
     const claimed = await client.query(
       `INSERT INTO club_bonus_reminder_sends (window_id, reminder, deadline_at)
        VALUES ($1, $2, $3) ON CONFLICT DO NOTHING RETURNING window_id`,
@@ -878,6 +882,31 @@ async function sendReminder(
     }
     if (await clubBonusExclusion(client, { email: window.email, contactId: contact.id, window: current })) {
       await closeClaim(client, window, key, "skipped: test account");
+      return false;
+    }
+    // C1-C3 are sales reminders too. Preserve an independently requested
+    // result (before sales_start_position), but do not compete with a selected
+    // non-Club sales nurture or send close to its last successful promotion.
+    const competing = await client.query(
+      `SELECT 1 FROM sequence_subscriptions s
+         JOIN email_sequences q ON q.id = s.sequence_id
+        WHERE s.contact_id = $1 AND s.status IN ('active', 'paused')
+          AND q.sales_family IS NOT NULL AND q.sales_family <> 'club'
+          AND s.position >= q.sales_start_position
+        LIMIT 1`,
+      [contact.id]
+    );
+    if (competing.rows[0]) {
+      await closeClaim(client, window, key, "skipped: another sales sequence");
+      return false;
+    }
+    const globalPromotion = await client.query<{ last_sales_sent_at: Date | null }>(
+      "SELECT last_sales_sent_at FROM quiz_followup_state WHERE contact_id = $1",
+      [contact.id]
+    );
+    const lastGlobalPromotion = globalPromotion.rows[0]?.last_sales_sent_at;
+    if (lastGlobalPromotion && tooClose(lastGlobalPromotion, sendNow)) {
+      await closeClaim(client, window, key, "skipped: global promotion spacing");
       return false;
     }
     // "If necessary, skip a reminder that cannot meet spacing." The Club
@@ -928,6 +957,13 @@ async function sendReminder(
       fromEmail: email.from_email,
       preheader: renderTokens(email.preview_text ?? "", values),
     });
+    if (result.outcome === "sent") {
+      await client.query(
+        `INSERT INTO quiz_followup_state (contact_id, last_sales_sent_at) VALUES ($1, $2)
+         ON CONFLICT (contact_id) DO UPDATE SET last_sales_sent_at = EXCLUDED.last_sales_sent_at`,
+        [contact.id, sendNow]
+      );
+    }
     await client.query(
       `UPDATE club_bonus_reminder_sends SET email_message_id = $4, outcome = $5, sent_at = now()
         WHERE window_id = $1 AND reminder = $2 AND deadline_at = $3`,
