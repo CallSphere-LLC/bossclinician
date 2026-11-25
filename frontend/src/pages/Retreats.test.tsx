@@ -165,3 +165,19 @@ describe("retreat page, second 22 Nov 2026 owner reply (item 4: FAQ wording, ite
     expect(flight).toBeGreaterThan(mobility);
   });
 });
+
+describe("retreat villa video (row 256)", () => {
+  it("stays off the published page until the owner approves the ?preview=video link", () => {
+    const { html } = render();
+    expect(html).not.toContain("retreat-bali-preview-v1");
+    expect(html).not.toContain("Imagine Six Days Where You");
+  });
+
+  it("assets and captions for the section exist", async () => {
+    const { existsSync } = await import("node:fs");
+    for (const file of ["-720.mp4", "-540.mp4", "-poster.jpg"]) {
+      expect(existsSync(new URL(`../../public/videos/retreat-bali-preview-v1${file}`, import.meta.url)), file).toBe(true);
+    }
+    expect(existsSync(new URL("../../public/videos/captions/retreat-bali-preview-v1.en.vtt", import.meta.url))).toBe(true);
+  });
+});

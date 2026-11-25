@@ -628,3 +628,14 @@ html[data-site-theme] .theme-luxe .retreat-page .retreat-heading {
     width: 100%;
   }
 }
+
+/* Row 256: villa walkthrough video between the stats and the recognition band. */
+.retreat-video .retreat-copy {
+  text-align: center;
+}
+.retreat-video-player {
+  margin-top: 2.5rem;
+}
+#included {
+  scroll-margin-top: 96px;
+}

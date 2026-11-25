@@ -1,4 +1,5 @@
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import { TestimonialVideo } from "@/components/luxe/TestimonialVideo";
 import { useHashScroll } from "@/hooks/useHashScroll";
 import { Seo } from "@/components/Seo";
 import {
@@ -114,8 +115,48 @@ function ReserveLink() {
   );
 }
 
+/**
+ * Row 256: the owner asked to approve the video section on a preview link
+ * before it is published, so it only shows with ?preview=video until then.
+ * Decided after mount so the server render and hydration always agree.
+ */
+const RETREAT_VIDEO_PUBLISHED = false;
+function useRetreatVideoVisible() {
+  const [visible, setVisible] = useState(RETREAT_VIDEO_PUBLISHED);
+  useEffect(() => {
+    if (RETREAT_VIDEO_PUBLISHED) return;
+    if (new URLSearchParams(window.location.search).get("preview") === "video") setVisible(true);
+  }, []);
+  return visible;
+}
+function RetreatVideo() {
+  const v = r.video;
+  return (
+    <Band id="preview-video" className="retreat-video">
+      <div className="retreat-narrow">
+        <Heading eyebrow={v.eyebrow} title={v.title} />
+        <Copy lines={v.body} />
+      </div>
+      <TestimonialVideo
+        className="retreat-video-player"
+        src720={`${v.prefix}-720.mp4`}
+        src540={`${v.prefix}-540.mp4`}
+        poster={`${v.prefix}-poster.jpg`}
+        captions={`/videos/captions/retreat-bali-preview-v1.en.vtt`}
+        title={v.playerTitle}
+      />
+      <div className="retreat-actions">
+        <a href="#included" className="retreat-button">
+          {v.cta}
+        </a>
+      </div>
+    </Band>
+  );
+}
+
 export default function Retreats() {
   useHashScroll();
+  const showVideo = useRetreatVideoVisible();
   const { origin } = useHeadContext();
   return (
     <div className="retreat-page">
@@ -199,6 +240,7 @@ export default function Retreats() {
           </div>
         ))}
       </div>
+      {showVideo && <RetreatVideo />}
       <Band id="about" light>
         <div className="retreat-split">
           <div>

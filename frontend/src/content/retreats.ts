@@ -283,6 +283,19 @@ export const retreat = {
     { value: "1", lines: ["PRIVATE", "VILLA"] },
   ],
 
+  /** Row 256 (24 Nov): owner's Bali villa walkthrough video, placed after the stats. */
+  video: {
+    eyebrow: "A GLIMPSE INTO WHAT’S POSSIBLE",
+    title: "Imagine Six Days Where You Don’t Have to Be Everything to Everyone.",
+    body: [
+      "Imagine waking up without a client to prepare for, a team to manage, or an itinerary to coordinate. Six days to laugh, explore, be cared for, and reconnect with the woman you are outside of everything you do for others.",
+      "This is the intention behind FlourisHealer.",
+    ],
+    cta: "Explore Your Bali Experience",
+    playerTitle: "Behind the scenes: a preview of the Bali retreat villa",
+    prefix: "/videos/retreat-bali-preview-v1",
+  },
+
   /** Recognition (21 Nov handoff, ready-to-paste). */
   about: {
     eyebrow: "THE RETREAT",
