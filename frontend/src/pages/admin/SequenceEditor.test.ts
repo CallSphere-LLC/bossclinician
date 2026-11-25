@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { describeTrigger, describeWhereTheyAre } from "./SequenceEditor";
+import { describeEmailTiming, describeTrigger, describeWhereTheyAre } from "./SequenceEditor";
 
 describe("describeTrigger", () => {
   it("names the offer in plain words", () => {
@@ -54,5 +54,18 @@ describe("describeWhereTheyAre", () => {
   it("says finished and left early for the ended runs", () => {
     expect(describeWhereTheyAre({ status: "completed", position: 4 }, emails)).toBe("Finished");
     expect(describeWhereTheyAre({ status: "exited", position: 2 }, emails)).toBe("Left early");
+  });
+});
+
+
+describe("completion-anchored email timing labels", () => {
+  it("labels every stored offset from quiz completion", () => {
+    expect(describeEmailTiming(1440, 0, true)).toBe("Goes out 1 day after quiz completion");
+    expect(describeEmailTiming(3 * 1440, 1, true)).toBe("Goes out 3 days after quiz completion");
+    expect(describeEmailTiming(14 * 1440, 4, true)).toBe("Goes out 2 weeks after quiz completion");
+  });
+  it("preserves ordinary first-email and cumulative descriptions", () => {
+    expect(describeEmailTiming(1440, 0)).toBe("Goes out 1 day after somebody joins");
+    expect(describeEmailTiming(3 * 1440, 1)).toBe("Goes out 3 days after the one above");
   });
 });

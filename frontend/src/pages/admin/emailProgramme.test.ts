@@ -42,6 +42,22 @@ const sequence = (over: Partial<SequenceSummary>): SequenceSummary => ({
 });
 
 describe("A3 — broadcasts and sequences in one list", () => {
+  it("uses the last enabled completion offset, not the sum, for Ready and Almost", () => {
+    expect(sequenceSpan(sequence({ emailCount: 6, enabledEmailCount: 5, completionAnchored: true, totalDelayMinutes: 37 * 1440, maxDelayMinutes: 14 * 1440 })))
+      .toBe("5 emails over 14 days from completion");
+  });
+  it("uses day nine rather than sixteen for Not Yet", () => {
+    expect(sequenceSpan(sequence({ emailCount: 3, enabledEmailCount: 3, completionAnchored: true, totalDelayMinutes: 16 * 1440, maxDelayMinutes: 9 * 1440 })))
+      .toBe("3 emails over 9 days from completion");
+  });
+  it("keeps cumulative waits for ordinary sequences even when a max is available", () => {
+    expect(sequenceSpan(sequence({ emailCount: 5, enabledEmailCount: 5, completionAnchored: false, totalDelayMinutes: 37 * 1440, maxDelayMinutes: 14 * 1440 })))
+      .toBe("5 emails over 37 days");
+  });
+  it("does not misrepresent missing completion metadata as day one", () => {
+    expect(sequenceSpan(sequence({ completionAnchored: true, maxDelayMinutes: undefined })))
+      .toBe("6 emails, timed from completion");
+  });
   it("describes the Club's disabled templates as personal-deadline reminders", () => {
     expect(sequenceSpan(sequence({ slug: "club-bonus-reminders", emailCount: 3, enabledEmailCount: 0 })))
       .toBe("3 reminders scheduled by personal deadline");

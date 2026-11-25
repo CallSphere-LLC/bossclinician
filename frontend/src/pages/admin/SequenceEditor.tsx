@@ -134,6 +134,19 @@ export function describeWhereTheyAre(
   return row.status === "paused" ? `${where} (paused)` : where;
 }
 
+/** Explain the stored offset without changing its scheduling semantics. */
+export function describeEmailTiming(delayMinutes: number, index: number, completionAnchored = false): string {
+  if (completionAnchored) return delayMinutes === 0
+    ? "Goes out on quiz completion"
+    : `Goes out ${describeWait(delayMinutes)} after quiz completion`;
+  if (index === 0) return delayMinutes === 0
+    ? "Goes out as soon as somebody joins"
+    : `Goes out ${describeWait(delayMinutes)} after somebody joins`;
+  return delayMinutes === 0
+    ? "Goes out immediately after the one above"
+    : `Goes out ${describeWait(delayMinutes)} after the one above`;
+}
+
 /** "When someone buys The Club", for the "Triggered by" panel. */
 export function describeTrigger(
   automation: Pick<AutomationSummary, "triggerType" | "triggerSentence">,
@@ -531,7 +544,7 @@ export default function SequenceEditor() {
       <Card>
         <CardHeader
           title="The emails"
-          subtitle={isClubBonus ? "Automatically timed from each registrant’s bonus deadline." : "In the order they go out. The wait on each one is counted from the email before it."}
+          subtitle={isClubBonus ? "Automatically timed from each registrant’s bonus deadline." : sequence.completionAnchored ? "Each offset is counted from quiz completion, not from the previous email." : "In the order they go out. The wait on each one is counted from the email before it."}
           icon={<Mail />}
           action={
             <Button size="sm" onClick={() => setEditing({ ...BLANK_EMAIL })}>
@@ -595,13 +608,7 @@ export default function SequenceEditor() {
                       <Clock className="size-3.5" />
                       {isClubBonus && email.position >= 1 && email.position <= 3
                         ? ["5 days before the deadline", "2 days before the deadline", "On the deadline day"][email.position - 1] + " at 9 a.m. Pacific"
-                        : index === 0
-                        ? email.delayMinutes === 0
-                          ? "Goes out as soon as somebody joins"
-                          : `Goes out ${describeWait(email.delayMinutes)} after somebody joins`
-                        : email.delayMinutes === 0
-                          ? "Goes out immediately after the one above"
-                          : `Goes out ${describeWait(email.delayMinutes)} after the one above`}
+                        : describeEmailTiming(email.delayMinutes, index, sequence.completionAnchored)}
                     </p>
                     {measured && measured.sent > 0 && (
                       <p className="mt-1 text-xs text-ink-soft/80">
@@ -987,7 +994,7 @@ export default function SequenceEditor() {
               />
             </Field>
 
-            <Field label="Wait this many weeks" error={emailErrors.waitWeeks}>
+            <Field label={sequence.completionAnchored ? "Weeks after quiz completion" : "Wait this many weeks"} error={emailErrors.waitWeeks}>
               <Input
                 id={SEQUENCE_EMAIL_FIELD_IDS.waitWeeks}
                 type="number" min={0} max={52} value={editing.waitWeeks}
@@ -996,7 +1003,7 @@ export default function SequenceEditor() {
             </Field>
             <Field
               label="…and this many days"
-              hint="Counted from the email before it"
+              hint={sequence.completionAnchored ? "Offset from quiz completion, not the previous email" : "Counted from the email before it"}
               error={emailErrors.waitDays}
             >
               <Input

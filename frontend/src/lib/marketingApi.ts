@@ -57,6 +57,9 @@ export interface SequenceSummary {
   /** A3: emails that actually go out, and the sum of their waits in minutes. */
   enabledEmailCount?: number;
   totalDelayMinutes?: number;
+  /** Absolute offsets use the last enabled offset rather than the sum. */
+  completionAnchored?: boolean;
+  maxDelayMinutes?: number;
 }
 
 export interface SequenceEmail {

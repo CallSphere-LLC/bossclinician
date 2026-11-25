@@ -96,12 +96,14 @@ const plural = (count: number, one: string, many: string) =>
 /**
  * "6 emails over 11 days" — how a sequence reads inline among broadcasts.
  *
- * Counts the emails that actually go out and adds up their waits (each wait is
- * from the email before, so the sum is the span from joining to the last one).
+ * Counts enabled emails. Ordinary waits add up from one email to the next;
+ * completion-anchored sequences use their last enabled absolute offset.
  */
 export function sequenceSpan(sequence: Pick<SequenceSummary, "emailCount"> & {
   enabledEmailCount?: number;
   totalDelayMinutes?: number;
+  completionAnchored?: boolean;
+  maxDelayMinutes?: number;
   slug?: string;
 }): string {
   // These disabled templates are intentionally sent only by the personal-deadline dispatcher.
@@ -109,16 +111,19 @@ export function sequenceSpan(sequence: Pick<SequenceSummary, "emailCount"> & {
     return `${plural(sequence.emailCount, "reminder", "reminders")} scheduled by personal deadline`;
   }
   const count = sequence.enabledEmailCount ?? sequence.emailCount;
-  const minutes = Math.max(0, sequence.totalDelayMinutes ?? 0);
+  const minutes = Math.max(0, (sequence.completionAnchored ? sequence.maxDelayMinutes : sequence.totalDelayMinutes) ?? 0);
   if (count === 0) {
     return sequence.emailCount > 0
       ? `${plural(sequence.emailCount, "email", "emails")}, all switched off`
       : "No emails yet";
   }
   const emails = plural(count, "email", "emails");
+  if (sequence.completionAnchored && sequence.maxDelayMinutes === undefined) return `${emails}, timed from completion`;
+  const origin = sequence.completionAnchored ? " from completion" : "";
+  if (sequence.completionAnchored && minutes === 0) return `${emails}, sent on completion`;
   if (minutes === 0) return count === 1 ? `${emails}, sent when they join` : `${emails}, all on day one`;
-  if (minutes < 1440) return `${emails} over ${plural(Math.max(1, Math.round(minutes / 60)), "hour", "hours")}`;
-  return `${emails} over ${plural(Math.round(minutes / 1440), "day", "days")}`;
+  if (minutes < 1440) return `${emails} over ${plural(Math.max(1, Math.round(minutes / 60)), "hour", "hours")}${origin}`;
+  return `${emails} over ${plural(Math.round(minutes / 1440), "day", "days")}${origin}`;
 }
 
 export function mergeProgramme(

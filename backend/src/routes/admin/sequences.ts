@@ -112,6 +112,8 @@ adminSequencesRouter.get(
                 WHERE e.sequence_id = q.id AND e.enabled)                              AS enabled_email_count,
               (SELECT COALESCE(SUM(e.delay_minutes), 0)::int FROM sequence_emails e
                 WHERE e.sequence_id = q.id AND e.enabled)                              AS total_delay_minutes,
+              (SELECT COALESCE(MAX(e.delay_minutes), 0)::int FROM sequence_emails e
+                WHERE e.sequence_id = q.id AND e.enabled)                              AS max_delay_minutes,
               (SELECT COUNT(*)::int FROM sequence_subscriptions s
                 WHERE s.sequence_id = q.id AND s.status = 'active')                    AS active_count,
               (SELECT COUNT(*)::int FROM sequence_subscriptions s
