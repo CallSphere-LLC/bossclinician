@@ -114,7 +114,19 @@ vi.mock("../email/provider",async original=>({...await original<typeof import(".
   const id=await contact("never_subscribed");const q=(await db.client.query("SELECT id FROM email_sequences WHERE slug='fixture-quiz'")).rows[0].id;
   const {enrollContact}=await import("./sequences");const result=await enrollContact(q,id);
   expect(result.outcome).toBe("enrolled");
+  expect((await enrollContact(q,id)).outcome).toBe("already_enrolled");
   expect((await db.client.query("SELECT count(*)::int n FROM jobs WHERE kind='sequence.sendEmail' AND payload->>'subscriptionId'=$1",[String(result.subscriptionId)])).rows[0].n).toBe(1);
+ });
+
+ it("queues nothing when enrollment rolls back",async()=>{
+  const id=await contact();const q=(await db.client.query("SELECT id FROM email_sequences WHERE slug='fixture-quiz'")).rows[0].id;
+  await db.client.query("CREATE FUNCTION fixture_reject_enrollment() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'fixture rejects enrollment'; END $$");
+  await db.client.query(`CREATE TRIGGER fixture_reject_enrollment BEFORE INSERT ON sequence_subscriptions FOR EACH ROW WHEN (NEW.contact_id=${id}) EXECUTE FUNCTION fixture_reject_enrollment()`);
+  try {
+   const {enrollContact}=await import("./sequences");await expect(enrollContact(q,id)).rejects.toThrow("fixture rejects enrollment");
+   expect(await subs(id)).toHaveLength(0);
+   expect((await db.client.query("SELECT count(*)::int n FROM jobs WHERE kind='sequence.sendEmail' AND payload->>'subscriptionId' IN (SELECT id::text FROM sequence_subscriptions WHERE contact_id=$1)",[id])).rows[0].n).toBe(0);
+  } finally {await db.client.query("DROP TRIGGER fixture_reject_enrollment ON sequence_subscriptions; DROP FUNCTION fixture_reject_enrollment()");}
  });
 
 });
