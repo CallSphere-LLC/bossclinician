@@ -1,5 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
-import { TestimonialVideo } from "@/components/luxe/TestimonialVideo";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useHashScroll } from "@/hooks/useHashScroll";
 import { Seo } from "@/components/Seo";
 import {
@@ -129,6 +128,64 @@ function useRetreatVideoVisible() {
   }, []);
   return visible;
 }
+/**
+ * The villa walkthrough in the retreat page's own editorial frame: square
+ * edges and a gold hairline mat like the rest of the page, instead of the
+ * site-wide rounded luxe card. Same loading contract as TestimonialVideo:
+ * only the poster loads until the visitor presses play, and the 540p file is
+ * chosen inside the click for phones and Save-Data.
+ */
+function RetreatVideoPlayer() {
+  const v = r.video;
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [started, setStarted] = useState(false);
+  const start = () => {
+    const video = videoRef.current;
+    if (!video) return;
+    if (!video.getAttribute("src")) {
+      const lean =
+        window.matchMedia("(max-width: 767px)").matches ||
+        (navigator as Navigator & { connection?: { saveData?: boolean } }).connection?.saveData === true;
+      video.src = `${v.prefix}-${lean ? 540 : 720}.mp4`;
+    }
+    setStarted(true);
+    video.play().catch(() => {
+      // Native controls are showing by now, so the visitor can still retry.
+    });
+  };
+  return (
+    <figure className="retreat-film">
+      <div className="retreat-film-frame" data-started={started || undefined}>
+        <video
+          ref={videoRef}
+          poster={`${v.prefix}-poster.jpg`}
+          controls={started}
+          controlsList="nodownload"
+          playsInline
+          preload="none"
+          aria-label={v.playerTitle}
+          onPlay={() => setStarted(true)}
+        >
+          <track kind="captions" src={v.captions} srcLang="en" label="English" />
+        </video>
+        {!started && (
+          <button type="button" className="retreat-film-play" onClick={start} aria-label={`Play ${v.playerTitle}`}>
+            <span className="retreat-film-disc" aria-hidden>
+              <svg viewBox="0 0 24 24">
+                <path d="M7 4.5v15l12.5-7.5z" />
+              </svg>
+            </span>
+            <span className="retreat-film-label" aria-hidden>
+              <strong>{v.playLabel}</strong>
+              <small>{v.duration}</small>
+            </span>
+          </button>
+        )}
+      </div>
+    </figure>
+  );
+}
+
 function RetreatVideo() {
   const v = r.video;
   return (
@@ -137,14 +194,7 @@ function RetreatVideo() {
         <Heading eyebrow={v.eyebrow} title={v.title} />
         <Copy lines={v.body} />
       </div>
-      <TestimonialVideo
-        className="retreat-video-player"
-        src720={`${v.prefix}-720.mp4`}
-        src540={`${v.prefix}-540.mp4`}
-        poster={`${v.prefix}-poster.jpg`}
-        captions={`/videos/captions/retreat-bali-preview-v1.en.vtt`}
-        title={v.playerTitle}
-      />
+      <RetreatVideoPlayer />
       <div className="retreat-actions">
         <a href="#included" className="retreat-button">
           {v.cta}

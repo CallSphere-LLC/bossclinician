@@ -294,6 +294,9 @@ export const retreat = {
     cta: "Explore Your Bali Experience",
     playerTitle: "Behind the scenes: a preview of the Bali retreat villa",
     prefix: "/videos/retreat-bali-preview-v1",
+    captions: "/videos/captions/retreat-bali-preview-v1.en.vtt",
+    playLabel: "Watch the villa tour",
+    duration: "4:51",
   },
 
   /** Recognition (21 Nov handoff, ready-to-paste). */
