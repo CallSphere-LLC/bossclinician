@@ -114,6 +114,13 @@ function ReserveLink() {
   );
 }
 
+/** Inclusion details are written as ", a closing ritual..." to follow a bold
+ *  name inline; set on their own line they read as a sentence. */
+function sentence(text: string) {
+  const t = text.replace(/^,\s*/, "");
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
+
 /**
  * Row 256: the owner asked to approve the video section on a preview link
  * before it is published, so it only shows with ?preview=video until then.
@@ -347,40 +354,56 @@ export default function Retreats() {
           <Copy lines={r.included.body} />
         </div>
         <div className="retreat-inclusions">
+          {/* Layout: 01 + 02 share the first row, 03 (the long wellness
+              list) runs full width as a horizontal card, 04-06 share the
+              last row. See .retreat-inclusions in retreats.css. */}
           {r.included.items.map((item) => (
-            <article className="retreat-card" key={item.number}>
-              <img
-                className="retreat-inclusion-photo"
-                src={inclusionPhotos[item.number].src}
-                alt={inclusionPhotos[item.number].alt}
-                loading="lazy"
-                decoding="async"
-              />
-              <span className="retreat-number">{item.number}</span>
-              <h3>{item.title}</h3>
-              {item.number === "03" && (
+            <article
+              className={`retreat-card${item.groups ? " retreat-card-wide" : ""}`}
+              key={item.number}
+            >
+              <div className="retreat-card-media">
                 <img
                   className="retreat-inclusion-photo"
-                  src="/images/retreat-inclusion-temple.jpg"
-                  alt="Balinese water temple ceremony"
+                  src={inclusionPhotos[item.number].src}
+                  alt={inclusionPhotos[item.number].alt}
                   loading="lazy"
                   decoding="async"
                 />
-              )}
-              {item.body && <p>{item.body}</p>}
-              {item.groups?.map((group) => (
-                <div key={group.label}>
-                  <h4>{group.label}</h4>
-                  <ul>
-                    {group.items.map((detail) => (
-                      <li key={detail.name}>
-                        <strong>{detail.name}</strong>
-                        {detail.body}
-                      </li>
+                {item.number === "03" && (
+                  <img
+                    className="retreat-inclusion-photo"
+                    src="/images/retreat-inclusion-temple.jpg"
+                    alt="Balinese water temple ceremony"
+                    loading="lazy"
+                    decoding="async"
+                  />
+                )}
+              </div>
+              <div className="retreat-card-body">
+                <header className="retreat-card-head">
+                  <span className="retreat-number">{item.number}</span>
+                  <h3>{item.title}</h3>
+                </header>
+                {item.body && <p>{item.body}</p>}
+                {item.groups && (
+                  <div className="retreat-card-groups">
+                    {item.groups.map((group) => (
+                      <div className="retreat-card-group" key={group.label}>
+                        <h4>{group.label.replace(/:$/, "")}</h4>
+                        <ul>
+                          {group.items.map((detail) => (
+                            <li key={detail.name}>
+                              <strong>{detail.name}</strong>
+                              <span>{sentence(detail.body)}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
                     ))}
-                  </ul>
-                </div>
-              ))}
+                  </div>
+                )}
+              </div>
             </article>
           ))}
         </div>

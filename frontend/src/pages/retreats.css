@@ -945,21 +945,183 @@ html[data-site-theme] .theme-luxe .retreat-page .retreat-heading {
 }
 /* Inclusion cards keep their natural height instead of stretching to the
    tallest one and leaving tall empty boxes. */
+/* Inclusions: a six-column grid. 01 and 02 share the first row, 03 (the
+   long wellness list) is a full-width horizontal card, 04-06 share the last
+   row, so no card stretches into a tall empty box. */
 .retreat-inclusions {
-  align-items: start;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 28px;
+  align-items: stretch;
 }
-.retreat-card h3 {
-  font-size: 1.6rem;
+.retreat-inclusions > .retreat-card {
+  grid-column: span 2;
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  overflow: hidden;
+  background: #fffdf8;
+  border: 1px solid #2433181f;
+  box-shadow: 0 22px 44px -32px rgba(36, 51, 24, 0.45);
+  transition:
+    transform 0.6s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.6s cubic-bezier(0.16, 1, 0.3, 1);
 }
-.retreat-card h4 {
-  font-size: 0.7rem;
-  letter-spacing: 0.16em;
+.retreat-inclusions > .retreat-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 30px 54px -30px rgba(36, 51, 24, 0.5);
+}
+.retreat-inclusions > .retreat-card:nth-child(-n + 2) {
+  grid-column: span 3;
+}
+.retreat-inclusions .retreat-inclusion-photo {
+  display: block;
+  width: 100%;
+  margin: 0;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+}
+.retreat-inclusions > .retreat-card:nth-child(-n + 2) .retreat-inclusion-photo {
+  aspect-ratio: 16 / 10;
+}
+.retreat-card-body {
+  flex: 1;
+  padding: 26px 30px 32px;
+}
+.retreat-card-head {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  padding-bottom: 14px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid #2433181f;
+}
+.retreat-inclusions .retreat-number {
+  margin: 0;
+  font-size: 1.05rem;
+  font-style: italic;
+  letter-spacing: 0.04em;
+  color: #8a7638;
+}
+.retreat-card-head h3 {
+  margin: 0;
+  font-size: 1.55rem;
+  line-height: 1.25;
+}
+.retreat-card-body > p {
+  font-size: 0.98rem;
+  line-height: 1.8;
+  margin: 0;
+}
+/* 03 Wellness: photos on the left, the two lists side by side on the right. */
+.retreat-inclusions > .retreat-card-wide {
+  grid-column: 1 / -1;
+  flex-direction: row;
+}
+.retreat-card-wide .retreat-card-media {
+  flex: 0 0 40%;
+  display: grid;
+  grid-template-rows: minmax(0, 3fr) minmax(0, 2fr);
+  gap: 3px;
+  /* Photos take the height of the text column, never set it. */
+  contain: size;
+  min-height: 440px;
+}
+.retreat-card-wide .retreat-inclusion-photo,
+.retreat-inclusions > .retreat-card-wide .retreat-inclusion-photo {
+  height: 100%;
+  aspect-ratio: auto;
+}
+.retreat-card-wide .retreat-card-body {
+  padding: 38px 44px 40px;
+}
+.retreat-card-wide .retreat-card-head h3 {
+  font-size: clamp(1.7rem, 2.4vw, 2.2rem);
+}
+.retreat-card-groups {
+  display: grid;
+  grid-template-columns: 3fr 2fr;
+  gap: 40px;
+  margin-top: 6px;
+}
+.retreat-card-group h4 {
+  margin: 0 0 6px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
   color: #5d622e;
 }
-.retreat-card li strong {
+.retreat-card-group ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.retreat-card-group li {
+  margin: 0;
+  padding: 14px 0;
+  border-bottom: 1px solid #2433181a;
+  font-size: 0.95rem;
+  line-height: 1.7;
+}
+.retreat-card-group li:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+.retreat-card-group li strong {
   display: block;
-  font-weight: 600;
+  margin-bottom: 2px;
+  font-family: "Playfair Display", Georgia, serif;
+  font-size: 1.15rem;
+  font-weight: 400;
+  color: var(--retreat-forest);
+}
+@media (max-width: 1000px) {
+  .retreat-inclusions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 22px;
+  }
+  .retreat-inclusions > .retreat-card,
+  .retreat-inclusions > .retreat-card:nth-child(-n + 2) {
+    grid-column: span 1;
+  }
+  .retreat-inclusions > .retreat-card-wide {
+    grid-column: 1 / -1;
+  }
+  .retreat-card-groups {
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+}
+@media (max-width: 700px) {
+  .retreat-inclusions {
+    grid-template-columns: 1fr;
+  }
+  .retreat-inclusions > .retreat-card-wide {
+    flex-direction: column;
+  }
+  .retreat-card-wide .retreat-card-media {
+    flex: none;
+    contain: none;
+    min-height: 0;
+    grid-template-rows: none;
+    grid-template-columns: 3fr 2fr;
+  }
+  .retreat-card-wide .retreat-inclusion-photo,
+  .retreat-inclusions > .retreat-card-wide .retreat-inclusion-photo {
+    aspect-ratio: 4 / 5;
+  }
+  .retreat-card-body,
+  .retreat-card-wide .retreat-card-body {
+    padding: 22px 22px 26px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .retreat-inclusions > .retreat-card {
+    transition: none;
+  }
+  .retreat-inclusions > .retreat-card:hover {
+    transform: none;
+  }
 }
 @media (max-width: 600px) {
   .retreat-narrow > .retreat-copy > p:first-child {
