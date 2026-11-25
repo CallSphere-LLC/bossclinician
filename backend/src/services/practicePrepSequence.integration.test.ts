@@ -105,12 +105,20 @@ describeDb("Practice Prep to Club sequence", () => {
     expect(hours).toBeGreaterThan(11.9); expect(hours).toBeLessThan(36.1);
     expect(new Intl.DateTimeFormat("en-US",{timeZone:"America/Los_Angeles",hour:"2-digit",minute:"2-digit",hourCycle:"h23"}).format(next)).toBe("09:00");
   });
-  it("honors opt-outs without transmitting a message", async () => {
-    const c=await contact("opted_out"); await signup(c); const sub=await subscription(c);
+  it("does not enroll an already opted-out contact or transmit a message", async () => {
+    const c=await contact("opted_out"); const before=sent.messages.length;
+    await signup(c);
+    expect(await subscription(c)).toBeUndefined();
+    expect(sent.messages.length).toBe(before);
+  });
+  it("rechecks an opt-out after enrollment without transmitting a message", async () => {
+    const c=await contact(); await signup(c); const sub=await subscription(c);
+    await db.client.query("UPDATE contacts SET email_marketing_status='opted_out' WHERE id=$1",[c.id]);
     await db.client.query("UPDATE sequence_subscriptions SET next_send_at=now()-interval '1 minute' WHERE id=$1",[sub.id]);
     const before=sent.messages.length;
     expect((await sequences.sendDueEmail(Number(sub.id))).outcome).toBe("suppressed");
     expect(sent.messages.length).toBe(before);
+    expect((await subscription(c)).status).toBe("exited");
   });
   it("stops on Club purchase, not unrelated purchases, and does not restart", async () => {
     const c=await contact(); await signup(c); const sub=await subscription(c);
