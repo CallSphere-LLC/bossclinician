@@ -1,3 +1,4 @@
+import { marketingSettings } from "../email/provider";
 import { z } from "zod";
 import { env } from "../config/env";
 import { pool } from "../db/pool";
@@ -388,6 +389,7 @@ export async function sendBossAssessmentResults(input: {
   const outcome = await sendMail({
     to: input.email,
     ...email,
+    replyTo: (await marketingSettings()).replyTo || undefined,
     topic: BOSS_ASSESSMENT_EMAIL_TOPIC,
     sourceId: input.submissionId,
     contactId: input.contactId,
