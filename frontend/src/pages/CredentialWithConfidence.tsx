@@ -31,6 +31,7 @@ import { stripeTestMode } from "@/lib/paymentMode";
 import { courseNode, productNode } from "@/seo/schema";
 import { useHeadContext } from "@/ssr/context";
 import { ssrKeys } from "@/ssr/keys";
+import { NbccApproval } from "@/components/ce/NbccApproval";
 
 /**
  * Credential with Confidence — the on-site rebuild of the Kajabi sales page at
@@ -617,7 +618,7 @@ function PolicySection() {
 function AccreditationSection() {
   return (
     <Section surface="deep" space="sm" aria-label="Continuing education accreditation" containerClassName="max-w-3xl">
-      <p className="text-pretty text-center text-xs leading-[1.8] text-orchid">{cwc.footer.nbcc}</p>
+      <NbccApproval text={cwc.footer.nbcc} />
       <MailSentence
         line={cwc.footer.contact}
         className="mt-5 text-pretty text-center text-xs leading-[1.8] text-orchid"

@@ -1,3 +1,4 @@
+import { NBCC_APPROVAL_STATEMENT } from "./nbcc";
 /**
  * The legal agreements bossclinician.com kept as separate Kajabi pages, copied
  * word for word from the live pages (October 2026).
@@ -523,9 +524,10 @@ export const continuingEducation: KajabiLegalDoc = {
           type: "p",
           text: [
             { text: "Boss Clinician, LLC", bold: true },
-            " is fully committed to conducting all activities in strict conformance with NBCC Boss Clinician, LLC will comply with all legal and ethical responsibilities to be non-discriminatory in promotional activities, program content and in the treatment of program participants. The monitoring and assessment of compliance with these standards will be the responsibility of the CE Provider.",
+            " is fully committed to conducting all activities in strict conformance with NBCC. Boss Clinician, LLC will comply with all legal and ethical responsibilities to be non-discriminatory in promotional activities, program content and in the treatment of program participants. The monitoring and assessment of compliance with these standards will be the responsibility of the CE Provider.",
           ],
         },
+        { type: "p", text: NBCC_APPROVAL_STATEMENT },
       ],
     },
     CE_CONFIDENTIALITY_PARTICIPANT,
@@ -635,7 +637,7 @@ export const retreatAgreement: KajabiLegalDoc = {
             "Five nights’ accommodation at a private 12-bedroom villa estate in Ubud, Bali (room type based on package selected)",
             "Airport transportation to and from Ngurah Rai International Airport, Denpasar (DPS) through designated group transfers during June 15–20, 2027, with final shuttle windows coordinated with guests and shared before travel",
             "All meals prepared daily by a private villa chef, including breakfast, brunch, and dinner, plus outside villa meals as scheduled",
-            "Wellness experiences: sound bath, breathwork session, Balinese massage, and flower bath",
+            "Wellness experiences: flower bath, Balinese massage and spa day, a cabana day at the pool, and your choice of Healing Meditation or Palm Reading and Holy Water Ceremony",
             "Curated group activities: temple tour, fire show, beach day, photo day, shared storytelling, and dancing",
             "Pre-trip group call with Yvette Howard prior to the retreat date",
             "All retreat materials and essentials",
@@ -1214,7 +1216,7 @@ export const termsOfUse: KajabiLegalDoc = {
       id: "continuing-education-credits",
       heading: "11. Continuing Education Credits",
       blocks: [
-        { type: "p", text: "Boss Clinician, LLC is approved by the National Board for Certified Counselors as an Approved Continuing Education Provider (NBCC ACEP No. 7998)." },
+        { type: "p", text: NBCC_APPROVAL_STATEMENT },
         { type: "p", text: "Only specific trainings designated as eligible for continuing education credit carry those credits." },
         { type: "p", text: "Purchasing a Boss Clinician membership does not automatically entitle a participant to continuing education credit for all membership activities." },
         { type: "p", text: "Participants are responsible for verifying whether a specific training meets their applicable licensing board's continuing education requirements." },

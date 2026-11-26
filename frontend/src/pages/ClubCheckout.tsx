@@ -11,6 +11,7 @@ import { CLUB_OFFER_SLUG, RAMP_UP_BONUS_LABEL, clubCheckout } from "@/content/cl
 import { personalBonusLine, useClubBonus } from "@/lib/clubBonus";
 import { commerceApi, commerceErrorMessage, type PublicOffer } from "@/lib/commerceApi";
 import { CheckoutExperience } from "./Checkout";
+import { NbccApproval } from "@/components/ce/NbccApproval";
 
 /**
  * `/club/checkout` — the Club's own checkout, in place of Kajabi's hosted one
@@ -224,7 +225,7 @@ export default function ClubCheckout() {
       {/* 4 · The source's footer band: NBCC statement, refund and security notes. */}
       <Section surface="deep" space="md" aria-label="Policies">
         <div className="mx-auto grid max-w-6xl grid-cols-1 gap-8 lg:grid-cols-2 lg:gap-12">
-          <p className="text-pretty text-sm leading-relaxed text-orchid-dim">{clubCheckout.nbcc}</p>
+          <NbccApproval text={clubCheckout.nbcc} align="start" className="sm:items-start" textClassName="text-sm leading-relaxed text-orchid-dim" />
           <div className="space-y-6">
             <div className="flex gap-3.5">
               <ShieldCheck aria-hidden className="mt-0.5 size-5 flex-none text-gold" />

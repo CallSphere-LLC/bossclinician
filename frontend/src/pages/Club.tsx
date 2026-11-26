@@ -27,6 +27,7 @@ import { cn } from "@/lib/cn";
 import { ORGANIZATION_ID, absoluteUrl, faqPageNode } from "@/seo/schema";
 import type { JsonLdNode } from "@/seo/types";
 import { useHeadContext } from "@/ssr/context";
+import { NbccApproval } from "@/components/ce/NbccApproval";
 
 /**
  * The Boss Clinician Club — `/club`, at the path the source site sells it from.
@@ -898,7 +899,7 @@ function AccreditationSection() {
       <p className="text-balance text-center font-display text-[1.2rem] italic text-white sm:text-[1.4rem]">
         {club.footerLine}
       </p>
-      <p className="mt-6 text-pretty text-center text-xs leading-[1.8] text-orchid">{club.nbcc}</p>
+      <NbccApproval text={club.nbcc} className="mt-6" />
     </Section>
   );
 }

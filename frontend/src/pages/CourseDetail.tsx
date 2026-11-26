@@ -27,6 +27,8 @@ import FullyBookedSalesPage from "@/components/course/FullyBookedSalesPage";
 import { CLOSED_OFFER_LABEL, parseSalesPage } from "@/components/course/salesPage";
 import { OfferCountdown } from "@/components/countdown/OfferCountdown";
 import { afterClosePath, saleClosed, timedOffer } from "@/lib/countdown";
+import { NbccApproval } from "@/components/ce/NbccApproval";
+import { NBCC_COURSE_SLUGS } from "@/content/nbcc";
 
 /**
  * The sales page for one course.
@@ -411,6 +413,12 @@ export default function CourseDetail({ slugOverride }: { slugOverride?: string }
             </Section>
           )}
         </>
+      )}
+
+      {NBCC_COURSE_SLUGS.has(course.slug) && (
+        <Section surface="deep" space="sm" aria-label="Continuing education accreditation" containerClassName="max-w-3xl">
+          <NbccApproval />
+        </Section>
       )}
     </>
   );
