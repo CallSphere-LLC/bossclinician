@@ -123,10 +123,10 @@ function sentence(text: string) {
 
 /**
  * Row 256: the owner asked to approve the video section on a preview link
- * before it is published, so it only shows with ?preview=video until then.
- * Decided after mount so the server render and hydration always agree.
+ * before it was published. Row 257 (25 Nov 2026): she approved it, so it now
+ * shows for everyone. Set back to false to hide it behind ?preview=video.
  */
-const RETREAT_VIDEO_PUBLISHED = false;
+const RETREAT_VIDEO_PUBLISHED = true;
 function useRetreatVideoVisible() {
   const [visible, setVisible] = useState(RETREAT_VIDEO_PUBLISHED);
   useEffect(() => {

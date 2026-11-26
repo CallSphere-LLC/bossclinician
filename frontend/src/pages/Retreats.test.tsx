@@ -167,10 +167,10 @@ describe("retreat page, second 22 Nov 2026 owner reply (item 4: FAQ wording, ite
 });
 
 describe("retreat villa video (row 256)", () => {
-  it("stays off the published page until the owner approves the ?preview=video link", () => {
+  it("shows on the published page now the owner has approved it (row 257)", () => {
     const { html } = render();
-    expect(html).not.toContain("retreat-bali-preview-v1");
-    expect(html).not.toContain("Imagine Six Days Where You");
+    expect(html).toContain("retreat-bali-preview-v1");
+    expect(html).toContain("Imagine Six Days Where You");
   });
 
   it("assets and captions for the section exist", async () => {
