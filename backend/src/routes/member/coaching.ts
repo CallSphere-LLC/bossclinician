@@ -31,6 +31,7 @@ import { isProtectedRef, signedFileUrl } from "../../services/signedUrls";
 import type { EntitledMedia } from "./downloads";
 import { dispatchEvent } from "../../services/webhooksOut";
 import { automationIdentity, publishDomainEvent } from "../../services/domainEvents";
+import { notificationRecipients } from "../../services/notificationRecipients";
 
 /**
  * `/api/member/coaching` — booking, rescheduling and cancelling sessions.
@@ -804,6 +805,112 @@ async function sendBookingMail(input: BookingMailInput): Promise<void> {
   });
 }
 
+/**
+ * Tells the owner a member booked, moved or cancelled a session (row 258).
+ *
+ * The public Book A Call page has always written to her; a session booked from
+ * a coaching package inside the member area told only the member, so the coach
+ * found out from her calendar or not at all. Goes to the same address and under
+ * the same "new lead" switch as the Book A Call notice, in the coach's own
+ * time zone, with the calendar file attached.
+ *
+ * Never throws and is never awaited by a handler: the booking is already
+ * committed and the member already has their answer.
+ */
+function notifyOwnerOfSession(input: {
+  kind: "booked" | "moved" | "cancelled";
+  session: SessionRow;
+  memberId: number;
+  memberEmail: string;
+  coachTimezone: string;
+  memberTimezone: string;
+  reason?: string;
+}): void {
+  const work = async (): Promise<void> => {
+    const to = await notificationRecipients("lead");
+    if (!to) return;
+    const { session, kind } = input;
+    const identity = await automationIdentity(input.memberId, input.memberEmail).catch(() => null);
+    const name = identity?.name?.trim() || input.memberEmail;
+    const title = session.offer_title ?? "Coaching session";
+    const hostZone = isValidTimeZone(input.coachTimezone) ? input.coachTimezone : "America/Los_Angeles";
+    const whenHost = session.scheduled_at
+      ? describeInstant(session.scheduled_at, hostZone).label
+      : "a time to be confirmed";
+    const whenMember =
+      session.scheduled_at && isValidTimeZone(input.memberTimezone)
+        ? describeInstant(session.scheduled_at, input.memberTimezone).label
+        : whenHost;
+    const reason = (input.reason ?? "").trim();
+
+    const verb = kind === "booked" ? "booked" : kind === "moved" ? "moved" : "cancelled";
+    const lead =
+      kind === "booked"
+        ? `${name} booked a ${title} session.`
+        : kind === "moved"
+          ? `${name} moved their ${title} session to a new time.`
+          : `${name} cancelled their ${title} session.`;
+    const subject =
+      kind === "booked"
+        ? `New booking: ${title} — ${name}, ${whenHost}`
+        : kind === "moved"
+          ? `Moved: ${title} — ${name}, now ${whenHost}`
+          : `Cancelled: ${title} — ${name}, ${whenHost}`;
+    const join = kind !== "cancelled" && session.meeting_url ? session.meeting_url : "";
+
+    const text = [
+      lead,
+      "",
+      `When: ${whenHost}`,
+      whenMember !== whenHost ? `(their time: ${whenMember})` : "",
+      `Length: ${session.duration_minutes} minutes`,
+      `Email: ${input.memberEmail}`,
+      join ? `Join: ${join}` : "",
+      reason ? `Reason: ${reason}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
+    const html = [
+      `<p>${escapeHtml(lead)}</p>`,
+      `<p><strong>When:</strong> ${escapeHtml(whenHost)}`,
+      whenMember !== whenHost ? `<br>(their time: ${escapeHtml(whenMember)})` : "",
+      `<br><strong>Length:</strong> ${session.duration_minutes} minutes`,
+      `<br><strong>Email:</strong> <a href="mailto:${escapeHtml(input.memberEmail)}">${escapeHtml(input.memberEmail)}</a>`,
+      join ? `<br><strong>Join:</strong> <a href="${escapeHtml(join)}">${escapeHtml(join)}</a>` : "",
+      reason ? `<br><strong>Reason:</strong> ${escapeHtml(reason)}` : "",
+      `</p>`,
+    ].join("");
+
+    await sendMail({
+      to,
+      subject,
+      text,
+      html,
+      replyTo: input.memberEmail,
+      topic: `coaching_owner_${verb}`,
+      sourceId: session.id,
+      attachments: [
+        {
+          filename: icsFilename(session),
+          content: buildSessionIcs({
+            session,
+            memberEmail: input.memberEmail,
+            organiserEmail: organiserEmail(),
+          }),
+          contentType: "text/calendar; charset=utf-8",
+        },
+      ],
+    });
+  };
+  work().catch((err) => {
+    // eslint-disable-next-line no-console
+    console.error(
+      `[coaching] owner notice (${input.kind}) failed:`,
+      err instanceof Error ? err.message : err
+    );
+  });
+}
+
 /* ------------------------------------------------------------- meeting rooms */
 
 /**
@@ -1187,6 +1294,14 @@ memberCoachingRouter.post(
       intro: "Your coaching session is confirmed. The calendar invitation is attached.",
       closing: "Need to move it?",
     });
+    notifyOwnerOfSession({
+      kind: "booked",
+      session: booked,
+      memberId: member.id,
+      memberEmail: member.email,
+      coachTimezone: policy.timezone,
+      memberTimezone: zone,
+    });
 
     await dispatchEvent("coaching.booked", {
       id: `coaching-session:${booked.id}`,
@@ -1383,6 +1498,14 @@ memberCoachingRouter.post(
       intro: "Your coaching session has been moved. The updated invitation is attached.",
       closing: "Need to change it again?",
     });
+    notifyOwnerOfSession({
+      kind: "moved",
+      session: moved,
+      memberId: member.id,
+      memberEmail: member.email,
+      coachTimezone: policy.timezone,
+      memberTimezone: zone,
+    });
 
     res.json({
       session: toSessionJson(moved, policy, new Date(), { timezone: zone }),
@@ -1504,6 +1627,15 @@ memberCoachingRouter.post(
       heading: `Cancelled: ${cancelled.offer_title ?? "your coaching session"}`,
       intro: message,
       closing: "Ready to rebook?",
+    });
+    notifyOwnerOfSession({
+      kind: "cancelled",
+      session: cancelled,
+      memberId: member.id,
+      memberEmail: member.email,
+      coachTimezone: policy.timezone,
+      memberTimezone: zone,
+      reason: parsed.data.reason ?? "",
     });
 
     await dispatchEvent("coaching.cancelled", {
