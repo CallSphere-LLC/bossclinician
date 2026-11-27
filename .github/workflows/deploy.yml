@@ -6,7 +6,7 @@ permissions:
   contents: read
 jobs:
   instructions:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, central-biggestserver, general-ci]
     steps:
       - name: Direct release only
         run: echo 'Production deploys directly on K3s using ./scripts/deploy-k3s.sh. Git pushes run CI checks only.'
