@@ -10,9 +10,13 @@ name: CI
 
 #
 
-# Trusted main jobs use the isolated central runner. Pull requests keep
+# Every job runs on our own self-hosted runners on biggestServer; none use
 
-# GitHub-hosted execution and never receive production deployment credentials.
+# GitHub-hosted runners. Checks run on the keyless general-ci runner for every
+
+# event; only central-build/central-deploy (push to main) use trusted-main,
+
+# so pull requests never reach production deployment credentials.
 
 on:
 
@@ -72,7 +76,7 @@ jobs:
 
     name: Pipeline, scripts and secrets
 
-    runs-on: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && fromJSON('["self-hosted","central-biggestserver","trusted-main"]') || 'ubuntu-latest' }}
+    runs-on: [self-hosted, central-biggestserver, general-ci]
 
     timeout-minutes: 10
 
@@ -111,7 +115,7 @@ jobs:
 
       - name: Shell scripts pass shellcheck
 
-        run: shellcheck --severity=warning scripts/*.sh scripts/ci/*.sh backend/scripts/*.sh .github/ci/*.sh
+        run: docker run --rm -v "$PWD:/mnt" -w /mnt koalaman/shellcheck:v0.10.0 --severity=warning scripts/*.sh scripts/ci/*.sh backend/scripts/*.sh .github/ci/*.sh
 
       - name: Workflows pass actionlint
 
@@ -141,7 +145,7 @@ jobs:
 
     if: github.event_name == 'pull_request'
 
-    runs-on: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && fromJSON('["self-hosted","central-biggestserver","trusted-main"]') || 'ubuntu-latest' }}
+    runs-on: [self-hosted, central-biggestserver, general-ci]
 
     timeout-minutes: 10
 
@@ -170,7 +174,7 @@ jobs:
 
     name: Backend — typecheck, unit, integration, build
 
-    runs-on: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && fromJSON('["self-hosted","central-biggestserver","trusted-main"]') || 'ubuntu-latest' }}
+    runs-on: [self-hosted, central-biggestserver, general-ci]
 
     timeout-minutes: 20
 
@@ -261,7 +265,7 @@ jobs:
 
     name: Frontend — typecheck, unit, build
 
-    runs-on: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && fromJSON('["self-hosted","central-biggestserver","trusted-main"]') || 'ubuntu-latest' }}
+    runs-on: [self-hosted, central-biggestserver, general-ci]
 
     timeout-minutes: 15
 
@@ -314,7 +318,7 @@ jobs:
 
     name: AI service — tests
 
-    runs-on: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && fromJSON('["self-hosted","central-biggestserver","trusted-main"]') || 'ubuntu-latest' }}
+    runs-on: [self-hosted, central-biggestserver, general-ci]
 
     timeout-minutes: 10
 
@@ -377,7 +381,7 @@ jobs:
 
     name: Production images — build, boot on an empty database, smoke test
 
-    runs-on: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && fromJSON('["self-hosted","central-biggestserver","trusted-main"]') || 'ubuntu-latest' }}
+    runs-on: [self-hosted, central-biggestserver, general-ci]
 
     timeout-minutes: 40
 
@@ -526,7 +530,7 @@ jobs:
   central-build:
     needs: [pipeline, backend, frontend, ai, stack]
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && (inputs.ref == '' || inputs.ref == github.sha)
-    runs-on: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && fromJSON('["self-hosted","central-biggestserver","trusted-main"]') || 'ubuntu-latest' }}
+    runs-on: [self-hosted, central-biggestserver, trusted-main]
     timeout-minutes: 180
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -538,7 +542,7 @@ jobs:
   central-deploy:
     needs: central-build
     if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && (inputs.ref == '' || inputs.ref == github.sha) && vars.CENTRAL_DEPLOY_ENABLED == 'true'
-    runs-on: ${{ github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && fromJSON('["self-hosted","central-biggestserver","trusted-main"]') || 'ubuntu-latest' }}
+    runs-on: [self-hosted, central-biggestserver, trusted-main]
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
